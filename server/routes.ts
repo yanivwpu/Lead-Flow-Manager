@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertChatSchema } from "@shared/schema";
 import { z } from "zod";
+import { getVapidPublicKey } from "./notifications";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -153,6 +154,15 @@ export async function registerRoutes(
       console.error("Error fetching preferences:", error);
       res.status(500).json({ error: "Failed to fetch preferences" });
     }
+  });
+
+  // Get VAPID public key for push notifications
+  app.get("/api/vapid-public-key", (_req, res) => {
+    const publicKey = getVapidPublicKey();
+    if (!publicKey) {
+      return res.status(503).json({ error: "Push notifications not configured" });
+    }
+    res.json({ publicKey });
   });
 
   return httpServer;
