@@ -20,6 +20,8 @@ The application is now a full-stack implementation with:
 - Integrated Web Push API for push notifications
 - Added placeholder for email notifications (awaiting service credentials)
 - Connected frontend to backend API endpoints
+- Added "Remember Me" checkbox to login form for extended 30-day sessions
+- Fixed Follow-ups/Tasks page: made all items clickable to navigate to chat details and added "mark as done" functionality to clear follow-ups
 
 ## Features
 - **Chat Management**: View and organize WhatsApp conversations
