@@ -1,5 +1,5 @@
-import { Link, useLocation } from "wouter";
-import { Clock, ArrowRight, CheckCircle2, X } from "lucide-react";
+import { useLocation } from "wouter";
+import { ArrowRight, CheckCircle2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -129,11 +129,13 @@ export function FollowUps() {
                    <CheckCircle2 className="h-12 w-12 text-gray-300 mx-auto mb-3" />
                    <p className="text-gray-500 font-medium">All caught up!</p>
                    <p className="text-sm text-gray-400 mt-1">No tasks pending.</p>
-                   <Link href="/app/chats">
-                     <Button className="mt-4 bg-brand-green hover:bg-green-600" data-testid="button-view-chats">
-                       View All Chats
-                     </Button>
-                   </Link>
+                   <Button 
+                     className="mt-4 bg-brand-green hover:bg-green-600" 
+                     data-testid="button-view-chats"
+                     onClick={() => setLocation('/app/chats')}
+                   >
+                     View All Chats
+                   </Button>
                  </div>
                )}
              </div>
