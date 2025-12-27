@@ -80,7 +80,13 @@ export async function registerRoutes(
         return res.status(403).json({ error: "Forbidden" });
       }
 
-      const updated = await storage.updateChat(req.params.id, req.body);
+      // Convert followUpDate string to Date object if provided
+      const updates = { ...req.body };
+      if (updates.followUpDate !== undefined) {
+        updates.followUpDate = updates.followUpDate ? new Date(updates.followUpDate) : null;
+      }
+
+      const updated = await storage.updateChat(req.params.id, updates);
       res.json(updated);
     } catch (error) {
       console.error("Error updating chat:", error);
