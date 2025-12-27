@@ -132,10 +132,20 @@ export function registerAuthRoutes(app: Express) {
       if (!user) {
         return res.status(401).json({ error: info?.message || 'Invalid email or password' });
       }
+      
+      // Set session duration based on rememberMe flag
+      const rememberMe = req.body.rememberMe || false;
+      
       req.login(user, (loginErr: any) => {
         if (loginErr) {
           return res.status(500).json({ error: 'Failed to log in' });
         }
+        
+        // Extend session if remember me is checked (30 days vs 7 days default)
+        if (rememberMe && req.session.cookie) {
+          req.session.cookie.maxAge = 30 * 24 * 60 * 60 * 1000; // 30 days
+        }
+        
         const { password: _, ...safeUser } = user;
         res.json(safeUser);
       });
