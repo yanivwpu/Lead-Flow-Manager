@@ -1,7 +1,11 @@
-import React, { createContext, useContext, useState, useEffect } from "react";
+import { createContext, useContext, useState, useEffect } from "react";
 import { useLocation } from "wouter";
-import * as storage from "./storage";
-import { User } from "./data";
+
+interface User {
+  id: string;
+  name: string;
+  email: string;
+}
 
 interface AuthContextType {
   user: User | null;
@@ -19,55 +23,85 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [, setLocation] = useLocation();
 
   useEffect(() => {
-    // Check for persisted session on mount
-    const persistedUser = storage.getPersistedSession();
-    if (persistedUser) {
-      setUser(persistedUser);
-    }
-    setIsLoading(false);
+    // Check for existing session on mount
+    checkSession();
   }, []);
 
-  const login = async (email: string, password: string): Promise<boolean> => {
-    // Simulate network delay
-    await new Promise(resolve => setTimeout(resolve, 800));
-    
-    const foundUser = storage.findUserByEmail(email);
-    
-    if (foundUser && foundUser.password === password) {
-      const { password, ...safeUser } = foundUser;
-      setUser(safeUser as User);
-      storage.persistSession(safeUser as User);
-      return true;
+  const checkSession = async () => {
+    try {
+      const response = await fetch('/api/auth/me', {
+        credentials: 'include',
+      });
+      
+      if (response.ok) {
+        const userData = await response.json();
+        setUser(userData);
+      }
+    } catch (error) {
+      console.error('Failed to check session:', error);
+    } finally {
+      setIsLoading(false);
     }
-    return false;
+  };
+
+  const login = async (email: string, password: string): Promise<boolean> => {
+    try {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password }),
+        credentials: 'include',
+      });
+
+      if (response.ok) {
+        const userData = await response.json();
+        setUser(userData);
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error('Login error:', error);
+      return false;
+    }
   };
 
   const signup = async (name: string, email: string, password: string): Promise<boolean> => {
-    // Simulate network delay
-    await new Promise(resolve => setTimeout(resolve, 800));
-    
-    const newUser: User = {
-      id: Math.random().toString(36).substring(2, 9),
-      name,
-      email,
-      password
-    };
-    
-    const success = storage.createUser(newUser);
-    
-    if (success) {
-      const { password, ...safeUser } = newUser;
-      setUser(safeUser as User);
-      storage.persistSession(safeUser as User);
-      return true;
+    try {
+      const response = await fetch('/api/auth/signup', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ name, email, password }),
+        credentials: 'include',
+      });
+
+      if (response.ok) {
+        const userData = await response.json();
+        setUser(userData);
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error('Signup error:', error);
+      return false;
     }
-    return false;
   };
 
-  const logout = () => {
-    setUser(null);
-    storage.clearSession();
-    setLocation("/");
+  const logout = async () => {
+    try {
+      await fetch('/api/auth/logout', {
+        method: 'POST',
+        credentials: 'include',
+      });
+    } catch (error) {
+      console.error('Logout error:', error);
+    } finally {
+      setUser(null);
+      setLocation("/");
+    }
   };
 
   return (
