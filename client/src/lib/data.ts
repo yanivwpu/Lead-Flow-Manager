@@ -1,0 +1,122 @@
+import { Zap, CheckCircle2, Clock, AlertCircle, DollarSign, XCircle, Search, MessageSquare, ListTodo, MoreVertical, Send, Phone, Video, Paperclip, Mic, Smile } from "lucide-react";
+
+export type Tag = 'New' | 'Hot' | 'Quoted' | 'Paid' | 'Waiting' | 'Lost';
+export type FollowUp = 'Tomorrow' | '3 days' | '1 week' | null;
+
+export interface Message {
+  id: string;
+  text: string;
+  sender: 'me' | 'them';
+  time: string;
+}
+
+export interface Chat {
+  id: string;
+  name: string;
+  avatar: string;
+  lastMessage: string;
+  time: string;
+  unread: number;
+  tag: Tag;
+  followUp: FollowUp;
+  messages: Message[];
+  notes: string;
+  pipelineStage: 'Lead' | 'Contacted' | 'Proposal' | 'Negotiation' | 'Closed';
+}
+
+export const MOCK_CHATS: Chat[] = [
+  {
+    id: '1',
+    name: 'Sarah Wilson',
+    avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=150&h=150',
+    lastMessage: 'That sounds great! Can you send the pricing?',
+    time: '10:42 AM',
+    unread: 2,
+    tag: 'Hot',
+    followUp: 'Tomorrow',
+    notes: 'Interested in the premium plan. Needs approval from manager.',
+    pipelineStage: 'Proposal',
+    messages: [
+      { id: '1', text: 'Hi Sarah, thanks for reaching out!', sender: 'me', time: '10:30 AM' },
+      { id: '2', text: 'I saw you were interested in our enterprise tier.', sender: 'me', time: '10:30 AM' },
+      { id: '3', text: 'Yes, exactly. We have a team of 15.', sender: 'them', time: '10:35 AM' },
+      { id: '4', text: 'That sounds great! Can you send the pricing?', sender: 'them', time: '10:42 AM' },
+    ]
+  },
+  {
+    id: '2',
+    name: 'TechCorp Solutions',
+    avatar: 'https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&w=150&h=150',
+    lastMessage: 'Payment has been processed.',
+    time: 'Yesterday',
+    unread: 0,
+    tag: 'Paid',
+    followUp: null,
+    notes: 'Onboarding scheduled for next Tuesday.',
+    pipelineStage: 'Closed',
+    messages: [
+      { id: '1', text: 'Invoice #2024-001 sent.', sender: 'me', time: 'Yesterday' },
+      { id: '2', text: 'Payment has been processed.', sender: 'them', time: 'Yesterday' },
+    ]
+  },
+  {
+    id: '3',
+    name: 'David Chen',
+    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&h=150',
+    lastMessage: 'Let me think about it.',
+    time: 'Mon',
+    unread: 0,
+    tag: 'Waiting',
+    followUp: '3 days',
+    notes: 'Price objection. Offered 10% discount if closed by EOM.',
+    pipelineStage: 'Negotiation',
+    messages: [
+      { id: '1', text: 'The price is a bit higher than we expected.', sender: 'them', time: 'Mon' },
+      { id: '2', text: 'I understand. What if we could include the onboarding for free?', sender: 'me', time: 'Mon' },
+      { id: '3', text: 'Let me think about it.', sender: 'them', time: 'Mon' },
+    ]
+  },
+  {
+    id: '4',
+    name: 'Emma Davis',
+    avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?auto=format&fit=crop&w=150&h=150',
+    lastMessage: 'Is this available in Spanish?',
+    time: 'Mon',
+    unread: 1,
+    tag: 'New',
+    followUp: null,
+    notes: '',
+    pipelineStage: 'Lead',
+    messages: [
+      { id: '1', text: 'Hi! I found your website.', sender: 'them', time: 'Mon' },
+      { id: '2', text: 'Is this available in Spanish?', sender: 'them', time: 'Mon' },
+    ]
+  },
+  {
+    id: '5',
+    name: 'Robert Fox',
+    avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=150&h=150',
+    lastMessage: 'Not interested right now.',
+    time: 'Last Week',
+    unread: 0,
+    tag: 'Lost',
+    followUp: '1 week',
+    notes: 'Revisit in Q3.',
+    pipelineStage: 'Lead',
+    messages: [
+      { id: '1', text: 'Just checking in on this.', sender: 'me', time: 'Last Week' },
+      { id: '2', text: 'Not interested right now.', sender: 'them', time: 'Last Week' },
+    ]
+  }
+];
+
+export const TAG_COLORS: Record<Tag, string> = {
+  'New': 'bg-blue-100 text-blue-700 border-blue-200',
+  'Hot': 'bg-orange-100 text-orange-700 border-orange-200',
+  'Quoted': 'bg-purple-100 text-purple-700 border-purple-200',
+  'Paid': 'bg-green-100 text-green-700 border-green-200',
+  'Waiting': 'bg-yellow-100 text-yellow-700 border-yellow-200',
+  'Lost': 'bg-gray-100 text-gray-700 border-gray-200',
+};
+
+export const PIPELINE_STAGES = ['Lead', 'Contacted', 'Proposal', 'Negotiation', 'Closed'];

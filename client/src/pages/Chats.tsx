@@ -1,0 +1,276 @@
+import { useState } from "react";
+import { useRoute, useLocation } from "wouter";
+import { ChatListItem } from "@/components/ChatListItem";
+import { MOCK_CHATS, Chat, TAG_COLORS, PIPELINE_STAGES, FollowUp } from "@/lib/data";
+import { 
+  Search, 
+  MoreVertical, 
+  Phone, 
+  Video, 
+  Smile, 
+  Paperclip, 
+  Mic, 
+  Send,
+  Calendar,
+  Tag as TagIcon,
+  Clock,
+  ChevronDown,
+  Smartphone // Added this import
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
+
+export function Chats() {
+  const [match, params] = useRoute("/app/chats/:id?");
+  const [, setLocation] = useLocation();
+  const [searchTerm, setSearchTerm] = useState("");
+  const [chats, setChats] = useState<Chat[]>(MOCK_CHATS);
+  
+  // If no ID is selected on desktop, default to first chat or show placeholder
+  // For now, let's just handle the selection state
+  const selectedChatId = params?.id;
+  const selectedChat = chats.find(c => c.id === selectedChatId);
+
+  const filteredChats = chats.filter(chat => 
+    chat.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    chat.lastMessage.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const handleUpdateChat = (updates: Partial<Chat>) => {
+    if (!selectedChat) return;
+    const updatedChats = chats.map(c => 
+      c.id === selectedChat.id ? { ...c, ...updates } : c
+    );
+    setChats(updatedChats);
+  };
+
+  const updateTag = (tag: Chat['tag']) => handleUpdateChat({ tag });
+  const updatePipeline = (stage: string) => handleUpdateChat({ pipelineStage: stage as any });
+  const updateFollowUp = (followUp: FollowUp) => handleUpdateChat({ followUp });
+
+  return (
+    <div className="flex h-full w-full">
+      {/* Chat List - Hidden on mobile if chat is selected */}
+      <div className={cn(
+        "w-full md:w-[380px] flex flex-col border-r border-gray-200 bg-white",
+        selectedChatId ? "hidden md:flex" : "flex"
+      )}>
+        <div className="p-4 bg-gray-50 border-b border-gray-200">
+          <div className="flex justify-between items-center mb-4">
+             <h2 className="font-display font-bold text-xl text-gray-900">Chats</h2>
+             <div className="flex gap-2">
+               <button className="p-2 hover:bg-gray-200 rounded-full text-gray-600">
+                 <MoreVertical className="h-5 w-5" />
+               </button>
+             </div>
+          </div>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <input 
+              type="text" 
+              placeholder="Search or start new chat"
+              className="w-full pl-10 pr-4 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-green/20 focus:border-brand-green"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto">
+           {filteredChats.map(chat => (
+             <ChatListItem 
+               key={chat.id} 
+               chat={chat} 
+               isActive={chat.id === selectedChatId} 
+             />
+           ))}
+        </div>
+      </div>
+
+      {/* Chat Detail + CRM Panel */}
+      {selectedChat ? (
+        <div className="flex-1 flex flex-col md:flex-row h-full min-w-0 bg-[#efeae2]">
+           {/* Chat Conversation Area */}
+           <div className="flex-1 flex flex-col min-w-0 h-full relative">
+              {/* Header */}
+              <div className="bg-gray-50 px-4 py-3 border-b border-gray-200 flex justify-between items-center shrink-0">
+                 <div className="flex items-center gap-3">
+                   <button onClick={() => setLocation('/app/chats')} className="md:hidden">
+                     <span className="text-2xl mr-2">←</span>
+                   </button>
+                   <img src={selectedChat.avatar} className="h-10 w-10 rounded-full object-cover" />
+                   <div>
+                     <h3 className="font-semibold text-gray-900">{selectedChat.name}</h3>
+                     <span className="text-xs text-gray-500">last seen today at 10:45 AM</span>
+                   </div>
+                 </div>
+                 <div className="flex items-center gap-4 text-gray-500">
+                    <Search className="h-5 w-5 cursor-pointer hover:text-gray-700 hidden sm:block" />
+                    <MoreVertical className="h-5 w-5 cursor-pointer hover:text-gray-700" />
+                 </div>
+              </div>
+
+              {/* Messages Area */}
+              <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-4 relative" style={{ backgroundImage: 'url("https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png")', backgroundRepeat: 'repeat', backgroundSize: '400px' }}>
+                <div className="absolute inset-0 bg-[#efeae2]/90 pointer-events-none" /> {/* Overlay to soften pattern */}
+                
+                <div className="relative z-10 space-y-4">
+                  {selectedChat.messages.map(msg => (
+                    <div 
+                      key={msg.id} 
+                      className={cn(
+                        "flex", 
+                        msg.sender === 'me' ? "justify-end" : "justify-start"
+                      )}
+                    >
+                      <div className={cn(
+                        "max-w-[85%] md:max-w-[65%] rounded-lg px-3 py-2 text-sm shadow-sm relative",
+                        msg.sender === 'me' 
+                          ? "bg-[#d9fdd3] text-gray-900 rounded-tr-none" 
+                          : "bg-white text-gray-900 rounded-tl-none"
+                      )}>
+                        <p>{msg.text}</p>
+                        <span className="text-[10px] text-gray-500 block text-right mt-1 opacity-70">
+                          {msg.time}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Input Area */}
+              <div className="bg-gray-50 px-4 py-3 border-t border-gray-200 flex items-center gap-3 shrink-0">
+                 <div className="flex gap-4 text-gray-500">
+                    <Smile className="h-6 w-6 cursor-pointer hover:text-gray-700" />
+                    <Paperclip className="h-6 w-6 cursor-pointer hover:text-gray-700" />
+                 </div>
+                 <input 
+                   type="text" 
+                   placeholder="Type a message" 
+                   className="flex-1 bg-white border border-gray-200 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-brand-green"
+                 />
+                 {/* Send Button or Mic */}
+                 <button className="h-10 w-10 bg-brand-green hover:bg-green-600 rounded-full flex items-center justify-center text-white transition-colors shadow-sm">
+                   <Send className="h-5 w-5 ml-0.5" />
+                 </button>
+              </div>
+           </div>
+
+           {/* CRM Sidebar Panel - Collapsible on mobile maybe? For now showing on side for desktop */}
+           <div className="w-full md:w-[320px] bg-white border-l border-gray-200 overflow-y-auto shrink-0 flex flex-col shadow-xl md:shadow-none z-10">
+              <div className="p-5 border-b border-gray-100">
+                 <h3 className="font-display font-bold text-gray-900 mb-4">Lead Details</h3>
+                 
+                 {/* Pipeline Stage */}
+                 <div className="mb-6">
+                   <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 block">Pipeline Stage</label>
+                   <Select value={selectedChat.pipelineStage} onValueChange={updatePipeline}>
+                      <SelectTrigger className="w-full bg-gray-50 border-gray-200">
+                        <SelectValue placeholder="Select stage" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {PIPELINE_STAGES.map(stage => (
+                          <SelectItem key={stage} value={stage}>{stage}</SelectItem>
+                        ))}
+                      </SelectContent>
+                   </Select>
+                 </div>
+
+                 {/* Tags */}
+                 <div className="mb-6">
+                   <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 block">Status Tag</label>
+                   <div className="flex flex-wrap gap-2">
+                     {Object.keys(TAG_COLORS).map((tag) => (
+                       <button
+                         key={tag}
+                         onClick={() => updateTag(tag as any)}
+                         className={cn(
+                           "text-xs px-2.5 py-1 rounded-full border transition-all",
+                           selectedChat.tag === tag 
+                             ? TAG_COLORS[tag as keyof typeof TAG_COLORS] + " ring-1 ring-offset-1 ring-gray-300"
+                             : "bg-white text-gray-600 border-gray-200 hover:border-gray-300"
+                         )}
+                       >
+                         {tag}
+                       </button>
+                     ))}
+                   </div>
+                 </div>
+
+                 {/* Follow Up */}
+                 <div className="mb-6">
+                   <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 block">Follow-up Reminder</label>
+                   <div className="grid grid-cols-3 gap-2">
+                      {['Tomorrow', '3 days', '1 week'].map((time) => (
+                        <button
+                          key={time}
+                          onClick={() => updateFollowUp(selectedChat.followUp === time ? null : time as any)}
+                          className={cn(
+                            "text-xs py-2 rounded-lg border text-center transition-colors flex flex-col items-center justify-center gap-1",
+                            selectedChat.followUp === time
+                              ? "bg-brand-green/10 text-brand-green border-brand-green font-medium"
+                              : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
+                          )}
+                        >
+                          <Clock className="h-3 w-3" />
+                          {time}
+                        </button>
+                      ))}
+                   </div>
+                 </div>
+
+                 {/* Notes */}
+                 <div className="mb-6">
+                   <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 block">Notes</label>
+                   <textarea 
+                     className="w-full h-32 bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-sm text-gray-700 focus:outline-none focus:ring-1 focus:ring-yellow-400 resize-none"
+                     placeholder="Add a note..."
+                     value={selectedChat.notes}
+                     onChange={(e) => handleUpdateChat({ notes: e.target.value })}
+                   />
+                 </div>
+              </div>
+
+              <div className="p-5 mt-auto bg-gray-50">
+                <Button variant="outline" className="w-full text-red-600 hover:text-red-700 hover:bg-red-50 border-red-100">
+                  Block Contact
+                </Button>
+              </div>
+           </div>
+        </div>
+      ) : (
+        <div className="hidden md:flex flex-1 bg-[#efeae2] items-center justify-center flex-col text-center p-8 border-b-8 border-brand-green relative overflow-hidden">
+           <div className="max-w-md bg-white p-8 rounded-2xl shadow-sm z-10">
+             <div className="h-16 w-16 bg-brand-green/10 rounded-full flex items-center justify-center mx-auto mb-6">
+               <Smartphone className="h-8 w-8 text-brand-green" />
+             </div>
+             <h2 className="text-2xl font-display font-bold text-gray-900 mb-2">WhatsApp Web CRM</h2>
+             <p className="text-gray-500 mb-6">Select a chat to view details, manage pipeline stages, and set follow-up reminders.</p>
+             <div className="flex items-center justify-center gap-2 text-sm text-gray-400">
+               <div className="h-2 w-2 rounded-full bg-gray-300" />
+               <span>End-to-end encrypted</span>
+             </div>
+           </div>
+           
+           <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'url("https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png")', backgroundRepeat: 'repeat', backgroundSize: '400px' }} />
+        </div>
+      )}
+    </div>
+  );
+}
