@@ -2,19 +2,25 @@ import { motion } from "framer-motion";
 import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { Loader2, CheckCircle2, QrCode, Smartphone } from "lucide-react";
+import { useAuth } from "@/lib/auth-context";
+import { MOCK_CHATS } from "@/lib/data";
+import * as storage from "@/lib/storage";
 
 export function Connect() {
   const [, setLocation] = useLocation();
+  const { user } = useAuth();
   const [step, setStep] = useState<'scan' | 'connecting' | 'success'>('scan');
-
-  useEffect(() => {
-    let timer: NodeJS.Timeout;
-    return () => clearTimeout(timer);
-  }, []);
 
   const handleSimulateScan = () => {
     setStep('connecting');
+    
+    // Simulate sync delay
     setTimeout(() => {
+      // Load mock chats for the user ONLY after connection
+      if (user) {
+        storage.saveUserChats(user.id, MOCK_CHATS);
+      }
+      
       setStep('success');
       setTimeout(() => {
         setLocation('/app/chats');

@@ -23,9 +23,7 @@ export function getUserChats(userId: string): Chat[] {
   if (chats) {
     return JSON.parse(chats);
   }
-  // Initialize with mock data for new users
-  localStorage.setItem(key, JSON.stringify(MOCK_CHATS));
-  return MOCK_CHATS;
+  return [];
 }
 
 // Helper to save chats for a specific user
@@ -57,7 +55,7 @@ export function createUser(user: User): boolean {
   saveUsers(users);
   
   // Initialize their data
-  saveUserChats(user.id, MOCK_CHATS);
+  saveUserChats(user.id, []);
   return true;
 }
 

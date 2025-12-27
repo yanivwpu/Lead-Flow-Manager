@@ -8,7 +8,7 @@ import { motion } from "framer-motion";
 import { Loader2, ArrowRight, AlertCircle, CheckCircle2 } from "lucide-react";
 
 export function AuthPage() {
-  const [isLogin, setIsLogin] = useState(true);
+  const [isLogin, setIsLogin] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
@@ -33,7 +33,7 @@ export function AuthPage() {
       } else {
         const success = await signup(name, email, password);
         if (success) {
-          setLocation("/app/chats"); // Go straight to app, or maybe connect screen
+          setLocation("/connect");
         } else {
           setError("User already exists with that email");
         }
