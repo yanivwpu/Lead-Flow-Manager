@@ -9,8 +9,6 @@ export function Connect() {
 
   useEffect(() => {
     let timer: NodeJS.Timeout;
-    
-    // Auto-advance for prototype feel after click (simulated below)
     return () => clearTimeout(timer);
   }, []);
 

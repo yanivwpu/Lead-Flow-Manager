@@ -1,10 +1,22 @@
-import { MOCK_CHATS } from "@/lib/data";
 import { Link } from "wouter";
 import { Clock, ArrowRight, CheckCircle2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/lib/auth-context";
+import * as storage from "@/lib/storage";
+import { useState, useEffect } from "react";
+import { Chat } from "@/lib/data";
 
 export function FollowUps() {
-  const followUps = MOCK_CHATS.filter(c => c.followUp);
+  const { user } = useAuth();
+  const [chats, setChats] = useState<Chat[]>([]);
+  
+  useEffect(() => {
+    if (user) {
+      setChats(storage.getUserChats(user.id));
+    }
+  }, [user]);
+
+  const followUps = chats.filter(c => c.followUp);
 
   return (
     <div className="flex-1 h-full bg-white flex flex-col">

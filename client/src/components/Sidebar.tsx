@@ -1,9 +1,11 @@
 import { Link, useLocation } from "wouter";
 import { MessageSquare, ListTodo, Search, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/lib/auth-context";
 
 export function Sidebar() {
   const [location] = useLocation();
+  const { logout, user } = useAuth();
 
   const navItems = [
     { icon: MessageSquare, label: "Chats", href: "/app/chats" },
@@ -52,12 +54,19 @@ export function Sidebar() {
       </nav>
 
       <div className="mt-auto px-2 md:px-4">
-        <Link href="/">
-          <a className="flex items-center p-3 rounded-lg text-gray-500 hover:bg-red-50 hover:text-red-600 transition-colors justify-center md:justify-start">
-            <LogOut className="h-6 w-6 shrink-0" />
-            <span className="ml-3 font-medium hidden md:block">Logout</span>
-          </a>
-        </Link>
+        {user && (
+          <div className="mb-4 px-2 hidden md:block">
+            <div className="text-xs font-medium text-gray-500">Signed in as</div>
+            <div className="text-sm font-bold text-gray-900 truncate">{user.name}</div>
+          </div>
+        )}
+        <button 
+          onClick={logout}
+          className="w-full flex items-center p-3 rounded-lg text-gray-500 hover:bg-red-50 hover:text-red-600 transition-colors justify-center md:justify-start"
+        >
+          <LogOut className="h-6 w-6 shrink-0" />
+          <span className="ml-3 font-medium hidden md:block">Logout</span>
+        </button>
       </div>
     </div>
   );

@@ -2,9 +2,11 @@ import { motion } from "framer-motion";
 import { Link, useLocation } from "wouter";
 import { ArrowRight, CheckCircle2, QrCode } from "lucide-react";
 import heroImage from "@assets/generated_images/modern_abstract_network_connection_graphic_with_green_accents.png";
+import { useAuth } from "@/lib/auth-context";
 
 export function Welcome() {
   const [, setLocation] = useLocation();
+  const { user } = useAuth();
 
   return (
     <div className="min-h-screen bg-white flex flex-col relative overflow-hidden">
@@ -18,7 +20,19 @@ export function Welcome() {
           </div>
           <span className="font-display font-bold text-xl text-gray-900">ChatCRM</span>
         </div>
-        <button className="text-sm font-medium text-gray-600 hover:text-gray-900">Login</button>
+        <div className="flex items-center gap-4">
+          {user ? (
+            <Link href="/app/chats">
+              <button className="text-sm font-medium text-gray-900 hover:text-brand-green">
+                Go to Dashboard
+              </button>
+            </Link>
+          ) : (
+            <Link href="/auth">
+              <button className="text-sm font-medium text-gray-600 hover:text-gray-900">Login</button>
+            </Link>
+          )}
+        </div>
       </nav>
 
       <main className="flex-1 flex flex-col md:flex-row items-center justify-center max-w-7xl mx-auto w-full px-6 gap-12 relative z-10">
@@ -36,9 +50,9 @@ export function Welcome() {
             </p>
             
             <div className="flex flex-col sm:flex-row gap-4">
-              <Link href="/connect">
+              <Link href={user ? "/app/chats" : "/auth"}>
                 <button className="h-14 px-8 bg-brand-green hover:bg-green-600 text-white font-semibold rounded-full flex items-center justify-center gap-2 transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5">
-                  Connect WhatsApp
+                  {user ? "Open Dashboard" : "Start Free Trial"}
                   <ArrowRight className="h-5 w-5" />
                 </button>
               </Link>

@@ -1,31 +1,20 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRoute, useLocation } from "wouter";
 import { ChatListItem } from "@/components/ChatListItem";
-import { MOCK_CHATS, Chat, TAG_COLORS, PIPELINE_STAGES, FollowUp } from "@/lib/data";
+import { Chat, TAG_COLORS, PIPELINE_STAGES, FollowUp } from "@/lib/data";
+import { useAuth } from "@/lib/auth-context";
+import * as storage from "@/lib/storage";
 import { 
   Search, 
   MoreVertical, 
-  Phone, 
-  Video, 
   Smile, 
   Paperclip, 
-  Mic, 
   Send,
-  Calendar,
-  Tag as TagIcon,
   Clock,
-  ChevronDown,
-  Smartphone // Added this import
+  Smartphone
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -33,16 +22,22 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Button } from "@/components/ui/button";
 
 export function Chats() {
   const [match, params] = useRoute("/app/chats/:id?");
   const [, setLocation] = useLocation();
+  const { user } = useAuth();
   const [searchTerm, setSearchTerm] = useState("");
-  const [chats, setChats] = useState<Chat[]>(MOCK_CHATS);
+  const [chats, setChats] = useState<Chat[]>([]);
   
-  // If no ID is selected on desktop, default to first chat or show placeholder
-  // For now, let's just handle the selection state
+  // Load chats on mount
+  useEffect(() => {
+    if (user) {
+      const userChats = storage.getUserChats(user.id);
+      setChats(userChats);
+    }
+  }, [user]);
+
   const selectedChatId = params?.id;
   const selectedChat = chats.find(c => c.id === selectedChatId);
 
@@ -52,20 +47,48 @@ export function Chats() {
   );
 
   const handleUpdateChat = (updates: Partial<Chat>) => {
-    if (!selectedChat) return;
+    if (!selectedChat || !user) return;
+    
+    // Optimistic update
     const updatedChats = chats.map(c => 
       c.id === selectedChat.id ? { ...c, ...updates } : c
     );
     setChats(updatedChats);
+    
+    // Persist
+    storage.updateUserChat(user.id, selectedChat.id, updates);
   };
 
   const updateTag = (tag: Chat['tag']) => handleUpdateChat({ tag });
   const updatePipeline = (stage: string) => handleUpdateChat({ pipelineStage: stage as any });
   const updateFollowUp = (followUp: FollowUp) => handleUpdateChat({ followUp });
 
+  // Handle send message (mock)
+  const [newMessage, setNewMessage] = useState("");
+  const handleSendMessage = () => {
+    if (!newMessage.trim() || !selectedChat) return;
+    
+    const newMsgObj = {
+      id: Date.now().toString(),
+      text: newMessage,
+      sender: 'me' as const,
+      time: 'Just now'
+    };
+    
+    const updatedMessages = [...selectedChat.messages, newMsgObj];
+    
+    handleUpdateChat({ 
+      messages: updatedMessages,
+      lastMessage: newMessage,
+      time: 'Just now'
+    });
+    
+    setNewMessage("");
+  };
+
   return (
     <div className="flex h-full w-full">
-      {/* Chat List - Hidden on mobile if chat is selected */}
+      {/* Chat List */}
       <div className={cn(
         "w-full md:w-[380px] flex flex-col border-r border-gray-200 bg-white",
         selectedChatId ? "hidden md:flex" : "flex"
@@ -127,7 +150,7 @@ export function Chats() {
 
               {/* Messages Area */}
               <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-4 relative" style={{ backgroundImage: 'url("https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png")', backgroundRepeat: 'repeat', backgroundSize: '400px' }}>
-                <div className="absolute inset-0 bg-[#efeae2]/90 pointer-events-none" /> {/* Overlay to soften pattern */}
+                <div className="absolute inset-0 bg-[#efeae2]/90 pointer-events-none" />
                 
                 <div className="relative z-10 space-y-4">
                   {selectedChat.messages.map(msg => (
@@ -164,20 +187,24 @@ export function Chats() {
                    type="text" 
                    placeholder="Type a message" 
                    className="flex-1 bg-white border border-gray-200 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-brand-green"
+                   value={newMessage}
+                   onChange={(e) => setNewMessage(e.target.value)}
+                   onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
                  />
-                 {/* Send Button or Mic */}
-                 <button className="h-10 w-10 bg-brand-green hover:bg-green-600 rounded-full flex items-center justify-center text-white transition-colors shadow-sm">
+                 <button 
+                   onClick={handleSendMessage}
+                   className="h-10 w-10 bg-brand-green hover:bg-green-600 rounded-full flex items-center justify-center text-white transition-colors shadow-sm"
+                 >
                    <Send className="h-5 w-5 ml-0.5" />
                  </button>
               </div>
            </div>
 
-           {/* CRM Sidebar Panel - Collapsible on mobile maybe? For now showing on side for desktop */}
+           {/* CRM Sidebar Panel */}
            <div className="w-full md:w-[320px] bg-white border-l border-gray-200 overflow-y-auto shrink-0 flex flex-col shadow-xl md:shadow-none z-10">
               <div className="p-5 border-b border-gray-100">
                  <h3 className="font-display font-bold text-gray-900 mb-4">Lead Details</h3>
                  
-                 {/* Pipeline Stage */}
                  <div className="mb-6">
                    <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 block">Pipeline Stage</label>
                    <Select value={selectedChat.pipelineStage} onValueChange={updatePipeline}>
@@ -192,7 +219,6 @@ export function Chats() {
                    </Select>
                  </div>
 
-                 {/* Tags */}
                  <div className="mb-6">
                    <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 block">Status Tag</label>
                    <div className="flex flex-wrap gap-2">
@@ -213,7 +239,6 @@ export function Chats() {
                    </div>
                  </div>
 
-                 {/* Follow Up */}
                  <div className="mb-6">
                    <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 block">Follow-up Reminder</label>
                    <div className="grid grid-cols-3 gap-2">
@@ -235,7 +260,6 @@ export function Chats() {
                    </div>
                  </div>
 
-                 {/* Notes */}
                  <div className="mb-6">
                    <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 block">Notes</label>
                    <textarea 

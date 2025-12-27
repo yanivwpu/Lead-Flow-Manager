@@ -10,6 +10,13 @@ export interface Message {
   time: string;
 }
 
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+  password?: string;
+}
+
 export interface Chat {
   id: string;
   name: string;

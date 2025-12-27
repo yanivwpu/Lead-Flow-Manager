@@ -1,20 +1,48 @@
-import { Switch, Route } from "wouter";
+import { Switch, Route, Redirect } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { Welcome } from "@/pages/Welcome";
 import { Connect } from "@/pages/Connect";
 import { AppLayout } from "@/pages/AppLayout";
+import { AuthPage } from "@/pages/Auth";
 import NotFound from "@/pages/not-found";
+import { AuthProvider, useAuth } from "@/lib/auth-context";
+import { Loader2 } from "lucide-react";
+
+// Wrapper for protected routes
+function ProtectedRoute({ component: Component, ...rest }: any) {
+  const { user, isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-gray-50">
+        <Loader2 className="h-8 w-8 text-brand-green animate-spin" />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <Redirect to="/auth" />;
+  }
+
+  return <Component {...rest} />;
+}
 
 function Router() {
   return (
     <Switch>
       <Route path="/" component={Welcome} />
-      <Route path="/connect" component={Connect} />
+      <Route path="/auth" component={AuthPage} />
       
-      {/* Nested routes for app handled inside AppLayout mostly, but wouter needs the parent route matching */}
-      <Route path="/app/:rest*" component={AppLayout} />
+      {/* Protected Routes */}
+      <Route path="/connect">
+        <ProtectedRoute component={Connect} />
+      </Route>
+      
+      <Route path="/app/:rest*">
+        <ProtectedRoute component={AppLayout} />
+      </Route>
       
       <Route component={NotFound} />
     </Switch>
@@ -24,8 +52,10 @@ function Router() {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <Toaster />
-      <Router />
+      <AuthProvider>
+        <Toaster />
+        <Router />
+      </AuthProvider>
     </QueryClientProvider>
   );
 }
