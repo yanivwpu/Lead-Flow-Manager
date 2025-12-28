@@ -1,14 +1,4 @@
-import React, {
-  createContext,
-  forwardRef,
-  useContext,
-  useId,
-  useMemo,
-  type CSSProperties,
-  type ComponentProps,
-  type ComponentType,
-  type ReactNode,
-} from "react"
+import * as React from "react"
 import * as RechartsPrimitive from "recharts"
 
 import { cn } from "@/lib/utils"
@@ -18,8 +8,8 @@ const THEMES = { light: "", dark: ".dark" } as const
 
 export type ChartConfig = {
   [k in string]: {
-    label?: ReactNode
-    icon?: ComponentType
+    label?: React.ReactNode
+    icon?: React.ComponentType
   } & (
     | { color?: string; theme?: never }
     | { color?: never; theme: Record<keyof typeof THEMES, string> }
@@ -30,10 +20,10 @@ type ChartContextProps = {
   config: ChartConfig
 }
 
-const ChartContext = createContext<ChartContextProps | null>(null)
+const ChartContext = React.createContext<ChartContextProps | null>(null)
 
 function useChart() {
-  const context = useContext(ChartContext)
+  const context = React.useContext(ChartContext)
 
   if (!context) {
     throw new Error("useChart must be used within a <ChartContainer />")
@@ -42,16 +32,16 @@ function useChart() {
   return context
 }
 
-const ChartContainer = forwardRef<
+const ChartContainer = React.forwardRef<
   HTMLDivElement,
-  ComponentProps<"div"> & {
+  React.ComponentProps<"div"> & {
     config: ChartConfig
-    children: ComponentProps<
+    children: React.ComponentProps<
       typeof RechartsPrimitive.ResponsiveContainer
     >["children"]
   }
 >(({ id, className, children, config, ...props }, ref) => {
-  const uniqueId = useId()
+  const uniqueId = React.useId()
   const chartId = `chart-${id || uniqueId.replace(/:/g, "")}`
 
   return (
@@ -110,10 +100,10 @@ ${colorConfig
 
 const ChartTooltip = RechartsPrimitive.Tooltip
 
-const ChartTooltipContent = forwardRef<
+const ChartTooltipContent = React.forwardRef<
   HTMLDivElement,
-  ComponentProps<typeof RechartsPrimitive.Tooltip> &
-    ComponentProps<"div"> & {
+  React.ComponentProps<typeof RechartsPrimitive.Tooltip> &
+    React.ComponentProps<"div"> & {
       hideLabel?: boolean
       hideIndicator?: boolean
       indicator?: "line" | "dot" | "dashed"
@@ -141,7 +131,7 @@ const ChartTooltipContent = forwardRef<
   ) => {
     const { config } = useChart()
 
-    const tooltipLabel = useMemo(() => {
+    const tooltipLabel = React.useMemo(() => {
       if (hideLabel || !payload?.length) {
         return null
       }
@@ -231,7 +221,7 @@ const ChartTooltipContent = forwardRef<
                               {
                                 "--color-bg": indicatorColor,
                                 "--color-border": indicatorColor,
-                              } as CSSProperties
+                              } as React.CSSProperties
                             }
                           />
                         )
@@ -268,9 +258,9 @@ ChartTooltipContent.displayName = "ChartTooltip"
 
 const ChartLegend = RechartsPrimitive.Legend
 
-const ChartLegendContent = forwardRef<
+const ChartLegendContent = React.forwardRef<
   HTMLDivElement,
-  ComponentProps<"div"> &
+  React.ComponentProps<"div"> &
     Pick<RechartsPrimitive.LegendProps, "payload" | "verticalAlign"> & {
       hideIcon?: boolean
       nameKey?: string

@@ -1,10 +1,6 @@
 "use client"
 
-import React, {
-  useEffect,
-  useRef,
-  type ComponentProps,
-} from "react"
+import * as React from "react"
 import {
   ChevronDownIcon,
   ChevronLeftIcon,
@@ -24,8 +20,8 @@ function Calendar({
   formatters,
   components,
   ...props
-}: ComponentProps<typeof DayPicker> & {
-  buttonVariant?: ComponentProps<typeof Button>["variant"]
+}: React.ComponentProps<typeof DayPicker> & {
+  buttonVariant?: React.ComponentProps<typeof Button>["variant"]
 }) {
   const defaultClassNames = getDefaultClassNames()
 
@@ -181,11 +177,11 @@ function CalendarDayButton({
   day,
   modifiers,
   ...props
-}: ComponentProps<typeof DayButton>) {
+}: React.ComponentProps<typeof DayButton>) {
   const defaultClassNames = getDefaultClassNames()
 
-  const ref = useRef<HTMLButtonElement>(null)
-  useEffect(() => {
+  const ref = React.useRef<HTMLButtonElement>(null)
+  React.useEffect(() => {
     if (modifiers.focused) ref.current?.focus()
   }, [modifiers.focused])
 
