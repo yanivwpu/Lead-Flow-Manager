@@ -51,7 +51,13 @@ export function FollowUps() {
     },
   });
 
-  const followUps = chats.filter(c => c.followUp);
+  const followUps = chats
+    .filter(c => c.followUp && c.followUpDate)
+    .sort((a, b) => {
+      const dateA = new Date(a.followUpDate!).getTime();
+      const dateB = new Date(b.followUpDate!).getTime();
+      return dateA - dateB;
+    });
 
   const handleMarkDone = async (e: React.MouseEvent, chatId: string) => {
     e.stopPropagation();
