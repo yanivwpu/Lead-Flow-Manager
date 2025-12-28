@@ -171,6 +171,33 @@ export function registerAuthRoutes(app: Express) {
       res.status(401).json({ error: 'Not authenticated' });
     }
   });
+
+  // Forgot password - request password reset
+  app.post('/api/auth/forgot-password', async (req, res) => {
+    try {
+      const { email } = req.body;
+
+      if (!email) {
+        return res.status(400).json({ error: 'Email is required' });
+      }
+
+      // Check if user exists (but don't reveal this to the client)
+      const user = await storage.getUserByEmail(email);
+      
+      if (user) {
+        // TODO: Send password reset email when email service is configured
+        // For now, log the request
+        console.log(`Password reset requested for: ${email}`);
+      }
+
+      // Always return success to prevent email enumeration
+      res.json({ success: true, message: 'If an account exists, a reset link will be sent.' });
+    } catch (error) {
+      console.error('Forgot password error:', error);
+      // Still return success to prevent information leakage
+      res.json({ success: true, message: 'If an account exists, a reset link will be sent.' });
+    }
+  });
 }
 
 // Extend Express Request type to include user

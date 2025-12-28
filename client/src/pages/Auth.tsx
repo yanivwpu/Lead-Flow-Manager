@@ -5,7 +5,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { motion } from "framer-motion";
-import { Loader2, ArrowRight, AlertCircle, CheckCircle2 } from "lucide-react";
+import { Loader2, ArrowRight, AlertCircle, CheckCircle2, X } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 export function AuthPage() {
   const [isLogin, setIsLogin] = useState(false);
@@ -15,8 +21,36 @@ export function AuthPage() {
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
+  const [forgotPasswordOpen, setForgotPasswordOpen] = useState(false);
+  const [resetEmail, setResetEmail] = useState("");
+  const [resetSubmitted, setResetSubmitted] = useState(false);
+  const [resetSubmitting, setResetSubmitting] = useState(false);
   const { login, signup } = useAuth();
   const [, setLocation] = useLocation();
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setResetSubmitting(true);
+    
+    try {
+      await fetch('/api/auth/forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: resetEmail }),
+      });
+    } catch (err) {
+      // Silent fail - don't reveal if email exists
+    }
+    
+    setResetSubmitting(false);
+    setResetSubmitted(true);
+  };
+
+  const closeForgotPassword = () => {
+    setForgotPasswordOpen(false);
+    setResetEmail("");
+    setResetSubmitted(false);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -130,7 +164,7 @@ export function AuthPage() {
             <div className="space-y-2">
               <div className="flex justify-between items-center">
                 <Label htmlFor="password">Password</Label>
-                {isLogin && <a href="#" className="text-xs text-brand-green font-medium hover:underline">Forgot password?</a>}
+                {isLogin && <button type="button" onClick={() => setForgotPasswordOpen(true)} className="text-xs text-brand-green font-medium hover:underline">Forgot password?</button>}
               </div>
               <Input 
                 id="password" 
@@ -200,6 +234,74 @@ export function AuthPage() {
           </div>
         </motion.div>
       </div>
+
+      <Dialog open={forgotPasswordOpen} onOpenChange={closeForgotPassword}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-display">Reset your password</DialogTitle>
+          </DialogHeader>
+          
+          {!resetSubmitted ? (
+            <form onSubmit={handleForgotPassword} className="space-y-4 mt-4">
+              <p className="text-sm text-gray-500">
+                Enter your email address and we'll send you a link to reset your password.
+              </p>
+              <div className="space-y-2">
+                <Label htmlFor="reset-email">Email address</Label>
+                <Input
+                  id="reset-email"
+                  type="email"
+                  placeholder="john@company.com"
+                  required
+                  value={resetEmail}
+                  onChange={(e) => setResetEmail(e.target.value)}
+                  className="bg-gray-50 border-gray-200"
+                  data-testid="input-reset-email"
+                />
+              </div>
+              <div className="flex gap-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={closeForgotPassword}
+                  className="flex-1"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  className="flex-1 bg-brand-green hover:bg-green-600"
+                  disabled={resetSubmitting}
+                  data-testid="button-send-reset"
+                >
+                  {resetSubmitting ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    "Send Reset Link"
+                  )}
+                </Button>
+              </div>
+            </form>
+          ) : (
+            <div className="py-6 text-center">
+              <div className="h-12 w-12 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <CheckCircle2 className="h-6 w-6 text-brand-green" />
+              </div>
+              <h3 className="font-semibold text-gray-900 mb-2">Check your email</h3>
+              <p className="text-sm text-gray-500 mb-4">
+                If an account exists for {resetEmail}, you'll receive a password reset link shortly.
+              </p>
+              <Button
+                onClick={closeForgotPassword}
+                className="bg-brand-green hover:bg-green-600"
+                data-testid="button-close-reset"
+              >
+                Back to Login
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
