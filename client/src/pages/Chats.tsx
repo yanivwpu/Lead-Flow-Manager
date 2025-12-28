@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/select";
 
 export function Chats() {
-  const [match, params] = useRoute("/app/chats/:id");
+  const [match, params] = useRoute("/app/chats/:id?");
   const [, setLocation] = useLocation();
   const { user } = useAuth();
   const [searchTerm, setSearchTerm] = useState("");

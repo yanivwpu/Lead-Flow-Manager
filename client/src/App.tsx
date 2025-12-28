@@ -40,7 +40,7 @@ function Router() {
         <ProtectedRoute component={Connect} />
       </Route>
       
-      <Route path="/app/*?">
+      <Route path="/app/:rest*">
         <ProtectedRoute component={AppLayout} />
       </Route>
       
