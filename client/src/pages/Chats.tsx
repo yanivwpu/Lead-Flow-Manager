@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRoute, useLocation } from "wouter";
 import { ChatListItem } from "@/components/ChatListItem";
 import { TAG_COLORS, PIPELINE_STAGES } from "@/lib/data";
@@ -37,6 +37,7 @@ interface Chat {
   notes: string;
   pipelineStage: string;
   messages: any[];
+  createdAt?: string;
 }
 
 type FollowUp = 'Tomorrow' | '3 days' | '1 week' | null;
@@ -85,7 +86,16 @@ export function Chats() {
   const selectedChatId = params?.id;
   const selectedChat = chats.find(c => c.id === selectedChatId);
 
-  const filteredChats = chats.filter(chat => 
+  const sortedChats = useMemo(() => {
+    return [...chats].sort((a, b) => {
+      if (a.createdAt && b.createdAt) {
+        return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+      }
+      return a.id.localeCompare(b.id);
+    });
+  }, [chats]);
+
+  const filteredChats = sortedChats.filter(chat => 
     chat.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     chat.lastMessage.toLowerCase().includes(searchTerm.toLowerCase())
   );
