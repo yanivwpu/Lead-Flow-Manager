@@ -64,7 +64,20 @@ export function Chats() {
       if (!response.ok) throw new Error('Failed to update chat');
       return response.json();
     },
-    onSuccess: () => {
+    onMutate: async ({ chatId, updates }) => {
+      await queryClient.cancelQueries({ queryKey: ['/api/chats'] });
+      const previousChats = queryClient.getQueryData<Chat[]>(['/api/chats']);
+      queryClient.setQueryData<Chat[]>(['/api/chats'], (old) =>
+        old?.map((chat) => (chat.id === chatId ? { ...chat, ...updates } : chat))
+      );
+      return { previousChats };
+    },
+    onError: (_err, _variables, context) => {
+      if (context?.previousChats) {
+        queryClient.setQueryData(['/api/chats'], context.previousChats);
+      }
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/chats'] });
     },
   });
