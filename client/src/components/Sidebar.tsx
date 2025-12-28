@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { MessageSquare, ListTodo, Search, LogOut } from "lucide-react";
+import { MessageSquare, ListTodo, Search, LogOut, Settings, Plug } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 
@@ -11,6 +11,8 @@ export function Sidebar() {
     { icon: MessageSquare, label: "Chats", href: "/app/chats" },
     { icon: ListTodo, label: "Follow-ups", href: "/app/followups" },
     { icon: Search, label: "Search", href: "/app/search" },
+    { icon: Plug, label: "Integration", href: "/app/integration" },
+    { icon: Settings, label: "Settings", href: "/app/settings" },
   ];
 
   return (

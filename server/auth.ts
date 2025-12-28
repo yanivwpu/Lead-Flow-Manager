@@ -1,0 +1,183 @@
+import passport from 'passport';
+import { Strategy as LocalStrategy } from 'passport-local';
+import bcrypt from 'bcryptjs';
+import type { Express } from 'express';
+import session from 'express-session';
+import createMemoryStore from 'memorystore';
+import { storage } from './storage';
+import type { User } from '@shared/schema';
+
+const MemoryStore = createMemoryStore(session);
+
+export function setupAuth(app: Express) {
+  // Session configuration
+  app.use(
+    session({
+      secret: process.env.SESSION_SECRET || 'whatsapp-crm-secret-key-change-in-production',
+      resave: false,
+      saveUninitialized: false,
+      store: new MemoryStore({
+        checkPeriod: 86400000, // prune expired entries every 24h
+      }),
+      cookie: {
+        maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+      },
+    })
+  );
+
+  app.use(passport.initialize());
+  app.use(passport.session());
+
+  // Configure passport local strategy
+  passport.use(
+    new LocalStrategy(
+      {
+        usernameField: 'email',
+        passwordField: 'password',
+      },
+      async (email, password, done) => {
+        try {
+          const user = await storage.getUserByEmail(email);
+          if (!user) {
+            return done(null, false, { message: 'Invalid email or password' });
+          }
+
+          const isValid = await bcrypt.compare(password, user.password);
+          if (!isValid) {
+            return done(null, false, { message: 'Invalid email or password' });
+          }
+
+          return done(null, user);
+        } catch (error) {
+          return done(error);
+        }
+      }
+    )
+  );
+
+  // Serialize user to session
+  passport.serializeUser((user: any, done) => {
+    done(null, user.id);
+  });
+
+  // Deserialize user from session
+  passport.deserializeUser(async (id: string, done) => {
+    try {
+      const user = await storage.getUser(id);
+      done(null, user);
+    } catch (error) {
+      done(error);
+    }
+  });
+}
+
+// Auth middleware to protect routes
+export function requireAuth(req: any, res: any, next: any) {
+  if (req.isAuthenticated()) {
+    return next();
+  }
+  res.status(401).json({ error: 'Unauthorized' });
+}
+
+// Register auth routes
+export function registerAuthRoutes(app: Express) {
+  // Sign up
+  app.post('/api/auth/signup', async (req, res) => {
+    try {
+      const { name, email, password } = req.body;
+
+      if (!name || !email || !password) {
+        return res.status(400).json({ error: 'Missing required fields' });
+      }
+
+      // Check if user already exists
+      const existingUser = await storage.getUserByEmail(email);
+      if (existingUser) {
+        return res.status(400).json({ error: 'User already exists with that email' });
+      }
+
+      // Hash password
+      const hashedPassword = await bcrypt.hash(password, 10);
+
+      // Create user
+      const user = await storage.createUser({
+        name,
+        email,
+        password: hashedPassword,
+      });
+
+      // Log the user in
+      req.login(user, (err: any) => {
+        if (err) {
+          return res.status(500).json({ error: 'Failed to log in after signup' });
+        }
+        const { password: _, ...safeUser } = user;
+        res.status(201).json(safeUser);
+      });
+    } catch (error) {
+      console.error('Signup error:', error);
+      res.status(500).json({ error: 'Failed to create account' });
+    }
+  });
+
+  // Login
+  app.post('/api/auth/login', (req, res, next) => {
+    passport.authenticate('local', (err: any, user: User, info: any) => {
+      if (err) {
+        return res.status(500).json({ error: 'Authentication failed' });
+      }
+      if (!user) {
+        return res.status(401).json({ error: info?.message || 'Invalid email or password' });
+      }
+      
+      // Set session duration based on rememberMe flag
+      const rememberMe = req.body.rememberMe || false;
+      
+      req.login(user, (loginErr: any) => {
+        if (loginErr) {
+          return res.status(500).json({ error: 'Failed to log in' });
+        }
+        
+        // Extend session if remember me is checked (30 days vs 7 days default)
+        if (rememberMe && req.session.cookie) {
+          req.session.cookie.maxAge = 30 * 24 * 60 * 60 * 1000; // 30 days
+        }
+        
+        const { password: _, ...safeUser } = user;
+        res.json(safeUser);
+      });
+    })(req, res, next);
+  });
+
+  // Logout
+  app.post('/api/auth/logout', (req, res) => {
+    req.logout((err: any) => {
+      if (err) {
+        return res.status(500).json({ error: 'Failed to log out' });
+      }
+      res.json({ success: true });
+    });
+  });
+
+  // Check if user is authenticated
+  app.get('/api/auth/me', (req, res) => {
+    if (req.isAuthenticated()) {
+      const { password: _, ...safeUser } = req.user as User;
+      res.json(safeUser);
+    } else {
+      res.status(401).json({ error: 'Not authenticated' });
+    }
+  });
+}
+
+// Extend Express Request type to include user
+import type { User as SchemaUser } from '@shared/schema';
+
+declare global {
+  namespace Express {
+    interface User extends SchemaUser {}
+  }
+}

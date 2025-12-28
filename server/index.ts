@@ -2,6 +2,8 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
+import { startNotificationScheduler } from "./notifications";
+import { setupAuth, registerAuthRoutes } from "./auth";
 
 const app = express();
 const httpServer = createServer(app);
@@ -21,6 +23,9 @@ app.use(
 );
 
 app.use(express.urlencoded({ extended: false }));
+
+// Setup authentication
+setupAuth(app);
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
@@ -60,7 +65,13 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  // Register authentication routes
+  registerAuthRoutes(app);
+  
   await registerRoutes(httpServer, app);
+
+  // Start notification scheduler
+  startNotificationScheduler();
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;

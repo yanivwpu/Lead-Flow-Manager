@@ -1,9 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useRoute, useLocation } from "wouter";
 import { ChatListItem } from "@/components/ChatListItem";
-import { Chat, TAG_COLORS, PIPELINE_STAGES, FollowUp } from "@/lib/data";
+import { TAG_COLORS, PIPELINE_STAGES } from "@/lib/data";
 import { useAuth } from "@/lib/auth-context";
-import * as storage from "@/lib/storage";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { 
   Search, 
   MoreVertical, 
@@ -23,20 +23,51 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
+interface Chat {
+  id: string;
+  userId: string;
+  name: string;
+  avatar: string;
+  lastMessage: string;
+  time: string;
+  unread: number;
+  tag: string;
+  followUp: string | null;
+  followUpDate: string | null;
+  notes: string;
+  pipelineStage: string;
+  messages: any[];
+}
+
+type FollowUp = 'Tomorrow' | '3 days' | '1 week' | null;
+
 export function Chats() {
-  const [match, params] = useRoute("/app/chats/:id?");
+  const [match, params] = useRoute("/app/chats/:id");
   const [, setLocation] = useLocation();
   const { user } = useAuth();
   const [searchTerm, setSearchTerm] = useState("");
-  const [chats, setChats] = useState<Chat[]>([]);
+  const queryClient = useQueryClient();
   
-  // Load chats on mount
-  useEffect(() => {
-    if (user) {
-      const userChats = storage.getUserChats(user.id);
-      setChats(userChats);
-    }
-  }, [user]);
+  const { data: chats = [], isLoading } = useQuery<Chat[]>({
+    queryKey: ['/api/chats'],
+    enabled: !!user,
+  });
+
+  const updateChatMutation = useMutation({
+    mutationFn: async ({ chatId, updates }: { chatId: string; updates: Partial<Chat> }) => {
+      const response = await fetch(`/api/chats/${chatId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(updates),
+      });
+      if (!response.ok) throw new Error('Failed to update chat');
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/chats'] });
+    },
+  });
 
   const selectedChatId = params?.id;
   const selectedChat = chats.find(c => c.id === selectedChatId);
@@ -47,23 +78,33 @@ export function Chats() {
   );
 
   const handleUpdateChat = (updates: Partial<Chat>) => {
-    if (!selectedChat || !user) return;
-    
-    // Optimistic update
-    const updatedChats = chats.map(c => 
-      c.id === selectedChat.id ? { ...c, ...updates } : c
-    );
-    setChats(updatedChats);
-    
-    // Persist
-    storage.updateUserChat(user.id, selectedChat.id, updates);
+    if (!selectedChat) return;
+    updateChatMutation.mutate({ chatId: selectedChat.id, updates });
   };
 
-  const updateTag = (tag: Chat['tag']) => handleUpdateChat({ tag });
-  const updatePipeline = (stage: string) => handleUpdateChat({ pipelineStage: stage as any });
-  const updateFollowUp = (followUp: FollowUp) => handleUpdateChat({ followUp });
+  const updateTag = (tag: string) => handleUpdateChat({ tag });
+  const updatePipeline = (stage: string) => handleUpdateChat({ pipelineStage: stage });
+  const updateFollowUp = (followUp: FollowUp) => {
+    const followUpDate = followUp ? calculateFollowUpDate(followUp) : null;
+    handleUpdateChat({ followUp, followUpDate });
+  };
 
-  // Handle send message (mock)
+  const calculateFollowUpDate = (followUp: string): string => {
+    const now = new Date();
+    switch (followUp) {
+      case 'Tomorrow':
+        now.setDate(now.getDate() + 1);
+        break;
+      case '3 days':
+        now.setDate(now.getDate() + 3);
+        break;
+      case '1 week':
+        now.setDate(now.getDate() + 7);
+        break;
+    }
+    return now.toISOString();
+  };
+
   const [newMessage, setNewMessage] = useState("");
   const handleSendMessage = () => {
     if (!newMessage.trim() || !selectedChat) return;
@@ -75,7 +116,7 @@ export function Chats() {
       time: 'Just now'
     };
     
-    const updatedMessages = [...selectedChat.messages, newMsgObj];
+    const updatedMessages = [...(selectedChat.messages || []), newMsgObj];
     
     handleUpdateChat({ 
       messages: updatedMessages,
@@ -85,6 +126,14 @@ export function Chats() {
     
     setNewMessage("");
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex h-full w-full items-center justify-center bg-white">
+        <div className="text-gray-400">Loading chats...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-full w-full">
@@ -110,18 +159,25 @@ export function Chats() {
               className="w-full pl-10 pr-4 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-green/20 focus:border-brand-green"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
+              data-testid="input-search-chats"
             />
           </div>
         </div>
 
         <div className="flex-1 overflow-y-auto">
-           {filteredChats.map(chat => (
-             <ChatListItem 
-               key={chat.id} 
-               chat={chat} 
-               isActive={chat.id === selectedChatId} 
-             />
-           ))}
+           {filteredChats.length === 0 ? (
+             <div className="p-8 text-center text-gray-500">
+               <p>No chats available</p>
+             </div>
+           ) : (
+             filteredChats.map(chat => (
+               <ChatListItem 
+                 key={chat.id} 
+                 chat={chat as any} 
+                 isActive={chat.id === selectedChatId} 
+               />
+             ))
+           )}
         </div>
       </div>
 
@@ -136,7 +192,9 @@ export function Chats() {
                    <button onClick={() => setLocation('/app/chats')} className="md:hidden">
                      <span className="text-2xl mr-2">←</span>
                    </button>
-                   <img src={selectedChat.avatar} className="h-10 w-10 rounded-full object-cover" />
+                   <div className="h-10 w-10 rounded-full bg-brand-green/10 flex items-center justify-center text-brand-green font-semibold">
+                     {selectedChat.avatar}
+                   </div>
                    <div>
                      <h3 className="font-semibold text-gray-900">{selectedChat.name}</h3>
                      <span className="text-xs text-gray-500">last seen today at 10:45 AM</span>
@@ -153,27 +211,33 @@ export function Chats() {
                 <div className="absolute inset-0 bg-[#efeae2]/90 pointer-events-none" />
                 
                 <div className="relative z-10 space-y-4">
-                  {selectedChat.messages.map(msg => (
-                    <div 
-                      key={msg.id} 
-                      className={cn(
-                        "flex", 
-                        msg.sender === 'me' ? "justify-end" : "justify-start"
-                      )}
-                    >
-                      <div className={cn(
-                        "max-w-[85%] md:max-w-[65%] rounded-lg px-3 py-2 text-sm shadow-sm relative",
-                        msg.sender === 'me' 
-                          ? "bg-[#d9fdd3] text-gray-900 rounded-tr-none" 
-                          : "bg-white text-gray-900 rounded-tl-none"
-                      )}>
-                        <p>{msg.text}</p>
-                        <span className="text-[10px] text-gray-500 block text-right mt-1 opacity-70">
-                          {msg.time}
-                        </span>
-                      </div>
+                  {(selectedChat.messages || []).length === 0 ? (
+                    <div className="text-center text-gray-500 py-8">
+                      <p>No messages yet. Start the conversation!</p>
                     </div>
-                  ))}
+                  ) : (
+                    (selectedChat.messages || []).map((msg: any) => (
+                      <div 
+                        key={msg.id} 
+                        className={cn(
+                          "flex", 
+                          msg.sender === 'me' ? "justify-end" : "justify-start"
+                        )}
+                      >
+                        <div className={cn(
+                          "max-w-[85%] md:max-w-[65%] rounded-lg px-3 py-2 text-sm shadow-sm relative",
+                          msg.sender === 'me' 
+                            ? "bg-[#d9fdd3] text-gray-900 rounded-tr-none" 
+                            : "bg-white text-gray-900 rounded-tl-none"
+                        )}>
+                          <p>{msg.text}</p>
+                          <span className="text-[10px] text-gray-500 block text-right mt-1 opacity-70">
+                            {msg.time}
+                          </span>
+                        </div>
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
 
@@ -190,10 +254,12 @@ export function Chats() {
                    value={newMessage}
                    onChange={(e) => setNewMessage(e.target.value)}
                    onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
+                   data-testid="input-message"
                  />
                  <button 
                    onClick={handleSendMessage}
                    className="h-10 w-10 bg-brand-green hover:bg-green-600 rounded-full flex items-center justify-center text-white transition-colors shadow-sm"
+                   data-testid="button-send-message"
                  >
                    <Send className="h-5 w-5 ml-0.5" />
                  </button>
@@ -208,7 +274,7 @@ export function Chats() {
                  <div className="mb-6">
                    <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 block">Pipeline Stage</label>
                    <Select value={selectedChat.pipelineStage} onValueChange={updatePipeline}>
-                      <SelectTrigger className="w-full bg-gray-50 border-gray-200">
+                      <SelectTrigger className="w-full bg-gray-50 border-gray-200" data-testid="select-pipeline">
                         <SelectValue placeholder="Select stage" />
                       </SelectTrigger>
                       <SelectContent>
@@ -225,13 +291,14 @@ export function Chats() {
                      {Object.keys(TAG_COLORS).map((tag) => (
                        <button
                          key={tag}
-                         onClick={() => updateTag(tag as any)}
+                         onClick={() => updateTag(tag)}
                          className={cn(
                            "text-xs px-2.5 py-1 rounded-full border transition-all",
                            selectedChat.tag === tag 
                              ? TAG_COLORS[tag as keyof typeof TAG_COLORS] + " ring-1 ring-offset-1 ring-gray-300"
                              : "bg-white text-gray-600 border-gray-200 hover:border-gray-300"
                          )}
+                         data-testid={`button-tag-${tag.toLowerCase()}`}
                        >
                          {tag}
                        </button>
@@ -242,16 +309,17 @@ export function Chats() {
                  <div className="mb-6">
                    <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 block">Follow-up Reminder</label>
                    <div className="grid grid-cols-3 gap-2">
-                      {['Tomorrow', '3 days', '1 week'].map((time) => (
+                      {(['Tomorrow', '3 days', '1 week'] as const).map((time) => (
                         <button
                           key={time}
-                          onClick={() => updateFollowUp(selectedChat.followUp === time ? null : time as any)}
+                          onClick={() => updateFollowUp(selectedChat.followUp === time ? null : time)}
                           className={cn(
                             "text-xs py-2 rounded-lg border text-center transition-colors flex flex-col items-center justify-center gap-1",
                             selectedChat.followUp === time
                               ? "bg-brand-green/10 text-brand-green border-brand-green font-medium"
                               : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
                           )}
+                          data-testid={`button-followup-${time.replace(' ', '-').toLowerCase()}`}
                         >
                           <Clock className="h-3 w-3" />
                           {time}
@@ -265,8 +333,9 @@ export function Chats() {
                    <textarea 
                      className="w-full h-32 bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-sm text-gray-700 focus:outline-none focus:ring-1 focus:ring-yellow-400 resize-none"
                      placeholder="Add a note..."
-                     value={selectedChat.notes}
+                     value={selectedChat.notes || ''}
                      onChange={(e) => handleUpdateChat({ notes: e.target.value })}
+                     data-testid="textarea-notes"
                    />
                  </div>
               </div>
