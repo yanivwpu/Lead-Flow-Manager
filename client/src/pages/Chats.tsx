@@ -88,8 +88,10 @@ export function Chats() {
 
   const sortedChats = useMemo(() => {
     return [...chats].sort((a, b) => {
-      if (a.createdAt && b.createdAt) {
-        return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+      const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      if (dateA !== dateB) {
+        return dateA - dateB;
       }
       return a.id.localeCompare(b.id);
     });

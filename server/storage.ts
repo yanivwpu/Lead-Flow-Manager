@@ -43,7 +43,7 @@ export class DbStorage implements IStorage {
   }
 
   async getChats(userId: string): Promise<Chat[]> {
-    return await db.select().from(chats).where(eq(chats.userId, userId)).orderBy(asc(chats.createdAt));
+    return await db.select().from(chats).where(eq(chats.userId, userId)).orderBy(asc(chats.createdAt), asc(chats.id));
   }
 
   async getChat(id: string): Promise<Chat | undefined> {
