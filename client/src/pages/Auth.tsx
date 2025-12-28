@@ -232,6 +232,17 @@ export function AuthPage() {
               {isLogin ? "Sign up" : "Log in"}
             </button>
           </div>
+
+          <div className="mt-4 text-center">
+            <button 
+              type="button"
+              onClick={() => setForgotPasswordOpen(true)} 
+              className="text-sm text-gray-400 hover:text-brand-green hover:underline"
+              data-testid="link-forgot-password"
+            >
+              Forgot your password?
+            </button>
+          </div>
         </motion.div>
       </div>
 
