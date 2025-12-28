@@ -11,6 +11,10 @@ export const users = pgTable("users", {
   pushEnabled: boolean("push_enabled").default(false),
   emailEnabled: boolean("email_enabled").default(false),
   pushSubscription: jsonb("push_subscription"),
+  twilioAccountSid: text("twilio_account_sid"),
+  twilioAuthToken: text("twilio_auth_token"),
+  twilioWhatsappNumber: text("twilio_whatsapp_number"),
+  twilioConnected: boolean("twilio_connected").default(false),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -19,6 +23,7 @@ export const chats = pgTable("chats", {
   userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
   avatar: text("avatar").notNull(),
+  whatsappPhone: text("whatsapp_phone"),
   lastMessage: text("last_message").notNull(),
   time: text("time").notNull(),
   unread: integer("unread").default(0),
