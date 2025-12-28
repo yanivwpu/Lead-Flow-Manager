@@ -1,19 +1,7 @@
 import { Link } from "wouter";
 import { cn } from "@/lib/utils";
-import { TAG_COLORS } from "@/lib/data";
-import { CheckCheck } from "lucide-react";
-
-interface Chat {
-  id: string;
-  name: string;
-  avatar: string;
-  lastMessage: string;
-  time: string;
-  unread: number;
-  tag: string;
-  followUp: string | null;
-  messages: any[];
-}
+import { Chat, TAG_COLORS } from "@/lib/data";
+import { Check, CheckCheck } from "lucide-react";
 
 interface ChatListItemProps {
   chat: Chat;
@@ -21,11 +9,6 @@ interface ChatListItemProps {
 }
 
 export function ChatListItem({ chat, isActive }: ChatListItemProps) {
-  const lastMessage = chat.messages && chat.messages.length > 0 
-    ? chat.messages[chat.messages.length - 1] 
-    : null;
-  const isLastMessageFromMe = lastMessage?.sender === 'me';
-
   return (
     <Link href={`/app/chats/${chat.id}`}>
       <div
@@ -33,12 +16,13 @@ export function ChatListItem({ chat, isActive }: ChatListItemProps) {
           "flex items-center p-3 cursor-pointer transition-colors border-b border-gray-50 hover:bg-gray-50",
           isActive ? "bg-gray-100 hover:bg-gray-100" : "bg-white"
         )}
-        data-testid={`chat-item-${chat.id}`}
       >
         <div className="relative shrink-0">
-          <div className="h-12 w-12 rounded-full bg-brand-green/10 flex items-center justify-center text-brand-green font-semibold">
-            {chat.avatar}
-          </div>
+          <img
+            src={chat.avatar}
+            alt={chat.name}
+            className="h-12 w-12 rounded-full object-cover"
+          />
           {chat.unread > 0 && (
             <div className="absolute -top-1 -right-1 h-5 w-5 bg-brand-green text-white text-xs font-bold rounded-full flex items-center justify-center border-2 border-white">
               {chat.unread}
@@ -61,7 +45,7 @@ export function ChatListItem({ chat, isActive }: ChatListItemProps) {
 
           <div className="flex justify-between items-center">
             <div className="flex items-center text-sm text-gray-500 truncate pr-2">
-              {isLastMessageFromMe && (
+              {chat.messages[chat.messages.length - 1].sender === 'me' && (
                 <span className="mr-1">
                    <CheckCheck className="h-4 w-4 text-blue-400" />
                 </span>
@@ -71,7 +55,7 @@ export function ChatListItem({ chat, isActive }: ChatListItemProps) {
           </div>
           
           <div className="flex gap-2 mt-2">
-            <span className={cn("text-[10px] px-1.5 py-0.5 rounded border font-medium", TAG_COLORS[chat.tag as keyof typeof TAG_COLORS] || "bg-gray-50 text-gray-600 border-gray-200")}>
+            <span className={cn("text-[10px] px-1.5 py-0.5 rounded border font-medium", TAG_COLORS[chat.tag])}>
               {chat.tag}
             </span>
             {chat.followUp && (

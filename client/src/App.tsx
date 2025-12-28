@@ -1,4 +1,3 @@
-import React from "react";
 import { Switch, Route, Redirect } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -11,6 +10,7 @@ import NotFound from "@/pages/not-found";
 import { AuthProvider, useAuth } from "@/lib/auth-context";
 import { Loader2 } from "lucide-react";
 
+// Wrapper for protected routes
 function ProtectedRoute({ component: Component, ...rest }: any) {
   const { user, isLoading } = useAuth();
 
@@ -35,11 +35,12 @@ function Router() {
       <Route path="/" component={Welcome} />
       <Route path="/auth" component={AuthPage} />
       
+      {/* Protected Routes */}
       <Route path="/connect">
         <ProtectedRoute component={Connect} />
       </Route>
       
-      <Route path="/app/*?">
+      <Route path="/app/:rest*">
         <ProtectedRoute component={AppLayout} />
       </Route>
       

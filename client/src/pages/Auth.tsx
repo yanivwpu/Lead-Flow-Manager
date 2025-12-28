@@ -14,7 +14,6 @@ export function AuthPage() {
   const [name, setName] = useState("");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [rememberMe, setRememberMe] = useState(false);
   const { login, signup } = useAuth();
   const [, setLocation] = useLocation();
 
@@ -25,7 +24,7 @@ export function AuthPage() {
 
     try {
       if (isLogin) {
-        const success = await login(email, password, rememberMe);
+        const success = await login(email, password);
         if (success) {
           setLocation("/app/chats");
         } else {
@@ -140,28 +139,8 @@ export function AuthPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="bg-gray-50 border-gray-200"
-                data-testid="input-password"
               />
             </div>
-
-            {isLogin && (
-              <div className="flex items-center space-x-2">
-                <input
-                  type="checkbox"
-                  id="remember"
-                  checked={rememberMe}
-                  onChange={(e) => setRememberMe(e.target.checked)}
-                  className="h-4 w-4 rounded border-gray-300 text-brand-green focus:ring-brand-green focus:ring-offset-0"
-                  data-testid="checkbox-remember"
-                />
-                <Label 
-                  htmlFor="remember" 
-                  className="text-sm font-normal cursor-pointer text-gray-700"
-                >
-                  Remember me for 30 days
-                </Label>
-              </div>
-            )}
 
             {error && (
               <div className="p-3 bg-red-50 border border-red-100 rounded-lg flex items-center gap-2 text-sm text-red-600">
