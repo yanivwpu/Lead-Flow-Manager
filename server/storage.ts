@@ -1,7 +1,7 @@
 import { type User, type InsertUser, type Chat, type InsertChat } from "@shared/schema";
 import { db } from "../drizzle/db";
 import { users, chats } from "@shared/schema";
-import { eq, and, lte, sql, isNotNull } from "drizzle-orm";
+import { eq, and, lte, sql, isNotNull, asc } from "drizzle-orm";
 
 export interface IStorage {
   // User methods
@@ -43,7 +43,7 @@ export class DbStorage implements IStorage {
   }
 
   async getChats(userId: string): Promise<Chat[]> {
-    return await db.select().from(chats).where(eq(chats.userId, userId));
+    return await db.select().from(chats).where(eq(chats.userId, userId)).orderBy(asc(chats.createdAt));
   }
 
   async getChat(id: string): Promise<Chat | undefined> {
