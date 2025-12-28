@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRoute, useLocation } from "wouter";
 import { ChatListItem } from "@/components/ChatListItem";
 import { TAG_COLORS, PIPELINE_STAGES } from "@/lib/data";
@@ -106,6 +106,12 @@ export function Chats() {
   };
 
   const [newMessage, setNewMessage] = useState("");
+  const [localNotes, setLocalNotes] = useState("");
+
+  useEffect(() => {
+    setLocalNotes(selectedChat?.notes || "");
+  }, [selectedChat?.id, selectedChat?.notes]);
+
   const handleSendMessage = () => {
     if (!newMessage.trim() || !selectedChat) return;
     
@@ -333,8 +339,9 @@ export function Chats() {
                    <textarea 
                      className="w-full h-32 bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-sm text-gray-700 focus:outline-none focus:ring-1 focus:ring-yellow-400 resize-none"
                      placeholder="Add a note..."
-                     value={selectedChat.notes || ''}
-                     onChange={(e) => handleUpdateChat({ notes: e.target.value })}
+                     value={localNotes}
+                     onChange={(e) => setLocalNotes(e.target.value)}
+                     onBlur={() => handleUpdateChat({ notes: localNotes })}
                      data-testid="textarea-notes"
                    />
                  </div>
