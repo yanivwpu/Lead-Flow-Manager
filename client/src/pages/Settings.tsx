@@ -9,17 +9,29 @@ export function Settings() {
   const { user } = useAuth();
   const [pushEnabled, setPushEnabled] = useState(false);
   const [emailEnabled, setEmailEnabled] = useState(false);
-  const [permission, setPermission] = useState(Notification.permission);
+  const [permission, setPermission] = useState(
+    typeof Notification !== 'undefined' ? Notification.permission : 'default'
+  );
 
   useEffect(() => {
     // Load saved settings
     const savedPush = localStorage.getItem("chatcrm_push_enabled") === "true";
     const savedEmail = localStorage.getItem("chatcrm_email_enabled") === "true";
-    setPushEnabled(savedPush && Notification.permission === "granted");
+    const notificationGranted = typeof Notification !== 'undefined' && Notification.permission === "granted";
+    setPushEnabled(savedPush && notificationGranted);
     setEmailEnabled(savedEmail);
   }, []);
 
   const handlePushToggle = async (checked: boolean) => {
+    if (typeof Notification === 'undefined') {
+      toast({
+        title: "Not Supported",
+        description: "Push notifications are not supported on this device.",
+        variant: "destructive"
+      });
+      return;
+    }
+    
     if (checked) {
       const result = await Notification.requestPermission();
       setPermission(result);
