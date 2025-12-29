@@ -1,4 +1,4 @@
-import Twilio from "twilio";
+import twilio from "twilio";
 import { storage } from "./storage";
 import type { User, Chat } from "@shared/schema";
 
@@ -11,26 +11,71 @@ export interface WhatsAppMessage {
   twilioSid?: string;
 }
 
-export function createTwilioClient(user: User) {
-  if (!user.twilioAccountSid || !user.twilioAuthToken) {
-    throw new Error("Twilio credentials not configured");
+let connectionSettings: any;
+
+async function getCredentials() {
+  const hostname = process.env.REPLIT_CONNECTORS_HOSTNAME;
+  const xReplitToken = process.env.REPL_IDENTITY 
+    ? 'repl ' + process.env.REPL_IDENTITY 
+    : process.env.WEB_REPL_RENEWAL 
+    ? 'depl ' + process.env.WEB_REPL_RENEWAL 
+    : null;
+
+  if (!xReplitToken) {
+    throw new Error('Twilio connector not available');
   }
-  return Twilio(user.twilioAccountSid, user.twilioAuthToken);
+
+  connectionSettings = await fetch(
+    'https://' + hostname + '/api/v2/connection?include_secrets=true&connector_names=twilio',
+    {
+      headers: {
+        'Accept': 'application/json',
+        'X_REPLIT_TOKEN': xReplitToken
+      }
+    }
+  ).then(res => res.json()).then(data => data.items?.[0]);
+
+  if (!connectionSettings || (!connectionSettings.settings.account_sid || !connectionSettings.settings.api_key || !connectionSettings.settings.api_key_secret)) {
+    throw new Error('Twilio not connected');
+  }
+  return {
+    accountSid: connectionSettings.settings.account_sid,
+    apiKey: connectionSettings.settings.api_key,
+    apiKeySecret: connectionSettings.settings.api_key_secret,
+    phoneNumber: connectionSettings.settings.phone_number
+  };
+}
+
+export async function getTwilioClient() {
+  const { accountSid, apiKey, apiKeySecret } = await getCredentials();
+  return twilio(apiKey, apiKeySecret, {
+    accountSid: accountSid
+  });
+}
+
+export async function getTwilioFromPhoneNumber() {
+  const { phoneNumber } = await getCredentials();
+  return phoneNumber;
+}
+
+export async function getTwilioAccountSid() {
+  const { accountSid } = await getCredentials();
+  return accountSid;
 }
 
 export async function sendWhatsAppMessage(
-  user: User,
   toPhone: string,
   message: string
 ): Promise<{ sid: string; status: string }> {
-  const client = createTwilioClient(user);
+  const client = await getTwilioClient();
+  const fromNumber = await getTwilioFromPhoneNumber();
   
-  if (!user.twilioWhatsappNumber) {
+  if (!fromNumber) {
     throw new Error("Twilio WhatsApp number not configured");
   }
 
   const result = await client.messages.create({
-    from: `whatsapp:${user.twilioWhatsappNumber}`,
+    from: `whatsapp:${fromNumber}`,
     to: `whatsapp:${toPhone}`,
     body: message,
   });
@@ -38,13 +83,9 @@ export async function sendWhatsAppMessage(
   return { sid: result.sid, status: result.status };
 }
 
-export async function verifyTwilioCredentials(
-  accountSid: string,
-  authToken: string
-): Promise<boolean> {
+export async function verifyTwilioConnection(): Promise<boolean> {
   try {
-    const client = Twilio(accountSid, authToken);
-    await client.api.accounts(accountSid).fetch();
+    await getCredentials();
     return true;
   } catch (error) {
     console.error("Twilio verification failed:", error);
@@ -71,15 +112,6 @@ export function parseStatusWebhook(body: any) {
     to: body.To?.replace("whatsapp:", "") || "",
     accountSid: body.AccountSid || "",
   };
-}
-
-export async function findUserByTwilioAccount(accountSid: string): Promise<User | undefined> {
-  const { db } = await import("../drizzle/db");
-  const { users } = await import("@shared/schema");
-  const { eq } = await import("drizzle-orm");
-  
-  const result = await db.select().from(users).where(eq(users.twilioAccountSid, accountSid));
-  return result[0];
 }
 
 export async function findOrCreateChatByPhone(

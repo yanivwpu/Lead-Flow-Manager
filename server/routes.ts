@@ -6,11 +6,11 @@ import { z } from "zod";
 import { getVapidPublicKey } from "./notifications";
 import {
   sendWhatsAppMessage,
-  verifyTwilioCredentials,
+  verifyTwilioConnection,
   parseIncomingWebhook,
   parseStatusWebhook,
-  findUserByTwilioAccount,
   findOrCreateChatByPhone,
+  getTwilioAccountSid,
   type WhatsAppMessage,
 } from "./twilio";
 
@@ -180,77 +180,23 @@ export async function registerRoutes(
     res.json({ publicKey });
   });
 
-  // Get Twilio connection status
+  // Get Twilio connection status (platform-level, via Replit integration)
   app.get("/api/twilio/status", async (req, res) => {
     try {
       if (!req.user) {
         return res.status(401).json({ error: "Unauthorized" });
       }
-      const user = await storage.getUser(req.user.id);
-      if (!user) {
-        return res.status(404).json({ error: "User not found" });
-      }
+      
+      const isConnected = await verifyTwilioConnection();
       res.json({
-        connected: user.twilioConnected || false,
-        hasCredentials: !!(user.twilioAccountSid && user.twilioAuthToken),
-        whatsappNumber: user.twilioWhatsappNumber || null,
+        connected: isConnected,
+        message: isConnected 
+          ? "WhatsApp messaging is enabled via platform Twilio account" 
+          : "Twilio not configured"
       });
     } catch (error) {
       console.error("Error fetching Twilio status:", error);
       res.status(500).json({ error: "Failed to fetch status" });
-    }
-  });
-
-  // Save Twilio credentials
-  app.post("/api/twilio/connect", async (req, res) => {
-    try {
-      if (!req.user) {
-        return res.status(401).json({ error: "Unauthorized" });
-      }
-
-      const { accountSid, authToken, whatsappNumber } = req.body;
-
-      if (!accountSid || !authToken || !whatsappNumber) {
-        return res.status(400).json({ error: "Missing required fields" });
-      }
-
-      const isValid = await verifyTwilioCredentials(accountSid, authToken);
-      if (!isValid) {
-        return res.status(400).json({ error: "Invalid Twilio credentials" });
-      }
-
-      await storage.updateUser(req.user.id, {
-        twilioAccountSid: accountSid,
-        twilioAuthToken: authToken,
-        twilioWhatsappNumber: whatsappNumber,
-        twilioConnected: true,
-      });
-
-      res.json({ success: true, message: "Twilio connected successfully" });
-    } catch (error) {
-      console.error("Error connecting Twilio:", error);
-      res.status(500).json({ error: "Failed to connect Twilio" });
-    }
-  });
-
-  // Disconnect Twilio
-  app.post("/api/twilio/disconnect", async (req, res) => {
-    try {
-      if (!req.user) {
-        return res.status(401).json({ error: "Unauthorized" });
-      }
-
-      await storage.updateUser(req.user.id, {
-        twilioAccountSid: null,
-        twilioAuthToken: null,
-        twilioWhatsappNumber: null,
-        twilioConnected: false,
-      });
-
-      res.json({ success: true });
-    } catch (error) {
-      console.error("Error disconnecting Twilio:", error);
-      res.status(500).json({ error: "Failed to disconnect" });
     }
   });
 
@@ -273,9 +219,9 @@ export async function registerRoutes(
         return res.status(400).json({ error: "No WhatsApp phone number for this chat" });
       }
 
-      const user = await storage.getUser(req.user.id);
-      if (!user || !user.twilioConnected) {
-        return res.status(400).json({ error: "Twilio not connected" });
+      const isConnected = await verifyTwilioConnection();
+      if (!isConnected) {
+        return res.status(400).json({ error: "WhatsApp messaging not available" });
       }
 
       const { message } = req.body;
@@ -283,7 +229,7 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Message is required" });
       }
 
-      const result = await sendWhatsAppMessage(user, chat.whatsappPhone, message);
+      const result = await sendWhatsAppMessage(chat.whatsappPhone, message);
 
       const newMessage: WhatsAppMessage = {
         id: result.sid,
@@ -316,13 +262,29 @@ export async function registerRoutes(
       const parsed = parseIncomingWebhook(req.body);
       console.log("Incoming WhatsApp message:", parsed);
 
-      const user = await findUserByTwilioAccount(parsed.accountSid);
-      if (!user) {
-        console.log("No user found for account:", parsed.accountSid);
-        return res.status(200).send("");
+      // In multi-tenant SaaS, we match incoming messages by phone number
+      // For now, find the first user who has a chat with this phone number
+      // TODO: Implement proper phone number registration per user
+      const { db } = await import("../drizzle/db");
+      const { chats, users } = await import("@shared/schema");
+      const { eq } = await import("drizzle-orm");
+      
+      // Find existing chat with this phone number
+      const existingChats = await db.select().from(chats).where(eq(chats.whatsappPhone, parsed.from));
+      
+      let chat;
+      if (existingChats.length > 0) {
+        chat = existingChats[0];
+      } else {
+        // If no existing chat, get the first user to create a demo chat
+        // In production, this would need proper phone number routing
+        const allUsers = await db.select().from(users).limit(1);
+        if (allUsers.length === 0) {
+          console.log("No users in system for incoming message");
+          return res.status(200).send("");
+        }
+        chat = await findOrCreateChatByPhone(allUsers[0].id, parsed.from, parsed.profileName);
       }
-
-      const chat = await findOrCreateChatByPhone(user.id, parsed.from, parsed.profileName);
 
       const newMessage: WhatsAppMessage = {
         id: parsed.messageSid,
