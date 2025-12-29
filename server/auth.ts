@@ -1,11 +1,14 @@
 import passport from 'passport';
 import { Strategy as LocalStrategy } from 'passport-local';
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import type { Express } from 'express';
 import session from 'express-session';
 import createMemoryStore from 'memorystore';
 import { storage } from './storage';
 import type { User } from '@shared/schema';
+
+const resetTokens = new Map<string, { email: string; expires: Date }>();
 
 const MemoryStore = createMemoryStore(session);
 
@@ -109,6 +112,11 @@ export function registerAuthRoutes(app: Express) {
         password: hashedPassword,
       });
 
+      // Send welcome email (async, don't wait)
+      import('./email').then(({ sendWelcomeEmail }) => {
+        sendWelcomeEmail(name, email);
+      });
+
       // Log the user in
       req.login(user, (err: any) => {
         if (err) {
@@ -181,21 +189,60 @@ export function registerAuthRoutes(app: Express) {
         return res.status(400).json({ error: 'Email is required' });
       }
 
-      // Check if user exists (but don't reveal this to the client)
       const user = await storage.getUserByEmail(email);
       
       if (user) {
-        // TODO: Send password reset email when email service is configured
-        // For now, log the request
-        console.log(`Password reset requested for: ${email}`);
+        const token = crypto.randomBytes(32).toString('hex');
+        resetTokens.set(token, {
+          email: user.email,
+          expires: new Date(Date.now() + 60 * 60 * 1000) // 1 hour
+        });
+        
+        import('./email').then(({ sendPasswordResetEmail }) => {
+          sendPasswordResetEmail(user.email, token);
+        });
       }
 
-      // Always return success to prevent email enumeration
       res.json({ success: true, message: 'If an account exists, a reset link will be sent.' });
     } catch (error) {
       console.error('Forgot password error:', error);
-      // Still return success to prevent information leakage
       res.json({ success: true, message: 'If an account exists, a reset link will be sent.' });
+    }
+  });
+
+  // Reset password with token
+  app.post('/api/auth/reset-password', async (req, res) => {
+    try {
+      const { token, password } = req.body;
+
+      if (!token || !password) {
+        return res.status(400).json({ error: 'Token and password are required' });
+      }
+
+      const tokenData = resetTokens.get(token);
+      if (!tokenData) {
+        return res.status(400).json({ error: 'Invalid or expired reset token' });
+      }
+
+      if (new Date() > tokenData.expires) {
+        resetTokens.delete(token);
+        return res.status(400).json({ error: 'Reset token has expired' });
+      }
+
+      const user = await storage.getUserByEmail(tokenData.email);
+      if (!user) {
+        return res.status(400).json({ error: 'User not found' });
+      }
+
+      const hashedPassword = await bcrypt.hash(password, 10);
+      await storage.updateUser(user.id, { password: hashedPassword });
+      
+      resetTokens.delete(token);
+
+      res.json({ success: true, message: 'Password has been reset successfully' });
+    } catch (error) {
+      console.error('Reset password error:', error);
+      res.status(500).json({ error: 'Failed to reset password' });
     }
   });
 }

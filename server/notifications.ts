@@ -30,35 +30,10 @@ async function sendPushNotification(subscription: any, payload: string) {
   }
 }
 
-async function sendEmailNotification(email: string, subject: string, body: string) {
+async function sendEmailNotification(chatId: string, email: string, chatName: string, followUp: string, notes: string) {
   try {
-    const resendApiKey = process.env.RESEND_API_KEY;
-    
-    if (!resendApiKey) {
-      console.log(`[Email] No RESEND_API_KEY configured, skipping email to ${email}`);
-      return;
-    }
-    
-    const response = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${resendApiKey}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        from: 'WhaChatCRM <noreply@crm.whachatcrm.com>',
-        to: email,
-        subject,
-        html: body
-      })
-    });
-    
-    if (!response.ok) {
-      const error = await response.text();
-      console.error(`[Email] Failed to send: ${error}`);
-    } else {
-      console.log(`[Email] Sent successfully to ${email}`);
-    }
+    const { sendFollowUpReminderEmail } = await import('./email');
+    await sendFollowUpReminderEmail(email, chatName, followUp, notes, chatId);
   } catch (error) {
     console.error('Error sending email notification:', error);
   }
@@ -102,15 +77,11 @@ async function checkFollowUps() {
       // Send email notification if enabled
       if (user.emailEnabled) {
         await sendEmailNotification(
+          chat.id,
           user.email,
-          'Follow-up Reminder',
-          `
-            <h2>Follow-up Reminder</h2>
-            <p>You have a follow-up scheduled for <strong>${chat.name}</strong></p>
-            <p><strong>Follow-up:</strong> ${chat.followUp}</p>
-            <p><strong>Notes:</strong> ${chat.notes || 'No notes'}</p>
-            <p><a href="${process.env.APP_URL || 'http://localhost:5000'}/chats/${chat.id}">View Chat</a></p>
-          `
+          chat.name,
+          chat.followUp || '',
+          chat.notes || ''
         );
       }
 

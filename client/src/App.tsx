@@ -6,6 +6,7 @@ import { Welcome } from "@/pages/Welcome";
 import { Connect } from "@/pages/Connect";
 import { AppLayout } from "@/pages/AppLayout";
 import { AuthPage } from "@/pages/Auth";
+import { ResetPassword } from "@/pages/ResetPassword";
 import NotFound from "@/pages/not-found";
 import { AuthProvider, useAuth } from "@/lib/auth-context";
 import { Loader2 } from "lucide-react";
@@ -34,6 +35,7 @@ function Router() {
     <Switch>
       <Route path="/" component={Welcome} />
       <Route path="/auth" component={AuthPage} />
+      <Route path="/reset-password" component={ResetPassword} />
       
       {/* Protected Routes */}
       <Route path="/connect">
