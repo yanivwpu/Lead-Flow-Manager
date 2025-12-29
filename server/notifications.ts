@@ -32,29 +32,33 @@ async function sendPushNotification(subscription: any, payload: string) {
 
 async function sendEmailNotification(email: string, subject: string, body: string) {
   try {
-    // Email sending would be implemented here with Resend or other service
-    // For now, we'll just log it
-    console.log(`Email notification to ${email}:`);
-    console.log(`Subject: ${subject}`);
-    console.log(`Body: ${body}`);
+    const resendApiKey = process.env.RESEND_API_KEY;
     
-    // When user provides Resend API key, uncomment and configure:
-    // const resendApiKey = process.env.RESEND_API_KEY;
-    // if (resendApiKey) {
-    //   const response = await fetch('https://api.resend.com/emails', {
-    //     method: 'POST',
-    //     headers: {
-    //       'Authorization': `Bearer ${resendApiKey}`,
-    //       'Content-Type': 'application/json'
-    //     },
-    //     body: JSON.stringify({
-    //       from: 'CRM Reminders <reminders@yourdomain.com>',
-    //       to: email,
-    //       subject,
-    //       html: body
-    //     })
-    //   });
-    // }
+    if (!resendApiKey) {
+      console.log(`[Email] No RESEND_API_KEY configured, skipping email to ${email}`);
+      return;
+    }
+    
+    const response = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${resendApiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        from: 'WhaChatCRM <noreply@crm.whachatcrm.com>',
+        to: email,
+        subject,
+        html: body
+      })
+    });
+    
+    if (!response.ok) {
+      const error = await response.text();
+      console.error(`[Email] Failed to send: ${error}`);
+    } else {
+      console.log(`[Email] Sent successfully to ${email}`);
+    }
   } catch (error) {
     console.error('Error sending email notification:', error);
   }
