@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertChatSchema } from "@shared/schema";
+import { insertChatSchema, insertRegisteredPhoneSchema } from "@shared/schema";
 import { z } from "zod";
 import { getVapidPublicKey } from "./notifications";
 import {
@@ -13,6 +13,19 @@ import {
   getTwilioAccountSid,
   type WhatsAppMessage,
 } from "./twilio";
+
+const TWILIO_BASE_COST_PER_MESSAGE = 0.005;
+const MARKUP_PERCENT = 5;
+
+function calculateCostWithMarkup(baseCost: number): { twilioCost: string; markupPercent: string; totalCost: string } {
+  const markup = baseCost * (MARKUP_PERCENT / 100);
+  const total = baseCost + markup;
+  return {
+    twilioCost: baseCost.toFixed(6),
+    markupPercent: MARKUP_PERCENT.toFixed(2),
+    totalCost: total.toFixed(6),
+  };
+}
 
 export async function registerRoutes(
   httpServer: Server,
@@ -200,6 +213,129 @@ export async function registerRoutes(
     }
   });
 
+  // ============= Phone Registration Endpoints =============
+  
+  // Get registered phones for current user
+  app.get("/api/phones", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const phones = await storage.getRegisteredPhones(req.user.id);
+      res.json(phones);
+    } catch (error) {
+      console.error("Error fetching phones:", error);
+      res.status(500).json({ error: "Failed to fetch phones" });
+    }
+  });
+
+  // Register a new WhatsApp Business phone number
+  app.post("/api/phones", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      
+      const { phoneNumber, businessName } = req.body;
+      if (!phoneNumber) {
+        return res.status(400).json({ error: "Phone number is required" });
+      }
+
+      // Normalize phone number format (should be whatsapp:+1234567890)
+      let normalizedPhone = phoneNumber.trim();
+      if (!normalizedPhone.startsWith("whatsapp:")) {
+        if (!normalizedPhone.startsWith("+")) {
+          normalizedPhone = "+" + normalizedPhone;
+        }
+        normalizedPhone = "whatsapp:" + normalizedPhone;
+      }
+
+      // Check if already registered
+      const existing = await storage.getRegisteredPhoneByNumber(normalizedPhone);
+      if (existing) {
+        return res.status(400).json({ error: "This phone number is already registered" });
+      }
+
+      const phone = await storage.registerPhone({
+        userId: req.user.id,
+        phoneNumber: normalizedPhone,
+        businessName: businessName || null,
+      });
+
+      res.status(201).json(phone);
+    } catch (error) {
+      console.error("Error registering phone:", error);
+      res.status(500).json({ error: "Failed to register phone" });
+    }
+  });
+
+  // Delete a registered phone
+  app.delete("/api/phones/:id", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      
+      const phones = await storage.getRegisteredPhones(req.user.id);
+      const phone = phones.find(p => p.id === req.params.id);
+      if (!phone) {
+        return res.status(404).json({ error: "Phone not found" });
+      }
+
+      await storage.deleteRegisteredPhone(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting phone:", error);
+      res.status(500).json({ error: "Failed to delete phone" });
+    }
+  });
+
+  // ============= Usage & Billing Endpoints =============
+  
+  // Get usage summary for current user
+  app.get("/api/usage/summary", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      
+      const { startDate, endDate } = req.query;
+      let start: Date | undefined;
+      let end: Date | undefined;
+      
+      if (startDate) start = new Date(startDate as string);
+      if (endDate) end = new Date(endDate as string);
+      
+      const summary = await storage.getUsageSummary(req.user.id, start, end);
+      res.json(summary);
+    } catch (error) {
+      console.error("Error fetching usage summary:", error);
+      res.status(500).json({ error: "Failed to fetch usage" });
+    }
+  });
+
+  // Get detailed usage history
+  app.get("/api/usage/history", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      
+      const { startDate, endDate } = req.query;
+      let start: Date | undefined;
+      let end: Date | undefined;
+      
+      if (startDate) start = new Date(startDate as string);
+      if (endDate) end = new Date(endDate as string);
+      
+      const usage = await storage.getUsageByUser(req.user.id, start, end);
+      res.json(usage);
+    } catch (error) {
+      console.error("Error fetching usage history:", error);
+      res.status(500).json({ error: "Failed to fetch usage history" });
+    }
+  });
+
   // Send WhatsApp message
   app.post("/api/chats/:id/send", async (req, res) => {
     try {
@@ -230,6 +366,19 @@ export async function registerRoutes(
       }
 
       const result = await sendWhatsAppMessage(chat.whatsappPhone, message);
+
+      // Track usage with 5% markup
+      const costs = calculateCostWithMarkup(TWILIO_BASE_COST_PER_MESSAGE);
+      await storage.recordMessageUsage({
+        userId: req.user.id,
+        chatId: chat.id,
+        direction: "outbound",
+        messageType: "text",
+        twilioSid: result.sid,
+        twilioCost: costs.twilioCost,
+        markupPercent: costs.markupPercent,
+        totalCost: costs.totalCost,
+      });
 
       const newMessage: WhatsAppMessage = {
         id: result.sid,
@@ -262,29 +411,53 @@ export async function registerRoutes(
       const parsed = parseIncomingWebhook(req.body);
       console.log("Incoming WhatsApp message:", parsed);
 
-      // In multi-tenant SaaS, we match incoming messages by phone number
-      // For now, find the first user who has a chat with this phone number
-      // TODO: Implement proper phone number registration per user
       const { db } = await import("../drizzle/db");
-      const { chats, users } = await import("@shared/schema");
+      const { chats, registeredPhones } = await import("@shared/schema");
       const { eq } = await import("drizzle-orm");
       
-      // Find existing chat with this phone number
+      // First, find existing chat with this phone number
       const existingChats = await db.select().from(chats).where(eq(chats.whatsappPhone, parsed.from));
       
       let chat;
+      let userId: string;
+      
       if (existingChats.length > 0) {
         chat = existingChats[0];
+        userId = chat.userId;
       } else {
-        // If no existing chat, get the first user to create a demo chat
-        // In production, this would need proper phone number routing
-        const allUsers = await db.select().from(users).limit(1);
-        if (allUsers.length === 0) {
-          console.log("No users in system for incoming message");
-          return res.status(200).send("");
+        // No existing chat - check if the "To" number is registered by any user
+        // The "To" field contains the platform's Twilio number that received the message
+        // We need to route to the user who registered this receiving number
+        const toNumber = parsed.to || "";
+        const registeredPhone = await storage.getRegisteredPhoneByNumber(toNumber);
+        
+        if (registeredPhone) {
+          userId = registeredPhone.userId;
+          chat = await findOrCreateChatByPhone(userId, parsed.from, parsed.profileName);
+        } else {
+          // Fallback: route to any user who has a registered phone (first one found)
+          const allRegisteredPhones = await db.select().from(registeredPhones).limit(1);
+          if (allRegisteredPhones.length === 0) {
+            console.log("No registered phones in system for incoming message");
+            return res.status(200).send("");
+          }
+          userId = allRegisteredPhones[0].userId;
+          chat = await findOrCreateChatByPhone(userId, parsed.from, parsed.profileName);
         }
-        chat = await findOrCreateChatByPhone(allUsers[0].id, parsed.from, parsed.profileName);
       }
+
+      // Track inbound usage with 5% markup
+      const costs = calculateCostWithMarkup(TWILIO_BASE_COST_PER_MESSAGE);
+      await storage.recordMessageUsage({
+        userId,
+        chatId: chat.id,
+        direction: "inbound",
+        messageType: "text",
+        twilioSid: parsed.messageSid,
+        twilioCost: costs.twilioCost,
+        markupPercent: costs.markupPercent,
+        totalCost: costs.totalCost,
+      });
 
       const newMessage: WhatsAppMessage = {
         id: parsed.messageSid,
