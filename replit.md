@@ -23,7 +23,15 @@ The application is a full multi-tenant SaaS implementation with:
 - Added Settings UI for phone registration and billing/usage view
 - Admin endpoint for viewing all client usage (/api/admin/usage)
 
-## Recent Changes (December 27, 2025)
+## Recent Changes (December 29, 2025)
+- Enhanced signup form with phone number, business name, and terms agreement checkbox
+- Created Privacy Policy page (/privacy-policy) with data collection and security information
+- Created Terms of Use page (/terms-of-use) with pricing details ($0.00525 per message)
+- Removed technical Twilio pricing details from Settings, replaced with link to Terms of Use
+- Auto-registers WhatsApp Business number during signup if provided
+- Added validation requiring terms agreement before signup
+
+## Previous Changes (December 27, 2025)
 - Converted from prototype to full-stack application with PostgreSQL and Drizzle ORM
 - Implemented server-side authentication with bcrypt password hashing
 - Created database schema for users, chats, messages, and notification preferences
