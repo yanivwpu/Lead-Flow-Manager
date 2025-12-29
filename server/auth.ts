@@ -13,6 +13,9 @@ const resetTokens = new Map<string, { email: string; expires: Date }>();
 const MemoryStore = createMemoryStore(session);
 
 export function setupAuth(app: Express) {
+  // Trust proxy for Replit's reverse proxy
+  app.set('trust proxy', 1);
+
   // Session configuration
   app.use(
     session({
@@ -25,7 +28,7 @@ export function setupAuth(app: Express) {
       cookie: {
         maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
+        secure: true, // Always secure since Replit serves over HTTPS
         sameSite: 'lax',
       },
     })
