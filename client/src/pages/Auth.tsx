@@ -18,6 +18,9 @@ export function AuthPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
+  const [phoneNumber, setPhoneNumber] = useState("");
+  const [businessName, setBusinessName] = useState("");
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
@@ -55,6 +58,12 @@ export function AuthPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+
+    if (!isLogin && !agreedToTerms) {
+      setError("Please agree to the Privacy Policy and Terms of Use");
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
@@ -66,9 +75,9 @@ export function AuthPage() {
           setError("Invalid email or password");
         }
       } else {
-        const success = await signup(name, email, password);
+        const success = await signup(name, email, password, phoneNumber, businessName);
         if (success) {
-          setLocation("/connect");
+          setLocation("/app/chats");
         } else {
           setError("User already exists with that email");
         }
@@ -135,17 +144,43 @@ export function AuthPage() {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             {!isLogin && (
-              <div className="space-y-2">
-                <Label htmlFor="name">Full Name</Label>
-                <Input 
-                  id="name" 
-                  placeholder="John Doe" 
-                  required 
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="bg-gray-50 border-gray-200"
-                />
-              </div>
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="name">Full Name</Label>
+                  <Input 
+                    id="name" 
+                    placeholder="John Doe" 
+                    required 
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="bg-gray-50 border-gray-200"
+                    data-testid="input-name"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="businessName">Business Name</Label>
+                  <Input 
+                    id="businessName" 
+                    placeholder="My Company" 
+                    value={businessName}
+                    onChange={(e) => setBusinessName(e.target.value)}
+                    className="bg-gray-50 border-gray-200"
+                    data-testid="input-business-name"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="phoneNumber">WhatsApp Business Number</Label>
+                  <Input 
+                    id="phoneNumber" 
+                    placeholder="+1234567890" 
+                    value={phoneNumber}
+                    onChange={(e) => setPhoneNumber(e.target.value)}
+                    className="bg-gray-50 border-gray-200"
+                    data-testid="input-phone"
+                  />
+                  <p className="text-xs text-gray-500">Include country code (e.g., +1 for US)</p>
+                </div>
+              </>
             )}
             
             <div className="space-y-2">
@@ -190,6 +225,32 @@ export function AuthPage() {
                   className="text-sm font-normal cursor-pointer text-gray-700"
                 >
                   Remember me for 30 days
+                </Label>
+              </div>
+            )}
+
+            {!isLogin && (
+              <div className="flex items-start space-x-2">
+                <input
+                  type="checkbox"
+                  id="terms"
+                  checked={agreedToTerms}
+                  onChange={(e) => setAgreedToTerms(e.target.checked)}
+                  className="h-4 w-4 mt-0.5 rounded border-gray-300 text-brand-green focus:ring-brand-green focus:ring-offset-0"
+                  data-testid="checkbox-terms"
+                />
+                <Label 
+                  htmlFor="terms" 
+                  className="text-sm font-normal cursor-pointer text-gray-600 leading-tight"
+                >
+                  I agree to the{" "}
+                  <Link href="/privacy-policy">
+                    <a className="text-brand-green hover:underline" target="_blank">Privacy Policy</a>
+                  </Link>
+                  {" "}and{" "}
+                  <Link href="/terms-of-use">
+                    <a className="text-brand-green hover:underline" target="_blank">Terms of Use</a>
+                  </Link>
                 </Label>
               </div>
             )}

@@ -90,7 +90,7 @@ export function registerAuthRoutes(app: Express) {
   // Sign up
   app.post('/api/auth/signup', async (req, res) => {
     try {
-      const { name, email, password } = req.body;
+      const { name, email, password, phoneNumber, businessName } = req.body;
 
       if (!name || !email || !password) {
         return res.status(400).json({ error: 'Missing required fields' });
@@ -111,6 +111,32 @@ export function registerAuthRoutes(app: Express) {
         email,
         password: hashedPassword,
       });
+
+      // Register phone number if provided
+      if (phoneNumber && phoneNumber.trim()) {
+        try {
+          let normalizedPhone = phoneNumber.trim();
+          if (!normalizedPhone.startsWith("whatsapp:")) {
+            if (!normalizedPhone.startsWith("+")) {
+              normalizedPhone = "+" + normalizedPhone;
+            }
+            normalizedPhone = "whatsapp:" + normalizedPhone;
+          }
+
+          // Check if phone not already registered
+          const existingPhone = await storage.getRegisteredPhoneByNumber(normalizedPhone);
+          if (!existingPhone) {
+            await storage.registerPhone({
+              userId: user.id,
+              phoneNumber: normalizedPhone,
+              businessName: businessName || null,
+            });
+          }
+        } catch (phoneError) {
+          console.error('Phone registration error during signup:', phoneError);
+          // Continue with signup even if phone registration fails
+        }
+      }
 
       // Send welcome email (async, don't wait)
       import('./email').then(({ sendWelcomeEmail }) => {

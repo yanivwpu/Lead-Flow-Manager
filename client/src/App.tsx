@@ -6,6 +6,8 @@ import { Welcome } from "@/pages/Welcome";
 import { AppLayout } from "@/pages/AppLayout";
 import { AuthPage } from "@/pages/Auth";
 import { ResetPassword } from "@/pages/ResetPassword";
+import { PrivacyPolicy } from "@/pages/PrivacyPolicy";
+import { TermsOfUse } from "@/pages/TermsOfUse";
 import NotFound from "@/pages/not-found";
 import { AuthProvider, useAuth } from "@/lib/auth-context";
 import { Loader2 } from "lucide-react";
@@ -35,6 +37,8 @@ function Router() {
       <Route path="/" component={Welcome} />
       <Route path="/auth" component={AuthPage} />
       <Route path="/reset-password" component={ResetPassword} />
+      <Route path="/privacy-policy" component={PrivacyPolicy} />
+      <Route path="/terms-of-use" component={TermsOfUse} />
       
       {/* Protected Routes */}
       <Route path="/app/*?">

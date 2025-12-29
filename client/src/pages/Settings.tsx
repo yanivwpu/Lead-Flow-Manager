@@ -307,7 +307,7 @@ export function Settings() {
              </div>
 
              <p className="text-xs text-gray-500 mt-4 text-center">
-               Pricing includes Twilio messaging costs plus 5% platform fee.
+               View our <a href="/terms-of-use" target="_blank" className="text-brand-green hover:underline">Terms of Use</a> for pricing details.
              </p>
            </div>
 
