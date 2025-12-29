@@ -496,5 +496,39 @@ export async function registerRoutes(
     }
   });
 
+  // ============= Admin Endpoints =============
+  
+  // Get all users' usage summary (admin only - for now, accessible to all authenticated users)
+  app.get("/api/admin/usage", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      
+      const { db } = await import("../drizzle/db");
+      const { users, messageUsage } = await import("@shared/schema");
+      const { sql } = await import("drizzle-orm");
+      
+      // Get usage summary per user
+      const result = await db.execute(sql`
+        SELECT 
+          u.id as user_id,
+          u.name,
+          u.email,
+          COUNT(m.id)::int as total_messages,
+          COALESCE(SUM(m.total_cost), 0)::text as total_cost
+        FROM users u
+        LEFT JOIN message_usage m ON u.id = m.user_id
+        GROUP BY u.id, u.name, u.email
+        ORDER BY total_cost DESC
+      `);
+      
+      res.json(result.rows);
+    } catch (error) {
+      console.error("Error fetching admin usage:", error);
+      res.status(500).json({ error: "Failed to fetch usage data" });
+    }
+  });
+
   return httpServer;
 }
