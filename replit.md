@@ -1,15 +1,27 @@
-# WhatsApp CRM Web Application
+# WhatsApp CRM Web Application (SaaS Platform)
 
 ## Overview
-A WhatsApp-first CRM web application that enables users to manage WhatsApp leads without forgetting follow-ups. Built as a Progressive Web App (PWA) with offline support, installable on mobile devices, and push/email notification capabilities.
+A multi-tenant WhatsApp-first CRM SaaS platform. The platform owns the Twilio account - clients never need their own Twilio credentials. Built as a Progressive Web App (PWA) with offline support, installable on mobile devices, and push/email notification capabilities.
 
 ## Current State
-The application is now a full-stack implementation with:
+The application is a full multi-tenant SaaS implementation with:
+- **SaaS Model**: Platform owns single Twilio account, clients just use the service
+- **Phone Registration**: Clients register their WhatsApp Business numbers within the app
+- **Usage-based Billing**: Per-message tracking with Twilio cost + 5% markup
 - Real PostgreSQL database for data persistence
 - Session-based authentication with Passport.js
 - Complete CRM functionality for chat management
 - Notification system for follow-up reminders (push & email)
 - PWA capabilities (installable, offline-first)
+
+## Recent Changes (December 29, 2025)
+- **SaaS Architecture**: Platform now owns Twilio account via Replit integration
+- **Phone Registration**: Clients can register their WhatsApp Business phone numbers
+- **Message Routing**: Incoming messages routed to clients based on registered phone numbers
+- **Usage Tracking**: Every message (inbound/outbound) is tracked with cost calculation
+- **Billing System**: 5% markup over Twilio costs for all messages
+- Added Settings UI for phone registration and billing/usage view
+- Admin endpoint for viewing all client usage (/api/admin/usage)
 
 ## Recent Changes (December 27, 2025)
 - Converted from prototype to full-stack application with PostgreSQL and Drizzle ORM
@@ -99,6 +111,15 @@ Email reminders are currently configured for Resend but will log to console if A
 - **Chats**: WhatsApp conversations with tags, pipeline stages, notes
 - **Follow-ups**: Scheduled reminders with automatic notifications
 - **Push Subscriptions**: Web Push API subscription data stored per user
+- **Registered Phones**: WhatsApp Business phone numbers registered per client
+- **Message Usage**: Per-message cost tracking with Twilio cost + 5% markup
+
+## SaaS Billing Model
+- **Base Cost**: Twilio per-message cost ($0.005 default for text messages)
+- **Markup**: 5% over Twilio costs
+- **Tracking**: Every inbound and outbound message is tracked
+- **Visibility**: Clients can view their usage in Settings > Billing & Usage
+- **Admin View**: Platform can view all client usage via /api/admin/usage
 
 ## Notification Flow
 1. Background cron job runs every minute to check for due follow-ups
