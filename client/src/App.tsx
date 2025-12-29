@@ -3,7 +3,6 @@ import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { Welcome } from "@/pages/Welcome";
-import { Connect } from "@/pages/Connect";
 import { AppLayout } from "@/pages/AppLayout";
 import { AuthPage } from "@/pages/Auth";
 import { ResetPassword } from "@/pages/ResetPassword";
@@ -38,10 +37,6 @@ function Router() {
       <Route path="/reset-password" component={ResetPassword} />
       
       {/* Protected Routes */}
-      <Route path="/connect">
-        <ProtectedRoute component={Connect} />
-      </Route>
-      
       <Route path="/app/*?">
         <ProtectedRoute component={AppLayout} />
       </Route>
