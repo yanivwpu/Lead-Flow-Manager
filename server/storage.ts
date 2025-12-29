@@ -1,7 +1,11 @@
-import { type User, type InsertUser, type Chat, type InsertChat } from "@shared/schema";
+import { 
+  type User, type InsertUser, type Chat, type InsertChat,
+  type RegisteredPhone, type InsertRegisteredPhone,
+  type MessageUsage, type InsertMessageUsage
+} from "@shared/schema";
 import { db } from "../drizzle/db";
-import { users, chats } from "@shared/schema";
-import { eq, and, lte, sql, isNotNull, asc } from "drizzle-orm";
+import { users, chats, registeredPhones, messageUsage } from "@shared/schema";
+import { eq, and, lte, sql, isNotNull, asc, desc, gte, sum } from "drizzle-orm";
 
 export interface IStorage {
   // User methods
@@ -19,6 +23,17 @@ export interface IStorage {
   
   // Notification methods
   getDueFollowUps(): Promise<Chat[]>;
+  
+  // Phone registration methods
+  getRegisteredPhones(userId: string): Promise<RegisteredPhone[]>;
+  getRegisteredPhoneByNumber(phoneNumber: string): Promise<RegisteredPhone | undefined>;
+  registerPhone(phone: InsertRegisteredPhone): Promise<RegisteredPhone>;
+  deleteRegisteredPhone(id: string): Promise<void>;
+  
+  // Usage tracking methods
+  recordMessageUsage(usage: InsertMessageUsage): Promise<MessageUsage>;
+  getUsageByUser(userId: string, startDate?: Date, endDate?: Date): Promise<MessageUsage[]>;
+  getUsageSummary(userId: string, startDate?: Date, endDate?: Date): Promise<{totalMessages: number; totalCost: string}>;
 }
 
 export class DbStorage implements IStorage {
@@ -80,6 +95,69 @@ export class DbStorage implements IStorage {
           lte(chats.followUpDate, now)
         )
       );
+  }
+
+  // Phone registration methods
+  async getRegisteredPhones(userId: string): Promise<RegisteredPhone[]> {
+    return await db.select().from(registeredPhones).where(eq(registeredPhones.userId, userId));
+  }
+
+  async getRegisteredPhoneByNumber(phoneNumber: string): Promise<RegisteredPhone | undefined> {
+    const result = await db.select().from(registeredPhones).where(eq(registeredPhones.phoneNumber, phoneNumber));
+    return result[0];
+  }
+
+  async registerPhone(phone: InsertRegisteredPhone): Promise<RegisteredPhone> {
+    const result = await db.insert(registeredPhones).values(phone).returning();
+    return result[0];
+  }
+
+  async deleteRegisteredPhone(id: string): Promise<void> {
+    await db.delete(registeredPhones).where(eq(registeredPhones.id, id));
+  }
+
+  // Usage tracking methods
+  async recordMessageUsage(usage: InsertMessageUsage): Promise<MessageUsage> {
+    const result = await db.insert(messageUsage).values(usage).returning();
+    return result[0];
+  }
+
+  async getUsageByUser(userId: string, startDate?: Date, endDate?: Date): Promise<MessageUsage[]> {
+    let query = db.select().from(messageUsage).where(eq(messageUsage.userId, userId));
+    
+    if (startDate && endDate) {
+      query = db.select().from(messageUsage).where(
+        and(
+          eq(messageUsage.userId, userId),
+          gte(messageUsage.createdAt, startDate),
+          lte(messageUsage.createdAt, endDate)
+        )
+      );
+    }
+    
+    return await query.orderBy(desc(messageUsage.createdAt));
+  }
+
+  async getUsageSummary(userId: string, startDate?: Date, endDate?: Date): Promise<{totalMessages: number; totalCost: string}> {
+    let whereClause = eq(messageUsage.userId, userId);
+    
+    if (startDate && endDate) {
+      whereClause = and(
+        eq(messageUsage.userId, userId),
+        gte(messageUsage.createdAt, startDate),
+        lte(messageUsage.createdAt, endDate)
+      ) as any;
+    }
+    
+    const result = await db
+      .select({
+        totalMessages: sql<number>`count(*)::int`,
+        totalCost: sql<string>`coalesce(sum(${messageUsage.totalCost}), 0)::text`
+      })
+      .from(messageUsage)
+      .where(whereClause);
+    
+    return result[0] || { totalMessages: 0, totalCost: "0" };
   }
 }
 

@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, timestamp, boolean, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, timestamp, boolean, jsonb, numeric } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -37,6 +37,30 @@ export const chats = pgTable("chats", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// Registered WhatsApp phone numbers per client
+export const registeredPhones = pgTable("registered_phones", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  phoneNumber: text("phone_number").notNull().unique(),
+  businessName: text("business_name"),
+  isVerified: boolean("is_verified").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Message usage tracking for billing
+export const messageUsage = pgTable("message_usage", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  chatId: varchar("chat_id").references(() => chats.id, { onDelete: "set null" }),
+  direction: text("direction").notNull(), // 'inbound' or 'outbound'
+  messageType: text("message_type").notNull().default("text"), // 'text', 'media', 'template'
+  twilioSid: text("twilio_sid"),
+  twilioCost: numeric("twilio_cost", { precision: 10, scale: 6 }).default("0"),
+  markupPercent: numeric("markup_percent", { precision: 5, scale: 2 }).default("5.00"),
+  totalCost: numeric("total_cost", { precision: 10, scale: 6 }).default("0"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
   createdAt: true,
@@ -49,7 +73,22 @@ export const insertChatSchema = createInsertSchema(chats).omit({
   updatedAt: true,
 });
 
+export const insertRegisteredPhoneSchema = createInsertSchema(registeredPhones).omit({
+  id: true,
+  createdAt: true,
+  isVerified: true,
+});
+
+export const insertMessageUsageSchema = createInsertSchema(messageUsage).omit({
+  id: true,
+  createdAt: true,
+});
+
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 export type InsertChat = z.infer<typeof insertChatSchema>;
 export type Chat = typeof chats.$inferSelect;
+export type InsertRegisteredPhone = z.infer<typeof insertRegisteredPhoneSchema>;
+export type RegisteredPhone = typeof registeredPhones.$inferSelect;
+export type InsertMessageUsage = z.infer<typeof insertMessageUsageSchema>;
+export type MessageUsage = typeof messageUsage.$inferSelect;
