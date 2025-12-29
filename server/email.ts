@@ -1,5 +1,5 @@
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
-const APP_URL = process.env.APP_URL || 'https://whachatcrm.replit.app';
+const APP_URL = process.env.APP_URL || 'https://whatchatcrm.com';
 const FROM_EMAIL = 'WhaChatCRM <noreply@crm.whachatcrm.com>';
 
 interface EmailOptions {
