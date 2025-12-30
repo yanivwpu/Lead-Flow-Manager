@@ -61,7 +61,11 @@ export function Welcome() {
               </button>
             </div>
             
-            <div className="mt-12 flex items-center gap-6 text-sm text-gray-500 font-medium">
+            <div className="mt-8 text-sm text-gray-600 font-medium">
+              Free to start · Paid plans from $19/month
+            </div>
+            
+            <div className="mt-6 flex items-center gap-6 text-sm text-gray-500 font-medium">
                <div className="flex items-center gap-2">
                  <CheckCircle2 className="h-4 w-4 text-brand-green" />
                  <span>No credit card required</span>
