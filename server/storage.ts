@@ -11,6 +11,7 @@ export interface IStorage {
   // User methods
   getUser(id: string): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
+  getUserByStripeCustomerId(customerId: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
   updateUser(id: string, updates: Partial<User>): Promise<User | undefined>;
   
@@ -20,6 +21,7 @@ export interface IStorage {
   createChat(chat: InsertChat): Promise<Chat>;
   updateChat(id: string, updates: Partial<Chat>): Promise<Chat | undefined>;
   deleteChat(id: string): Promise<void>;
+  getConversationCount(userId: string, startDate: Date): Promise<number>;
   
   // Notification methods
   getDueFollowUps(): Promise<Chat[]>;
@@ -44,6 +46,11 @@ export class DbStorage implements IStorage {
 
   async getUserByEmail(email: string): Promise<User | undefined> {
     const result = await db.select().from(users).where(eq(users.email, email));
+    return result[0];
+  }
+
+  async getUserByStripeCustomerId(customerId: string): Promise<User | undefined> {
+    const result = await db.select().from(users).where(eq(users.stripeCustomerId, customerId));
     return result[0];
   }
 
@@ -82,6 +89,19 @@ export class DbStorage implements IStorage {
 
   async deleteChat(id: string): Promise<void> {
     await db.delete(chats).where(eq(chats.id, id));
+  }
+
+  async getConversationCount(userId: string, startDate: Date): Promise<number> {
+    const result = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(chats)
+      .where(
+        and(
+          eq(chats.userId, userId),
+          gte(chats.createdAt, startDate)
+        )
+      );
+    return result[0]?.count || 0;
   }
 
   async getDueFollowUps(): Promise<Chat[]> {

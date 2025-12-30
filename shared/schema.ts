@@ -3,6 +3,65 @@ import { pgTable, text, varchar, integer, timestamp, boolean, jsonb, numeric } f
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
+// Subscription plan types
+export type SubscriptionPlan = 'free' | 'starter' | 'growth' | 'pro';
+
+// Plan limits configuration
+export const PLAN_LIMITS = {
+  free: {
+    name: 'Free',
+    price: 0,
+    conversationsPerMonth: 50, // lifetime for free
+    isLifetimeLimit: true,
+    maxUsers: 1,
+    maxWhatsappNumbers: 1,
+    canSendMessages: false, // inbound only, limited replies
+    emailNotifications: false,
+    pushNotifications: false,
+    teamInbox: false,
+    usageReports: false,
+  },
+  starter: {
+    name: 'Starter',
+    price: 19,
+    conversationsPerMonth: 500,
+    isLifetimeLimit: false,
+    maxUsers: 1,
+    maxWhatsappNumbers: 1,
+    canSendMessages: true,
+    emailNotifications: true,
+    pushNotifications: false,
+    teamInbox: false,
+    usageReports: false,
+  },
+  growth: {
+    name: 'Growth',
+    price: 49,
+    conversationsPerMonth: 2000,
+    isLifetimeLimit: false,
+    maxUsers: 3,
+    maxWhatsappNumbers: 1,
+    canSendMessages: true,
+    emailNotifications: true,
+    pushNotifications: true,
+    teamInbox: false,
+    usageReports: false,
+  },
+  pro: {
+    name: 'Pro',
+    price: 99,
+    conversationsPerMonth: 5000,
+    isLifetimeLimit: false,
+    maxUsers: -1, // unlimited
+    maxWhatsappNumbers: 2,
+    canSendMessages: true,
+    emailNotifications: true,
+    pushNotifications: true,
+    teamInbox: true,
+    usageReports: true,
+  },
+} as const;
+
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
@@ -15,6 +74,14 @@ export const users = pgTable("users", {
   twilioAuthToken: text("twilio_auth_token"),
   twilioWhatsappNumber: text("twilio_whatsapp_number"),
   twilioConnected: boolean("twilio_connected").default(false),
+  // Subscription fields
+  subscriptionPlan: text("subscription_plan").default("free"),
+  stripeCustomerId: text("stripe_customer_id"),
+  stripeSubscriptionId: text("stripe_subscription_id"),
+  subscriptionStatus: text("subscription_status").default("active"), // active, canceled, past_due
+  currentPeriodStart: timestamp("current_period_start"),
+  currentPeriodEnd: timestamp("current_period_end"),
+  lifetimeConversations: integer("lifetime_conversations").default(0), // for free tier tracking
   createdAt: timestamp("created_at").defaultNow(),
 });
 

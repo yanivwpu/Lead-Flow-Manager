@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertChatSchema, insertRegisteredPhoneSchema } from "@shared/schema";
+import { insertChatSchema, insertRegisteredPhoneSchema, PLAN_LIMITS, type SubscriptionPlan } from "@shared/schema";
 import { z } from "zod";
 import { getVapidPublicKey } from "./notifications";
 import {
@@ -13,6 +13,8 @@ import {
   getTwilioAccountSid,
   type WhatsAppMessage,
 } from "./twilio";
+import { subscriptionService } from "./subscriptionService";
+import { getStripePublishableKey } from "./stripeClient";
 
 const TWILIO_BASE_COST_PER_MESSAGE = 0.005;
 const MARKUP_PERCENT = 5;
@@ -493,6 +495,87 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Status webhook error:", error);
       res.status(200).send("");
+    }
+  });
+
+  // ============= Subscription Endpoints =============
+
+  // Get Stripe publishable key
+  app.get("/api/stripe/publishable-key", async (_req, res) => {
+    try {
+      const key = await getStripePublishableKey();
+      res.json({ publishableKey: key });
+    } catch (error) {
+      console.error("Error getting Stripe key:", error);
+      res.status(500).json({ error: "Stripe not configured" });
+    }
+  });
+
+  // Get available subscription plans
+  app.get("/api/subscription/plans", (_req, res) => {
+    const plans = Object.entries(PLAN_LIMITS).map(([id, plan]) => ({
+      id,
+      ...plan,
+    }));
+    res.json(plans);
+  });
+
+  // Get current user's subscription and limits
+  app.get("/api/subscription", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const limits = await subscriptionService.getUserLimits(req.user.id);
+      const user = await storage.getUser(req.user.id);
+
+      res.json({
+        limits,
+        subscription: user ? {
+          plan: user.subscriptionPlan,
+          status: user.subscriptionStatus,
+          currentPeriodEnd: user.currentPeriodEnd,
+        } : null,
+      });
+    } catch (error) {
+      console.error("Error fetching subscription:", error);
+      res.status(500).json({ error: "Failed to fetch subscription" });
+    }
+  });
+
+  // Create checkout session for upgrading
+  app.post("/api/subscription/checkout", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const { planId } = req.body;
+      if (!planId || !['starter', 'growth', 'pro'].includes(planId)) {
+        return res.status(400).json({ error: "Invalid plan" });
+      }
+
+      const url = await subscriptionService.createCheckoutSession(req.user.id, planId);
+      res.json({ url });
+    } catch (error: any) {
+      console.error("Error creating checkout:", error);
+      res.status(500).json({ error: error.message || "Failed to create checkout" });
+    }
+  });
+
+  // Create customer portal session for managing subscription
+  app.post("/api/subscription/portal", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const url = await subscriptionService.createCustomerPortalSession(req.user.id);
+      res.json({ url });
+    } catch (error: any) {
+      console.error("Error creating portal:", error);
+      res.status(500).json({ error: error.message || "Failed to create portal session" });
     }
   });
 
