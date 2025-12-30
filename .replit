@@ -48,4 +48,4 @@ integrations = ["twilio:1.0.0"]
 VAPID_PUBLIC_KEY = "BFPzTJh87JHoq7y-Pn0adv2b4vRBOXouLmqrZO46DGcDHRMdEh_MNFMSlTbWl-_C1aO_cSrfabPgri5FJJhiyrw"
 VAPID_PRIVATE_KEY = "NoLYiJ4lztcATms8h7lhqaABpJHA1kyYHXtBTGDWTbk"
 VAPID_EMAIL = "mailto:support@whachatcrm.com"
-APP_URL = "https://whatchatcrm.com"
+APP_URL = "https://whachatcrm.com"
