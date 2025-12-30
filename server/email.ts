@@ -1,5 +1,5 @@
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
-const APP_URL = process.env.APP_URL || 'https://whatchatcrm.com';
+const APP_URL = process.env.APP_URL || 'https://whachatcrm.com';
 const FROM_EMAIL = 'WhaChatCRM <noreply@crm.whachatcrm.com>';
 
 interface EmailOptions {
@@ -99,35 +99,53 @@ export async function sendPasswordResetEmail(email: string, resetToken: string):
       <!DOCTYPE html>
       <html>
       <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <style>
-          body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; }
-          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-          .header { background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
-          .content { background: #f9fafb; padding: 30px; border-radius: 0 0 10px 10px; }
-          .button { display: inline-block; background: #3b82f6; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; margin-top: 20px; }
-          .warning { background: #fef3c7; border: 1px solid #f59e0b; padding: 15px; border-radius: 6px; margin-top: 20px; }
-          .footer { text-align: center; margin-top: 20px; color: #6b7280; font-size: 12px; }
+          body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f3f4f6; }
+          .wrapper { padding: 40px 20px; }
+          .container { max-width: 600px; margin: 0 auto; background: white; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); }
+          .header { background: linear-gradient(135deg, #1a2e35 0%, #0f1c20 100%); color: white; padding: 40px 30px; text-align: center; }
+          .logo { width: 50px; height: 50px; background: #22c55e; border-radius: 12px; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 16px; font-size: 24px; font-weight: bold; color: white; }
+          .header h1 { margin: 0; font-size: 24px; font-weight: 600; }
+          .content { padding: 40px 30px; }
+          .content h2 { color: #1a2e35; margin-top: 0; font-size: 20px; }
+          .button { display: inline-block; background: #22c55e; color: white !important; padding: 14px 32px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px; margin: 24px 0; }
+          .button:hover { background: #16a34a; }
+          .info-box { background: #f0fdf4; border: 1px solid #bbf7d0; padding: 16px; border-radius: 8px; margin: 24px 0; }
+          .info-box p { margin: 0; color: #166534; font-size: 14px; }
+          .url-box { background: #f9fafb; border: 1px solid #e5e7eb; padding: 12px; border-radius: 6px; margin-top: 24px; word-break: break-all; font-family: monospace; font-size: 12px; color: #6b7280; }
+          .footer { text-align: center; padding: 24px 30px; background: #f9fafb; border-top: 1px solid #e5e7eb; }
+          .footer p { margin: 0; color: #9ca3af; font-size: 12px; }
+          .footer a { color: #22c55e; text-decoration: none; }
         </style>
       </head>
       <body>
-        <div class="container">
-          <div class="header">
-            <h1 style="margin: 0;">Password Reset</h1>
-          </div>
-          <div class="content">
-            <p>We received a request to reset your password for your WhaChatCRM account.</p>
-            <p>Click the button below to reset your password:</p>
-            <a href="${resetUrl}" class="button">Reset Password</a>
-            <div class="warning">
-              <strong>Note:</strong> This link will expire in 1 hour. If you didn't request this reset, you can safely ignore this email.
+        <div class="wrapper">
+          <div class="container">
+            <div class="header">
+              <div class="logo">C</div>
+              <h1>Reset Your Password</h1>
             </div>
-            <p style="margin-top: 20px; font-size: 12px; color: #6b7280;">
-              Or copy and paste this URL into your browser:<br>
-              <code style="word-break: break-all;">${resetUrl}</code>
-            </p>
-          </div>
-          <div class="footer">
-            <p>&copy; ${new Date().getFullYear()} WhaChatCRM. All rights reserved.</p>
+            <div class="content">
+              <h2>Password Reset Request</h2>
+              <p>We received a request to reset the password for your WhaChatCRM account. Click the button below to create a new password:</p>
+              
+              <center>
+                <a href="${resetUrl}" class="button">Reset My Password</a>
+              </center>
+              
+              <div class="info-box">
+                <p><strong>Security Note:</strong> This link will expire in 1 hour. If you didn't request this password reset, you can safely ignore this email - your account is secure.</p>
+              </div>
+              
+              <p style="font-size: 14px; color: #6b7280;">Having trouble with the button? Copy and paste this link into your browser:</p>
+              <div class="url-box">${resetUrl}</div>
+            </div>
+            <div class="footer">
+              <p>Need help? Contact us at <a href="mailto:support@whachatcrm.com">support@whachatcrm.com</a></p>
+              <p style="margin-top: 12px;">&copy; ${new Date().getFullYear()} WhaChatCRM. All rights reserved.</p>
+            </div>
           </div>
         </div>
       </body>
