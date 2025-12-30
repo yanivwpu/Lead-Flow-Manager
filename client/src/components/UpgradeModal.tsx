@@ -1,7 +1,7 @@
+import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Zap, MessageSquare, Users, Phone, Sparkles } from "lucide-react";
-import { Link } from "wouter";
+import { Zap, MessageSquare, Users, Phone, Sparkles, Loader2, Check } from "lucide-react";
 
 export type UpgradeReason = 
   | "conversation_limit" 
@@ -17,46 +17,113 @@ interface UpgradeModalProps {
   currentPlan?: string;
 }
 
-const UPGRADE_CONTENT: Record<UpgradeReason, {
+type TargetPlan = "starter" | "growth" | "pro";
+
+interface UpgradeContent {
   icon: React.ReactNode;
   title: string;
   description: string;
-  cta: string;
-}> = {
+  targetPlan: TargetPlan;
+  ctaText: string;
+  benefits: string[];
+}
+
+const UPGRADE_CONTENT: Record<UpgradeReason, UpgradeContent> = {
   conversation_limit: {
     icon: <MessageSquare className="h-8 w-8 text-amber-500" />,
     title: "You've reached your conversation limit",
-    description: "Upgrade your plan to continue connecting with more customers. Your existing conversations remain accessible.",
-    cta: "Upgrade Now",
+    description: "Upgrade to continue connecting with more customers.",
+    targetPlan: "starter",
+    ctaText: "Upgrade to Starter",
+    benefits: [
+      "500 conversations/month",
+      "Send messages to customers",
+      "Basic automation features",
+    ],
   },
   free_reply: {
     icon: <Zap className="h-8 w-8 text-brand-green" />,
     title: "Upgrade to send messages",
-    description: "Free plan users can receive messages, but sending replies requires a paid plan. Upgrade to Starter or higher to start responding to your customers.",
-    cta: "Unlock Messaging",
+    description: "Free plan users can receive messages, but sending requires a paid plan.",
+    targetPlan: "starter",
+    ctaText: "Upgrade to Starter",
+    benefits: [
+      "Reply to all your customers",
+      "500 conversations/month",
+      "Notes, tags & pipeline",
+    ],
   },
   add_user: {
     icon: <Users className="h-8 w-8 text-blue-500" />,
     title: "Team members require Growth plan",
-    description: "Want to add team members to your inbox? Upgrade to Growth (3 users) or Pro (unlimited users) to collaborate with your team.",
-    cta: "Upgrade for Team",
+    description: "Add your team to collaborate on customer conversations.",
+    targetPlan: "growth",
+    ctaText: "Upgrade to Growth",
+    benefits: [
+      "Up to 3 team members",
+      "2,000 conversations/month",
+      "Team collaboration tools",
+    ],
   },
   add_automation: {
     icon: <Sparkles className="h-8 w-8 text-purple-500" />,
-    title: "Automation requires a paid plan",
-    description: "Automate your WhatsApp workflows with smart responses and scheduled messages. Available on Starter plan and above.",
-    cta: "Unlock Automation",
+    title: "Automation requires Growth plan",
+    description: "Automate your WhatsApp workflows with smart responses.",
+    targetPlan: "growth",
+    ctaText: "Upgrade to Growth",
+    benefits: [
+      "Auto-replies & workflows",
+      "Scheduled messages",
+      "Smart tagging rules",
+    ],
   },
   add_whatsapp_number: {
     icon: <Phone className="h-8 w-8 text-green-500" />,
     title: "Additional numbers require Pro plan",
-    description: "Need multiple WhatsApp Business numbers? Pro plan supports up to 2 numbers for managing different brands or departments.",
-    cta: "Upgrade to Pro",
+    description: "Manage multiple WhatsApp Business numbers for different brands.",
+    targetPlan: "pro",
+    ctaText: "Upgrade to Pro",
+    benefits: [
+      "Up to 2 WhatsApp numbers",
+      "Unlimited conversations",
+      "Unlimited team members",
+    ],
   },
 };
 
+const PLAN_PRICES: Record<TargetPlan, string> = {
+  starter: "$19",
+  growth: "$49",
+  pro: "$99",
+};
+
 export function UpgradeModal({ open, onOpenChange, reason, currentPlan }: UpgradeModalProps) {
+  const [isLoading, setIsLoading] = useState(false);
   const content = UPGRADE_CONTENT[reason];
+
+  const handleUpgrade = async () => {
+    setIsLoading(true);
+    try {
+      const response = await fetch("/api/subscription/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ planId: content.targetPlan }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to start checkout");
+      }
+
+      const data = await response.json();
+      if (data.url) {
+        window.location.href = data.url;
+      }
+    } catch (error) {
+      console.error("Checkout error:", error);
+      setIsLoading(false);
+    }
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -74,21 +141,43 @@ export function UpgradeModal({ open, onOpenChange, reason, currentPlan }: Upgrad
             {content.description}
           </DialogDescription>
         </DialogHeader>
-        <DialogFooter className="flex-col sm:flex-col gap-2 mt-4">
-          <Link href="/pricing" className="w-full">
-            <Button 
-              className="w-full bg-brand-green hover:bg-green-600"
-              onClick={() => onOpenChange(false)}
-              data-testid="button-upgrade-modal-cta"
-            >
-              <Zap className="h-4 w-4 mr-2" />
-              {content.cta}
-            </Button>
-          </Link>
+
+        <div className="bg-gray-50 rounded-lg p-4 my-4">
+          <div className="flex items-baseline justify-center gap-1 mb-3">
+            <span className="text-3xl font-bold text-gray-900">{PLAN_PRICES[content.targetPlan]}</span>
+            <span className="text-gray-500">/month</span>
+          </div>
+          <ul className="space-y-2">
+            {content.benefits.map((benefit, i) => (
+              <li key={i} className="flex items-center gap-2 text-sm text-gray-700">
+                <Check className="h-4 w-4 text-brand-green flex-shrink-0" />
+                {benefit}
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        <DialogFooter className="flex-col sm:flex-col gap-2">
+          <Button 
+            className="w-full bg-brand-green hover:bg-green-600 h-12 text-base"
+            onClick={handleUpgrade}
+            disabled={isLoading}
+            data-testid="button-upgrade-modal-cta"
+          >
+            {isLoading ? (
+              <Loader2 className="h-5 w-5 animate-spin" />
+            ) : (
+              <>
+                <Zap className="h-5 w-5 mr-2" />
+                {content.ctaText} — {PLAN_PRICES[content.targetPlan]}/mo
+              </>
+            )}
+          </Button>
           <Button 
             variant="ghost" 
             className="w-full text-gray-500"
             onClick={() => onOpenChange(false)}
+            disabled={isLoading}
             data-testid="button-upgrade-modal-dismiss"
           >
             Maybe later
