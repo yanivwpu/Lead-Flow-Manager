@@ -137,6 +137,32 @@ Email reminders are currently configured for Resend but will log to console if A
 - **Visibility**: Clients can view their usage in Settings > Billing & Usage
 - **Admin View**: Platform can view all client usage via /api/admin/usage
 
+## Cost Control & Limit Enforcement
+To prevent unexpected Twilio costs, the following protections are in place:
+
+### Sending Blocks
+- **Free plan**: Cannot send outbound messages (inbound only)
+- **At limit**: All plans blocked from new conversations when at limit
+- **Error codes**: Returns `PLAN_LIMIT` or `CONVERSATION_LIMIT` for UI handling
+
+### Usage Tracking (24-Hour Windows)
+- **Conversation = 24-hour window**: One conversation per contact per 24 hours
+- **Window tracking**: `conversationWindows` table tracks window start/end per contact
+- **Both directions**: Inbound and outbound messages tracked via `messageUsage` table
+- **Per tenant**: All usage tied to `userId` for tenant-level isolation
+
+### Monthly Reset Logic
+- **Free plan**: Lifetime limit of 50 conversations (never resets)
+- **Paid plans**: Count resets each billing period via `currentPeriodStart`
+- **Stripe webhook**: `subscription.updated` event updates `currentPeriodStart` and `currentPeriodEnd`
+- **Automatic renewal**: When Stripe renews subscription, new period dates are set
+
+### Upgrade Flow
+- **Warning banner**: Shown at 80% of conversation limit
+- **Block modal**: Shown at 100% with one-click upgrade button
+- **Direct checkout**: Upgrade modals trigger Stripe checkout immediately
+- **Immediate unlock**: Features unlock on successful payment via webhook
+
 ## Notification Flow
 1. Background cron job runs every minute to check for due follow-ups
 2. Queries database for chats with `followUpDate <= now()`
