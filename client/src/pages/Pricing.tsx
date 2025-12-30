@@ -257,57 +257,30 @@ export function Pricing() {
         <div className="mt-16 max-w-3xl mx-auto">
           <h2 className="text-2xl font-bold text-gray-900 mb-8 text-center">Frequently Asked Questions</h2>
           <Accordion type="single" collapsible className="space-y-4">
+            <AccordionItem value="twilio-account" className="bg-white border border-gray-200 rounded-xl px-6">
+              <AccordionTrigger className="text-left font-semibold text-gray-900 hover:no-underline" data-testid="faq-twilio-account">
+                Do I need a Twilio account?
+              </AccordionTrigger>
+              <AccordionContent className="text-gray-600">
+                No. WhatsApp messaging is fully included. We handle Twilio and WhatsApp Business API for you.
+              </AccordionContent>
+            </AccordionItem>
+
             <AccordionItem value="what-is-conversation" className="bg-white border border-gray-200 rounded-xl px-6">
               <AccordionTrigger className="text-left font-semibold text-gray-900 hover:no-underline" data-testid="faq-what-is-conversation">
-                What counts as a conversation?
+                What is a WhatsApp conversation?
               </AccordionTrigger>
               <AccordionContent className="text-gray-600">
-                A conversation is a unique WhatsApp chat with a contact. Each phone number you message counts as one conversation. Conversations are counted monthly for paid plans, or as a lifetime total for the Free plan.
+                A conversation is a 24-hour messaging window between you and a customer. You're only counted once per conversation — not per message.
               </AccordionContent>
             </AccordionItem>
 
-            <AccordionItem value="message-cost" className="bg-white border border-gray-200 rounded-xl px-6">
-              <AccordionTrigger className="text-left font-semibold text-gray-900 hover:no-underline" data-testid="faq-message-cost">
-                Are there additional costs per message?
+            <AccordionItem value="reach-limit" className="bg-white border border-gray-200 rounded-xl px-6">
+              <AccordionTrigger className="text-left font-semibold text-gray-900 hover:no-underline" data-testid="faq-reach-limit">
+                What happens if I reach my limit?
               </AccordionTrigger>
               <AccordionContent className="text-gray-600">
-                Yes, each WhatsApp message (sent or received) costs $0.00525. This covers the WhatsApp Business API messaging fees. Your subscription gives you access to the platform features, while message costs are usage-based.
-              </AccordionContent>
-            </AccordionItem>
-
-            <AccordionItem value="whatsapp-number" className="bg-white border border-gray-200 rounded-xl px-6">
-              <AccordionTrigger className="text-left font-semibold text-gray-900 hover:no-underline" data-testid="faq-whatsapp-number">
-                Do I need my own WhatsApp Business number?
-              </AccordionTrigger>
-              <AccordionContent className="text-gray-600">
-                Yes, you'll need a phone number that can receive SMS for WhatsApp Business verification. You can register your existing business phone number during signup or add it later in Settings.
-              </AccordionContent>
-            </AccordionItem>
-
-            <AccordionItem value="upgrade-downgrade" className="bg-white border border-gray-200 rounded-xl px-6">
-              <AccordionTrigger className="text-left font-semibold text-gray-900 hover:no-underline" data-testid="faq-upgrade-downgrade">
-                Can I upgrade or downgrade my plan?
-              </AccordionTrigger>
-              <AccordionContent className="text-gray-600">
-                Yes! You can upgrade anytime and the change takes effect immediately. Downgrades apply at the end of your current billing period. Manage your subscription from the Settings page.
-              </AccordionContent>
-            </AccordionItem>
-
-            <AccordionItem value="team-members" className="bg-white border border-gray-200 rounded-xl px-6">
-              <AccordionTrigger className="text-left font-semibold text-gray-900 hover:no-underline" data-testid="faq-team-members">
-                How do team members work?
-              </AccordionTrigger>
-              <AccordionContent className="text-gray-600">
-                Team members share access to the same inbox and conversations. The Growth plan supports up to 3 team members, while Pro offers unlimited users. All team members can view, respond, and manage chats.
-              </AccordionContent>
-            </AccordionItem>
-
-            <AccordionItem value="free-limits" className="bg-white border border-gray-200 rounded-xl px-6">
-              <AccordionTrigger className="text-left font-semibold text-gray-900 hover:no-underline" data-testid="faq-free-limits">
-                What happens when I reach my Free plan limit?
-              </AccordionTrigger>
-              <AccordionContent className="text-gray-600">
-                The Free plan includes 50 lifetime conversations. Once you reach this limit, you'll need to upgrade to a paid plan to continue creating new conversations. Your existing chats remain accessible.
+                We'll notify you before you hit your limit. You can upgrade instantly with no downtime.
               </AccordionContent>
             </AccordionItem>
 
@@ -316,16 +289,7 @@ export function Pricing() {
                 Can I cancel anytime?
               </AccordionTrigger>
               <AccordionContent className="text-gray-600">
-                Yes, you can cancel your subscription at any time. You'll continue to have access until the end of your current billing period. Your data is retained, and you can resubscribe whenever you're ready.
-              </AccordionContent>
-            </AccordionItem>
-
-            <AccordionItem value="data-security" className="bg-white border border-gray-200 rounded-xl px-6">
-              <AccordionTrigger className="text-left font-semibold text-gray-900 hover:no-underline" data-testid="faq-data-security">
-                Is my data secure?
-              </AccordionTrigger>
-              <AccordionContent className="text-gray-600">
-                Absolutely. All data is encrypted in transit and at rest. We use industry-standard security practices and never share your customer data with third parties. See our <a href="/privacy-policy" className="text-brand-green hover:underline">Privacy Policy</a> for details.
+                Yes. No contracts. Cancel anytime.
               </AccordionContent>
             </AccordionItem>
           </Accordion>

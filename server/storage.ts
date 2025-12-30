@@ -4,8 +4,8 @@ import {
   type MessageUsage, type InsertMessageUsage
 } from "@shared/schema";
 import { db } from "../drizzle/db";
-import { users, chats, registeredPhones, messageUsage } from "@shared/schema";
-import { eq, and, lte, sql, isNotNull, asc, desc, gte, sum } from "drizzle-orm";
+import { users, chats, registeredPhones, messageUsage, conversationWindows, type InsertConversationWindow, type ConversationWindow } from "@shared/schema";
+import { eq, and, lte, sql, isNotNull, asc, desc, gte, sum, gt } from "drizzle-orm";
 
 export interface IStorage {
   // User methods
@@ -36,6 +36,13 @@ export interface IStorage {
   recordMessageUsage(usage: InsertMessageUsage): Promise<MessageUsage>;
   getUsageByUser(userId: string, startDate?: Date, endDate?: Date): Promise<MessageUsage[]>;
   getUsageSummary(userId: string, startDate?: Date, endDate?: Date): Promise<{totalMessages: number; totalCost: string}>;
+  
+  // Conversation window methods (24-hour tracking)
+  getActiveConversationWindow(userId: string, whatsappPhone: string): Promise<ConversationWindow | undefined>;
+  createConversationWindow(window: InsertConversationWindow): Promise<ConversationWindow>;
+  updateConversationWindowMessageCount(id: string): Promise<void>;
+  getConversationWindowCount(userId: string, startDate: Date): Promise<number>;
+  getLifetimeConversationWindowCount(userId: string): Promise<number>;
 }
 
 export class DbStorage implements IStorage {
@@ -178,6 +185,57 @@ export class DbStorage implements IStorage {
       .where(whereClause);
     
     return result[0] || { totalMessages: 0, totalCost: "0" };
+  }
+
+  // Conversation window methods (24-hour tracking)
+  async getActiveConversationWindow(userId: string, whatsappPhone: string): Promise<ConversationWindow | undefined> {
+    const now = new Date();
+    const result = await db
+      .select()
+      .from(conversationWindows)
+      .where(
+        and(
+          eq(conversationWindows.userId, userId),
+          eq(conversationWindows.whatsappPhone, whatsappPhone),
+          gt(conversationWindows.windowEnd, now)
+        )
+      )
+      .orderBy(desc(conversationWindows.windowStart))
+      .limit(1);
+    return result[0];
+  }
+
+  async createConversationWindow(window: InsertConversationWindow): Promise<ConversationWindow> {
+    const result = await db.insert(conversationWindows).values(window).returning();
+    return result[0];
+  }
+
+  async updateConversationWindowMessageCount(id: string): Promise<void> {
+    await db
+      .update(conversationWindows)
+      .set({ messageCount: sql`${conversationWindows.messageCount} + 1` })
+      .where(eq(conversationWindows.id, id));
+  }
+
+  async getConversationWindowCount(userId: string, startDate: Date): Promise<number> {
+    const result = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(conversationWindows)
+      .where(
+        and(
+          eq(conversationWindows.userId, userId),
+          gte(conversationWindows.windowStart, startDate)
+        )
+      );
+    return result[0]?.count || 0;
+  }
+
+  async getLifetimeConversationWindowCount(userId: string): Promise<number> {
+    const result = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(conversationWindows)
+      .where(eq(conversationWindows.userId, userId));
+    return result[0]?.count || 0;
   }
 }
 

@@ -114,6 +114,18 @@ export const registeredPhones = pgTable("registered_phones", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// Conversation windows for 24-hour tracking (per contact per tenant)
+export const conversationWindows = pgTable("conversation_windows", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  chatId: varchar("chat_id").notNull().references(() => chats.id, { onDelete: "cascade" }),
+  whatsappPhone: text("whatsapp_phone").notNull(), // the customer's phone
+  windowStart: timestamp("window_start").notNull(), // when the 24-hour window started
+  windowEnd: timestamp("window_end").notNull(), // when the window expires (windowStart + 24 hours)
+  messageCount: integer("message_count").default(1), // how many messages in this window
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 // Message usage tracking for billing
 export const messageUsage = pgTable("message_usage", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -151,6 +163,11 @@ export const insertMessageUsageSchema = createInsertSchema(messageUsage).omit({
   createdAt: true,
 });
 
+export const insertConversationWindowSchema = createInsertSchema(conversationWindows).omit({
+  id: true,
+  createdAt: true,
+});
+
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 export type InsertChat = z.infer<typeof insertChatSchema>;
@@ -159,3 +176,5 @@ export type InsertRegisteredPhone = z.infer<typeof insertRegisteredPhoneSchema>;
 export type RegisteredPhone = typeof registeredPhones.$inferSelect;
 export type InsertMessageUsage = z.infer<typeof insertMessageUsageSchema>;
 export type MessageUsage = typeof messageUsage.$inferSelect;
+export type InsertConversationWindow = z.infer<typeof insertConversationWindowSchema>;
+export type ConversationWindow = typeof conversationWindows.$inferSelect;

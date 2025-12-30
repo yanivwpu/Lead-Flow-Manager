@@ -357,6 +357,26 @@ export async function registerRoutes(
         return res.status(400).json({ error: "No WhatsApp phone number for this chat" });
       }
 
+      // Check if user can send messages (plan restriction)
+      const canSend = await subscriptionService.canSendMessage(req.user.id);
+      if (!canSend.allowed) {
+        return res.status(403).json({ 
+          error: canSend.reason, 
+          code: "PLAN_LIMIT",
+          upgradeRequired: true 
+        });
+      }
+
+      // Check conversation limit (24-hour window tracking)
+      const canStart = await subscriptionService.canStartConversation(req.user.id, chat.whatsappPhone);
+      if (!canStart.allowed) {
+        return res.status(403).json({ 
+          error: canStart.reason, 
+          code: "CONVERSATION_LIMIT",
+          upgradeRequired: true 
+        });
+      }
+
       const isConnected = await verifyTwilioConnection();
       if (!isConnected) {
         return res.status(400).json({ error: "WhatsApp messaging not available" });
@@ -368,6 +388,9 @@ export async function registerRoutes(
       }
 
       const result = await sendWhatsAppMessage(chat.whatsappPhone, message);
+
+      // Track conversation window (24-hour)
+      await subscriptionService.trackConversationWindow(req.user.id, chat.id, chat.whatsappPhone);
 
       // Track usage with 5% markup
       const costs = calculateCostWithMarkup(TWILIO_BASE_COST_PER_MESSAGE);
@@ -447,6 +470,9 @@ export async function registerRoutes(
           chat = await findOrCreateChatByPhone(userId, parsed.from, parsed.profileName);
         }
       }
+
+      // Track conversation window (24-hour) for inbound messages too
+      await subscriptionService.trackConversationWindow(userId, chat.id, parsed.from);
 
       // Track inbound usage with 5% markup
       const costs = calculateCostWithMarkup(TWILIO_BASE_COST_PER_MESSAGE);

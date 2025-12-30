@@ -27,15 +27,15 @@ export class SubscriptionService {
     const plan = (user.subscriptionPlan as SubscriptionPlan) || 'free';
     const limits = PLAN_LIMITS[plan];
 
-    // Get conversation count
+    // Get conversation window count (24-hour windows, not chats)
     let conversationsUsed: number;
     if (limits.isLifetimeLimit) {
-      // For free tier, use lifetime count
-      conversationsUsed = user.lifetimeConversations || 0;
+      // For free tier, count lifetime conversation windows
+      conversationsUsed = await storage.getLifetimeConversationWindowCount(userId);
     } else {
-      // For paid tiers, count this billing period
+      // For paid tiers, count conversation windows this billing period
       const startDate = user.currentPeriodStart || new Date(new Date().setDate(1));
-      conversationsUsed = await storage.getConversationCount(userId, startDate);
+      conversationsUsed = await storage.getConversationWindowCount(userId, startDate);
     }
 
     const conversationsRemaining = Math.max(0, limits.conversationsPerMonth - conversationsUsed);
@@ -109,18 +109,59 @@ export class SubscriptionService {
     return { allowed: true };
   }
 
-  async incrementConversationCount(userId: string): Promise<void> {
-    const user = await storage.getUser(userId);
-    if (!user) return;
-
-    const plan = (user.subscriptionPlan as SubscriptionPlan) || 'free';
-    const limits = PLAN_LIMITS[plan];
-
-    if (limits.isLifetimeLimit) {
-      await storage.updateUser(userId, {
-        lifetimeConversations: (user.lifetimeConversations || 0) + 1,
-      });
+  async trackConversationWindow(userId: string, chatId: string, whatsappPhone: string): Promise<{ isNewWindow: boolean; windowId: string }> {
+    // Check if there's an active 24-hour window for this contact
+    const activeWindow = await storage.getActiveConversationWindow(userId, whatsappPhone);
+    
+    if (activeWindow) {
+      // Window still active - just increment message count
+      await storage.updateConversationWindowMessageCount(activeWindow.id);
+      return { isNewWindow: false, windowId: activeWindow.id };
     }
+    
+    // No active window - create a new 24-hour window (this counts as a new conversation)
+    const now = new Date();
+    const windowEnd = new Date(now.getTime() + 24 * 60 * 60 * 1000); // 24 hours from now
+    
+    const newWindow = await storage.createConversationWindow({
+      userId,
+      chatId,
+      whatsappPhone,
+      windowStart: now,
+      windowEnd,
+    });
+    
+    return { isNewWindow: true, windowId: newWindow.id };
+  }
+
+  async canStartConversation(userId: string, whatsappPhone: string): Promise<{ allowed: boolean; reason?: string; isExistingWindow: boolean }> {
+    // Check if there's already an active window (no new conversation needed)
+    const activeWindow = await storage.getActiveConversationWindow(userId, whatsappPhone);
+    if (activeWindow) {
+      return { allowed: true, isExistingWindow: true };
+    }
+    
+    // Need a new conversation window - check limits
+    const limits = await this.getUserLimits(userId);
+    if (!limits) return { allowed: false, reason: 'User not found', isExistingWindow: false };
+
+    if (limits.isAtLimit) {
+      if (limits.isLifetimeLimit) {
+        return { 
+          allowed: false, 
+          reason: `You've reached the ${limits.conversationsLimit} conversation limit on the Free plan. Upgrade to continue.`,
+          isExistingWindow: false
+        };
+      } else {
+        return { 
+          allowed: false, 
+          reason: `You've used all ${limits.conversationsLimit} conversations this month. Upgrade for more.`,
+          isExistingWindow: false
+        };
+      }
+    }
+
+    return { allowed: true, isExistingWindow: false };
   }
 
   async createCheckoutSession(userId: string, planId: SubscriptionPlan): Promise<string> {

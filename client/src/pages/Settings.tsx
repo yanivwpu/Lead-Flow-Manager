@@ -8,6 +8,7 @@ import { useAuth } from "@/lib/auth-context";
 import { toast } from "@/hooks/use-toast";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
+import { UpgradeModal, type UpgradeReason } from "@/components/UpgradeModal";
 
 interface RegisteredPhone {
   id: string;
@@ -25,12 +26,13 @@ interface UsageSummary {
 interface SubscriptionData {
   limits: {
     conversationsUsed: number;
-    conversationsLimit: number | null;
+    conversationsLimit: number;
     isLifetimeLimit: boolean;
     usersCount: number;
-    usersLimit: number | null;
-    phonesCount: number;
-    phonesLimit: number;
+    usersLimit: number;
+    maxWhatsappNumbers: number;
+    planName: string;
+    plan: string;
   };
   subscription: {
     plan: string;
@@ -56,6 +58,8 @@ export function Settings() {
   );
   const [newPhone, setNewPhone] = useState("");
   const [businessName, setBusinessName] = useState("");
+  const [upgradeModalOpen, setUpgradeModalOpen] = useState(false);
+  const [upgradeReason, setUpgradeReason] = useState<UpgradeReason>("add_whatsapp_number");
 
   // Fetch registered phones
   const { data: phones = [], isLoading: phonesLoading } = useQuery<RegisteredPhone[]>({
@@ -151,6 +155,14 @@ export function Settings() {
       toast({ title: "Error", description: "Please enter a phone number", variant: "destructive" });
       return;
     }
+    
+    const maxNumbers = subscriptionData?.limits?.maxWhatsappNumbers || 1;
+    if (phones.length >= maxNumbers) {
+      setUpgradeReason("add_whatsapp_number");
+      setUpgradeModalOpen(true);
+      return;
+    }
+    
     registerPhoneMutation.mutate({ phoneNumber: newPhone, businessName });
   };
 
@@ -477,6 +489,13 @@ export function Settings() {
 
          </div>
        </div>
+       
+       <UpgradeModal
+         open={upgradeModalOpen}
+         onOpenChange={setUpgradeModalOpen}
+         reason={upgradeReason}
+         currentPlan={subscriptionData?.limits?.plan}
+       />
     </div>
   );
 }

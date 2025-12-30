@@ -11,7 +11,8 @@ import {
   Paperclip, 
   Send,
   Clock,
-  Smartphone
+  Smartphone,
+  Lock
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -22,6 +23,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { UpgradeModal, type UpgradeReason } from "@/components/UpgradeModal";
+import { useSubscription } from "@/lib/subscription-context";
+import { useToast } from "@/hooks/use-toast";
 
 interface Chat {
   id: string;
@@ -48,7 +52,14 @@ export function Chats() {
   const { user } = useAuth();
   const [searchTerm, setSearchTerm] = useState("");
   const queryClient = useQueryClient();
+  const { data: subscription } = useSubscription();
+  const { toast } = useToast();
+  const [upgradeModalOpen, setUpgradeModalOpen] = useState(false);
+  const [upgradeReason, setUpgradeReason] = useState<UpgradeReason>("free_reply");
   
+  const canSendMessages = subscription?.limits?.canSendMessages ?? false;
+  const isAtLimit = subscription?.limits?.isAtLimit ?? false;
+
   const { data: chats = [], isLoading } = useQuery<Chat[]>({
     queryKey: ['/api/chats'],
     enabled: !!user,
@@ -137,25 +148,55 @@ export function Chats() {
     setLocalNotes(selectedChat?.notes || "");
   }, [selectedChat?.id, selectedChat?.notes]);
 
-  const handleSendMessage = () => {
+  const handleSendMessage = async () => {
     if (!newMessage.trim() || !selectedChat) return;
     
-    const newMsgObj = {
-      id: Date.now().toString(),
-      text: newMessage,
-      sender: 'me' as const,
-      time: 'Just now'
-    };
+    if (!canSendMessages) {
+      setUpgradeReason("free_reply");
+      setUpgradeModalOpen(true);
+      return;
+    }
     
-    const updatedMessages = [...(selectedChat.messages || []), newMsgObj];
-    
-    handleUpdateChat({ 
-      messages: updatedMessages,
-      lastMessage: newMessage,
-      time: 'Just now'
-    });
-    
-    setNewMessage("");
+    if (isAtLimit) {
+      setUpgradeReason("conversation_limit");
+      setUpgradeModalOpen(true);
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/chats/${selectedChat.id}/send`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ message: newMessage }),
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        if (data.code === "PLAN_LIMIT") {
+          setUpgradeReason("free_reply");
+          setUpgradeModalOpen(true);
+          return;
+        }
+        if (data.code === "CONVERSATION_LIMIT") {
+          setUpgradeReason("conversation_limit");
+          setUpgradeModalOpen(true);
+          return;
+        }
+        throw new Error(data.error || "Failed to send message");
+      }
+      
+      queryClient.invalidateQueries({ queryKey: ['/api/chats'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/subscription'] });
+      setNewMessage("");
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to send message",
+        variant: "destructive",
+      });
+    }
   };
 
   if (isLoading) {
@@ -396,6 +437,13 @@ export function Chats() {
            <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'url("https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png")', backgroundRepeat: 'repeat', backgroundSize: '400px' }} />
         </div>
       )}
+      
+      <UpgradeModal
+        open={upgradeModalOpen}
+        onOpenChange={setUpgradeModalOpen}
+        reason={upgradeReason}
+        currentPlan={subscription?.limits?.plan}
+      />
     </div>
   );
 }
