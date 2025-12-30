@@ -14,7 +14,15 @@ The application is a full multi-tenant SaaS implementation with:
 - Notification system for follow-up reminders (push & email)
 - PWA capabilities (installable, offline-first)
 
-## Recent Changes (December 29, 2025)
+## Recent Changes (December 30, 2025)
+- **Subscription System**: Four tiers - Free (50 lifetime), Starter ($19/mo), Growth ($49/mo), Pro ($99/mo)
+- **Stripe Integration**: Payment processing with automatic webhook sync (stripe-replit-sync)
+- **Limit Enforcement**: Conversations, users, and WhatsApp numbers enforced per plan
+- **Pricing Page**: Public /pricing page with plan comparison and Stripe checkout
+- **Settings Upgrade**: Subscription info, usage stats, and billing portal link
+- **Stripe Products**: Seeded Starter/Growth/Pro plans with metadata for plan matching
+
+## Previous Changes (December 29, 2025)
 - **SaaS Architecture**: Platform now owns Twilio account via Replit integration
 - **Phone Registration**: Clients can register their WhatsApp Business phone numbers
 - **Message Routing**: Incoming messages routed to clients based on registered phone numbers
