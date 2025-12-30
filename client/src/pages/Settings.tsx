@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Bell, Mail, Smartphone, Shield, LogOut, Phone, DollarSign, Plus, Trash2, Loader2 } from "lucide-react";
+import { Bell, Mail, Smartphone, Shield, LogOut, Phone, DollarSign, Plus, Trash2, Loader2, CreditCard, ExternalLink, Zap } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { useAuth } from "@/lib/auth-context";
 import { toast } from "@/hooks/use-toast";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Link } from "wouter";
 
 interface RegisteredPhone {
   id: string;
@@ -20,6 +21,30 @@ interface UsageSummary {
   totalMessages: number;
   totalCost: string;
 }
+
+interface SubscriptionData {
+  limits: {
+    conversationsUsed: number;
+    conversationsLimit: number | null;
+    isLifetimeLimit: boolean;
+    usersCount: number;
+    usersLimit: number | null;
+    phonesCount: number;
+    phonesLimit: number;
+  };
+  subscription: {
+    plan: string;
+    status: string;
+    currentPeriodEnd: string | null;
+  } | null;
+}
+
+const PLAN_NAMES: Record<string, string> = {
+  free: "Free",
+  starter: "Starter",
+  growth: "Growth",
+  pro: "Pro",
+};
 
 export function Settings() {
   const { user } = useAuth();
@@ -40,6 +65,35 @@ export function Settings() {
   // Fetch usage summary
   const { data: usageSummary } = useQuery<UsageSummary>({
     queryKey: ["/api/usage/summary"],
+  });
+
+  // Fetch subscription data
+  const { data: subscriptionData, isLoading: subscriptionLoading } = useQuery<SubscriptionData>({
+    queryKey: ["/api/subscription"],
+  });
+
+  // Manage billing portal
+  const portalMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/subscription/portal", {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to open billing portal");
+      return res.json();
+    },
+    onSuccess: (data) => {
+      if (data.url) {
+        window.location.href = data.url;
+      }
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Could not open billing portal. Make sure you have an active subscription.",
+        variant: "destructive",
+      });
+    },
   });
 
   // Register phone mutation
@@ -279,6 +333,90 @@ export function Settings() {
              </div>
            </div>
 
+           {/* Subscription Section */}
+           <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
+             <div className="flex items-center gap-3 mb-6">
+               <div className="h-10 w-10 bg-purple-50 rounded-lg flex items-center justify-center">
+                 <CreditCard className="h-5 w-5 text-purple-600" />
+               </div>
+               <div>
+                 <h2 className="text-lg font-bold text-gray-900" data-testid="text-subscription-title">Subscription</h2>
+                 <p className="text-sm text-gray-500">Manage your plan and billing.</p>
+               </div>
+             </div>
+
+             {subscriptionLoading ? (
+               <div className="flex justify-center py-8">
+                 <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+               </div>
+             ) : (
+               <div className="space-y-4">
+                 <div className="p-4 bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg border border-purple-200">
+                   <div className="flex items-center justify-between mb-2">
+                     <span className="text-xs text-purple-700 uppercase font-semibold">Current Plan</span>
+                     {subscriptionData?.subscription?.plan !== "free" && (
+                       <span className="text-xs px-2 py-0.5 bg-purple-600 text-white rounded-full">
+                         {subscriptionData?.subscription?.status === "active" ? "Active" : subscriptionData?.subscription?.status}
+                       </span>
+                     )}
+                   </div>
+                   <p className="text-2xl font-bold text-purple-800" data-testid="text-current-plan">
+                     {PLAN_NAMES[subscriptionData?.subscription?.plan || "free"] || "Free"}
+                   </p>
+                   {subscriptionData?.subscription?.currentPeriodEnd && (
+                     <p className="text-sm text-purple-600 mt-1">
+                       Renews {new Date(subscriptionData.subscription.currentPeriodEnd).toLocaleDateString()}
+                     </p>
+                   )}
+                 </div>
+
+                 <div className="grid grid-cols-2 gap-4">
+                   <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+                     <span className="text-xs text-gray-500 uppercase font-semibold">Conversations</span>
+                     <p className="text-lg font-bold text-gray-900 mt-1" data-testid="text-conversations-usage">
+                       {subscriptionData?.limits.conversationsUsed || 0} / {subscriptionData?.limits.conversationsLimit === null ? "∞" : subscriptionData?.limits.conversationsLimit}
+                     </p>
+                     <p className="text-xs text-gray-500">
+                       {subscriptionData?.limits.isLifetimeLimit ? "Lifetime" : "This month"}
+                     </p>
+                   </div>
+                   <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+                     <span className="text-xs text-gray-500 uppercase font-semibold">Team Members</span>
+                     <p className="text-lg font-bold text-gray-900 mt-1" data-testid="text-users-usage">
+                       {subscriptionData?.limits.usersCount || 1} / {subscriptionData?.limits.usersLimit === null ? "∞" : subscriptionData?.limits.usersLimit}
+                     </p>
+                   </div>
+                 </div>
+
+                 <div className="flex gap-2">
+                   <Link href="/pricing" className="flex-1">
+                     <Button className="w-full bg-brand-green hover:bg-green-600" data-testid="button-view-plans">
+                       <Zap className="h-4 w-4 mr-2" />
+                       {subscriptionData?.subscription?.plan === "free" ? "Upgrade Plan" : "View Plans"}
+                     </Button>
+                   </Link>
+                   {subscriptionData?.subscription?.plan !== "free" && (
+                     <Button
+                       variant="outline"
+                       onClick={() => portalMutation.mutate()}
+                       disabled={portalMutation.isPending}
+                       data-testid="button-manage-billing"
+                     >
+                       {portalMutation.isPending ? (
+                         <Loader2 className="h-4 w-4 animate-spin" />
+                       ) : (
+                         <>
+                           Manage Billing
+                           <ExternalLink className="h-4 w-4 ml-2" />
+                         </>
+                       )}
+                     </Button>
+                   )}
+                 </div>
+               </div>
+             )}
+           </div>
+
            {/* Billing & Usage Section */}
            <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
              <div className="flex items-center gap-3 mb-6">
@@ -286,8 +424,8 @@ export function Settings() {
                  <DollarSign className="h-5 w-5 text-amber-600" />
                </div>
                <div>
-                 <h2 className="text-lg font-bold text-gray-900" data-testid="text-billing-title">Billing & Usage</h2>
-                 <p className="text-sm text-gray-500">Track your messaging costs.</p>
+                 <h2 className="text-lg font-bold text-gray-900" data-testid="text-billing-title">Messaging Usage</h2>
+                 <p className="text-sm text-gray-500">Track your WhatsApp messaging costs.</p>
                </div>
              </div>
 
@@ -299,7 +437,7 @@ export function Settings() {
                  </p>
                </div>
                <div className="p-4 bg-gradient-to-br from-amber-50 to-amber-100 rounded-lg border border-amber-200">
-                 <span className="text-xs text-amber-700 uppercase font-semibold">Total Cost</span>
+                 <span className="text-xs text-amber-700 uppercase font-semibold">Message Cost</span>
                  <p className="text-2xl font-bold text-amber-800 mt-1" data-testid="text-total-cost">
                    ${parseFloat(usageSummary?.totalCost || "0").toFixed(2)}
                  </p>
@@ -307,7 +445,7 @@ export function Settings() {
              </div>
 
              <p className="text-xs text-gray-500 mt-4 text-center">
-               View our <a href="/terms-of-use" target="_blank" className="text-brand-green hover:underline">Terms of Use</a> for pricing details.
+               $0.00525 per message. View <a href="/terms-of-use" target="_blank" className="text-brand-green hover:underline">Terms of Use</a> for details.
              </p>
            </div>
 
