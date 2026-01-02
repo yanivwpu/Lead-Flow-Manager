@@ -546,6 +546,38 @@ export async function registerRoutes(
     res.json(plans);
   });
 
+  // Debug endpoint to check Stripe data status
+  app.get("/api/debug/stripe-status", async (_req, res) => {
+    try {
+      const { db } = await import("../drizzle/db");
+      const { sql } = await import("drizzle-orm");
+      
+      // Check if stripe schema exists
+      const schemaCheck = await db.execute(
+        sql`SELECT EXISTS(SELECT 1 FROM information_schema.schemata WHERE schema_name = 'stripe')`
+      );
+      
+      // Try to get prices
+      let prices: any[] = [];
+      try {
+        const pricesResult = await db.execute(
+          sql`SELECT id, metadata FROM stripe.prices WHERE active = true LIMIT 10`
+        );
+        prices = pricesResult.rows as any[];
+      } catch (e: any) {
+        prices = [{ error: e.message }];
+      }
+      
+      res.json({
+        schemaExists: schemaCheck.rows[0],
+        activePrices: prices,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Get current user's subscription and limits
   app.get("/api/subscription", async (req, res) => {
     try {
