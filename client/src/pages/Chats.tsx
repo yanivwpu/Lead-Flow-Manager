@@ -12,7 +12,8 @@ import {
   Send,
   Clock,
   Smartphone,
-  Lock
+  Lock,
+  Trash2
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -93,6 +94,31 @@ export function Chats() {
       queryClient.invalidateQueries({ queryKey: ['/api/chats'] });
     },
   });
+
+  const deleteChatMutation = useMutation({
+    mutationFn: async (chatId: string) => {
+      const response = await fetch(`/api/chats/${chatId}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      if (!response.ok) throw new Error('Failed to delete chat');
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/chats'] });
+      setLocation('/app/chats');
+      toast({ title: "Chat deleted", description: "The conversation has been removed." });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to delete chat", variant: "destructive" });
+    },
+  });
+
+  const handleDeleteChat = () => {
+    if (!selectedChat) return;
+    if (confirm(`Are you sure you want to delete the conversation with ${selectedChat.name}? This cannot be undone.`)) {
+      deleteChatMutation.mutate(selectedChat.id);
+    }
+  };
 
   const selectedChatId = params?.id;
   const selectedChat = chats.find(c => c.id === selectedChatId);
@@ -422,8 +448,15 @@ export function Chats() {
               </div>
 
               <div className="p-5 mt-auto bg-gray-50">
-                <Button variant="outline" className="w-full text-red-600 hover:text-red-700 hover:bg-red-50 border-red-100">
-                  Block Contact
+                <Button 
+                  variant="outline" 
+                  className="w-full text-red-600 hover:text-red-700 hover:bg-red-50 border-red-100"
+                  onClick={handleDeleteChat}
+                  disabled={deleteChatMutation.isPending}
+                  data-testid="button-delete-chat"
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  {deleteChatMutation.isPending ? "Deleting..." : "Delete Chat"}
                 </Button>
               </div>
            </div>
