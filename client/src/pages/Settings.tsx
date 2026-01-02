@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { useAuth } from "@/lib/auth-context";
 import { toast } from "@/hooks/use-toast";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Link } from "wouter";
+import { Link, useSearch } from "wouter";
 import { UpgradeModal, type UpgradeReason } from "@/components/UpgradeModal";
 
 interface RegisteredPhone {
@@ -51,6 +51,7 @@ const PLAN_NAMES: Record<string, string> = {
 export function Settings() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const searchString = useSearch();
   const [pushEnabled, setPushEnabled] = useState(false);
   const [emailEnabled, setEmailEnabled] = useState(false);
   const [permission, setPermission] = useState(
@@ -60,6 +61,37 @@ export function Settings() {
   const [businessName, setBusinessName] = useState("");
   const [upgradeModalOpen, setUpgradeModalOpen] = useState(false);
   const [upgradeReason, setUpgradeReason] = useState<UpgradeReason>("add_whatsapp_number");
+  const [syncingSubscription, setSyncingSubscription] = useState(false);
+
+  // Auto-sync subscription when returning from Stripe checkout
+  useEffect(() => {
+    const params = new URLSearchParams(searchString);
+    if (params.get('subscription') === 'success') {
+      setSyncingSubscription(true);
+      fetch('/api/subscription/sync', { 
+        method: 'POST', 
+        credentials: 'include' 
+      })
+        .then(res => res.json())
+        .then(data => {
+          if (data.synced && data.plan !== 'free') {
+            toast({
+              title: "Subscription Activated!",
+              description: `You're now on the ${data.plan.charAt(0).toUpperCase() + data.plan.slice(1)} plan.`,
+            });
+          }
+          queryClient.invalidateQueries({ queryKey: ["/api/subscription"] });
+          // Remove the query param from URL
+          window.history.replaceState({}, '', '/app/settings');
+        })
+        .catch(err => {
+          console.error('Sync error:', err);
+        })
+        .finally(() => {
+          setSyncingSubscription(false);
+        });
+    }
+  }, [searchString, queryClient]);
 
   // Fetch registered phones
   const { data: phones = [], isLoading: phonesLoading } = useQuery<RegisteredPhone[]>({
