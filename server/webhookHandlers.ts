@@ -1,4 +1,4 @@
-import { getStripeSync } from './stripeClient';
+import { getStripeSync, getUncachableStripeClient } from './stripeClient';
 import { storage } from './storage';
 import type { SubscriptionPlan } from '@shared/schema';
 
@@ -13,20 +13,31 @@ export class WebhookHandlers {
       );
     }
 
+    // Let the sync package handle its internal processing
     const sync = await getStripeSync();
-    const event = await sync.processWebhook(payload, signature);
+    try {
+      await sync.processWebhook(payload, signature);
+    } catch (error) {
+      console.log('[Webhook] sync.processWebhook error (non-fatal):', error);
+    }
 
-    // Handle subscription events for our app
-    if (event) {
-      console.log(`[Webhook] Processing event type: ${event.type}`);
+    // Parse the event directly from the payload for our handling
+    const payloadString = payload.toString('utf8');
+    const event = JSON.parse(payloadString);
+    
+    if (event && event.type) {
+      console.log(`[Webhook] Processing event type: ${event.type}, id: ${event.id}`);
       await WebhookHandlers.handleStripeEvent(event);
     } else {
-      console.log('[Webhook] No event returned from sync.processWebhook');
+      console.log('[Webhook] Could not parse event from payload');
     }
   }
 
   static async handleStripeEvent(event: any): Promise<void> {
     switch (event.type) {
+      case 'checkout.session.completed':
+        await WebhookHandlers.handleCheckoutCompleted(event.data.object);
+        break;
       case 'customer.subscription.created':
       case 'customer.subscription.updated':
         await WebhookHandlers.handleSubscriptionUpdate(event.data.object);
@@ -37,6 +48,44 @@ export class WebhookHandlers {
       case 'invoice.payment_failed':
         await WebhookHandlers.handlePaymentFailed(event.data.object);
         break;
+    }
+  }
+
+  static async handleCheckoutCompleted(session: any): Promise<void> {
+    console.log(`[Webhook] handleCheckoutCompleted called`);
+    console.log(`[Webhook] Session customer: ${session.customer}, subscription: ${session.subscription}`);
+    console.log(`[Webhook] Session metadata:`, session.metadata);
+    
+    const customerId = session.customer;
+    const subscriptionId = session.subscription;
+    
+    // Get user by customer ID
+    let user = await storage.getUserByStripeCustomerId(customerId);
+    
+    // If not found by customer ID, try by userId in metadata
+    if (!user && session.metadata?.userId) {
+      const userId = session.metadata.userId;
+      user = await storage.getUser(userId);
+      
+      // Update the user with their Stripe customer ID
+      if (user) {
+        await storage.updateUser(user.id, { stripeCustomerId: customerId });
+        console.log(`[Webhook] Linked Stripe customer ${customerId} to user ${user.id}`);
+      }
+    }
+    
+    if (!user) {
+      console.log(`[Webhook] No user found for checkout session`);
+      return;
+    }
+    
+    console.log(`[Webhook] Found user: ${user.id} (${user.email})`);
+    
+    // Fetch the subscription from Stripe to get the plan details
+    if (subscriptionId) {
+      const stripe = await getUncachableStripeClient();
+      const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+      await WebhookHandlers.handleSubscriptionUpdate(subscription);
     }
   }
 
@@ -65,7 +114,7 @@ export class WebhookHandlers {
       currentPeriodEnd: new Date(subscription.current_period_end * 1000),
     });
 
-    console.log(`Updated subscription for user ${user.id} to ${plan}`);
+    console.log(`[Webhook] Updated subscription for user ${user.id} to ${plan}`);
   }
 
   static async handleSubscriptionCanceled(subscription: any): Promise<void> {
@@ -98,10 +147,33 @@ export class WebhookHandlers {
   }
 
   static async getPlanFromPriceId(priceId: string): Promise<SubscriptionPlan> {
-    const { db } = await import('../drizzle/db');
-    const { sql } = await import('drizzle-orm');
-    
+    // Query Stripe directly for price metadata
     try {
+      const stripe = await getUncachableStripeClient();
+      const price = await stripe.prices.retrieve(priceId);
+      
+      if (price.metadata?.plan) {
+        console.log(`[Webhook] Found plan in price metadata: ${price.metadata.plan}`);
+        return price.metadata.plan as SubscriptionPlan;
+      }
+      
+      // Fallback: check the product metadata
+      if (price.product && typeof price.product === 'string') {
+        const product = await stripe.products.retrieve(price.product);
+        if (product.metadata?.plan) {
+          console.log(`[Webhook] Found plan in product metadata: ${product.metadata.plan}`);
+          return product.metadata.plan as SubscriptionPlan;
+        }
+      }
+    } catch (error) {
+      console.error('[Webhook] Error fetching price from Stripe:', error);
+    }
+    
+    // Fallback to database
+    try {
+      const { db } = await import('../drizzle/db');
+      const { sql } = await import('drizzle-orm');
+      
       const result = await db.execute(
         sql`SELECT metadata FROM stripe.prices WHERE id = ${priceId}`
       );
@@ -111,9 +183,10 @@ export class WebhookHandlers {
         return metadata.plan as SubscriptionPlan;
       }
     } catch (error) {
-      console.error('Error fetching price metadata:', error);
+      console.error('[Webhook] Error fetching price metadata from DB:', error);
     }
     
+    console.log(`[Webhook] Could not determine plan for price ${priceId}, defaulting to free`);
     return 'free';
   }
 }

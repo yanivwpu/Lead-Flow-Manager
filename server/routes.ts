@@ -681,6 +681,70 @@ export async function registerRoutes(
     }
   });
 
+  // Sync subscription from Stripe (for when webhooks fail)
+  app.post("/api/subscription/sync", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const user = await storage.getUser(req.user.id);
+      if (!user?.stripeCustomerId) {
+        return res.json({ 
+          synced: false, 
+          message: "No Stripe customer ID found",
+          plan: user?.subscriptionPlan || 'free'
+        });
+      }
+
+      const { getUncachableStripeClient } = await import("./stripeClient");
+      const stripe = await getUncachableStripeClient();
+
+      // Get all active subscriptions for this customer
+      const subscriptions = await stripe.subscriptions.list({
+        customer: user.stripeCustomerId,
+        status: 'active',
+        limit: 1,
+      });
+
+      if (subscriptions.data.length === 0) {
+        // No active subscription, set to free
+        await storage.updateUser(user.id, {
+          subscriptionPlan: 'free',
+          subscriptionStatus: 'canceled',
+          stripeSubscriptionId: null,
+        });
+        return res.json({ synced: true, plan: 'free', message: "No active subscription found" });
+      }
+
+      const subscription = subscriptions.data[0];
+      const priceId = subscription.items?.data?.[0]?.price?.id;
+
+      // Get plan from price metadata
+      let plan: 'free' | 'starter' | 'growth' | 'pro' = 'free';
+      if (priceId) {
+        const price = await stripe.prices.retrieve(priceId);
+        if (price.metadata?.plan) {
+          plan = price.metadata.plan as any;
+        }
+      }
+
+      const subData = subscription as any;
+      await storage.updateUser(user.id, {
+        stripeSubscriptionId: subscription.id,
+        subscriptionPlan: plan,
+        subscriptionStatus: subscription.status === 'active' ? 'active' : 'past_due',
+        currentPeriodStart: subData.current_period_start ? new Date(subData.current_period_start * 1000) : null,
+        currentPeriodEnd: subData.current_period_end ? new Date(subData.current_period_end * 1000) : null,
+      });
+
+      res.json({ synced: true, plan, subscription: subscription.id });
+    } catch (error: any) {
+      console.error("Error syncing subscription:", error);
+      res.status(500).json({ error: error.message || "Failed to sync subscription" });
+    }
+  });
+
   // ============= Admin Endpoints =============
   
   // Get all users' usage summary (admin only - for now, accessible to all authenticated users)
