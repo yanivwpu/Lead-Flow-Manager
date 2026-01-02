@@ -36,9 +36,17 @@ export function ChatListItem({ chat, isActive }: ChatListItemProps) {
         data-testid={`chat-item-${chat.id}`}
       >
         <div className="relative shrink-0">
-          <div className="h-12 w-12 rounded-full bg-brand-green/10 flex items-center justify-center text-brand-green font-semibold">
-            {chat.avatar}
-          </div>
+          {chat.avatar?.startsWith('http') ? (
+            <img 
+              src={chat.avatar} 
+              alt={chat.name} 
+              className="h-12 w-12 rounded-full object-cover"
+            />
+          ) : (
+            <div className="h-12 w-12 rounded-full bg-brand-green/10 flex items-center justify-center text-brand-green font-semibold">
+              {chat.avatar}
+            </div>
+          )}
           {chat.unread > 0 && (
             <div className="absolute -top-1 -right-1 h-5 w-5 bg-brand-green text-white text-xs font-bold rounded-full flex items-center justify-center border-2 border-white">
               {chat.unread}

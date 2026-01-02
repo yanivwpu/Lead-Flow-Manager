@@ -264,9 +264,17 @@ export function Chats() {
                    <button onClick={() => setLocation('/app/chats')} className="md:hidden">
                      <span className="text-2xl mr-2">←</span>
                    </button>
-                   <div className="h-10 w-10 rounded-full bg-brand-green/10 flex items-center justify-center text-brand-green font-semibold">
-                     {selectedChat.avatar}
-                   </div>
+                   {selectedChat.avatar?.startsWith('http') ? (
+                     <img 
+                       src={selectedChat.avatar} 
+                       alt={selectedChat.name} 
+                       className="h-10 w-10 rounded-full object-cover"
+                     />
+                   ) : (
+                     <div className="h-10 w-10 rounded-full bg-brand-green/10 flex items-center justify-center text-brand-green font-semibold">
+                       {selectedChat.avatar}
+                     </div>
+                   )}
                    <div>
                      <h3 className="font-semibold text-gray-900">{selectedChat.name}</h3>
                      <span className="text-xs text-gray-500">last seen today at 10:45 AM</span>
