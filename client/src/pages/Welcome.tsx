@@ -318,132 +318,82 @@ export function Welcome() {
       </section>
 
       {/* Pricing Teaser */}
-      <section className="px-4 md:px-6 py-16 md:py-20 bg-gray-50">
-        <div className="max-w-4xl mx-auto">
-          <div className="text-center mb-10 md:mb-12">
-            <h2 className="text-2xl md:text-4xl font-display font-bold text-gray-900 mb-3 md:mb-4">
-              Simple, transparent pricing
-            </h2>
-            <p className="text-base md:text-lg text-gray-600">
-              Start free. Upgrade when you need more.
-            </p>
+      <section className="px-4 md:px-6 py-16 md:py-20">
+        <div className="max-w-3xl mx-auto text-center">
+          <h2 className="text-2xl md:text-4xl font-display font-bold text-gray-900 mb-3 md:mb-4">
+            Simple, Transparent Pricing
+          </h2>
+          <p className="text-base md:text-lg text-gray-600 mb-8">
+            Start for free. Upgrade only when you need more.
+          </p>
+          
+          <div className="flex flex-wrap justify-center gap-4 md:gap-6 mb-8">
+            <div className="flex items-center gap-2 text-gray-700">
+              <CheckCircle2 className="h-5 w-5 text-brand-green" />
+              <span>Free plan for individuals</span>
+            </div>
+            <div className="flex items-center gap-2 text-gray-700">
+              <CheckCircle2 className="h-5 w-5 text-brand-green" />
+              <span>Paid plans start at $19/month</span>
+            </div>
+            <div className="flex items-center gap-2 text-gray-700">
+              <CheckCircle2 className="h-5 w-5 text-brand-green" />
+              <span>Cancel anytime</span>
+            </div>
           </div>
           
-          <div className="grid md:grid-cols-2 gap-4 md:gap-6">
-            {/* Free Plan */}
-            <motion.div 
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              className="bg-white border-2 border-brand-green rounded-2xl p-6 md:p-8 relative"
-            >
-              <div className="absolute -top-3 left-4 md:left-6 bg-brand-green text-white text-xs font-bold px-3 py-1 rounded-full">
-                START HERE
-              </div>
-              <h3 className="text-xl md:text-2xl font-bold text-gray-900 mb-2">Free</h3>
-              <div className="flex items-baseline gap-1 mb-3">
-                <span className="text-3xl md:text-4xl font-bold text-gray-900">$0</span>
-                <span className="text-gray-500">/forever</span>
-              </div>
-              <p className="text-gray-600 mb-5">Perfect for trying WhachatCRM.</p>
-              <ul className="space-y-2 mb-6">
-                <li className="flex items-center gap-2 text-gray-700 text-sm md:text-base">
-                  <CheckCircle2 className="h-4 w-4 text-brand-green shrink-0" />
-                  50 conversations (lifetime)
-                </li>
-                <li className="flex items-center gap-2 text-gray-700 text-sm md:text-base">
-                  <CheckCircle2 className="h-4 w-4 text-brand-green shrink-0" />
-                  Notes, tags & reminders
-                </li>
-                <li className="flex items-center gap-2 text-gray-700 text-sm md:text-base">
-                  <CheckCircle2 className="h-4 w-4 text-brand-green shrink-0" />
-                  1 WhatsApp number
-                </li>
-              </ul>
-              <Link href="/auth" className="block">
-                <button className="w-full h-12 bg-brand-green hover:bg-green-600 text-white font-semibold rounded-full transition-colors">
-                  Get Started Free
-                </button>
-              </Link>
-            </motion.div>
-            
-            {/* Paid Plans */}
-            <motion.div 
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ delay: 0.1 }}
-              className="bg-white border border-gray-200 rounded-2xl p-6 md:p-8"
-            >
-              <h3 className="text-xl md:text-2xl font-bold text-gray-900 mb-2">Paid Plans</h3>
-              <div className="flex items-baseline gap-1 mb-3">
-                <span className="text-3xl md:text-4xl font-bold text-gray-900">$19</span>
-                <span className="text-gray-500">/month and up</span>
-              </div>
-              <p className="text-gray-600 mb-5">For growing teams that need more.</p>
-              <ul className="space-y-2 mb-6">
-                <li className="flex items-center gap-2 text-gray-700 text-sm md:text-base">
-                  <CheckCircle2 className="h-4 w-4 text-brand-green shrink-0" />
-                  500 – unlimited conversations
-                </li>
-                <li className="flex items-center gap-2 text-gray-700 text-sm md:text-base">
-                  <CheckCircle2 className="h-4 w-4 text-brand-green shrink-0" />
-                  Send messages to customers
-                </li>
-                <li className="flex items-center gap-2 text-gray-700 text-sm md:text-base">
-                  <CheckCircle2 className="h-4 w-4 text-brand-green shrink-0" />
-                  Team access (Growth+)
-                </li>
-              </ul>
-              <Link href="/pricing" className="block">
-                <button className="w-full h-12 bg-gray-100 hover:bg-gray-200 text-gray-900 font-semibold rounded-full transition-colors flex items-center justify-center gap-2">
-                  Compare Plans
-                  <ChevronRight className="h-4 w-4" />
-                </button>
-              </Link>
-            </motion.div>
+          <Link href="/pricing">
+            <button className="h-14 px-8 bg-brand-green hover:bg-green-600 text-white font-semibold rounded-full inline-flex items-center gap-2 transition-all shadow-lg">
+              See Plans
+              <ArrowRight className="h-5 w-5" />
+            </button>
+          </Link>
+        </div>
+      </section>
+
+      {/* Built For Section */}
+      <section className="px-4 md:px-6 py-16 md:py-20 bg-gray-50">
+        <div className="max-w-4xl mx-auto text-center">
+          <h2 className="text-2xl md:text-4xl font-display font-bold text-gray-900 mb-10">
+            Built for Businesses That Live on WhatsApp
+          </h2>
+          
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 mb-10">
+            <div className="bg-white p-4 md:p-6 rounded-xl border border-gray-200">
+              <p className="font-medium text-gray-900 text-sm md:text-base">Sales teams managing inbound leads</p>
+            </div>
+            <div className="bg-white p-4 md:p-6 rounded-xl border border-gray-200">
+              <p className="font-medium text-gray-900 text-sm md:text-base">Customer support teams</p>
+            </div>
+            <div className="bg-white p-4 md:p-6 rounded-xl border border-gray-200">
+              <p className="font-medium text-gray-900 text-sm md:text-base">Agencies & consultants</p>
+            </div>
+            <div className="bg-white p-4 md:p-6 rounded-xl border border-gray-200">
+              <p className="font-medium text-gray-900 text-sm md:text-base">Small businesses & founders</p>
+            </div>
           </div>
+          
+          <p className="text-lg text-gray-600">
+            If WhatsApp is how you talk to customers — this is your CRM.
+          </p>
         </div>
       </section>
 
       {/* Trust Section */}
       <section className="px-4 md:px-6 py-12 md:py-16 bg-gray-900 text-white">
-        <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-8 md:mb-10">
-            <h2 className="text-xl md:text-2xl font-display font-bold mb-2">
-              Your data is safe with us
-            </h2>
-            <p className="text-gray-400 text-sm md:text-base">
-              Enterprise-grade security for businesses of all sizes.
-            </p>
+        <div className="max-w-3xl mx-auto text-center">
+          <div className="h-14 w-14 bg-brand-green/20 rounded-2xl flex items-center justify-center mx-auto mb-6">
+            <Shield className="h-7 w-7 text-brand-green" />
           </div>
-          
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
-            <div className="text-center">
-              <div className="h-10 w-10 md:h-12 md:w-12 bg-gray-800 rounded-xl flex items-center justify-center mx-auto mb-2 md:mb-3">
-                <Shield className="h-5 w-5 md:h-6 md:w-6 text-brand-green" />
-              </div>
-              <p className="text-xs md:text-sm text-gray-300">Encrypted Data</p>
-            </div>
-            <div className="text-center">
-              <div className="h-10 w-10 md:h-12 md:w-12 bg-gray-800 rounded-xl flex items-center justify-center mx-auto mb-2 md:mb-3">
-                <Zap className="h-5 w-5 md:h-6 md:w-6 text-brand-green" />
-              </div>
-              <p className="text-xs md:text-sm text-gray-300">99.9% Uptime</p>
-            </div>
-            <div className="text-center">
-              <div className="h-10 w-10 md:h-12 md:w-12 bg-gray-800 rounded-xl flex items-center justify-center mx-auto mb-2 md:mb-3">
-                <Users className="h-5 w-5 md:h-6 md:w-6 text-brand-green" />
-              </div>
-              <p className="text-xs md:text-sm text-gray-300">GDPR Compliant</p>
-            </div>
-            <div className="text-center">
-              <div className="h-10 w-10 md:h-12 md:w-12 bg-gray-800 rounded-xl flex items-center justify-center mx-auto mb-2 md:mb-3">
-                <Clock className="h-5 w-5 md:h-6 md:w-6 text-brand-green" />
-              </div>
-              <p className="text-xs md:text-sm text-gray-300">24/7 Support</p>
-            </div>
-          </div>
+          <h2 className="text-xl md:text-3xl font-display font-bold mb-4">
+            Official. Secure. Reliable.
+          </h2>
+          <p className="text-gray-300 mb-2">
+            WhachatCRM uses the official WhatsApp Business API and does not scrape personal accounts.
+          </p>
+          <p className="text-gray-400">
+            Your data stays secure and compliant with Meta's policies.
+          </p>
         </div>
       </section>
 
@@ -451,24 +401,18 @@ export function Welcome() {
       <section className="px-4 md:px-6 py-16 md:py-20">
         <div className="max-w-3xl mx-auto text-center">
           <h2 className="text-2xl md:text-4xl font-display font-bold text-gray-900 mb-3 md:mb-4">
-            Ready to organize your WhatsApp leads?
+            Ready to Organize Your WhatsApp Conversations?
           </h2>
           <p className="text-base md:text-lg text-gray-600 mb-6 md:mb-8">
-            Join small teams using WhachatCRM to manage conversations and close more deals.
+            Start free in minutes. No credit card required.
           </p>
           
-          <div className="flex flex-col sm:flex-row gap-3 justify-center mb-4">
-            <Link href={user ? "/app/chats" : "/auth"}>
-              <button className="w-full sm:w-auto h-14 px-8 bg-brand-green hover:bg-green-600 text-white font-semibold rounded-full inline-flex items-center justify-center gap-2 transition-all shadow-lg hover:shadow-xl">
-                Start Free — No Credit Card
-                <ArrowRight className="h-5 w-5" />
-              </button>
-            </Link>
-          </div>
-          
-          <p className="text-sm text-gray-500">
-            Free plan available · Paid plans start at $19/month
-          </p>
+          <Link href={user ? "/app/chats" : "/auth"}>
+            <button className="h-14 px-8 bg-brand-green hover:bg-green-600 text-white font-semibold rounded-full inline-flex items-center justify-center gap-2 transition-all shadow-lg hover:shadow-xl">
+              Start Free
+              <ArrowRight className="h-5 w-5" />
+            </button>
+          </Link>
         </div>
       </section>
 
