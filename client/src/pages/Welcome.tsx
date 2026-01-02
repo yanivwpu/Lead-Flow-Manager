@@ -64,10 +64,10 @@ export function Welcome() {
             transition={{ duration: 0.6 }}
           >
             <h1 className="text-3xl md:text-5xl lg:text-6xl font-display font-bold text-gray-900 leading-[1.1] mb-4 md:mb-6">
-              Simple WhatsApp CRM for Small Teams
+              WhatsApp CRM for Small Teams & Growing Businesses
             </h1>
             <p className="text-lg md:text-xl text-gray-600 mb-6 md:mb-8 leading-relaxed">
-              Stop losing leads in your WhatsApp chats. Add notes, set reminders, and never forget to follow up again.
+              Organize WhatsApp conversations, add notes & tags, and never miss a follow-up — all in one simple CRM built for WhatsApp Business.
             </p>
             
             {/* Stacked CTAs for mobile */}
