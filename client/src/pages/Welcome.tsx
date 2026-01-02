@@ -42,7 +42,7 @@ export function Welcome() {
             </Link>
           ) : (
             <>
-              <Link href="/auth">
+              <Link href="/auth?mode=login">
                 <button className="text-sm font-medium text-gray-600 hover:text-gray-900 hidden sm:block">Login</button>
               </Link>
               <Link href="/auth">

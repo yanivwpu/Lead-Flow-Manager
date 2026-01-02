@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation, Link } from "wouter";
 import { useAuth } from "@/lib/auth-context";
 import { Button } from "@/components/ui/button";
@@ -14,7 +14,9 @@ import {
 } from "@/components/ui/dialog";
 
 export function AuthPage() {
-  const [isLogin, setIsLogin] = useState(false);
+  const params = new URLSearchParams(window.location.search);
+  const defaultToLogin = params.get('mode') === 'login';
+  const [isLogin, setIsLogin] = useState(defaultToLogin);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
