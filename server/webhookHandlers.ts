@@ -18,7 +18,10 @@ export class WebhookHandlers {
 
     // Handle subscription events for our app
     if (event) {
+      console.log(`[Webhook] Processing event type: ${event.type}`);
       await WebhookHandlers.handleStripeEvent(event);
+    } else {
+      console.log('[Webhook] No event returned from sync.processWebhook');
     }
   }
 
@@ -38,17 +41,21 @@ export class WebhookHandlers {
   }
 
   static async handleSubscriptionUpdate(subscription: any): Promise<void> {
+    console.log(`[Webhook] handleSubscriptionUpdate called for customer: ${subscription.customer}`);
     const customerId = subscription.customer;
     const user = await storage.getUserByStripeCustomerId(customerId);
     
     if (!user) {
-      console.log(`No user found for Stripe customer ${customerId}`);
+      console.log(`[Webhook] No user found for Stripe customer ${customerId}`);
       return;
     }
+    console.log(`[Webhook] Found user: ${user.id} (${user.email})`);
 
     // Map Stripe price to our plan
     const priceId = subscription.items?.data?.[0]?.price?.id;
+    console.log(`[Webhook] Price ID from subscription: ${priceId}`);
     const plan = await WebhookHandlers.getPlanFromPriceId(priceId);
+    console.log(`[Webhook] Mapped to plan: ${plan}`);
 
     await storage.updateUser(user.id, {
       stripeSubscriptionId: subscription.id,
