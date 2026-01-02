@@ -546,6 +546,35 @@ export async function registerRoutes(
     res.json(plans);
   });
 
+  // Debug endpoint to manually trigger Stripe sync
+  app.post("/api/debug/stripe-sync", async (_req, res) => {
+    try {
+      const { getStripeSync } = await import("./stripeClient");
+      const stripeSync = await getStripeSync();
+      
+      console.log('[Debug] Manually triggering Stripe sync...');
+      await stripeSync.syncBackfill();
+      console.log('[Debug] Stripe sync completed');
+      
+      // Check results
+      const { db } = await import("../drizzle/db");
+      const { sql } = await import("drizzle-orm");
+      const pricesResult = await db.execute(
+        sql`SELECT id, metadata FROM stripe.prices WHERE active = true LIMIT 10`
+      );
+      
+      res.json({
+        success: true,
+        message: 'Sync completed',
+        pricesFound: pricesResult.rows.length,
+        prices: pricesResult.rows,
+      });
+    } catch (error: any) {
+      console.error('[Debug] Stripe sync error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Debug endpoint to check Stripe data status
   app.get("/api/debug/stripe-status", async (_req, res) => {
     try {
