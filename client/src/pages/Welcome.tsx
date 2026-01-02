@@ -182,19 +182,16 @@ export function Welcome() {
         </div>
       </section>
 
-      {/* Benefits Section - Benefit-first approach */}
+      {/* Benefits Section */}
       <section className="px-4 md:px-6 py-16 md:py-20 bg-gray-50">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-10 md:mb-14">
             <h2 className="text-2xl md:text-4xl font-display font-bold text-gray-900 mb-3 md:mb-4">
-              Close more deals, forget fewer leads
+              Everything You Need to Manage WhatsApp Like a CRM
             </h2>
-            <p className="text-base md:text-lg text-gray-600 max-w-2xl mx-auto">
-              Everything you need to turn WhatsApp conversations into customers.
-            </p>
           </div>
           
-          <div className="grid md:grid-cols-3 gap-6 md:gap-8">
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 md:gap-8">
             <motion.div 
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
@@ -202,10 +199,10 @@ export function Welcome() {
               className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100"
             >
               <div className="h-12 w-12 bg-green-100 rounded-xl flex items-center justify-center mb-4">
-                <Bell className="h-6 w-6 text-brand-green" />
+                <MessageSquare className="h-6 w-6 text-brand-green" />
               </div>
-              <h3 className="text-lg font-bold text-gray-900 mb-2">Never miss a follow-up</h3>
-              <p className="text-gray-600">Set reminders for any conversation. Get notified when it's time to reach out — so leads don't go cold.</p>
+              <h3 className="text-lg font-bold text-gray-900 mb-2">Organized Conversations</h3>
+              <p className="text-gray-600">Every WhatsApp chat becomes a customer record — no more searching or guessing.</p>
             </motion.div>
             
             <motion.div 
@@ -218,8 +215,8 @@ export function Welcome() {
               <div className="h-12 w-12 bg-blue-100 rounded-xl flex items-center justify-center mb-4">
                 <Tag className="h-6 w-6 text-blue-600" />
               </div>
-              <h3 className="text-lg font-bold text-gray-900 mb-2">Stay organized instantly</h3>
-              <p className="text-gray-600">Add notes, tags, and pipeline stages to every chat. Find any conversation in seconds, not minutes.</p>
+              <h3 className="text-lg font-bold text-gray-900 mb-2">Notes & Tags</h3>
+              <p className="text-gray-600">Add internal notes and tags so your team always knows the full context.</p>
             </motion.div>
             
             <motion.div 
@@ -229,18 +226,59 @@ export function Welcome() {
               transition={{ delay: 0.2 }}
               className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100"
             >
-              <div className="h-12 w-12 bg-purple-100 rounded-xl flex items-center justify-center mb-4">
-                <MessageSquare className="h-6 w-6 text-purple-600" />
+              <div className="h-12 w-12 bg-amber-100 rounded-xl flex items-center justify-center mb-4">
+                <Bell className="h-6 w-6 text-amber-600" />
               </div>
-              <h3 className="text-lg font-bold text-gray-900 mb-2">Reply from anywhere</h3>
-              <p className="text-gray-600">Manage all your WhatsApp conversations in one place. Works on desktop, tablet, and mobile.</p>
+              <h3 className="text-lg font-bold text-gray-900 mb-2">Follow-Ups & Tasks</h3>
+              <p className="text-gray-600">Set reminders and tasks to make sure every lead is followed up on time.</p>
+            </motion.div>
+            
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ delay: 0.3 }}
+              className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100"
+            >
+              <div className="h-12 w-12 bg-purple-100 rounded-xl flex items-center justify-center mb-4">
+                <Users className="h-6 w-6 text-purple-600" />
+              </div>
+              <h3 className="text-lg font-bold text-gray-900 mb-2">Built for Teams</h3>
+              <p className="text-gray-600">Assign conversations, track progress, and stay aligned.</p>
             </motion.div>
           </div>
         </div>
       </section>
 
-      {/* How It Works - Simple 3 steps */}
+      {/* Product Screenshot Section */}
       <section className="px-4 md:px-6 py-16 md:py-20">
+        <div className="max-w-5xl mx-auto">
+          <div className="text-center mb-10 md:mb-12">
+            <h2 className="text-2xl md:text-4xl font-display font-bold text-gray-900 mb-3 md:mb-4">
+              See WhachatCRM in Action
+            </h2>
+            <p className="text-base md:text-lg text-gray-600 max-w-2xl mx-auto">
+              Everything happens in one clean dashboard — no switching tools, no chaos.
+            </p>
+          </div>
+          
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="relative"
+          >
+            <img 
+              src={heroImage} 
+              alt="WhachatCRM Dashboard showing WhatsApp conversations with notes and tags" 
+              className="w-full rounded-xl md:rounded-2xl shadow-2xl border border-gray-200"
+            />
+          </motion.div>
+        </div>
+      </section>
+
+      {/* How It Works - Simple 3 steps */}
+      <section className="px-4 md:px-6 py-16 md:py-20 bg-gray-50">
         <div className="max-w-5xl mx-auto">
           <div className="text-center mb-12 md:mb-16">
             <h2 className="text-2xl md:text-4xl font-display font-bold text-gray-900 mb-3 md:mb-4">
