@@ -9,6 +9,9 @@ import { ResetPassword } from "@/pages/ResetPassword";
 import { PrivacyPolicy } from "@/pages/PrivacyPolicy";
 import { TermsOfUse } from "@/pages/TermsOfUse";
 import { Pricing } from "@/pages/Pricing";
+import { WatiAlternative } from "@/pages/WatiAlternative";
+import { WhatsappCrm } from "@/pages/WhatsappCrm";
+import { CrmForWhatsappBusiness } from "@/pages/CrmForWhatsappBusiness";
 import NotFound from "@/pages/not-found";
 import { AuthProvider, useAuth } from "@/lib/auth-context";
 import { Loader2 } from "lucide-react";
@@ -41,6 +44,9 @@ function Router() {
       <Route path="/privacy-policy" component={PrivacyPolicy} />
       <Route path="/terms-of-use" component={TermsOfUse} />
       <Route path="/pricing" component={Pricing} />
+      <Route path="/wati-alternative" component={WatiAlternative} />
+      <Route path="/whatsapp-crm" component={WhatsappCrm} />
+      <Route path="/crm-for-whatsapp-business" component={CrmForWhatsappBusiness} />
       
       {/* Protected Routes */}
       <Route path="/app/*?">
