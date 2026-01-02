@@ -4,61 +4,51 @@ import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
 // Subscription plan types
-export type SubscriptionPlan = 'free' | 'starter' | 'growth' | 'pro';
+export type SubscriptionPlan = 'free' | 'starter' | 'pro';
 
 // Plan limits configuration
 export const PLAN_LIMITS = {
   free: {
     name: 'Free',
     price: 0,
-    conversationsPerMonth: 50, // lifetime for free
-    isLifetimeLimit: true,
+    conversationsPerMonth: 100,
+    isLifetimeLimit: false,
     maxUsers: 1,
     maxWhatsappNumbers: 1,
-    canSendMessages: false, // inbound only, limited replies
+    canSendMessages: true,
+    followUpsEnabled: false,
+    twilioUsageIncluded: 0, // $0 included
     emailNotifications: false,
     pushNotifications: false,
     teamInbox: false,
-    usageReports: false,
   },
   starter: {
     name: 'Starter',
     price: 19,
-    conversationsPerMonth: 500,
-    isLifetimeLimit: false,
-    maxUsers: 1,
-    maxWhatsappNumbers: 1,
-    canSendMessages: true,
-    emailNotifications: true,
-    pushNotifications: false,
-    teamInbox: false,
-    usageReports: false,
-  },
-  growth: {
-    name: 'Growth',
-    price: 49,
-    conversationsPerMonth: 2000,
+    conversationsPerMonth: 1000,
     isLifetimeLimit: false,
     maxUsers: 3,
     maxWhatsappNumbers: 1,
     canSendMessages: true,
+    followUpsEnabled: true,
+    twilioUsageIncluded: 5, // $5 included
     emailNotifications: true,
     pushNotifications: true,
     teamInbox: false,
-    usageReports: false,
   },
   pro: {
     name: 'Pro',
-    price: 99,
+    price: 49,
     conversationsPerMonth: 5000,
     isLifetimeLimit: false,
-    maxUsers: -1, // unlimited
-    maxWhatsappNumbers: 2,
+    maxUsers: 10,
+    maxWhatsappNumbers: 3,
     canSendMessages: true,
+    followUpsEnabled: true,
+    twilioUsageIncluded: 15, // $15 included
     emailNotifications: true,
     pushNotifications: true,
     teamInbox: true,
-    usageReports: true,
   },
 } as const;
 
@@ -82,6 +72,8 @@ export const users = pgTable("users", {
   currentPeriodStart: timestamp("current_period_start"),
   currentPeriodEnd: timestamp("current_period_end"),
   lifetimeConversations: integer("lifetime_conversations").default(0), // for free tier tracking
+  monthlyConversations: integer("monthly_conversations").default(0), // current month conversation count
+  monthlyTwilioUsage: numeric("monthly_twilio_usage", { precision: 10, scale: 2 }).default("0"), // current month Twilio spend
   createdAt: timestamp("created_at").defaultNow(),
 });
 

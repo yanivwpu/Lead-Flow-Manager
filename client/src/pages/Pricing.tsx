@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Check, Zap, Users, MessageSquare, Phone, Loader2, ChevronDown } from "lucide-react";
+import { ArrowLeft, Check, Zap, Users, MessageSquare, Phone, Loader2, Shield } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { useAuth } from "@/lib/auth-context";
 import { useToast } from "@/hooks/use-toast";
@@ -12,69 +12,52 @@ const PLANS = [
     id: "free",
     name: "Free",
     price: 0,
-    description: "Try the CRM on real WhatsApp conversations.",
+    description: "Get started with WhatsApp CRM basics.",
     cta: "Current Plan",
     popular: false,
     features: [
       "1 user",
-      "Shared inbox (single user)",
+      "1 WhatsApp number",
+      "100 conversations / month",
       "Notes & tags",
-      "Tasks & follow-ups",
-      "PWA (mobile-friendly)",
-      "Up to 50 conversations (lifetime)",
-      "Inbound messages only",
+      "Pipeline management",
+      "Mobile PWA",
     ],
-    limitations: ["Limited replies", "No automation"],
+    limitations: ["No follow-ups", "No Twilio usage included"],
   },
   {
     id: "starter",
     name: "Starter",
     price: 19,
-    description: "For solo founders & small businesses.",
+    description: "For solo founders & small teams.",
     cta: "Upgrade to Starter",
-    popular: false,
-    features: [
-      "Everything in Free, plus:",
-      "Send & receive WhatsApp messages",
-      "1 WhatsApp Business number",
-      "500 conversations / month",
-      "Full chat history",
-      "Tasks & basic reminders",
-      "Email notifications",
-    ],
-    limitations: ["No automation", "Single user only"],
-  },
-  {
-    id: "growth",
-    name: "Growth",
-    price: 49,
-    description: "For growing teams using WhatsApp daily.",
-    cta: "Upgrade to Growth",
     popular: true,
     features: [
-      "Everything in Starter, plus:",
-      "Up to 3 users",
-      "2,000 conversations / month",
-      "Push + email reminders",
-      "Pipeline & task views",
-      "Priority support",
+      "3 users",
+      "1 WhatsApp number",
+      "1,000 conversations / month",
+      "Follow-ups enabled",
+      "$5 Twilio usage included",
+      "Email & push notifications",
+      "Full chat history",
     ],
     limitations: [],
   },
   {
     id: "pro",
     name: "Pro",
-    price: 99,
-    description: "For high-volume or multi-number teams.",
+    price: 49,
+    description: "For growing teams with high volume.",
     cta: "Upgrade to Pro",
     popular: false,
     features: [
-      "Everything in Growth, plus:",
-      "Unlimited users",
-      "2 WhatsApp Business numbers",
+      "10 users",
+      "3 WhatsApp numbers",
       "5,000 conversations / month",
+      "$15 Twilio usage included",
       "Team inbox",
-      "Monthly usage reports",
+      "Priority support",
+      "Everything in Starter",
     ],
     limitations: [],
   },
@@ -128,9 +111,14 @@ export function Pricing() {
     checkoutMutation.mutate(planId);
   };
 
+  const getPlanIndex = (planId: string) => {
+    const order = ['free', 'starter', 'pro'];
+    return order.indexOf(planId);
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 py-12 px-4">
-      <div className="max-w-6xl mx-auto">
+      <div className="max-w-5xl mx-auto">
         <Link href={user ? "/app/settings" : "/"}>
           <a className="inline-flex items-center text-sm text-gray-500 hover:text-brand-green mb-6">
             <ArrowLeft className="h-4 w-4 mr-2" />
@@ -140,17 +128,19 @@ export function Pricing() {
 
         <div className="text-center mb-12">
           <h1 className="text-4xl font-display font-bold text-gray-900 mb-4">
-            Simple, transparent pricing
+            Simple, Transparent Pricing
           </h1>
           <p className="text-xl text-gray-600 max-w-2xl mx-auto">
-            Start free, upgrade when you need more. All plans include core CRM features.
+            Start for free. Upgrade only when you need more.
           </p>
         </div>
 
-        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid md:grid-cols-3 gap-6">
           {PLANS.map((plan) => {
             const isCurrentPlan = plan.id === currentPlan;
-            const canUpgrade = !isCurrentPlan && plan.id !== "free";
+            const currentPlanIndex = getPlanIndex(currentPlan);
+            const thisPlanIndex = getPlanIndex(plan.id);
+            const canUpgrade = thisPlanIndex > currentPlanIndex;
             const isLoading = loadingPlan === plan.id;
 
             return (
@@ -228,14 +218,14 @@ export function Pricing() {
                 <MessageSquare className="h-6 w-6 text-brand-green" />
               </div>
               <h3 className="font-semibold text-gray-900 mb-1">Real-time messaging</h3>
-              <p className="text-sm text-gray-500">Sync WhatsApp conversations instantly</p>
+              <p className="text-sm text-gray-500">Send & receive WhatsApp messages</p>
             </div>
             <div className="text-center">
               <div className="h-12 w-12 bg-green-100 rounded-xl flex items-center justify-center mx-auto mb-3">
                 <Zap className="h-6 w-6 text-brand-green" />
               </div>
-              <h3 className="font-semibold text-gray-900 mb-1">Follow-up reminders</h3>
-              <p className="text-sm text-gray-500">Never miss a lead again</p>
+              <h3 className="font-semibold text-gray-900 mb-1">Notes & Tags</h3>
+              <p className="text-sm text-gray-500">Organize every conversation</p>
             </div>
             <div className="text-center">
               <div className="h-12 w-12 bg-green-100 rounded-xl flex items-center justify-center mx-auto mb-3">
@@ -262,16 +252,16 @@ export function Pricing() {
                 Do I need a Twilio account?
               </AccordionTrigger>
               <AccordionContent className="text-gray-600">
-                No. WhatsApp messaging is fully included. We handle Twilio and WhatsApp Business API for you.
+                No. WhachatCRM manages Twilio for you. Paid plans include Twilio usage credits ($5 on Starter, $15 on Pro). You only pay overage if you exceed your included amount.
               </AccordionContent>
             </AccordionItem>
 
             <AccordionItem value="what-is-conversation" className="bg-white border border-gray-200 rounded-xl px-6">
               <AccordionTrigger className="text-left font-semibold text-gray-900 hover:no-underline" data-testid="faq-what-is-conversation">
-                What is a WhatsApp conversation?
+                What counts as a conversation?
               </AccordionTrigger>
               <AccordionContent className="text-gray-600">
-                A conversation is a 24-hour messaging window between you and a customer. You're only counted once per conversation — not per message.
+                A conversation is a 24-hour messaging window between you and a customer. All messages within that window count as one conversation. New windows open when a customer messages you or you send a template message.
               </AccordionContent>
             </AccordionItem>
 
@@ -280,7 +270,7 @@ export function Pricing() {
                 What happens if I reach my limit?
               </AccordionTrigger>
               <AccordionContent className="text-gray-600">
-                We'll notify you before you hit your limit. You can upgrade instantly with no downtime.
+                We'll notify you at 80% usage. When you hit 100%, new conversations are paused until you upgrade. You can upgrade instantly with one click.
               </AccordionContent>
             </AccordionItem>
 
@@ -289,23 +279,34 @@ export function Pricing() {
                 Can I cancel anytime?
               </AccordionTrigger>
               <AccordionContent className="text-gray-600">
-                Yes. No contracts. Cancel anytime.
+                Yes. No contracts. Cancel anytime from your account settings. Your data stays accessible on the Free plan.
+              </AccordionContent>
+            </AccordionItem>
+
+            <AccordionItem value="twilio-overage" className="bg-white border border-gray-200 rounded-xl px-6">
+              <AccordionTrigger className="text-left font-semibold text-gray-900 hover:no-underline" data-testid="faq-twilio-overage">
+                What if I exceed my Twilio usage?
+              </AccordionTrigger>
+              <AccordionContent className="text-gray-600">
+                Additional Twilio usage is billed at cost + 5% margin. We'll notify you before any overage charges. Most users stay within their included limits.
               </AccordionContent>
             </AccordionItem>
           </Accordion>
         </div>
 
-        <div className="mt-16 bg-white rounded-2xl border border-gray-200 p-8 text-center">
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Need more?</h2>
-          <p className="text-gray-600 mb-6">
-            Contact us for custom enterprise plans with higher limits and dedicated support.
+        <div className="mt-16 bg-gray-900 rounded-2xl p-8 text-center text-white">
+          <div className="flex justify-center mb-4">
+            <Shield className="h-10 w-10 text-brand-green" />
+          </div>
+          <h2 className="text-2xl font-bold mb-2">Official WhatsApp Business API</h2>
+          <p className="text-gray-400 mb-6 max-w-lg mx-auto">
+            WhachatCRM uses the official WhatsApp Business API. Your data is secure and compliant with Meta's policies.
           </p>
-          <a
-            href="mailto:enterprise@whachatcrm.com"
-            className="text-brand-green font-semibold hover:underline"
-          >
-            Contact Sales
-          </a>
+          <Link href="/auth">
+            <Button className="bg-brand-green hover:bg-green-600 text-white px-8">
+              Start Free
+            </Button>
+          </Link>
         </div>
       </div>
     </div>
