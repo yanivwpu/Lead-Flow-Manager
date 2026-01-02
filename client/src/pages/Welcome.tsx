@@ -90,14 +90,18 @@ export function Welcome() {
               Paid plans start at $19/month
             </p>
             
-            <div className="flex flex-wrap items-center gap-4 text-sm text-gray-600">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-gray-600">
               <div className="flex items-center gap-2">
                 <CheckCircle2 className="h-4 w-4 text-brand-green" />
-                <span>Free plan available</span>
+                <span>Built on the official WhatsApp Business API</span>
               </div>
               <div className="flex items-center gap-2">
                 <CheckCircle2 className="h-4 w-4 text-brand-green" />
-                <span>Setup in 2 minutes</span>
+                <span>Secure & compliant — no scraping</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4 text-brand-green" />
+                <span>Designed for founders, sales teams & support teams</span>
               </div>
             </div>
           </motion.div>
@@ -114,6 +118,67 @@ export function Welcome() {
               className="w-full rounded-xl md:rounded-2xl shadow-2xl border border-gray-200"
             />
           </motion.div>
+        </div>
+      </section>
+
+      {/* Problem/Solution Section */}
+      <section className="px-4 md:px-6 py-16 md:py-20 bg-gray-900 text-white">
+        <div className="max-w-6xl mx-auto">
+          <h2 className="text-2xl md:text-4xl font-display font-bold text-center mb-10 md:mb-14">
+            WhatsApp Wasn't Built for Managing Customers — Until Now
+          </h2>
+          
+          <div className="grid md:grid-cols-2 gap-8 md:gap-12">
+            {/* Problems */}
+            <div>
+              <h3 className="text-lg font-semibold text-gray-400 mb-6 uppercase tracking-wide">The Problem</h3>
+              <div className="space-y-4">
+                <div className="flex items-start gap-3">
+                  <div className="h-6 w-6 rounded-full bg-red-500/20 flex items-center justify-center shrink-0 mt-0.5">
+                    <span className="text-red-400 text-sm">✕</span>
+                  </div>
+                  <p className="text-gray-300">Important chats get buried</p>
+                </div>
+                <div className="flex items-start gap-3">
+                  <div className="h-6 w-6 rounded-full bg-red-500/20 flex items-center justify-center shrink-0 mt-0.5">
+                    <span className="text-red-400 text-sm">✕</span>
+                  </div>
+                  <p className="text-gray-300">No context about customers</p>
+                </div>
+                <div className="flex items-start gap-3">
+                  <div className="h-6 w-6 rounded-full bg-red-500/20 flex items-center justify-center shrink-0 mt-0.5">
+                    <span className="text-red-400 text-sm">✕</span>
+                  </div>
+                  <p className="text-gray-300">Follow-ups are forgotten</p>
+                </div>
+                <div className="flex items-start gap-3">
+                  <div className="h-6 w-6 rounded-full bg-red-500/20 flex items-center justify-center shrink-0 mt-0.5">
+                    <span className="text-red-400 text-sm">✕</span>
+                  </div>
+                  <p className="text-gray-300">Teams lose visibility</p>
+                </div>
+              </div>
+            </div>
+            
+            {/* Solution */}
+            <div>
+              <h3 className="text-lg font-semibold text-brand-green mb-6 uppercase tracking-wide">WhachatCRM Solution</h3>
+              <div className="space-y-4">
+                <div className="flex items-start gap-3">
+                  <CheckCircle2 className="h-6 w-6 text-brand-green shrink-0 mt-0.5" />
+                  <p className="text-white">One conversation per customer</p>
+                </div>
+                <div className="flex items-start gap-3">
+                  <CheckCircle2 className="h-6 w-6 text-brand-green shrink-0 mt-0.5" />
+                  <p className="text-white">Notes, tags & tasks inside each chat</p>
+                </div>
+                <div className="flex items-start gap-3">
+                  <CheckCircle2 className="h-6 w-6 text-brand-green shrink-0 mt-0.5" />
+                  <p className="text-white">Clear follow-ups so nothing slips through</p>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
