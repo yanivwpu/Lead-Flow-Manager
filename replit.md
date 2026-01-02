@@ -95,6 +95,12 @@ The application requires the following environment variables:
 - `DATABASE_URL`: PostgreSQL connection string (auto-configured by Replit)
 - `SESSION_SECRET`: Session encryption key (defaults to development key if not set)
 
+#### Stripe (Manual Setup)
+- `STRIPE_PUBLISHABLE_KEY`: Stripe publishable key (pk_test_... or pk_live_...)
+- `STRIPE_SECRET_KEY`: Stripe secret key (sk_test_... or sk_live_...)
+
+**Note**: Stripe is configured manually via environment variables (not using Replit Stripe integration). The app will first check for these environment variables, then fall back to Replit connector if not found.
+
 #### Optional (for full notification features)
 - `VAPID_PUBLIC_KEY`: Web Push VAPID public key
 - `VAPID_PRIVATE_KEY`: Web Push VAPID private key
