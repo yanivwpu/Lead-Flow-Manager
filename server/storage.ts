@@ -237,6 +237,26 @@ export class DbStorage implements IStorage {
       .where(eq(conversationWindows.userId, userId));
     return result[0]?.count || 0;
   }
+
+  async incrementMonthlyConversations(userId: string): Promise<void> {
+    await db
+      .update(users)
+      .set({ monthlyConversations: sql`coalesce(${users.monthlyConversations}, 0) + 1` })
+      .where(eq(users.id, userId));
+  }
+
+  async incrementTwilioUsage(userId: string, amount: number): Promise<void> {
+    await db
+      .update(users)
+      .set({ monthlyTwilioUsage: sql`coalesce(${users.monthlyTwilioUsage}::numeric, 0) + ${amount}` })
+      .where(eq(users.id, userId));
+  }
+
+  async getTeamMemberCount(userId: string): Promise<number> {
+    // For now, return 1 as we don't have team members table yet
+    // In future, this would query a team_members table
+    return 1;
+  }
 }
 
 export const storage = new DbStorage();
