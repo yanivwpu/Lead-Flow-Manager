@@ -364,7 +364,7 @@ export class SubscriptionService {
     
     try {
       const result = await db.execute(
-        sql`SELECT id FROM stripe.prices WHERE metadata->>'plan' = ${planId} AND active = true LIMIT 1`
+        sql`SELECT id FROM stripe.prices WHERE metadata->>'plan' = ${planId} AND active = true ORDER BY created DESC LIMIT 1`
       );
       
       const row = result.rows[0] as { id: string } | undefined;
