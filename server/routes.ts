@@ -551,6 +551,19 @@ export async function registerRoutes(
     try {
       const { db } = await import("../drizzle/db");
       const { sql } = await import("drizzle-orm");
+      const { getStripePublishableKey } = await import("./stripeClient");
+      
+      // Check environment
+      const isProduction = process.env.REPLIT_DEPLOYMENT === '1';
+      
+      // Check Stripe key (just first 20 chars for safety)
+      let stripeKeyPrefix = 'not configured';
+      try {
+        const key = await getStripePublishableKey();
+        stripeKeyPrefix = key ? key.substring(0, 20) + '...' : 'empty';
+      } catch (e: any) {
+        stripeKeyPrefix = `error: ${e.message}`;
+      }
       
       // Check if stripe schema exists
       const schemaCheck = await db.execute(
@@ -569,6 +582,8 @@ export async function registerRoutes(
       }
       
       res.json({
+        isProduction,
+        stripeKeyPrefix,
         schemaExists: schemaCheck.rows[0],
         activePrices: prices,
         timestamp: new Date().toISOString(),
