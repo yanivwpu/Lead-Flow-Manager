@@ -89,7 +89,8 @@ export function Pricing() {
     },
     onSuccess: (data) => {
       if (data.url) {
-        window.location.href = data.url;
+        window.open(data.url, '_blank');
+        setLoadingPlan(null);
       }
     },
     onError: (error: any) => {

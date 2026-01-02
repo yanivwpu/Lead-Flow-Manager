@@ -117,7 +117,9 @@ export function UpgradeModal({ open, onOpenChange, reason, currentPlan }: Upgrad
 
       const data = await response.json();
       if (data.url) {
-        window.location.href = data.url;
+        window.open(data.url, '_blank');
+        setIsLoading(false);
+        onOpenChange(false);
       }
     } catch (error) {
       console.error("Checkout error:", error);
