@@ -363,11 +363,26 @@ export class SubscriptionService {
     const { sql } = await import('drizzle-orm');
     
     try {
+      console.log(`[Checkout] Looking for price with plan=${planId}`);
+      
+      // First check if stripe schema exists
+      const schemaCheck = await db.execute(
+        sql`SELECT EXISTS(SELECT 1 FROM information_schema.schemata WHERE schema_name = 'stripe')`
+      );
+      console.log('[Checkout] Stripe schema exists:', schemaCheck.rows[0]);
+      
       const result = await db.execute(
         sql`SELECT id FROM stripe.prices WHERE metadata->>'plan' = ${planId} AND active = true ORDER BY created DESC LIMIT 1`
       );
       
+      console.log(`[Checkout] Found prices for ${planId}:`, result.rows);
+      
       const row = result.rows[0] as { id: string } | undefined;
+      if (!row?.id) {
+        // List all available prices for debugging
+        const allPrices = await db.execute(sql`SELECT id, metadata FROM stripe.prices WHERE active = true LIMIT 10`);
+        console.log('[Checkout] All active prices:', allPrices.rows);
+      }
       return row?.id || null;
     } catch (error) {
       console.error('Error fetching price for plan:', error);
