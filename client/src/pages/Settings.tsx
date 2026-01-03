@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Bell, Mail, Smartphone, Shield, LogOut, Phone, Plus, Trash2, Loader2, CreditCard, ExternalLink, Zap } from "lucide-react";
+import { Bell, Mail, Smartphone, Shield, LogOut, Phone, Plus, Trash2, Loader2, CreditCard, ExternalLink, Zap, CheckCircle2, XCircle, MessageSquare } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,8 @@ import { toast } from "@/hooks/use-toast";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link, useSearch } from "wouter";
 import { UpgradeModal, type UpgradeReason } from "@/components/UpgradeModal";
+import { ConnectTwilioWizard } from "@/components/ConnectTwilioWizard";
+import { cn } from "@/lib/utils";
 
 interface RegisteredPhone {
   id: string;
@@ -57,6 +59,7 @@ export function Settings() {
   const [upgradeModalOpen, setUpgradeModalOpen] = useState(false);
   const [upgradeReason, setUpgradeReason] = useState<UpgradeReason>("add_whatsapp_number");
   const [syncingSubscription, setSyncingSubscription] = useState(false);
+  const [connectTwilioOpen, setConnectTwilioOpen] = useState(false);
 
   // Auto-sync subscription when returning from Stripe checkout
   useEffect(() => {
@@ -87,6 +90,27 @@ export function Settings() {
         });
     }
   }, [searchString, queryClient]);
+
+  // Fetch Twilio connection status
+  const { data: twilioStatus, isLoading: twilioLoading } = useQuery<{ connected: boolean; whatsappNumber: string | null }>({
+    queryKey: ["/api/twilio/status"],
+  });
+
+  // Disconnect Twilio mutation
+  const disconnectTwilioMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/twilio/disconnect", { method: "POST", credentials: "include" });
+      if (!res.ok) throw new Error("Failed to disconnect");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/twilio/status"] });
+      toast({ title: "WhatsApp Disconnected", description: "Your Twilio account has been disconnected." });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to disconnect Twilio", variant: "destructive" });
+    },
+  });
 
   // Fetch registered phones
   const { data: phones = [], isLoading: phonesLoading } = useQuery<RegisteredPhone[]>({
@@ -270,6 +294,79 @@ export function Settings() {
        <div className="flex-1 overflow-y-auto px-4 sm:px-8 py-4 sm:py-6">
          <div className="max-w-2xl mx-auto space-y-6 sm:space-y-8">
            
+           {/* WhatsApp Connection Section - Most Important */}
+           <div className={cn(
+             "bg-white border rounded-xl p-4 sm:p-6 shadow-sm",
+             twilioStatus?.connected ? "border-gray-200" : "border-orange-300 bg-orange-50"
+           )}>
+             <div className="flex items-center gap-3 mb-4 sm:mb-6">
+               <div className={cn(
+                 "h-9 w-9 sm:h-10 sm:w-10 rounded-lg flex items-center justify-center flex-shrink-0",
+                 twilioStatus?.connected ? "bg-green-50" : "bg-orange-100"
+               )}>
+                 <MessageSquare className={cn(
+                   "h-4 w-4 sm:h-5 sm:w-5",
+                   twilioStatus?.connected ? "text-green-600" : "text-orange-600"
+                 )} />
+               </div>
+               <div className="min-w-0 flex-1">
+                 <h2 className="text-base sm:text-lg font-bold text-gray-900" data-testid="text-whatsapp-connection-title">
+                   WhatsApp Connection
+                 </h2>
+                 <p className="text-xs sm:text-sm text-gray-500">
+                   {twilioStatus?.connected 
+                     ? "Your Twilio account is connected and ready to send/receive messages."
+                     : "Connect your Twilio account to start messaging."}
+                 </p>
+               </div>
+               {twilioStatus?.connected ? (
+                 <CheckCircle2 className="h-5 w-5 text-green-500 flex-shrink-0" />
+               ) : (
+                 <XCircle className="h-5 w-5 text-orange-500 flex-shrink-0" />
+               )}
+             </div>
+
+             {twilioLoading ? (
+               <div className="flex items-center justify-center py-4">
+                 <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
+               </div>
+             ) : twilioStatus?.connected ? (
+               <div className="space-y-4">
+                 <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg border border-green-100">
+                   <div className="flex items-center gap-3">
+                     <Phone className="h-4 w-4 text-green-600" />
+                     <span className="font-mono text-sm text-green-800">{twilioStatus.whatsappNumber}</span>
+                   </div>
+                   <span className="text-xs text-green-600 font-medium">Connected</span>
+                 </div>
+                 <Button 
+                   variant="outline" 
+                   size="sm"
+                   onClick={() => disconnectTwilioMutation.mutate()}
+                   disabled={disconnectTwilioMutation.isPending}
+                   className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                   data-testid="button-disconnect-twilio"
+                 >
+                   {disconnectTwilioMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                   Disconnect
+                 </Button>
+               </div>
+             ) : (
+               <div className="space-y-4">
+                 <p className="text-sm text-orange-800">
+                   You need to connect your Twilio account before you can send or receive WhatsApp messages.
+                 </p>
+                 <Button 
+                   onClick={() => setConnectTwilioOpen(true)}
+                   className="bg-brand-green hover:bg-brand-green/90"
+                   data-testid="button-connect-twilio"
+                 >
+                   Connect Twilio Account
+                 </Button>
+               </div>
+             )}
+           </div>
+
            {/* Notifications Section */}
            <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 shadow-sm">
              <div className="flex items-center gap-3 mb-4 sm:mb-6">
@@ -518,6 +615,11 @@ export function Settings() {
          onOpenChange={setUpgradeModalOpen}
          reason={upgradeReason}
          currentPlan={subscriptionData?.limits?.plan}
+       />
+       
+       <ConnectTwilioWizard
+         open={connectTwilioOpen}
+         onOpenChange={setConnectTwilioOpen}
        />
     </div>
   );

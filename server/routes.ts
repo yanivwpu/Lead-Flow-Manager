@@ -199,26 +199,6 @@ export async function registerRoutes(
     res.json({ publicKey });
   });
 
-  // Get Twilio connection status (platform-level, via Replit integration)
-  app.get("/api/twilio/status", async (req, res) => {
-    try {
-      if (!req.user) {
-        return res.status(401).json({ error: "Unauthorized" });
-      }
-      
-      const isConnected = await verifyTwilioConnection();
-      res.json({
-        connected: isConnected,
-        message: isConnected 
-          ? "WhatsApp messaging is enabled via platform Twilio account" 
-          : "Twilio not configured"
-      });
-    } catch (error) {
-      console.error("Error fetching Twilio status:", error);
-      res.status(500).json({ error: "Failed to fetch status" });
-    }
-  });
-
   // ============= Phone Registration Endpoints =============
   
   // Get registered phones for current user

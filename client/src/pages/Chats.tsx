@@ -13,7 +13,9 @@ import {
   Clock,
   Smartphone,
   Lock,
-  Trash2
+  Trash2,
+  AlertTriangle,
+  Settings
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -27,6 +29,7 @@ import {
 import { UpgradeModal, type UpgradeReason } from "@/components/UpgradeModal";
 import { useSubscription } from "@/lib/subscription-context";
 import { useToast } from "@/hooks/use-toast";
+import { Link } from "wouter";
 
 interface Chat {
   id: string;
@@ -60,6 +63,13 @@ export function Chats() {
   
   const canSendMessages = subscription?.limits?.canSendMessages ?? false;
   const isAtLimit = subscription?.limits?.isAtLimit ?? false;
+
+  const { data: twilioStatus } = useQuery<{ connected: boolean; whatsappNumber: string | null }>({
+    queryKey: ["/api/twilio/status"],
+    enabled: !!user,
+  });
+
+  const isTwilioConnected = twilioStatus?.connected ?? false;
 
   const { data: chats = [], isLoading } = useQuery<Chat[]>({
     queryKey: ['/api/chats'],
@@ -237,6 +247,28 @@ export function Chats() {
     return (
       <div className="flex h-full w-full items-center justify-center bg-white">
         <div className="text-gray-400">Loading chats...</div>
+      </div>
+    );
+  }
+
+  if (!isTwilioConnected) {
+    return (
+      <div className="flex h-full w-full items-center justify-center bg-white">
+        <div className="max-w-md text-center p-8">
+          <div className="mx-auto h-16 w-16 rounded-full bg-orange-100 flex items-center justify-center mb-6">
+            <AlertTriangle className="h-8 w-8 text-orange-500" />
+          </div>
+          <h2 className="text-xl font-bold text-gray-900 mb-2">WhatsApp Not Connected</h2>
+          <p className="text-gray-500 mb-6">
+            You need to connect your Twilio account before you can send or receive WhatsApp messages.
+          </p>
+          <Link href="/app/settings">
+            <Button className="bg-brand-green hover:bg-brand-green/90" data-testid="button-go-to-settings">
+              <Settings className="h-4 w-4 mr-2" />
+              Connect WhatsApp in Settings
+            </Button>
+          </Link>
+        </div>
       </div>
     );
   }
