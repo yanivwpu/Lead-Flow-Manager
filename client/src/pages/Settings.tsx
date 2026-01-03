@@ -199,12 +199,24 @@ export function Settings() {
   };
 
   const handlePushToggle = async (checked: boolean) => {
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || 
+                         (window.navigator as any).standalone === true;
+    
     if (typeof Notification === 'undefined') {
-      toast({
-        title: "Not Supported",
-        description: "Push notifications are not supported on this device.",
-        variant: "destructive"
-      });
+      if (isIOS && !isStandalone) {
+        toast({
+          title: "Install App First",
+          description: "On iPhone/iPad, tap Share > Add to Home Screen, then open from there to enable notifications.",
+          variant: "destructive"
+        });
+      } else {
+        toast({
+          title: "Not Supported",
+          description: "Your browser doesn't support push notifications. Try Chrome, Firefox, or Edge.",
+          variant: "destructive"
+        });
+      }
       return;
     }
     
@@ -218,11 +230,26 @@ export function Settings() {
           body: "You will now receive follow-up reminders.",
           icon: "/pwa-icon.png"
         });
+      } else if (result === 'denied') {
+        setPushEnabled(false);
+        if (isIOS) {
+          toast({
+            title: "Permission Blocked",
+            description: "Go to Settings > Notifications > Find this app and enable notifications.",
+            variant: "destructive"
+          });
+        } else {
+          toast({
+            title: "Permission Blocked",
+            description: "Click the lock icon in your browser's address bar to allow notifications.",
+            variant: "destructive"
+          });
+        }
       } else {
         setPushEnabled(false);
         toast({
-          title: "Permission Denied",
-          description: "Please enable notifications in your browser settings.",
+          title: "Permission Required",
+          description: "Please allow notifications when prompted to receive reminders.",
           variant: "destructive"
         });
       }
