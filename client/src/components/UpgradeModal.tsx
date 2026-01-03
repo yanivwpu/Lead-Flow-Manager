@@ -84,9 +84,9 @@ const UPGRADE_CONTENT: Record<UpgradeReason, UpgradeContent> = {
     targetPlan: "pro",
     ctaText: "Upgrade to Pro",
     benefits: [
-      "Up to 2 WhatsApp numbers",
-      "Unlimited conversations",
-      "Unlimited team members",
+      "Up to 3 WhatsApp numbers",
+      "5,000 conversations/month",
+      "Up to 10 team members",
     ],
   },
 };
