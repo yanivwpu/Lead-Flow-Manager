@@ -21,7 +21,10 @@ export function ConnectTwilioWizard({ open, onOpenChange, onSuccess }: ConnectTw
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [statusCopied, setStatusCopied] = useState(false);
   const [webhookUrl, setWebhookUrl] = useState("");
+  const [statusCallbackUrl, setStatusCallbackUrl] = useState("");
+  const [webhooksConfigured, setWebhooksConfigured] = useState(false);
   
   const [credentials, setCredentials] = useState({
     accountSid: "",
@@ -49,7 +52,15 @@ export function ConnectTwilioWizard({ open, onOpenChange, onSuccess }: ConnectTw
       }
 
       setWebhookUrl(data.webhookUrl);
-      setStep("webhook");
+      setStatusCallbackUrl(data.statusCallbackUrl);
+      setWebhooksConfigured(data.webhooksConfigured || false);
+      
+      // If webhooks were auto-configured, skip to success
+      if (data.webhooksConfigured) {
+        handleComplete();
+      } else {
+        setStep("webhook");
+      }
     } catch (err: any) {
       setError(err.message || "Connection failed");
     } finally {
@@ -61,6 +72,12 @@ export function ConnectTwilioWizard({ open, onOpenChange, onSuccess }: ConnectTw
     await navigator.clipboard.writeText(webhookUrl);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleCopyStatus = async () => {
+    await navigator.clipboard.writeText(statusCallbackUrl);
+    setStatusCopied(true);
+    setTimeout(() => setStatusCopied(false), 2000);
   };
 
   const handleComplete = () => {
@@ -178,52 +195,87 @@ export function ConnectTwilioWizard({ open, onOpenChange, onSuccess }: ConnectTw
 
         {step === "webhook" && (
           <div className="space-y-4 py-4">
-            <Alert className="bg-green-50 border-green-200">
-              <CheckCircle2 className="h-4 w-4 text-green-600" />
-              <AlertDescription className="text-green-800">
-                Credentials verified! Now configure your Twilio webhook.
+            <Alert className="bg-amber-50 border-amber-200">
+              <AlertCircle className="h-4 w-4 text-amber-600" />
+              <AlertDescription className="text-amber-800">
+                Almost done! Copy these URLs to your Twilio Sandbox settings.
               </AlertDescription>
             </Alert>
 
-            <div className="space-y-3">
-              <p className="text-sm text-muted-foreground">
-                Copy this webhook URL and add it to your Twilio WhatsApp Sandbox or Business Profile:
-              </p>
-              
-              <div className="flex items-center gap-2">
-                <Input 
-                  value={webhookUrl} 
-                  readOnly 
-                  className="font-mono text-xs"
-                  data-testid="input-webhook-url"
-                />
-                <Button 
-                  variant="outline" 
-                  size="icon" 
-                  onClick={handleCopyWebhook}
-                  data-testid="button-copy-webhook"
-                >
-                  {copied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
-                </Button>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-gray-700">
+                  When a message comes in:
+                </label>
+                <div className="flex items-center gap-2">
+                  <Input 
+                    value={webhookUrl} 
+                    readOnly 
+                    className="font-mono text-xs"
+                    data-testid="input-webhook-url"
+                  />
+                  <Button 
+                    variant="outline" 
+                    size="icon" 
+                    onClick={handleCopyWebhook}
+                    data-testid="button-copy-webhook"
+                  >
+                    {copied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
+                  </Button>
+                </div>
               </div>
 
-              <div className="text-xs text-muted-foreground space-y-1">
-                <p><strong>In Twilio Console:</strong></p>
-                <ol className="list-decimal list-inside space-y-1 ml-2">
-                  <li>Go to Messaging {">"} Try it out {">"} Send a WhatsApp message</li>
-                  <li>Click "Sandbox settings"</li>
-                  <li>Paste the URL in "When a message comes in"</li>
-                  <li>Set the HTTP method to POST</li>
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-gray-700">
+                  Status callback URL:
+                </label>
+                <div className="flex items-center gap-2">
+                  <Input 
+                    value={statusCallbackUrl} 
+                    readOnly 
+                    className="font-mono text-xs"
+                    data-testid="input-status-url"
+                  />
+                  <Button 
+                    variant="outline" 
+                    size="icon" 
+                    onClick={handleCopyStatus}
+                    data-testid="button-copy-status"
+                  >
+                    {statusCopied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
+                  </Button>
+                </div>
+              </div>
+
+              <div className="bg-gray-50 rounded-lg p-3 text-xs text-gray-600 space-y-2">
+                <p className="font-medium">Quick setup:</p>
+                <ol className="list-decimal list-inside space-y-1">
+                  <li>Click the button below to open Twilio settings</li>
+                  <li>Paste the first URL in "When a message comes in"</li>
+                  <li>Paste the second URL in "Status callback URL"</li>
+                  <li>Set both to POST method and save</li>
                 </ol>
               </div>
+
+              <a
+                href="https://console.twilio.com/us1/develop/sms/try-it-out/whatsapp-learn"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block"
+              >
+                <Button variant="outline" className="w-full">
+                  <ExternalLink className="h-4 w-4 mr-2" />
+                  Open Twilio Sandbox Settings
+                </Button>
+              </a>
             </div>
 
-            <div className="flex justify-end gap-2 pt-4">
+            <div className="flex justify-end gap-2 pt-2">
               <Button variant="outline" onClick={() => setStep("credentials")} data-testid="button-back">
                 Back
               </Button>
               <Button onClick={handleComplete} data-testid="button-done">
-                Done
+                I've configured the webhooks
               </Button>
             </div>
           </div>

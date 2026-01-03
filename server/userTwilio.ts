@@ -133,10 +133,67 @@ export async function validateTwilioCredentials(credentials: TwilioCredentials):
   }
 }
 
+export async function configureWebhooks(
+  client: ReturnType<typeof twilio>,
+  phoneNumber: string,
+  webhookBaseUrl: string
+): Promise<{ configured: boolean; method: string; error?: string }> {
+  const incomingUrl = `${webhookBaseUrl}/api/webhook/twilio/incoming`;
+  const statusUrl = `${webhookBaseUrl}/api/webhook/twilio/status`;
+  
+  try {
+    // Try to configure the WhatsApp sender directly
+    const whatsappNumber = `whatsapp:${phoneNumber}`;
+    
+    // First, try to find and update the phone number's messaging configuration
+    const incomingPhoneNumbers = await client.incomingPhoneNumbers.list({ phoneNumber });
+    
+    if (incomingPhoneNumbers.length > 0) {
+      // Update the phone number's webhook configuration
+      await client.incomingPhoneNumbers(incomingPhoneNumbers[0].sid).update({
+        smsUrl: incomingUrl,
+        smsMethod: 'POST',
+        statusCallback: statusUrl,
+        statusCallbackMethod: 'POST',
+      });
+      console.log(`Configured webhooks for phone number ${phoneNumber}`);
+      return { configured: true, method: 'phone_number' };
+    }
+    
+    // If no phone number found, try WhatsApp senders
+    try {
+      const senders = await client.messaging.v1.services.list({ limit: 10 });
+      for (const service of senders) {
+        try {
+          await client.messaging.v1.services(service.sid).update({
+            inboundRequestUrl: incomingUrl,
+            inboundMethod: 'POST',
+            statusCallback: statusUrl,
+          });
+          console.log(`Configured webhooks for messaging service ${service.sid}`);
+          return { configured: true, method: 'messaging_service' };
+        } catch (e) {
+          // Continue to next service
+        }
+      }
+    } catch (e) {
+      // Messaging services not available or no permission
+    }
+    
+    // If we can't auto-configure, return with instructions
+    console.log('Could not auto-configure webhooks - manual setup required');
+    return { configured: false, method: 'manual', error: 'Manual webhook configuration required' };
+  } catch (error: any) {
+    console.log('Webhook auto-configuration failed:', error.message);
+    return { configured: false, method: 'manual', error: error.message };
+  }
+}
+
 export async function connectUserTwilio(
   userId: string,
-  credentials: TwilioCredentials
-): Promise<{ success: boolean; error?: string }> {
+  credentials: TwilioCredentials,
+  webhookBaseUrl?: string
+): Promise<{ success: boolean; error?: string; webhooksConfigured?: boolean }> {
   const validation = await validateTwilioCredentials(credentials);
   if (!validation.valid) {
     return { success: false, error: validation.error };
@@ -152,7 +209,19 @@ export async function connectUserTwilio(
     twilioConnected: true,
   });
 
-  return { success: true };
+  // Try to auto-configure webhooks
+  let webhooksConfigured = false;
+  if (webhookBaseUrl) {
+    try {
+      const client = twilio(credentials.accountSid, credentials.authToken);
+      const result = await configureWebhooks(client, phoneNumber, webhookBaseUrl);
+      webhooksConfigured = result.configured;
+    } catch (e) {
+      console.log('Failed to auto-configure webhooks:', e);
+    }
+  }
+
+  return { success: true, webhooksConfigured };
 }
 
 export async function disconnectUserTwilio(userId: string): Promise<void> {

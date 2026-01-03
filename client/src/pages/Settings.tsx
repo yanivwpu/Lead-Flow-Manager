@@ -61,15 +61,22 @@ export function Settings() {
   const [syncingSubscription, setSyncingSubscription] = useState(false);
   const [connectTwilioOpen, setConnectTwilioOpen] = useState(false);
   const [webhookCopied, setWebhookCopied] = useState(false);
+  const [statusCopied, setStatusCopied] = useState(false);
   
-  const webhookUrl = typeof window !== 'undefined' 
-    ? `${window.location.origin}/api/webhook/twilio/incoming`
-    : '';
+  const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
+  const webhookUrl = `${baseUrl}/api/webhook/twilio/incoming`;
+  const statusCallbackUrl = `${baseUrl}/api/webhook/twilio/status`;
 
   const handleCopyWebhook = async () => {
     await navigator.clipboard.writeText(webhookUrl);
     setWebhookCopied(true);
     setTimeout(() => setWebhookCopied(false), 2000);
+  };
+
+  const handleCopyStatus = async () => {
+    await navigator.clipboard.writeText(statusCallbackUrl);
+    setStatusCopied(true);
+    setTimeout(() => setStatusCopied(false), 2000);
   };
 
   // Auto-sync subscription when returning from Stripe checkout
@@ -358,40 +365,53 @@ export function Settings() {
                      <div>
                        <p className="text-sm font-medium text-amber-900">Not receiving messages?</p>
                        <p className="text-xs text-amber-700 mt-1">
-                         Make sure you've configured the webhook URL in your Twilio Console.
+                         Make sure you've configured both webhook URLs in your Twilio Console.
                        </p>
                      </div>
                    </div>
                    
-                   <div className="space-y-2">
-                     <Label className="text-xs text-amber-800">Webhook URL (copy this):</Label>
-                     <div className="flex items-center gap-2">
-                       <Input 
-                         value={webhookUrl} 
-                         readOnly 
-                         className="font-mono text-xs bg-white border-amber-300"
-                         data-testid="input-webhook-url-settings"
-                       />
-                       <Button 
-                         variant="outline" 
-                         size="icon" 
-                         onClick={handleCopyWebhook}
-                         className="flex-shrink-0 border-amber-300 hover:bg-amber-100"
-                         data-testid="button-copy-webhook-settings"
-                       >
-                         {webhookCopied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4 text-amber-600" />}
-                       </Button>
+                   <div className="space-y-3">
+                     <div className="space-y-1">
+                       <Label className="text-xs text-amber-800">When a message comes in:</Label>
+                       <div className="flex items-center gap-2">
+                         <Input 
+                           value={webhookUrl} 
+                           readOnly 
+                           className="font-mono text-xs bg-white border-amber-300"
+                           data-testid="input-webhook-url-settings"
+                         />
+                         <Button 
+                           variant="outline" 
+                           size="icon" 
+                           onClick={handleCopyWebhook}
+                           className="flex-shrink-0 border-amber-300 hover:bg-amber-100"
+                           data-testid="button-copy-webhook-settings"
+                         >
+                           {webhookCopied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4 text-amber-600" />}
+                         </Button>
+                       </div>
                      </div>
-                   </div>
-                   
-                   <div className="mt-3 text-xs text-amber-700 space-y-1">
-                     <p className="font-medium">In Twilio Console:</p>
-                     <ol className="list-decimal list-inside ml-1 space-y-0.5">
-                       <li>Go to Messaging {">"} Try it out {">"} Send a WhatsApp message</li>
-                       <li>Click "Sandbox settings"</li>
-                       <li>Paste URL in "When a message comes in"</li>
-                       <li>Set HTTP method to POST and save</li>
-                     </ol>
+                     
+                     <div className="space-y-1">
+                       <Label className="text-xs text-amber-800">Status callback URL:</Label>
+                       <div className="flex items-center gap-2">
+                         <Input 
+                           value={statusCallbackUrl} 
+                           readOnly 
+                           className="font-mono text-xs bg-white border-amber-300"
+                           data-testid="input-status-url-settings"
+                         />
+                         <Button 
+                           variant="outline" 
+                           size="icon" 
+                           onClick={handleCopyStatus}
+                           className="flex-shrink-0 border-amber-300 hover:bg-amber-100"
+                           data-testid="button-copy-status-settings"
+                         >
+                           {statusCopied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4 text-amber-600" />}
+                         </Button>
+                       </div>
+                     </div>
                    </div>
                    
                    <a
@@ -400,7 +420,7 @@ export function Settings() {
                      rel="noopener noreferrer"
                      className="inline-flex items-center gap-1 mt-3 text-xs text-amber-800 hover:text-amber-900 underline"
                    >
-                     Open Twilio WhatsApp Settings <ExternalLink className="h-3 w-3" />
+                     Open Twilio Sandbox Settings <ExternalLink className="h-3 w-3" />
                    </a>
                  </div>
                  

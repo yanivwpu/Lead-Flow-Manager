@@ -473,7 +473,8 @@ export async function registerRoutes(
         whatsappNumber,
       };
 
-      const result = await connectUserTwilio(req.user.id, credentials);
+      const webhookBaseUrl = process.env.APP_URL || `https://${process.env.REPLIT_DOMAINS?.split(',')[0]}`;
+      const result = await connectUserTwilio(req.user.id, credentials, webhookBaseUrl);
 
       if (!result.success) {
         return res.status(400).json({ error: result.error });
@@ -481,8 +482,12 @@ export async function registerRoutes(
 
       res.json({ 
         success: true, 
-        message: "Twilio connected successfully",
-        webhookUrl: `${process.env.APP_URL || `https://${process.env.REPLIT_DOMAINS?.split(',')[0]}`}/api/webhook/twilio/incoming`
+        message: result.webhooksConfigured 
+          ? "Twilio connected and webhooks configured automatically!"
+          : "Twilio connected successfully",
+        webhookUrl: `${webhookBaseUrl}/api/webhook/twilio/incoming`,
+        statusCallbackUrl: `${webhookBaseUrl}/api/webhook/twilio/status`,
+        webhooksConfigured: result.webhooksConfigured,
       });
     } catch (error: any) {
       console.error("Error connecting Twilio:", error);
