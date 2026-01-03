@@ -1,0 +1,179 @@
+💰 Simple Pricing for WhatsApp Teams
+You bring WhatsApp. We power the CRM.
+
+WhachatCRM helps you manage, organize, and follow up on WhatsApp conversations — without locking you into message fees.
+
+🆓 Free (Forever)
+
+Try WhachatCRM with real workflows
+
+1 WhatsApp Business number
+
+1 user
+
+50 active conversations / month
+
+Shared inbox (read-only)
+
+Tags & internal notes
+
+Tasks & reminders
+
+Community support
+
+No credit card required
+
+CTA: Start Free
+
+🟦 Starter — $19 / month
+
+For small businesses & solo teams
+
+1 WhatsApp Business number
+
+Up to 3 team members
+
+500 active conversations / month
+
+Shared team inbox
+
+Tags, notes & follow-ups
+
+Conversation history
+
+Email & push notifications
+
+Best for getting started with WhatsApp sales & support
+
+CTA: Start Starter
+
+🟪 Pro — $49 / month
+
+For growing teams handling high volume
+
+Up to 3 WhatsApp Business numbers
+
+Up to 10 team members
+
+2,000 active conversations / month
+
+Conversation assignment & statuses
+
+Advanced reminders & workflows
+
+Priority support
+
+Built for serious WhatsApp operations
+
+CTA: Upgrade to Pro
+
+⚠️ Important: WhatsApp Message Costs
+
+WhatsApp message delivery is billed separately by your provider (e.g. Twilio).
+
+WhachatCRM does not charge per message.
+Your plan only controls how many conversations you manage inside the CRM.
+
+This keeps pricing transparent and predictable.
+
+🔍 What Is an “Active Conversation”?
+
+An active conversation is:
+
+One unique WhatsApp contact within a rolling 30-day window
+
+Unlimited messages can happen inside that conversation — the count stays the same.
+
+🚦 What Happens When I Reach My Limit?
+
+Inbound messages continue normally
+
+Outbound replies are paused
+
+You’ll see a clear upgrade prompt
+
+Upgrade instantly — no downtime
+
+You’re always in control.
+
+❓ Frequently Asked Questions
+Do I pay twice — once to Twilio and once to WhachatCRM?
+
+No. You’re paying for two different things.
+
+Twilio (or provider): WhatsApp message delivery
+
+WhachatCRM: Managing conversations, teams, notes, tasks & workflows
+
+Think of it like email:
+
+Gmail sends emails
+
+CRM manages customers
+
+Why don’t your plans include WhatsApp message fees?
+
+Because WhatsApp pricing varies by:
+
+Country
+
+Message type
+
+Volume
+
+By letting customers connect their own provider:
+
+You avoid hidden fees
+
+Costs stay transparent
+
+You keep full control
+
+This is the standard SaaS model.
+
+Do I need a Twilio account?
+
+Yes — currently WhachatCRM supports WhatsApp Business API via Twilio.
+
+If you already use Twilio, you can connect in minutes.
+If not, we guide you step-by-step during setup.
+
+⚠️ The WhatsApp Business mobile app is not supported.
+
+Why only Twilio?
+
+Twilio offers:
+
+Fast WhatsApp approval
+
+Reliable infrastructure
+
+Clear compliance rules
+
+Easier setup for non-technical teams
+
+We’re designing WhachatCRM to support additional WhatsApp providers in the future, based on customer demand.
+
+I already use another WhatsApp provider. Can I still use WhachatCRM?
+
+Not yet — but we’re collecting demand.
+
+If you use providers like:
+
+360dialog
+
+Gupshup
+
+Meta Cloud API
+
+You can contact us and help shape future integrations.
+
+Can I upgrade or downgrade anytime?
+
+Yes.
+Plans are monthly, flexible, and update instantly.
+
+🚀 Start Free. Upgrade When WhatsApp Works for You.
+
+CTA (Footer):
+Start Free — No Credit Card Required

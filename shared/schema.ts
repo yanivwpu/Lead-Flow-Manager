@@ -17,7 +17,7 @@ export const PLAN_LIMITS = {
   free: {
     name: 'Free',
     price: 0,
-    conversationsPerMonth: 100,
+    conversationsPerMonth: 50,
     isLifetimeLimit: false,
     maxUsers: 1,
     maxWhatsappNumbers: 1,
@@ -26,7 +26,7 @@ export const PLAN_LIMITS = {
     twilioUsageIncluded: 0, // $0 included
     emailNotifications: false,
     pushNotifications: false,
-    teamInbox: false,
+    teamInbox: true, // read-only shared inbox
   },
   starter: {
     name: 'Starter',

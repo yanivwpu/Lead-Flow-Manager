@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Check, Zap, Users, MessageSquare, Phone, Loader2, Shield } from "lucide-react";
+import { ArrowLeft, Check, Zap, Users, MessageSquare, Phone, Loader2, Shield, AlertTriangle, HelpCircle } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { useAuth } from "@/lib/auth-context";
 import { useToast } from "@/hooks/use-toast";
@@ -11,55 +11,58 @@ const PLANS = [
   {
     id: "free",
     name: "Free",
+    badge: "Forever Free",
     price: 0,
-    description: "Get started with WhatsApp CRM basics.",
-    cta: "Current Plan",
+    description: "Try WhachatCRM with real workflows",
+    cta: "Start Free",
     popular: false,
     features: [
+      "1 WhatsApp Business number",
       "1 user",
-      "1 WhatsApp number",
-      "100 conversations / month",
-      "Notes & tags",
-      "Pipeline management",
-      "Mobile PWA",
+      "50 active conversations / month",
+      "Shared inbox (read-only)",
+      "Tags & internal notes",
+      "Tasks & reminders",
+      "Community support",
     ],
-    limitations: ["No follow-ups", "No Twilio usage included"],
+    note: "No credit card required",
   },
   {
     id: "starter",
     name: "Starter",
+    badge: null,
     price: 19,
-    description: "For solo founders & small teams.",
-    cta: "Upgrade to Starter",
+    description: "For small businesses & solo teams",
+    cta: "Start Starter",
     popular: true,
     features: [
-      "3 users",
-      "1 WhatsApp number",
-      "500 conversations / month",
-      "Follow-ups enabled",
-      "$5 Twilio usage included",
+      "1 WhatsApp Business number",
+      "Up to 3 team members",
+      "500 active conversations / month",
+      "Shared team inbox",
+      "Tags, notes & follow-ups",
+      "Conversation history",
       "Email & push notifications",
-      "Full chat history",
     ],
-    limitations: [],
+    note: "Best for getting started with WhatsApp sales & support",
   },
   {
     id: "pro",
     name: "Pro",
+    badge: null,
     price: 49,
-    description: "For growing teams with high volume.",
+    description: "For growing teams handling high volume",
     cta: "Upgrade to Pro",
     popular: false,
     features: [
-      "10 users",
-      "3 WhatsApp numbers",
-      "2,000 conversations / month",
-      "$15 Twilio usage included",
-      "Team inbox",
+      "Up to 3 WhatsApp Business numbers",
+      "Up to 10 team members",
+      "2,000 active conversations / month",
+      "Conversation assignment & statuses",
+      "Advanced reminders & workflows",
       "Priority support",
-      "Everything in Starter",
     ],
-    limitations: [],
+    note: "Built for serious WhatsApp operations",
   },
 ];
 
@@ -112,6 +115,7 @@ export function Pricing() {
       setLocation("/auth");
       return;
     }
+    if (planId === "free") return;
     setLoadingPlan(planId);
     checkoutMutation.mutate(planId);
   };
@@ -133,10 +137,13 @@ export function Pricing() {
 
         <div className="text-center mb-12">
           <h1 className="text-4xl font-display font-bold text-gray-900 mb-4">
-            Simple, Transparent Pricing
+            Simple Pricing for WhatsApp Teams
           </h1>
           <p className="text-xl text-gray-600 max-w-2xl mx-auto">
-            Start for free. Upgrade only when you need more.
+            You bring WhatsApp. We power the CRM.
+          </p>
+          <p className="text-gray-500 mt-2 max-w-2xl mx-auto">
+            WhachatCRM helps you manage, organize, and follow up on WhatsApp conversations — without locking you into message fees.
           </p>
         </div>
 
@@ -165,28 +172,33 @@ export function Pricing() {
                 )}
 
                 <div className="mb-6">
-                  <h3 className="text-xl font-bold text-gray-900 mb-1">{plan.name}</h3>
+                  <div className="flex items-center gap-2 mb-1">
+                    <h3 className="text-xl font-bold text-gray-900">{plan.name}</h3>
+                    {plan.badge && (
+                      <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">
+                        {plan.badge}
+                      </span>
+                    )}
+                  </div>
                   <div className="flex items-baseline gap-1 mb-2">
                     <span className="text-4xl font-bold text-gray-900">${plan.price}</span>
-                    {plan.price > 0 && <span className="text-gray-500">/month</span>}
+                    {plan.price > 0 && <span className="text-gray-500">/ month</span>}
                   </div>
                   <p className="text-sm text-gray-600">{plan.description}</p>
                 </div>
 
-                <ul className="space-y-3 flex-1 mb-6">
+                <ul className="space-y-3 flex-1 mb-4">
                   {plan.features.map((feature, i) => (
                     <li key={i} className="flex items-start gap-2 text-sm">
                       <Check className="h-4 w-4 text-brand-green shrink-0 mt-0.5" />
                       <span className="text-gray-700">{feature}</span>
                     </li>
                   ))}
-                  {plan.limitations.map((limitation, i) => (
-                    <li key={i} className="flex items-start gap-2 text-sm text-gray-400">
-                      <span className="shrink-0 mt-0.5">✕</span>
-                      <span>{limitation}</span>
-                    </li>
-                  ))}
                 </ul>
+
+                {plan.note && (
+                  <p className="text-xs text-gray-500 mb-4 italic">{plan.note}</p>
+                )}
 
                 <Button
                   className={`w-full ${
@@ -196,16 +208,14 @@ export function Pricing() {
                       ? "bg-gray-100 text-gray-500 cursor-default"
                       : "bg-gray-900 hover:bg-gray-800"
                   }`}
-                  disabled={!canUpgrade || isLoading}
-                  onClick={() => canUpgrade && handleUpgrade(plan.id)}
+                  disabled={isCurrentPlan || isLoading || (plan.id === "free" && !user)}
+                  onClick={() => handleUpgrade(plan.id)}
                   data-testid={`button-upgrade-${plan.id}`}
                 >
                   {isLoading ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : isCurrentPlan ? (
                     "Current Plan"
-                  ) : plan.id === "free" ? (
-                    "Free Forever"
                   ) : (
                     plan.cta
                   )}
@@ -215,101 +225,171 @@ export function Pricing() {
           })}
         </div>
 
-        <div className="mt-16 text-center">
-          <h2 className="text-2xl font-bold text-gray-900 mb-8">All plans include</h2>
-          <div className="grid md:grid-cols-4 gap-8 max-w-4xl mx-auto">
-            <div className="text-center">
-              <div className="h-12 w-12 bg-green-100 rounded-xl flex items-center justify-center mx-auto mb-3">
-                <MessageSquare className="h-6 w-6 text-brand-green" />
-              </div>
-              <h3 className="font-semibold text-gray-900 mb-1">Real-time messaging</h3>
-              <p className="text-sm text-gray-500">Send & receive WhatsApp messages</p>
-            </div>
-            <div className="text-center">
-              <div className="h-12 w-12 bg-green-100 rounded-xl flex items-center justify-center mx-auto mb-3">
-                <Zap className="h-6 w-6 text-brand-green" />
-              </div>
-              <h3 className="font-semibold text-gray-900 mb-1">Notes & Tags</h3>
-              <p className="text-sm text-gray-500">Organize every conversation</p>
-            </div>
-            <div className="text-center">
-              <div className="h-12 w-12 bg-green-100 rounded-xl flex items-center justify-center mx-auto mb-3">
-                <Users className="h-6 w-6 text-brand-green" />
-              </div>
-              <h3 className="font-semibold text-gray-900 mb-1">Pipeline management</h3>
-              <p className="text-sm text-gray-500">Track deals from lead to close</p>
-            </div>
-            <div className="text-center">
-              <div className="h-12 w-12 bg-green-100 rounded-xl flex items-center justify-center mx-auto mb-3">
-                <Phone className="h-6 w-6 text-brand-green" />
-              </div>
-              <h3 className="font-semibold text-gray-900 mb-1">Mobile-ready PWA</h3>
-              <p className="text-sm text-gray-500">Install on any device</p>
+        {/* Important Notice */}
+        <div className="mt-12 bg-amber-50 border border-amber-200 rounded-xl p-6">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+            <div>
+              <h3 className="font-semibold text-amber-900 mb-2">Important: WhatsApp Message Costs</h3>
+              <p className="text-amber-800 text-sm mb-3">
+                WhatsApp message delivery is billed separately by your provider (e.g. Twilio).
+              </p>
+              <ul className="text-sm text-amber-800 space-y-1">
+                <li><strong>WhachatCRM does not charge per message.</strong></li>
+                <li>Your plan only controls how many conversations you manage inside the CRM.</li>
+                <li>This keeps pricing transparent and predictable.</li>
+              </ul>
             </div>
           </div>
         </div>
 
+        {/* What is an Active Conversation */}
+        <div className="mt-8 bg-blue-50 border border-blue-200 rounded-xl p-6">
+          <div className="flex items-start gap-3">
+            <HelpCircle className="h-5 w-5 text-blue-600 shrink-0 mt-0.5" />
+            <div>
+              <h3 className="font-semibold text-blue-900 mb-2">What Is an "Active Conversation"?</h3>
+              <p className="text-blue-800 text-sm mb-2">An active conversation is:</p>
+              <ul className="text-sm text-blue-800 space-y-1 list-disc list-inside">
+                <li>One unique WhatsApp contact within a rolling 30-day window</li>
+                <li>Unlimited messages can happen inside that conversation — the count stays the same</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        {/* What Happens at Limit */}
+        <div className="mt-8 bg-gray-100 border border-gray-200 rounded-xl p-6">
+          <h3 className="font-semibold text-gray-900 mb-3">What Happens When I Reach My Limit?</h3>
+          <div className="grid sm:grid-cols-2 gap-4 text-sm">
+            <div className="flex items-start gap-2">
+              <Check className="h-4 w-4 text-green-600 shrink-0 mt-0.5" />
+              <span className="text-gray-700">Inbound messages continue normally</span>
+            </div>
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
+              <span className="text-gray-700">Outbound replies are paused</span>
+            </div>
+            <div className="flex items-start gap-2">
+              <Check className="h-4 w-4 text-green-600 shrink-0 mt-0.5" />
+              <span className="text-gray-700">You'll see a clear upgrade prompt</span>
+            </div>
+            <div className="flex items-start gap-2">
+              <Zap className="h-4 w-4 text-brand-green shrink-0 mt-0.5" />
+              <span className="text-gray-700">Upgrade instantly — no downtime</span>
+            </div>
+          </div>
+          <p className="text-sm text-gray-600 mt-4 font-medium">You're always in control.</p>
+        </div>
+
+        {/* FAQ Section */}
         <div className="mt-16 max-w-3xl mx-auto">
           <h2 className="text-2xl font-bold text-gray-900 mb-8 text-center">Frequently Asked Questions</h2>
           <Accordion type="single" collapsible className="space-y-4">
-            <AccordionItem value="twilio-account" className="bg-white border border-gray-200 rounded-xl px-6">
-              <AccordionTrigger className="text-left font-semibold text-gray-900 hover:no-underline" data-testid="faq-twilio-account">
+            <AccordionItem value="pay-twice" className="bg-white border border-gray-200 rounded-xl px-6">
+              <AccordionTrigger className="text-left font-semibold text-gray-900 hover:no-underline" data-testid="faq-pay-twice">
+                Do I pay twice — once to Twilio and once to WhachatCRM?
+              </AccordionTrigger>
+              <AccordionContent className="text-gray-600">
+                <p className="mb-3">No. You're paying for two different things:</p>
+                <ul className="list-disc list-inside space-y-1 mb-3">
+                  <li><strong>Twilio (or provider):</strong> WhatsApp message delivery</li>
+                  <li><strong>WhachatCRM:</strong> Managing conversations, teams, notes, tasks & workflows</li>
+                </ul>
+                <p>Think of it like email: Gmail sends emails, CRM manages customers.</p>
+              </AccordionContent>
+            </AccordionItem>
+
+            <AccordionItem value="no-message-fees" className="bg-white border border-gray-200 rounded-xl px-6">
+              <AccordionTrigger className="text-left font-semibold text-gray-900 hover:no-underline" data-testid="faq-no-message-fees">
+                Why don't your plans include WhatsApp message fees?
+              </AccordionTrigger>
+              <AccordionContent className="text-gray-600">
+                <p className="mb-3">Because WhatsApp pricing varies by:</p>
+                <ul className="list-disc list-inside space-y-1 mb-3">
+                  <li>Country</li>
+                  <li>Message type</li>
+                  <li>Volume</li>
+                </ul>
+                <p className="mb-3">By letting customers connect their own provider:</p>
+                <ul className="list-disc list-inside space-y-1">
+                  <li>You avoid hidden fees</li>
+                  <li>Costs stay transparent</li>
+                  <li>You keep full control</li>
+                </ul>
+                <p className="mt-3">This is the standard SaaS model.</p>
+              </AccordionContent>
+            </AccordionItem>
+
+            <AccordionItem value="need-twilio" className="bg-white border border-gray-200 rounded-xl px-6">
+              <AccordionTrigger className="text-left font-semibold text-gray-900 hover:no-underline" data-testid="faq-need-twilio">
                 Do I need a Twilio account?
               </AccordionTrigger>
               <AccordionContent className="text-gray-600">
-                No. WhachatCRM manages Twilio for you. Paid plans include Twilio usage credits ($5 on Starter, $15 on Pro). You only pay overage if you exceed your included amount.
+                <p className="mb-3">Yes — currently WhachatCRM supports WhatsApp Business API via Twilio.</p>
+                <ul className="list-disc list-inside space-y-1 mb-3">
+                  <li>If you already use Twilio, you can connect in minutes.</li>
+                  <li>If not, we guide you step-by-step during setup.</li>
+                </ul>
+                <p className="text-amber-700 font-medium">The WhatsApp Business mobile app is not supported.</p>
               </AccordionContent>
             </AccordionItem>
 
-            <AccordionItem value="what-is-conversation" className="bg-white border border-gray-200 rounded-xl px-6">
-              <AccordionTrigger className="text-left font-semibold text-gray-900 hover:no-underline" data-testid="faq-what-is-conversation">
-                What counts as a conversation?
+            <AccordionItem value="why-twilio" className="bg-white border border-gray-200 rounded-xl px-6">
+              <AccordionTrigger className="text-left font-semibold text-gray-900 hover:no-underline" data-testid="faq-why-twilio">
+                Why only Twilio?
               </AccordionTrigger>
               <AccordionContent className="text-gray-600">
-                A conversation is a 24-hour messaging window between you and a customer. All messages within that window count as one conversation. New windows open when a customer messages you or you send a template message.
+                <p className="mb-3">Twilio offers:</p>
+                <ul className="list-disc list-inside space-y-1 mb-3">
+                  <li>Fast WhatsApp approval</li>
+                  <li>Reliable infrastructure</li>
+                  <li>Clear compliance rules</li>
+                  <li>Easier setup for non-technical teams</li>
+                </ul>
+                <p>We're designing WhachatCRM to support additional WhatsApp providers in the future, based on customer demand.</p>
               </AccordionContent>
             </AccordionItem>
 
-            <AccordionItem value="reach-limit" className="bg-white border border-gray-200 rounded-xl px-6">
-              <AccordionTrigger className="text-left font-semibold text-gray-900 hover:no-underline" data-testid="faq-reach-limit">
-                What happens if I reach my limit?
+            <AccordionItem value="other-providers" className="bg-white border border-gray-200 rounded-xl px-6">
+              <AccordionTrigger className="text-left font-semibold text-gray-900 hover:no-underline" data-testid="faq-other-providers">
+                I already use another WhatsApp provider. Can I still use WhachatCRM?
               </AccordionTrigger>
               <AccordionContent className="text-gray-600">
-                We'll notify you at 80% usage. When you hit 100%, new conversations are paused until you upgrade. You can upgrade instantly with one click.
+                <p className="mb-3">Not yet — but we're collecting demand.</p>
+                <p className="mb-3">If you use providers like:</p>
+                <ul className="list-disc list-inside space-y-1 mb-3">
+                  <li>360dialog</li>
+                  <li>Gupshup</li>
+                  <li>Meta Cloud API</li>
+                </ul>
+                <p>You can contact us and help shape future integrations.</p>
               </AccordionContent>
             </AccordionItem>
 
-            <AccordionItem value="cancel" className="bg-white border border-gray-200 rounded-xl px-6">
-              <AccordionTrigger className="text-left font-semibold text-gray-900 hover:no-underline" data-testid="faq-cancel">
-                Can I cancel anytime?
+            <AccordionItem value="upgrade-downgrade" className="bg-white border border-gray-200 rounded-xl px-6">
+              <AccordionTrigger className="text-left font-semibold text-gray-900 hover:no-underline" data-testid="faq-upgrade-downgrade">
+                Can I upgrade or downgrade anytime?
               </AccordionTrigger>
               <AccordionContent className="text-gray-600">
-                Yes. No contracts. Cancel anytime from your account settings. Your data stays accessible on the Free plan.
-              </AccordionContent>
-            </AccordionItem>
-
-            <AccordionItem value="twilio-overage" className="bg-white border border-gray-200 rounded-xl px-6">
-              <AccordionTrigger className="text-left font-semibold text-gray-900 hover:no-underline" data-testid="faq-twilio-overage">
-                What if I exceed my Twilio usage?
-              </AccordionTrigger>
-              <AccordionContent className="text-gray-600">
-                Additional Twilio usage is billed at cost + 5% margin. We'll notify you before any overage charges. Most users stay within their included limits.
+                Yes. Plans are monthly, flexible, and update instantly.
               </AccordionContent>
             </AccordionItem>
           </Accordion>
         </div>
 
+        {/* Footer CTA */}
         <div className="mt-16 bg-gray-900 rounded-2xl p-8 text-center text-white">
           <div className="flex justify-center mb-4">
             <Shield className="h-10 w-10 text-brand-green" />
           </div>
-          <h2 className="text-2xl font-bold mb-2">Official WhatsApp Business API</h2>
+          <h2 className="text-2xl font-bold mb-2">Start Free. Upgrade When WhatsApp Works for You.</h2>
           <p className="text-gray-400 mb-6 max-w-lg mx-auto">
             WhachatCRM uses the official WhatsApp Business API. Your data is secure and compliant with Meta's policies.
           </p>
           <Link href="/auth">
-            <Button className="bg-brand-green hover:bg-green-600 text-white px-8">
-              Start Free
+            <Button className="bg-brand-green hover:bg-green-600 text-white px-8" data-testid="button-start-free-footer">
+              Start Free — No Credit Card Required
             </Button>
           </Link>
         </div>
