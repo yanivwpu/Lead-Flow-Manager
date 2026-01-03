@@ -244,69 +244,71 @@ export function Settings() {
   };
 
   return (
-    <div className="flex-1 h-full bg-white flex flex-col">
-       <div className="p-8 pb-4 border-b border-gray-100">
-         <h1 className="text-3xl font-display font-bold text-gray-900">Settings</h1>
-         <p className="text-gray-500 mt-1">Manage notifications and preferences.</p>
+    <div className="flex-1 h-full bg-white flex flex-col overflow-hidden">
+       <div className="px-4 sm:px-8 py-4 sm:py-6 border-b border-gray-100 flex-shrink-0">
+         <h1 className="text-2xl sm:text-3xl font-display font-bold text-gray-900">Settings</h1>
+         <p className="text-gray-500 mt-1 text-sm sm:text-base">Manage notifications and preferences.</p>
        </div>
 
-       <div className="flex-1 overflow-y-auto p-8">
-         <div className="max-w-2xl space-y-8">
+       <div className="flex-1 overflow-y-auto px-4 sm:px-8 py-4 sm:py-6">
+         <div className="max-w-2xl mx-auto space-y-6 sm:space-y-8">
            
            {/* Notifications Section */}
-           <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
-             <div className="flex items-center gap-3 mb-6">
-               <div className="h-10 w-10 bg-blue-50 rounded-lg flex items-center justify-center">
-                 <Bell className="h-5 w-5 text-blue-600" />
+           <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 shadow-sm">
+             <div className="flex items-center gap-3 mb-4 sm:mb-6">
+               <div className="h-9 w-9 sm:h-10 sm:w-10 bg-blue-50 rounded-lg flex items-center justify-center flex-shrink-0">
+                 <Bell className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600" />
                </div>
-               <div>
-                 <h2 className="text-lg font-bold text-gray-900">Notifications</h2>
-                 <p className="text-sm text-gray-500">Choose how you want to be reminded.</p>
+               <div className="min-w-0">
+                 <h2 className="text-base sm:text-lg font-bold text-gray-900">Notifications</h2>
+                 <p className="text-xs sm:text-sm text-gray-500">Choose how you want to be reminded.</p>
                </div>
              </div>
 
-             <div className="space-y-6">
-               <div className="flex items-center justify-between">
-                 <div className="space-y-0.5">
-                   <Label className="text-base font-medium">Push Notifications</Label>
-                   <p className="text-sm text-gray-500">Receive alerts on your device for due follow-ups.</p>
+             <div className="space-y-4 sm:space-y-6">
+               <div className="flex items-center justify-between gap-3">
+                 <div className="space-y-0.5 min-w-0 flex-1">
+                   <Label className="text-sm sm:text-base font-medium">Push Notifications</Label>
+                   <p className="text-xs sm:text-sm text-gray-500">Receive alerts on your device for due follow-ups.</p>
                  </div>
                  <Switch 
                    checked={pushEnabled}
                    onCheckedChange={handlePushToggle}
+                   className="flex-shrink-0"
                  />
                </div>
                
                <div className="h-px bg-gray-100" />
 
-               <div className="flex items-center justify-between">
-                 <div className="space-y-0.5">
-                   <Label className="text-base font-medium">Email Reminders</Label>
-                   <p className="text-sm text-gray-500">Get a daily summary of tasks sent to your inbox.</p>
+               <div className="flex items-center justify-between gap-3">
+                 <div className="space-y-0.5 min-w-0 flex-1">
+                   <Label className="text-sm sm:text-base font-medium">Email Reminders</Label>
+                   <p className="text-xs sm:text-sm text-gray-500">Get a daily summary of tasks sent to your inbox.</p>
                  </div>
                  <Switch 
                     checked={emailEnabled}
                     onCheckedChange={handleEmailToggle}
+                    className="flex-shrink-0"
                  />
                </div>
              </div>
            </div>
 
            {/* WhatsApp Phone Numbers Section */}
-           <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
-             <div className="flex items-center gap-3 mb-6">
-               <div className="h-10 w-10 bg-green-50 rounded-lg flex items-center justify-center">
-                 <Phone className="h-5 w-5 text-green-600" />
+           <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 shadow-sm">
+             <div className="flex items-center gap-3 mb-4 sm:mb-6">
+               <div className="h-9 w-9 sm:h-10 sm:w-10 bg-green-50 rounded-lg flex items-center justify-center flex-shrink-0">
+                 <Phone className="h-4 w-4 sm:h-5 sm:w-5 text-green-600" />
                </div>
-               <div>
-                 <h2 className="text-lg font-bold text-gray-900" data-testid="text-phones-title">WhatsApp Numbers</h2>
-                 <p className="text-sm text-gray-500">Register your WhatsApp Business phone numbers.</p>
+               <div className="min-w-0">
+                 <h2 className="text-base sm:text-lg font-bold text-gray-900" data-testid="text-phones-title">WhatsApp Numbers</h2>
+                 <p className="text-xs sm:text-sm text-gray-500">Register your WhatsApp Business phone numbers.</p>
                </div>
              </div>
 
              <div className="space-y-4">
                {/* Add new phone form */}
-               <div className="flex gap-2">
+               <div className="flex flex-col sm:flex-row gap-2">
                  <Input
                    placeholder="+1234567890"
                    value={newPhone}
@@ -324,13 +326,16 @@ export function Settings() {
                  <Button 
                    onClick={handleRegisterPhone}
                    disabled={registerPhoneMutation.isPending}
-                   className="bg-green-600 hover:bg-green-700"
+                   className="bg-green-600 hover:bg-green-700 w-full sm:w-auto"
                    data-testid="button-register-phone"
                  >
                    {registerPhoneMutation.isPending ? (
                      <Loader2 className="h-4 w-4 animate-spin" />
                    ) : (
-                     <Plus className="h-4 w-4" />
+                     <>
+                       <Plus className="h-4 w-4 sm:mr-0 mr-2" />
+                       <span className="sm:hidden">Add Number</span>
+                     </>
                    )}
                  </Button>
                </div>
@@ -378,14 +383,14 @@ export function Settings() {
            </div>
 
            {/* Subscription Section */}
-           <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
-             <div className="flex items-center gap-3 mb-6">
-               <div className="h-10 w-10 bg-purple-50 rounded-lg flex items-center justify-center">
-                 <CreditCard className="h-5 w-5 text-purple-600" />
+           <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 shadow-sm">
+             <div className="flex items-center gap-3 mb-4 sm:mb-6">
+               <div className="h-9 w-9 sm:h-10 sm:w-10 bg-purple-50 rounded-lg flex items-center justify-center flex-shrink-0">
+                 <CreditCard className="h-4 w-4 sm:h-5 sm:w-5 text-purple-600" />
                </div>
-               <div>
-                 <h2 className="text-lg font-bold text-gray-900" data-testid="text-subscription-title">Subscription</h2>
-                 <p className="text-sm text-gray-500">Manage your plan and billing.</p>
+               <div className="min-w-0">
+                 <h2 className="text-base sm:text-lg font-bold text-gray-900" data-testid="text-subscription-title">Subscription</h2>
+                 <p className="text-xs sm:text-sm text-gray-500">Manage your plan and billing.</p>
                </div>
              </div>
 
@@ -414,27 +419,27 @@ export function Settings() {
                    )}
                  </div>
 
-                 <div className="grid grid-cols-2 gap-4">
-                   <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+                 <div className="grid grid-cols-2 gap-3 sm:gap-4">
+                   <div className="p-3 sm:p-4 bg-gray-50 rounded-lg border border-gray-200">
                      <span className="text-xs text-gray-500 uppercase font-semibold">Conversations</span>
-                     <p className="text-lg font-bold text-gray-900 mt-1" data-testid="text-conversations-usage">
+                     <p className="text-base sm:text-lg font-bold text-gray-900 mt-1" data-testid="text-conversations-usage">
                        {subscriptionData?.limits.conversationsUsed || 0} / {subscriptionData?.limits.conversationsLimit === null ? "∞" : subscriptionData?.limits.conversationsLimit}
                      </p>
                      <p className="text-xs text-gray-500">
                        {subscriptionData?.limits.isLifetimeLimit ? "Lifetime" : "This month"}
                      </p>
                    </div>
-                   <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+                   <div className="p-3 sm:p-4 bg-gray-50 rounded-lg border border-gray-200">
                      <span className="text-xs text-gray-500 uppercase font-semibold">Team Members</span>
-                     <p className="text-lg font-bold text-gray-900 mt-1" data-testid="text-users-usage">
+                     <p className="text-base sm:text-lg font-bold text-gray-900 mt-1" data-testid="text-users-usage">
                        {subscriptionData?.limits.usersCount || 1} / {subscriptionData?.limits.usersLimit === null ? "∞" : subscriptionData?.limits.usersLimit}
                      </p>
                    </div>
                  </div>
 
-                 <div className="flex gap-2">
+                 <div className="flex flex-col sm:flex-row gap-2">
                    <Link href="/pricing" className="flex-1">
-                     <Button className="w-full bg-brand-green hover:bg-green-600" data-testid="button-view-plans">
+                     <Button className="w-full bg-brand-green hover:bg-green-600 text-sm sm:text-base" data-testid="button-view-plans">
                        <Zap className="h-4 w-4 mr-2" />
                        {subscriptionData?.subscription?.plan === "free" ? "Upgrade Plan" : "View Plans"}
                      </Button>
@@ -444,6 +449,7 @@ export function Settings() {
                        variant="outline"
                        onClick={() => portalMutation.mutate()}
                        disabled={portalMutation.isPending}
+                       className="text-sm sm:text-base"
                        data-testid="button-manage-billing"
                      >
                        {portalMutation.isPending ? (
@@ -462,27 +468,27 @@ export function Settings() {
            </div>
 
            {/* Billing & Usage Section */}
-           <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
-             <div className="flex items-center gap-3 mb-6">
-               <div className="h-10 w-10 bg-amber-50 rounded-lg flex items-center justify-center">
-                 <DollarSign className="h-5 w-5 text-amber-600" />
+           <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 shadow-sm">
+             <div className="flex items-center gap-3 mb-4 sm:mb-6">
+               <div className="h-9 w-9 sm:h-10 sm:w-10 bg-amber-50 rounded-lg flex items-center justify-center flex-shrink-0">
+                 <DollarSign className="h-4 w-4 sm:h-5 sm:w-5 text-amber-600" />
                </div>
-               <div>
-                 <h2 className="text-lg font-bold text-gray-900" data-testid="text-billing-title">Messaging Usage</h2>
-                 <p className="text-sm text-gray-500">Track your WhatsApp messaging costs.</p>
+               <div className="min-w-0">
+                 <h2 className="text-base sm:text-lg font-bold text-gray-900" data-testid="text-billing-title">Messaging Usage</h2>
+                 <p className="text-xs sm:text-sm text-gray-500">Track your WhatsApp messaging costs.</p>
                </div>
              </div>
 
-             <div className="grid grid-cols-2 gap-4">
-               <div className="p-4 bg-gradient-to-br from-green-50 to-green-100 rounded-lg border border-green-200">
+             <div className="grid grid-cols-2 gap-3 sm:gap-4">
+               <div className="p-3 sm:p-4 bg-gradient-to-br from-green-50 to-green-100 rounded-lg border border-green-200">
                  <span className="text-xs text-green-700 uppercase font-semibold">Total Messages</span>
-                 <p className="text-2xl font-bold text-green-800 mt-1" data-testid="text-total-messages">
+                 <p className="text-xl sm:text-2xl font-bold text-green-800 mt-1" data-testid="text-total-messages">
                    {usageSummary?.totalMessages || 0}
                  </p>
                </div>
-               <div className="p-4 bg-gradient-to-br from-amber-50 to-amber-100 rounded-lg border border-amber-200">
+               <div className="p-3 sm:p-4 bg-gradient-to-br from-amber-50 to-amber-100 rounded-lg border border-amber-200">
                  <span className="text-xs text-amber-700 uppercase font-semibold">Message Cost</span>
-                 <p className="text-2xl font-bold text-amber-800 mt-1" data-testid="text-total-cost">
+                 <p className="text-xl sm:text-2xl font-bold text-amber-800 mt-1" data-testid="text-total-cost">
                    ${parseFloat(usageSummary?.totalCost || "0").toFixed(2)}
                  </p>
                </div>
@@ -494,26 +500,26 @@ export function Settings() {
            </div>
 
            {/* Account Section */}
-           <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
-             <div className="flex items-center gap-3 mb-6">
-               <div className="h-10 w-10 bg-gray-50 rounded-lg flex items-center justify-center">
-                 <Shield className="h-5 w-5 text-gray-600" />
+           <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 shadow-sm">
+             <div className="flex items-center gap-3 mb-4 sm:mb-6">
+               <div className="h-9 w-9 sm:h-10 sm:w-10 bg-gray-50 rounded-lg flex items-center justify-center flex-shrink-0">
+                 <Shield className="h-4 w-4 sm:h-5 sm:w-5 text-gray-600" />
                </div>
-               <div>
-                 <h2 className="text-lg font-bold text-gray-900">Account</h2>
-                 <p className="text-sm text-gray-500">Manage your profile and session.</p>
+               <div className="min-w-0">
+                 <h2 className="text-base sm:text-lg font-bold text-gray-900">Account</h2>
+                 <p className="text-xs sm:text-sm text-gray-500">Manage your profile and session.</p>
                </div>
              </div>
 
              <div className="space-y-4">
-               <div className="grid grid-cols-2 gap-4">
-                 <div className="p-3 bg-gray-50 rounded-lg">
+               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                 <div className="p-3 bg-gray-50 rounded-lg overflow-hidden">
                    <span className="text-xs text-gray-500 uppercase font-semibold">Name</span>
-                   <p className="font-medium text-gray-900">{user?.name}</p>
+                   <p className="font-medium text-gray-900 truncate">{user?.name}</p>
                  </div>
-                 <div className="p-3 bg-gray-50 rounded-lg">
+                 <div className="p-3 bg-gray-50 rounded-lg overflow-hidden">
                    <span className="text-xs text-gray-500 uppercase font-semibold">Email</span>
-                   <p className="font-medium text-gray-900">{user?.email}</p>
+                   <p className="font-medium text-gray-900 truncate">{user?.email}</p>
                  </div>
                </div>
              </div>
