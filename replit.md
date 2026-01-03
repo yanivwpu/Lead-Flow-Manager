@@ -1,55 +1,35 @@
 # WhatsApp CRM Web Application (SaaS Platform)
 
 ## Overview
-A multi-tenant WhatsApp-first CRM SaaS platform. The platform owns the Twilio account - clients never need their own Twilio credentials. Built as a Progressive Web App (PWA) with offline support, installable on mobile devices, and push/email notification capabilities.
+A multi-tenant WhatsApp-first CRM SaaS platform. Each customer connects their own Twilio account and WhatsApp Business number. Built as a Progressive Web App (PWA) with offline support, installable on mobile devices, and push/email notification capabilities.
 
 ## Current State
 The application is a full multi-tenant SaaS implementation with:
-- **SaaS Model**: Platform owns single Twilio account, clients just use the service
-- **Phone Registration**: Clients register their WhatsApp Business numbers within the app
-- **Usage-based Billing**: Per-message tracking with Twilio cost + 5% markup
+- **Customer-Owned Twilio**: Each workspace connects their own Twilio account
+- **Secure Credentials**: Twilio Auth Tokens encrypted at rest (AES-256-GCM)
+- **Gated Access**: Users must connect Twilio before sending/receiving messages
+- **Webhook Routing**: Incoming messages routed by Account SID + phone number
 - Real PostgreSQL database for data persistence
 - Session-based authentication with Passport.js
 - Complete CRM functionality for chat management
 - Notification system for follow-up reminders (push & email)
 - PWA capabilities (installable, offline-first)
 
-## Recent Changes (December 30, 2025)
-- **Subscription System**: Four tiers - Free (50 lifetime), Starter ($19/mo), Growth ($49/mo), Pro ($99/mo)
+## Recent Changes (January 3, 2026)
+- **CRITICAL ARCHITECTURE CHANGE**: Switched from platform-owned to customer-owned Twilio accounts
+- **Connect Twilio Wizard**: Users enter Account SID, Auth Token, WhatsApp number
+- **Credential Encryption**: Auth tokens encrypted with AES-256-GCM before storage
+- **Hard Gating**: Chats page blocked until Twilio is connected
+- **Settings UI**: New WhatsApp Connection section with status and disconnect option
+- **Webhook Routing**: Incoming messages identified by Twilio Account SID + phone number
+- **Throttling**: Max 100 messages per 24-hour conversation window to prevent abuse
+
+## Previous Changes (December 30, 2025)
+- **Subscription System**: Three tiers - Free (100/mo), Starter ($19/mo, 500), Pro ($49/mo, 2000)
 - **Stripe Integration**: Payment processing with automatic webhook sync (stripe-replit-sync)
 - **Limit Enforcement**: Conversations, users, and WhatsApp numbers enforced per plan
 - **Pricing Page**: Public /pricing page with plan comparison and Stripe checkout
 - **Settings Upgrade**: Subscription info, usage stats, and billing portal link
-- **Stripe Products**: Seeded Starter/Growth/Pro plans with metadata for plan matching
-
-## Previous Changes (December 29, 2025)
-- **SaaS Architecture**: Platform now owns Twilio account via Replit integration
-- **Phone Registration**: Clients can register their WhatsApp Business phone numbers
-- **Message Routing**: Incoming messages routed to clients based on registered phone numbers
-- **Usage Tracking**: Every message (inbound/outbound) is tracked with cost calculation
-- **Billing System**: 5% markup over Twilio costs for all messages
-- Added Settings UI for phone registration and billing/usage view
-- Admin endpoint for viewing all client usage (/api/admin/usage)
-
-## Recent Changes (December 29, 2025)
-- Enhanced signup form with phone number, business name, and terms agreement checkbox
-- Created Privacy Policy page (/privacy-policy) with data collection and security information
-- Created Terms of Use page (/terms-of-use) with pricing details ($0.00525 per message)
-- Removed technical Twilio pricing details from Settings, replaced with link to Terms of Use
-- Auto-registers WhatsApp Business number during signup if provided
-- Added validation requiring terms agreement before signup
-
-## Previous Changes (December 27, 2025)
-- Converted from prototype to full-stack application with PostgreSQL and Drizzle ORM
-- Implemented server-side authentication with bcrypt password hashing
-- Created database schema for users, chats, messages, and notification preferences
-- Built API routes for CRUD operations on chats and user preferences
-- Implemented background scheduler (cron job) to check for due follow-ups
-- Integrated Web Push API for push notifications
-- Added placeholder for email notifications (awaiting service credentials)
-- Connected frontend to backend API endpoints
-- Added "Remember Me" checkbox to login form for extended 30-day sessions
-- Fixed Follow-ups/Tasks page: made all items clickable to navigate to chat details and added "mark as done" functionality to clear follow-ups
 
 ## Features
 - **Chat Management**: View and organize WhatsApp conversations
@@ -61,6 +41,33 @@ The application is a full multi-tenant SaaS implementation with:
 - **Email Reminders**: Email notifications as fallback (requires configuration)
 - **PWA**: Installable on mobile with Add to Home Screen
 - **Authentication**: Secure email/password authentication with session persistence
+
+## Twilio Integration Architecture
+
+### Customer-Owned Model
+Each customer must:
+1. Sign up for WhachatCRM (email/password)
+2. Land in dashboard in "Disconnected" state
+3. Connect their own Twilio account via Settings
+4. Configure Twilio webhooks to receive messages
+
+### Connection Flow
+1. User goes to Settings > WhatsApp Connection
+2. Enters Twilio Account SID, Auth Token, WhatsApp number
+3. System validates credentials against Twilio API
+4. Credentials encrypted and stored per user
+5. User receives webhook URL to configure in Twilio console
+
+### Webhook Configuration
+Users must add this webhook URL in Twilio Console:
+- **Incoming Messages**: `https://[your-app]/api/webhook/twilio/incoming`
+- **Status Updates**: `https://[your-app]/api/webhook/twilio/status`
+
+### Security
+- Auth tokens encrypted with AES-256-GCM at rest
+- Auth tokens never logged
+- Customer data isolated by user ID
+- Credentials validated before storage
 
 ## Project Architecture
 ### Frontend (React + TypeScript)
@@ -82,9 +89,11 @@ The application is a full multi-tenant SaaS implementation with:
 - `server/storage.ts`: Storage interface with CRUD operations
 - `server/routes.ts`: API route handlers
 - `server/auth.ts`: Authentication middleware and routes
+- `server/userTwilio.ts`: Per-user Twilio service with encryption
 - `server/notifications.ts`: Push notification and scheduler logic
-- `client/src/lib/auth-context.tsx`: Frontend authentication context
-- `client/src/pages/Settings.tsx`: Notification preferences UI
+- `client/src/components/ConnectTwilioWizard.tsx`: Twilio connection UI
+- `client/src/pages/Settings.tsx`: WhatsApp connection status UI
+- `client/src/pages/Chats.tsx`: Gated chat interface
 
 ## Configuration
 
@@ -93,99 +102,63 @@ The application requires the following environment variables:
 
 #### Required (Auto-configured)
 - `DATABASE_URL`: PostgreSQL connection string (auto-configured by Replit)
-- `SESSION_SECRET`: Session encryption key (defaults to development key if not set)
+- `SESSION_SECRET`: Session encryption key (also used for Twilio credential encryption)
 
 #### Stripe (Manual Setup)
 - `STRIPE_PUBLISHABLE_KEY`: Stripe publishable key (pk_test_... or pk_live_...)
 - `STRIPE_SECRET_KEY`: Stripe secret key (sk_test_... or sk_live_...)
 
-**Note**: Stripe is configured manually via environment variables (not using Replit Stripe integration). The app will first check for these environment variables, then fall back to Replit connector if not found.
-
-#### Optional (for full notification features)
+#### Optional
+- `TWILIO_ENCRYPTION_KEY`: Custom encryption key for Twilio credentials (defaults to SESSION_SECRET)
 - `VAPID_PUBLIC_KEY`: Web Push VAPID public key
 - `VAPID_PRIVATE_KEY`: Web Push VAPID private key
-- `VAPID_EMAIL`: Contact email for VAPID (e.g., mailto:admin@example.com)
-- `RESEND_API_KEY`: API key for Resend email service (not using Replit integration per user preference)
-- `APP_URL`: Full URL of the app for email links (defaults to http://localhost:5000)
-
-### Generating VAPID Keys
-To enable push notifications, generate VAPID keys:
-```bash
-npx web-push generate-vapid-keys
-```
-Then set the keys as secrets in Replit or environment variables.
-
-### Email Integration
-Email reminders are currently configured for Resend but will log to console if API key is not provided. To enable email notifications:
-1. Sign up for Resend at https://resend.com
-2. Get your API key
-3. Set `RESEND_API_KEY` as a secret in Replit
-4. Verify your sending domain in Resend
-
-**Note**: User dismissed the Replit Resend integration. If email notifications are needed in the future, manually configure the RESEND_API_KEY secret.
-
-## User Preferences
-- Email integration was offered but dismissed by user during development
-- User prefers manual credential management over Replit integrations
+- `VAPID_EMAIL`: Contact email for VAPID
+- `RESEND_API_KEY`: API key for Resend email service
+- `APP_URL`: Full URL of the app for webhooks and emails
 
 ## Data Model
-- **Users**: Authentication and notification preferences
+- **Users**: Authentication, notification preferences, Twilio credentials (encrypted)
 - **Chats**: WhatsApp conversations with tags, pipeline stages, notes
 - **Follow-ups**: Scheduled reminders with automatic notifications
 - **Push Subscriptions**: Web Push API subscription data stored per user
-- **Registered Phones**: WhatsApp Business phone numbers registered per client
-- **Message Usage**: Per-message cost tracking with Twilio cost + 5% markup
-
-## SaaS Billing Model
-- **Base Cost**: Twilio per-message cost ($0.005 default for text messages)
-- **Markup**: 5% over Twilio costs
-- **Tracking**: Every inbound and outbound message is tracked
-- **Visibility**: Clients can view their usage in Settings > Billing & Usage
-- **Admin View**: Platform can view all client usage via /api/admin/usage
+- **Conversation Windows**: 24-hour tracking for billing purposes
+- **Message Usage**: Per-message cost tracking
 
 ## Cost Control & Limit Enforcement
-To prevent unexpected Twilio costs, the following protections are in place:
 
 ### Sending Blocks
-- **Free plan**: Cannot send outbound messages (inbound only)
+- **Twilio not connected**: All messaging blocked until connected
+- **Free plan follow-ups**: Cannot create follow-ups (upgrade prompt shown)
 - **At limit**: All plans blocked from new conversations when at limit
-- **Error codes**: Returns `PLAN_LIMIT` or `CONVERSATION_LIMIT` for UI handling
+- **Throttled**: Max 100 messages per 24-hour conversation window
 
 ### Usage Tracking (24-Hour Windows)
 - **Conversation = 24-hour window**: One conversation per contact per 24 hours
 - **Window tracking**: `conversationWindows` table tracks window start/end per contact
-- **Both directions**: Inbound and outbound messages tracked via `messageUsage` table
-- **Per tenant**: All usage tied to `userId` for tenant-level isolation
+- **Message count**: Each window tracks message count for throttling
+- **Both directions**: Inbound and outbound messages tracked
 
-### Monthly Reset Logic
-- **Free plan**: Lifetime limit of 50 conversations (never resets)
-- **Paid plans**: Count resets each billing period via `currentPeriodStart`
-- **Stripe webhook**: `subscription.updated` event updates `currentPeriodStart` and `currentPeriodEnd`
-- **Automatic renewal**: When Stripe renews subscription, new period dates are set
+### Subscription Plans
+| Plan | Price | Conversations/mo | Users | WhatsApp Numbers | Follow-ups |
+|------|-------|------------------|-------|------------------|------------|
+| Free | $0 | 100 | 1 | 1 | No |
+| Starter | $19 | 500 | 3 | 1 | Yes |
+| Pro | $49 | 2,000 | 10 | 3 | Yes |
 
-### Upgrade Flow
-- **Warning banner**: Shown at 80% of conversation limit
-- **Block modal**: Shown at 100% with one-click upgrade button
-- **Direct checkout**: Upgrade modals trigger Stripe checkout immediately
-- **Immediate unlock**: Features unlock on successful payment via webhook
+## API Endpoints
 
-## Notification Flow
-1. Background cron job runs every minute to check for due follow-ups
-2. Queries database for chats with `followUpDate <= now()`
-3. For each due follow-up:
-   - Sends push notification if user has push enabled
-   - Sends email notification if user has email enabled
-   - Clears the follow-up after sending
-4. User can manage notification preferences in Settings page
+### Twilio Connection
+- `GET /api/twilio/status` - Get connection status
+- `POST /api/twilio/connect` - Connect Twilio account
+- `POST /api/twilio/disconnect` - Disconnect Twilio account
+- `POST /api/twilio/validate` - Validate credentials without saving
+
+### Webhooks
+- `POST /api/webhook/twilio/incoming` - Receive incoming WhatsApp messages
+- `POST /api/webhook/twilio/status` - Receive message status updates
 
 ## Development Commands
 - `npm run dev`: Start development server
 - `npm run db:push`: Push schema changes to database
 - `npm run build`: Build for production
 - `npm start`: Run production server
-
-## Next Steps
-If you want to enable full email notifications:
-1. Request RESEND_API_KEY secret from user
-2. Update `server/notifications.ts` to uncomment Resend implementation
-3. Configure verified sender domain in Resend dashboard
