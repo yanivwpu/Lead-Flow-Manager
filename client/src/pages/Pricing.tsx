@@ -239,28 +239,17 @@ export function Pricing() {
                 <li>Your plan only controls how many conversations you manage inside the CRM.</li>
                 <li>This keeps pricing transparent and predictable.</li>
               </ul>
-              <p className="text-sm text-amber-800 mb-2">
-                <strong>View message costs for US and international use:</strong>
-              </p>
-              <div className="flex flex-wrap gap-3">
+              <p className="text-sm text-amber-800">
+                <strong>View message costs for US and international use:</strong>{" "}
                 <a 
                   href="https://www.twilio.com/en-us/whatsapp/pricing" 
                   target="_blank" 
                   rel="noopener noreferrer"
-                  className="inline-flex items-center text-sm text-amber-900 hover:text-amber-700 underline"
+                  className="text-amber-900 hover:text-amber-700 underline"
                 >
                   Twilio WhatsApp Pricing
                 </a>
-                <span className="text-amber-400">|</span>
-                <a 
-                  href="https://business.whatsapp.com/products/platform-pricing" 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center text-sm text-amber-900 hover:text-amber-700 underline"
-                >
-                  Meta WhatsApp Pricing by Country
-                </a>
-              </div>
+              </p>
             </div>
           </div>
         </div>

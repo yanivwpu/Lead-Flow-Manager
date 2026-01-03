@@ -52,9 +52,7 @@ export function TermsOfUse() {
             </p>
             <p className="text-gray-600 text-sm">
               <strong>View message costs for US and international use:</strong>{" "}
-              <a href="https://www.twilio.com/en-us/whatsapp/pricing" target="_blank" rel="noopener noreferrer" className="text-brand-green hover:underline">Twilio Pricing</a>
-              {" | "}
-              <a href="https://business.whatsapp.com/products/platform-pricing" target="_blank" rel="noopener noreferrer" className="text-brand-green hover:underline">Meta Pricing by Country</a>
+              <a href="https://www.twilio.com/en-us/whatsapp/pricing" target="_blank" rel="noopener noreferrer" className="text-brand-green hover:underline">Twilio WhatsApp Pricing</a>
             </p>
           </div>
           <p className="text-gray-600 mb-4">
