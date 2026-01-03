@@ -393,6 +393,12 @@ export function Pricing() {
             </Button>
           </Link>
         </div>
+
+        {/* Legal Disclaimer */}
+        <div className="mt-8 text-center text-xs text-gray-400 space-y-1">
+          <p>WhachatCRM is a CRM platform and is not affiliated with Meta or WhatsApp.</p>
+          <p>WhatsApp Business API access is provided by approved third-party providers.</p>
+        </div>
       </div>
     </div>
   );
