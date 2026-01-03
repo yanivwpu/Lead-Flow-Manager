@@ -6,6 +6,12 @@ import { z } from "zod";
 // Subscription plan types
 export type SubscriptionPlan = 'free' | 'starter' | 'pro';
 
+// Throttle limits for high-volume conversations
+export const CONVERSATION_THROTTLE = {
+  maxMessagesPerWindow: 100, // Max messages per 24-hour conversation window
+  warningThreshold: 80, // Warn at 80 messages
+} as const;
+
 // Plan limits configuration
 export const PLAN_LIMITS = {
   free: {

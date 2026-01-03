@@ -1,5 +1,5 @@
 import { storage } from './storage';
-import { PLAN_LIMITS, type SubscriptionPlan, type User } from '@shared/schema';
+import { PLAN_LIMITS, CONVERSATION_THROTTLE, type SubscriptionPlan, type User } from '@shared/schema';
 import { getUncachableStripeClient } from './stripeClient';
 
 export interface SubscriptionLimits {
@@ -224,6 +224,26 @@ export class SubscriptionService {
     }
 
     return { allowed: true };
+  }
+
+  async checkConversationThrottle(userId: string, whatsappPhone: string): Promise<{ allowed: boolean; reason?: string; messagesInWindow: number }> {
+    const activeWindow = await storage.getActiveConversationWindow(userId, whatsappPhone);
+    
+    if (!activeWindow) {
+      return { allowed: true, messagesInWindow: 0 };
+    }
+
+    const messageCount = activeWindow.messageCount || 0;
+    
+    if (messageCount >= CONVERSATION_THROTTLE.maxMessagesPerWindow) {
+      return {
+        allowed: false,
+        reason: `This conversation has reached the ${CONVERSATION_THROTTLE.maxMessagesPerWindow} message limit for this 24-hour window. The limit resets when a new conversation window opens.`,
+        messagesInWindow: messageCount,
+      };
+    }
+
+    return { allowed: true, messagesInWindow: messageCount };
   }
 
   async canAddWhatsAppNumber(userId: string): Promise<{ allowed: boolean; reason?: string; trigger?: UpgradeTrigger }> {

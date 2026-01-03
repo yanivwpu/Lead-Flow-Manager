@@ -377,6 +377,16 @@ export async function registerRoutes(
         });
       }
 
+      // Check throttling for high-volume conversations (max messages per 24h window)
+      const throttleCheck = await subscriptionService.checkConversationThrottle(req.user.id, chat.whatsappPhone);
+      if (!throttleCheck.allowed) {
+        return res.status(429).json({ 
+          error: throttleCheck.reason, 
+          code: "THROTTLED",
+          messagesInWindow: throttleCheck.messagesInWindow
+        });
+      }
+
       const isConnected = await verifyTwilioConnection();
       if (!isConnected) {
         return res.status(400).json({ error: "WhatsApp messaging not available" });

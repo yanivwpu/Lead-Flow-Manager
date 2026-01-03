@@ -210,6 +210,14 @@ export function Chats() {
           setUpgradeModalOpen(true);
           return;
         }
+        if (data.code === "THROTTLED") {
+          toast({
+            title: "Message limit reached",
+            description: data.error || "This conversation has too many messages. Please wait for the 24-hour window to reset.",
+            variant: "destructive",
+          });
+          return;
+        }
         throw new Error(data.error || "Failed to send message");
       }
       
