@@ -5,14 +5,18 @@ import { insertChatSchema, insertRegisteredPhoneSchema, PLAN_LIMITS, type Subscr
 import { z } from "zod";
 import { getVapidPublicKey } from "./notifications";
 import {
-  sendWhatsAppMessage,
-  verifyTwilioConnection,
+  sendUserWhatsAppMessage,
+  verifyUserTwilioConnection,
   parseIncomingWebhook,
   parseStatusWebhook,
   findOrCreateChatByPhone,
-  getTwilioAccountSid,
+  findUserByTwilioCredentials,
+  connectUserTwilio,
+  disconnectUserTwilio,
+  validateTwilioCredentials,
   type WhatsAppMessage,
-} from "./twilio";
+  type TwilioCredentials,
+} from "./userTwilio";
 import { subscriptionService } from "./subscriptionService";
 import { getStripePublishableKey } from "./stripeClient";
 
@@ -387,9 +391,12 @@ export async function registerRoutes(
         });
       }
 
-      const isConnected = await verifyTwilioConnection();
+      const isConnected = await verifyUserTwilioConnection(req.user.id);
       if (!isConnected) {
-        return res.status(400).json({ error: "WhatsApp messaging not available" });
+        return res.status(400).json({ 
+          error: "WhatsApp not connected. Please connect your Twilio account first.",
+          code: "TWILIO_NOT_CONNECTED"
+        });
       }
 
       const { message } = req.body;
@@ -397,7 +404,7 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Message is required" });
       }
 
-      const result = await sendWhatsAppMessage(chat.whatsappPhone, message);
+      const result = await sendUserWhatsAppMessage(req.user.id, chat.whatsappPhone, message);
 
       // Track conversation window (24-hour)
       await subscriptionService.trackConversationWindow(req.user.id, chat.id, chat.whatsappPhone);
@@ -440,46 +447,124 @@ export async function registerRoutes(
     }
   });
 
+  // ============= Twilio Connection Endpoints =============
+
+  // Get Twilio connection status
+  app.get("/api/twilio/status", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      
+      const user = await storage.getUser(req.user.id);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      res.json({
+        connected: user.twilioConnected || false,
+        whatsappNumber: user.twilioWhatsappNumber || null,
+        hasCredentials: !!(user.twilioAccountSid && user.twilioAuthToken),
+      });
+    } catch (error) {
+      console.error("Error getting Twilio status:", error);
+      res.status(500).json({ error: "Failed to get Twilio status" });
+    }
+  });
+
+  // Connect Twilio account
+  app.post("/api/twilio/connect", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const { accountSid, authToken, whatsappNumber } = req.body;
+
+      if (!accountSid || !authToken || !whatsappNumber) {
+        return res.status(400).json({ 
+          error: "Account SID, Auth Token, and WhatsApp number are required" 
+        });
+      }
+
+      const credentials: TwilioCredentials = {
+        accountSid,
+        authToken,
+        whatsappNumber,
+      };
+
+      const result = await connectUserTwilio(req.user.id, credentials);
+
+      if (!result.success) {
+        return res.status(400).json({ error: result.error });
+      }
+
+      res.json({ 
+        success: true, 
+        message: "Twilio connected successfully",
+        webhookUrl: `${process.env.APP_URL || `https://${process.env.REPLIT_DOMAINS?.split(',')[0]}`}/api/webhook/twilio/incoming`
+      });
+    } catch (error: any) {
+      console.error("Error connecting Twilio:", error);
+      res.status(500).json({ error: error.message || "Failed to connect Twilio" });
+    }
+  });
+
+  // Disconnect Twilio account
+  app.post("/api/twilio/disconnect", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      await disconnectUserTwilio(req.user.id);
+      res.json({ success: true, message: "Twilio disconnected" });
+    } catch (error: any) {
+      console.error("Error disconnecting Twilio:", error);
+      res.status(500).json({ error: error.message || "Failed to disconnect Twilio" });
+    }
+  });
+
+  // Validate Twilio credentials (without saving)
+  app.post("/api/twilio/validate", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const { accountSid, authToken, whatsappNumber } = req.body;
+
+      if (!accountSid || !authToken || !whatsappNumber) {
+        return res.status(400).json({ 
+          error: "Account SID, Auth Token, and WhatsApp number are required" 
+        });
+      }
+
+      const result = await validateTwilioCredentials({ accountSid, authToken, whatsappNumber });
+      res.json(result);
+    } catch (error: any) {
+      console.error("Error validating Twilio:", error);
+      res.status(500).json({ valid: false, error: error.message || "Validation failed" });
+    }
+  });
+
   // Twilio webhook for incoming WhatsApp messages
+  // Routes messages to the correct user based on Account SID + phone number
   app.post("/api/webhook/twilio/incoming", async (req, res) => {
     try {
       const parsed = parseIncomingWebhook(req.body);
-      console.log("Incoming WhatsApp message:", parsed);
+      console.log("Incoming WhatsApp message:", { from: parsed.from, to: parsed.to, accountSid: parsed.accountSid });
 
-      const { db } = await import("../drizzle/db");
-      const { chats, registeredPhones } = await import("@shared/schema");
-      const { eq } = await import("drizzle-orm");
+      // Find user by their Twilio Account SID and receiving phone number
+      const user = await findUserByTwilioCredentials(parsed.accountSid, parsed.to);
       
-      // First, find existing chat with this phone number
-      const existingChats = await db.select().from(chats).where(eq(chats.whatsappPhone, parsed.from));
-      
-      let chat;
-      let userId: string;
-      
-      if (existingChats.length > 0) {
-        chat = existingChats[0];
-        userId = chat.userId;
-      } else {
-        // No existing chat - check if the "To" number is registered by any user
-        // The "To" field contains the platform's Twilio number that received the message
-        // We need to route to the user who registered this receiving number
-        const toNumber = parsed.to || "";
-        const registeredPhone = await storage.getRegisteredPhoneByNumber(toNumber);
-        
-        if (registeredPhone) {
-          userId = registeredPhone.userId;
-          chat = await findOrCreateChatByPhone(userId, parsed.from, parsed.profileName);
-        } else {
-          // Fallback: route to any user who has a registered phone (first one found)
-          const allRegisteredPhones = await db.select().from(registeredPhones).limit(1);
-          if (allRegisteredPhones.length === 0) {
-            console.log("No registered phones in system for incoming message");
-            return res.status(200).send("");
-          }
-          userId = allRegisteredPhones[0].userId;
-          chat = await findOrCreateChatByPhone(userId, parsed.from, parsed.profileName);
-        }
+      if (!user) {
+        console.log("No user found for incoming message:", { accountSid: parsed.accountSid, to: parsed.to });
+        return res.status(200).send("");
       }
+
+      const userId = user.id;
+      const chat = await findOrCreateChatByPhone(userId, parsed.from, parsed.profileName);
 
       // Track conversation window (24-hour) for inbound messages too
       await subscriptionService.trackConversationWindow(userId, chat.id, parsed.from);

@@ -1,0 +1,81 @@
+CRITICAL ARCHITECTURE CHANGE REQUIRED
+Switch from Founder-Owned Twilio → Customer-Owned Twilio 
+Right now all customers are sending WhatsApp messages through a single
+founder-owned Twilio account.
+
+This must be changed.
+Each customer must connect and use their own Twilio account and their
+own WhatsApp Business API number.
+
+Target Architecture
+We need to implement a customer-owned Twilio model:
+- Every workspace/customer connects their own Twilio account
+- Each workspace stores its own Twilio credentials
+- Messages are sent ONLY through that customer's Twilio account
+- No shared Twilio usage across customers
+
+EXACT Onboarding & Registration Flow
+1. User signs up to WhachatCRM (email/password only)
+2. User lands in dashboard in "Disconnected" state
+3. Show mandatory "Connect WhatsApp" step
+4. User must connect Twilio before sending/receiving messages
+
+Twilio Connection UI Requirements
+Add a "Connect Twilio" setup wizard that requires:
+- Twilio Account SID
+- Twilio Auth Token
+- WhatsApp-enabled Twilio phone number
+Store these credentials encrypted per workspace.
+
+Verification Logic
+After credentials are submitted:
+1. Attempt to register Twilio webhooks automatically:
+   - Incoming messages webhook
+   - Message status webhook
+2. Verify connection by:
+   - Receiving a valid webhook event
+   - Returning HTTP 200 OK
+3. Only mark workspace as "Connected" if webhook verification succeeds
+
+Hard Gating Logic
+Enforce strict gating:
+
+- If Twilio is NOT connected:
+  - Block sending messages
+  - Block live inbox
+  - Show "Connect WhatsApp to continue"
+
+- If Twilio is connected:
+  - Enable messaging
+  - Enable live chat
+
+Message Routing Logic
+Outbound messages must:
+- Use the Twilio credentials of the current workspace
+- Never use a global or shared Twilio account
+
+Inbound messages must:
+- Be routed to the correct workspace
+- Identified by Twilio Account SID + WhatsApp number
+
+Usage Tracking & Billing
+Conversation usage must be tracked per workspace:
+- Count unique contacts per 30-day window
+- Enforce plan limits per workspace
+- Pause outbound messages when limit is reached
+- Show upgrade CTA when limit is hit
+
+Remove Founder Risk
+The founder Twilio account must NOT be used for:
+- Sending messages
+- Receiving messages
+- Production traffic
+
+It can only be used for:
+- Testing
+- Demo mode
+
+Security & Compliance Requirements
+- Encrypt all Twilio credentials at rest
+- Never log Auth Tokens
+- Isolate customer data strictly by workspace
