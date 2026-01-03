@@ -20,7 +20,6 @@ export function AuthPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
-  const [phoneNumber, setPhoneNumber] = useState("");
   const [businessName, setBusinessName] = useState("");
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [error, setError] = useState("");
@@ -77,7 +76,7 @@ export function AuthPage() {
           setError("Invalid email or password");
         }
       } else {
-        const success = await signup(name, email, password, phoneNumber, businessName);
+        const success = await signup(name, email, password, "", businessName);
         if (success) {
           setLocation("/app/chats");
         } else {
@@ -169,18 +168,6 @@ export function AuthPage() {
                     className="bg-gray-50 border-gray-200"
                     data-testid="input-business-name"
                   />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="phoneNumber">WhatsApp Business Number</Label>
-                  <Input 
-                    id="phoneNumber" 
-                    placeholder="+1234567890" 
-                    value={phoneNumber}
-                    onChange={(e) => setPhoneNumber(e.target.value)}
-                    className="bg-gray-50 border-gray-200"
-                    data-testid="input-phone"
-                  />
-                  <p className="text-xs text-gray-500">Include country code (e.g., +1 for US)</p>
                 </div>
               </>
             )}
