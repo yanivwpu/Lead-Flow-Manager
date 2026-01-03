@@ -23,16 +23,16 @@ async function updateProducts() {
     console.log(`  Current description: ${starterProduct.description}`);
     
     await stripe.products.update(starterProduct.id, {
-      description: 'WhachatCRM Starter - 3 users, 1 WhatsApp number, 100 conversations/month, $5 Twilio usage included',
+      description: 'WhachatCRM Starter - 3 users, 1 WhatsApp number, 500 conversations/month, $5 Twilio usage included',
       metadata: {
         ...starterProduct.metadata,
-        conversationsPerMonth: '100',
+        conversationsPerMonth: '500',
         maxUsers: '3',
         maxWhatsappNumbers: '1',
       },
     });
     
-    console.log('  ✓ Updated to 100 conversations/month\n');
+    console.log('  ✓ Updated to 500 conversations/month\n');
   } else {
     console.log('⚠ Starter Plan not found\n');
   }
@@ -42,16 +42,16 @@ async function updateProducts() {
     console.log(`  Current description: ${proProduct.description}`);
     
     await stripe.products.update(proProduct.id, {
-      description: 'WhachatCRM Pro - 10 users, 3 WhatsApp numbers, 500 conversations/month, $15 Twilio usage included',
+      description: 'WhachatCRM Pro - 10 users, 3 WhatsApp numbers, 2,000 conversations/month, $15 Twilio usage included',
       metadata: {
         ...proProduct.metadata,
-        conversationsPerMonth: '500',
+        conversationsPerMonth: '2000',
         maxUsers: '10',
         maxWhatsappNumbers: '3',
       },
     });
     
-    console.log('  ✓ Updated to 500 conversations/month\n');
+    console.log('  ✓ Updated to 2,000 conversations/month\n');
   } else {
     console.log('⚠ Pro Plan not found\n');
   }
