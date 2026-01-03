@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Bell, Mail, Smartphone, Shield, LogOut, Phone, DollarSign, Plus, Trash2, Loader2, CreditCard, ExternalLink, Zap } from "lucide-react";
+import { Bell, Mail, Smartphone, Shield, LogOut, Phone, Plus, Trash2, Loader2, CreditCard, ExternalLink, Zap } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -16,11 +16,6 @@ interface RegisteredPhone {
   businessName: string | null;
   isVerified: boolean;
   createdAt: string;
-}
-
-interface UsageSummary {
-  totalMessages: number;
-  totalCost: string;
 }
 
 interface SubscriptionData {
@@ -96,11 +91,6 @@ export function Settings() {
   // Fetch registered phones
   const { data: phones = [], isLoading: phonesLoading } = useQuery<RegisteredPhone[]>({
     queryKey: ["/api/phones"],
-  });
-
-  // Fetch usage summary
-  const { data: usageSummary } = useQuery<UsageSummary>({
-    queryKey: ["/api/usage/summary"],
   });
 
   // Fetch subscription data
@@ -492,38 +482,6 @@ export function Settings() {
                  </div>
                </div>
              )}
-           </div>
-
-           {/* Billing & Usage Section */}
-           <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 shadow-sm">
-             <div className="flex items-center gap-3 mb-4 sm:mb-6">
-               <div className="h-9 w-9 sm:h-10 sm:w-10 bg-amber-50 rounded-lg flex items-center justify-center flex-shrink-0">
-                 <DollarSign className="h-4 w-4 sm:h-5 sm:w-5 text-amber-600" />
-               </div>
-               <div className="min-w-0">
-                 <h2 className="text-base sm:text-lg font-bold text-gray-900" data-testid="text-billing-title">Messaging Usage</h2>
-                 <p className="text-xs sm:text-sm text-gray-500">Track your WhatsApp messaging costs.</p>
-               </div>
-             </div>
-
-             <div className="grid grid-cols-2 gap-3 sm:gap-4">
-               <div className="p-3 sm:p-4 bg-gradient-to-br from-green-50 to-green-100 rounded-lg border border-green-200">
-                 <span className="text-xs text-green-700 uppercase font-semibold">Total Messages</span>
-                 <p className="text-xl sm:text-2xl font-bold text-green-800 mt-1" data-testid="text-total-messages">
-                   {usageSummary?.totalMessages || 0}
-                 </p>
-               </div>
-               <div className="p-3 sm:p-4 bg-gradient-to-br from-amber-50 to-amber-100 rounded-lg border border-amber-200">
-                 <span className="text-xs text-amber-700 uppercase font-semibold">Message Cost</span>
-                 <p className="text-xl sm:text-2xl font-bold text-amber-800 mt-1" data-testid="text-total-cost">
-                   ${parseFloat(usageSummary?.totalCost || "0").toFixed(2)}
-                 </p>
-               </div>
-             </div>
-
-             <p className="text-xs text-gray-500 mt-4 text-center">
-               $0.00525 per message. View <a href="/terms-of-use" target="_blank" className="text-brand-green hover:underline">Terms of Use</a> for details.
-             </p>
            </div>
 
            {/* Account Section */}
