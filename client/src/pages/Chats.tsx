@@ -15,8 +15,11 @@ import {
   Lock,
   Trash2,
   AlertTriangle,
-  Settings
+  Settings,
+  Play,
+  X
 } from "lucide-react";
+import { DEMO_CHATS, type DemoChat } from "@/lib/demo-data";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -60,6 +63,8 @@ export function Chats() {
   const { toast } = useToast();
   const [upgradeModalOpen, setUpgradeModalOpen] = useState(false);
   const [upgradeReason, setUpgradeReason] = useState<UpgradeReason>("free_reply");
+  const [demoMode, setDemoMode] = useState(false);
+  const [demoChats, setDemoChats] = useState<DemoChat[]>(DEMO_CHATS);
   
   const canSendMessages = subscription?.limits?.canSendMessages ?? false;
   const isAtLimit = subscription?.limits?.isAtLimit ?? false;
@@ -126,15 +131,24 @@ export function Chats() {
   const handleDeleteChat = () => {
     if (!selectedChat) return;
     if (confirm(`Are you sure you want to delete the conversation with ${selectedChat.name}? This cannot be undone.`)) {
+      if (demoMode) {
+        setDemoChats(prev => prev.filter(chat => chat.id !== selectedChat.id));
+        setLocation('/app/chats');
+        toast({ title: "Chat deleted", description: "The demo conversation has been removed." });
+        return;
+      }
       deleteChatMutation.mutate(selectedChat.id);
     }
   };
 
   const selectedChatId = params?.id;
-  const selectedChat = chats.find(c => c.id === selectedChatId);
+  const selectedChat = demoMode 
+    ? demoChats.find(c => c.id === selectedChatId)
+    : chats.find(c => c.id === selectedChatId);
 
   const sortedChats = useMemo(() => {
-    return [...chats].sort((a, b) => {
+    const chatsToSort = demoMode ? demoChats : chats;
+    return [...chatsToSort].sort((a, b) => {
       const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
       const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
       if (dateA !== dateB) {
@@ -142,7 +156,7 @@ export function Chats() {
       }
       return a.id.localeCompare(b.id);
     });
-  }, [chats]);
+  }, [chats, demoChats, demoMode]);
 
   const filteredChats = sortedChats.filter(chat => 
     chat.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -151,6 +165,14 @@ export function Chats() {
 
   const handleUpdateChat = (updates: Partial<Chat>) => {
     if (!selectedChat) return;
+    
+    if (demoMode) {
+      setDemoChats(prev => prev.map(chat => 
+        chat.id === selectedChat.id ? { ...chat, ...updates } : chat
+      ));
+      return;
+    }
+    
     updateChatMutation.mutate({ chatId: selectedChat.id, updates });
   };
 
@@ -186,6 +208,31 @@ export function Chats() {
 
   const handleSendMessage = async () => {
     if (!newMessage.trim() || !selectedChat) return;
+    
+    if (demoMode) {
+      const newMsg = {
+        id: `demo-msg-${Date.now()}`,
+        text: newMessage,
+        sender: "me",
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      };
+      setDemoChats(prev => prev.map(chat => 
+        chat.id === selectedChat.id 
+          ? { 
+              ...chat, 
+              messages: [...chat.messages, newMsg],
+              lastMessage: newMessage,
+              time: "Just now"
+            } 
+          : chat
+      ));
+      setNewMessage("");
+      toast({
+        title: "Demo Mode",
+        description: "Message simulated. Connect Twilio to send real messages.",
+      });
+      return;
+    }
     
     if (!canSendMessages) {
       setUpgradeReason("free_reply");
@@ -251,7 +298,7 @@ export function Chats() {
     );
   }
 
-  if (!isTwilioConnected) {
+  if (!isTwilioConnected && !demoMode) {
     return (
       <div className="flex h-full w-full items-center justify-center bg-white">
         <div className="max-w-md text-center p-8">
@@ -260,25 +307,72 @@ export function Chats() {
           </div>
           <h2 className="text-xl font-bold text-gray-900 mb-2">WhatsApp Not Connected</h2>
           <p className="text-gray-500 mb-6">
-            You need to connect your Twilio account before you can send or receive WhatsApp messages.
+            Connect your Twilio account to send and receive WhatsApp messages, or try our demo mode first.
           </p>
-          <Link href="/app/settings">
-            <Button className="bg-brand-green hover:bg-brand-green/90" data-testid="button-go-to-settings">
-              <Settings className="h-4 w-4 mr-2" />
-              Connect WhatsApp in Settings
+          <div className="flex flex-col gap-3">
+            <Link href="/app/settings">
+              <Button className="w-full bg-brand-green hover:bg-brand-green/90" data-testid="button-go-to-settings">
+                <Settings className="h-4 w-4 mr-2" />
+                Connect WhatsApp in Settings
+              </Button>
+            </Link>
+            <Button 
+              variant="outline" 
+              className="w-full border-brand-green text-brand-green hover:bg-brand-green/5"
+              onClick={() => setDemoMode(true)}
+              data-testid="button-try-demo"
+            >
+              <Play className="h-4 w-4 mr-2" />
+              Try Demo Mode
             </Button>
-          </Link>
+          </div>
+          <p className="text-xs text-gray-400 mt-4">
+            Demo mode lets you explore the CRM with sample data
+          </p>
         </div>
       </div>
     );
   }
 
+  const activeChats = demoMode ? demoChats : chats;
+  const isDemo = demoMode;
+
   return (
     <div className="flex h-full w-full">
+      {/* Demo Mode Banner */}
+      {demoMode && (
+        <div className="fixed top-0 left-0 right-0 bg-amber-500 text-white px-4 py-2 flex items-center justify-between z-50">
+          <div className="flex items-center gap-2">
+            <Play className="h-4 w-4" />
+            <span className="text-sm font-medium">Demo Mode - Explore with sample data</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <Link href="/app/settings">
+              <Button size="sm" variant="secondary" className="h-7 text-xs bg-white text-amber-600 hover:bg-amber-50">
+                <Settings className="h-3 w-3 mr-1" />
+                Connect Twilio
+              </Button>
+            </Link>
+            <button 
+              onClick={() => {
+                setDemoMode(false);
+                setDemoChats(DEMO_CHATS);
+                setLocation('/app/chats');
+              }}
+              className="p-1 hover:bg-amber-600 rounded"
+              data-testid="button-exit-demo"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      )}
+      
       {/* Chat List */}
       <div className={cn(
         "w-full md:w-[380px] flex flex-col border-r border-gray-200 bg-white",
-        selectedChatId ? "hidden md:flex" : "flex"
+        selectedChatId ? "hidden md:flex" : "flex",
+        demoMode && "pt-10"
       )}>
         <div className="p-4 bg-gray-50 border-b border-gray-200">
           <div className="flex justify-between items-center mb-4">
@@ -321,7 +415,10 @@ export function Chats() {
 
       {/* Chat Detail + CRM Panel */}
       {selectedChat ? (
-        <div className="flex-1 flex flex-col md:flex-row h-full min-w-0 bg-[#efeae2]">
+        <div className={cn(
+          "flex-1 flex flex-col md:flex-row h-full min-w-0 bg-[#efeae2]",
+          demoMode && "pt-10"
+        )}>
            {/* Chat Conversation Area */}
            <div className="flex-1 flex flex-col min-w-0 h-full relative">
               {/* Header */}
@@ -492,26 +589,36 @@ export function Chats() {
                   variant="outline" 
                   className="w-full text-red-600 hover:text-red-700 hover:bg-red-50 border-red-100"
                   onClick={handleDeleteChat}
-                  disabled={deleteChatMutation.isPending}
+                  disabled={!demoMode && deleteChatMutation.isPending}
                   data-testid="button-delete-chat"
                 >
                   <Trash2 className="h-4 w-4 mr-2" />
-                  {deleteChatMutation.isPending ? "Deleting..." : "Delete Chat"}
+                  {!demoMode && deleteChatMutation.isPending ? "Deleting..." : "Delete Chat"}
                 </Button>
               </div>
            </div>
         </div>
       ) : (
-        <div className="hidden md:flex flex-1 bg-[#efeae2] items-center justify-center flex-col text-center p-8 border-b-8 border-brand-green relative overflow-hidden">
+        <div className={cn(
+          "hidden md:flex flex-1 bg-[#efeae2] items-center justify-center flex-col text-center p-8 border-b-8 border-brand-green relative overflow-hidden",
+          demoMode && "pt-18"
+        )}>
            <div className="max-w-md bg-white p-8 rounded-2xl shadow-sm z-10">
              <div className="h-16 w-16 bg-brand-green/10 rounded-full flex items-center justify-center mx-auto mb-6">
                <Smartphone className="h-8 w-8 text-brand-green" />
              </div>
-             <h2 className="text-2xl font-display font-bold text-gray-900 mb-2">WhatsApp Web CRM</h2>
-             <p className="text-gray-500 mb-6">Select a chat to view details, manage pipeline stages, and set follow-up reminders.</p>
+             <h2 className="text-2xl font-display font-bold text-gray-900 mb-2">
+               {demoMode ? "Demo Mode Active" : "WhatsApp Web CRM"}
+             </h2>
+             <p className="text-gray-500 mb-6">
+               {demoMode 
+                 ? "Select a demo chat to explore the CRM features. Try changing tags, pipeline stages, and sending messages!"
+                 : "Select a chat to view details, manage pipeline stages, and set follow-up reminders."
+               }
+             </p>
              <div className="flex items-center justify-center gap-2 text-sm text-gray-400">
                <div className="h-2 w-2 rounded-full bg-gray-300" />
-               <span>End-to-end encrypted</span>
+               <span>{demoMode ? "Sample data - no real messages" : "End-to-end encrypted"}</span>
              </div>
            </div>
            
