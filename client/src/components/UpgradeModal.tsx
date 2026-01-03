@@ -93,8 +93,8 @@ const UPGRADE_CONTENT: Record<UpgradeReason, UpgradeContent> = {
 
 const PLAN_PRICES: Record<TargetPlan, string> = {
   starter: "$19",
-  growth: "$49",
-  pro: "$99",
+  growth: "$29",
+  pro: "$49",
 };
 
 export function UpgradeModal({ open, onOpenChange, reason, currentPlan }: UpgradeModalProps) {
