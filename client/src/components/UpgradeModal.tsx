@@ -17,7 +17,7 @@ interface UpgradeModalProps {
   currentPlan?: string;
 }
 
-type TargetPlan = "starter" | "growth" | "pro";
+type TargetPlan = "starter" | "pro";
 
 interface UpgradeContent {
   icon: React.ReactNode;
@@ -55,22 +55,22 @@ const UPGRADE_CONTENT: Record<UpgradeReason, UpgradeContent> = {
   },
   add_user: {
     icon: <Users className="h-8 w-8 text-blue-500" />,
-    title: "Team members require Growth plan",
+    title: "Team members require Pro plan",
     description: "Add your team to collaborate on customer conversations.",
-    targetPlan: "growth",
-    ctaText: "Upgrade to Growth",
+    targetPlan: "pro",
+    ctaText: "Upgrade to Pro",
     benefits: [
-      "Up to 3 team members",
-      "2,000 conversations/month",
-      "Team collaboration tools",
+      "Up to 10 team members",
+      "5,000 conversations/month",
+      "Team inbox & collaboration",
     ],
   },
   add_automation: {
     icon: <Sparkles className="h-8 w-8 text-purple-500" />,
-    title: "Automation requires Growth plan",
+    title: "Automation requires Pro plan",
     description: "Automate your WhatsApp workflows with smart responses.",
-    targetPlan: "growth",
-    ctaText: "Upgrade to Growth",
+    targetPlan: "pro",
+    ctaText: "Upgrade to Pro",
     benefits: [
       "Auto-replies & workflows",
       "Scheduled messages",
@@ -93,7 +93,6 @@ const UPGRADE_CONTENT: Record<UpgradeReason, UpgradeContent> = {
 
 const PLAN_PRICES: Record<TargetPlan, string> = {
   starter: "$19",
-  growth: "$29",
   pro: "$49",
 };
 
