@@ -36,7 +36,7 @@ const UPGRADE_CONTENT: Record<UpgradeReason, UpgradeContent> = {
     targetPlan: "starter",
     ctaText: "Upgrade to Starter",
     benefits: [
-      "100 conversations/month",
+      "500 conversations/month",
       "Send messages to customers",
       "Follow-ups enabled",
     ],
@@ -49,7 +49,7 @@ const UPGRADE_CONTENT: Record<UpgradeReason, UpgradeContent> = {
     ctaText: "Upgrade to Starter",
     benefits: [
       "Reply to all your customers",
-      "100 conversations/month",
+      "500 conversations/month",
       "Notes, tags & pipeline",
     ],
   },
@@ -61,7 +61,7 @@ const UPGRADE_CONTENT: Record<UpgradeReason, UpgradeContent> = {
     ctaText: "Upgrade to Pro",
     benefits: [
       "Up to 10 team members",
-      "500 conversations/month",
+      "2,000 conversations/month",
       "Team inbox & collaboration",
     ],
   },
@@ -85,7 +85,7 @@ const UPGRADE_CONTENT: Record<UpgradeReason, UpgradeContent> = {
     ctaText: "Upgrade to Pro",
     benefits: [
       "Up to 3 WhatsApp numbers",
-      "500 conversations/month",
+      "2,000 conversations/month",
       "Up to 10 team members",
     ],
   },

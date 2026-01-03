@@ -25,7 +25,7 @@ export const PLAN_LIMITS = {
   starter: {
     name: 'Starter',
     price: 19,
-    conversationsPerMonth: 100,
+    conversationsPerMonth: 500,
     isLifetimeLimit: false,
     maxUsers: 3,
     maxWhatsappNumbers: 1,
@@ -39,7 +39,7 @@ export const PLAN_LIMITS = {
   pro: {
     name: 'Pro',
     price: 49,
-    conversationsPerMonth: 500,
+    conversationsPerMonth: 2000,
     isLifetimeLimit: false,
     maxUsers: 10,
     maxWhatsappNumbers: 3,

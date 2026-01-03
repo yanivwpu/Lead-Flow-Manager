@@ -35,7 +35,7 @@ const PLANS = [
     features: [
       "3 users",
       "1 WhatsApp number",
-      "100 conversations / month",
+      "500 conversations / month",
       "Follow-ups enabled",
       "$5 Twilio usage included",
       "Email & push notifications",
@@ -53,7 +53,7 @@ const PLANS = [
     features: [
       "10 users",
       "3 WhatsApp numbers",
-      "500 conversations / month",
+      "2,000 conversations / month",
       "$15 Twilio usage included",
       "Team inbox",
       "Priority support",
