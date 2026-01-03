@@ -47,8 +47,14 @@ export function TermsOfUse() {
           </div>
           <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4">
             <p className="text-gray-700 font-medium mb-2">Important - Separate Costs:</p>
-            <p className="text-gray-600">
+            <p className="text-gray-600 mb-3">
               WhachatCRM subscription fees cover CRM functionality only. WhatsApp message delivery costs are billed separately by your provider (e.g., Twilio). WhachatCRM does not charge per message.
+            </p>
+            <p className="text-gray-600 text-sm">
+              <strong>View message costs for US and international use:</strong>{" "}
+              <a href="https://www.twilio.com/en-us/whatsapp/pricing" target="_blank" rel="noopener noreferrer" className="text-brand-green hover:underline">Twilio Pricing</a>
+              {" | "}
+              <a href="https://business.whatsapp.com/products/platform-pricing" target="_blank" rel="noopener noreferrer" className="text-brand-green hover:underline">Meta Pricing by Country</a>
             </p>
           </div>
           <p className="text-gray-600 mb-4">

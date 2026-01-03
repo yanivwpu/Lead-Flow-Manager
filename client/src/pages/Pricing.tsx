@@ -234,11 +234,33 @@ export function Pricing() {
               <p className="text-amber-800 text-sm mb-3">
                 WhatsApp message delivery is billed separately by your provider (e.g. Twilio).
               </p>
-              <ul className="text-sm text-amber-800 space-y-1">
+              <ul className="text-sm text-amber-800 space-y-1 mb-3">
                 <li><strong>WhachatCRM does not charge per message.</strong></li>
                 <li>Your plan only controls how many conversations you manage inside the CRM.</li>
                 <li>This keeps pricing transparent and predictable.</li>
               </ul>
+              <p className="text-sm text-amber-800 mb-2">
+                <strong>View message costs for US and international use:</strong>
+              </p>
+              <div className="flex flex-wrap gap-3">
+                <a 
+                  href="https://www.twilio.com/en-us/whatsapp/pricing" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center text-sm text-amber-900 hover:text-amber-700 underline"
+                >
+                  Twilio WhatsApp Pricing
+                </a>
+                <span className="text-amber-400">|</span>
+                <a 
+                  href="https://business.whatsapp.com/products/platform-pricing" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center text-sm text-amber-900 hover:text-amber-700 underline"
+                >
+                  Meta WhatsApp Pricing by Country
+                </a>
+              </div>
             </div>
           </div>
         </div>
