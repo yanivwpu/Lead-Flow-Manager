@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Bell, Mail, Smartphone, Shield, LogOut, Phone, Plus, Trash2, Loader2, CreditCard, ExternalLink, Zap, CheckCircle2, XCircle, MessageSquare } from "lucide-react";
+import { Bell, Mail, Smartphone, Shield, LogOut, Phone, Plus, Trash2, Loader2, CreditCard, ExternalLink, Zap, CheckCircle2, XCircle, MessageSquare, Copy, Check, AlertTriangle } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -60,6 +60,17 @@ export function Settings() {
   const [upgradeReason, setUpgradeReason] = useState<UpgradeReason>("add_whatsapp_number");
   const [syncingSubscription, setSyncingSubscription] = useState(false);
   const [connectTwilioOpen, setConnectTwilioOpen] = useState(false);
+  const [webhookCopied, setWebhookCopied] = useState(false);
+  
+  const webhookUrl = typeof window !== 'undefined' 
+    ? `${window.location.origin}/api/webhook/twilio/incoming`
+    : '';
+
+  const handleCopyWebhook = async () => {
+    await navigator.clipboard.writeText(webhookUrl);
+    setWebhookCopied(true);
+    setTimeout(() => setWebhookCopied(false), 2000);
+  };
 
   // Auto-sync subscription when returning from Stripe checkout
   useEffect(() => {
@@ -339,6 +350,60 @@ export function Settings() {
                    </div>
                    <span className="text-xs text-green-600 font-medium">Connected</span>
                  </div>
+                 
+                 {/* Webhook Configuration Reminder */}
+                 <div className="p-4 bg-amber-50 rounded-lg border border-amber-200">
+                   <div className="flex items-start gap-3 mb-3">
+                     <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
+                     <div>
+                       <p className="text-sm font-medium text-amber-900">Not receiving messages?</p>
+                       <p className="text-xs text-amber-700 mt-1">
+                         Make sure you've configured the webhook URL in your Twilio Console.
+                       </p>
+                     </div>
+                   </div>
+                   
+                   <div className="space-y-2">
+                     <Label className="text-xs text-amber-800">Webhook URL (copy this):</Label>
+                     <div className="flex items-center gap-2">
+                       <Input 
+                         value={webhookUrl} 
+                         readOnly 
+                         className="font-mono text-xs bg-white border-amber-300"
+                         data-testid="input-webhook-url-settings"
+                       />
+                       <Button 
+                         variant="outline" 
+                         size="icon" 
+                         onClick={handleCopyWebhook}
+                         className="flex-shrink-0 border-amber-300 hover:bg-amber-100"
+                         data-testid="button-copy-webhook-settings"
+                       >
+                         {webhookCopied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4 text-amber-600" />}
+                       </Button>
+                     </div>
+                   </div>
+                   
+                   <div className="mt-3 text-xs text-amber-700 space-y-1">
+                     <p className="font-medium">In Twilio Console:</p>
+                     <ol className="list-decimal list-inside ml-1 space-y-0.5">
+                       <li>Go to Messaging {">"} Try it out {">"} Send a WhatsApp message</li>
+                       <li>Click "Sandbox settings"</li>
+                       <li>Paste URL in "When a message comes in"</li>
+                       <li>Set HTTP method to POST and save</li>
+                     </ol>
+                   </div>
+                   
+                   <a
+                     href="https://console.twilio.com/us1/develop/sms/try-it-out/whatsapp-learn"
+                     target="_blank"
+                     rel="noopener noreferrer"
+                     className="inline-flex items-center gap-1 mt-3 text-xs text-amber-800 hover:text-amber-900 underline"
+                   >
+                     Open Twilio WhatsApp Settings <ExternalLink className="h-3 w-3" />
+                   </a>
+                 </div>
+                 
                  <Button 
                    variant="outline" 
                    size="sm"
