@@ -15,11 +15,11 @@ async function createSubscriptionProducts() {
   // Create Starter Plan
   const starterProduct = await stripe.products.create({
     name: 'WhaChatCRM Starter',
-    description: 'For solo founders & small businesses. 500 conversations/month, full messaging, email notifications.',
+    description: 'For solo founders & small businesses. 100 conversations/month, full messaging, email notifications.',
     metadata: {
       plan: 'starter',
-      conversationsPerMonth: '500',
-      maxUsers: '1',
+      conversationsPerMonth: '100',
+      maxUsers: '3',
       maxWhatsappNumbers: '1',
     },
   });
@@ -59,12 +59,12 @@ async function createSubscriptionProducts() {
   // Create Pro Plan
   const proProduct = await stripe.products.create({
     name: 'WhaChatCRM Pro',
-    description: 'For high-volume teams. 5,000 conversations/month, unlimited users, 2 WhatsApp numbers, team inbox.',
+    description: 'For high-volume teams. 500 conversations/month, 10 users, 3 WhatsApp numbers, team inbox.',
     metadata: {
       plan: 'pro',
-      conversationsPerMonth: '5000',
-      maxUsers: 'unlimited',
-      maxWhatsappNumbers: '2',
+      conversationsPerMonth: '500',
+      maxUsers: '10',
+      maxWhatsappNumbers: '3',
     },
   });
 
