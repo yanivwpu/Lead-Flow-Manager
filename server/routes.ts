@@ -847,9 +847,20 @@ export async function registerRoutes(
 
       const limits = await subscriptionService.getUserLimits(req.user.id);
       const user = await storage.getUser(req.user.id);
+      const usersCount = await storage.getTeamMemberCount(req.user.id);
 
       res.json({
-        limits,
+        limits: limits ? {
+          ...limits,
+          conversationsLimit: limits.conversationsLimit,
+          conversationsUsed: limits.conversationsUsed,
+          isLifetimeLimit: limits.isLifetimeLimit,
+          usersCount,
+          usersLimit: limits.maxUsers,
+          maxWhatsappNumbers: limits.maxWhatsappNumbers,
+          planName: limits.planName,
+          plan: limits.plan,
+        } : null,
         subscription: user ? {
           plan: user.subscriptionPlan,
           status: user.subscriptionStatus,
