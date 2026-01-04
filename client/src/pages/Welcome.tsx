@@ -430,6 +430,9 @@ export function Welcome() {
             <Link href="/pricing">
               <span className="hover:text-gray-900 cursor-pointer">Pricing</span>
             </Link>
+            <Link href="/contact">
+              <span className="hover:text-gray-900 cursor-pointer">Contact</span>
+            </Link>
             <Link href="/privacy-policy">
               <span className="hover:text-gray-900 cursor-pointer">Privacy</span>
             </Link>

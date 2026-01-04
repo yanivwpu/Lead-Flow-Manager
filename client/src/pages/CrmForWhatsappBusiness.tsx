@@ -218,6 +218,7 @@ export function CrmForWhatsappBusiness() {
           </Link>
           <div className="flex items-center gap-6 text-sm text-gray-500">
             <Link href="/pricing"><span className="hover:text-gray-900 cursor-pointer">Pricing</span></Link>
+            <Link href="/contact"><span className="hover:text-gray-900 cursor-pointer">Contact</span></Link>
             <Link href="/privacy-policy"><span className="hover:text-gray-900 cursor-pointer">Privacy</span></Link>
             <Link href="/terms-of-use"><span className="hover:text-gray-900 cursor-pointer">Terms</span></Link>
           </div>
