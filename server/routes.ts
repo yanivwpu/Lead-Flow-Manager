@@ -19,7 +19,7 @@ import {
 } from "./userTwilio";
 import { subscriptionService } from "./subscriptionService";
 import { getStripePublishableKey } from "./stripeClient";
-import { sendWelcomeEmail } from "./email";
+import { sendWelcomeEmail, sendContactFormEmail } from "./email";
 
 const TWILIO_BASE_COST_PER_MESSAGE = 0.005;
 const MARKUP_PERCENT = 5;
@@ -39,6 +39,27 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
   
+  // Contact form endpoint (public - no auth required)
+  app.post("/api/contact", async (req, res) => {
+    try {
+      const { name, email, message } = req.body;
+      
+      if (!name || !email || !message) {
+        return res.status(400).json({ error: "Name, email, and message are required" });
+      }
+      
+      const success = await sendContactFormEmail(name, email, message);
+      if (success) {
+        res.json({ message: "Your message has been sent. We'll get back to you soon!" });
+      } else {
+        res.status(500).json({ error: "Failed to send message. Please try again later." });
+      }
+    } catch (error) {
+      console.error("Error sending contact form:", error);
+      res.status(500).json({ error: "Failed to send message" });
+    }
+  });
+
   // Test email endpoint (temporary - for testing email templates)
   app.post("/api/test-email", async (req, res) => {
     try {

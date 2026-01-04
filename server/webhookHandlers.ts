@@ -1,6 +1,7 @@
 import { getStripeSync, getUncachableStripeClient } from './stripeClient';
 import { storage } from './storage';
 import type { SubscriptionPlan } from '@shared/schema';
+import { sendSubscriptionConfirmationEmail } from './email';
 
 export class WebhookHandlers {
   static async processWebhook(payload: Buffer, signature: string): Promise<void> {
@@ -86,6 +87,20 @@ export class WebhookHandlers {
       const stripe = await getUncachableStripeClient();
       const subscription = await stripe.subscriptions.retrieve(subscriptionId);
       await WebhookHandlers.handleSubscriptionUpdate(subscription);
+      
+      // Send subscription confirmation email
+      const priceId = subscription.items?.data?.[0]?.price?.id;
+      const plan = await WebhookHandlers.getPlanFromPriceId(priceId);
+      const planNames: Record<string, string> = { free: 'Free', starter: 'Starter', pro: 'Pro' };
+      const planPrices: Record<string, string> = { free: '$0', starter: '$19', pro: '$49' };
+      
+      await sendSubscriptionConfirmationEmail(
+        user.name || 'User',
+        user.email,
+        planNames[plan] || plan,
+        planPrices[plan] || '$0'
+      );
+      console.log(`[Webhook] Sent subscription confirmation email to ${user.email}`);
     }
   }
 

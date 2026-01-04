@@ -135,6 +135,96 @@ export async function sendPasswordResetEmail(email: string, resetToken: string):
   });
 }
 
+export async function sendContactFormEmail(name: string, email: string, message: string): Promise<boolean> {
+  const SUPPORT_EMAIL = 'support@whachatcrm.com';
+  
+  return sendEmail({
+    to: SUPPORT_EMAIL,
+    subject: `Contact Form: ${name}`,
+    html: `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      </head>
+      <body style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #334155; margin: 0; padding: 0; background-color: #f1f5f9;">
+        <div style="padding: 40px 20px;">
+          <div style="max-width: 600px; margin: 0 auto; background: white; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+            <div style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); color: white; padding: 40px 30px; text-align: center;">
+              <div style="width: 50px; height: 50px; background: #059669; border-radius: 12px; display: inline-block; margin-bottom: 16px; font-size: 24px; line-height: 50px;">✉️</div>
+              <h1 style="margin: 0; font-size: 24px; font-weight: 600;">New Contact Form Submission</h1>
+            </div>
+            <div style="padding: 40px 30px;">
+              <div style="background: #f8fafc; border: 1px solid #e2e8f0; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                <p style="margin: 8px 0; color: #475569; font-size: 15px;"><strong>From:</strong> ${name}</p>
+                <p style="margin: 8px 0; color: #475569; font-size: 15px;"><strong>Email:</strong> <a href="mailto:${email}" style="color: #059669;">${email}</a></p>
+              </div>
+              <h3 style="color: #1e293b; font-size: 16px; margin-bottom: 8px;">Message:</h3>
+              <div style="background: #f8fafc; border: 1px solid #e2e8f0; padding: 20px; border-radius: 8px;">
+                <p style="margin: 0; color: #475569; font-size: 15px; white-space: pre-wrap;">${message}</p>
+              </div>
+              <div style="text-align: center; margin-top: 24px;">
+                <a href="mailto:${email}" style="display: inline-block; background: #059669; color: white; padding: 14px 32px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px;">Reply to ${name}</a>
+              </div>
+            </div>
+            <div style="text-align: center; padding: 24px 30px; background: #f8fafc; border-top: 1px solid #e2e8f0;">
+              <p style="margin: 0; color: #94a3b8; font-size: 12px;">&copy; ${new Date().getFullYear()} WhaChatCRM. All rights reserved.</p>
+            </div>
+          </div>
+        </div>
+      </body>
+      </html>
+    `
+  });
+}
+
+export async function sendSubscriptionConfirmationEmail(name: string, email: string, planName: string, amount: string): Promise<boolean> {
+  return sendEmail({
+    to: email,
+    subject: `Welcome to WhaChatCRM ${planName}!`,
+    html: `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      </head>
+      <body style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #334155; margin: 0; padding: 0; background-color: #f1f5f9;">
+        <div style="padding: 40px 20px;">
+          <div style="max-width: 600px; margin: 0 auto; background: white; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+            <div style="background: linear-gradient(135deg, #059669 0%, #047857 100%); color: white; padding: 40px 30px; text-align: center;">
+              <div style="width: 50px; height: 50px; background: white; border-radius: 12px; display: inline-block; margin-bottom: 16px; font-size: 24px; line-height: 50px;">🎉</div>
+              <h1 style="margin: 0; font-size: 24px; font-weight: 600;">You're on ${planName}!</h1>
+            </div>
+            <div style="padding: 40px 30px;">
+              <h2 style="color: #1e293b; margin-top: 0; font-size: 20px;">Hi ${name}!</h2>
+              <p style="color: #475569; font-size: 15px;">Thank you for upgrading to WhaChatCRM <strong>${planName}</strong>. Your subscription is now active!</p>
+              
+              <div style="background: #ecfdf5; border: 1px solid #a7f3d0; padding: 20px; border-radius: 8px; margin: 24px 0;">
+                <p style="margin: 0 0 8px 0; color: #065f46; font-size: 15px;"><strong>Subscription Details:</strong></p>
+                <p style="margin: 4px 0; color: #065f46; font-size: 15px;">Plan: ${planName}</p>
+                <p style="margin: 4px 0; color: #065f46; font-size: 15px;">Amount: ${amount}/month</p>
+              </div>
+              
+              <p style="color: #475569; font-size: 15px;">You now have access to all ${planName} features. Start making the most of your upgraded plan!</p>
+              
+              <div style="text-align: center;">
+                <a href="${APP_URL}/chats" style="display: inline-block; background: #059669; color: white; padding: 14px 32px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px; margin: 24px 0;">Go to Dashboard</a>
+              </div>
+            </div>
+            <div style="text-align: center; padding: 24px 30px; background: #f8fafc; border-top: 1px solid #e2e8f0;">
+              <p style="margin: 0; color: #94a3b8; font-size: 12px;">Need help? Contact us at <a href="mailto:support@whachatcrm.com" style="color: #059669; text-decoration: none;">support@whachatcrm.com</a></p>
+              <p style="margin: 12px 0 0 0; color: #94a3b8; font-size: 12px;">&copy; ${new Date().getFullYear()} WhaChatCRM. All rights reserved.</p>
+            </div>
+          </div>
+        </div>
+      </body>
+      </html>
+    `
+  });
+}
+
 export async function sendFollowUpReminderEmail(email: string, chatName: string, followUp: string, notes: string, chatId: string): Promise<boolean> {
   return sendEmail({
     to: email,
