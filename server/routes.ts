@@ -19,6 +19,7 @@ import {
 } from "./userTwilio";
 import { subscriptionService } from "./subscriptionService";
 import { getStripePublishableKey } from "./stripeClient";
+import { sendWelcomeEmail } from "./email";
 
 const TWILIO_BASE_COST_PER_MESSAGE = 0.005;
 const MARKUP_PERCENT = 5;
@@ -38,6 +39,24 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
   
+  // Test email endpoint (temporary - for testing email templates)
+  app.post("/api/test-email", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const success = await sendWelcomeEmail(req.user.name || "User", req.user.email);
+      if (success) {
+        res.json({ message: "Test email sent successfully" });
+      } else {
+        res.status(500).json({ error: "Failed to send email - check server logs" });
+      }
+    } catch (error) {
+      console.error("Error sending test email:", error);
+      res.status(500).json({ error: "Failed to send test email" });
+    }
+  });
+
   // Get all chats for the current user
   app.get("/api/chats", async (req, res) => {
     try {
