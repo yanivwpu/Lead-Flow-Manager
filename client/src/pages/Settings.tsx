@@ -564,10 +564,10 @@ export function Settings() {
                    <img 
                      src={user.avatarUrl} 
                      alt={user.name || 'Profile'} 
-                     className="h-16 w-16 rounded-full object-cover border-2 border-emerald-200"
+                     className="h-16 w-16 rounded-full object-cover"
                    />
                  ) : (
-                   <div className="h-16 w-16 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-700 text-xl font-bold border-2 border-emerald-200">
+                   <div className="h-16 w-16 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-700 text-xl font-bold">
                      {user?.name?.charAt(0)?.toUpperCase() || 'U'}
                    </div>
                  )}
