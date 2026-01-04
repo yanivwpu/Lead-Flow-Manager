@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Bell, Mail, Smartphone, Shield, LogOut, Phone, Plus, Trash2, Loader2, CreditCard, ExternalLink, Zap, CheckCircle2, XCircle, MessageSquare, Copy, Check, AlertTriangle } from "lucide-react";
+import { Bell, Mail, Smartphone, Shield, LogOut, Phone, Plus, Trash2, Loader2, CreditCard, ExternalLink, Zap, CheckCircle2, XCircle, MessageSquare, Copy, Check, AlertTriangle, Users, UserPlus, Crown, Clock } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,18 @@ import { Link, useSearch } from "wouter";
 import { UpgradeModal, type UpgradeReason } from "@/components/UpgradeModal";
 import { ConnectTwilioWizard } from "@/components/ConnectTwilioWizard";
 import { cn } from "@/lib/utils";
+
+interface TeamMember {
+  id: string;
+  ownerId: string;
+  memberId: string | null;
+  email: string;
+  name: string | null;
+  role: string;
+  status: string;
+  invitedAt: string;
+  joinedAt: string | null;
+}
 
 interface RegisteredPhone {
   id: string;
@@ -62,6 +74,8 @@ export function Settings() {
   const [connectTwilioOpen, setConnectTwilioOpen] = useState(false);
   const [webhookCopied, setWebhookCopied] = useState(false);
   const [statusCopied, setStatusCopied] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteName, setInviteName] = useState("");
   
   const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
   const webhookUrl = `${baseUrl}/api/webhook/twilio/incoming`;
@@ -138,6 +152,63 @@ export function Settings() {
   // Fetch subscription data
   const { data: subscriptionData, isLoading: subscriptionLoading } = useQuery<SubscriptionData>({
     queryKey: ["/api/subscription"],
+  });
+
+  // Fetch team members
+  const { data: teamMembers = [], isLoading: teamLoading } = useQuery<TeamMember[]>({
+    queryKey: ["/api/team"],
+  });
+
+  // Invite team member mutation
+  const inviteMutation = useMutation({
+    mutationFn: async (data: { email: string; name?: string }) => {
+      const res = await fetch("/api/team", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || "Failed to invite team member");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/team"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/subscription"] });
+      setInviteEmail("");
+      setInviteName("");
+      toast({ title: "Invitation Sent", description: "Team member has been invited." });
+    },
+    onError: (error: Error) => {
+      if (error.message.includes("Upgrade")) {
+        setUpgradeReason("add_team_member");
+        setUpgradeModalOpen(true);
+      } else {
+        toast({ title: "Error", description: error.message, variant: "destructive" });
+      }
+    },
+  });
+
+  // Remove team member mutation
+  const removeMemberMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetch(`/api/team/${id}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to remove team member");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/team"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/subscription"] });
+      toast({ title: "Removed", description: "Team member has been removed." });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to remove team member", variant: "destructive" });
+    },
   });
 
   // Manage billing portal
@@ -662,6 +733,128 @@ export function Settings() {
                      </Button>
                    )}
                  </div>
+               </div>
+             )}
+           </div>
+
+           {/* Team Members Section */}
+           <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 shadow-sm">
+             <div className="flex items-center gap-3 mb-4 sm:mb-6">
+               <div className="h-9 w-9 sm:h-10 sm:w-10 bg-blue-50 rounded-lg flex items-center justify-center flex-shrink-0">
+                 <Users className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600" />
+               </div>
+               <div className="min-w-0">
+                 <h2 className="text-base sm:text-lg font-bold text-gray-900">Team Members</h2>
+                 <p className="text-xs sm:text-sm text-gray-500">Manage your team and invite new members.</p>
+               </div>
+             </div>
+
+             {teamLoading ? (
+               <div className="flex justify-center py-4">
+                 <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+               </div>
+             ) : (
+               <div className="space-y-4">
+                 {/* Team member list */}
+                 <div className="space-y-2">
+                   {teamMembers.map((member) => (
+                     <div 
+                       key={member.id} 
+                       className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-100"
+                       data-testid={`team-member-${member.id}`}
+                     >
+                       <div className="flex items-center gap-3 min-w-0">
+                         <div className="h-8 w-8 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
+                           {member.role === "owner" ? (
+                             <Crown className="h-4 w-4 text-blue-600" />
+                           ) : (
+                             <span className="text-sm font-medium text-blue-600">
+                               {(member.name || member.email)[0].toUpperCase()}
+                             </span>
+                           )}
+                         </div>
+                         <div className="min-w-0">
+                           <div className="flex items-center gap-2">
+                             <p className="font-medium text-gray-900 truncate">
+                               {member.name || member.email.split("@")[0]}
+                             </p>
+                             {member.role === "owner" && (
+                               <span className="text-xs px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded">Owner</span>
+                             )}
+                             {member.status === "pending" && (
+                               <span className="text-xs px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded flex items-center gap-1">
+                                 <Clock className="h-3 w-3" /> Pending
+                               </span>
+                             )}
+                           </div>
+                           <p className="text-xs text-gray-500 truncate">{member.email}</p>
+                         </div>
+                       </div>
+                       {member.role !== "owner" && (
+                         <Button
+                           variant="ghost"
+                           size="sm"
+                           onClick={() => removeMemberMutation.mutate(member.id)}
+                           disabled={removeMemberMutation.isPending}
+                           className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                           data-testid={`button-remove-member-${member.id}`}
+                         >
+                           <Trash2 className="h-4 w-4" />
+                         </Button>
+                       )}
+                     </div>
+                   ))}
+                 </div>
+
+                 {/* Invite form - only show if under limit */}
+                 {(subscriptionData?.limits.usersLimit || 1) > teamMembers.length ? (
+                   <div className="pt-2 border-t border-gray-200">
+                     <p className="text-sm font-medium text-gray-700 mb-2">Invite a team member</p>
+                     <div className="flex flex-col sm:flex-row gap-2">
+                       <Input
+                         type="email"
+                         placeholder="Email address"
+                         value={inviteEmail}
+                         onChange={(e) => setInviteEmail(e.target.value)}
+                         className="flex-1"
+                         data-testid="input-invite-email"
+                       />
+                       <Input
+                         type="text"
+                         placeholder="Name (optional)"
+                         value={inviteName}
+                         onChange={(e) => setInviteName(e.target.value)}
+                         className="flex-1 sm:max-w-[150px]"
+                         data-testid="input-invite-name"
+                       />
+                       <Button
+                         onClick={() => inviteMutation.mutate({ email: inviteEmail, name: inviteName || undefined })}
+                         disabled={!inviteEmail || inviteMutation.isPending}
+                         className="bg-blue-600 hover:bg-blue-700"
+                         data-testid="button-invite-member"
+                       >
+                         {inviteMutation.isPending ? (
+                           <Loader2 className="h-4 w-4 animate-spin" />
+                         ) : (
+                           <>
+                             <UserPlus className="h-4 w-4 mr-1" /> Invite
+                           </>
+                         )}
+                       </Button>
+                     </div>
+                   </div>
+                 ) : (
+                   <div className="pt-2 border-t border-gray-200">
+                     <p className="text-sm text-gray-500 mb-2">
+                       You've reached your team member limit ({subscriptionData?.limits.usersLimit}).
+                     </p>
+                     <Link href="/pricing">
+                       <Button variant="outline" size="sm" data-testid="button-upgrade-team">
+                         <Zap className="h-4 w-4 mr-1" /> Upgrade for more
+                       </Button>
+                     </Link>
+                   </div>
+                 )}
                </div>
              )}
            </div>

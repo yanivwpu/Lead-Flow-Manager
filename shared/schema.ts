@@ -100,9 +100,24 @@ export const chats = pgTable("chats", {
   followUpDate: timestamp("follow_up_date"),
   notes: text("notes").default(""),
   pipelineStage: text("pipeline_stage").notNull().default("Lead"),
+  status: text("status").notNull().default("open"), // open, pending, resolved, closed
+  assignedTo: varchar("assigned_to").references(() => users.id, { onDelete: "set null" }),
   messages: jsonb("messages").notNull().default(sql`'[]'::jsonb`),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Team members (users who belong to a team/organization)
+export const teamMembers = pgTable("team_members", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  ownerId: varchar("owner_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  memberId: varchar("member_id").references(() => users.id, { onDelete: "set null" }),
+  email: text("email").notNull(),
+  name: text("name"),
+  role: text("role").notNull().default("member"), // owner, admin, member
+  status: text("status").notNull().default("pending"), // pending, active, inactive
+  invitedAt: timestamp("invited_at").defaultNow(),
+  joinedAt: timestamp("joined_at"),
 });
 
 // Registered WhatsApp phone numbers per client
@@ -169,6 +184,12 @@ export const insertConversationWindowSchema = createInsertSchema(conversationWin
   createdAt: true,
 });
 
+export const insertTeamMemberSchema = createInsertSchema(teamMembers).omit({
+  id: true,
+  invitedAt: true,
+  joinedAt: true,
+});
+
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 export type InsertChat = z.infer<typeof insertChatSchema>;
@@ -179,3 +200,5 @@ export type InsertMessageUsage = z.infer<typeof insertMessageUsageSchema>;
 export type MessageUsage = typeof messageUsage.$inferSelect;
 export type InsertConversationWindow = z.infer<typeof insertConversationWindowSchema>;
 export type ConversationWindow = typeof conversationWindows.$inferSelect;
+export type InsertTeamMember = z.infer<typeof insertTeamMemberSchema>;
+export type TeamMember = typeof teamMembers.$inferSelect;

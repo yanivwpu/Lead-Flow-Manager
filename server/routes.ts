@@ -533,6 +533,142 @@ export async function registerRoutes(
     }
   });
 
+  // ============ TEAM MEMBER ROUTES ============
+
+  // Get team members
+  app.get("/api/team", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const members = await storage.getTeamMembers(req.user.id);
+      const user = await storage.getUser(req.user.id);
+      
+      // Include the owner as the first team member
+      const ownerMember = {
+        id: "owner",
+        ownerId: req.user.id,
+        memberId: req.user.id,
+        email: user?.email || "",
+        name: user?.name || "You",
+        role: "owner",
+        status: "active",
+        invitedAt: user?.createdAt,
+        joinedAt: user?.createdAt,
+      };
+      
+      res.json([ownerMember, ...members]);
+    } catch (error) {
+      console.error("Error fetching team members:", error);
+      res.status(500).json({ error: "Failed to fetch team members" });
+    }
+  });
+
+  // Invite a team member
+  app.post("/api/team", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const { email, name, role = "member" } = req.body;
+      
+      if (!email) {
+        return res.status(400).json({ error: "Email is required" });
+      }
+
+      // Check subscription limits
+      const limits = await subscriptionService.getUserLimits(req.user.id);
+      if (!limits) {
+        return res.status(400).json({ error: "Could not fetch subscription limits" });
+      }
+
+      const currentCount = await storage.getTeamMemberCount(req.user.id);
+      if (currentCount >= limits.maxUsers) {
+        return res.status(403).json({ 
+          error: `Your ${limits.planName} plan allows ${limits.maxUsers} team member(s). Upgrade to add more.`,
+          upgradeRequired: true
+        });
+      }
+
+      // Check if already invited
+      const existing = await storage.getTeamMembers(req.user.id);
+      if (existing.some(m => m.email.toLowerCase() === email.toLowerCase())) {
+        return res.status(400).json({ error: "This email has already been invited" });
+      }
+
+      const member = await storage.createTeamMember({
+        ownerId: req.user.id,
+        email: email.toLowerCase(),
+        name: name || null,
+        role,
+        status: "pending",
+      });
+
+      res.json(member);
+    } catch (error) {
+      console.error("Error inviting team member:", error);
+      res.status(500).json({ error: "Failed to invite team member" });
+    }
+  });
+
+  // Remove a team member
+  app.delete("/api/team/:id", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const member = await storage.getTeamMember(req.params.id);
+      if (!member) {
+        return res.status(404).json({ error: "Team member not found" });
+      }
+
+      // Only owner can remove team members
+      if (member.ownerId !== req.user.id) {
+        return res.status(403).json({ error: "Not authorized to remove this team member" });
+      }
+
+      await storage.deleteTeamMember(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error removing team member:", error);
+      res.status(500).json({ error: "Failed to remove team member" });
+    }
+  });
+
+  // Update a team member
+  app.patch("/api/team/:id", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const member = await storage.getTeamMember(req.params.id);
+      if (!member) {
+        return res.status(404).json({ error: "Team member not found" });
+      }
+
+      if (member.ownerId !== req.user.id) {
+        return res.status(403).json({ error: "Not authorized to update this team member" });
+      }
+
+      const { role, status, name } = req.body;
+      const updated = await storage.updateTeamMember(req.params.id, { 
+        ...(role && { role }),
+        ...(status && { status }),
+        ...(name !== undefined && { name }),
+      });
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating team member:", error);
+      res.status(500).json({ error: "Failed to update team member" });
+    }
+  });
+
+  // ============ END TEAM MEMBER ROUTES ============
+
   // Twilio webhook for incoming WhatsApp messages
   // Routes messages to the correct user based on Account SID + phone number
   app.post("/api/webhook/twilio/incoming", async (req, res) => {

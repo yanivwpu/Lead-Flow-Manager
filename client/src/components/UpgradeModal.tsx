@@ -8,7 +8,8 @@ export type UpgradeReason =
   | "free_reply" 
   | "add_user" 
   | "add_automation" 
-  | "add_whatsapp_number";
+  | "add_whatsapp_number"
+  | "add_team_member";
 
 interface UpgradeModalProps {
   open: boolean;
@@ -87,6 +88,18 @@ const UPGRADE_CONTENT: Record<UpgradeReason, UpgradeContent> = {
       "Up to 3 WhatsApp numbers",
       "2,000 conversations/month",
       "Up to 10 team members",
+    ],
+  },
+  add_team_member: {
+    icon: <Users className="h-8 w-8 text-blue-500" />,
+    title: "Team member limit reached",
+    description: "Upgrade to invite more team members to collaborate.",
+    targetPlan: "starter",
+    ctaText: "Upgrade Now",
+    benefits: [
+      "Up to 3 team members (Starter)",
+      "Up to 10 team members (Pro)",
+      "Shared team inbox",
     ],
   },
 };

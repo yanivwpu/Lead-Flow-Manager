@@ -1,11 +1,12 @@
 import { 
   type User, type InsertUser, type Chat, type InsertChat,
   type RegisteredPhone, type InsertRegisteredPhone,
-  type MessageUsage, type InsertMessageUsage
+  type MessageUsage, type InsertMessageUsage,
+  type TeamMember, type InsertTeamMember
 } from "@shared/schema";
 import { db } from "../drizzle/db";
-import { users, chats, registeredPhones, messageUsage, conversationWindows, type InsertConversationWindow, type ConversationWindow } from "@shared/schema";
-import { eq, and, lte, sql, isNotNull, asc, desc, gte, sum, gt } from "drizzle-orm";
+import { users, chats, registeredPhones, messageUsage, conversationWindows, teamMembers, type InsertConversationWindow, type ConversationWindow } from "@shared/schema";
+import { eq, and, lte, sql, isNotNull, asc, desc, gte, sum, gt, or } from "drizzle-orm";
 
 export interface IStorage {
   // User methods
@@ -43,6 +44,14 @@ export interface IStorage {
   updateConversationWindowMessageCount(id: string): Promise<void>;
   getConversationWindowCount(userId: string, startDate: Date): Promise<number>;
   getLifetimeConversationWindowCount(userId: string): Promise<number>;
+  
+  // Team member methods
+  getTeamMembers(ownerId: string): Promise<TeamMember[]>;
+  getTeamMember(id: string): Promise<TeamMember | undefined>;
+  createTeamMember(member: InsertTeamMember): Promise<TeamMember>;
+  updateTeamMember(id: string, updates: Partial<TeamMember>): Promise<TeamMember | undefined>;
+  deleteTeamMember(id: string): Promise<void>;
+  getTeamMemberCount(userId: string): Promise<number>;
 }
 
 export class DbStorage implements IStorage {
@@ -252,10 +261,38 @@ export class DbStorage implements IStorage {
       .where(eq(users.id, userId));
   }
 
-  async getTeamMemberCount(userId: string): Promise<number> {
-    // For now, return 1 as we don't have team members table yet
-    // In future, this would query a team_members table
-    return 1;
+  async getTeamMembers(ownerId: string): Promise<TeamMember[]> {
+    return await db.select().from(teamMembers).where(eq(teamMembers.ownerId, ownerId)).orderBy(asc(teamMembers.invitedAt));
+  }
+
+  async getTeamMember(id: string): Promise<TeamMember | undefined> {
+    const result = await db.select().from(teamMembers).where(eq(teamMembers.id, id));
+    return result[0];
+  }
+
+  async createTeamMember(member: InsertTeamMember): Promise<TeamMember> {
+    const result = await db.insert(teamMembers).values(member).returning();
+    return result[0];
+  }
+
+  async updateTeamMember(id: string, updates: Partial<TeamMember>): Promise<TeamMember | undefined> {
+    const result = await db.update(teamMembers).set(updates).where(eq(teamMembers.id, id)).returning();
+    return result[0];
+  }
+
+  async deleteTeamMember(id: string): Promise<void> {
+    await db.delete(teamMembers).where(eq(teamMembers.id, id));
+  }
+
+  async getTeamMemberCount(ownerId: string): Promise<number> {
+    const result = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(teamMembers)
+      .where(and(
+        eq(teamMembers.ownerId, ownerId),
+        or(eq(teamMembers.status, 'active'), eq(teamMembers.status, 'pending'))
+      ));
+    return (result[0]?.count || 0) + 1; // +1 to include the owner
   }
 }
 
