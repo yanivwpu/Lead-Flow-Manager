@@ -13,12 +13,11 @@ export interface SubscriptionLimits {
   maxWhatsappNumbers: number;
   canSendMessages: boolean;
   followUpsEnabled: boolean;
-  twilioUsageIncluded: number;
-  twilioUsageUsed: number;
-  twilioUsageRemaining: number;
   emailNotifications: boolean;
   pushNotifications: boolean;
   teamInbox: boolean;
+  assignmentEnabled: boolean;
+  workflowsEnabled: boolean;
   isAtLimit: boolean;
   isAtWarning: boolean; // 80% usage
   suggestedUpgrade: SubscriptionPlan | null;
@@ -29,7 +28,7 @@ export interface UpgradeTrigger {
   reason: string;
   currentPlan: SubscriptionPlan;
   suggestedPlan: SubscriptionPlan;
-  usageType: 'conversations' | 'users' | 'whatsapp_numbers' | 'twilio_usage' | 'follow_ups';
+  usageType: 'conversations' | 'users' | 'whatsapp_numbers' | 'follow_ups';
   currentUsage: number;
   limit: number;
 }
@@ -43,14 +42,9 @@ export class SubscriptionService {
     const limits = PLAN_LIMITS[plan];
 
     // Get conversation count for current period
-    const startDate = user.currentPeriodStart || new Date(new Date().setDate(1));
     const conversationsUsed = user.monthlyConversations || 0;
-    
-    // Get Twilio usage for current period
-    const twilioUsageUsed = parseFloat(user.monthlyTwilioUsage?.toString() || '0');
 
     const conversationsRemaining = Math.max(0, limits.conversationsPerMonth - conversationsUsed);
-    const twilioUsageRemaining = Math.max(0, limits.twilioUsageIncluded - twilioUsageUsed);
     
     const usagePercent = conversationsUsed / limits.conversationsPerMonth;
     const isAtWarning = usagePercent >= 0.8 && usagePercent < 1;
@@ -72,12 +66,11 @@ export class SubscriptionService {
       maxWhatsappNumbers: limits.maxWhatsappNumbers,
       canSendMessages: limits.canSendMessages,
       followUpsEnabled: limits.followUpsEnabled,
-      twilioUsageIncluded: limits.twilioUsageIncluded,
-      twilioUsageUsed,
-      twilioUsageRemaining,
       emailNotifications: limits.emailNotifications,
       pushNotifications: limits.pushNotifications,
       teamInbox: limits.teamInbox,
+      assignmentEnabled: limits.assignmentEnabled,
+      workflowsEnabled: limits.workflowsEnabled,
       isAtLimit,
       isAtWarning,
       suggestedUpgrade,
@@ -111,19 +104,6 @@ export class SubscriptionService {
         usageType: 'conversations',
         currentUsage: limits.conversationsUsed,
         limit: limits.conversationsLimit,
-      });
-    }
-
-    // Check Twilio usage (for paid plans)
-    if (limits.twilioUsageIncluded > 0 && limits.twilioUsageRemaining <= 0) {
-      triggers.push({
-        triggered: true,
-        reason: `You've exceeded your $${limits.twilioUsageIncluded} Twilio usage allowance.`,
-        currentPlan: limits.plan,
-        suggestedPlan: limits.suggestedUpgrade || 'pro',
-        usageType: 'twilio_usage',
-        currentUsage: limits.twilioUsageUsed,
-        limit: limits.twilioUsageIncluded,
       });
     }
 

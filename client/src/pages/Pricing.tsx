@@ -55,6 +55,7 @@ const PLANS = [
     cta: "Upgrade to Pro",
     popular: false,
     features: [
+      "Everything in Starter, plus:",
       "Up to 3 WhatsApp Business numbers",
       "Up to 10 team members",
       "2,000 active conversations / month",

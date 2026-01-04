@@ -23,10 +23,11 @@ export const PLAN_LIMITS = {
     maxWhatsappNumbers: 1,
     canSendMessages: true,
     followUpsEnabled: false,
-    twilioUsageIncluded: 0, // $0 included
     emailNotifications: false,
     pushNotifications: false,
     teamInbox: true, // read-only shared inbox
+    assignmentEnabled: false,
+    workflowsEnabled: false,
   },
   starter: {
     name: 'Starter',
@@ -37,10 +38,11 @@ export const PLAN_LIMITS = {
     maxWhatsappNumbers: 1,
     canSendMessages: true,
     followUpsEnabled: true,
-    twilioUsageIncluded: 5, // $5 included
     emailNotifications: true,
     pushNotifications: true,
-    teamInbox: false,
+    teamInbox: true,
+    assignmentEnabled: false,
+    workflowsEnabled: false,
   },
   pro: {
     name: 'Pro',
@@ -51,10 +53,11 @@ export const PLAN_LIMITS = {
     maxWhatsappNumbers: 3,
     canSendMessages: true,
     followUpsEnabled: true,
-    twilioUsageIncluded: 15, // $15 included
     emailNotifications: true,
     pushNotifications: true,
     teamInbox: true,
+    assignmentEnabled: true, // Pro feature: conversation assignment
+    workflowsEnabled: true, // Pro feature: advanced workflows
   },
 } as const;
 
