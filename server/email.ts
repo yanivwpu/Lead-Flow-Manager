@@ -54,46 +54,31 @@ export async function sendWelcomeEmail(name: string, email: string): Promise<boo
       <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <style>
-          body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #334155; margin: 0; padding: 0; background-color: #f1f5f9; }
-          .wrapper { padding: 40px 20px; }
-          .container { max-width: 600px; margin: 0 auto; background: white; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); }
-          .header { background: linear-gradient(135deg, #059669 0%, #047857 100%); color: white; padding: 40px 30px; text-align: center; }
-          .logo { width: 50px; height: 50px; background: white; border-radius: 12px; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 16px; font-size: 24px; font-weight: bold; color: #059669; }
-          .header h1 { margin: 0; font-size: 24px; font-weight: 600; }
-          .content { padding: 40px 30px; }
-          .content h2 { color: #1e293b; margin-top: 0; font-size: 20px; }
-          .content p { color: #475569; }
-          .content ul { color: #475569; }
-          .button { display: inline-block; background: #059669; color: white !important; padding: 14px 32px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px; margin: 24px 0; }
-          .footer { text-align: center; padding: 24px 30px; background: #f8fafc; border-top: 1px solid #e2e8f0; }
-          .footer p { margin: 0; color: #94a3b8; font-size: 12px; }
-        </style>
       </head>
-      <body>
-        <div class="wrapper">
-          <div class="container">
-            <div class="header">
-              <div class="logo">W</div>
-              <h1>Welcome to WhaChatCRM!</h1>
+      <body style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #334155; margin: 0; padding: 0; background-color: #f1f5f9;">
+        <div style="padding: 40px 20px;">
+          <div style="max-width: 600px; margin: 0 auto; background: white; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+            <div style="background: linear-gradient(135deg, #059669 0%, #047857 100%); color: white; padding: 40px 30px; text-align: center;">
+              <div style="width: 50px; height: 50px; background: white; border-radius: 12px; display: inline-block; margin-bottom: 16px; font-size: 24px; font-weight: bold; color: #059669; line-height: 50px;">W</div>
+              <h1 style="margin: 0; font-size: 24px; font-weight: 600;">Welcome to WhaChatCRM!</h1>
             </div>
-            <div class="content">
-              <h2>Hi ${name}!</h2>
-              <p>Thank you for signing up for WhaChatCRM. We're excited to have you on board!</p>
-              <p>With WhaChatCRM, you can:</p>
-              <ul>
-                <li>Manage all your WhatsApp conversations in one place</li>
-                <li>Never miss a follow-up with smart reminders</li>
-                <li>Organize leads with tags and pipeline stages</li>
-                <li>Track your sales progress effortlessly</li>
+            <div style="padding: 40px 30px;">
+              <h2 style="color: #1e293b; margin-top: 0; font-size: 20px;">Hi ${name}!</h2>
+              <p style="color: #475569; font-size: 15px;">Thank you for signing up for WhaChatCRM. We're excited to have you on board!</p>
+              <p style="color: #475569; font-size: 15px;">With WhaChatCRM, you can:</p>
+              <ul style="color: #475569; font-size: 15px; padding-left: 20px;">
+                <li style="margin-bottom: 8px;">Manage all your WhatsApp conversations in one place</li>
+                <li style="margin-bottom: 8px;">Never miss a follow-up with smart reminders</li>
+                <li style="margin-bottom: 8px;">Organize leads with tags and pipeline stages</li>
+                <li style="margin-bottom: 8px;">Track your sales progress effortlessly</li>
               </ul>
-              <p>Ready to get started?</p>
-              <center>
-                <a href="${APP_URL}" class="button">Open WhaChatCRM</a>
-              </center>
+              <p style="color: #475569; font-size: 15px;">Ready to get started?</p>
+              <div style="text-align: center;">
+                <a href="${APP_URL}" style="display: inline-block; background: #059669; color: white; padding: 14px 32px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px; margin: 24px 0;">Open WhaChatCRM</a>
+              </div>
             </div>
-            <div class="footer">
-              <p>&copy; ${new Date().getFullYear()} WhaChatCRM. All rights reserved.</p>
+            <div style="text-align: center; padding: 24px 30px; background: #f8fafc; border-top: 1px solid #e2e8f0;">
+              <p style="margin: 0; color: #94a3b8; font-size: 12px;">&copy; ${new Date().getFullYear()} WhaChatCRM. All rights reserved.</p>
             </div>
           </div>
         </div>
@@ -115,50 +100,32 @@ export async function sendPasswordResetEmail(email: string, resetToken: string):
       <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <style>
-          body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #334155; margin: 0; padding: 0; background-color: #f1f5f9; }
-          .wrapper { padding: 40px 20px; }
-          .container { max-width: 600px; margin: 0 auto; background: white; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); }
-          .header { background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); color: white; padding: 40px 30px; text-align: center; }
-          .logo { width: 50px; height: 50px; background: #059669; border-radius: 12px; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 16px; font-size: 24px; font-weight: bold; color: white; }
-          .header h1 { margin: 0; font-size: 24px; font-weight: 600; }
-          .content { padding: 40px 30px; }
-          .content h2 { color: #1e293b; margin-top: 0; font-size: 20px; }
-          .content p { color: #475569; }
-          .button { display: inline-block; background: #059669; color: white !important; padding: 14px 32px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px; margin: 24px 0; }
-          .info-box { background: #ecfdf5; border: 1px solid #a7f3d0; padding: 16px; border-radius: 8px; margin: 24px 0; }
-          .info-box p { margin: 0; color: #065f46; font-size: 14px; }
-          .url-box { background: #f8fafc; border: 1px solid #e2e8f0; padding: 12px; border-radius: 6px; margin-top: 24px; word-break: break-all; font-family: monospace; font-size: 12px; color: #64748b; }
-          .footer { text-align: center; padding: 24px 30px; background: #f8fafc; border-top: 1px solid #e2e8f0; }
-          .footer p { margin: 0; color: #94a3b8; font-size: 12px; }
-          .footer a { color: #059669; text-decoration: none; }
-        </style>
       </head>
-      <body>
-        <div class="wrapper">
-          <div class="container">
-            <div class="header">
-              <div class="logo">W</div>
-              <h1>Reset Your Password</h1>
+      <body style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #334155; margin: 0; padding: 0; background-color: #f1f5f9;">
+        <div style="padding: 40px 20px;">
+          <div style="max-width: 600px; margin: 0 auto; background: white; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+            <div style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); color: white; padding: 40px 30px; text-align: center;">
+              <div style="width: 50px; height: 50px; background: #059669; border-radius: 12px; display: inline-block; margin-bottom: 16px; font-size: 24px; font-weight: bold; color: white; line-height: 50px;">W</div>
+              <h1 style="margin: 0; font-size: 24px; font-weight: 600;">Reset Your Password</h1>
             </div>
-            <div class="content">
-              <h2>Password Reset Request</h2>
-              <p>We received a request to reset the password for your WhaChatCRM account. Click the button below to create a new password:</p>
+            <div style="padding: 40px 30px;">
+              <h2 style="color: #1e293b; margin-top: 0; font-size: 20px;">Password Reset Request</h2>
+              <p style="color: #475569; font-size: 15px;">We received a request to reset the password for your WhaChatCRM account. Click the button below to create a new password:</p>
               
-              <center>
-                <a href="${resetUrl}" class="button">Reset My Password</a>
-              </center>
+              <div style="text-align: center;">
+                <a href="${resetUrl}" style="display: inline-block; background: #059669; color: white; padding: 14px 32px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px; margin: 24px 0;">Reset My Password</a>
+              </div>
               
-              <div class="info-box">
-                <p><strong>Security Note:</strong> This link will expire in 1 hour. If you didn't request this password reset, you can safely ignore this email - your account is secure.</p>
+              <div style="background: #ecfdf5; border: 1px solid #a7f3d0; padding: 16px; border-radius: 8px; margin: 24px 0;">
+                <p style="margin: 0; color: #065f46; font-size: 14px;"><strong>Security Note:</strong> This link will expire in 1 hour. If you didn't request this password reset, you can safely ignore this email - your account is secure.</p>
               </div>
               
               <p style="font-size: 14px; color: #64748b;">Having trouble with the button? Copy and paste this link into your browser:</p>
-              <div class="url-box">${resetUrl}</div>
+              <div style="background: #f8fafc; border: 1px solid #e2e8f0; padding: 12px; border-radius: 6px; margin-top: 16px; word-break: break-all; font-family: monospace; font-size: 12px; color: #64748b;">${resetUrl}</div>
             </div>
-            <div class="footer">
-              <p>Need help? Contact us at <a href="mailto:support@whachatcrm.com">support@whachatcrm.com</a></p>
-              <p style="margin-top: 12px;">&copy; ${new Date().getFullYear()} WhaChatCRM. All rights reserved.</p>
+            <div style="text-align: center; padding: 24px 30px; background: #f8fafc; border-top: 1px solid #e2e8f0;">
+              <p style="margin: 0; color: #94a3b8; font-size: 12px;">Need help? Contact us at <a href="mailto:support@whachatcrm.com" style="color: #059669; text-decoration: none;">support@whachatcrm.com</a></p>
+              <p style="margin: 12px 0 0 0; color: #94a3b8; font-size: 12px;">&copy; ${new Date().getFullYear()} WhaChatCRM. All rights reserved.</p>
             </div>
           </div>
         </div>
@@ -178,42 +145,27 @@ export async function sendFollowUpReminderEmail(email: string, chatName: string,
       <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <style>
-          body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #334155; margin: 0; padding: 0; background-color: #f1f5f9; }
-          .wrapper { padding: 40px 20px; }
-          .container { max-width: 600px; margin: 0 auto; background: white; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); }
-          .header { background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); color: white; padding: 40px 30px; text-align: center; }
-          .logo { width: 50px; height: 50px; background: white; border-radius: 12px; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 16px; font-size: 24px; }
-          .header h1 { margin: 0; font-size: 24px; font-weight: 600; }
-          .content { padding: 40px 30px; }
-          .content p { color: #475569; }
-          .info-box { background: #f8fafc; border: 1px solid #e2e8f0; padding: 20px; border-radius: 8px; margin: 20px 0; }
-          .info-box p { margin: 8px 0; color: #475569; }
-          .button { display: inline-block; background: #059669; color: white !important; padding: 14px 32px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px; margin: 24px 0; }
-          .footer { text-align: center; padding: 24px 30px; background: #f8fafc; border-top: 1px solid #e2e8f0; }
-          .footer p { margin: 0; color: #94a3b8; font-size: 12px; }
-        </style>
       </head>
-      <body>
-        <div class="wrapper">
-          <div class="container">
-            <div class="header">
-              <div class="logo">🔔</div>
-              <h1>Follow-up Reminder</h1>
+      <body style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #334155; margin: 0; padding: 0; background-color: #f1f5f9;">
+        <div style="padding: 40px 20px;">
+          <div style="max-width: 600px; margin: 0 auto; background: white; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+            <div style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); color: white; padding: 40px 30px; text-align: center;">
+              <div style="width: 50px; height: 50px; background: white; border-radius: 12px; display: inline-block; margin-bottom: 16px; font-size: 24px; line-height: 50px;">🔔</div>
+              <h1 style="margin: 0; font-size: 24px; font-weight: 600;">Follow-up Reminder</h1>
             </div>
-            <div class="content">
-              <p>You have a follow-up scheduled:</p>
-              <div class="info-box">
-                <p><strong>Contact:</strong> ${chatName}</p>
-                <p><strong>Follow-up:</strong> ${followUp}</p>
-                ${notes ? `<p><strong>Notes:</strong> ${notes}</p>` : ''}
+            <div style="padding: 40px 30px;">
+              <p style="color: #475569; font-size: 15px;">You have a follow-up scheduled:</p>
+              <div style="background: #f8fafc; border: 1px solid #e2e8f0; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                <p style="margin: 8px 0; color: #475569; font-size: 15px;"><strong>Contact:</strong> ${chatName}</p>
+                <p style="margin: 8px 0; color: #475569; font-size: 15px;"><strong>Follow-up:</strong> ${followUp}</p>
+                ${notes ? `<p style="margin: 8px 0; color: #475569; font-size: 15px;"><strong>Notes:</strong> ${notes}</p>` : ''}
               </div>
-              <center>
-                <a href="${APP_URL}/chats/${chatId}" class="button">View Chat</a>
-              </center>
+              <div style="text-align: center;">
+                <a href="${APP_URL}/chats/${chatId}" style="display: inline-block; background: #059669; color: white; padding: 14px 32px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px; margin: 24px 0;">View Chat</a>
+              </div>
             </div>
-            <div class="footer">
-              <p>&copy; ${new Date().getFullYear()} WhaChatCRM. All rights reserved.</p>
+            <div style="text-align: center; padding: 24px 30px; background: #f8fafc; border-top: 1px solid #e2e8f0;">
+              <p style="margin: 0; color: #94a3b8; font-size: 12px;">&copy; ${new Date().getFullYear()} WhaChatCRM. All rights reserved.</p>
             </div>
           </div>
         </div>
