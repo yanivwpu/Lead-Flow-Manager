@@ -386,16 +386,16 @@ export function Settings() {
            {/* WhatsApp Connection Section - Most Important */}
            <div className={cn(
              "bg-white border rounded-xl p-4 sm:p-6 shadow-sm",
-             twilioStatus?.connected ? "border-gray-200" : "border-orange-300 bg-orange-50"
+             twilioStatus?.connected ? "border-gray-200" : "border-slate-300 bg-slate-50"
            )}>
              <div className="flex items-center gap-3 mb-4 sm:mb-6">
                <div className={cn(
                  "h-9 w-9 sm:h-10 sm:w-10 rounded-lg flex items-center justify-center flex-shrink-0",
-                 twilioStatus?.connected ? "bg-green-50" : "bg-orange-100"
+                 twilioStatus?.connected ? "bg-green-50" : "bg-slate-100"
                )}>
                  <MessageSquare className={cn(
                    "h-4 w-4 sm:h-5 sm:w-5",
-                   twilioStatus?.connected ? "text-green-600" : "text-orange-600"
+                   twilioStatus?.connected ? "text-emerald-600" : "text-slate-600"
                  )} />
                </div>
                <div className="min-w-0 flex-1">
@@ -409,9 +409,9 @@ export function Settings() {
                  </p>
                </div>
                {twilioStatus?.connected ? (
-                 <CheckCircle2 className="h-5 w-5 text-green-500 flex-shrink-0" />
+                 <CheckCircle2 className="h-5 w-5 text-emerald-600 flex-shrink-0" />
                ) : (
-                 <XCircle className="h-5 w-5 text-orange-500 flex-shrink-0" />
+                 <XCircle className="h-5 w-5 text-amber-500 flex-shrink-0" />
                )}
              </div>
 
@@ -421,21 +421,21 @@ export function Settings() {
                </div>
              ) : twilioStatus?.connected ? (
                <div className="space-y-4">
-                 <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg border border-green-100">
+                 <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg border border-emerald-100">
                    <div className="flex items-center gap-3">
-                     <Phone className="h-4 w-4 text-green-600" />
+                     <Phone className="h-4 w-4 text-emerald-600" />
                      <span className="font-mono text-sm text-green-800">{twilioStatus.whatsappNumber}</span>
                    </div>
-                   <span className="text-xs text-green-600 font-medium">Connected</span>
+                   <span className="text-xs text-emerald-600 font-medium">Connected</span>
                  </div>
                  
                  {/* Webhook Configuration Reminder */}
-                 <div className="p-4 bg-amber-50 rounded-lg border border-amber-200">
+                 <div className="p-4 bg-slate-50 rounded-lg border border-slate-200">
                    <div className="flex items-start gap-3 mb-3">
-                     <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
+                     <AlertTriangle className="h-4 w-4 text-slate-600 mt-0.5 flex-shrink-0" />
                      <div>
-                       <p className="text-sm font-medium text-amber-900">Not receiving messages?</p>
-                       <p className="text-xs text-amber-700 mt-1">
+                       <p className="text-sm font-medium text-slate-900">Not receiving messages?</p>
+                       <p className="text-xs text-slate-700 mt-1">
                          Make sure you've configured both webhook URLs in your Twilio Console.
                        </p>
                      </div>
@@ -443,43 +443,43 @@ export function Settings() {
                    
                    <div className="space-y-3">
                      <div className="space-y-1">
-                       <Label className="text-xs text-amber-800">When a message comes in:</Label>
+                       <Label className="text-xs text-slate-800">When a message comes in:</Label>
                        <div className="flex items-center gap-2">
                          <Input 
                            value={webhookUrl} 
                            readOnly 
-                           className="font-mono text-xs bg-white border-amber-300"
+                           className="font-mono text-xs bg-white border-slate-300"
                            data-testid="input-webhook-url-settings"
                          />
                          <Button 
                            variant="outline" 
                            size="icon" 
                            onClick={handleCopyWebhook}
-                           className="flex-shrink-0 border-amber-300 hover:bg-amber-100"
+                           className="flex-shrink-0 border-slate-300 hover:bg-slate-100"
                            data-testid="button-copy-webhook-settings"
                          >
-                           {webhookCopied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4 text-amber-600" />}
+                           {webhookCopied ? <Check className="h-4 w-4 text-emerald-600" /> : <Copy className="h-4 w-4 text-slate-600" />}
                          </Button>
                        </div>
                      </div>
                      
                      <div className="space-y-1">
-                       <Label className="text-xs text-amber-800">Status callback URL:</Label>
+                       <Label className="text-xs text-slate-800">Status callback URL:</Label>
                        <div className="flex items-center gap-2">
                          <Input 
                            value={statusCallbackUrl} 
                            readOnly 
-                           className="font-mono text-xs bg-white border-amber-300"
+                           className="font-mono text-xs bg-white border-slate-300"
                            data-testid="input-status-url-settings"
                          />
                          <Button 
                            variant="outline" 
                            size="icon" 
                            onClick={handleCopyStatus}
-                           className="flex-shrink-0 border-amber-300 hover:bg-amber-100"
+                           className="flex-shrink-0 border-slate-300 hover:bg-slate-100"
                            data-testid="button-copy-status-settings"
                          >
-                           {statusCopied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4 text-amber-600" />}
+                           {statusCopied ? <Check className="h-4 w-4 text-emerald-600" /> : <Copy className="h-4 w-4 text-slate-600" />}
                          </Button>
                        </div>
                      </div>
@@ -489,7 +489,7 @@ export function Settings() {
                      href="https://console.twilio.com/us1/develop/sms/try-it-out/whatsapp-learn"
                      target="_blank"
                      rel="noopener noreferrer"
-                     className="inline-flex items-center gap-1 mt-3 text-xs text-amber-800 hover:text-amber-900 underline"
+                     className="inline-flex items-center gap-1 mt-3 text-xs text-slate-800 hover:text-slate-900 underline"
                    >
                      Open Twilio Sandbox Settings <ExternalLink className="h-3 w-3" />
                    </a>
@@ -509,7 +509,7 @@ export function Settings() {
                </div>
              ) : (
                <div className="space-y-4">
-                 <p className="text-sm text-orange-800">
+                 <p className="text-sm text-slate-800">
                    You need to connect your Twilio account before you can send or receive WhatsApp messages.
                  </p>
                  <Button 
@@ -568,7 +568,7 @@ export function Settings() {
            <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 shadow-sm">
              <div className="flex items-center gap-3 mb-4 sm:mb-6">
                <div className="h-9 w-9 sm:h-10 sm:w-10 bg-green-50 rounded-lg flex items-center justify-center flex-shrink-0">
-                 <Phone className="h-4 w-4 sm:h-5 sm:w-5 text-green-600" />
+                 <Phone className="h-4 w-4 sm:h-5 sm:w-5 text-emerald-600" />
                </div>
                <div className="min-w-0">
                  <h2 className="text-base sm:text-lg font-bold text-gray-900" data-testid="text-phones-title">WhatsApp Numbers</h2>
@@ -596,7 +596,7 @@ export function Settings() {
                  <Button 
                    onClick={handleRegisterPhone}
                    disabled={registerPhoneMutation.isPending}
-                   className="bg-green-600 hover:bg-green-700 w-full sm:w-auto"
+                   className="bg-emerald-600 hover:bg-emerald-700 w-full sm:w-auto"
                    data-testid="button-register-phone"
                  >
                    {registerPhoneMutation.isPending ? (
@@ -655,8 +655,8 @@ export function Settings() {
            {/* Subscription Section */}
            <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 shadow-sm">
              <div className="flex items-center gap-3 mb-4 sm:mb-6">
-               <div className="h-9 w-9 sm:h-10 sm:w-10 bg-purple-50 rounded-lg flex items-center justify-center flex-shrink-0">
-                 <CreditCard className="h-4 w-4 sm:h-5 sm:w-5 text-purple-600" />
+               <div className="h-9 w-9 sm:h-10 sm:w-10 bg-slate-50 rounded-lg flex items-center justify-center flex-shrink-0">
+                 <CreditCard className="h-4 w-4 sm:h-5 sm:w-5 text-slate-600" />
                </div>
                <div className="min-w-0">
                  <h2 className="text-base sm:text-lg font-bold text-gray-900" data-testid="text-subscription-title">Subscription</h2>
@@ -670,20 +670,20 @@ export function Settings() {
                </div>
              ) : (
                <div className="space-y-4">
-                 <div className="p-4 bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg border border-purple-200">
+                 <div className="p-4 bg-gradient-to-br from-slate-50 to-slate-100 rounded-lg border border-slate-200">
                    <div className="flex items-center justify-between mb-2">
-                     <span className="text-xs text-purple-700 uppercase font-semibold">Current Plan</span>
+                     <span className="text-xs text-slate-700 uppercase font-semibold">Current Plan</span>
                      {subscriptionData?.subscription?.plan !== "free" && (
-                       <span className="text-xs px-2 py-0.5 bg-purple-600 text-white rounded-full">
+                       <span className="text-xs px-2 py-0.5 bg-slate-600 text-white rounded-full">
                          {subscriptionData?.subscription?.status === "active" ? "Active" : subscriptionData?.subscription?.status}
                        </span>
                      )}
                    </div>
-                   <p className="text-2xl font-bold text-purple-800" data-testid="text-current-plan">
+                   <p className="text-2xl font-bold text-slate-800" data-testid="text-current-plan">
                      {PLAN_NAMES[subscriptionData?.subscription?.plan || "free"] || "Free"}
                    </p>
                    {subscriptionData?.subscription?.currentPeriodEnd && (
-                     <p className="text-sm text-purple-600 mt-1">
+                     <p className="text-sm text-slate-600 mt-1">
                        Renews {new Date(subscriptionData.subscription.currentPeriodEnd).toLocaleDateString()}
                      </p>
                    )}
@@ -709,7 +709,7 @@ export function Settings() {
 
                  <div className="flex flex-col sm:flex-row gap-2">
                    <Link href="/pricing" className="flex-1">
-                     <Button className="w-full bg-brand-green hover:bg-green-600 text-sm sm:text-base" data-testid="button-view-plans">
+                     <Button className="w-full bg-brand-green hover:bg-emerald-700 text-sm sm:text-base" data-testid="button-view-plans">
                        <Zap className="h-4 w-4 mr-2" />
                        {subscriptionData?.subscription?.plan === "free" ? "Upgrade Plan" : "View Plans"}
                      </Button>
@@ -782,7 +782,7 @@ export function Settings() {
                                <span className="text-xs px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded">Owner</span>
                              )}
                              {member.status === "pending" && (
-                               <span className="text-xs px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded flex items-center gap-1">
+                               <span className="text-xs px-1.5 py-0.5 bg-slate-100 text-slate-700 rounded flex items-center gap-1">
                                  <Clock className="h-3 w-3" /> Pending
                                </span>
                              )}

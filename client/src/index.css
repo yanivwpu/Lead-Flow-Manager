@@ -2,37 +2,40 @@
 @import "tw-animate-css";
 
 @theme inline {
-  --color-brand-green: hsl(142 69% 58%);
-  --color-brand-teal: hsl(174 76% 31%);
-  --color-brand-dark: hsl(173 82% 18%);
+  /* Slate & Emerald Color Palette */
+  --color-brand-green: #059669;
+  --color-brand-dark: #047857;
+  --color-brand-light: #10b981;
+  --color-slate: #475569;
+  --color-slate-dark: #0f172a;
   
-  --color-background: hsl(0 0% 100%);
-  --color-foreground: hsl(222 47% 11%);
+  --color-background: #f8fafc;
+  --color-foreground: #0f172a;
   
   --color-card: hsl(0 0% 100%);
-  --color-card-foreground: hsl(222 47% 11%);
+  --color-card-foreground: #0f172a;
   
   --color-popover: hsl(0 0% 100%);
-  --color-popover-foreground: hsl(222 47% 11%);
+  --color-popover-foreground: #0f172a;
   
-  --color-primary: hsl(142 69% 58%);
+  --color-primary: #059669;
   --color-primary-foreground: hsl(0 0% 100%);
   
-  --color-secondary: hsl(210 40% 96.1%);
-  --color-secondary-foreground: hsl(222 47% 11.2%);
+  --color-secondary: #f1f5f9;
+  --color-secondary-foreground: #0f172a;
   
-  --color-muted: hsl(210 40% 96.1%);
-  --color-muted-foreground: hsl(215.4 16.3% 46.9%);
+  --color-muted: #f1f5f9;
+  --color-muted-foreground: #64748b;
   
-  --color-accent: hsl(210 40% 96.1%);
-  --color-accent-foreground: hsl(222 47% 11.2%);
+  --color-accent: #f1f5f9;
+  --color-accent-foreground: #0f172a;
   
   --color-destructive: hsl(0 84.2% 60.2%);
   --color-destructive-foreground: hsl(210 40% 98%);
   
-  --color-border: hsl(214.3 31.8% 91.4%);
-  --color-input: hsl(214.3 31.8% 91.4%);
-  --color-ring: hsl(142 69% 58%);
+  --color-border: #e2e8f0;
+  --color-input: #e2e8f0;
+  --color-ring: #059669;
   
   --radius: 0.5rem;
   

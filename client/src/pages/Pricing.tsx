@@ -176,7 +176,7 @@ export function Pricing() {
                   <div className="flex items-center gap-2 mb-1">
                     <h3 className="text-xl font-bold text-gray-900">{plan.name}</h3>
                     {plan.badge && (
-                      <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">
+                      <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-medium">
                         {plan.badge}
                       </span>
                     )}
@@ -204,7 +204,7 @@ export function Pricing() {
                 <Button
                   className={`w-full ${
                     plan.popular
-                      ? "bg-brand-green hover:bg-green-600"
+                      ? "bg-brand-green hover:bg-emerald-700"
                       : isCurrentPlan
                       ? "bg-gray-100 text-gray-500 cursor-default"
                       : "bg-gray-900 hover:bg-gray-800"
@@ -275,7 +275,7 @@ export function Pricing() {
           <h3 className="font-semibold text-gray-900 mb-3">What Happens When I Reach My Limit?</h3>
           <div className="grid sm:grid-cols-2 gap-4 text-sm">
             <div className="flex items-start gap-2">
-              <Check className="h-4 w-4 text-green-600 shrink-0 mt-0.5" />
+              <Check className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
               <span className="text-gray-700">Inbound messages continue normally</span>
             </div>
             <div className="flex items-start gap-2">
@@ -283,7 +283,7 @@ export function Pricing() {
               <span className="text-gray-700">Outbound replies are paused</span>
             </div>
             <div className="flex items-start gap-2">
-              <Check className="h-4 w-4 text-green-600 shrink-0 mt-0.5" />
+              <Check className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
               <span className="text-gray-700">You'll see a clear upgrade prompt</span>
             </div>
             <div className="flex items-start gap-2">
@@ -400,7 +400,7 @@ export function Pricing() {
             WhachatCRM uses the official WhatsApp Business API. Your data is secure and compliant with Meta's policies.
           </p>
           <Link href="/auth">
-            <Button className="bg-brand-green hover:bg-green-600 text-white px-8" data-testid="button-start-free-footer">
+            <Button className="bg-brand-green hover:bg-emerald-700 text-white px-8" data-testid="button-start-free-footer">
               Start Free — No Credit Card Required
             </Button>
           </Link>

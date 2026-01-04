@@ -79,7 +79,7 @@ const UPGRADE_CONTENT: Record<UpgradeReason, UpgradeContent> = {
     ],
   },
   add_whatsapp_number: {
-    icon: <Phone className="h-8 w-8 text-green-500" />,
+    icon: <Phone className="h-8 w-8 text-emerald-600" />,
     title: "Additional numbers require Pro plan",
     description: "Manage multiple WhatsApp Business numbers for different brands.",
     targetPlan: "pro",
@@ -173,7 +173,7 @@ export function UpgradeModal({ open, onOpenChange, reason, currentPlan }: Upgrad
 
         <DialogFooter className="flex-col sm:flex-col gap-2">
           <Button 
-            className="w-full bg-brand-green hover:bg-green-600 h-12 text-base"
+            className="w-full bg-brand-green hover:bg-emerald-700 h-12 text-base"
             onClick={handleUpgrade}
             disabled={isLoading}
             data-testid="button-upgrade-modal-cta"

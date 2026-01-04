@@ -31,7 +31,7 @@ export function WhatsappCrm() {
             <button className="text-sm font-medium text-gray-600 hover:text-gray-900 hidden sm:block">Pricing</button>
           </Link>
           <Link href="/auth">
-            <button className="text-sm font-medium px-4 py-2 bg-brand-green text-white rounded-full hover:bg-green-600">
+            <button className="text-sm font-medium px-4 py-2 bg-brand-green text-white rounded-full hover:bg-emerald-700">
               Start Free
             </button>
           </Link>
@@ -90,7 +90,7 @@ export function WhatsappCrm() {
           
           <div className="grid md:grid-cols-2 gap-6">
             <div className="bg-white border border-gray-200 p-6 rounded-xl">
-              <div className="h-10 w-10 bg-green-100 rounded-lg flex items-center justify-center mb-4">
+              <div className="h-10 w-10 bg-emerald-100 rounded-lg flex items-center justify-center mb-4">
                 <MessageSquare className="h-5 w-5 text-brand-green" />
               </div>
               <h3 className="font-bold text-gray-900 mb-2">Unified Inbox</h3>
@@ -150,7 +150,7 @@ export function WhatsappCrm() {
           </div>
           
           <Link href="/auth">
-            <button className="h-14 px-8 bg-brand-green hover:bg-green-600 text-white font-semibold rounded-full inline-flex items-center gap-2 transition-all shadow-lg">
+            <button className="h-14 px-8 bg-brand-green hover:bg-emerald-700 text-white font-semibold rounded-full inline-flex items-center gap-2 transition-all shadow-lg">
               Start Free Today
               <ArrowRight className="h-5 w-5" />
             </button>

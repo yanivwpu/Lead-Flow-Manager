@@ -36,7 +36,7 @@ export function Welcome() {
           </Link>
           {user ? (
             <Link href="/app/chats">
-              <button className="text-sm font-medium px-4 py-2 bg-brand-green text-white rounded-full hover:bg-green-600">
+              <button className="text-sm font-medium px-4 py-2 bg-brand-green text-white rounded-full hover:bg-emerald-700">
                 Dashboard
               </button>
             </Link>
@@ -46,7 +46,7 @@ export function Welcome() {
                 <button className="text-sm font-medium text-gray-600 hover:text-gray-900 hidden sm:block">Login</button>
               </Link>
               <Link href="/auth">
-                <button className="text-sm font-medium px-4 py-2 bg-brand-green text-white rounded-full hover:bg-green-600">
+                <button className="text-sm font-medium px-4 py-2 bg-brand-green text-white rounded-full hover:bg-emerald-700">
                   Start Free
                 </button>
               </Link>
@@ -73,7 +73,7 @@ export function Welcome() {
             {/* Stacked CTAs for mobile */}
             <div className="flex flex-col gap-3 mb-4">
               <Link href={user ? "/app/chats" : "/auth"} className="w-full sm:w-auto">
-                <button className="w-full sm:w-auto h-14 px-8 bg-brand-green hover:bg-green-600 text-white font-semibold rounded-full flex items-center justify-center gap-2 transition-all shadow-lg hover:shadow-xl">
+                <button className="w-full sm:w-auto h-14 px-8 bg-brand-green hover:bg-emerald-700 text-white font-semibold rounded-full flex items-center justify-center gap-2 transition-all shadow-lg hover:shadow-xl">
                   Start Free — No Credit Card
                   <ArrowRight className="h-5 w-5" />
                 </button>
@@ -198,7 +198,7 @@ export function Welcome() {
               viewport={{ once: true }}
               className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100"
             >
-              <div className="h-12 w-12 bg-green-100 rounded-xl flex items-center justify-center mb-4">
+              <div className="h-12 w-12 bg-emerald-100 rounded-xl flex items-center justify-center mb-4">
                 <MessageSquare className="h-6 w-6 text-brand-green" />
               </div>
               <h3 className="text-lg font-bold text-gray-900 mb-2">Organized Conversations</h3>
@@ -343,7 +343,7 @@ export function Welcome() {
           </div>
           
           <Link href="/pricing">
-            <button className="h-14 px-8 bg-brand-green hover:bg-green-600 text-white font-semibold rounded-full inline-flex items-center gap-2 transition-all shadow-lg">
+            <button className="h-14 px-8 bg-brand-green hover:bg-emerald-700 text-white font-semibold rounded-full inline-flex items-center gap-2 transition-all shadow-lg">
               See Plans
               <ArrowRight className="h-5 w-5" />
             </button>
@@ -408,7 +408,7 @@ export function Welcome() {
           </p>
           
           <Link href={user ? "/app/chats" : "/auth"}>
-            <button className="h-14 px-8 bg-brand-green hover:bg-green-600 text-white font-semibold rounded-full inline-flex items-center justify-center gap-2 transition-all shadow-lg hover:shadow-xl">
+            <button className="h-14 px-8 bg-brand-green hover:bg-emerald-700 text-white font-semibold rounded-full inline-flex items-center justify-center gap-2 transition-all shadow-lg hover:shadow-xl">
               Start Free
               <ArrowRight className="h-5 w-5" />
             </button>

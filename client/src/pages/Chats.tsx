@@ -71,8 +71,8 @@ type FollowUp = 'Tomorrow' | '3 days' | '1 week' | null;
 
 const CHAT_STATUSES = [
   { value: "open", label: "Open", color: "bg-blue-100 text-blue-700" },
-  { value: "pending", label: "Pending", color: "bg-amber-100 text-amber-700" },
-  { value: "resolved", label: "Resolved", color: "bg-green-100 text-green-700" },
+  { value: "pending", label: "Pending", color: "bg-slate-100 text-slate-700" },
+  { value: "resolved", label: "Resolved", color: "bg-emerald-100 text-emerald-700" },
   { value: "closed", label: "Closed", color: "bg-gray-100 text-gray-700" },
 ];
 
@@ -404,14 +404,14 @@ export function Chats() {
     <div className="flex h-full w-full">
       {/* Demo Mode Banner */}
       {demoMode && (
-        <div className="fixed top-0 left-0 right-0 bg-amber-500 text-white px-4 py-2 flex items-center justify-between z-50">
+        <div className="fixed top-0 left-0 right-0 bg-slate-600 text-white px-4 py-2 flex items-center justify-between z-50">
           <div className="flex items-center gap-2">
             <Play className="h-4 w-4" />
             <span className="text-sm font-medium">Demo Mode - Explore with sample data</span>
           </div>
           <div className="flex items-center gap-3">
             <Link href="/app/settings">
-              <Button size="sm" variant="secondary" className="h-7 text-xs bg-white text-amber-600 hover:bg-amber-50">
+              <Button size="sm" variant="secondary" className="h-7 text-xs bg-white text-slate-600 hover:bg-slate-50">
                 <Settings className="h-3 w-3 mr-1" />
                 Connect Twilio
               </Button>
@@ -422,7 +422,7 @@ export function Chats() {
                 setDemoChats(DEMO_CHATS);
                 setLocation('/app/chats');
               }}
-              className="p-1 hover:bg-amber-600 rounded"
+              className="p-1 hover:bg-slate-700 rounded"
               data-testid="button-exit-demo"
             >
               <X className="h-4 w-4" />
@@ -590,7 +590,7 @@ export function Chats() {
                            {teamMembers.filter(m => m.status === "active").map(member => (
                              <SelectItem key={member.id} value={member.memberId || member.id}>
                                <span className="flex items-center gap-1.5">
-                                 <UserCheck className="h-3 w-3 text-green-600" />
+                                 <UserCheck className="h-3 w-3 text-emerald-600" />
                                  {member.name || member.email.split("@")[0]}
                                </span>
                              </SelectItem>
@@ -654,7 +654,7 @@ export function Chats() {
                  />
                  <button 
                    onClick={handleSendMessage}
-                   className="h-10 w-10 bg-brand-green hover:bg-green-600 rounded-full flex items-center justify-center text-white transition-colors shadow-sm"
+                   className="h-10 w-10 bg-brand-green hover:bg-emerald-700 rounded-full flex items-center justify-center text-white transition-colors shadow-sm"
                    data-testid="button-send-message"
                  >
                    <Send className="h-5 w-5 ml-0.5" />

@@ -136,7 +136,7 @@ export function FollowUps() {
                    <p className="text-gray-500 font-medium">All caught up!</p>
                    <p className="text-sm text-gray-400 mt-1">No tasks pending.</p>
                    <Button 
-                     className="mt-4 bg-brand-green hover:bg-green-600" 
+                     className="mt-4 bg-brand-green hover:bg-emerald-700" 
                      data-testid="button-view-chats"
                      onClick={() => setLocation('/app/chats')}
                    >

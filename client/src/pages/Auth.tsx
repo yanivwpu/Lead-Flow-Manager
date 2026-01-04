@@ -253,7 +253,7 @@ export function AuthPage() {
 
             <Button 
               type="submit" 
-              className="w-full bg-brand-green hover:bg-green-600 h-11 text-base shadow-sm"
+              className="w-full bg-brand-green hover:bg-emerald-700 h-11 text-base shadow-sm"
               disabled={isSubmitting}
             >
               {isSubmitting ? (
@@ -328,7 +328,7 @@ export function AuthPage() {
                 </Button>
                 <Button
                   type="submit"
-                  className="flex-1 bg-brand-green hover:bg-green-600"
+                  className="flex-1 bg-brand-green hover:bg-emerald-700"
                   disabled={resetSubmitting}
                   data-testid="button-send-reset"
                 >
@@ -342,7 +342,7 @@ export function AuthPage() {
             </form>
           ) : (
             <div className="py-6 text-center">
-              <div className="h-12 w-12 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <div className="h-12 w-12 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
                 <CheckCircle2 className="h-6 w-6 text-brand-green" />
               </div>
               <h3 className="font-semibold text-gray-900 mb-2">Check your email</h3>
@@ -351,7 +351,7 @@ export function AuthPage() {
               </p>
               <Button
                 onClick={closeForgotPassword}
-                className="bg-brand-green hover:bg-green-600"
+                className="bg-brand-green hover:bg-emerald-700"
                 data-testid="button-close-reset"
               >
                 Back to Login

@@ -31,7 +31,7 @@ export function WatiAlternative() {
             <button className="text-sm font-medium text-gray-600 hover:text-gray-900 hidden sm:block">Pricing</button>
           </Link>
           <Link href="/auth">
-            <button className="text-sm font-medium px-4 py-2 bg-brand-green text-white rounded-full hover:bg-green-600">
+            <button className="text-sm font-medium px-4 py-2 bg-brand-green text-white rounded-full hover:bg-emerald-700">
               Start Free
             </button>
           </Link>
@@ -45,7 +45,7 @@ export function WatiAlternative() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6 }}
         >
-          <span className="inline-block bg-green-100 text-brand-green text-sm font-medium px-4 py-1 rounded-full mb-6">
+          <span className="inline-block bg-emerald-100 text-brand-green text-sm font-medium px-4 py-1 rounded-full mb-6">
             WATI Alternative
           </span>
           <h1 className="text-3xl md:text-5xl font-display font-bold text-gray-900 leading-tight mb-6">
@@ -57,7 +57,7 @@ export function WatiAlternative() {
           
           <div className="flex flex-col sm:flex-row gap-3 justify-center mb-4">
             <Link href="/auth">
-              <button className="w-full sm:w-auto h-14 px-8 bg-brand-green hover:bg-green-600 text-white font-semibold rounded-full flex items-center justify-center gap-2 transition-all shadow-lg">
+              <button className="w-full sm:w-auto h-14 px-8 bg-brand-green hover:bg-emerald-700 text-white font-semibold rounded-full flex items-center justify-center gap-2 transition-all shadow-lg">
                 Try WhachatCRM Free
                 <ArrowRight className="h-5 w-5" />
               </button>
@@ -142,7 +142,7 @@ export function WatiAlternative() {
           <h2 className="text-2xl md:text-3xl font-display font-bold text-white mb-4">
             Ready to switch from WATI?
           </h2>
-          <p className="text-green-100 mb-8">
+          <p className="text-emerald-100 mb-8">
             Try WhachatCRM free and see the difference simplicity makes.
           </p>
           <Link href="/auth">

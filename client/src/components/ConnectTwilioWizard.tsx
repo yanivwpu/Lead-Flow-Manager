@@ -106,7 +106,7 @@ export function ConnectTwilioWizard({ open, onOpenChange, onSuccess }: ConnectTw
           <DialogTitle className="flex items-center gap-2">
             {step === "success" ? (
               <>
-                <CheckCircle2 className="h-5 w-5 text-green-500" />
+                <CheckCircle2 className="h-5 w-5 text-emerald-600" />
                 WhatsApp Connected!
               </>
             ) : (
@@ -220,7 +220,7 @@ export function ConnectTwilioWizard({ open, onOpenChange, onSuccess }: ConnectTw
                     onClick={handleCopyWebhook}
                     data-testid="button-copy-webhook"
                   >
-                    {copied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
+                    {copied ? <Check className="h-4 w-4 text-emerald-600" /> : <Copy className="h-4 w-4" />}
                   </Button>
                 </div>
               </div>
@@ -242,7 +242,7 @@ export function ConnectTwilioWizard({ open, onOpenChange, onSuccess }: ConnectTw
                     onClick={handleCopyStatus}
                     data-testid="button-copy-status"
                   >
-                    {statusCopied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
+                    {statusCopied ? <Check className="h-4 w-4 text-emerald-600" /> : <Copy className="h-4 w-4" />}
                   </Button>
                 </div>
               </div>
@@ -283,8 +283,8 @@ export function ConnectTwilioWizard({ open, onOpenChange, onSuccess }: ConnectTw
 
         {step === "success" && (
           <div className="flex flex-col items-center justify-center py-8 gap-4">
-            <div className="rounded-full bg-green-100 p-4">
-              <CheckCircle2 className="h-8 w-8 text-green-600" />
+            <div className="rounded-full bg-emerald-100 p-4">
+              <CheckCircle2 className="h-8 w-8 text-emerald-600" />
             </div>
             <p className="text-center text-muted-foreground">
               You can now send and receive WhatsApp messages!

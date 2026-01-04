@@ -84,12 +84,12 @@ export function ResetPassword() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-green-50 to-emerald-100 p-4">
         <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md text-center">
-          <div className="h-16 w-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <CheckCircle className="h-8 w-8 text-green-600" />
+          <div className="h-16 w-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <CheckCircle className="h-8 w-8 text-emerald-600" />
           </div>
           <h1 className="text-2xl font-bold text-gray-900 mb-2">Password Reset!</h1>
           <p className="text-gray-600 mb-6">Your password has been successfully reset. Redirecting to login...</p>
-          <Button onClick={() => setLocation("/")} className="w-full bg-green-600 hover:bg-green-700" data-testid="button-go-to-login">
+          <Button onClick={() => setLocation("/")} className="w-full bg-emerald-600 hover:bg-emerald-700" data-testid="button-go-to-login">
             Go to Login
           </Button>
         </div>
@@ -118,8 +118,8 @@ export function ResetPassword() {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-green-50 to-emerald-100 p-4">
       <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md">
         <div className="text-center mb-8">
-          <div className="h-16 w-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Lock className="h-8 w-8 text-green-600" />
+          <div className="h-16 w-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Lock className="h-8 w-8 text-emerald-600" />
           </div>
           <h1 className="text-2xl font-bold text-gray-900">Reset Password</h1>
           <p className="text-gray-600 mt-2">Enter your new password below</p>
@@ -170,7 +170,7 @@ export function ResetPassword() {
 
           <Button
             type="submit"
-            className="w-full bg-green-600 hover:bg-green-700"
+            className="w-full bg-emerald-600 hover:bg-emerald-700"
             disabled={isLoading}
             data-testid="button-reset-password"
           >

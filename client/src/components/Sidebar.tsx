@@ -34,7 +34,7 @@ export function Sidebar() {
                 className={cn(
                   "flex items-center p-3 rounded-lg transition-colors group relative md:w-full justify-center md:justify-start",
                   isActive
-                    ? "bg-green-50 text-brand-green"
+                    ? "bg-emerald-50 text-brand-green"
                     : "text-gray-500 hover:bg-gray-50 hover:text-gray-900"
                 )}
               >
