@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Send, Loader2, Mail, MessageSquare } from "lucide-react";
+import { ArrowLeft, Send, Loader2, MessageSquare } from "lucide-react";
 
 export function Contact() {
   const { toast } = useToast();
@@ -81,16 +81,6 @@ export function Contact() {
             </p>
 
             <div className="space-y-6">
-              <div className="flex items-start gap-4">
-                <div className="h-10 w-10 bg-emerald-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                  <Mail className="h-5 w-5 text-emerald-600" />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-slate-900">Email Us</h3>
-                  <p className="text-slate-600 text-sm">support@whachatcrm.com</p>
-                </div>
-              </div>
-              
               <div className="flex items-start gap-4">
                 <div className="h-10 w-10 bg-emerald-100 rounded-lg flex items-center justify-center flex-shrink-0">
                   <MessageSquare className="h-5 w-5 text-emerald-600" />

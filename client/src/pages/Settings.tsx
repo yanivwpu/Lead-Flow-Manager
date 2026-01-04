@@ -678,49 +678,6 @@ export function Settings() {
                     className="flex-shrink-0"
                  />
                </div>
-
-               <div className="h-px bg-gray-100" />
-
-               <div className="flex items-center justify-between gap-3">
-                 <div className="space-y-0.5 min-w-0 flex-1">
-                   <Label className="text-sm sm:text-base font-medium">Test Email</Label>
-                   <p className="text-xs sm:text-sm text-gray-500">Send a test email to verify delivery.</p>
-                 </div>
-                 <Button
-                   variant="outline"
-                   size="sm"
-                   onClick={async () => {
-                     try {
-                       const res = await fetch('/api/test-email', {
-                         method: 'POST',
-                         credentials: 'include'
-                       });
-                       const data = await res.json();
-                       if (res.ok) {
-                         toast({
-                           title: "Test email sent",
-                           description: "Check your inbox (and spam folder)"
-                         });
-                       } else {
-                         toast({
-                           title: "Failed to send",
-                           description: data.error || "Something went wrong",
-                           variant: "destructive"
-                         });
-                       }
-                     } catch (err) {
-                       toast({
-                         title: "Error",
-                         description: "Failed to send test email",
-                         variant: "destructive"
-                       });
-                     }
-                   }}
-                   data-testid="button-test-email"
-                 >
-                   Send Test
-                 </Button>
-               </div>
              </div>
            </div>
 
