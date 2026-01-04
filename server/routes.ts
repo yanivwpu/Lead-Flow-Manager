@@ -249,6 +249,37 @@ export async function registerRoutes(
     res.json({ publicKey });
   });
 
+  // Update user avatar
+  app.patch("/api/users/avatar", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const { avatarUrl } = req.body;
+      
+      if (!avatarUrl) {
+        return res.status(400).json({ error: "Avatar URL is required" });
+      }
+
+      // Validate that it's a data URL or a valid URL
+      if (!avatarUrl.startsWith('data:image/') && !avatarUrl.startsWith('http')) {
+        return res.status(400).json({ error: "Invalid avatar format" });
+      }
+
+      // Limit size (max ~500KB for base64)
+      if (avatarUrl.length > 700000) {
+        return res.status(400).json({ error: "Image too large. Please use an image under 500KB" });
+      }
+
+      const updated = await storage.updateUser(req.user.id, { avatarUrl });
+      res.json({ avatarUrl: updated?.avatarUrl });
+    } catch (error) {
+      console.error("Error updating avatar:", error);
+      res.status(500).json({ error: "Failed to update avatar" });
+    }
+  });
+
   // ============= Phone Registration Endpoints =============
   
   // Get registered phones for current user

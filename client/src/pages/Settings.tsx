@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Bell, Mail, Smartphone, Shield, LogOut, Phone, Plus, Trash2, Loader2, CreditCard, ExternalLink, Zap, CheckCircle2, XCircle, MessageSquare, Copy, Check, AlertTriangle, Users, UserPlus, Crown, Clock } from "lucide-react";
+import { Bell, Mail, Smartphone, Shield, LogOut, Phone, Plus, Trash2, Loader2, CreditCard, ExternalLink, Zap, CheckCircle2, XCircle, MessageSquare, Copy, Check, AlertTriangle, Users, UserPlus, Crown, Clock, Building2 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -493,6 +493,29 @@ export function Settings() {
                    >
                      Open Twilio Sandbox Settings <ExternalLink className="h-3 w-3" />
                    </a>
+                </div>
+
+                {/* Business Profile Section */}
+                <div className="p-4 bg-emerald-50 rounded-lg border border-emerald-200">
+                  <div className="flex items-start gap-3 mb-3">
+                    <Building2 className="h-4 w-4 text-emerald-600 mt-0.5 flex-shrink-0" />
+                    <div>
+                      <p className="text-sm font-medium text-emerald-900">Business Profile</p>
+                      <p className="text-xs text-emerald-700 mt-1">
+                        Your business name, logo, and description that customers see on WhatsApp are managed in your Twilio Console.
+                      </p>
+                    </div>
+                  </div>
+                  <a
+                    href="https://console.twilio.com/us1/develop/sms/senders/whatsapp-senders"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 px-3 py-2 bg-white border border-emerald-300 rounded-lg text-sm text-emerald-700 hover:bg-emerald-50 transition-colors"
+                    data-testid="link-whatsapp-profile"
+                  >
+                    <span>Customize Your WhatsApp Business Profile</span>
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
                  </div>
                  
                  <Button 
@@ -521,6 +544,100 @@ export function Settings() {
                  </Button>
                </div>
              )}
+           </div>
+
+           {/* Profile Section */}
+           <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 shadow-sm">
+             <div className="flex items-center gap-3 mb-4 sm:mb-6">
+               <div className="h-9 w-9 sm:h-10 sm:w-10 bg-emerald-50 rounded-lg flex items-center justify-center flex-shrink-0">
+                 <Users className="h-4 w-4 sm:h-5 sm:w-5 text-emerald-600" />
+               </div>
+               <div className="min-w-0">
+                 <h2 className="text-base sm:text-lg font-bold text-gray-900">Your Profile</h2>
+                 <p className="text-xs sm:text-sm text-gray-500">Customize how you appear to your team.</p>
+               </div>
+             </div>
+
+             <div className="flex items-center gap-4">
+               <div className="relative">
+                 {user?.avatarUrl ? (
+                   <img 
+                     src={user.avatarUrl} 
+                     alt={user.name || 'Profile'} 
+                     className="h-16 w-16 rounded-full object-cover border-2 border-emerald-200"
+                   />
+                 ) : (
+                   <div className="h-16 w-16 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-700 text-xl font-bold border-2 border-emerald-200">
+                     {user?.name?.charAt(0)?.toUpperCase() || 'U'}
+                   </div>
+                 )}
+                 <label 
+                   htmlFor="avatar-upload"
+                   className="absolute -bottom-1 -right-1 h-7 w-7 bg-emerald-600 hover:bg-emerald-700 rounded-full flex items-center justify-center cursor-pointer transition-colors shadow-sm"
+                 >
+                   <Plus className="h-4 w-4 text-white" />
+                   <input
+                     id="avatar-upload"
+                     type="file"
+                     accept="image/*"
+                     className="hidden"
+                     onChange={async (e) => {
+                       const file = e.target.files?.[0];
+                       if (!file) return;
+                       
+                       if (file.size > 500000) {
+                         toast({
+                           title: "Image too large",
+                           description: "Please use an image under 500KB",
+                           variant: "destructive"
+                         });
+                         return;
+                       }
+                       
+                       const reader = new FileReader();
+                       reader.onload = async (event) => {
+                         const dataUrl = event.target?.result as string;
+                         try {
+                           const res = await fetch('/api/users/avatar', {
+                             method: 'PATCH',
+                             headers: { 'Content-Type': 'application/json' },
+                             body: JSON.stringify({ avatarUrl: dataUrl }),
+                             credentials: 'include'
+                           });
+                           if (res.ok) {
+                             toast({
+                               title: "Avatar updated",
+                               description: "Your profile picture has been updated"
+                             });
+                             window.location.reload();
+                           } else {
+                             const data = await res.json();
+                             toast({
+                               title: "Upload failed",
+                               description: data.error || "Failed to update avatar",
+                               variant: "destructive"
+                             });
+                           }
+                         } catch (err) {
+                           toast({
+                             title: "Upload failed",
+                             description: "Failed to update avatar",
+                             variant: "destructive"
+                           });
+                         }
+                       };
+                       reader.readAsDataURL(file);
+                     }}
+                     data-testid="input-avatar-upload"
+                   />
+                 </label>
+               </div>
+               <div>
+                 <p className="font-medium text-gray-900">{user?.name}</p>
+                 <p className="text-sm text-gray-500">{user?.email}</p>
+                 <p className="text-xs text-gray-400 mt-1">Click the + to upload a profile picture</p>
+               </div>
+             </div>
            </div>
 
            {/* Notifications Section */}
