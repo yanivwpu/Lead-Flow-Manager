@@ -391,17 +391,18 @@ export function Pricing() {
         </div>
 
         {/* Footer CTA */}
-        <div className="mt-16 bg-gray-900 rounded-2xl p-8 text-center text-white">
+        <div className="mt-16 bg-gray-900 rounded-2xl p-4 sm:p-8 text-center text-white overflow-hidden">
           <div className="flex justify-center mb-4">
             <Shield className="h-10 w-10 text-brand-green" />
           </div>
-          <h2 className="text-2xl font-bold mb-2">Start Free. Upgrade When WhatsApp Works for You.</h2>
-          <p className="text-gray-400 mb-6 max-w-lg mx-auto">
+          <h2 className="text-xl sm:text-2xl font-bold mb-2">Start Free. Upgrade When WhatsApp Works for You.</h2>
+          <p className="text-gray-400 mb-6 max-w-lg mx-auto text-sm sm:text-base">
             WhachatCRM uses the official WhatsApp Business API. Your data is secure and compliant with Meta's policies.
           </p>
           <Link href="/auth">
-            <Button className="bg-brand-green hover:bg-emerald-700 text-white px-8" data-testid="button-start-free-footer">
-              Start Free — No Credit Card Required
+            <Button className="bg-brand-green hover:bg-emerald-700 text-white px-4 sm:px-8 whitespace-normal h-auto py-3" data-testid="button-start-free-footer">
+              <span className="hidden sm:inline">Start Free — No Credit Card Required</span>
+              <span className="sm:hidden">Start Free — No Card Required</span>
             </Button>
           </Link>
         </div>
