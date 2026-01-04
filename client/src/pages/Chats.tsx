@@ -17,7 +17,11 @@ import {
   AlertTriangle,
   Settings,
   Play,
-  X
+  X,
+  Users,
+  User,
+  UserCheck,
+  CheckCircle2
 } from "lucide-react";
 import { DEMO_CHATS, type DemoChat } from "@/lib/demo-data";
 import { cn } from "@/lib/utils";
@@ -34,6 +38,16 @@ import { useSubscription } from "@/lib/subscription-context";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
 
+interface TeamMember {
+  id: string;
+  ownerId: string;
+  memberId: string | null;
+  email: string;
+  name: string | null;
+  role: string;
+  status: string;
+}
+
 interface Chat {
   id: string;
   userId: string;
@@ -49,9 +63,18 @@ interface Chat {
   pipelineStage: string;
   messages: any[];
   createdAt?: string;
+  status?: string;
+  assignedTo?: string | null;
 }
 
 type FollowUp = 'Tomorrow' | '3 days' | '1 week' | null;
+
+const CHAT_STATUSES = [
+  { value: "open", label: "Open", color: "bg-blue-100 text-blue-700" },
+  { value: "pending", label: "Pending", color: "bg-amber-100 text-amber-700" },
+  { value: "resolved", label: "Resolved", color: "bg-green-100 text-green-700" },
+  { value: "closed", label: "Closed", color: "bg-gray-100 text-gray-700" },
+];
 
 export function Chats() {
   const [match, params] = useRoute("/app/chats/:id");
@@ -65,9 +88,12 @@ export function Chats() {
   const [upgradeReason, setUpgradeReason] = useState<UpgradeReason>("free_reply");
   const [demoMode, setDemoMode] = useState(false);
   const [demoChats, setDemoChats] = useState<DemoChat[]>(DEMO_CHATS);
+  const [viewMode, setViewMode] = useState<"my" | "team">("my");
   
   const canSendMessages = subscription?.limits?.canSendMessages ?? false;
   const isAtLimit = subscription?.limits?.isAtLimit ?? false;
+  const hasTeamInbox = subscription?.limits?.teamInbox ?? false;
+  const hasAssignment = subscription?.limits?.assignmentEnabled ?? false;
 
   const { data: twilioStatus } = useQuery<{ connected: boolean; whatsappNumber: string | null }>({
     queryKey: ["/api/twilio/status"],
@@ -78,7 +104,17 @@ export function Chats() {
 
   const { data: chats = [], isLoading } = useQuery<Chat[]>({
     queryKey: ['/api/chats'],
-    enabled: !!user,
+    enabled: !!user && viewMode === "my",
+  });
+
+  const { data: teamChats = [] } = useQuery<Chat[]>({
+    queryKey: ['/api/chats/team'],
+    enabled: !!user && viewMode === "team" && hasTeamInbox,
+  });
+
+  const { data: teamMembers = [] } = useQuery<TeamMember[]>({
+    queryKey: ["/api/team"],
+    enabled: !!user && hasAssignment,
   });
 
   const updateChatMutation = useMutation({
@@ -128,6 +164,35 @@ export function Chats() {
     },
   });
 
+  const assignChatMutation = useMutation({
+    mutationFn: async ({ chatId, assignedTo, status }: { chatId: string; assignedTo?: string | null; status?: string }) => {
+      const response = await fetch(`/api/chats/${chatId}/assign`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ assignedTo, status }),
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to assign chat');
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/chats'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/chats/team'] });
+      toast({ title: "Updated", description: "Chat assignment updated." });
+    },
+    onError: (error: Error) => {
+      if (error.message.includes("Pro")) {
+        setUpgradeReason("add_automation");
+        setUpgradeModalOpen(true);
+      } else {
+        toast({ title: "Error", description: error.message, variant: "destructive" });
+      }
+    },
+  });
+
   const handleDeleteChat = () => {
     if (!selectedChat) return;
     if (confirm(`Are you sure you want to delete the conversation with ${selectedChat.name}? This cannot be undone.`)) {
@@ -142,12 +207,13 @@ export function Chats() {
   };
 
   const selectedChatId = params?.id;
+  const activeChats = viewMode === "team" ? teamChats : chats;
   const selectedChat = demoMode 
     ? demoChats.find(c => c.id === selectedChatId)
-    : chats.find(c => c.id === selectedChatId);
+    : activeChats.find(c => c.id === selectedChatId);
 
   const sortedChats = useMemo(() => {
-    const chatsToSort = demoMode ? demoChats : chats;
+    const chatsToSort = demoMode ? demoChats : activeChats;
     return [...chatsToSort].sort((a, b) => {
       const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
       const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
@@ -156,7 +222,7 @@ export function Chats() {
       }
       return a.id.localeCompare(b.id);
     });
-  }, [chats, demoChats, demoMode]);
+  }, [activeChats, demoChats, demoMode]);
 
   const filteredChats = sortedChats.filter(chat => 
     chat.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -334,9 +400,6 @@ export function Chats() {
     );
   }
 
-  const activeChats = demoMode ? demoChats : chats;
-  const isDemo = demoMode;
-
   return (
     <div className="flex h-full w-full">
       {/* Demo Mode Banner */}
@@ -375,14 +438,49 @@ export function Chats() {
         demoMode && "pt-10"
       )}>
         <div className="p-4 bg-gray-50 border-b border-gray-200">
-          <div className="flex justify-between items-center mb-4">
-             <h2 className="font-display font-bold text-xl text-gray-900">Chats</h2>
+          <div className="flex justify-between items-center mb-3">
+             <h2 className="font-display font-bold text-xl text-gray-900">
+               {viewMode === "team" ? "Team Inbox" : "Chats"}
+             </h2>
              <div className="flex gap-2">
                <button className="p-2 hover:bg-gray-200 rounded-full text-gray-600">
                  <MoreVertical className="h-5 w-5" />
                </button>
              </div>
           </div>
+          
+          {/* Team Inbox Toggle */}
+          {hasTeamInbox && (
+            <div className="flex gap-1 mb-3 bg-gray-100 rounded-lg p-1">
+              <button
+                onClick={() => setViewMode("my")}
+                className={cn(
+                  "flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-md text-sm font-medium transition-colors",
+                  viewMode === "my" 
+                    ? "bg-white text-gray-900 shadow-sm" 
+                    : "text-gray-500 hover:text-gray-700"
+                )}
+                data-testid="button-my-chats"
+              >
+                <User className="h-4 w-4" />
+                My Chats
+              </button>
+              <button
+                onClick={() => setViewMode("team")}
+                className={cn(
+                  "flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-md text-sm font-medium transition-colors",
+                  viewMode === "team" 
+                    ? "bg-white text-gray-900 shadow-sm" 
+                    : "text-gray-500 hover:text-gray-700"
+                )}
+                data-testid="button-team-inbox"
+              >
+                <Users className="h-4 w-4" />
+                Team Inbox
+              </button>
+            </div>
+          )}
+          
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
             <input 
@@ -422,31 +520,86 @@ export function Chats() {
            {/* Chat Conversation Area */}
            <div className="flex-1 flex flex-col min-w-0 h-full relative">
               {/* Header */}
-              <div className="bg-gray-50 px-4 py-3 border-b border-gray-200 flex justify-between items-center shrink-0">
-                 <div className="flex items-center gap-3">
-                   <button onClick={() => setLocation('/app/chats')} className="md:hidden">
-                     <span className="text-2xl mr-2">←</span>
-                   </button>
-                   {selectedChat.avatar?.startsWith('http') ? (
-                     <img 
-                       src={selectedChat.avatar} 
-                       alt={selectedChat.name} 
-                       className="h-10 w-10 rounded-full object-cover"
-                     />
-                   ) : (
-                     <div className="h-10 w-10 rounded-full bg-brand-green/10 flex items-center justify-center text-brand-green font-semibold">
-                       {selectedChat.avatar}
+              <div className="bg-gray-50 px-4 py-3 border-b border-gray-200 shrink-0">
+                 <div className="flex justify-between items-center">
+                   <div className="flex items-center gap-3">
+                     <button onClick={() => setLocation('/app/chats')} className="md:hidden">
+                       <span className="text-2xl mr-2">←</span>
+                     </button>
+                     {selectedChat.avatar?.startsWith('http') ? (
+                       <img 
+                         src={selectedChat.avatar} 
+                         alt={selectedChat.name} 
+                         className="h-10 w-10 rounded-full object-cover"
+                       />
+                     ) : (
+                       <div className="h-10 w-10 rounded-full bg-brand-green/10 flex items-center justify-center text-brand-green font-semibold">
+                         {selectedChat.avatar}
+                       </div>
+                     )}
+                     <div>
+                       <h3 className="font-semibold text-gray-900">{selectedChat.name}</h3>
+                       <span className="text-xs text-gray-500">last seen today at 10:45 AM</span>
                      </div>
-                   )}
-                   <div>
-                     <h3 className="font-semibold text-gray-900">{selectedChat.name}</h3>
-                     <span className="text-xs text-gray-500">last seen today at 10:45 AM</span>
+                   </div>
+                   <div className="flex items-center gap-4 text-gray-500">
+                      <Search className="h-5 w-5 cursor-pointer hover:text-gray-700 hidden sm:block" />
+                      <MoreVertical className="h-5 w-5 cursor-pointer hover:text-gray-700" />
                    </div>
                  </div>
-                 <div className="flex items-center gap-4 text-gray-500">
-                    <Search className="h-5 w-5 cursor-pointer hover:text-gray-700 hidden sm:block" />
-                    <MoreVertical className="h-5 w-5 cursor-pointer hover:text-gray-700" />
-                 </div>
+                 
+                 {/* Assignment Controls (Pro only) */}
+                 {hasAssignment && !demoMode && (
+                   <div className="flex items-center gap-3 mt-3 pt-3 border-t border-gray-200">
+                     <div className="flex items-center gap-2">
+                       <span className="text-xs text-gray-500">Status:</span>
+                       <Select 
+                         value={(selectedChat as Chat).status || "open"} 
+                         onValueChange={(status) => assignChatMutation.mutate({ chatId: selectedChat.id, status })}
+                       >
+                         <SelectTrigger className="h-7 text-xs w-[100px]" data-testid="select-chat-status">
+                           <SelectValue />
+                         </SelectTrigger>
+                         <SelectContent>
+                           {CHAT_STATUSES.map(s => (
+                             <SelectItem key={s.value} value={s.value}>
+                               <span className={cn("px-1.5 py-0.5 rounded text-xs", s.color)}>{s.label}</span>
+                             </SelectItem>
+                           ))}
+                         </SelectContent>
+                       </Select>
+                     </div>
+                     <div className="flex items-center gap-2">
+                       <span className="text-xs text-gray-500">Assigned:</span>
+                       <Select 
+                         value={(selectedChat as Chat).assignedTo || "unassigned"} 
+                         onValueChange={(assignedTo) => assignChatMutation.mutate({ 
+                           chatId: selectedChat.id, 
+                           assignedTo: assignedTo === "unassigned" ? null : assignedTo 
+                         })}
+                       >
+                         <SelectTrigger className="h-7 text-xs w-[130px]" data-testid="select-chat-assignee">
+                           <SelectValue placeholder="Unassigned" />
+                         </SelectTrigger>
+                         <SelectContent>
+                           <SelectItem value="unassigned">
+                             <span className="flex items-center gap-1.5 text-gray-500">
+                               <User className="h-3 w-3" /> Unassigned
+                             </span>
+                           </SelectItem>
+                           {teamMembers.filter(m => m.status === "active").map(member => (
+                             <SelectItem key={member.id} value={member.memberId || member.id}>
+                               <span className="flex items-center gap-1.5">
+                                 <UserCheck className="h-3 w-3 text-green-600" />
+                                 {member.name || member.email.split("@")[0]}
+                               </span>
+                             </SelectItem>
+                           ))}
+                         </SelectContent>
+                       </Select>
+                     </div>
+                   </div>
+                 )}
               </div>
 
               {/* Messages Area */}

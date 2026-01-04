@@ -18,6 +18,7 @@ export interface IStorage {
   
   // Chat methods
   getChats(userId: string): Promise<Chat[]>;
+  getTeamChats(ownerId: string): Promise<Chat[]>;
   getChat(id: string): Promise<Chat | undefined>;
   createChat(chat: InsertChat): Promise<Chat>;
   updateChat(id: string, updates: Partial<Chat>): Promise<Chat | undefined>;
@@ -82,6 +83,24 @@ export class DbStorage implements IStorage {
 
   async getChats(userId: string): Promise<Chat[]> {
     return await db.select().from(chats).where(eq(chats.userId, userId)).orderBy(asc(chats.createdAt), asc(chats.id));
+  }
+
+  async getTeamChats(ownerId: string): Promise<Chat[]> {
+    const members = await db.select().from(teamMembers).where(eq(teamMembers.ownerId, ownerId));
+    const memberUserIds = members
+      .filter(m => m.memberId !== null)
+      .map(m => m.memberId as string);
+    const allUserIds = [ownerId, ...memberUserIds];
+    
+    if (allUserIds.length === 1) {
+      return await db.select().from(chats).where(eq(chats.userId, ownerId)).orderBy(desc(chats.updatedAt));
+    }
+    
+    return await db
+      .select()
+      .from(chats)
+      .where(or(...allUserIds.map(id => eq(chats.userId, id))))
+      .orderBy(desc(chats.updatedAt));
   }
 
   async getChat(id: string): Promise<Chat | undefined> {

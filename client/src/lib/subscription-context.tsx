@@ -15,6 +15,8 @@ interface SubscriptionLimits {
   pushNotifications: boolean;
   teamInbox: boolean;
   usageReports: boolean;
+  assignmentEnabled: boolean;
+  workflowsEnabled: boolean;
   isAtLimit: boolean;
 }
 

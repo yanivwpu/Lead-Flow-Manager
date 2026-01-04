@@ -52,6 +52,56 @@ export async function registerRoutes(
     }
   });
 
+  // Get team inbox - all chats across team members (Pro feature)
+  app.get("/api/chats/team", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      
+      const limits = await subscriptionService.getUserLimits(req.user.id);
+      if (!limits?.teamInbox) {
+        return res.status(403).json({ error: "Team inbox requires a paid plan", upgradeRequired: true });
+      }
+      
+      const teamChats = await storage.getTeamChats(req.user.id);
+      res.json(teamChats);
+    } catch (error) {
+      console.error("Error fetching team chats:", error);
+      res.status(500).json({ error: "Failed to fetch team chats" });
+    }
+  });
+
+  // Assign chat to team member (Pro feature)
+  app.patch("/api/chats/:id/assign", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      
+      const limits = await subscriptionService.getUserLimits(req.user.id);
+      if (!limits?.assignmentEnabled) {
+        return res.status(403).json({ error: "Conversation assignment is a Pro feature", upgradeRequired: true });
+      }
+      
+      const { assignedTo, status } = req.body;
+      const chat = await storage.getChat(req.params.id);
+      if (!chat) {
+        return res.status(404).json({ error: "Chat not found" });
+      }
+      
+      const updates: any = {};
+      if (assignedTo !== undefined) updates.assignedTo = assignedTo;
+      if (status !== undefined) updates.status = status;
+      
+      const updatedChat = await storage.updateChat(req.params.id, updates);
+      res.json(updatedChat);
+    } catch (error) {
+      console.error("Error assigning chat:", error);
+      res.status(500).json({ error: "Failed to assign chat" });
+    }
+  });
+
   // Get a specific chat
   app.get("/api/chats/:id", async (req, res) => {
     try {
