@@ -24,13 +24,11 @@ async function seedProducts() {
   if (!starterExists) {
     const starterProduct = await stripe.products.create({
       name: 'Starter Plan',
-      description: 'WhachatCRM Starter - 3 users, 1 WhatsApp number, 500 conversations/month, $5 Twilio usage included',
+      description: 'WhachatCRM Starter - 500 conversations/month, 3 team members. Connect your own Twilio account for WhatsApp.',
       metadata: {
         plan: 'starter',
         maxUsers: '3',
-        maxWhatsappNumbers: '1',
         conversationsPerMonth: '500',
-        twilioUsageIncluded: '5',
       },
     });
 
@@ -53,13 +51,11 @@ async function seedProducts() {
   if (!proExists) {
     const proProduct = await stripe.products.create({
       name: 'Pro Plan',
-      description: 'WhachatCRM Pro - 10 users, 3 WhatsApp numbers, 2,000 conversations/month, $15 Twilio usage included',
+      description: 'WhachatCRM Pro - 2,000 conversations/month, 10 team members. Connect your own Twilio account for WhatsApp.',
       metadata: {
         plan: 'pro',
         maxUsers: '10',
-        maxWhatsappNumbers: '3',
         conversationsPerMonth: '2000',
-        twilioUsageIncluded: '15',
       },
     });
 
