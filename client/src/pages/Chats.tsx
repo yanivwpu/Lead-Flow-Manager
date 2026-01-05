@@ -93,6 +93,8 @@ export function Chats() {
   const [demoMode, setDemoMode] = useState(false);
   const [demoChats, setDemoChats] = useState<DemoChat[]>(DEMO_CHATS);
   const [viewMode, setViewMode] = useState<"my" | "team">("my");
+  const [conversationSearch, setConversationSearch] = useState("");
+  const [showConversationSearch, setShowConversationSearch] = useState(false);
   
   const canSendMessages = subscription?.limits?.canSendMessages ?? false;
   const isAtLimit = subscription?.limits?.isAtLimit ?? false;
@@ -279,6 +281,8 @@ export function Chats() {
 
   useEffect(() => {
     setLocalNotes(selectedChat?.notes || "");
+    setConversationSearch("");
+    setShowConversationSearch(false);
   }, [selectedChat?.id, selectedChat?.notes]);
 
   useEffect(() => {
@@ -557,10 +561,44 @@ export function Chats() {
                      </div>
                    </div>
                    <div className="flex items-center gap-4 text-gray-500">
-                      <Search className="h-5 w-5 cursor-pointer hover:text-gray-700 hidden sm:block" />
+                      <Search 
+                        className={cn(
+                          "h-5 w-5 cursor-pointer hover:text-gray-700 hidden sm:block",
+                          showConversationSearch && "text-brand-green"
+                        )}
+                        onClick={() => {
+                          setShowConversationSearch(!showConversationSearch);
+                          if (showConversationSearch) setConversationSearch("");
+                        }}
+                        data-testid="button-conversation-search"
+                      />
                       <MoreVertical className="h-5 w-5 cursor-pointer hover:text-gray-700" />
                    </div>
                  </div>
+                 
+                 {/* In-conversation search bar */}
+                 {showConversationSearch && (
+                   <div className="mt-2 relative">
+                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                     <input
+                       type="text"
+                       placeholder="Search in this conversation..."
+                       className="w-full pl-10 pr-10 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-green/20 focus:border-brand-green"
+                       value={conversationSearch}
+                       onChange={(e) => setConversationSearch(e.target.value)}
+                       autoFocus
+                       data-testid="input-conversation-search"
+                     />
+                     {conversationSearch && (
+                       <button
+                         onClick={() => setConversationSearch("")}
+                         className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                       >
+                         <X className="h-4 w-4" />
+                       </button>
+                     )}
+                   </div>
+                 )}
                  
                  {/* Assignment Controls (Pro only) */}
                  {hasAssignment && !demoMode && (
@@ -629,27 +667,51 @@ export function Chats() {
                       <p>No messages yet. Start the conversation!</p>
                     </div>
                   ) : (
-                    (selectedChat.messages || []).map((msg: any) => (
-                      <div 
-                        key={msg.id} 
-                        className={cn(
-                          "flex", 
-                          msg.sender === 'me' ? "justify-end" : "justify-start"
-                        )}
-                      >
-                        <div className={cn(
-                          "max-w-[85%] md:max-w-[65%] rounded-lg px-3 py-2 text-sm shadow-sm relative",
-                          msg.sender === 'me' 
-                            ? "bg-[#d9fdd3] text-gray-900 rounded-tr-none" 
-                            : "bg-white text-gray-900 rounded-tl-none"
-                        )}>
-                          <p>{msg.text}</p>
-                          <span className="text-[10px] text-gray-500 block text-right mt-1 opacity-70">
-                            {msg.time}
-                          </span>
-                        </div>
-                      </div>
-                    ))
+                    (selectedChat.messages || [])
+                      .filter((msg: any) => 
+                        !conversationSearch || 
+                        msg.text?.toLowerCase().includes(conversationSearch.toLowerCase())
+                      )
+                      .map((msg: any) => {
+                        const highlightText = (text: string) => {
+                          if (!conversationSearch || !text) return text;
+                          const parts = text.split(new RegExp(`(${conversationSearch})`, 'gi'));
+                          return parts.map((part, i) => 
+                            part.toLowerCase() === conversationSearch.toLowerCase() 
+                              ? <mark key={i} className="bg-yellow-300 text-gray-900 px-0.5 rounded">{part}</mark>
+                              : part
+                          );
+                        };
+                        
+                        return (
+                          <div 
+                            key={msg.id} 
+                            className={cn(
+                              "flex", 
+                              msg.sender === 'me' ? "justify-end" : "justify-start"
+                            )}
+                          >
+                            <div className={cn(
+                              "max-w-[85%] md:max-w-[65%] rounded-lg px-3 py-2 text-sm shadow-sm relative",
+                              msg.sender === 'me' 
+                                ? "bg-[#d9fdd3] text-gray-900 rounded-tr-none" 
+                                : "bg-white text-gray-900 rounded-tl-none"
+                            )}>
+                              <p>{highlightText(msg.text)}</p>
+                              <span className="text-[10px] text-gray-500 block text-right mt-1 opacity-70">
+                                {msg.time}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })
+                  )}
+                  {conversationSearch && (selectedChat.messages || []).filter((msg: any) => 
+                    msg.text?.toLowerCase().includes(conversationSearch.toLowerCase())
+                  ).length === 0 && (
+                    <div className="text-center text-gray-500 py-8">
+                      <p>No messages found for "{conversationSearch}"</p>
+                    </div>
                   )}
                   <div ref={messagesEndRef} />
                 </div>
