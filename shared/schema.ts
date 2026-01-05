@@ -81,6 +81,7 @@ export const users = pgTable("users", {
   subscriptionStatus: text("subscription_status").default("active"), // active, canceled, past_due
   currentPeriodStart: timestamp("current_period_start"),
   currentPeriodEnd: timestamp("current_period_end"),
+  trialEndsAt: timestamp("trial_ends_at"), // 14-day Pro trial end date
   lifetimeConversations: integer("lifetime_conversations").default(0), // for free tier tracking
   monthlyConversations: integer("monthly_conversations").default(0), // current month conversation count
   monthlyTwilioUsage: numeric("monthly_twilio_usage", { precision: 10, scale: 2 }).default("0"), // current month Twilio spend

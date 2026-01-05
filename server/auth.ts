@@ -108,11 +108,15 @@ export function registerAuthRoutes(app: Express) {
       // Hash password
       const hashedPassword = await bcrypt.hash(password, 10);
 
-      // Create user
+      // Create user with 14-day Pro trial
+      const trialEndsAt = new Date();
+      trialEndsAt.setDate(trialEndsAt.getDate() + 14);
+      
       const user = await storage.createUser({
         name,
         email,
         password: hashedPassword,
+        trialEndsAt,
       });
 
       // Register phone number if provided

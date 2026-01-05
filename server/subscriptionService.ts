@@ -21,6 +21,10 @@ export interface SubscriptionLimits {
   isAtLimit: boolean;
   isAtWarning: boolean; // 80% usage
   suggestedUpgrade: SubscriptionPlan | null;
+  // Trial info
+  isInTrial: boolean;
+  trialEndsAt: Date | null;
+  trialDaysRemaining: number;
 }
 
 export interface UpgradeTrigger {
@@ -38,8 +42,18 @@ export class SubscriptionService {
     const user = await storage.getUser(userId);
     if (!user) return null;
 
-    const plan = (user.subscriptionPlan as SubscriptionPlan) || 'free';
-    const limits = PLAN_LIMITS[plan];
+    // Check if user is in active trial period
+    const now = new Date();
+    const trialEndsAt = user.trialEndsAt ? new Date(user.trialEndsAt) : null;
+    const isInTrial = trialEndsAt && trialEndsAt > now && user.subscriptionPlan === 'free';
+    const trialDaysRemaining = trialEndsAt && trialEndsAt > now 
+      ? Math.ceil((trialEndsAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+      : 0;
+
+    // If in trial, use Pro limits; otherwise use actual plan
+    const actualPlan = (user.subscriptionPlan as SubscriptionPlan) || 'free';
+    const effectivePlan: SubscriptionPlan = isInTrial ? 'pro' : actualPlan;
+    const limits = PLAN_LIMITS[effectivePlan];
 
     // Get conversation count for current period
     const conversationsUsed = user.monthlyConversations || 0;
@@ -52,12 +66,12 @@ export class SubscriptionService {
 
     // Determine suggested upgrade
     let suggestedUpgrade: SubscriptionPlan | null = null;
-    if (plan === 'free') suggestedUpgrade = 'starter';
-    else if (plan === 'starter') suggestedUpgrade = 'pro';
+    if (actualPlan === 'free') suggestedUpgrade = 'starter';
+    else if (actualPlan === 'starter') suggestedUpgrade = 'pro';
 
     return {
-      plan,
-      planName: limits.name,
+      plan: effectivePlan,
+      planName: isInTrial ? 'Pro Trial' : limits.name,
       conversationsLimit: limits.conversationsPerMonth,
       conversationsUsed,
       conversationsRemaining,
@@ -74,6 +88,9 @@ export class SubscriptionService {
       isAtLimit,
       isAtWarning,
       suggestedUpgrade,
+      isInTrial: !!isInTrial,
+      trialEndsAt: trialEndsAt,
+      trialDaysRemaining,
     };
   }
 
