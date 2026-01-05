@@ -578,6 +578,7 @@ export async function registerRoutes(
         text: message,
         time: new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
         sent: true,
+        sender: "me",
         status: "sent",
         twilioSid: result.sid,
       };
@@ -881,6 +882,7 @@ export async function registerRoutes(
         text: parsed.body,
         time: new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
         sent: false,
+        sender: "them",
       };
 
       const messages = (chat.messages as WhatsAppMessage[]) || [];

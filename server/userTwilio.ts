@@ -8,6 +8,7 @@ export interface WhatsAppMessage {
   text: string;
   time: string;
   sent: boolean;
+  sender?: "me" | "them";
   status?: "sent" | "delivered" | "read" | "failed";
   twilioSid?: string;
 }
