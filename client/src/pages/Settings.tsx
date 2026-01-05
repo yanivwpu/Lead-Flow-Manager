@@ -496,12 +496,12 @@ export function Settings() {
                 </div>
 
                 {/* Business Profile Section */}
-                <div className="p-4 bg-emerald-50 rounded-lg border border-emerald-200">
+                <div className="p-4 bg-sky-50 rounded-lg border border-sky-200">
                   <div className="flex items-start gap-3 mb-3">
-                    <Building2 className="h-4 w-4 text-emerald-600 mt-0.5 flex-shrink-0" />
+                    <Building2 className="h-4 w-4 text-sky-600 mt-0.5 flex-shrink-0" />
                     <div>
-                      <p className="text-sm font-medium text-emerald-900">Business Profile</p>
-                      <p className="text-xs text-emerald-700 mt-1">
+                      <p className="text-sm font-medium text-sky-900">Business Profile</p>
+                      <p className="text-xs text-sky-700 mt-1">
                         Your business name, logo, and description that customers see on WhatsApp are managed in your Twilio Console.
                       </p>
                     </div>
@@ -510,7 +510,7 @@ export function Settings() {
                     href="https://console.twilio.com/us1/develop/sms/senders/whatsapp-senders"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 px-3 py-2 bg-white border border-emerald-300 rounded-lg text-sm text-emerald-700 hover:bg-emerald-50 transition-colors"
+                    className="inline-flex items-center gap-2 px-3 py-2 bg-white border border-sky-300 rounded-lg text-sm text-sky-700 hover:bg-sky-50 transition-colors"
                     data-testid="link-whatsapp-profile"
                   >
                     <span>Customize Your WhatsApp Business Profile</span>

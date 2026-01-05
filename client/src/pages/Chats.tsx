@@ -433,7 +433,7 @@ export function Chats() {
       
       {/* Chat List */}
       <div className={cn(
-        "w-full md:w-[380px] flex flex-col border-r border-gray-200 bg-white",
+        "w-full md:w-[300px] lg:w-[320px] flex flex-col border-r border-gray-200 bg-white",
         selectedChatId ? "hidden md:flex" : "flex",
         demoMode && "pt-10"
       )}>
