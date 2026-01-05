@@ -492,41 +492,42 @@ export function Workflows() {
       </div>
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{editingWorkflow ? "Edit Workflow" : "Create Workflow"}</DialogTitle>
-            <DialogDescription>
-              Set up automation rules to streamline your workflow
+        <DialogContent className="max-w-md max-h-[75vh] flex flex-col p-4 sm:p-6">
+          <DialogHeader className="shrink-0">
+            <DialogTitle className="text-base sm:text-lg">{editingWorkflow ? "Edit Workflow" : "Create Workflow"}</DialogTitle>
+            <DialogDescription className="text-xs sm:text-sm">
+              Set up automation rules
             </DialogDescription>
           </DialogHeader>
           
-          <div className="space-y-4 py-4">
+          <div className="flex-1 overflow-y-auto space-y-3 py-2">
             <div>
-              <Label htmlFor="name">Workflow Name</Label>
+              <Label htmlFor="name" className="text-xs sm:text-sm">Name</Label>
               <Input
                 id="name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="e.g., Auto-assign new chats"
+                className="h-9 text-sm"
                 data-testid="input-workflow-name"
               />
             </div>
 
             <div>
-              <Label htmlFor="description">Description (optional)</Label>
-              <Textarea
+              <Label htmlFor="description" className="text-xs sm:text-sm">Description</Label>
+              <Input
                 id="description"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="What does this workflow do?"
-                rows={2}
+                className="h-9 text-sm"
               />
             </div>
 
             <div>
-              <Label>Trigger</Label>
+              <Label className="text-xs sm:text-sm">When this happens:</Label>
               <Select value={triggerType} onValueChange={setTriggerType}>
-                <SelectTrigger data-testid="select-trigger-type">
+                <SelectTrigger className="h-9 text-sm" data-testid="select-trigger-type">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -540,19 +541,17 @@ export function Workflows() {
                   ))}
                 </SelectContent>
               </Select>
-              <p className="text-xs text-gray-500 mt-1">
-                {TRIGGER_TYPES.find(t => t.value === triggerType)?.description}
-              </p>
             </div>
 
             {triggerType === "keyword" && (
               <div>
-                <Label htmlFor="keywords">Keywords (comma-separated)</Label>
+                <Label htmlFor="keywords" className="text-xs sm:text-sm">Keywords</Label>
                 <Input
                   id="keywords"
                   value={keywords}
                   onChange={(e) => setKeywords(e.target.value)}
-                  placeholder="e.g., pricing, quote, help"
+                  placeholder="pricing, quote, help"
+                  className="h-9 text-sm"
                   data-testid="input-keywords"
                 />
               </div>
@@ -560,71 +559,76 @@ export function Workflows() {
 
             <div>
               <div className="flex items-center justify-between mb-2">
-                <Label>Actions</Label>
+                <Label className="text-xs sm:text-sm">Do this:</Label>
                 <Button 
                   type="button" 
-                  variant="outline" 
+                  variant="ghost" 
                   size="sm" 
                   onClick={addAction}
+                  className="h-7 text-xs px-2"
                   data-testid="button-add-action"
                 >
                   <Plus className="h-3 w-3 mr-1" />
-                  Add Action
+                  Add
                 </Button>
               </div>
               <div className="space-y-2">
                 {actions.map((action, index) => (
-                  <div key={index} className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg">
-                    <Select 
-                      value={action.type} 
-                      onValueChange={(v) => updateAction(index, "type", v)}
-                    >
-                      <SelectTrigger className="w-[160px]">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {ACTION_TYPES.map(at => (
-                          <SelectItem key={at.value} value={at.value}>
-                            <div className="flex items-center gap-2">
-                              <at.icon className="h-3 w-3" />
-                              {at.label}
-                            </div>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    {renderActionValueInput(action, index)}
-                    {actions.length > 1 && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => removeAction(index)}
-                        className="h-8 w-8"
+                  <div key={index} className="p-2 bg-gray-50 rounded-lg space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Select 
+                        value={action.type} 
+                        onValueChange={(v) => updateAction(index, "type", v)}
                       >
-                        <Trash2 className="h-3 w-3 text-red-500" />
-                      </Button>
-                    )}
+                        <SelectTrigger className="flex-1 h-8 text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {ACTION_TYPES.map(at => (
+                            <SelectItem key={at.value} value={at.value}>
+                              <div className="flex items-center gap-2">
+                                <at.icon className="h-3 w-3" />
+                                {at.label}
+                              </div>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {actions.length > 1 && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => removeAction(index)}
+                          className="h-7 w-7 shrink-0"
+                        >
+                          <Trash2 className="h-3 w-3 text-red-500" />
+                        </Button>
+                      )}
+                    </div>
+                    <div className="pl-0">
+                      {renderActionValueInput(action, index)}
+                    </div>
                   </div>
                 ))}
               </div>
             </div>
           </div>
 
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
+          <DialogFooter className="shrink-0 pt-2 gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setIsDialogOpen(false)} className="h-9 text-sm">
               Cancel
             </Button>
             <Button 
               onClick={handleSubmit}
               disabled={createWorkflowMutation.isPending || updateWorkflowMutation.isPending}
-              className="bg-brand-green hover:bg-brand-green/90"
+              className="bg-brand-green hover:bg-brand-green/90 h-9 text-sm"
               data-testid="button-save-workflow"
             >
               {(createWorkflowMutation.isPending || updateWorkflowMutation.isPending) && (
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
               )}
-              {editingWorkflow ? "Save Changes" : "Create Workflow"}
+              {editingWorkflow ? "Save" : "Create"}
             </Button>
           </DialogFooter>
         </DialogContent>

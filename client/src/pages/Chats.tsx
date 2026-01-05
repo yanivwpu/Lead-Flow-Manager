@@ -536,7 +536,7 @@ export function Chats() {
           demoMode && "pt-10"
         )}>
            {/* Chat Conversation Area */}
-           <div className="flex-1 flex flex-col min-w-0 h-full relative">
+           <div className="flex-[65] md:flex-1 flex flex-col min-w-0 min-h-0 relative">
               {/* Header */}
               <div className="bg-gray-50 px-4 py-3 border-b border-gray-200 shrink-0">
                  <div className="flex justify-between items-center">
@@ -656,12 +656,12 @@ export function Chats() {
 
               {/* Messages Area */}
               <div 
-                className="flex-1 overflow-y-auto p-4 md:p-8 space-y-4 relative" 
+                className="flex-1 overflow-y-auto p-2 sm:p-4 md:p-8 relative min-h-0" 
                 style={{ backgroundImage: 'url("https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png")', backgroundRepeat: 'repeat', backgroundSize: '400px' }}
               >
                 <div className="absolute inset-0 bg-[#efeae2]/90 pointer-events-none" />
                 
-                <div className="relative z-10 space-y-4">
+                <div className="relative z-10 space-y-1.5 sm:space-y-3 md:space-y-4">
                   {(selectedChat.messages || []).length === 0 ? (
                     <div className="text-center text-gray-500 py-8">
                       <p>No messages yet. Start the conversation!</p>
@@ -742,7 +742,75 @@ export function Chats() {
               </div>
            </div>
 
-           {/* CRM Sidebar Panel - Hidden on mobile portrait */}
+           {/* Mobile Lead Details Panel - Compact version for mobile */}
+           <div className="flex md:hidden flex-[35] min-h-0 bg-white border-t border-gray-200 overflow-y-auto shrink-0 flex-col">
+              <div className="p-3 space-y-3">
+                 <div className="flex items-center justify-between">
+                   <h3 className="font-display font-bold text-gray-900 text-sm">Lead Details</h3>
+                   <span className={cn("text-xs px-2 py-0.5 rounded-full", TAG_COLORS[selectedChat.tag as keyof typeof TAG_COLORS] || "bg-gray-100 text-gray-600")}>
+                     {selectedChat.tag || 'New'}
+                   </span>
+                 </div>
+                 
+                 <div className="flex gap-2">
+                   <Select value={selectedChat.pipelineStage} onValueChange={updatePipeline}>
+                      <SelectTrigger className="flex-1 h-8 text-xs bg-gray-50 border-gray-200">
+                        <SelectValue placeholder="Pipeline" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {PIPELINE_STAGES.map(stage => (
+                          <SelectItem key={stage} value={stage}>{stage}</SelectItem>
+                        ))}
+                      </SelectContent>
+                   </Select>
+                   <Select value={selectedChat.tag || "New"} onValueChange={updateTag}>
+                      <SelectTrigger className="flex-1 h-8 text-xs bg-gray-50 border-gray-200">
+                        <SelectValue placeholder="Tag" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Object.keys(TAG_COLORS).map(tag => (
+                          <SelectItem key={tag} value={tag}>{tag}</SelectItem>
+                        ))}
+                      </SelectContent>
+                   </Select>
+                 </div>
+                 
+                 <div className="flex gap-1.5 overflow-x-auto pb-1">
+                   {(['Tomorrow', '3 days', '1 week'] as const).map((time) => (
+                     <button
+                       key={time}
+                       onClick={() => updateFollowUp(selectedChat.followUp === time ? null : time)}
+                       className={cn(
+                         "text-[10px] px-2 py-1 rounded border whitespace-nowrap",
+                         selectedChat.followUp === time
+                           ? "bg-brand-green/10 text-brand-green border-brand-green"
+                           : "bg-white text-gray-600 border-gray-200"
+                       )}
+                     >
+                       {time}
+                     </button>
+                   ))}
+                   {selectedChat.followUp && (
+                     <button 
+                       onClick={() => updateFollowUp(null)}
+                       className="text-[10px] px-2 py-1 text-red-500 border border-red-200 rounded"
+                     >
+                       Clear
+                     </button>
+                   )}
+                 </div>
+                 
+                 <textarea 
+                   className="w-full h-16 bg-yellow-50 border border-yellow-200 rounded-lg p-2 text-xs text-gray-700 focus:outline-none resize-none"
+                   placeholder="Add notes..."
+                   value={localNotes}
+                   onChange={(e) => setLocalNotes(e.target.value)}
+                   onBlur={() => handleUpdateChat({ notes: localNotes })}
+                 />
+              </div>
+           </div>
+
+           {/* Desktop CRM Sidebar Panel */}
            <div className="hidden md:flex w-[320px] bg-white border-l border-gray-200 overflow-y-auto shrink-0 flex-col shadow-xl md:shadow-none z-10">
               <div className="p-5 border-b border-gray-100">
                  <h3 className="font-display font-bold text-gray-900 mb-4">Lead Details</h3>
