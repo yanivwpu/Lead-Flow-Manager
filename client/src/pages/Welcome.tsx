@@ -176,6 +176,10 @@ export function Welcome() {
                   <CheckCircle2 className="h-6 w-6 text-brand-green shrink-0 mt-0.5" />
                   <p className="text-white">Clear follow-ups so nothing slips through</p>
                 </div>
+                <div className="flex items-start gap-3">
+                  <CheckCircle2 className="h-6 w-6 text-brand-green shrink-0 mt-0.5" />
+                  <p className="text-white">Multi-channel integrations with your favorite tools</p>
+                </div>
               </div>
             </div>
           </div>
