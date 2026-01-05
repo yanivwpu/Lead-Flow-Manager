@@ -164,6 +164,14 @@ export function CrmForWhatsappBusiness() {
                 <p className="text-gray-600">Move leads through stages: Lead → Contacted → Proposal → Negotiation → Closed.</p>
               </div>
             </div>
+            
+            <div className="flex gap-4 items-start">
+              <CheckCircle2 className="h-6 w-6 text-brand-green shrink-0 mt-1" />
+              <div>
+                <h3 className="font-bold text-gray-900 mb-1">Multi-channel integrations</h3>
+                <p className="text-gray-600">Connect with Shopify, HubSpot, Salesforce, Stripe and more — sync your leads across all your tools.</p>
+              </div>
+            </div>
           </div>
         </div>
       </section>
