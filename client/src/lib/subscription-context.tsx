@@ -21,6 +21,8 @@ interface SubscriptionLimits {
   isInTrial: boolean;
   trialEndsAt: string | null;
   trialDaysRemaining: number;
+  integrationsEnabled: boolean;
+  maxWebhooks: number;
 }
 
 interface SubscriptionData {

@@ -18,6 +18,8 @@ export interface SubscriptionLimits {
   teamInbox: boolean;
   assignmentEnabled: boolean;
   workflowsEnabled: boolean;
+  integrationsEnabled: boolean;
+  maxWebhooks: number;
   isAtLimit: boolean;
   isAtWarning: boolean; // 80% usage
   suggestedUpgrade: SubscriptionPlan | null;
@@ -85,6 +87,8 @@ export class SubscriptionService {
       teamInbox: limits.teamInbox,
       assignmentEnabled: limits.assignmentEnabled,
       workflowsEnabled: limits.workflowsEnabled,
+      integrationsEnabled: limits.integrationsEnabled,
+      maxWebhooks: limits.maxWebhooks,
       isAtLimit,
       isAtWarning,
       suggestedUpgrade,

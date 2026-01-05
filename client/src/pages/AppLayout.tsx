@@ -5,6 +5,7 @@ import { FollowUps } from "./FollowUps";
 import { Search } from "./Search";
 import { Settings } from "./Settings";
 import { Workflows } from "./Workflows";
+import { Integrations } from "./Integrations";
 import { UsageWarningBanner } from "@/components/UsageWarningBanner";
 import { TrialBanner } from "@/components/TrialBanner";
 import { SubscriptionProvider, useSubscription } from "@/lib/subscription-context";
@@ -41,6 +42,7 @@ function AppContent() {
           <Route path="/app/chats" component={Chats} />
           <Route path="/app/followups" component={FollowUps} />
           <Route path="/app/workflows" component={Workflows} />
+          <Route path="/app/integrations" component={Integrations} />
           <Route path="/app/search" component={Search} />
           <Route path="/app/settings" component={Settings} />
         </Switch>

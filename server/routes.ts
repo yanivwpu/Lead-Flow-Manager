@@ -1462,6 +1462,139 @@ export async function registerRoutes(
     }
   });
 
+  // ============= Webhook Integration Endpoints =============
+
+  // Get user's webhooks
+  app.get("/api/webhooks", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      
+      const limits = await subscriptionService.getUserLimits(req.user.id);
+      if (!limits?.integrationsEnabled) {
+        return res.status(403).json({ error: "Integrations are not available on your plan" });
+      }
+      
+      const webhooks = await storage.getWebhooks(req.user.id);
+      res.json(webhooks);
+    } catch (error) {
+      console.error("Error fetching webhooks:", error);
+      res.status(500).json({ error: "Failed to fetch webhooks" });
+    }
+  });
+
+  // Create a webhook
+  app.post("/api/webhooks", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      
+      const limits = await subscriptionService.getUserLimits(req.user.id);
+      if (!limits?.integrationsEnabled) {
+        return res.status(403).json({ error: "Integrations are not available on your plan" });
+      }
+      
+      const webhookCount = await storage.getWebhookCount(req.user.id);
+      if (webhookCount >= limits.maxWebhooks) {
+        return res.status(403).json({ 
+          error: `You've reached your limit of ${limits.maxWebhooks} webhooks. Upgrade to add more.` 
+        });
+      }
+      
+      const { name, url, events } = req.body;
+      if (!name || !url || !events || events.length === 0) {
+        return res.status(400).json({ error: "Name, URL, and at least one event are required" });
+      }
+      
+      // Generate a secure signing secret
+      const crypto = await import("crypto");
+      const secret = crypto.randomBytes(32).toString("hex");
+      
+      const webhook = await storage.createWebhook({
+        userId: req.user.id,
+        name,
+        url,
+        events,
+        secret,
+        isActive: true,
+      });
+      
+      res.status(201).json(webhook);
+    } catch (error) {
+      console.error("Error creating webhook:", error);
+      res.status(500).json({ error: "Failed to create webhook" });
+    }
+  });
+
+  // Update a webhook
+  app.patch("/api/webhooks/:id", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      
+      const webhook = await storage.getWebhook(req.params.id);
+      if (!webhook || webhook.userId !== req.user.id) {
+        return res.status(404).json({ error: "Webhook not found" });
+      }
+      
+      const { name, url, events, isActive } = req.body;
+      const updates: any = {};
+      if (name !== undefined) updates.name = name;
+      if (url !== undefined) updates.url = url;
+      if (events !== undefined) updates.events = events;
+      if (isActive !== undefined) updates.isActive = isActive;
+      
+      const updated = await storage.updateWebhook(req.params.id, updates);
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating webhook:", error);
+      res.status(500).json({ error: "Failed to update webhook" });
+    }
+  });
+
+  // Delete a webhook
+  app.delete("/api/webhooks/:id", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      
+      const webhook = await storage.getWebhook(req.params.id);
+      if (!webhook || webhook.userId !== req.user.id) {
+        return res.status(404).json({ error: "Webhook not found" });
+      }
+      
+      await storage.deleteWebhook(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting webhook:", error);
+      res.status(500).json({ error: "Failed to delete webhook" });
+    }
+  });
+
+  // Get webhook delivery logs
+  app.get("/api/webhooks/:id/deliveries", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      
+      const webhook = await storage.getWebhook(req.params.id);
+      if (!webhook || webhook.userId !== req.user.id) {
+        return res.status(404).json({ error: "Webhook not found" });
+      }
+      
+      const deliveries = await storage.getWebhookDeliveries(req.params.id);
+      res.json(deliveries);
+    } catch (error) {
+      console.error("Error fetching webhook deliveries:", error);
+      res.status(500).json({ error: "Failed to fetch deliveries" });
+    }
+  });
+
   // ============= Admin Endpoints =============
   
   // Get all users' usage summary (admin only - for now, accessible to all authenticated users)

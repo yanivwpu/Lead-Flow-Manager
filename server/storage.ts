@@ -5,10 +5,13 @@ import {
   type TeamMember, type InsertTeamMember,
   type Workflow, type InsertWorkflow,
   type WorkflowExecution, type InsertWorkflowExecution,
-  type RecurringReminder, type InsertRecurringReminder
+  type RecurringReminder, type InsertRecurringReminder,
+  type Webhook, type InsertWebhook,
+  type WebhookDelivery, type InsertWebhookDelivery,
+  type Integration, type InsertIntegration
 } from "@shared/schema";
 import { db } from "../drizzle/db";
-import { users, chats, registeredPhones, messageUsage, conversationWindows, teamMembers, workflows, workflowExecutions, recurringReminders, type InsertConversationWindow, type ConversationWindow } from "@shared/schema";
+import { users, chats, registeredPhones, messageUsage, conversationWindows, teamMembers, workflows, workflowExecutions, recurringReminders, webhooks, webhookDeliveries, integrations, type InsertConversationWindow, type ConversationWindow } from "@shared/schema";
 import { eq, and, lte, sql, isNotNull, asc, desc, gte, sum, gt, or, like, ilike } from "drizzle-orm";
 
 export interface IStorage {
@@ -79,6 +82,24 @@ export interface IStorage {
   
   // Message search for conversation history
   searchMessages(userId: string, query: string): Promise<Chat[]>;
+  
+  // Webhook methods
+  getWebhooks(userId: string): Promise<Webhook[]>;
+  getWebhook(id: string): Promise<Webhook | undefined>;
+  getWebhooksByEvent(userId: string, event: string): Promise<Webhook[]>;
+  createWebhook(webhook: InsertWebhook): Promise<Webhook>;
+  updateWebhook(id: string, updates: Partial<Webhook>): Promise<Webhook | undefined>;
+  deleteWebhook(id: string): Promise<void>;
+  getWebhookCount(userId: string): Promise<number>;
+  logWebhookDelivery(delivery: InsertWebhookDelivery): Promise<WebhookDelivery>;
+  getWebhookDeliveries(webhookId: string, limit?: number): Promise<WebhookDelivery[]>;
+  
+  // Integration methods
+  getIntegrations(userId: string): Promise<Integration[]>;
+  getIntegration(id: string): Promise<Integration | undefined>;
+  createIntegration(integration: InsertIntegration): Promise<Integration>;
+  updateIntegration(id: string, updates: Partial<Integration>): Promise<Integration | undefined>;
+  deleteIntegration(id: string): Promise<void>;
 }
 
 export class DbStorage implements IStorage {
@@ -436,6 +457,81 @@ export class DbStorage implements IStorage {
         )
       )
     ).orderBy(desc(chats.updatedAt));
+  }
+
+  // Webhook methods
+  async getWebhooks(userId: string): Promise<Webhook[]> {
+    return await db.select().from(webhooks).where(eq(webhooks.userId, userId)).orderBy(desc(webhooks.createdAt));
+  }
+
+  async getWebhook(id: string): Promise<Webhook | undefined> {
+    const result = await db.select().from(webhooks).where(eq(webhooks.id, id));
+    return result[0];
+  }
+
+  async getWebhooksByEvent(userId: string, event: string): Promise<Webhook[]> {
+    return await db.select().from(webhooks).where(
+      and(
+        eq(webhooks.userId, userId),
+        eq(webhooks.isActive, true),
+        sql`${event} = ANY(${webhooks.events})`
+      )
+    );
+  }
+
+  async createWebhook(webhook: InsertWebhook): Promise<Webhook> {
+    const result = await db.insert(webhooks).values(webhook).returning();
+    return result[0];
+  }
+
+  async updateWebhook(id: string, updates: Partial<Webhook>): Promise<Webhook | undefined> {
+    const result = await db.update(webhooks).set(updates).where(eq(webhooks.id, id)).returning();
+    return result[0];
+  }
+
+  async deleteWebhook(id: string): Promise<void> {
+    await db.delete(webhooks).where(eq(webhooks.id, id));
+  }
+
+  async getWebhookCount(userId: string): Promise<number> {
+    const result = await db.select({ count: sql<number>`count(*)` }).from(webhooks).where(eq(webhooks.userId, userId));
+    return Number(result[0]?.count || 0);
+  }
+
+  async logWebhookDelivery(delivery: InsertWebhookDelivery): Promise<WebhookDelivery> {
+    const result = await db.insert(webhookDeliveries).values(delivery).returning();
+    return result[0];
+  }
+
+  async getWebhookDeliveries(webhookId: string, limit: number = 50): Promise<WebhookDelivery[]> {
+    return await db.select().from(webhookDeliveries)
+      .where(eq(webhookDeliveries.webhookId, webhookId))
+      .orderBy(desc(webhookDeliveries.deliveredAt))
+      .limit(limit);
+  }
+
+  // Integration methods
+  async getIntegrations(userId: string): Promise<Integration[]> {
+    return await db.select().from(integrations).where(eq(integrations.userId, userId)).orderBy(desc(integrations.createdAt));
+  }
+
+  async getIntegration(id: string): Promise<Integration | undefined> {
+    const result = await db.select().from(integrations).where(eq(integrations.id, id));
+    return result[0];
+  }
+
+  async createIntegration(integration: InsertIntegration): Promise<Integration> {
+    const result = await db.insert(integrations).values(integration).returning();
+    return result[0];
+  }
+
+  async updateIntegration(id: string, updates: Partial<Integration>): Promise<Integration | undefined> {
+    const result = await db.update(integrations).set(updates).where(eq(integrations.id, id)).returning();
+    return result[0];
+  }
+
+  async deleteIntegration(id: string): Promise<void> {
+    await db.delete(integrations).where(eq(integrations.id, id));
   }
 }
 
