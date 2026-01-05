@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useRoute, useLocation } from "wouter";
 import { ChatListItem } from "@/components/ChatListItem";
 import { TAG_COLORS, PIPELINE_STAGES } from "@/lib/data";
@@ -271,10 +271,19 @@ export function Chats() {
 
   const [newMessage, setNewMessage] = useState("");
   const [localNotes, setLocalNotes] = useState("");
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
 
   useEffect(() => {
     setLocalNotes(selectedChat?.notes || "");
   }, [selectedChat?.id, selectedChat?.notes]);
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [selectedChat?.messages]);
 
   const handleSendMessage = async () => {
     if (!newMessage.trim() || !selectedChat) return;
@@ -638,6 +647,7 @@ export function Chats() {
                       </div>
                     ))
                   )}
+                  <div ref={messagesEndRef} />
                 </div>
               </div>
 
