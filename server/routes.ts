@@ -1399,7 +1399,60 @@ export async function registerRoutes(
       if (!query || query.length < 2) {
         return res.status(400).json({ error: "Search query must be at least 2 characters" });
       }
-      const results = await storage.searchMessages(req.user.id, query);
+      const chats = await storage.searchMessages(req.user.id, query);
+      
+      // Transform to search results format with matched text excerpts
+      const results = chats.flatMap(chat => {
+        const matches: any[] = [];
+        const queryLower = query.toLowerCase();
+        
+        // Check messages for matches
+        const messages = (chat.messages as any[]) || [];
+        for (const msg of messages) {
+          if (msg.text && msg.text.toLowerCase().includes(queryLower)) {
+            matches.push({
+              chatId: chat.id,
+              chatName: chat.name,
+              avatar: chat.avatar,
+              matchedText: msg.text.length > 150 
+                ? msg.text.substring(0, 150) + '...' 
+                : msg.text,
+              timestamp: msg.time || chat.time,
+              pipelineStage: chat.pipelineStage,
+              tag: chat.tag,
+            });
+          }
+        }
+        
+        // Check notes for matches
+        if (chat.notes && chat.notes.toLowerCase().includes(queryLower)) {
+          matches.push({
+            chatId: chat.id,
+            chatName: chat.name,
+            avatar: chat.avatar,
+            matchedText: `Note: ${chat.notes.length > 150 ? chat.notes.substring(0, 150) + '...' : chat.notes}`,
+            timestamp: chat.time || 'Recently',
+            pipelineStage: chat.pipelineStage,
+            tag: chat.tag,
+          });
+        }
+        
+        // Check name for matches
+        if (chat.name.toLowerCase().includes(queryLower) && matches.length === 0) {
+          matches.push({
+            chatId: chat.id,
+            chatName: chat.name,
+            avatar: chat.avatar,
+            matchedText: chat.lastMessage || 'No recent messages',
+            timestamp: chat.time || 'Recently',
+            pipelineStage: chat.pipelineStage,
+            tag: chat.tag,
+          });
+        }
+        
+        return matches;
+      }).slice(0, 50); // Limit to 50 results
+      
       res.json(results);
     } catch (error) {
       console.error("Error searching messages:", error);
