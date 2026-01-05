@@ -28,6 +28,8 @@ export const PLAN_LIMITS = {
     teamInbox: true, // read-only shared inbox
     assignmentEnabled: false,
     workflowsEnabled: false,
+    integrationsEnabled: false,
+    maxWebhooks: 0,
   },
   starter: {
     name: 'Starter',
@@ -43,6 +45,8 @@ export const PLAN_LIMITS = {
     teamInbox: true,
     assignmentEnabled: false,
     workflowsEnabled: false,
+    integrationsEnabled: true,
+    maxWebhooks: 3,
   },
   pro: {
     name: 'Pro',
@@ -58,6 +62,8 @@ export const PLAN_LIMITS = {
     teamInbox: true,
     assignmentEnabled: true, // Pro feature: conversation assignment
     workflowsEnabled: true, // Pro feature: advanced workflows
+    integrationsEnabled: true,
+    maxWebhooks: 10,
   },
 } as const;
 
@@ -253,6 +259,65 @@ export const insertRecurringReminderSchema = createInsertSchema(recurringReminde
   createdAt: true,
 });
 
+// Webhook configurations for integrations
+export const webhooks = pgTable("webhooks", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  url: text("url").notNull(),
+  secret: text("secret").notNull(), // HMAC signing secret
+  events: text("events").array().notNull(), // ['new_chat', 'message_received', 'tag_changed', etc.]
+  isActive: boolean("is_active").default(true),
+  lastTriggeredAt: timestamp("last_triggered_at"),
+  failureCount: integer("failure_count").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Webhook delivery logs
+export const webhookDeliveries = pgTable("webhook_deliveries", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  webhookId: varchar("webhook_id").notNull().references(() => webhooks.id, { onDelete: "cascade" }),
+  event: text("event").notNull(),
+  payload: jsonb("payload").notNull(),
+  responseStatus: integer("response_status"),
+  responseBody: text("response_body"),
+  success: boolean("success").default(false),
+  deliveredAt: timestamp("delivered_at").defaultNow(),
+});
+
+// Native integrations (Shopify, HubSpot, etc.)
+export const integrations = pgTable("integrations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  type: text("type").notNull(), // 'shopify', 'hubspot', 'salesforce', 'google_sheets', 'zoho', 'showcase_idx'
+  name: text("name").notNull(), // User-given name
+  config: jsonb("config").notNull().default(sql`'{}'::jsonb`), // Integration-specific config
+  accessToken: text("access_token"), // OAuth access token (encrypted)
+  refreshToken: text("refresh_token"), // OAuth refresh token (encrypted)
+  tokenExpiresAt: timestamp("token_expires_at"),
+  isActive: boolean("is_active").default(true),
+  lastSyncAt: timestamp("last_sync_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertWebhookSchema = createInsertSchema(webhooks).omit({
+  id: true,
+  createdAt: true,
+  lastTriggeredAt: true,
+  failureCount: true,
+});
+
+export const insertWebhookDeliverySchema = createInsertSchema(webhookDeliveries).omit({
+  id: true,
+  deliveredAt: true,
+});
+
+export const insertIntegrationSchema = createInsertSchema(integrations).omit({
+  id: true,
+  createdAt: true,
+  lastSyncAt: true,
+});
+
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 export type InsertChat = z.infer<typeof insertChatSchema>;
@@ -271,3 +336,9 @@ export type InsertWorkflowExecution = z.infer<typeof insertWorkflowExecutionSche
 export type WorkflowExecution = typeof workflowExecutions.$inferSelect;
 export type InsertRecurringReminder = z.infer<typeof insertRecurringReminderSchema>;
 export type RecurringReminder = typeof recurringReminders.$inferSelect;
+export type InsertWebhook = z.infer<typeof insertWebhookSchema>;
+export type Webhook = typeof webhooks.$inferSelect;
+export type InsertWebhookDelivery = z.infer<typeof insertWebhookDeliverySchema>;
+export type WebhookDelivery = typeof webhookDeliveries.$inferSelect;
+export type InsertIntegration = z.infer<typeof insertIntegrationSchema>;
+export type Integration = typeof integrations.$inferSelect;
