@@ -661,7 +661,7 @@ export function Chats() {
               >
                 <div className="absolute inset-0 bg-[#efeae2]/90 pointer-events-none" />
                 
-                <div className="relative z-10 space-y-1.5 sm:space-y-3 md:space-y-4">
+                <div className="relative z-10 space-y-1 sm:space-y-1.5 md:space-y-2">
                   {(selectedChat.messages || []).length === 0 ? (
                     <div className="text-center text-gray-500 py-8">
                       <p>No messages yet. Start the conversation!</p>
@@ -692,13 +692,13 @@ export function Chats() {
                             )}
                           >
                             <div className={cn(
-                              "max-w-[85%] md:max-w-[65%] rounded-lg px-3 py-2 text-sm shadow-sm relative",
+                              "max-w-[80%] md:max-w-[60%] rounded-md px-2.5 py-1.5 text-[13px] shadow-sm relative",
                               msg.sender === 'me' 
                                 ? "bg-[#d9fdd3] text-gray-900 rounded-tr-none" 
                                 : "bg-white text-gray-900 rounded-tl-none"
                             )}>
-                              <p>{highlightText(msg.text)}</p>
-                              <span className="text-[10px] text-gray-500 block text-right mt-1 opacity-70">
+                              <p className="leading-snug">{highlightText(msg.text)}</p>
+                              <span className="text-[9px] text-gray-500 block text-right mt-0.5 opacity-70">
                                 {msg.time}
                               </span>
                             </div>
