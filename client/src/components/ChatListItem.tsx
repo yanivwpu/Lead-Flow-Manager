@@ -30,7 +30,7 @@ export function ChatListItem({ chat, isActive }: ChatListItemProps) {
     <Link href={`/app/chats/${chat.id}`}>
       <div
         className={cn(
-          "flex items-center p-3 cursor-pointer transition-colors border-b border-gray-50 hover:bg-gray-50",
+          "flex items-center py-2 px-3 cursor-pointer transition-colors border-b border-gray-100 hover:bg-gray-50",
           isActive ? "bg-gray-100 hover:bg-gray-100" : "bg-white"
         )}
         data-testid={`chat-item-${chat.id}`}
@@ -40,26 +40,26 @@ export function ChatListItem({ chat, isActive }: ChatListItemProps) {
             <img 
               src={chat.avatar} 
               alt={chat.name} 
-              className="h-12 w-12 rounded-full object-cover"
+              className="h-11 w-11 rounded-full object-cover"
             />
           ) : (
-            <div className="h-12 w-12 rounded-full bg-brand-green/10 flex items-center justify-center text-brand-green font-semibold">
+            <div className="h-11 w-11 rounded-full bg-brand-green/10 flex items-center justify-center text-brand-green font-semibold text-sm">
               {chat.avatar}
             </div>
           )}
           {chat.unread > 0 && (
-            <div className="absolute -top-1 -right-1 h-5 w-5 bg-brand-green text-white text-xs font-bold rounded-full flex items-center justify-center border-2 border-white">
+            <div className="absolute -top-0.5 -right-0.5 h-4 w-4 bg-brand-green text-white text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-white">
               {chat.unread}
             </div>
           )}
         </div>
 
-        <div className="ml-3 flex-1 min-w-0">
-          <div className="flex justify-between items-baseline mb-1">
-            <h3 className="font-semibold text-gray-900 truncate">{chat.name}</h3>
+        <div className="ml-2.5 flex-1 min-w-0">
+          <div className="flex justify-between items-baseline">
+            <h3 className="font-semibold text-gray-900 truncate text-[15px]">{chat.name}</h3>
             <span
               className={cn(
-                "text-xs whitespace-nowrap",
+                "text-[11px] whitespace-nowrap ml-2",
                 chat.unread > 0 ? "text-brand-green font-medium" : "text-gray-400"
               )}
             >
@@ -68,22 +68,22 @@ export function ChatListItem({ chat, isActive }: ChatListItemProps) {
           </div>
 
           <div className="flex justify-between items-center">
-            <div className="flex items-center text-sm text-gray-500 truncate pr-2">
+            <div className="flex items-center text-[13px] text-gray-500 truncate pr-2">
               {isLastMessageFromMe && (
                 <span className="mr-1">
-                   <CheckCheck className="h-4 w-4 text-blue-400" />
+                   <CheckCheck className="h-3.5 w-3.5 text-blue-400" />
                 </span>
               )}
               <span className="truncate">{chat.lastMessage}</span>
             </div>
           </div>
           
-          <div className="flex gap-2 mt-2">
-            <span className={cn("text-[10px] px-1.5 py-0.5 rounded border font-medium", TAG_COLORS[chat.tag as keyof typeof TAG_COLORS] || "bg-gray-50 text-gray-600 border-gray-200")}>
+          <div className="flex gap-1.5 mt-1">
+            <span className={cn("text-[9px] px-1.5 py-0.5 rounded border font-medium", TAG_COLORS[chat.tag as keyof typeof TAG_COLORS] || "bg-gray-50 text-gray-600 border-gray-200")}>
               {chat.tag}
             </span>
             {chat.followUp && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded border bg-red-50 text-red-600 border-red-100 font-medium flex items-center">
+              <span className="text-[9px] px-1.5 py-0.5 rounded border bg-red-50 text-red-600 border-red-100 font-medium flex items-center">
                  Due {chat.followUp}
               </span>
             )}
