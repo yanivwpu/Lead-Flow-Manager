@@ -20,6 +20,7 @@ import {
 import { subscriptionService } from "./subscriptionService";
 import { getStripePublishableKey } from "./stripeClient";
 import { sendWelcomeEmail, sendContactFormEmail } from "./email";
+import { triggerNewChatWorkflows, triggerKeywordWorkflows } from "./workflowEngine";
 
 const TWILIO_BASE_COST_PER_MESSAGE = 0.005;
 const MARKUP_PERCENT = 5;
@@ -885,12 +886,27 @@ export async function registerRoutes(
       const messages = (chat.messages as WhatsAppMessage[]) || [];
       messages.push(newMessage);
 
+      const isNewChat = messages.length === 1;
+      
       await storage.updateChat(chat.id, {
         messages,
         lastMessage: parsed.body,
         time: newMessage.time,
         unread: (chat.unread || 0) + 1,
       });
+
+      // Trigger workflow automations (Pro feature)
+      const updatedChat = await storage.getChat(chat.id);
+      if (updatedChat) {
+        if (isNewChat) {
+          triggerNewChatWorkflows(userId, updatedChat).catch(err => 
+            console.error("New chat workflow error:", err)
+          );
+        }
+        triggerKeywordWorkflows(userId, updatedChat, parsed.body).catch(err => 
+          console.error("Keyword workflow error:", err)
+        );
+      }
 
       res.status(200).send("");
     } catch (error) {

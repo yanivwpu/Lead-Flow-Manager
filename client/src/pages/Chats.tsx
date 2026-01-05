@@ -21,8 +21,12 @@ import {
   Users,
   User,
   UserCheck,
-  CheckCircle2
+  CheckCircle2,
+  Calendar as CalendarIcon
 } from "lucide-react";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { format } from "date-fns";
 import { DEMO_CHATS, type DemoChat } from "@/lib/demo-data";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -704,7 +708,7 @@ export function Chats() {
 
                  <div className="mb-6">
                    <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 block">Follow-up Reminder</label>
-                   <div className="grid grid-cols-3 gap-2">
+                   <div className="grid grid-cols-4 gap-2">
                       {(['Tomorrow', '3 days', '1 week'] as const).map((time) => (
                         <button
                           key={time}
@@ -721,7 +725,59 @@ export function Chats() {
                           {time}
                         </button>
                       ))}
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <button
+                            className={cn(
+                              "text-xs py-2 rounded-lg border text-center transition-colors flex flex-col items-center justify-center gap-1",
+                              selectedChat.followUp && !['Tomorrow', '3 days', '1 week'].includes(selectedChat.followUp)
+                                ? "bg-brand-green/10 text-brand-green border-brand-green font-medium"
+                                : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
+                            )}
+                            data-testid="button-followup-custom"
+                          >
+                            <CalendarIcon className="h-3 w-3" />
+                            Custom
+                          </button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <Calendar
+                            mode="single"
+                            selected={selectedChat.followUpDate ? new Date(selectedChat.followUpDate) : undefined}
+                            onSelect={(date) => {
+                              if (date) {
+                                const formatted = format(date, 'MMM d');
+                                handleUpdateChat({ 
+                                  followUp: formatted,
+                                  followUpDate: date.toISOString()
+                                });
+                              }
+                            }}
+                            disabled={(date) => date < new Date()}
+                            initialFocus
+                          />
+                        </PopoverContent>
+                      </Popover>
                    </div>
+                   {selectedChat.followUp && (
+                     <div className="mt-2 flex items-center justify-between text-xs">
+                       <span className="text-gray-500">
+                         Reminder: <span className="font-medium text-gray-700">{selectedChat.followUp}</span>
+                         {selectedChat.followUpDate && (
+                           <span className="ml-1 text-gray-400">
+                             ({format(new Date(selectedChat.followUpDate), 'MMM d, yyyy')})
+                           </span>
+                         )}
+                       </span>
+                       <button 
+                         onClick={() => updateFollowUp(null)}
+                         className="text-red-500 hover:text-red-700"
+                         data-testid="button-clear-followup"
+                       >
+                         Clear
+                       </button>
+                     </div>
+                   )}
                  </div>
 
                  <div className="mb-6">
