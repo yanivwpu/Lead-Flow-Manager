@@ -718,15 +718,15 @@ export function Chats() {
               </div>
 
               {/* Input Area */}
-              <div className="bg-gray-50 px-4 py-3 border-t border-gray-200 flex items-center gap-3 shrink-0">
-                 <div className="flex gap-4 text-gray-500">
+              <div className="bg-gray-50 px-2 sm:px-4 py-2 sm:py-3 border-t border-gray-200 flex items-center gap-2 sm:gap-3 shrink-0">
+                 <div className="hidden sm:flex gap-4 text-gray-500">
                     <Smile className="h-6 w-6 cursor-pointer hover:text-gray-700" />
                     <Paperclip className="h-6 w-6 cursor-pointer hover:text-gray-700" />
                  </div>
                  <input 
                    type="text" 
                    placeholder="Type a message" 
-                   className="flex-1 bg-white border border-gray-200 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-brand-green"
+                   className="flex-1 min-w-0 bg-white border border-gray-200 rounded-lg px-3 sm:px-4 py-2 text-sm focus:outline-none focus:border-brand-green"
                    value={newMessage}
                    onChange={(e) => setNewMessage(e.target.value)}
                    onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
@@ -734,7 +734,7 @@ export function Chats() {
                  />
                  <button 
                    onClick={handleSendMessage}
-                   className="h-10 w-10 bg-brand-green hover:bg-emerald-700 rounded-full flex items-center justify-center text-white transition-colors shadow-sm"
+                   className="h-10 w-10 bg-brand-green hover:bg-emerald-700 rounded-full flex items-center justify-center text-white transition-colors shadow-sm shrink-0"
                    data-testid="button-send-message"
                  >
                    <Send className="h-5 w-5 ml-0.5" />
@@ -742,8 +742,8 @@ export function Chats() {
               </div>
            </div>
 
-           {/* CRM Sidebar Panel */}
-           <div className="w-full md:w-[320px] bg-white border-l border-gray-200 overflow-y-auto shrink-0 flex flex-col shadow-xl md:shadow-none z-10">
+           {/* CRM Sidebar Panel - Hidden on mobile portrait */}
+           <div className="hidden md:flex w-[320px] bg-white border-l border-gray-200 overflow-y-auto shrink-0 flex-col shadow-xl md:shadow-none z-10">
               <div className="p-5 border-b border-gray-100">
                  <h3 className="font-display font-bold text-gray-900 mb-4">Lead Details</h3>
                  
