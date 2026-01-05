@@ -563,7 +563,7 @@ export function Chats() {
                    <div className="flex items-center gap-4 text-gray-500">
                       <Search 
                         className={cn(
-                          "h-5 w-5 cursor-pointer hover:text-gray-700 hidden sm:block",
+                          "h-5 w-5 cursor-pointer hover:text-gray-700",
                           showConversationSearch && "text-brand-green"
                         )}
                         onClick={() => {
@@ -790,6 +790,38 @@ export function Chats() {
                        {time}
                      </button>
                    ))}
+                   <Popover>
+                     <PopoverTrigger asChild>
+                       <button
+                         className={cn(
+                           "text-[10px] px-2 py-1 rounded border whitespace-nowrap flex items-center gap-1",
+                           selectedChat.followUp && !['Tomorrow', '3 days', '1 week'].includes(selectedChat.followUp)
+                             ? "bg-brand-green/10 text-brand-green border-brand-green"
+                             : "bg-white text-gray-600 border-gray-200"
+                         )}
+                       >
+                         <CalendarIcon className="h-3 w-3" />
+                         Custom
+                       </button>
+                     </PopoverTrigger>
+                     <PopoverContent className="w-auto p-0" align="start">
+                       <Calendar
+                         mode="single"
+                         selected={selectedChat.followUpDate ? new Date(selectedChat.followUpDate) : undefined}
+                         onSelect={(date) => {
+                           if (date) {
+                             const formatted = format(date, 'MMM d');
+                             handleUpdateChat({ 
+                               followUp: formatted,
+                               followUpDate: date.toISOString()
+                             });
+                           }
+                         }}
+                         disabled={(date) => date < new Date()}
+                         initialFocus
+                       />
+                     </PopoverContent>
+                   </Popover>
                    {selectedChat.followUp && (
                      <button 
                        onClick={() => updateFollowUp(null)}
