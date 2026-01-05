@@ -18,6 +18,9 @@ interface SubscriptionLimits {
   assignmentEnabled: boolean;
   workflowsEnabled: boolean;
   isAtLimit: boolean;
+  isInTrial: boolean;
+  trialEndsAt: string | null;
+  trialDaysRemaining: number;
 }
 
 interface SubscriptionData {
