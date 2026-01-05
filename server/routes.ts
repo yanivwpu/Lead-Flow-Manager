@@ -1595,6 +1595,143 @@ export async function registerRoutes(
     }
   });
 
+  // ============= Native Integration Endpoints =============
+
+  // Get user's integrations
+  app.get("/api/integrations", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      
+      const limits = await subscriptionService.getUserLimits(req.user.id);
+      if (!limits?.integrationsEnabled) {
+        return res.status(403).json({ error: "Integrations are not available on your plan" });
+      }
+      
+      const userIntegrations = await storage.getIntegrations(req.user.id);
+      res.json(userIntegrations);
+    } catch (error) {
+      console.error("Error fetching integrations:", error);
+      res.status(500).json({ error: "Failed to fetch integrations" });
+    }
+  });
+
+  // Create an integration
+  app.post("/api/integrations", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      
+      const limits = await subscriptionService.getUserLimits(req.user.id);
+      if (!limits?.integrationsEnabled) {
+        return res.status(403).json({ error: "Integrations are not available on your plan" });
+      }
+      
+      const { type, name, config } = req.body;
+      if (!type || !name || !config) {
+        return res.status(400).json({ error: "Type, name, and config are required" });
+      }
+      
+      // Check if integration of this type already exists
+      const existingIntegrations = await storage.getIntegrations(req.user.id);
+      const existingOfType = existingIntegrations.find(i => i.type === type);
+      if (existingOfType) {
+        return res.status(400).json({ error: `You already have a ${name} integration connected. Disconnect it first to add a new one.` });
+      }
+      
+      const integration = await storage.createIntegration({
+        userId: req.user.id,
+        type,
+        name,
+        config,
+        isActive: true,
+      });
+      
+      res.status(201).json(integration);
+    } catch (error) {
+      console.error("Error creating integration:", error);
+      res.status(500).json({ error: "Failed to create integration" });
+    }
+  });
+
+  // Update an integration
+  app.patch("/api/integrations/:id", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      
+      const integration = await storage.getIntegration(req.params.id);
+      if (!integration || integration.userId !== req.user.id) {
+        return res.status(404).json({ error: "Integration not found" });
+      }
+      
+      const { name, config, isActive } = req.body;
+      const updates: any = {};
+      if (name !== undefined) updates.name = name;
+      if (config !== undefined) updates.config = config;
+      if (isActive !== undefined) updates.isActive = isActive;
+      
+      const updated = await storage.updateIntegration(req.params.id, updates);
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating integration:", error);
+      res.status(500).json({ error: "Failed to update integration" });
+    }
+  });
+
+  // Delete an integration
+  app.delete("/api/integrations/:id", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      
+      const integration = await storage.getIntegration(req.params.id);
+      if (!integration || integration.userId !== req.user.id) {
+        return res.status(404).json({ error: "Integration not found" });
+      }
+      
+      await storage.deleteIntegration(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting integration:", error);
+      res.status(500).json({ error: "Failed to delete integration" });
+    }
+  });
+
+  // Trigger a sync for an integration
+  app.post("/api/integrations/:id/sync", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      
+      const integration = await storage.getIntegration(req.params.id);
+      if (!integration || integration.userId !== req.user.id) {
+        return res.status(404).json({ error: "Integration not found" });
+      }
+      
+      if (!integration.isActive) {
+        return res.status(400).json({ error: "Integration is paused. Activate it to sync." });
+      }
+      
+      // Update last sync time
+      await storage.updateIntegration(req.params.id, { lastSyncAt: new Date() });
+      
+      // TODO: Implement actual sync logic per integration type
+      // For now, just update the timestamp and return success
+      console.log(`Sync triggered for ${integration.type} integration ${integration.id}`);
+      
+      res.json({ success: true, message: `${integration.name} sync started` });
+    } catch (error) {
+      console.error("Error syncing integration:", error);
+      res.status(500).json({ error: "Failed to sync integration" });
+    }
+  });
+
   // ============= Admin Endpoints =============
   
   // Get all users' usage summary (admin only - for now, accessible to all authenticated users)
