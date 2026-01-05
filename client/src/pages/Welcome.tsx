@@ -191,7 +191,7 @@ export function Welcome() {
             </h2>
           </div>
           
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 md:gap-8">
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6 md:gap-8">
             <motion.div 
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
@@ -245,6 +245,20 @@ export function Welcome() {
               </div>
               <h3 className="text-lg font-bold text-gray-900 mb-2">Built for Teams</h3>
               <p className="text-gray-600">Assign conversations, track progress, and stay aligned.</p>
+            </motion.div>
+            
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ delay: 0.4 }}
+              className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100"
+            >
+              <div className="h-12 w-12 bg-pink-100 rounded-xl flex items-center justify-center mb-4">
+                <Zap className="h-6 w-6 text-pink-600" />
+              </div>
+              <h3 className="text-lg font-bold text-gray-900 mb-2">Multi-Channel Integrations</h3>
+              <p className="text-gray-600">Connect with Shopify, HubSpot, Salesforce, Stripe & more to sync leads across all your tools.</p>
             </motion.div>
           </div>
         </div>
