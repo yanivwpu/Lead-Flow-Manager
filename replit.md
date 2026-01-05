@@ -15,7 +15,19 @@ The application is a full multi-tenant SaaS implementation with:
 - Notification system for follow-up reminders (push & email)
 - PWA capabilities (installable, offline-first)
 
-## Recent Changes (January 3, 2026)
+## Recent Changes (January 5, 2026)
+- **Workflow Automation (Pro Feature)**: Complete rule-based workflow system
+  - Triggers: new_chat, incoming_message (keyword detection), tag_changed
+  - Actions: auto-assign (round-robin or specific user), auto-tag, set_status, set_pipeline, add_note, set_followup
+  - Workflow execution logging and history tracking
+- **Custom Date Picker for Follow-ups**: Calendar-based date selection for reminders
+- **Conversation History Search**: Full-text search across all messages and notes
+  - Searches message content, notes, and contact names
+  - Highlights matched text in results
+  - Quick filter buttons for common searches
+- **Workflow UI**: Full workflow management page with rule builder
+
+## Previous Changes (January 3, 2026)
 - **CRITICAL ARCHITECTURE CHANGE**: Switched from platform-owned to customer-owned Twilio accounts
 - **Connect Twilio Wizard**: Users enter Account SID, Auth Token, WhatsApp number
 - **Credential Encryption**: Auth tokens encrypted with AES-256-GCM before storage
