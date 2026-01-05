@@ -19,11 +19,13 @@ The application is a full multi-tenant SaaS implementation with:
 - **14-Day Pro Trial**: New users automatically receive 14-day Pro trial
   - Trial banner shows days remaining with upgrade prompts
   - Automatic downgrade to Free after trial expires
-- **Integrations System (Paid Feature)**: Webhook-based integration framework
+- **Integrations System (Paid Feature)**: Complete webhook and native integration framework
   - Webhook management: Create, edit, delete webhooks with HMAC signing
   - Events: new_chat, message_received, message_sent, tag_changed, pipeline_changed, followup_due, chat_assigned
   - Plan limits: Free (0 webhooks), Starter (3 webhooks), Pro (10 webhooks)
-  - Native integrations UI ready: Shopify, Google Sheets, HubSpot, Salesforce, Stripe, Showcase IDX (coming soon)
+  - Native integrations now available: Shopify, Google Sheets, HubSpot, Salesforce, Stripe, Showcase IDX
+  - Each integration has custom connection forms with sync options
+  - Sensitive credentials encrypted at rest (AES-256-GCM)
 - **Workflow Automation (Pro Feature)**: Complete rule-based workflow system
   - Triggers: new_chat, incoming_message (keyword detection), tag_changed
   - Actions: auto-assign (round-robin or specific user), auto-tag, set_status, set_pipeline, add_note, set_followup
@@ -62,7 +64,7 @@ The application is a full multi-tenant SaaS implementation with:
 - **PWA**: Installable on mobile with Add to Home Screen
 - **Authentication**: Secure email/password authentication with session persistence
 - **14-Day Pro Trial**: New users get full Pro access for 14 days
-- **Integrations**: Webhook endpoints for Zapier/Make.com and native integrations (coming soon)
+- **Integrations**: Webhook endpoints for Zapier/Make.com + 6 native integrations (Shopify, HubSpot, Salesforce, etc.)
 
 ## Twilio Integration Architecture
 
