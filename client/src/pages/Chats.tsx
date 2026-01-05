@@ -271,12 +271,10 @@ export function Chats() {
 
   const [newMessage, setNewMessage] = useState("");
   const [localNotes, setLocalNotes] = useState("");
-  const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
-    if (messagesContainerRef.current) {
-      messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
-    }
+    messagesEndRef.current?.scrollIntoView({ behavior: "auto", block: "end" });
   };
 
   useEffect(() => {
@@ -284,8 +282,9 @@ export function Chats() {
   }, [selectedChat?.id, selectedChat?.notes]);
 
   useEffect(() => {
-    setTimeout(scrollToBottom, 100);
-  }, [selectedChat?.messages, selectedChat?.id]);
+    const timer = setTimeout(scrollToBottom, 50);
+    return () => clearTimeout(timer);
+  }, [selectedChat?.messages?.length, selectedChat?.id]);
 
   const handleSendMessage = async () => {
     if (!newMessage.trim() || !selectedChat) return;
@@ -619,7 +618,6 @@ export function Chats() {
 
               {/* Messages Area */}
               <div 
-                ref={messagesContainerRef}
                 className="flex-1 overflow-y-auto p-4 md:p-8 space-y-4 relative" 
                 style={{ backgroundImage: 'url("https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png")', backgroundRepeat: 'repeat', backgroundSize: '400px' }}
               >
@@ -653,6 +651,7 @@ export function Chats() {
                       </div>
                     ))
                   )}
+                  <div ref={messagesEndRef} />
                 </div>
               </div>
 
