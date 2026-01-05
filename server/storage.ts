@@ -2,11 +2,14 @@ import {
   type User, type InsertUser, type Chat, type InsertChat,
   type RegisteredPhone, type InsertRegisteredPhone,
   type MessageUsage, type InsertMessageUsage,
-  type TeamMember, type InsertTeamMember
+  type TeamMember, type InsertTeamMember,
+  type Workflow, type InsertWorkflow,
+  type WorkflowExecution, type InsertWorkflowExecution,
+  type RecurringReminder, type InsertRecurringReminder
 } from "@shared/schema";
 import { db } from "../drizzle/db";
-import { users, chats, registeredPhones, messageUsage, conversationWindows, teamMembers, type InsertConversationWindow, type ConversationWindow } from "@shared/schema";
-import { eq, and, lte, sql, isNotNull, asc, desc, gte, sum, gt, or } from "drizzle-orm";
+import { users, chats, registeredPhones, messageUsage, conversationWindows, teamMembers, workflows, workflowExecutions, recurringReminders, type InsertConversationWindow, type ConversationWindow } from "@shared/schema";
+import { eq, and, lte, sql, isNotNull, asc, desc, gte, sum, gt, or, like, ilike } from "drizzle-orm";
 
 export interface IStorage {
   // User methods
@@ -53,6 +56,29 @@ export interface IStorage {
   updateTeamMember(id: string, updates: Partial<TeamMember>): Promise<TeamMember | undefined>;
   deleteTeamMember(id: string): Promise<void>;
   getTeamMemberCount(userId: string): Promise<number>;
+  
+  // Workflow methods (Pro feature)
+  getWorkflows(userId: string): Promise<Workflow[]>;
+  getWorkflow(id: string): Promise<Workflow | undefined>;
+  getActiveWorkflowsByTrigger(userId: string, triggerType: string): Promise<Workflow[]>;
+  createWorkflow(workflow: InsertWorkflow): Promise<Workflow>;
+  updateWorkflow(id: string, updates: Partial<Workflow>): Promise<Workflow | undefined>;
+  deleteWorkflow(id: string): Promise<void>;
+  incrementWorkflowExecution(id: string): Promise<void>;
+  
+  // Workflow execution log methods
+  logWorkflowExecution(execution: InsertWorkflowExecution): Promise<WorkflowExecution>;
+  getWorkflowExecutions(workflowId: string, limit?: number): Promise<WorkflowExecution[]>;
+  
+  // Recurring reminder methods
+  getRecurringReminders(userId: string): Promise<RecurringReminder[]>;
+  getDueRecurringReminders(): Promise<RecurringReminder[]>;
+  createRecurringReminder(reminder: InsertRecurringReminder): Promise<RecurringReminder>;
+  updateRecurringReminder(id: string, updates: Partial<RecurringReminder>): Promise<RecurringReminder | undefined>;
+  deleteRecurringReminder(id: string): Promise<void>;
+  
+  // Message search for conversation history
+  searchMessages(userId: string, query: string): Promise<Chat[]>;
 }
 
 export class DbStorage implements IStorage {
@@ -312,6 +338,104 @@ export class DbStorage implements IStorage {
         or(eq(teamMembers.status, 'active'), eq(teamMembers.status, 'pending'))
       ));
     return (result[0]?.count || 0) + 1; // +1 to include the owner
+  }
+
+  // Workflow methods (Pro feature)
+  async getWorkflows(userId: string): Promise<Workflow[]> {
+    return await db.select().from(workflows).where(eq(workflows.userId, userId)).orderBy(desc(workflows.createdAt));
+  }
+
+  async getWorkflow(id: string): Promise<Workflow | undefined> {
+    const result = await db.select().from(workflows).where(eq(workflows.id, id));
+    return result[0];
+  }
+
+  async getActiveWorkflowsByTrigger(userId: string, triggerType: string): Promise<Workflow[]> {
+    return await db.select().from(workflows).where(
+      and(
+        eq(workflows.userId, userId),
+        eq(workflows.triggerType, triggerType),
+        eq(workflows.isActive, true)
+      )
+    );
+  }
+
+  async createWorkflow(workflow: InsertWorkflow): Promise<Workflow> {
+    const result = await db.insert(workflows).values(workflow).returning();
+    return result[0];
+  }
+
+  async updateWorkflow(id: string, updates: Partial<Workflow>): Promise<Workflow | undefined> {
+    const result = await db.update(workflows).set({ ...updates, updatedAt: new Date() }).where(eq(workflows.id, id)).returning();
+    return result[0];
+  }
+
+  async deleteWorkflow(id: string): Promise<void> {
+    await db.delete(workflows).where(eq(workflows.id, id));
+  }
+
+  async incrementWorkflowExecution(id: string): Promise<void> {
+    await db.update(workflows).set({
+      executionCount: sql`coalesce(${workflows.executionCount}, 0) + 1`,
+      lastExecutedAt: new Date()
+    }).where(eq(workflows.id, id));
+  }
+
+  // Workflow execution log methods
+  async logWorkflowExecution(execution: InsertWorkflowExecution): Promise<WorkflowExecution> {
+    const result = await db.insert(workflowExecutions).values(execution).returning();
+    return result[0];
+  }
+
+  async getWorkflowExecutions(workflowId: string, limit: number = 50): Promise<WorkflowExecution[]> {
+    return await db.select().from(workflowExecutions)
+      .where(eq(workflowExecutions.workflowId, workflowId))
+      .orderBy(desc(workflowExecutions.executedAt))
+      .limit(limit);
+  }
+
+  // Recurring reminder methods
+  async getRecurringReminders(userId: string): Promise<RecurringReminder[]> {
+    return await db.select().from(recurringReminders).where(eq(recurringReminders.userId, userId)).orderBy(asc(recurringReminders.createdAt));
+  }
+
+  async getDueRecurringReminders(): Promise<RecurringReminder[]> {
+    const now = new Date();
+    return await db.select().from(recurringReminders).where(
+      and(
+        eq(recurringReminders.isActive, true),
+        lte(recurringReminders.nextDue, now)
+      )
+    );
+  }
+
+  async createRecurringReminder(reminder: InsertRecurringReminder): Promise<RecurringReminder> {
+    const result = await db.insert(recurringReminders).values(reminder).returning();
+    return result[0];
+  }
+
+  async updateRecurringReminder(id: string, updates: Partial<RecurringReminder>): Promise<RecurringReminder | undefined> {
+    const result = await db.update(recurringReminders).set(updates).where(eq(recurringReminders.id, id)).returning();
+    return result[0];
+  }
+
+  async deleteRecurringReminder(id: string): Promise<void> {
+    await db.delete(recurringReminders).where(eq(recurringReminders.id, id));
+  }
+
+  // Message search for conversation history
+  async searchMessages(userId: string, query: string): Promise<Chat[]> {
+    const searchPattern = `%${query}%`;
+    return await db.select().from(chats).where(
+      and(
+        eq(chats.userId, userId),
+        or(
+          ilike(chats.name, searchPattern),
+          ilike(chats.notes, searchPattern),
+          sql`${chats.messages}::text ILIKE ${searchPattern}`
+        )
+      )
+    ).orderBy(desc(chats.updatedAt));
   }
 }
 

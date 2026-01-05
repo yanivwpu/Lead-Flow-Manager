@@ -191,6 +191,67 @@ export const insertTeamMemberSchema = createInsertSchema(teamMembers).omit({
   joinedAt: true,
 });
 
+// Workflow automation rules (Pro feature)
+export const workflows = pgTable("workflows", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  description: text("description"),
+  isActive: boolean("is_active").default(true),
+  triggerType: text("trigger_type").notNull(), // 'new_chat', 'keyword', 'no_reply', 'tag_change'
+  triggerConditions: jsonb("trigger_conditions").notNull().default(sql`'{}'::jsonb`), // JSON with conditions
+  actions: jsonb("actions").notNull().default(sql`'[]'::jsonb`), // Array of actions to perform
+  executionCount: integer("execution_count").default(0),
+  lastExecutedAt: timestamp("last_executed_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Workflow execution log
+export const workflowExecutions = pgTable("workflow_executions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  workflowId: varchar("workflow_id").notNull().references(() => workflows.id, { onDelete: "cascade" }),
+  chatId: varchar("chat_id").references(() => chats.id, { onDelete: "set null" }),
+  triggerData: jsonb("trigger_data"), // Data that triggered the workflow
+  actionsExecuted: jsonb("actions_executed"), // What actions were performed
+  status: text("status").notNull().default("success"), // success, failed, partial
+  errorMessage: text("error_message"),
+  executedAt: timestamp("executed_at").defaultNow(),
+});
+
+// Recurring reminders
+export const recurringReminders = pgTable("recurring_reminders", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  chatId: varchar("chat_id").references(() => chats.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  frequency: text("frequency").notNull(), // 'daily', 'weekly', 'biweekly', 'monthly'
+  dayOfWeek: integer("day_of_week"), // 0-6 for weekly
+  dayOfMonth: integer("day_of_month"), // 1-31 for monthly
+  timeOfDay: text("time_of_day").notNull().default("09:00"), // HH:MM format
+  nextDue: timestamp("next_due"),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertWorkflowSchema = createInsertSchema(workflows).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  executionCount: true,
+  lastExecutedAt: true,
+});
+
+export const insertWorkflowExecutionSchema = createInsertSchema(workflowExecutions).omit({
+  id: true,
+  executedAt: true,
+});
+
+export const insertRecurringReminderSchema = createInsertSchema(recurringReminders).omit({
+  id: true,
+  createdAt: true,
+});
+
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 export type InsertChat = z.infer<typeof insertChatSchema>;
@@ -203,3 +264,9 @@ export type InsertConversationWindow = z.infer<typeof insertConversationWindowSc
 export type ConversationWindow = typeof conversationWindows.$inferSelect;
 export type InsertTeamMember = z.infer<typeof insertTeamMemberSchema>;
 export type TeamMember = typeof teamMembers.$inferSelect;
+export type InsertWorkflow = z.infer<typeof insertWorkflowSchema>;
+export type Workflow = typeof workflows.$inferSelect;
+export type InsertWorkflowExecution = z.infer<typeof insertWorkflowExecutionSchema>;
+export type WorkflowExecution = typeof workflowExecutions.$inferSelect;
+export type InsertRecurringReminder = z.infer<typeof insertRecurringReminderSchema>;
+export type RecurringReminder = typeof recurringReminders.$inferSelect;
