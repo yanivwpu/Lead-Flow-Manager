@@ -793,6 +793,8 @@ export async function registerRoutes(
   // Twilio webhook for incoming WhatsApp messages
   // Routes messages to the correct user based on Account SID + phone number
   app.post("/api/webhook/twilio/incoming", async (req, res) => {
+    console.log("=== TWILIO WEBHOOK HIT ===");
+    console.log("Request body:", JSON.stringify(req.body, null, 2));
     try {
       const parsed = parseIncomingWebhook(req.body);
       console.log("Incoming WhatsApp message:", { from: parsed.from, to: parsed.to, accountSid: parsed.accountSid });
