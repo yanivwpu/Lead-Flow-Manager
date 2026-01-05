@@ -14,6 +14,9 @@ import {
   connectUserTwilio,
   disconnectUserTwilio,
   validateTwilioCredentials,
+  encryptCredential,
+  decryptCredential,
+  isEncrypted,
   type WhatsAppMessage,
   type TwilioCredentials,
 } from "./userTwilio";
@@ -1597,6 +1600,39 @@ export async function registerRoutes(
 
   // ============= Native Integration Endpoints =============
 
+  // Helper to encrypt sensitive integration config fields
+  const SENSITIVE_CONFIG_KEYS = ['accessToken', 'secretKey', 'privateKey', 'clientSecret', 'refreshToken', 'apiKey', 'webhookSecret'];
+  
+  function encryptIntegrationConfig(config: Record<string, any>): Record<string, any> {
+    const encrypted: Record<string, any> = { ...config };
+    for (const key of SENSITIVE_CONFIG_KEYS) {
+      if (encrypted[key] && typeof encrypted[key] === 'string' && !isEncrypted(encrypted[key])) {
+        encrypted[key] = encryptCredential(encrypted[key]);
+      }
+    }
+    return encrypted;
+  }
+  
+  function decryptIntegrationConfig(config: Record<string, any>): Record<string, any> {
+    const decrypted: Record<string, any> = { ...config };
+    for (const key of SENSITIVE_CONFIG_KEYS) {
+      if (decrypted[key] && typeof decrypted[key] === 'string' && isEncrypted(decrypted[key])) {
+        decrypted[key] = decryptCredential(decrypted[key]);
+      }
+    }
+    return decrypted;
+  }
+  
+  function maskIntegrationConfig(config: Record<string, any>): Record<string, any> {
+    const masked: Record<string, any> = { ...config };
+    for (const key of SENSITIVE_CONFIG_KEYS) {
+      if (masked[key] && typeof masked[key] === 'string') {
+        masked[key] = '••••••••';
+      }
+    }
+    return masked;
+  }
+
   // Get user's integrations
   app.get("/api/integrations", async (req, res) => {
     try {
@@ -1610,7 +1646,12 @@ export async function registerRoutes(
       }
       
       const userIntegrations = await storage.getIntegrations(req.user.id);
-      res.json(userIntegrations);
+      // Mask sensitive fields before returning to client
+      const safeIntegrations = userIntegrations.map(i => ({
+        ...i,
+        config: maskIntegrationConfig(i.config as Record<string, any>),
+      }));
+      res.json(safeIntegrations);
     } catch (error) {
       console.error("Error fetching integrations:", error);
       res.status(500).json({ error: "Failed to fetch integrations" });
@@ -1641,15 +1682,22 @@ export async function registerRoutes(
         return res.status(400).json({ error: `You already have a ${name} integration connected. Disconnect it first to add a new one.` });
       }
       
+      // Encrypt sensitive fields before storing
+      const encryptedConfig = encryptIntegrationConfig(config);
+      
       const integration = await storage.createIntegration({
         userId: req.user.id,
         type,
         name,
-        config,
+        config: encryptedConfig,
         isActive: true,
       });
       
-      res.status(201).json(integration);
+      // Return with masked config
+      res.status(201).json({
+        ...integration,
+        config: maskIntegrationConfig(config),
+      });
     } catch (error) {
       console.error("Error creating integration:", error);
       res.status(500).json({ error: "Failed to create integration" });
@@ -1671,11 +1719,15 @@ export async function registerRoutes(
       const { name, config, isActive } = req.body;
       const updates: any = {};
       if (name !== undefined) updates.name = name;
-      if (config !== undefined) updates.config = config;
+      if (config !== undefined) updates.config = encryptIntegrationConfig(config);
       if (isActive !== undefined) updates.isActive = isActive;
       
       const updated = await storage.updateIntegration(req.params.id, updates);
-      res.json(updated);
+      // Return with masked config
+      res.json({
+        ...updated,
+        config: maskIntegrationConfig(updated?.config as Record<string, any> || {}),
+      });
     } catch (error) {
       console.error("Error updating integration:", error);
       res.status(500).json({ error: "Failed to update integration" });
