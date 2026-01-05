@@ -34,6 +34,55 @@ function calculateCostWithMarkup(baseCost: number): { twilioCost: string; markup
   };
 }
 
+function calculateNextDueDate(
+  frequency: string, 
+  timeOfDay: string = "09:00", 
+  dayOfWeek?: number | null, 
+  dayOfMonth?: number | null
+): Date {
+  const now = new Date();
+  const [hours, minutes] = timeOfDay.split(":").map(Number);
+  let nextDue = new Date(now);
+  nextDue.setHours(hours, minutes, 0, 0);
+  
+  switch (frequency) {
+    case "daily":
+      if (nextDue <= now) {
+        nextDue.setDate(nextDue.getDate() + 1);
+      }
+      break;
+    case "weekly":
+      const targetDay = dayOfWeek ?? 1; // Default to Monday
+      const currentDay = nextDue.getDay();
+      let daysUntil = targetDay - currentDay;
+      if (daysUntil <= 0 || (daysUntil === 0 && nextDue <= now)) {
+        daysUntil += 7;
+      }
+      nextDue.setDate(nextDue.getDate() + daysUntil);
+      break;
+    case "biweekly":
+      const biweeklyDay = dayOfWeek ?? 1;
+      const currDay = nextDue.getDay();
+      let biweeklyDaysUntil = biweeklyDay - currDay;
+      if (biweeklyDaysUntil <= 0 || (biweeklyDaysUntil === 0 && nextDue <= now)) {
+        biweeklyDaysUntil += 14;
+      }
+      nextDue.setDate(nextDue.getDate() + biweeklyDaysUntil);
+      break;
+    case "monthly":
+      const targetDate = dayOfMonth ?? 1;
+      nextDue.setDate(targetDate);
+      if (nextDue <= now) {
+        nextDue.setMonth(nextDue.getMonth() + 1);
+      }
+      break;
+    default:
+      nextDue.setDate(nextDue.getDate() + 1);
+  }
+  
+  return nextDue;
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
@@ -1092,6 +1141,253 @@ export async function registerRoutes(
     } catch (error: any) {
       console.error("Error syncing subscription:", error);
       res.status(500).json({ error: error.message || "Failed to sync subscription" });
+    }
+  });
+
+  // ============= Workflow Automation Endpoints (Pro Feature) =============
+
+  // Get all workflows for current user
+  app.get("/api/workflows", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const limits = await subscriptionService.getUserLimits(req.user.id);
+      if (!limits?.workflowsEnabled) {
+        return res.status(403).json({ error: "Workflows require a Pro plan", upgradeRequired: true });
+      }
+      const userWorkflows = await storage.getWorkflows(req.user.id);
+      res.json(userWorkflows);
+    } catch (error) {
+      console.error("Error fetching workflows:", error);
+      res.status(500).json({ error: "Failed to fetch workflows" });
+    }
+  });
+
+  // Create a new workflow
+  app.post("/api/workflows", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const limits = await subscriptionService.getUserLimits(req.user.id);
+      if (!limits?.workflowsEnabled) {
+        return res.status(403).json({ error: "Workflows require a Pro plan", upgradeRequired: true });
+      }
+      const { name, description, triggerType, triggerConditions, actions } = req.body;
+      if (!name || !triggerType) {
+        return res.status(400).json({ error: "Name and trigger type are required" });
+      }
+      const workflow = await storage.createWorkflow({
+        userId: req.user.id,
+        name,
+        description: description || null,
+        triggerType,
+        triggerConditions: triggerConditions || {},
+        actions: actions || [],
+        isActive: true,
+      });
+      res.status(201).json(workflow);
+    } catch (error) {
+      console.error("Error creating workflow:", error);
+      res.status(500).json({ error: "Failed to create workflow" });
+    }
+  });
+
+  // Update a workflow
+  app.patch("/api/workflows/:id", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const workflow = await storage.getWorkflow(req.params.id);
+      if (!workflow || workflow.userId !== req.user.id) {
+        return res.status(404).json({ error: "Workflow not found" });
+      }
+      const updated = await storage.updateWorkflow(req.params.id, req.body);
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating workflow:", error);
+      res.status(500).json({ error: "Failed to update workflow" });
+    }
+  });
+
+  // Delete a workflow
+  app.delete("/api/workflows/:id", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const workflow = await storage.getWorkflow(req.params.id);
+      if (!workflow || workflow.userId !== req.user.id) {
+        return res.status(404).json({ error: "Workflow not found" });
+      }
+      await storage.deleteWorkflow(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting workflow:", error);
+      res.status(500).json({ error: "Failed to delete workflow" });
+    }
+  });
+
+  // Get workflow execution history
+  app.get("/api/workflows/:id/executions", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const workflow = await storage.getWorkflow(req.params.id);
+      if (!workflow || workflow.userId !== req.user.id) {
+        return res.status(404).json({ error: "Workflow not found" });
+      }
+      const executions = await storage.getWorkflowExecutions(req.params.id);
+      res.json(executions);
+    } catch (error) {
+      console.error("Error fetching executions:", error);
+      res.status(500).json({ error: "Failed to fetch executions" });
+    }
+  });
+
+  // ============= Advanced Reminders Endpoints =============
+
+  // Get recurring reminders
+  app.get("/api/reminders/recurring", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const reminders = await storage.getRecurringReminders(req.user.id);
+      res.json(reminders);
+    } catch (error) {
+      console.error("Error fetching recurring reminders:", error);
+      res.status(500).json({ error: "Failed to fetch reminders" });
+    }
+  });
+
+  // Create recurring reminder
+  app.post("/api/reminders/recurring", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const limits = await subscriptionService.getUserLimits(req.user.id);
+      if (!limits?.workflowsEnabled) {
+        return res.status(403).json({ error: "Recurring reminders require a Pro plan", upgradeRequired: true });
+      }
+      const { chatId, title, frequency, dayOfWeek, dayOfMonth, timeOfDay } = req.body;
+      if (!title || !frequency) {
+        return res.status(400).json({ error: "Title and frequency are required" });
+      }
+      
+      // Calculate next due date
+      const nextDue = calculateNextDueDate(frequency, timeOfDay, dayOfWeek, dayOfMonth);
+      
+      const reminder = await storage.createRecurringReminder({
+        userId: req.user.id,
+        chatId: chatId || null,
+        title,
+        frequency,
+        dayOfWeek: dayOfWeek ?? null,
+        dayOfMonth: dayOfMonth ?? null,
+        timeOfDay: timeOfDay || "09:00",
+        nextDue,
+        isActive: true,
+      });
+      res.status(201).json(reminder);
+    } catch (error) {
+      console.error("Error creating recurring reminder:", error);
+      res.status(500).json({ error: "Failed to create reminder" });
+    }
+  });
+
+  // Update recurring reminder
+  app.patch("/api/reminders/recurring/:id", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const reminders = await storage.getRecurringReminders(req.user.id);
+      const reminder = reminders.find(r => r.id === req.params.id);
+      if (!reminder) {
+        return res.status(404).json({ error: "Reminder not found" });
+      }
+      
+      // Recalculate next due if frequency changed
+      let updates = { ...req.body };
+      if (req.body.frequency || req.body.timeOfDay || req.body.dayOfWeek !== undefined || req.body.dayOfMonth !== undefined) {
+        const freq = req.body.frequency || reminder.frequency;
+        const time = req.body.timeOfDay || reminder.timeOfDay;
+        const dow = req.body.dayOfWeek ?? reminder.dayOfWeek;
+        const dom = req.body.dayOfMonth ?? reminder.dayOfMonth;
+        updates.nextDue = calculateNextDueDate(freq, time, dow, dom);
+      }
+      
+      const updated = await storage.updateRecurringReminder(req.params.id, updates);
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating recurring reminder:", error);
+      res.status(500).json({ error: "Failed to update reminder" });
+    }
+  });
+
+  // Delete recurring reminder
+  app.delete("/api/reminders/recurring/:id", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const reminders = await storage.getRecurringReminders(req.user.id);
+      const reminder = reminders.find(r => r.id === req.params.id);
+      if (!reminder) {
+        return res.status(404).json({ error: "Reminder not found" });
+      }
+      await storage.deleteRecurringReminder(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting reminder:", error);
+      res.status(500).json({ error: "Failed to delete reminder" });
+    }
+  });
+
+  // Set custom one-time follow-up with specific date/time
+  app.patch("/api/chats/:id/follow-up", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const chat = await storage.getChat(req.params.id);
+      if (!chat || chat.userId !== req.user.id) {
+        return res.status(404).json({ error: "Chat not found" });
+      }
+      const { followUpDate, followUp } = req.body;
+      const updated = await storage.updateChat(req.params.id, {
+        followUpDate: followUpDate ? new Date(followUpDate) : null,
+        followUp: followUp || null,
+      });
+      res.json(updated);
+    } catch (error) {
+      console.error("Error setting follow-up:", error);
+      res.status(500).json({ error: "Failed to set follow-up" });
+    }
+  });
+
+  // ============= Conversation History Search =============
+
+  // Search across all messages
+  app.get("/api/messages/search", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const query = req.query.q as string;
+      if (!query || query.length < 2) {
+        return res.status(400).json({ error: "Search query must be at least 2 characters" });
+      }
+      const results = await storage.searchMessages(req.user.id, query);
+      res.json(results);
+    } catch (error) {
+      console.error("Error searching messages:", error);
+      res.status(500).json({ error: "Failed to search messages" });
     }
   });
 
