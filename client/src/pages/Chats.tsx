@@ -271,10 +271,12 @@ export function Chats() {
 
   const [newMessage, setNewMessage] = useState("");
   const [localNotes, setLocalNotes] = useState("");
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (messagesContainerRef.current) {
+      messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+    }
   };
 
   useEffect(() => {
@@ -282,8 +284,8 @@ export function Chats() {
   }, [selectedChat?.id, selectedChat?.notes]);
 
   useEffect(() => {
-    scrollToBottom();
-  }, [selectedChat?.messages]);
+    setTimeout(scrollToBottom, 100);
+  }, [selectedChat?.messages, selectedChat?.id]);
 
   const handleSendMessage = async () => {
     if (!newMessage.trim() || !selectedChat) return;
@@ -616,7 +618,11 @@ export function Chats() {
               </div>
 
               {/* Messages Area */}
-              <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-4 relative" style={{ backgroundImage: 'url("https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png")', backgroundRepeat: 'repeat', backgroundSize: '400px' }}>
+              <div 
+                ref={messagesContainerRef}
+                className="flex-1 overflow-y-auto p-4 md:p-8 space-y-4 relative" 
+                style={{ backgroundImage: 'url("https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png")', backgroundRepeat: 'repeat', backgroundSize: '400px' }}
+              >
                 <div className="absolute inset-0 bg-[#efeae2]/90 pointer-events-none" />
                 
                 <div className="relative z-10 space-y-4">
@@ -647,7 +653,6 @@ export function Chats() {
                       </div>
                     ))
                   )}
-                  <div ref={messagesEndRef} />
                 </div>
               </div>
 
