@@ -4,12 +4,14 @@ import { Helmet } from "react-helmet";
 import { 
   Zap, Plus, Trash2, Edit2, ToggleLeft, ToggleRight, 
   ArrowRight, User, Tag, Clock, FileText, ChevronDown,
-  Loader2, AlertCircle, Crown, Play, History
+  Loader2, AlertCircle, Crown, Play, History, Mail, Send,
+  MessageSquare, Users, Pause, X
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
   SelectContent,
@@ -73,21 +75,84 @@ interface WorkflowAction {
   value: string;
 }
 
+interface DripCampaign {
+  id: string;
+  userId: string;
+  name: string;
+  description: string | null;
+  isActive: boolean;
+  triggerType: string;
+  triggerConfig: any;
+  createdAt: string;
+  updatedAt: string;
+  steps?: DripStep[];
+  enrollments?: DripEnrollment[];
+}
+
+interface DripStep {
+  id: string;
+  campaignId: string;
+  stepOrder: number;
+  delayMinutes: number;
+  messageContent: string;
+  messageType: string;
+  templateId: string | null;
+  createdAt: string;
+}
+
+interface DripEnrollment {
+  id: string;
+  campaignId: string;
+  chatId: string;
+  currentStepOrder: number;
+  status: string;
+  enrolledAt: string;
+  nextSendAt: string | null;
+  completedAt: string | null;
+}
+
 export function Workflows() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [activeTab, setActiveTab] = useState("workflows");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingWorkflow, setEditingWorkflow] = useState<Workflow | null>(null);
   const [expandedWorkflow, setExpandedWorkflow] = useState<string | null>(null);
   
+  // Workflow form state
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [triggerType, setTriggerType] = useState("new_chat");
   const [keywords, setKeywords] = useState("");
   const [actions, setActions] = useState<WorkflowAction[]>([{ type: "assign", value: "round_robin" }]);
 
+  // Drip campaign state
+  const [isDripDialogOpen, setIsDripDialogOpen] = useState(false);
+  const [editingCampaign, setEditingCampaign] = useState<DripCampaign | null>(null);
+  const [expandedCampaign, setExpandedCampaign] = useState<string | null>(null);
+  const [campaignName, setCampaignName] = useState("");
+  const [campaignDescription, setCampaignDescription] = useState("");
+  const [campaignSteps, setCampaignSteps] = useState<Array<{ delayMinutes: number; messageContent: string }>>([
+    { delayMinutes: 0, messageContent: "" }
+  ]);
+
+  // Enroll chat dialog
+  const [isEnrollDialogOpen, setIsEnrollDialogOpen] = useState(false);
+  const [enrollCampaignId, setEnrollCampaignId] = useState<string | null>(null);
+  const [selectedChatId, setSelectedChatId] = useState("");
+
   const { data: workflows = [], isLoading, error } = useQuery<Workflow[]>({
     queryKey: ["/api/workflows"],
+    retry: false,
+  });
+
+  const { data: dripCampaigns = [], isLoading: isLoadingCampaigns, error: campaignsError } = useQuery<DripCampaign[]>({
+    queryKey: ["/api/drip-campaigns"],
+    retry: false,
+  });
+
+  const { data: chats = [] } = useQuery<any[]>({
+    queryKey: ["/api/chats"],
     retry: false,
   });
 
@@ -96,6 +161,7 @@ export function Workflows() {
     retry: false,
   });
 
+  // Workflow mutations
   const createWorkflowMutation = useMutation({
     mutationFn: async (data: any) => {
       const res = await apiRequest("POST", "/api/workflows", data);
@@ -155,6 +221,107 @@ export function Workflows() {
     },
   });
 
+  // Drip campaign mutations
+  const createCampaignMutation = useMutation({
+    mutationFn: async (data: any) => {
+      const res = await apiRequest("POST", "/api/drip-campaigns", data);
+      return res.json();
+    },
+    onSuccess: async (campaign) => {
+      // Add steps to the campaign
+      for (let i = 0; i < campaignSteps.length; i++) {
+        const step = campaignSteps[i];
+        if (step.messageContent.trim()) {
+          await apiRequest("POST", `/api/drip-campaigns/${campaign.id}/steps`, {
+            stepOrder: i + 1,
+            delayMinutes: step.delayMinutes,
+            messageContent: step.messageContent,
+          });
+        }
+      }
+      queryClient.invalidateQueries({ queryKey: ["/api/drip-campaigns"] });
+      toast({ title: "Campaign created successfully" });
+      resetCampaignForm();
+      setIsDripDialogOpen(false);
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const updateCampaignMutation = useMutation({
+    mutationFn: async ({ id, ...data }: any) => {
+      const res = await apiRequest("PATCH", `/api/drip-campaigns/${id}`, data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/drip-campaigns"] });
+      toast({ title: "Campaign updated successfully" });
+      resetCampaignForm();
+      setIsDripDialogOpen(false);
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const deleteCampaignMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await apiRequest("DELETE", `/api/drip-campaigns/${id}`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/drip-campaigns"] });
+      toast({ title: "Campaign deleted" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const toggleCampaignMutation = useMutation({
+    mutationFn: async ({ id, isActive }: { id: string; isActive: boolean }) => {
+      const res = await apiRequest("PATCH", `/api/drip-campaigns/${id}`, { isActive });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/drip-campaigns"] });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const enrollChatMutation = useMutation({
+    mutationFn: async ({ campaignId, chatId }: { campaignId: string; chatId: string }) => {
+      const res = await apiRequest("POST", `/api/drip-campaigns/${campaignId}/enroll`, { chatId });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/drip-campaigns"] });
+      toast({ title: "Contact enrolled in campaign" });
+      setIsEnrollDialogOpen(false);
+      setSelectedChatId("");
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const cancelEnrollmentMutation = useMutation({
+    mutationFn: async (enrollmentId: string) => {
+      const res = await apiRequest("POST", `/api/drip-enrollments/${enrollmentId}/cancel`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/drip-campaigns"] });
+      toast({ title: "Enrollment cancelled" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
   const resetForm = () => {
     setName("");
     setDescription("");
@@ -162,6 +329,13 @@ export function Workflows() {
     setKeywords("");
     setActions([{ type: "assign", value: "round_robin" }]);
     setEditingWorkflow(null);
+  };
+
+  const resetCampaignForm = () => {
+    setCampaignName("");
+    setCampaignDescription("");
+    setCampaignSteps([{ delayMinutes: 0, messageContent: "" }]);
+    setEditingCampaign(null);
   };
 
   const openEditDialog = (workflow: Workflow) => {
@@ -172,6 +346,26 @@ export function Workflows() {
     setKeywords(workflow.triggerConditions?.keywords?.join(", ") || "");
     setActions(workflow.actions as WorkflowAction[] || [{ type: "assign", value: "round_robin" }]);
     setIsDialogOpen(true);
+  };
+
+  const openEditCampaignDialog = async (campaign: DripCampaign) => {
+    // Fetch full campaign details with steps
+    try {
+      const res = await apiRequest("GET", `/api/drip-campaigns/${campaign.id}`);
+      const fullCampaign = await res.json();
+      setEditingCampaign(fullCampaign);
+      setCampaignName(fullCampaign.name);
+      setCampaignDescription(fullCampaign.description || "");
+      if (fullCampaign.steps && fullCampaign.steps.length > 0) {
+        setCampaignSteps(fullCampaign.steps.map((s: DripStep) => ({
+          delayMinutes: s.delayMinutes,
+          messageContent: s.messageContent,
+        })));
+      }
+      setIsDripDialogOpen(true);
+    } catch (error) {
+      toast({ title: "Error loading campaign", variant: "destructive" });
+    }
   };
 
   const handleSubmit = () => {
@@ -200,6 +394,31 @@ export function Workflows() {
     }
   };
 
+  const handleCampaignSubmit = () => {
+    if (!campaignName.trim()) {
+      toast({ title: "Please enter a campaign name", variant: "destructive" });
+      return;
+    }
+
+    const validSteps = campaignSteps.filter(s => s.messageContent.trim());
+    if (validSteps.length === 0) {
+      toast({ title: "Please add at least one message step", variant: "destructive" });
+      return;
+    }
+
+    const data = {
+      name: campaignName,
+      description: campaignDescription || null,
+      triggerType: "manual",
+    };
+
+    if (editingCampaign) {
+      updateCampaignMutation.mutate({ id: editingCampaign.id, ...data });
+    } else {
+      createCampaignMutation.mutate(data);
+    }
+  };
+
   const addAction = () => {
     setActions([...actions, { type: "tag", value: "" }]);
   };
@@ -215,6 +434,29 @@ export function Workflows() {
 
   const removeAction = (index: number) => {
     setActions(actions.filter((_, i) => i !== index));
+  };
+
+  const addCampaignStep = () => {
+    setCampaignSteps([...campaignSteps, { delayMinutes: 60, messageContent: "" }]);
+  };
+
+  const updateCampaignStep = (index: number, field: "delayMinutes" | "messageContent", value: any) => {
+    const newSteps = [...campaignSteps];
+    newSteps[index] = { ...newSteps[index], [field]: value };
+    setCampaignSteps(newSteps);
+  };
+
+  const removeCampaignStep = (index: number) => {
+    if (campaignSteps.length > 1) {
+      setCampaignSteps(campaignSteps.filter((_, i) => i !== index));
+    }
+  };
+
+  const formatDelay = (minutes: number) => {
+    if (minutes === 0) return "Immediately";
+    if (minutes < 60) return `${minutes} min`;
+    if (minutes < 1440) return `${Math.round(minutes / 60)} hr`;
+    return `${Math.round(minutes / 1440)} day${Math.round(minutes / 1440) > 1 ? "s" : ""}`;
   };
 
   const renderActionValueInput = (action: WorkflowAction, index: number) => {
@@ -342,200 +584,416 @@ export function Workflows() {
       <div className="p-4 sm:p-6 border-b border-gray-200 bg-gray-50">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-xl sm:text-2xl font-display font-bold text-gray-900">Workflows</h1>
-            <p className="text-sm text-gray-500 mt-1">Automate your chat management with rules</p>
+            <h1 className="text-xl sm:text-2xl font-display font-bold text-gray-900">Automation</h1>
+            <p className="text-sm text-gray-500 mt-1">Workflows & message sequences</p>
           </div>
-          <Button 
-            onClick={() => { resetForm(); setIsDialogOpen(true); }}
-            className="bg-brand-green hover:bg-brand-green/90"
-            data-testid="button-create-workflow"
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            New Workflow
-          </Button>
         </div>
       </div>
 
-      <div className="flex-1 overflow-auto p-4 sm:p-6">
-        {isLoading ? (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
-          </div>
-        ) : workflows.length === 0 ? (
-          <div className="text-center py-12">
-            <div className="h-16 w-16 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
-              <Zap className="h-8 w-8 text-gray-400" />
-            </div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">No workflows yet</h3>
-            <p className="text-gray-500 mb-4">Create your first workflow to automate repetitive tasks</p>
-            <Button 
-              onClick={() => { resetForm(); setIsDialogOpen(true); }}
-              className="bg-brand-green hover:bg-brand-green/90"
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
+        <div className="border-b border-gray-200 px-4 sm:px-6">
+          <TabsList className="h-12 bg-transparent border-0 p-0 gap-6">
+            <TabsTrigger 
+              value="workflows" 
+              className="h-12 px-0 border-b-2 border-transparent data-[state=active]:border-brand-green data-[state=active]:bg-transparent data-[state=active]:shadow-none rounded-none"
             >
-              <Plus className="h-4 w-4 mr-2" />
-              Create Workflow
-            </Button>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {workflows.map((workflow) => (
-              <Collapsible 
-                key={workflow.id}
-                open={expandedWorkflow === workflow.id}
-                onOpenChange={(open) => setExpandedWorkflow(open ? workflow.id : null)}
+              <Zap className="h-4 w-4 mr-2" />
+              Workflows
+            </TabsTrigger>
+            <TabsTrigger 
+              value="drip" 
+              className="h-12 px-0 border-b-2 border-transparent data-[state=active]:border-brand-green data-[state=active]:bg-transparent data-[state=active]:shadow-none rounded-none"
+            >
+              <Mail className="h-4 w-4 mr-2" />
+              Drip Sequences
+            </TabsTrigger>
+          </TabsList>
+        </div>
+
+        <TabsContent value="workflows" className="flex-1 overflow-auto m-0">
+          <div className="p-4 sm:p-6">
+            <div className="flex justify-end mb-4">
+              <Button 
+                onClick={() => { resetForm(); setIsDialogOpen(true); }}
+                className="bg-brand-green hover:bg-brand-green/90"
+                data-testid="button-create-workflow"
               >
-                <div className={cn(
-                  "border rounded-lg transition-colors",
-                  workflow.isActive ? "border-gray-200 bg-white" : "border-gray-100 bg-gray-50"
-                )}>
-                  <div className="p-4 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className={cn(
-                        "h-10 w-10 rounded-lg flex items-center justify-center",
-                        workflow.isActive ? "bg-brand-green/10" : "bg-gray-100"
-                      )}>
-                        <Zap className={cn(
-                          "h-5 w-5",
-                          workflow.isActive ? "text-brand-green" : "text-gray-400"
-                        )} />
-                      </div>
-                      <div>
-                        <h3 className={cn(
-                          "font-semibold",
-                          workflow.isActive ? "text-gray-900" : "text-gray-500"
-                        )}>{workflow.name}</h3>
-                        <p className="text-sm text-gray-500">
-                          {TRIGGER_TYPES.find(t => t.value === workflow.triggerType)?.label}
-                          {workflow.executionCount > 0 && (
-                            <span className="ml-2 text-xs">
-                              • {workflow.executionCount} executions
-                            </span>
-                          )}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => toggleWorkflowMutation.mutate({ 
-                          id: workflow.id, 
-                          isActive: !workflow.isActive 
-                        })}
-                        className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                        data-testid={`button-toggle-workflow-${workflow.id}`}
-                      >
-                        {workflow.isActive ? (
-                          <ToggleRight className="h-6 w-6 text-brand-green" />
-                        ) : (
-                          <ToggleLeft className="h-6 w-6 text-gray-400" />
-                        )}
-                      </button>
-                      <button
-                        onClick={() => openEditDialog(workflow)}
-                        className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                        data-testid={`button-edit-workflow-${workflow.id}`}
-                      >
-                        <Edit2 className="h-4 w-4 text-gray-500" />
-                      </button>
-                      <button
-                        onClick={() => deleteWorkflowMutation.mutate(workflow.id)}
-                        className="p-2 hover:bg-red-50 rounded-lg transition-colors"
-                        data-testid={`button-delete-workflow-${workflow.id}`}
-                      >
-                        <Trash2 className="h-4 w-4 text-red-500" />
-                      </button>
-                      <CollapsibleTrigger asChild>
-                        <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
-                          <ChevronDown className={cn(
-                            "h-4 w-4 text-gray-500 transition-transform",
-                            expandedWorkflow === workflow.id && "rotate-180"
-                          )} />
-                        </button>
-                      </CollapsibleTrigger>
-                    </div>
-                  </div>
-                  <CollapsibleContent>
-                    <div className="px-4 pb-4 border-t border-gray-100 pt-4">
-                      {workflow.description && (
-                        <p className="text-sm text-gray-600 mb-3">{workflow.description}</p>
-                      )}
-                      <div className="space-y-2">
-                        <div className="text-xs font-medium text-gray-500 uppercase">Actions</div>
-                        {(workflow.actions as WorkflowAction[]).map((action, idx) => (
-                          <div key={idx} className="flex items-center gap-2 text-sm">
-                            <ArrowRight className="h-3 w-3 text-gray-400" />
-                            <span className="text-gray-700">
-                              {ACTION_TYPES.find(a => a.value === action.type)?.label}: 
-                            </span>
-                            <span className="font-medium text-gray-900">{action.value}</span>
+                <Plus className="h-4 w-4 mr-2" />
+                New Workflow
+              </Button>
+            </div>
+
+            {isLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+              </div>
+            ) : workflows.length === 0 ? (
+              <div className="text-center py-12">
+                <div className="h-16 w-16 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
+                  <Zap className="h-8 w-8 text-gray-400" />
+                </div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">No workflows yet</h3>
+                <p className="text-gray-500 mb-4">Create your first workflow to automate repetitive tasks</p>
+                <Button 
+                  onClick={() => { resetForm(); setIsDialogOpen(true); }}
+                  className="bg-brand-green hover:bg-brand-green/90"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Create Workflow
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {workflows.map((workflow) => (
+                  <Collapsible 
+                    key={workflow.id}
+                    open={expandedWorkflow === workflow.id}
+                    onOpenChange={(open) => setExpandedWorkflow(open ? workflow.id : null)}
+                  >
+                    <div className={cn(
+                      "border rounded-lg transition-colors",
+                      workflow.isActive ? "border-gray-200 bg-white" : "border-gray-100 bg-gray-50"
+                    )}>
+                      <div className="p-4 flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className={cn(
+                            "h-10 w-10 rounded-lg flex items-center justify-center",
+                            workflow.isActive ? "bg-brand-green/10" : "bg-gray-100"
+                          )}>
+                            <Zap className={cn(
+                              "h-5 w-5",
+                              workflow.isActive ? "text-brand-green" : "text-gray-400"
+                            )} />
                           </div>
-                        ))}
-                      </div>
-                      {workflow.triggerType === "keyword" && workflow.triggerConditions?.keywords && (
-                        <div className="mt-3">
-                          <div className="text-xs font-medium text-gray-500 uppercase mb-1">Keywords</div>
-                          <div className="flex flex-wrap gap-1">
-                            {workflow.triggerConditions.keywords.map((kw: string, idx: number) => (
-                              <span key={idx} className="px-2 py-0.5 bg-gray-100 rounded text-sm">
-                                {kw}
-                              </span>
-                            ))}
+                          <div>
+                            <h3 className={cn(
+                              "font-semibold",
+                              workflow.isActive ? "text-gray-900" : "text-gray-500"
+                            )}>{workflow.name}</h3>
+                            <p className="text-sm text-gray-500">
+                              {TRIGGER_TYPES.find(t => t.value === workflow.triggerType)?.label}
+                              {workflow.executionCount > 0 && (
+                                <span className="ml-2 text-xs">
+                                  • {workflow.executionCount} executions
+                                </span>
+                              )}
+                            </p>
                           </div>
                         </div>
-                      )}
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => toggleWorkflowMutation.mutate({ 
+                              id: workflow.id, 
+                              isActive: !workflow.isActive 
+                            })}
+                            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                            data-testid={`button-toggle-workflow-${workflow.id}`}
+                          >
+                            {workflow.isActive ? (
+                              <ToggleRight className="h-6 w-6 text-brand-green" />
+                            ) : (
+                              <ToggleLeft className="h-6 w-6 text-gray-400" />
+                            )}
+                          </button>
+                          <button
+                            onClick={() => openEditDialog(workflow)}
+                            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                            data-testid={`button-edit-workflow-${workflow.id}`}
+                          >
+                            <Edit2 className="h-4 w-4 text-gray-500" />
+                          </button>
+                          <button
+                            onClick={() => deleteWorkflowMutation.mutate(workflow.id)}
+                            className="p-2 hover:bg-red-50 rounded-lg transition-colors"
+                            data-testid={`button-delete-workflow-${workflow.id}`}
+                          >
+                            <Trash2 className="h-4 w-4 text-red-500" />
+                          </button>
+                          <CollapsibleTrigger asChild>
+                            <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+                              <ChevronDown className={cn(
+                                "h-4 w-4 text-gray-500 transition-transform",
+                                expandedWorkflow === workflow.id && "rotate-180"
+                              )} />
+                            </button>
+                          </CollapsibleTrigger>
+                        </div>
+                      </div>
+                      <CollapsibleContent>
+                        <div className="px-4 pb-4 pt-0 border-t border-gray-100">
+                          <div className="mt-4 space-y-3">
+                            <div>
+                              <h4 className="text-xs font-medium text-gray-500 uppercase mb-2">Actions</h4>
+                              <div className="space-y-2">
+                                {(workflow.actions as WorkflowAction[])?.map((action, i) => {
+                                  const actionType = ACTION_TYPES.find(a => a.value === action.type);
+                                  return (
+                                    <div key={i} className="flex items-center gap-2 text-sm">
+                                      {actionType && <actionType.icon className="h-4 w-4 text-gray-400" />}
+                                      <span>{actionType?.label}</span>
+                                      <span className="text-gray-500">→ {action.value}</span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                            {workflow.lastExecutedAt && (
+                              <div className="text-xs text-gray-400">
+                                Last run: {new Date(workflow.lastExecutedAt).toLocaleString()}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </CollapsibleContent>
                     </div>
-                  </CollapsibleContent>
-                </div>
-              </Collapsible>
-            ))}
+                  </Collapsible>
+                ))}
+              </div>
+            )}
           </div>
-        )}
-      </div>
+        </TabsContent>
 
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-md max-h-[75vh] flex flex-col p-4 sm:p-6">
+        <TabsContent value="drip" className="flex-1 overflow-auto m-0">
+          <div className="p-4 sm:p-6">
+            <div className="flex justify-end mb-4">
+              <Button 
+                onClick={() => { resetCampaignForm(); setIsDripDialogOpen(true); }}
+                className="bg-brand-green hover:bg-brand-green/90"
+                data-testid="button-create-campaign"
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                New Sequence
+              </Button>
+            </div>
+
+            {isLoadingCampaigns ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+              </div>
+            ) : dripCampaigns.length === 0 ? (
+              <div className="text-center py-12">
+                <div className="h-16 w-16 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
+                  <Mail className="h-8 w-8 text-gray-400" />
+                </div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">No sequences yet</h3>
+                <p className="text-gray-500 mb-4 max-w-sm mx-auto">
+                  Create automated message sequences to nurture leads over time with scheduled follow-ups.
+                </p>
+                <Button 
+                  onClick={() => { resetCampaignForm(); setIsDripDialogOpen(true); }}
+                  className="bg-brand-green hover:bg-brand-green/90"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Create Sequence
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {dripCampaigns.map((campaign) => (
+                  <Collapsible 
+                    key={campaign.id}
+                    open={expandedCampaign === campaign.id}
+                    onOpenChange={(open) => setExpandedCampaign(open ? campaign.id : null)}
+                  >
+                    <div className={cn(
+                      "border rounded-lg transition-colors",
+                      campaign.isActive ? "border-gray-200 bg-white" : "border-gray-100 bg-gray-50"
+                    )}>
+                      <div className="p-4 flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className={cn(
+                            "h-10 w-10 rounded-lg flex items-center justify-center",
+                            campaign.isActive ? "bg-blue-50" : "bg-gray-100"
+                          )}>
+                            <Mail className={cn(
+                              "h-5 w-5",
+                              campaign.isActive ? "text-blue-600" : "text-gray-400"
+                            )} />
+                          </div>
+                          <div>
+                            <h3 className={cn(
+                              "font-semibold",
+                              campaign.isActive ? "text-gray-900" : "text-gray-500"
+                            )}>{campaign.name}</h3>
+                            <p className="text-sm text-gray-500">
+                              {campaign.steps?.length || 0} steps
+                              {campaign.enrollments && campaign.enrollments.length > 0 && (
+                                <span className="ml-2">
+                                  • {campaign.enrollments.filter(e => e.status === "active").length} active
+                                </span>
+                              )}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setEnrollCampaignId(campaign.id);
+                              setIsEnrollDialogOpen(true);
+                            }}
+                            disabled={!campaign.isActive}
+                            className="h-8"
+                          >
+                            <Users className="h-3 w-3 mr-1" />
+                            Enroll
+                          </Button>
+                          <button
+                            onClick={() => toggleCampaignMutation.mutate({ 
+                              id: campaign.id, 
+                              isActive: !campaign.isActive 
+                            })}
+                            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                            data-testid={`button-toggle-campaign-${campaign.id}`}
+                          >
+                            {campaign.isActive ? (
+                              <ToggleRight className="h-6 w-6 text-brand-green" />
+                            ) : (
+                              <ToggleLeft className="h-6 w-6 text-gray-400" />
+                            )}
+                          </button>
+                          <button
+                            onClick={() => openEditCampaignDialog(campaign)}
+                            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                            data-testid={`button-edit-campaign-${campaign.id}`}
+                          >
+                            <Edit2 className="h-4 w-4 text-gray-500" />
+                          </button>
+                          <button
+                            onClick={() => deleteCampaignMutation.mutate(campaign.id)}
+                            className="p-2 hover:bg-red-50 rounded-lg transition-colors"
+                            data-testid={`button-delete-campaign-${campaign.id}`}
+                          >
+                            <Trash2 className="h-4 w-4 text-red-500" />
+                          </button>
+                          <CollapsibleTrigger asChild>
+                            <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+                              <ChevronDown className={cn(
+                                "h-4 w-4 text-gray-500 transition-transform",
+                                expandedCampaign === campaign.id && "rotate-180"
+                              )} />
+                            </button>
+                          </CollapsibleTrigger>
+                        </div>
+                      </div>
+                      <CollapsibleContent>
+                        <div className="px-4 pb-4 pt-0 border-t border-gray-100">
+                          <div className="mt-4 space-y-4">
+                            {campaign.steps && campaign.steps.length > 0 && (
+                              <div>
+                                <h4 className="text-xs font-medium text-gray-500 uppercase mb-2">Message Steps</h4>
+                                <div className="space-y-2">
+                                  {campaign.steps.map((step, i) => (
+                                    <div key={step.id} className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
+                                      <div className="h-6 w-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-medium shrink-0">
+                                        {i + 1}
+                                      </div>
+                                      <div className="flex-1 min-w-0">
+                                        <p className="text-sm text-gray-700 line-clamp-2">{step.messageContent}</p>
+                                        <p className="text-xs text-gray-400 mt-1">
+                                          <Clock className="h-3 w-3 inline mr-1" />
+                                          {formatDelay(step.delayMinutes)} after previous
+                                        </p>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            
+                            {campaign.enrollments && campaign.enrollments.length > 0 && (
+                              <div>
+                                <h4 className="text-xs font-medium text-gray-500 uppercase mb-2">Enrolled Contacts</h4>
+                                <div className="space-y-2">
+                                  {campaign.enrollments.map((enrollment) => {
+                                    const chat = chats.find(c => c.id === enrollment.chatId);
+                                    return (
+                                      <div key={enrollment.id} className="flex items-center justify-between p-2 bg-gray-50 rounded-lg">
+                                        <div className="flex items-center gap-2">
+                                          <div className="h-8 w-8 rounded-full bg-gray-200 flex items-center justify-center">
+                                            <User className="h-4 w-4 text-gray-500" />
+                                          </div>
+                                          <div>
+                                            <p className="text-sm font-medium">{chat?.name || "Unknown"}</p>
+                                            <p className="text-xs text-gray-500">
+                                              Step {enrollment.currentStepOrder} • {enrollment.status}
+                                            </p>
+                                          </div>
+                                        </div>
+                                        {enrollment.status === "active" && (
+                                          <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() => cancelEnrollmentMutation.mutate(enrollment.id)}
+                                            className="h-7 text-xs text-red-500 hover:text-red-600"
+                                          >
+                                            <X className="h-3 w-3 mr-1" />
+                                            Cancel
+                                          </Button>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </CollapsibleContent>
+                    </div>
+                  </Collapsible>
+                ))}
+              </div>
+            )}
+          </div>
+        </TabsContent>
+      </Tabs>
+
+      {/* Workflow Dialog */}
+      <Dialog open={isDialogOpen} onOpenChange={(open) => { if (!open) resetForm(); setIsDialogOpen(open); }}>
+        <DialogContent className="max-w-lg max-h-[85vh] flex flex-col p-4 sm:p-6">
           <DialogHeader className="shrink-0">
-            <DialogTitle className="text-base sm:text-lg">{editingWorkflow ? "Edit Workflow" : "Create Workflow"}</DialogTitle>
-            <DialogDescription className="text-xs sm:text-sm">
-              Set up automation rules
+            <DialogTitle>{editingWorkflow ? "Edit Workflow" : "Create Workflow"}</DialogTitle>
+            <DialogDescription>
+              Set up automated actions when specific events occur
             </DialogDescription>
           </DialogHeader>
           
-          <div className="flex-1 overflow-y-auto space-y-3 py-2">
+          <div className="flex-1 overflow-y-auto space-y-4 py-2">
             <div>
-              <Label htmlFor="name" className="text-xs sm:text-sm">Name</Label>
-              <Input
-                id="name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="e.g., Auto-assign new chats"
-                className="h-9 text-sm"
+              <Label className="text-xs sm:text-sm">Name</Label>
+              <Input 
+                value={name} 
+                onChange={(e) => setName(e.target.value)} 
+                placeholder="e.g., Auto-assign new leads"
+                className="mt-1"
                 data-testid="input-workflow-name"
               />
             </div>
 
             <div>
-              <Label htmlFor="description" className="text-xs sm:text-sm">Description</Label>
-              <Input
-                id="description"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
+              <Label className="text-xs sm:text-sm">Description (optional)</Label>
+              <Input 
+                value={description} 
+                onChange={(e) => setDescription(e.target.value)} 
                 placeholder="What does this workflow do?"
-                className="h-9 text-sm"
+                className="mt-1"
               />
             </div>
 
             <div>
               <Label className="text-xs sm:text-sm">When this happens:</Label>
               <Select value={triggerType} onValueChange={setTriggerType}>
-                <SelectTrigger className="h-9 text-sm" data-testid="select-trigger-type">
+                <SelectTrigger className="mt-1" data-testid="select-trigger-type">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {TRIGGER_TYPES.map(trigger => (
-                    <SelectItem key={trigger.value} value={trigger.value}>
+                  {TRIGGER_TYPES.map(t => (
+                    <SelectItem key={t.value} value={t.value}>
                       <div className="flex items-center gap-2">
-                        <trigger.icon className="h-4 w-4" />
-                        {trigger.label}
+                        <t.icon className="h-4 w-4" />
+                        {t.label}
                       </div>
                     </SelectItem>
                   ))}
@@ -545,13 +1003,12 @@ export function Workflows() {
 
             {triggerType === "keyword" && (
               <div>
-                <Label htmlFor="keywords" className="text-xs sm:text-sm">Keywords</Label>
-                <Input
-                  id="keywords"
-                  value={keywords}
-                  onChange={(e) => setKeywords(e.target.value)}
-                  placeholder="pricing, quote, help"
-                  className="h-9 text-sm"
+                <Label className="text-xs sm:text-sm">Keywords (comma separated)</Label>
+                <Input 
+                  value={keywords} 
+                  onChange={(e) => setKeywords(e.target.value)} 
+                  placeholder="price, quote, order"
+                  className="mt-1"
                   data-testid="input-keywords"
                 />
               </div>
@@ -629,6 +1086,187 @@ export function Workflows() {
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
               )}
               {editingWorkflow ? "Save" : "Create"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Drip Campaign Dialog */}
+      <Dialog open={isDripDialogOpen} onOpenChange={(open) => { if (!open) resetCampaignForm(); setIsDripDialogOpen(open); }}>
+        <DialogContent className="max-w-lg max-h-[85vh] flex flex-col p-4 sm:p-6">
+          <DialogHeader className="shrink-0">
+            <DialogTitle>{editingCampaign ? "Edit Sequence" : "Create Sequence"}</DialogTitle>
+            <DialogDescription>
+              Build an automated message sequence to nurture contacts
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="flex-1 overflow-y-auto space-y-4 py-2">
+            <div>
+              <Label className="text-xs sm:text-sm">Sequence Name</Label>
+              <Input 
+                value={campaignName} 
+                onChange={(e) => setCampaignName(e.target.value)} 
+                placeholder="e.g., Welcome Series"
+                className="mt-1"
+                data-testid="input-campaign-name"
+              />
+            </div>
+
+            <div>
+              <Label className="text-xs sm:text-sm">Description (optional)</Label>
+              <Input 
+                value={campaignDescription} 
+                onChange={(e) => setCampaignDescription(e.target.value)} 
+                placeholder="What's this sequence for?"
+                className="mt-1"
+              />
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <Label className="text-xs sm:text-sm">Message Steps</Label>
+                <Button 
+                  type="button" 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={addCampaignStep}
+                  className="h-7 text-xs px-2"
+                  data-testid="button-add-step"
+                >
+                  <Plus className="h-3 w-3 mr-1" />
+                  Add Step
+                </Button>
+              </div>
+              <div className="space-y-3">
+                {campaignSteps.map((step, index) => (
+                  <div key={index} className="p-3 bg-gray-50 rounded-lg space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="h-6 w-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-medium">
+                          {index + 1}
+                        </div>
+                        <span className="text-sm font-medium">Step {index + 1}</span>
+                      </div>
+                      {campaignSteps.length > 1 && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => removeCampaignStep(index)}
+                          className="h-7 w-7"
+                        >
+                          <Trash2 className="h-3 w-3 text-red-500" />
+                        </Button>
+                      )}
+                    </div>
+                    
+                    <div>
+                      <Label className="text-xs text-gray-500">Delay</Label>
+                      <Select 
+                        value={String(step.delayMinutes)} 
+                        onValueChange={(v) => updateCampaignStep(index, "delayMinutes", parseInt(v))}
+                      >
+                        <SelectTrigger className="mt-1 h-8 text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="0">Immediately</SelectItem>
+                          <SelectItem value="5">5 minutes</SelectItem>
+                          <SelectItem value="30">30 minutes</SelectItem>
+                          <SelectItem value="60">1 hour</SelectItem>
+                          <SelectItem value="180">3 hours</SelectItem>
+                          <SelectItem value="360">6 hours</SelectItem>
+                          <SelectItem value="720">12 hours</SelectItem>
+                          <SelectItem value="1440">1 day</SelectItem>
+                          <SelectItem value="2880">2 days</SelectItem>
+                          <SelectItem value="4320">3 days</SelectItem>
+                          <SelectItem value="10080">1 week</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div>
+                      <Label className="text-xs text-gray-500">Message</Label>
+                      <Textarea 
+                        value={step.messageContent}
+                        onChange={(e) => updateCampaignStep(index, "messageContent", e.target.value)}
+                        placeholder="Enter your message..."
+                        className="mt-1 text-sm"
+                        rows={3}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter className="shrink-0 pt-2 gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setIsDripDialogOpen(false)} className="h-9 text-sm">
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleCampaignSubmit}
+              disabled={createCampaignMutation.isPending || updateCampaignMutation.isPending}
+              className="bg-brand-green hover:bg-brand-green/90 h-9 text-sm"
+              data-testid="button-save-campaign"
+            >
+              {(createCampaignMutation.isPending || updateCampaignMutation.isPending) && (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              )}
+              {editingCampaign ? "Save" : "Create"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Enroll Chat Dialog */}
+      <Dialog open={isEnrollDialogOpen} onOpenChange={setIsEnrollDialogOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Enroll Contact</DialogTitle>
+            <DialogDescription>
+              Select a contact to add to this message sequence
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="py-4">
+            <Label>Select Contact</Label>
+            <Select value={selectedChatId} onValueChange={setSelectedChatId}>
+              <SelectTrigger className="mt-1">
+                <SelectValue placeholder="Choose a contact..." />
+              </SelectTrigger>
+              <SelectContent>
+                {chats.filter(c => c.whatsappPhone).map((chat) => (
+                  <SelectItem key={chat.id} value={chat.id}>
+                    {chat.name} {chat.whatsappPhone && `(${chat.whatsappPhone})`}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {chats.filter(c => c.whatsappPhone).length === 0 && (
+              <p className="text-sm text-gray-500 mt-2">
+                No contacts with WhatsApp numbers available.
+              </p>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsEnrollDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={() => {
+                if (enrollCampaignId && selectedChatId) {
+                  enrollChatMutation.mutate({ campaignId: enrollCampaignId, chatId: selectedChatId });
+                }
+              }}
+              disabled={!selectedChatId || enrollChatMutation.isPending}
+              className="bg-brand-green hover:bg-brand-green/90"
+            >
+              {enrollChatMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Enroll
             </Button>
           </DialogFooter>
         </DialogContent>
