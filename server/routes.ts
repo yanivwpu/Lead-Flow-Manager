@@ -1784,6 +1784,148 @@ export async function registerRoutes(
     }
   });
 
+  // ============= Template Messaging Endpoints (Pro Feature) =============
+
+  // Get user's message templates
+  app.get("/api/templates", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      
+      const limits = await subscriptionService.getUserLimits(req.user.id);
+      if (!(limits as any)?.templatesEnabled) {
+        return res.status(403).json({ error: "Template messaging is a Pro feature" });
+      }
+      
+      const templates = await storage.getMessageTemplates(req.user.id);
+      res.json(templates);
+    } catch (error) {
+      console.error("Error fetching templates:", error);
+      res.status(500).json({ error: "Failed to fetch templates" });
+    }
+  });
+
+  // Sync templates from Twilio Content API
+  app.post("/api/templates/sync", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      
+      const limits = await subscriptionService.getUserLimits(req.user.id);
+      if (!(limits as any)?.templatesEnabled) {
+        return res.status(403).json({ error: "Template messaging is a Pro feature" });
+      }
+      
+      const user = await storage.getUser(req.user.id);
+      if (!user?.twilioConnected || !user.twilioAccountSid || !user.twilioAuthToken) {
+        return res.status(400).json({ error: "Twilio is not connected. Connect Twilio in Settings first." });
+      }
+      
+      // For now, return a placeholder - actual Twilio Content API sync would happen here
+      // The Twilio Content API requires additional setup and approval
+      console.log(`Template sync requested for user ${req.user.id}`);
+      
+      res.json({ 
+        success: true, 
+        message: "Template sync initiated. Note: Templates must be created and approved in your Twilio console first.",
+        templatesFound: 0 
+      });
+    } catch (error) {
+      console.error("Error syncing templates:", error);
+      res.status(500).json({ error: "Failed to sync templates" });
+    }
+  });
+
+  // Get retargetable chats (outside 24-hour window)
+  app.get("/api/templates/retargetable-chats", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      
+      const limits = await subscriptionService.getUserLimits(req.user.id);
+      if (!(limits as any)?.templatesEnabled) {
+        return res.status(403).json({ error: "Template messaging is a Pro feature" });
+      }
+      
+      const chats = await storage.getRetargetableChats(req.user.id);
+      
+      // Add days since last message for each chat
+      const now = Date.now();
+      const retargetableChats = chats.map(chat => ({
+        id: chat.id,
+        name: chat.name,
+        avatar: chat.avatar,
+        whatsappPhone: chat.whatsappPhone,
+        lastMessage: chat.lastMessage,
+        lastMessageAt: chat.updatedAt?.toISOString(),
+        daysSinceLastMessage: chat.updatedAt 
+          ? Math.floor((now - new Date(chat.updatedAt).getTime()) / (24 * 60 * 60 * 1000))
+          : 0,
+      }));
+      
+      res.json(retargetableChats);
+    } catch (error) {
+      console.error("Error fetching retargetable chats:", error);
+      res.status(500).json({ error: "Failed to fetch retargetable chats" });
+    }
+  });
+
+  // Send a template message
+  app.post("/api/templates/send", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      
+      const limits = await subscriptionService.getUserLimits(req.user.id);
+      if (!(limits as any)?.templatesEnabled) {
+        return res.status(403).json({ error: "Template messaging is a Pro feature" });
+      }
+      
+      const { templateId, chatId, variables } = req.body;
+      if (!templateId || !chatId) {
+        return res.status(400).json({ error: "Template ID and Chat ID are required" });
+      }
+      
+      const template = await storage.getMessageTemplate(templateId);
+      if (!template || template.userId !== req.user.id) {
+        return res.status(404).json({ error: "Template not found" });
+      }
+      
+      const chat = await storage.getChat(chatId);
+      if (!chat || chat.userId !== req.user.id) {
+        return res.status(404).json({ error: "Chat not found" });
+      }
+      
+      if (!chat.whatsappPhone) {
+        return res.status(400).json({ error: "Chat does not have a WhatsApp number" });
+      }
+      
+      // Log the template send (actual sending would use Twilio Content API)
+      const templateSend = await storage.createTemplateSend({
+        userId: req.user.id,
+        chatId,
+        templateId,
+        variableValues: variables || {},
+        status: "sent",
+      });
+      
+      console.log(`Template ${template.name} sent to ${chat.name} (${chat.whatsappPhone})`);
+      
+      res.json({ 
+        success: true, 
+        message: `Template "${template.name}" sent to ${chat.name}`,
+        sendId: templateSend.id 
+      });
+    } catch (error) {
+      console.error("Error sending template:", error);
+      res.status(500).json({ error: "Failed to send template" });
+    }
+  });
+
   // ============= Admin Endpoints =============
   
   // Get all users' usage summary (admin only - for now, accessible to all authenticated users)

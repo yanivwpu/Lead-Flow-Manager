@@ -8,10 +8,12 @@ import {
   type RecurringReminder, type InsertRecurringReminder,
   type Webhook, type InsertWebhook,
   type WebhookDelivery, type InsertWebhookDelivery,
-  type Integration, type InsertIntegration
+  type Integration, type InsertIntegration,
+  type MessageTemplate, type InsertMessageTemplate,
+  type TemplateSend, type InsertTemplateSend
 } from "@shared/schema";
 import { db } from "../drizzle/db";
-import { users, chats, registeredPhones, messageUsage, conversationWindows, teamMembers, workflows, workflowExecutions, recurringReminders, webhooks, webhookDeliveries, integrations, type InsertConversationWindow, type ConversationWindow } from "@shared/schema";
+import { users, chats, registeredPhones, messageUsage, conversationWindows, teamMembers, workflows, workflowExecutions, recurringReminders, webhooks, webhookDeliveries, integrations, messageTemplates, templateSends, type InsertConversationWindow, type ConversationWindow } from "@shared/schema";
 import { eq, and, lte, sql, isNotNull, asc, desc, gte, sum, gt, or, like, ilike } from "drizzle-orm";
 
 export interface IStorage {
@@ -100,6 +102,22 @@ export interface IStorage {
   createIntegration(integration: InsertIntegration): Promise<Integration>;
   updateIntegration(id: string, updates: Partial<Integration>): Promise<Integration | undefined>;
   deleteIntegration(id: string): Promise<void>;
+  
+  // Template methods
+  getMessageTemplates(userId: string): Promise<MessageTemplate[]>;
+  getMessageTemplate(id: string): Promise<MessageTemplate | undefined>;
+  getMessageTemplateByTwilioSid(userId: string, twilioSid: string): Promise<MessageTemplate | undefined>;
+  createMessageTemplate(template: InsertMessageTemplate): Promise<MessageTemplate>;
+  updateMessageTemplate(id: string, updates: Partial<MessageTemplate>): Promise<MessageTemplate | undefined>;
+  deleteMessageTemplate(id: string): Promise<void>;
+  
+  // Template send methods
+  createTemplateSend(send: InsertTemplateSend): Promise<TemplateSend>;
+  getTemplateSends(userId: string, limit?: number): Promise<TemplateSend[]>;
+  updateTemplateSendStatus(id: string, status: string, deliveredAt?: Date, readAt?: Date, failureReason?: string): Promise<void>;
+  
+  // Retargetable chats (outside 24-hour window)
+  getRetargetableChats(userId: string): Promise<Chat[]>;
 }
 
 export class DbStorage implements IStorage {
@@ -532,6 +550,71 @@ export class DbStorage implements IStorage {
 
   async deleteIntegration(id: string): Promise<void> {
     await db.delete(integrations).where(eq(integrations.id, id));
+  }
+
+  // Template methods
+  async getMessageTemplates(userId: string): Promise<MessageTemplate[]> {
+    return await db.select().from(messageTemplates)
+      .where(eq(messageTemplates.userId, userId))
+      .orderBy(desc(messageTemplates.createdAt));
+  }
+
+  async getMessageTemplate(id: string): Promise<MessageTemplate | undefined> {
+    const result = await db.select().from(messageTemplates).where(eq(messageTemplates.id, id));
+    return result[0];
+  }
+
+  async getMessageTemplateByTwilioSid(userId: string, twilioSid: string): Promise<MessageTemplate | undefined> {
+    const result = await db.select().from(messageTemplates)
+      .where(and(eq(messageTemplates.userId, userId), eq(messageTemplates.twilioSid, twilioSid)));
+    return result[0];
+  }
+
+  async createMessageTemplate(template: InsertMessageTemplate): Promise<MessageTemplate> {
+    const result = await db.insert(messageTemplates).values(template).returning();
+    return result[0];
+  }
+
+  async updateMessageTemplate(id: string, updates: Partial<MessageTemplate>): Promise<MessageTemplate | undefined> {
+    const result = await db.update(messageTemplates).set(updates).where(eq(messageTemplates.id, id)).returning();
+    return result[0];
+  }
+
+  async deleteMessageTemplate(id: string): Promise<void> {
+    await db.delete(messageTemplates).where(eq(messageTemplates.id, id));
+  }
+
+  // Template send methods
+  async createTemplateSend(send: InsertTemplateSend): Promise<TemplateSend> {
+    const result = await db.insert(templateSends).values(send).returning();
+    return result[0];
+  }
+
+  async getTemplateSends(userId: string, limit: number = 100): Promise<TemplateSend[]> {
+    return await db.select().from(templateSends)
+      .where(eq(templateSends.userId, userId))
+      .orderBy(desc(templateSends.sentAt))
+      .limit(limit);
+  }
+
+  async updateTemplateSendStatus(id: string, status: string, deliveredAt?: Date, readAt?: Date, failureReason?: string): Promise<void> {
+    const updates: any = { status };
+    if (deliveredAt) updates.deliveredAt = deliveredAt;
+    if (readAt) updates.readAt = readAt;
+    if (failureReason) updates.failureReason = failureReason;
+    await db.update(templateSends).set(updates).where(eq(templateSends.id, id));
+  }
+
+  // Get chats outside the 24-hour window (eligible for template messaging)
+  async getRetargetableChats(userId: string): Promise<Chat[]> {
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    return await db.select().from(chats)
+      .where(and(
+        eq(chats.userId, userId),
+        isNotNull(chats.whatsappPhone),
+        lte(chats.updatedAt, twentyFourHoursAgo)
+      ))
+      .orderBy(desc(chats.updatedAt));
   }
 }
 

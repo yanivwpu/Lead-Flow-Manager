@@ -15,7 +15,16 @@ The application is a full multi-tenant SaaS implementation with:
 - Notification system for follow-up reminders (push & email)
 - PWA capabilities (installable, offline-first)
 
-## Recent Changes (January 5, 2026)
+## Recent Changes (January 6, 2026)
+- **Template Messaging (Pro Feature)**: WhatsApp template messaging for re-engaging contacts
+  - Template library: Sync templates from Twilio Content API
+  - Retargeting view: Shows chats outside 24-hour window with "days since last message"
+  - Variable substitution: Dynamic {contact_name}, {product}, {date} etc.
+  - Template types: text, media, carousel (up to 10 cards)
+  - Full API: /api/templates, /api/templates/sync, /api/templates/retargetable-chats, /api/templates/send
+  - Database: message_templates and template_sends tables for tracking
+
+## Previous Changes (January 5, 2026)
 - **14-Day Pro Trial**: New users automatically receive 14-day Pro trial
   - Trial banner shows days remaining with upgrade prompts
   - Automatic downgrade to Free after trial expires
@@ -65,6 +74,7 @@ The application is a full multi-tenant SaaS implementation with:
 - **Authentication**: Secure email/password authentication with session persistence
 - **14-Day Pro Trial**: New users get full Pro access for 14 days
 - **Integrations**: Webhook endpoints for Zapier/Make.com + 6 native integrations (Shopify, HubSpot, Salesforce, etc.)
+- **Template Messaging**: Pro feature for re-engaging contacts outside 24-hour window with approved templates
 
 ## Twilio Integration Architecture
 

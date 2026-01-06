@@ -30,6 +30,7 @@ export const PLAN_LIMITS = {
     workflowsEnabled: false,
     integrationsEnabled: false,
     maxWebhooks: 0,
+    templatesEnabled: false,
   },
   starter: {
     name: 'Starter',
@@ -47,6 +48,7 @@ export const PLAN_LIMITS = {
     workflowsEnabled: false,
     integrationsEnabled: true,
     maxWebhooks: 3,
+    templatesEnabled: false,
   },
   pro: {
     name: 'Pro',
@@ -64,6 +66,7 @@ export const PLAN_LIMITS = {
     workflowsEnabled: true, // Pro feature: advanced workflows
     integrationsEnabled: true,
     maxWebhooks: 10,
+    templatesEnabled: true, // Pro feature: template messaging & retargeting
   },
 } as const;
 
@@ -285,6 +288,42 @@ export const webhookDeliveries = pgTable("webhook_deliveries", {
   deliveredAt: timestamp("delivered_at").defaultNow(),
 });
 
+// WhatsApp Message Templates (synced from Twilio)
+export const messageTemplates = pgTable("message_templates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  twilioSid: text("twilio_sid").notNull(), // Twilio Content SID
+  name: text("name").notNull(),
+  language: text("language").default("en"),
+  category: text("category").notNull(), // 'marketing', 'utility', 'authentication'
+  status: text("status").notNull(), // 'approved', 'pending', 'rejected'
+  templateType: text("template_type").default("text"), // 'text', 'media', 'carousel'
+  bodyText: text("body_text"), // Template body with {{variables}}
+  headerType: text("header_type"), // 'text', 'image', 'video', 'document'
+  headerContent: text("header_content"), // Header text or media URL
+  footerText: text("footer_text"),
+  buttons: jsonb("buttons").default(sql`'[]'::jsonb`), // Array of button configs
+  carouselCards: jsonb("carousel_cards").default(sql`'[]'::jsonb`), // For carousel templates
+  variables: jsonb("variables").default(sql`'[]'::jsonb`), // Variable names for substitution
+  lastSyncedAt: timestamp("last_synced_at").defaultNow(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Template send history for retargeting analytics
+export const templateSends = pgTable("template_sends", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  chatId: varchar("chat_id").notNull().references(() => chats.id, { onDelete: "cascade" }),
+  templateId: varchar("template_id").notNull().references(() => messageTemplates.id, { onDelete: "cascade" }),
+  twilioMessageSid: text("twilio_message_sid"),
+  status: text("status").default("sent"), // 'sent', 'delivered', 'read', 'failed'
+  variableValues: jsonb("variable_values").default(sql`'{}'::jsonb`), // Substituted values
+  sentAt: timestamp("sent_at").defaultNow(),
+  deliveredAt: timestamp("delivered_at"),
+  readAt: timestamp("read_at"),
+  failureReason: text("failure_reason"),
+});
+
 // Native integrations (Shopify, HubSpot, etc.)
 export const integrations = pgTable("integrations", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -342,3 +381,19 @@ export type InsertWebhookDelivery = z.infer<typeof insertWebhookDeliverySchema>;
 export type WebhookDelivery = typeof webhookDeliveries.$inferSelect;
 export type InsertIntegration = z.infer<typeof insertIntegrationSchema>;
 export type Integration = typeof integrations.$inferSelect;
+
+export const insertMessageTemplateSchema = createInsertSchema(messageTemplates).omit({
+  id: true,
+  createdAt: true,
+  lastSyncedAt: true,
+});
+
+export const insertTemplateSendSchema = createInsertSchema(templateSends).omit({
+  id: true,
+  sentAt: true,
+});
+
+export type InsertMessageTemplate = z.infer<typeof insertMessageTemplateSchema>;
+export type MessageTemplate = typeof messageTemplates.$inferSelect;
+export type InsertTemplateSend = z.infer<typeof insertTemplateSendSchema>;
+export type TemplateSend = typeof templateSends.$inferSelect;

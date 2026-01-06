@@ -63,6 +63,7 @@ const PLANS = [
       "Conversation assignment & statuses",
       "Advanced reminders & workflows",
       "10 webhook + native integrations",
+      "Template messaging & smart retargeting",
       "Priority support",
     ],
     note: "Built for serious WhatsApp operations",
