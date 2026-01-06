@@ -429,7 +429,7 @@ export function Integrations() {
               <CardContent className="py-6 text-center">
                 <p className="text-gray-500 text-sm">
                   Need a specific integration? Use webhooks to connect with any app via Zapier or Make.com, 
-                  or <a href="mailto:support@whachatcrm.com" className="text-brand-green hover:underline">contact us</a> to request a native integration.
+                  or <a href="/contact" className="text-brand-green hover:underline">contact us</a> to request a native integration.
                 </p>
               </CardContent>
             </Card>
