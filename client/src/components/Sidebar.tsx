@@ -59,7 +59,7 @@ export function Sidebar() {
 
       <div className="mt-auto px-2 md:px-4">
         {user && (
-          <div className="mb-2 px-2 hidden md:block">
+          <div className="mb-1 px-2 hidden md:block">
             <div className="text-xs font-medium text-gray-500">Signed in as</div>
             <div className="text-sm font-bold text-gray-900 truncate">{user.name}</div>
           </div>
