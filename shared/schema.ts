@@ -94,6 +94,19 @@ export const users = pgTable("users", {
   lifetimeConversations: integer("lifetime_conversations").default(0), // for free tier tracking
   monthlyConversations: integer("monthly_conversations").default(0), // current month conversation count
   monthlyTwilioUsage: numeric("monthly_twilio_usage", { precision: 10, scale: 2 }).default("0"), // current month Twilio spend
+  // Business hours & auto-reply settings
+  businessHoursEnabled: boolean("business_hours_enabled").default(false),
+  businessHoursStart: text("business_hours_start").default("09:00"), // HH:mm format
+  businessHoursEnd: text("business_hours_end").default("17:00"),
+  businessDays: jsonb("business_days").default(sql`'[1,2,3,4,5]'::jsonb`), // 0=Sun, 1=Mon, etc.
+  timezone: text("timezone").default("America/New_York"),
+  awayMessageEnabled: boolean("away_message_enabled").default(false),
+  awayMessage: text("away_message").default("Thanks for reaching out! We're currently away but will respond as soon as we're back."),
+  autoReplyEnabled: boolean("auto_reply_enabled").default(false),
+  autoReplyMessage: text("auto_reply_message").default("Thanks for your message! We'll get back to you shortly."),
+  autoReplyDelay: integer("auto_reply_delay").default(0), // seconds to wait before sending
+  // Onboarding
+  onboardingCompleted: boolean("onboarding_completed").default(false),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

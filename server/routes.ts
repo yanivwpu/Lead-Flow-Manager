@@ -315,6 +315,20 @@ export async function registerRoutes(
     }
   });
 
+  // Complete onboarding tour
+  app.post("/api/user/complete-onboarding", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      await storage.updateUser(req.user.id, { onboardingCompleted: true });
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error completing onboarding:", error);
+      res.status(500).json({ error: "Failed to complete onboarding" });
+    }
+  });
+
   // Get notification preferences
   app.get("/api/users/preferences", async (req, res) => {
     try {
@@ -375,6 +389,69 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error updating avatar:", error);
       res.status(500).json({ error: "Failed to update avatar" });
+    }
+  });
+
+  // ============= Auto-Reply Settings Endpoints =============
+  
+  // Get auto-reply settings
+  app.get("/api/users/auto-reply-settings", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const user = await storage.getUser(req.user.id);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      res.json({
+        businessHoursEnabled: user.businessHoursEnabled || false,
+        businessHoursStart: user.businessHoursStart || "09:00",
+        businessHoursEnd: user.businessHoursEnd || "17:00",
+        businessDays: user.businessDays || [1, 2, 3, 4, 5],
+        awayMessageEnabled: user.awayMessageEnabled || false,
+        awayMessage: user.awayMessage || "",
+        autoReplyEnabled: user.autoReplyEnabled || false,
+        autoReplyMessage: user.autoReplyMessage || "",
+      });
+    } catch (error) {
+      console.error("Error fetching auto-reply settings:", error);
+      res.status(500).json({ error: "Failed to fetch settings" });
+    }
+  });
+
+  // Update auto-reply settings
+  app.patch("/api/users/auto-reply-settings", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const { 
+        businessHoursEnabled, 
+        businessHoursStart, 
+        businessHoursEnd, 
+        businessDays,
+        awayMessageEnabled,
+        awayMessage,
+        autoReplyEnabled,
+        autoReplyMessage 
+      } = req.body;
+      
+      const updates: any = {};
+      if (businessHoursEnabled !== undefined) updates.businessHoursEnabled = businessHoursEnabled;
+      if (businessHoursStart !== undefined) updates.businessHoursStart = businessHoursStart;
+      if (businessHoursEnd !== undefined) updates.businessHoursEnd = businessHoursEnd;
+      if (businessDays !== undefined) updates.businessDays = businessDays;
+      if (awayMessageEnabled !== undefined) updates.awayMessageEnabled = awayMessageEnabled;
+      if (awayMessage !== undefined) updates.awayMessage = awayMessage;
+      if (autoReplyEnabled !== undefined) updates.autoReplyEnabled = autoReplyEnabled;
+      if (autoReplyMessage !== undefined) updates.autoReplyMessage = autoReplyMessage;
+
+      await storage.updateUser(req.user.id, updates);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error updating auto-reply settings:", error);
+      res.status(500).json({ error: "Failed to update settings" });
     }
   });
 

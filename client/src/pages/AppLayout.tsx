@@ -1,4 +1,6 @@
+import { useState, useEffect } from "react";
 import { Switch, Route } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 import { Sidebar } from "@/components/Sidebar";
 import { Chats } from "./Chats";
 import { FollowUps } from "./FollowUps";
@@ -9,10 +11,22 @@ import { Integrations } from "./Integrations";
 import { Templates } from "./Templates";
 import { UsageWarningBanner } from "@/components/UsageWarningBanner";
 import { TrialBanner } from "@/components/TrialBanner";
+import { OnboardingTour } from "@/components/OnboardingTour";
 import { SubscriptionProvider, useSubscription } from "@/lib/subscription-context";
 
 function AppContent() {
   const { data: subscription, isLoading } = useSubscription();
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  
+  const { data: user } = useQuery<{ onboardingCompleted?: boolean }>({
+    queryKey: ["/api/user"],
+  });
+  
+  useEffect(() => {
+    if (user && user.onboardingCompleted === false) {
+      setShowOnboarding(true);
+    }
+  }, [user]);
   
   const showUsageBanner = !isLoading && subscription?.limits && 
     subscription.limits.conversationsLimit > 0 &&
@@ -49,6 +63,11 @@ function AppContent() {
           <Route path="/app/settings" component={Settings} />
         </Switch>
       </main>
+      
+      <OnboardingTour 
+        isOpen={showOnboarding} 
+        onComplete={() => setShowOnboarding(false)} 
+      />
     </div>
   );
 }

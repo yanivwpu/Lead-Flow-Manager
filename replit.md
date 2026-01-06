@@ -16,6 +16,15 @@ The application is a full multi-tenant SaaS implementation with:
 - PWA capabilities (installable, offline-first)
 
 ## Recent Changes (January 6, 2026)
+- **Onboarding Tour**: 7-step guided walkthrough for new users
+  - Shows automatically when user hasn't completed onboarding
+  - Covers key features: Inbox, Search, Follow-ups, Templates, Workflows, Integrations, Settings
+  - Marks onboarding complete via API endpoint
+- **Auto-Reply & Business Hours Settings**: New settings section
+  - Auto-reply toggle with customizable instant response message
+  - Business hours with day-of-week selection and time range
+  - Away message for outside business hours
+  - Settings persisted per user in database
 - **Native Integration Webhooks**: Full bi-directional integration sync
   - Shopify: Webhook receiver for orders/create, customers/create, checkouts/create
   - Calendly: Webhook receiver for invitee.created, invitee.canceled - auto-creates leads

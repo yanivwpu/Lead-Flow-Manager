@@ -57,6 +57,210 @@ const PLAN_NAMES: Record<string, string> = {
   pro: "Pro",
 };
 
+const DAYS_OF_WEEK = [
+  { id: 0, label: "Sun" },
+  { id: 1, label: "Mon" },
+  { id: 2, label: "Tue" },
+  { id: 3, label: "Wed" },
+  { id: 4, label: "Thu" },
+  { id: 5, label: "Fri" },
+  { id: 6, label: "Sat" },
+];
+
+function AutoReplySettings() {
+  const queryClient = useQueryClient();
+  const [settings, setSettings] = useState({
+    businessHoursEnabled: false,
+    businessHoursStart: "09:00",
+    businessHoursEnd: "17:00",
+    businessDays: [1, 2, 3, 4, 5],
+    awayMessageEnabled: false,
+    awayMessage: "Thanks for reaching out! We're currently away but will respond as soon as we're back.",
+    autoReplyEnabled: false,
+    autoReplyMessage: "Thanks for your message! We'll get back to you shortly.",
+  });
+  const [isSaving, setIsSaving] = useState(false);
+
+  const { data: userSettings } = useQuery<any>({
+    queryKey: ["/api/users/auto-reply-settings"],
+  });
+
+  useEffect(() => {
+    if (userSettings) {
+      setSettings({
+        businessHoursEnabled: userSettings.businessHoursEnabled || false,
+        businessHoursStart: userSettings.businessHoursStart || "09:00",
+        businessHoursEnd: userSettings.businessHoursEnd || "17:00",
+        businessDays: userSettings.businessDays || [1, 2, 3, 4, 5],
+        awayMessageEnabled: userSettings.awayMessageEnabled || false,
+        awayMessage: userSettings.awayMessage || "Thanks for reaching out! We're currently away but will respond as soon as we're back.",
+        autoReplyEnabled: userSettings.autoReplyEnabled || false,
+        autoReplyMessage: userSettings.autoReplyMessage || "Thanks for your message! We'll get back to you shortly.",
+      });
+    }
+  }, [userSettings]);
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    try {
+      const res = await fetch("/api/users/auto-reply-settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(settings),
+        credentials: "include",
+      });
+      if (res.ok) {
+        queryClient.invalidateQueries({ queryKey: ["/api/users/auto-reply-settings"] });
+      }
+    } catch (e) {
+      console.error("Failed to save settings:", e);
+    }
+    setIsSaving(false);
+  };
+
+  const toggleDay = (dayId: number) => {
+    setSettings(prev => ({
+      ...prev,
+      businessDays: prev.businessDays.includes(dayId)
+        ? prev.businessDays.filter(d => d !== dayId)
+        : [...prev.businessDays, dayId].sort((a, b) => a - b)
+    }));
+  };
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 shadow-sm">
+      <div className="flex items-center gap-3 mb-4 sm:mb-6">
+        <div className="h-9 w-9 sm:h-10 sm:w-10 bg-purple-50 rounded-lg flex items-center justify-center flex-shrink-0">
+          <Clock className="h-4 w-4 sm:h-5 sm:w-5 text-purple-600" />
+        </div>
+        <div className="min-w-0">
+          <h2 className="text-base sm:text-lg font-bold text-gray-900">Auto-Reply & Business Hours</h2>
+          <p className="text-xs sm:text-sm text-gray-500">Automatically respond when you're away.</p>
+        </div>
+      </div>
+
+      <div className="space-y-6">
+        <div className="flex items-center justify-between gap-3">
+          <div className="space-y-0.5 min-w-0 flex-1">
+            <Label className="text-sm sm:text-base font-medium">Auto-Reply</Label>
+            <p className="text-xs sm:text-sm text-gray-500">Send an instant reply when customers message you.</p>
+          </div>
+          <Switch 
+            checked={settings.autoReplyEnabled}
+            onCheckedChange={(checked) => setSettings(prev => ({ ...prev, autoReplyEnabled: checked }))}
+            className="flex-shrink-0"
+            data-testid="switch-auto-reply"
+          />
+        </div>
+
+        {settings.autoReplyEnabled && (
+          <div className="pl-0 sm:pl-4 border-l-2 border-purple-100">
+            <Label className="text-xs text-gray-500 mb-1 block">Auto-reply message</Label>
+            <textarea
+              value={settings.autoReplyMessage}
+              onChange={(e) => setSettings(prev => ({ ...prev, autoReplyMessage: e.target.value }))}
+              className="w-full h-20 bg-gray-50 border border-gray-200 rounded-lg p-3 text-sm focus:outline-none focus:ring-1 focus:ring-purple-400 resize-none"
+              placeholder="Thanks for your message! We'll get back to you shortly."
+              data-testid="textarea-auto-reply"
+            />
+          </div>
+        )}
+
+        <div className="h-px bg-gray-100" />
+
+        <div className="flex items-center justify-between gap-3">
+          <div className="space-y-0.5 min-w-0 flex-1">
+            <Label className="text-sm sm:text-base font-medium">Business Hours</Label>
+            <p className="text-xs sm:text-sm text-gray-500">Set when you're available to respond.</p>
+          </div>
+          <Switch 
+            checked={settings.businessHoursEnabled}
+            onCheckedChange={(checked) => setSettings(prev => ({ ...prev, businessHoursEnabled: checked }))}
+            className="flex-shrink-0"
+            data-testid="switch-business-hours"
+          />
+        </div>
+
+        {settings.businessHoursEnabled && (
+          <div className="pl-0 sm:pl-4 border-l-2 border-purple-100 space-y-4">
+            <div className="flex flex-wrap gap-2">
+              {DAYS_OF_WEEK.map((day) => (
+                <button
+                  key={day.id}
+                  onClick={() => toggleDay(day.id)}
+                  className={`px-3 py-1.5 text-xs rounded-full border transition-colors ${
+                    settings.businessDays.includes(day.id)
+                      ? "bg-purple-100 text-purple-700 border-purple-300"
+                      : "bg-gray-50 text-gray-500 border-gray-200"
+                  }`}
+                  data-testid={`button-day-${day.label.toLowerCase()}`}
+                >
+                  {day.label}
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center gap-2">
+              <Input
+                type="time"
+                value={settings.businessHoursStart}
+                onChange={(e) => setSettings(prev => ({ ...prev, businessHoursStart: e.target.value }))}
+                className="w-32"
+                data-testid="input-hours-start"
+              />
+              <span className="text-gray-400">to</span>
+              <Input
+                type="time"
+                value={settings.businessHoursEnd}
+                onChange={(e) => setSettings(prev => ({ ...prev, businessHoursEnd: e.target.value }))}
+                className="w-32"
+                data-testid="input-hours-end"
+              />
+            </div>
+          </div>
+        )}
+
+        <div className="h-px bg-gray-100" />
+
+        <div className="flex items-center justify-between gap-3">
+          <div className="space-y-0.5 min-w-0 flex-1">
+            <Label className="text-sm sm:text-base font-medium">Away Message</Label>
+            <p className="text-xs sm:text-sm text-gray-500">Send a message when outside business hours.</p>
+          </div>
+          <Switch 
+            checked={settings.awayMessageEnabled}
+            onCheckedChange={(checked) => setSettings(prev => ({ ...prev, awayMessageEnabled: checked }))}
+            className="flex-shrink-0"
+            data-testid="switch-away-message"
+          />
+        </div>
+
+        {settings.awayMessageEnabled && (
+          <div className="pl-0 sm:pl-4 border-l-2 border-purple-100">
+            <Label className="text-xs text-gray-500 mb-1 block">Away message</Label>
+            <textarea
+              value={settings.awayMessage}
+              onChange={(e) => setSettings(prev => ({ ...prev, awayMessage: e.target.value }))}
+              className="w-full h-20 bg-gray-50 border border-gray-200 rounded-lg p-3 text-sm focus:outline-none focus:ring-1 focus:ring-purple-400 resize-none"
+              placeholder="Thanks for reaching out! We're currently away..."
+              data-testid="textarea-away-message"
+            />
+          </div>
+        )}
+
+        <Button
+          onClick={handleSave}
+          disabled={isSaving}
+          className="w-full sm:w-auto bg-purple-600 hover:bg-purple-700"
+          data-testid="button-save-auto-reply"
+        >
+          {isSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+          Save Settings
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 export function Settings() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -711,6 +915,9 @@ export function Settings() {
                </div>
              </div>
            </div>
+
+           {/* Auto-Reply & Business Hours Section */}
+           <AutoReplySettings />
 
            {/* WhatsApp Phone Numbers Section */}
            <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 shadow-sm">
