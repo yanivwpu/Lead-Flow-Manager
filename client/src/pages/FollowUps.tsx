@@ -79,7 +79,7 @@ export function FollowUps() {
   return (
     <div className="flex-1 h-full bg-white flex flex-col">
        <div className="p-8 pb-4 border-b border-gray-100">
-         <h1 className="text-3xl font-display font-bold text-gray-900">Tasks</h1>
+         <h1 className="text-2xl font-display font-bold text-gray-900">Tasks</h1>
          <p className="text-gray-500 mt-1">You have {followUps.length} follow-up{followUps.length !== 1 ? 's' : ''} scheduled.</p>
        </div>
 
