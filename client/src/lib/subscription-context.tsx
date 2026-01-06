@@ -23,6 +23,7 @@ interface SubscriptionLimits {
   trialDaysRemaining: number;
   integrationsEnabled: boolean;
   maxWebhooks: number;
+  templatesEnabled: boolean;
 }
 
 interface SubscriptionData {

@@ -20,6 +20,7 @@ export interface SubscriptionLimits {
   workflowsEnabled: boolean;
   integrationsEnabled: boolean;
   maxWebhooks: number;
+  templatesEnabled: boolean;
   isAtLimit: boolean;
   isAtWarning: boolean; // 80% usage
   suggestedUpgrade: SubscriptionPlan | null;
@@ -89,6 +90,7 @@ export class SubscriptionService {
       workflowsEnabled: limits.workflowsEnabled,
       integrationsEnabled: limits.integrationsEnabled,
       maxWebhooks: limits.maxWebhooks,
+      templatesEnabled: limits.templatesEnabled,
       isAtLimit,
       isAtWarning,
       suggestedUpgrade,
