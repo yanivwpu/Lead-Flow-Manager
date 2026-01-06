@@ -449,6 +449,85 @@ export class SubscriptionService {
       monthlyTwilioUsage: '0',
     });
   }
+
+  // Cancel subscription immediately - true one-click cancellation
+  async cancelSubscription(userId: string): Promise<{ success: boolean; message: string }> {
+    const user = await storage.getUser(userId);
+    if (!user || !user.stripeCustomerId) {
+      return { success: false, message: 'No subscription found' };
+    }
+
+    const stripe = await getUncachableStripeClient();
+
+    try {
+      // Find active subscription for this customer
+      const subscriptions = await stripe.subscriptions.list({
+        customer: user.stripeCustomerId,
+        status: 'active',
+        limit: 1,
+      });
+
+      if (subscriptions.data.length === 0) {
+        // No active subscription, just update user to free
+        await storage.updateUser(userId, { subscriptionPlan: 'free' });
+        return { success: true, message: 'You are now on the Free plan.' };
+      }
+
+      const subscription = subscriptions.data[0];
+
+      // Cancel at period end (user keeps access until billing period ends)
+      await stripe.subscriptions.update(subscription.id, {
+        cancel_at_period_end: true,
+      });
+
+      return { 
+        success: true, 
+        message: `Your subscription will be canceled at the end of your billing period. You'll continue to have access until then.`
+      };
+    } catch (error: any) {
+      console.error('Error canceling subscription:', error);
+      return { success: false, message: error.message || 'Failed to cancel subscription' };
+    }
+  }
+
+  // Cancel subscription immediately (no grace period)
+  async cancelSubscriptionImmediately(userId: string): Promise<{ success: boolean; message: string }> {
+    const user = await storage.getUser(userId);
+    if (!user || !user.stripeCustomerId) {
+      return { success: false, message: 'No subscription found' };
+    }
+
+    const stripe = await getUncachableStripeClient();
+
+    try {
+      const subscriptions = await stripe.subscriptions.list({
+        customer: user.stripeCustomerId,
+        status: 'active',
+        limit: 1,
+      });
+
+      if (subscriptions.data.length === 0) {
+        await storage.updateUser(userId, { subscriptionPlan: 'free' });
+        return { success: true, message: 'You are now on the Free plan.' };
+      }
+
+      const subscription = subscriptions.data[0];
+
+      // Cancel immediately
+      await stripe.subscriptions.cancel(subscription.id);
+
+      // Update user plan to free
+      await storage.updateUser(userId, { subscriptionPlan: 'free' });
+
+      return { 
+        success: true, 
+        message: 'Your subscription has been canceled. You are now on the Free plan.'
+      };
+    } catch (error: any) {
+      console.error('Error canceling subscription:', error);
+      return { success: false, message: error.message || 'Failed to cancel subscription' };
+    }
+  }
 }
 
 export const subscriptionService = new SubscriptionService();

@@ -235,6 +235,37 @@ export function Settings() {
     },
   });
 
+  // Cancel subscription - one-click cancellation
+  const cancelMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/subscription/cancel", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ immediate: false }),
+      });
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || "Failed to cancel subscription");
+      }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/subscription"] });
+      toast({
+        title: "Subscription Canceled",
+        description: data.message,
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Could not cancel subscription.",
+        variant: "destructive",
+      });
+    },
+  });
+
   // Register phone mutation
   const registerPhoneMutation = useMutation({
     mutationFn: async (data: { phoneNumber: string; businessName: string }) => {
@@ -850,6 +881,27 @@ export function Settings() {
                      </Button>
                    )}
                  </div>
+                 
+                 {subscriptionData?.subscription?.plan !== "free" && (
+                   <div className="pt-3 border-t border-gray-100">
+                     <Button
+                       variant="ghost"
+                       onClick={() => {
+                         if (confirm("Are you sure you want to cancel your subscription? You'll keep access until the end of your billing period.")) {
+                           cancelMutation.mutate();
+                         }
+                       }}
+                       disabled={cancelMutation.isPending}
+                       className="text-sm text-gray-500 hover:text-red-600 hover:bg-red-50"
+                       data-testid="button-cancel-subscription"
+                     >
+                       {cancelMutation.isPending ? (
+                         <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                       ) : null}
+                       Cancel Subscription
+                     </Button>
+                   </div>
+                 )}
                </div>
              )}
            </div>

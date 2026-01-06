@@ -1101,6 +1101,33 @@ export async function registerRoutes(
     }
   });
 
+  // Cancel subscription - one-click cancellation
+  app.post("/api/subscription/cancel", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const { immediate } = req.body;
+      
+      let result;
+      if (immediate) {
+        result = await subscriptionService.cancelSubscriptionImmediately(req.user.id);
+      } else {
+        result = await subscriptionService.cancelSubscription(req.user.id);
+      }
+
+      if (result.success) {
+        res.json(result);
+      } else {
+        res.status(400).json({ error: result.message });
+      }
+    } catch (error: any) {
+      console.error("Error canceling subscription:", error);
+      res.status(500).json({ error: error.message || "Failed to cancel subscription" });
+    }
+  });
+
   // Sync subscription from Stripe (for when webhooks fail)
   app.post("/api/subscription/sync", async (req, res) => {
     try {
