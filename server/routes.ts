@@ -6,6 +6,7 @@ import { z } from "zod";
 import { getVapidPublicKey } from "./notifications";
 import {
   sendUserWhatsAppMessage,
+  sendUserWhatsAppMedia,
   verifyUserTwilioConnection,
   parseIncomingWebhook,
   parseStatusWebhook,
@@ -20,6 +21,9 @@ import {
   type WhatsAppMessage,
   type TwilioCredentials,
 } from "./userTwilio";
+import multer from "multer";
+import path from "path";
+import fs from "fs";
 import { subscriptionService } from "./subscriptionService";
 import { getStripePublishableKey } from "./stripeClient";
 import { sendWelcomeEmail, sendContactFormEmail } from "./email";
@@ -599,6 +603,138 @@ export async function registerRoutes(
     } catch (error: any) {
       console.error("Error sending message:", error);
       res.status(500).json({ error: error.message || "Failed to send message" });
+    }
+  });
+
+  // Configure multer for media uploads
+  const uploadDir = path.join(process.cwd(), 'uploads');
+  if (!fs.existsSync(uploadDir)) {
+    fs.mkdirSync(uploadDir, { recursive: true });
+  }
+  
+  const upload = multer({
+    storage: multer.diskStorage({
+      destination: uploadDir,
+      filename: (req, file, cb) => {
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+        cb(null, uniqueSuffix + path.extname(file.originalname));
+      }
+    }),
+    limits: { fileSize: 16 * 1024 * 1024 }, // 16MB max
+    fileFilter: (req, file, cb) => {
+      const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'application/pdf'];
+      if (allowedTypes.includes(file.mimetype)) {
+        cb(null, true);
+      } else {
+        cb(new Error('Invalid file type. Allowed: images (JPEG, PNG, GIF, WebP) and PDF'));
+      }
+    }
+  });
+
+  // Send WhatsApp media message
+  app.post("/api/chats/send-media", upload.single('file'), async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      if (!req.file) {
+        return res.status(400).json({ error: "No file uploaded" });
+      }
+
+      const { chatId, phone } = req.body;
+      if (!chatId || !phone) {
+        return res.status(400).json({ error: "Chat ID and phone are required" });
+      }
+
+      const chat = await storage.getChat(chatId);
+      if (!chat) {
+        return res.status(404).json({ error: "Chat not found" });
+      }
+      if (chat.userId !== req.user.id) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+
+      // Check subscription limits
+      const canSend = await subscriptionService.canSendMessage(req.user.id);
+      if (!canSend.allowed) {
+        // Clean up uploaded file
+        fs.unlinkSync(req.file.path);
+        return res.status(403).json({ 
+          error: canSend.reason, 
+          code: "PLAN_LIMIT",
+          upgradeRequired: true 
+        });
+      }
+
+      const isConnected = await verifyUserTwilioConnection(req.user.id);
+      if (!isConnected) {
+        fs.unlinkSync(req.file.path);
+        return res.status(400).json({ 
+          error: "WhatsApp not connected. Please connect your Twilio account first.",
+          code: "TWILIO_NOT_CONNECTED"
+        });
+      }
+
+      // For Twilio, we need a publicly accessible URL for the media
+      // Since we're on Replit, we can serve the file temporarily
+      const appUrl = process.env.APP_URL || `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co`;
+      const mediaUrl = `${appUrl}/uploads/${path.basename(req.file.path)}`;
+
+      const result = await sendUserWhatsAppMedia(req.user.id, phone, mediaUrl);
+
+      // Track usage
+      const mediaCost = 0.01; // Higher cost for media
+      const costs = calculateCostWithMarkup(mediaCost);
+      await storage.recordMessageUsage({
+        userId: req.user.id,
+        chatId: chat.id,
+        direction: "outbound",
+        messageType: req.file.mimetype.startsWith('image/') ? "image" : "document",
+        twilioSid: result.sid,
+        twilioCost: costs.twilioCost,
+        markupPercent: costs.markupPercent,
+        totalCost: costs.totalCost,
+      });
+
+      const newMessage: WhatsAppMessage = {
+        id: result.sid,
+        text: req.file.mimetype.startsWith('image/') ? '[Image]' : `[File: ${req.file.originalname}]`,
+        time: new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
+        sent: true,
+        sender: "me",
+        status: "sent",
+        twilioSid: result.sid,
+      };
+
+      const messages = (chat.messages as WhatsAppMessage[]) || [];
+      messages.push(newMessage);
+
+      await storage.updateChat(chat.id, {
+        messages,
+        lastMessage: newMessage.text,
+        time: newMessage.time,
+      });
+
+      // Clean up file after a delay (Twilio needs time to fetch it)
+      setTimeout(() => {
+        try {
+          if (req.file && fs.existsSync(req.file.path)) {
+            fs.unlinkSync(req.file.path);
+          }
+        } catch (e) {
+          console.error('Error cleaning up uploaded file:', e);
+        }
+      }, 60000); // Clean up after 1 minute
+
+      res.json({ success: true, message: newMessage });
+    } catch (error: any) {
+      // Clean up file on error
+      if (req.file && fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
+      }
+      console.error("Error sending media:", error);
+      res.status(500).json({ error: error.message || "Failed to send media" });
     }
   });
 

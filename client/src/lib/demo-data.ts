@@ -3,6 +3,7 @@ export interface DemoChat {
   userId: string;
   name: string;
   avatar: string;
+  whatsappPhone?: string | null;
   lastMessage: string;
   time: string;
   unread: number;
@@ -11,7 +12,7 @@ export interface DemoChat {
   followUpDate: string | null;
   notes: string;
   pipelineStage: string;
-  messages: { id: string; text: string; sender: string; time: string }[];
+  messages: { id: string; text: string; sender: string; time: string; mediaUrl?: string; mediaType?: string }[];
   createdAt: string;
 }
 

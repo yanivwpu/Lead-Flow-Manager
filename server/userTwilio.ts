@@ -109,6 +109,34 @@ export async function sendUserWhatsAppMessage(
   return { sid: result.sid, status: result.status };
 }
 
+export async function sendUserWhatsAppMedia(
+  userId: string,
+  toPhone: string,
+  mediaUrl: string,
+  caption?: string
+): Promise<{ sid: string; status: string }> {
+  const client = await getUserTwilioClient(userId);
+  const fromNumber = await getUserTwilioNumber(userId);
+
+  if (!client || !fromNumber) {
+    throw new Error("Twilio not connected. Please connect your Twilio account first.");
+  }
+
+  const messageOptions: any = {
+    from: `whatsapp:${fromNumber}`,
+    to: `whatsapp:${toPhone}`,
+    mediaUrl: [mediaUrl],
+  };
+
+  if (caption) {
+    messageOptions.body = caption;
+  }
+
+  const result = await client.messages.create(messageOptions);
+
+  return { sid: result.sid, status: result.status };
+}
+
 export interface TwilioCredentials {
   accountSid: string;
   authToken: string;

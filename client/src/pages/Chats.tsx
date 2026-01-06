@@ -60,6 +60,7 @@ interface Chat {
   userId: string;
   name: string;
   avatar: string;
+  whatsappPhone?: string | null;
   lastMessage: string;
   time: string;
   unread: number;

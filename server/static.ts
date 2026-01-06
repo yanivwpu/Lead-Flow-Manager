@@ -10,6 +10,13 @@ export function serveStatic(app: Express) {
     );
   }
 
+  // Serve uploaded files for Twilio media messages
+  const uploadsPath = path.resolve(process.cwd(), "uploads");
+  if (!fs.existsSync(uploadsPath)) {
+    fs.mkdirSync(uploadsPath, { recursive: true });
+  }
+  app.use("/uploads", express.static(uploadsPath));
+
   app.use(express.static(distPath));
 
   // fall through to index.html if the file doesn't exist
