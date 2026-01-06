@@ -277,7 +277,8 @@ export function Chats() {
 
   const [newMessage, setNewMessage] = useState("");
   const [localNotes, setLocalNotes] = useState("");
-  const [calendarOpen, setCalendarOpen] = useState(false);
+  const [mobileCalendarOpen, setMobileCalendarOpen] = useState(false);
+  const [desktopCalendarOpen, setDesktopCalendarOpen] = useState(false);
   const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [filePreview, setFilePreview] = useState<string | null>(null);
@@ -978,7 +979,7 @@ export function Chats() {
                        {time}
                      </button>
                    ))}
-                   <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+                   <Popover open={mobileCalendarOpen} onOpenChange={setMobileCalendarOpen}>
                      <PopoverTrigger asChild>
                        <button
                          className={cn(
@@ -1003,7 +1004,7 @@ export function Chats() {
                                followUp: formatted,
                                followUpDate: date.toISOString()
                              });
-                             setCalendarOpen(false);
+                             setMobileCalendarOpen(false);
                            }
                          }}
                          disabled={(date) => date < new Date()}
@@ -1090,7 +1091,7 @@ export function Chats() {
                           {time}
                         </button>
                       ))}
-                      <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+                      <Popover open={desktopCalendarOpen} onOpenChange={setDesktopCalendarOpen}>
                         <PopoverTrigger asChild>
                           <button
                             className={cn(
@@ -1116,7 +1117,7 @@ export function Chats() {
                                   followUp: formatted,
                                   followUpDate: date.toISOString()
                                 });
-                                setCalendarOpen(false);
+                                setDesktopCalendarOpen(false);
                               }
                             }}
                             disabled={(date) => date < new Date()}
