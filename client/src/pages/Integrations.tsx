@@ -177,6 +177,101 @@ interface Integration {
   createdAt: string;
 }
 
+function WebhookUrlDisplay({ integrationType }: { integrationType: string }) {
+  const [copied, setCopied] = useState(false);
+  const [showInstructions, setShowInstructions] = useState(false);
+  
+  const baseUrl = window.location.origin;
+  const { data: user } = useQuery<{ id: string }>({
+    queryKey: ["/api/user"],
+  });
+  
+  const webhookUrl = user ? `${baseUrl}/api/webhooks/${integrationType}/${user.id}` : '';
+  
+  const copyWebhookUrl = () => {
+    navigator.clipboard.writeText(webhookUrl);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+  
+  const getInstructions = () => {
+    switch (integrationType) {
+      case 'shopify':
+        return [
+          "Go to Shopify Admin → Settings → Notifications → Webhooks",
+          "Click 'Create webhook'",
+          "Select events: orders/create, customers/create",
+          "Paste the webhook URL above",
+          "Format: JSON"
+        ];
+      case 'calendly':
+        return [
+          "Go to Calendly → Integrations → Webhooks",
+          "Click 'Create Webhook'",
+          "Paste the webhook URL above",
+          "Select events: invitee.created, invitee.canceled",
+          "Click 'Subscribe'"
+        ];
+      case 'stripe':
+        return [
+          "Go to Stripe Dashboard → Developers → Webhooks",
+          "Click 'Add endpoint'",
+          "Paste the webhook URL above",
+          "Select events: checkout.session.completed, payment_intent.succeeded",
+          "Click 'Add endpoint'"
+        ];
+      case 'hubspot':
+        return [
+          "Go to HubSpot → Settings → Integrations → Private Apps",
+          "Create or edit your app",
+          "Go to Webhooks tab",
+          "Add subscription for 'contact.creation'",
+          "Set webhook URL to the URL above"
+        ];
+      default:
+        return ["Configure the webhook URL in your service"];
+    }
+  };
+  
+  if (!user) return null;
+  
+  return (
+    <div className="mt-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-xs font-medium text-gray-600">Webhook URL</span>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-6 text-xs"
+          onClick={() => setShowInstructions(!showInstructions)}
+        >
+          {showInstructions ? "Hide" : "Setup"} instructions
+        </Button>
+      </div>
+      <div className="flex items-center gap-2">
+        <code className="flex-1 bg-white px-2 py-1.5 rounded text-xs truncate border">
+          {webhookUrl}
+        </code>
+        <Button 
+          variant="outline" 
+          size="icon" 
+          className="h-7 w-7 shrink-0"
+          onClick={copyWebhookUrl}
+        >
+          {copied ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
+        </Button>
+      </div>
+      {showInstructions && (
+        <ol className="mt-3 text-xs text-gray-600 space-y-1 list-decimal list-inside">
+          {getInstructions().map((step, i) => (
+            <li key={i}>{step}</li>
+          ))}
+        </ol>
+      )}
+    </div>
+  );
+}
+
 export function Integrations() {
   const { data: subscription, isLoading: subLoading } = useSubscription();
   const queryClient = useQueryClient();
@@ -396,6 +491,9 @@ export function Integrations() {
                                 {new Date(connected.lastSyncAt).toLocaleDateString()}
                               </span>
                             </div>
+                          )}
+                          {['shopify', 'calendly', 'stripe', 'hubspot'].includes(integration.id) && (
+                            <WebhookUrlDisplay integrationType={integration.id} />
                           )}
                           <div className="flex gap-2 pt-2">
                             <Button 
