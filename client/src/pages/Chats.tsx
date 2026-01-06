@@ -329,7 +329,7 @@ export function Chats() {
         text: `[${selectedFile.type.startsWith('image/') ? 'Image' : 'File'}: ${selectedFile.name}]`,
         sender: "me",
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        mediaUrl: filePreview,
+        mediaUrl: filePreview || undefined,
         mediaType: selectedFile.type.startsWith('image/') ? 'image' : 'document',
       };
       setDemoChats(prev => prev.map(chat => 
