@@ -76,22 +76,24 @@ export function Welcome() {
             {/* Stacked CTAs for mobile */}
             <div className="flex flex-col gap-3 mb-4">
               <Link href={user ? "/app/chats" : "/auth"} className="w-full sm:w-auto">
-                <button className="w-full sm:w-auto h-14 px-8 bg-brand-green hover:bg-emerald-700 text-white font-semibold rounded-full flex items-center justify-center gap-2 transition-all shadow-lg hover:shadow-xl">
-                  Start Free — No Credit Card
+                <button className="w-full sm:w-auto h-14 px-8 bg-brand-green hover:bg-emerald-700 text-white font-semibold rounded-full flex items-center justify-center gap-2 transition-all shadow-lg hover:shadow-xl" data-testid="button-hero-cta">
+                  Start Your 14-Day Pro Trial
                   <ArrowRight className="h-5 w-5" />
                 </button>
               </Link>
               <Link href="/pricing" className="w-full sm:w-auto">
-                <button className="w-full sm:w-auto h-12 px-6 bg-white border border-gray-200 text-gray-700 font-medium rounded-full flex items-center justify-center gap-2 hover:bg-gray-50 transition-colors">
-                  View Pricing
+                <button className="w-full sm:w-auto h-12 px-6 bg-white border border-gray-200 text-gray-700 font-medium rounded-full flex items-center justify-center gap-2 hover:bg-gray-50 transition-colors" data-testid="button-hero-pricing">
+                  Compare Plans
                   <ChevronRight className="h-4 w-4" />
                 </button>
               </Link>
             </div>
             
-            <p className="text-sm text-gray-500 mb-6">
-              Paid plans start at $19/month
-            </p>
+            <div className="flex items-center gap-2 mb-6">
+              <span className="text-sm text-gray-500">No credit card required</span>
+              <span className="text-gray-300">|</span>
+              <span className="text-sm text-brand-green font-medium">Free plan available forever</span>
+            </div>
             
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-gray-600">
               <div className="flex items-center gap-2">
@@ -419,21 +421,47 @@ export function Welcome() {
       </section>
 
       {/* Final CTA */}
-      <section className="px-4 md:px-6 py-16 md:py-20">
+      <section className="px-4 md:px-6 py-16 md:py-20 bg-gradient-to-br from-brand-green/5 to-brand-teal/5">
         <div className="max-w-3xl mx-auto text-center">
+          <div className="inline-flex items-center gap-2 px-4 py-2 bg-brand-green/10 text-brand-green rounded-full text-sm font-medium mb-6">
+            <Zap className="h-4 w-4" />
+            Set up in under 5 minutes
+          </div>
           <h2 className="text-2xl md:text-4xl font-display font-bold text-gray-900 mb-3 md:mb-4">
-            Ready to Organize Your WhatsApp Conversations?
+            Stop Losing Leads in Your WhatsApp Inbox
           </h2>
-          <p className="text-base md:text-lg text-gray-600 mb-6 md:mb-8">
-            Start free in minutes. No credit card required.
+          <p className="text-base md:text-lg text-gray-600 mb-8">
+            Join growing businesses using WhachatCRM to close more deals via WhatsApp.
           </p>
           
-          <Link href={user ? "/app/chats" : "/auth"}>
-            <button className="h-14 px-8 bg-brand-green hover:bg-emerald-700 text-white font-semibold rounded-full inline-flex items-center justify-center gap-2 transition-all shadow-lg hover:shadow-xl">
-              Start Free
-              <ArrowRight className="h-5 w-5" />
-            </button>
-          </Link>
+          <div className="flex flex-col sm:flex-row gap-4 justify-center mb-6">
+            <Link href={user ? "/app/chats" : "/auth"}>
+              <button className="h-14 px-8 bg-brand-green hover:bg-emerald-700 text-white font-semibold rounded-full inline-flex items-center justify-center gap-2 transition-all shadow-lg hover:shadow-xl" data-testid="button-final-cta">
+                Start Your 14-Day Pro Trial
+                <ArrowRight className="h-5 w-5" />
+              </button>
+            </Link>
+            <Link href="/pricing">
+              <button className="h-14 px-8 bg-white border border-gray-200 text-gray-700 font-medium rounded-full inline-flex items-center justify-center gap-2 hover:bg-gray-50 transition-colors" data-testid="button-final-pricing">
+                See Pricing
+              </button>
+            </Link>
+          </div>
+          
+          <div className="flex flex-wrap justify-center gap-6 text-sm text-gray-500">
+            <span className="flex items-center gap-1.5">
+              <CheckCircle2 className="h-4 w-4 text-brand-green" />
+              No credit card required
+            </span>
+            <span className="flex items-center gap-1.5">
+              <CheckCircle2 className="h-4 w-4 text-brand-green" />
+              Free plan forever
+            </span>
+            <span className="flex items-center gap-1.5">
+              <CheckCircle2 className="h-4 w-4 text-brand-green" />
+              Cancel anytime
+            </span>
+          </div>
         </div>
       </section>
 
