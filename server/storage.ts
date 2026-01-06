@@ -10,10 +10,14 @@ import {
   type WebhookDelivery, type InsertWebhookDelivery,
   type Integration, type InsertIntegration,
   type MessageTemplate, type InsertMessageTemplate,
-  type TemplateSend, type InsertTemplateSend
+  type TemplateSend, type InsertTemplateSend,
+  type DripCampaign, type InsertDripCampaign,
+  type DripStep, type InsertDripStep,
+  type DripEnrollment, type InsertDripEnrollment,
+  type DripSend, type InsertDripSend
 } from "@shared/schema";
 import { db } from "../drizzle/db";
-import { users, chats, registeredPhones, messageUsage, conversationWindows, teamMembers, workflows, workflowExecutions, recurringReminders, webhooks, webhookDeliveries, integrations, messageTemplates, templateSends, type InsertConversationWindow, type ConversationWindow } from "@shared/schema";
+import { users, chats, registeredPhones, messageUsage, conversationWindows, teamMembers, workflows, workflowExecutions, recurringReminders, webhooks, webhookDeliveries, integrations, messageTemplates, templateSends, dripCampaigns, dripSteps, dripEnrollments, dripSends, type InsertConversationWindow, type ConversationWindow } from "@shared/schema";
 import { eq, and, lte, sql, isNotNull, asc, desc, gte, sum, gt, or, like, ilike } from "drizzle-orm";
 
 export interface IStorage {
@@ -628,6 +632,121 @@ export class DbStorage implements IStorage {
         lte(chats.updatedAt, twentyFourHoursAgo)
       ))
       .orderBy(desc(chats.updatedAt));
+  }
+
+  // Drip Campaign methods
+  async getDripCampaigns(userId: string): Promise<DripCampaign[]> {
+    return await db.select().from(dripCampaigns)
+      .where(eq(dripCampaigns.userId, userId))
+      .orderBy(desc(dripCampaigns.createdAt));
+  }
+
+  async getDripCampaign(id: string): Promise<DripCampaign | undefined> {
+    const result = await db.select().from(dripCampaigns).where(eq(dripCampaigns.id, id));
+    return result[0];
+  }
+
+  async getActiveDripCampaigns(userId: string): Promise<DripCampaign[]> {
+    return await db.select().from(dripCampaigns)
+      .where(and(eq(dripCampaigns.userId, userId), eq(dripCampaigns.isActive, true)));
+  }
+
+  async createDripCampaign(campaign: InsertDripCampaign): Promise<DripCampaign> {
+    const result = await db.insert(dripCampaigns).values(campaign).returning();
+    return result[0];
+  }
+
+  async updateDripCampaign(id: string, updates: Partial<DripCampaign>): Promise<DripCampaign | undefined> {
+    const result = await db.update(dripCampaigns).set({ ...updates, updatedAt: new Date() }).where(eq(dripCampaigns.id, id)).returning();
+    return result[0];
+  }
+
+  async deleteDripCampaign(id: string): Promise<void> {
+    await db.delete(dripCampaigns).where(eq(dripCampaigns.id, id));
+  }
+
+  // Drip Step methods
+  async getDripSteps(campaignId: string): Promise<DripStep[]> {
+    return await db.select().from(dripSteps)
+      .where(eq(dripSteps.campaignId, campaignId))
+      .orderBy(asc(dripSteps.stepOrder));
+  }
+
+  async getDripStep(id: string): Promise<DripStep | undefined> {
+    const result = await db.select().from(dripSteps).where(eq(dripSteps.id, id));
+    return result[0];
+  }
+
+  async createDripStep(step: InsertDripStep): Promise<DripStep> {
+    const result = await db.insert(dripSteps).values(step).returning();
+    return result[0];
+  }
+
+  async updateDripStep(id: string, updates: Partial<DripStep>): Promise<DripStep | undefined> {
+    const result = await db.update(dripSteps).set(updates).where(eq(dripSteps.id, id)).returning();
+    return result[0];
+  }
+
+  async deleteDripStep(id: string): Promise<void> {
+    await db.delete(dripSteps).where(eq(dripSteps.id, id));
+  }
+
+  // Drip Enrollment methods
+  async getDripEnrollments(campaignId: string): Promise<DripEnrollment[]> {
+    return await db.select().from(dripEnrollments)
+      .where(eq(dripEnrollments.campaignId, campaignId))
+      .orderBy(desc(dripEnrollments.enrolledAt));
+  }
+
+  async getDripEnrollment(id: string): Promise<DripEnrollment | undefined> {
+    const result = await db.select().from(dripEnrollments).where(eq(dripEnrollments.id, id));
+    return result[0];
+  }
+
+  async getActiveEnrollmentForChat(chatId: string): Promise<DripEnrollment | undefined> {
+    const result = await db.select().from(dripEnrollments)
+      .where(and(eq(dripEnrollments.chatId, chatId), eq(dripEnrollments.status, "active")));
+    return result[0];
+  }
+
+  async getDueEnrollments(): Promise<DripEnrollment[]> {
+    const now = new Date();
+    return await db.select().from(dripEnrollments)
+      .where(and(
+        eq(dripEnrollments.status, "active"),
+        lte(dripEnrollments.nextSendAt, now)
+      ));
+  }
+
+  async createDripEnrollment(enrollment: InsertDripEnrollment): Promise<DripEnrollment> {
+    const result = await db.insert(dripEnrollments).values(enrollment).returning();
+    return result[0];
+  }
+
+  async updateDripEnrollment(id: string, updates: Partial<DripEnrollment>): Promise<DripEnrollment | undefined> {
+    const result = await db.update(dripEnrollments).set(updates).where(eq(dripEnrollments.id, id)).returning();
+    return result[0];
+  }
+
+  async cancelDripEnrollment(id: string): Promise<void> {
+    await db.update(dripEnrollments).set({ status: "cancelled" }).where(eq(dripEnrollments.id, id));
+  }
+
+  // Drip Send methods
+  async createDripSend(send: InsertDripSend): Promise<DripSend> {
+    const result = await db.insert(dripSends).values(send).returning();
+    return result[0];
+  }
+
+  async getDripSends(enrollmentId: string): Promise<DripSend[]> {
+    return await db.select().from(dripSends)
+      .where(eq(dripSends.enrollmentId, enrollmentId))
+      .orderBy(asc(dripSends.sentAt));
+  }
+
+  async updateDripSend(id: string, updates: Partial<DripSend>): Promise<DripSend | undefined> {
+    const result = await db.update(dripSends).set(updates).where(eq(dripSends.id, id)).returning();
+    return result[0];
   }
 }
 
