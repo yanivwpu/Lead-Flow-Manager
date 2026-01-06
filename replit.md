@@ -16,6 +16,17 @@ The application is a full multi-tenant SaaS implementation with:
 - PWA capabilities (installable, offline-first)
 
 ## Recent Changes (January 6, 2026)
+- **Native Integration Webhooks**: Full bi-directional integration sync
+  - Shopify: Webhook receiver for orders/create, customers/create, checkouts/create
+  - Calendly: Webhook receiver for invitee.created, invitee.canceled - auto-creates leads
+  - Stripe: Webhook receiver for checkout.session.completed, payment_intent.succeeded/failed
+  - HubSpot: Webhook receiver for contact.creation with CRM sync
+  - Google Sheets: Export leads functionality with sync button
+  - Webhook URL display: Shows webhook URL with setup instructions for each integration
+  - All integrations create/update chats automatically when events received
+- **Calendly Integration**: Added as new native integration option
+  - Supports new bookings, cancellations, and reschedules
+  - Auto-creates leads when meetings are booked
 - **Template Messaging (Pro Feature)**: WhatsApp template messaging for re-engaging contacts
   - Template library: Sync templates from Twilio Content API
   - Retargeting view: Shows chats outside 24-hour window with "days since last message"
