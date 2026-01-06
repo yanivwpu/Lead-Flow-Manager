@@ -1,0 +1,112 @@
+Time
+Deployment
+Source
+Log
+2026-01-06 13:21:44.12
+06c7d3ea
+User
+doc_url: 'https://stripe.com/docs/error-codes/resource-missing',
+2026-01-06 15:22:19.43
+06c7d3ea
+User
+server: 'nginx',
+2026-01-06 15:22:19.43
+06c7d3ea
+User
+requestId: 'req_EotXtMFzsn3US8',
+2026-01-06 15:22:19.43
+06c7d3ea
+User
+code: 'resource_missing',
+2026-01-06 15:22:19.43
+06c7d3ea
+User
+at res.toJSON.then.StripeAPIError.message (file:///home/runner/workspace/node_modules/stripe/esm/RequestSender.js:111:31)
+2026-01-06 15:22:19.43
+06c7d3ea
+User
+setup_intent: undefined,
+2026-01-06 15:22:19.43
+06c7d3ea
+User
+type: 'invalid_request_error',
+2026-01-06 15:22:19.43
+06c7d3ea
+User
+} Webhook not found in Stripe (404), removing from database
+2026-01-06 15:22:19.43
+06c7d3ea
+User
+userMessage: undefined,
+2026-01-06 15:22:19.43
+06c7d3ea
+User
+code: 'resource_missing',
+2026-01-06 15:22:19.43
+06c7d3ea
+User
+'cache-control': 'no-cache, no-store',
+2026-01-06 15:22:19.43
+06c7d3ea
+User
+decline_code: undefined,
+2026-01-06 15:22:19.43
+06c7d3ea
+User
+type: 'StripeInvalidRequestError',
+2026-01-06 15:22:19.43
+06c7d3ea
+User
+'x-wc': 'ABGHIJ',
+2026-01-06 15:22:19.43
+06c7d3ea
+User
+statusCode: 404,
+2026-01-06 15:22:19.43
+06c7d3ea
+User
+requestId: 'req_EotXtMFzsn3US8'
+2026-01-06 15:22:19.43
+06c7d3ea
+User
+'content-security-policy': "base-uri 'none'; default-src 'none'; form-action 'none'; frame-ancestors 'none'; img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'; worker-src 'none'; upgrade-insecure-requests; report-uri https://q.stripe.com/csp-violation?q=2h-NSs2isYqrghaaSdzpw7NO6yhvHf66X4Kow42Q7Lsum0nvSMahFXDAeP6Sn5oNEP3S9Xq8bUIZYRnZ",
+2026-01-06 15:22:19.43
+06c7d3ea
+User
+'access-control-max-age': '300',
+2026-01-06 15:22:19.43
+06c7d3ea
+User
+'access-control-expose-headers': 'Request-Id, Stripe-Manage-Version, Stripe-Should-Retry, X-Stripe-External-Auth-Required, X-Stripe-Privileged-Session-Required',
+2026-01-06 15:22:19.43
+06c7d3ea
+User
+},
+2026-01-06 15:22:19.43
+06c7d3ea
+User
+payment_intent: undefined,
+2026-01-06 15:22:19.43
+06c7d3ea
+User
+'strict-transport-security': 'max-age=63072000; includeSubDomains; preload'
+2026-01-06 15:22:19.43
+06c7d3ea
+User
+},
+2026-01-06 15:22:19.43
+06c7d3ea
+User
+'x-stripe-routing-context-priority-tier': 'api-testmode',
+2026-01-06 15:22:19.43
+06c7d3ea
+User
+},
+2026-01-06 15:22:21.23
+06c7d3ea
+User
+{
+2026-01-06 15:22:21.23
+06c7d3ea
+User
+} Found orphaned managed webhook in Stripe, deleting
