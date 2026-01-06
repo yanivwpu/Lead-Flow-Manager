@@ -25,10 +25,8 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import { subscriptionService } from "./subscriptionService";
-import { getStripePublishableKey } from "./stripeClient";
 import { sendWelcomeEmail, sendContactFormEmail } from "./email";
 import { triggerNewChatWorkflows, triggerKeywordWorkflows } from "./workflowEngine";
-import { registerIntegrationWebhooks } from "./integrationWebhooks";
 
 const TWILIO_BASE_COST_PER_MESSAGE = 0.005;
 const MARKUP_PERCENT = 5;
@@ -1300,17 +1298,6 @@ export async function registerRoutes(
 
   // ============= Subscription Endpoints =============
 
-  // Get Stripe publishable key
-  app.get("/api/stripe/publishable-key", async (_req, res) => {
-    try {
-      const key = await getStripePublishableKey();
-      res.json({ publishableKey: key });
-    } catch (error) {
-      console.error("Error getting Stripe key:", error);
-      res.status(500).json({ error: "Stripe not configured" });
-    }
-  });
-
   // Get available subscription plans
   app.get("/api/subscription/plans", (_req, res) => {
     const plans = Object.entries(PLAN_LIMITS).map(([id, plan]) => ({
@@ -1318,82 +1305,6 @@ export async function registerRoutes(
       ...plan,
     }));
     res.json(plans);
-  });
-
-  // Debug endpoint to manually trigger Stripe sync
-  app.post("/api/debug/stripe-sync", async (_req, res) => {
-    try {
-      const { getStripeSync } = await import("./stripeClient");
-      const stripeSync = await getStripeSync();
-      
-      console.log('[Debug] Manually triggering Stripe sync...');
-      await stripeSync.syncBackfill();
-      console.log('[Debug] Stripe sync completed');
-      
-      // Check results
-      const { db } = await import("../drizzle/db");
-      const { sql } = await import("drizzle-orm");
-      const pricesResult = await db.execute(
-        sql`SELECT id, metadata FROM stripe.prices WHERE active = true LIMIT 10`
-      );
-      
-      res.json({
-        success: true,
-        message: 'Sync completed',
-        pricesFound: pricesResult.rows.length,
-        prices: pricesResult.rows,
-      });
-    } catch (error: any) {
-      console.error('[Debug] Stripe sync error:', error);
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // Debug endpoint to check Stripe data status
-  app.get("/api/debug/stripe-status", async (_req, res) => {
-    try {
-      const { db } = await import("../drizzle/db");
-      const { sql } = await import("drizzle-orm");
-      const { getStripePublishableKey } = await import("./stripeClient");
-      
-      // Check environment
-      const isProduction = process.env.REPLIT_DEPLOYMENT === '1';
-      
-      // Check Stripe key (just first 20 chars for safety)
-      let stripeKeyPrefix = 'not configured';
-      try {
-        const key = await getStripePublishableKey();
-        stripeKeyPrefix = key ? key.substring(0, 20) + '...' : 'empty';
-      } catch (e: any) {
-        stripeKeyPrefix = `error: ${e.message}`;
-      }
-      
-      // Check if stripe schema exists
-      const schemaCheck = await db.execute(
-        sql`SELECT EXISTS(SELECT 1 FROM information_schema.schemata WHERE schema_name = 'stripe')`
-      );
-      
-      // Try to get prices
-      let prices: any[] = [];
-      try {
-        const pricesResult = await db.execute(
-          sql`SELECT id, metadata FROM stripe.prices WHERE active = true LIMIT 10`
-        );
-        prices = pricesResult.rows as any[];
-      } catch (e: any) {
-        prices = [{ error: e.message }];
-      }
-      
-      res.json({
-        isProduction,
-        stripeKeyPrefix,
-        schemaExists: schemaCheck.rows[0],
-        activePrices: prices,
-        timestamp: new Date().toISOString(),
-      });
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
   });
 
   // Get current user's subscription and limits
@@ -1490,70 +1401,6 @@ export async function registerRoutes(
     } catch (error: any) {
       console.error("Error canceling subscription:", error);
       res.status(500).json({ error: error.message || "Failed to cancel subscription" });
-    }
-  });
-
-  // Sync subscription from Stripe (for when webhooks fail)
-  app.post("/api/subscription/sync", async (req, res) => {
-    try {
-      if (!req.user) {
-        return res.status(401).json({ error: "Unauthorized" });
-      }
-
-      const user = await storage.getUser(req.user.id);
-      if (!user?.stripeCustomerId) {
-        return res.json({ 
-          synced: false, 
-          message: "No Stripe customer ID found",
-          plan: user?.subscriptionPlan || 'free'
-        });
-      }
-
-      const { getUncachableStripeClient } = await import("./stripeClient");
-      const stripe = await getUncachableStripeClient();
-
-      // Get all active subscriptions for this customer
-      const subscriptions = await stripe.subscriptions.list({
-        customer: user.stripeCustomerId,
-        status: 'active',
-        limit: 1,
-      });
-
-      if (subscriptions.data.length === 0) {
-        // No active subscription, set to free
-        await storage.updateUser(user.id, {
-          subscriptionPlan: 'free',
-          subscriptionStatus: 'canceled',
-          stripeSubscriptionId: null,
-        });
-        return res.json({ synced: true, plan: 'free', message: "No active subscription found" });
-      }
-
-      const subscription = subscriptions.data[0];
-      const priceId = subscription.items?.data?.[0]?.price?.id;
-
-      // Get plan from price metadata
-      let plan: 'free' | 'starter' | 'growth' | 'pro' = 'free';
-      if (priceId) {
-        const price = await stripe.prices.retrieve(priceId);
-        if (price.metadata?.plan) {
-          plan = price.metadata.plan as any;
-        }
-      }
-
-      const subData = subscription as any;
-      await storage.updateUser(user.id, {
-        stripeSubscriptionId: subscription.id,
-        subscriptionPlan: plan,
-        subscriptionStatus: subscription.status === 'active' ? 'active' : 'past_due',
-        currentPeriodStart: subData.current_period_start ? new Date(subData.current_period_start * 1000) : null,
-        currentPeriodEnd: subData.current_period_end ? new Date(subData.current_period_end * 1000) : null,
-      });
-
-      res.json({ synced: true, plan, subscription: subscription.id });
-    } catch (error: any) {
-      console.error("Error syncing subscription:", error);
-      res.status(500).json({ error: error.message || "Failed to sync subscription" });
     }
   });
 
@@ -2620,9 +2467,6 @@ export async function registerRoutes(
       res.status(500).json({ error: "Failed to fetch usage data" });
     }
   });
-
-  // Register external integration webhook endpoints (Shopify, Calendly, Stripe, HubSpot)
-  registerIntegrationWebhooks(app);
 
   return httpServer;
 }
