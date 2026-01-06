@@ -406,7 +406,85 @@ export const insertTemplateSendSchema = createInsertSchema(templateSends).omit({
   sentAt: true,
 });
 
+// Drip Sequences (Campaigns)
+export const dripCampaigns = pgTable("drip_campaigns", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  description: text("description"),
+  isActive: boolean("is_active").default(false),
+  triggerType: text("trigger_type").notNull().default("manual"), // manual, new_chat, tag_applied
+  triggerConfig: jsonb("trigger_config").default(sql`'{}'::jsonb`), // e.g., { tag: "Hot" }
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Drip Steps (Messages within a campaign)
+export const dripSteps = pgTable("drip_steps", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  campaignId: varchar("campaign_id").notNull().references(() => dripCampaigns.id, { onDelete: "cascade" }),
+  stepOrder: integer("step_order").notNull().default(1),
+  delayMinutes: integer("delay_minutes").notNull().default(0), // delay from previous step or enrollment
+  messageContent: text("message_content").notNull(),
+  messageType: text("message_type").notNull().default("text"), // text, template
+  templateId: varchar("template_id"), // if using template
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Drip Enrollments (Contacts enrolled in campaigns)
+export const dripEnrollments = pgTable("drip_enrollments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  campaignId: varchar("campaign_id").notNull().references(() => dripCampaigns.id, { onDelete: "cascade" }),
+  chatId: varchar("chat_id").notNull().references(() => chats.id, { onDelete: "cascade" }),
+  currentStepOrder: integer("current_step_order").default(0), // 0 = not started yet
+  status: text("status").notNull().default("active"), // active, paused, completed, cancelled
+  enrolledAt: timestamp("enrolled_at").defaultNow(),
+  nextSendAt: timestamp("next_send_at"), // when to send next step
+  completedAt: timestamp("completed_at"),
+});
+
+// Drip Sends (History of sent messages)
+export const dripSends = pgTable("drip_sends", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  enrollmentId: varchar("enrollment_id").notNull().references(() => dripEnrollments.id, { onDelete: "cascade" }),
+  stepId: varchar("step_id").notNull().references(() => dripSteps.id, { onDelete: "cascade" }),
+  twilioSid: text("twilio_sid"),
+  status: text("status").notNull().default("pending"), // pending, sent, failed, delivered
+  sentAt: timestamp("sent_at").defaultNow(),
+  errorMessage: text("error_message"),
+});
+
+export const insertDripCampaignSchema = createInsertSchema(dripCampaigns).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertDripStepSchema = createInsertSchema(dripSteps).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertDripEnrollmentSchema = createInsertSchema(dripEnrollments).omit({
+  id: true,
+  enrolledAt: true,
+  completedAt: true,
+});
+
+export const insertDripSendSchema = createInsertSchema(dripSends).omit({
+  id: true,
+  sentAt: true,
+});
+
 export type InsertMessageTemplate = z.infer<typeof insertMessageTemplateSchema>;
 export type MessageTemplate = typeof messageTemplates.$inferSelect;
 export type InsertTemplateSend = z.infer<typeof insertTemplateSendSchema>;
 export type TemplateSend = typeof templateSends.$inferSelect;
+export type InsertDripCampaign = z.infer<typeof insertDripCampaignSchema>;
+export type DripCampaign = typeof dripCampaigns.$inferSelect;
+export type InsertDripStep = z.infer<typeof insertDripStepSchema>;
+export type DripStep = typeof dripSteps.$inferSelect;
+export type InsertDripEnrollment = z.infer<typeof insertDripEnrollmentSchema>;
+export type DripEnrollment = typeof dripEnrollments.$inferSelect;
+export type InsertDripSend = z.infer<typeof insertDripSendSchema>;
+export type DripSend = typeof dripSends.$inferSelect;

@@ -1212,6 +1212,72 @@ export async function registerRoutes(
         );
       }
 
+      // Auto-reply & Business Hours handling
+      try {
+        const userSettings = await storage.getUser(userId);
+        if (userSettings) {
+          let shouldSendAutoReply = false;
+          let autoReplyText = "";
+
+          // Check if outside business hours and away message is enabled
+          if (userSettings.businessHoursEnabled && userSettings.awayMessageEnabled) {
+            const now = new Date();
+            const userTimezone = userSettings.timezone || "America/New_York";
+            const nowInTimezone = new Date(now.toLocaleString("en-US", { timeZone: userTimezone }));
+            const currentDay = nowInTimezone.getDay();
+            const currentTime = nowInTimezone.toTimeString().slice(0, 5); // HH:mm
+            
+            const businessDays = (userSettings.businessDays as number[]) || [1, 2, 3, 4, 5];
+            const startTime = userSettings.businessHoursStart || "09:00";
+            const endTime = userSettings.businessHoursEnd || "17:00";
+            
+            const isBusinessDay = businessDays.includes(currentDay);
+            const isWithinHours = currentTime >= startTime && currentTime <= endTime;
+            
+            if (!isBusinessDay || !isWithinHours) {
+              shouldSendAutoReply = true;
+              autoReplyText = userSettings.awayMessage || "Thanks for reaching out! We're currently away but will respond as soon as we're back.";
+            }
+          }
+
+          // If within business hours but auto-reply is enabled, send auto-reply
+          if (!shouldSendAutoReply && userSettings.autoReplyEnabled) {
+            shouldSendAutoReply = true;
+            autoReplyText = userSettings.autoReplyMessage || "Thanks for your message! We'll get back to you shortly.";
+          }
+
+          // Send the auto-reply via user's Twilio account
+          if (shouldSendAutoReply && autoReplyText && chat.whatsappPhone) {
+            const delay = userSettings.autoReplyDelay || 0;
+            setTimeout(async () => {
+              try {
+                await sendUserWhatsAppMessage(userId, chat.whatsappPhone!, autoReplyText);
+                console.log("Auto-reply sent to:", chat.whatsappPhone);
+                
+                // Record the auto-reply message in chat history
+                const autoReplyMessage = {
+                  id: `auto-${Date.now()}`,
+                  text: autoReplyText,
+                  time: new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
+                  sent: true,
+                  sender: "me",
+                };
+                const currentChat = await storage.getChat(chat.id);
+                if (currentChat) {
+                  const msgs = (currentChat.messages as any[]) || [];
+                  msgs.push(autoReplyMessage);
+                  await storage.updateChat(chat.id, { messages: msgs });
+                }
+              } catch (err) {
+                console.error("Failed to send auto-reply:", err);
+              }
+            }, delay * 1000);
+          }
+        }
+      } catch (autoReplyError) {
+        console.error("Auto-reply error:", autoReplyError);
+      }
+
       res.status(200).send("");
     } catch (error) {
       console.error("Webhook error:", error);
