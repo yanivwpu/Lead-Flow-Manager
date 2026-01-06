@@ -1661,6 +1661,249 @@ export async function registerRoutes(
     }
   });
 
+  // ============= Drip Campaign Endpoints (Pro Feature) =============
+
+  // Get all drip campaigns
+  app.get("/api/drip-campaigns", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const limits = await subscriptionService.getUserLimits(req.user.id);
+      if (!limits?.workflowsEnabled) {
+        return res.status(403).json({ error: "Drip campaigns require a Pro plan", upgradeRequired: true });
+      }
+      const campaigns = await storage.getDripCampaigns(req.user.id);
+      res.json(campaigns);
+    } catch (error) {
+      console.error("Error fetching drip campaigns:", error);
+      res.status(500).json({ error: "Failed to fetch drip campaigns" });
+    }
+  });
+
+  // Get single drip campaign with steps
+  app.get("/api/drip-campaigns/:id", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const campaign = await storage.getDripCampaign(req.params.id);
+      if (!campaign || campaign.userId !== req.user.id) {
+        return res.status(404).json({ error: "Campaign not found" });
+      }
+      const steps = await storage.getDripSteps(req.params.id);
+      const enrollments = await storage.getDripEnrollments(req.params.id);
+      res.json({ ...campaign, steps, enrollments });
+    } catch (error) {
+      console.error("Error fetching drip campaign:", error);
+      res.status(500).json({ error: "Failed to fetch drip campaign" });
+    }
+  });
+
+  // Create drip campaign
+  app.post("/api/drip-campaigns", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const limits = await subscriptionService.getUserLimits(req.user.id);
+      if (!limits?.workflowsEnabled) {
+        return res.status(403).json({ error: "Drip campaigns require a Pro plan", upgradeRequired: true });
+      }
+      const { name, description, triggerType, triggerConfig } = req.body;
+      if (!name) {
+        return res.status(400).json({ error: "Campaign name is required" });
+      }
+      const campaign = await storage.createDripCampaign({
+        userId: req.user.id,
+        name,
+        description: description || null,
+        triggerType: triggerType || "manual",
+        triggerConfig: triggerConfig || {},
+        isActive: false,
+      });
+      res.status(201).json(campaign);
+    } catch (error) {
+      console.error("Error creating drip campaign:", error);
+      res.status(500).json({ error: "Failed to create drip campaign" });
+    }
+  });
+
+  // Update drip campaign
+  app.patch("/api/drip-campaigns/:id", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const campaign = await storage.getDripCampaign(req.params.id);
+      if (!campaign || campaign.userId !== req.user.id) {
+        return res.status(404).json({ error: "Campaign not found" });
+      }
+      const updated = await storage.updateDripCampaign(req.params.id, req.body);
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating drip campaign:", error);
+      res.status(500).json({ error: "Failed to update drip campaign" });
+    }
+  });
+
+  // Delete drip campaign
+  app.delete("/api/drip-campaigns/:id", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const campaign = await storage.getDripCampaign(req.params.id);
+      if (!campaign || campaign.userId !== req.user.id) {
+        return res.status(404).json({ error: "Campaign not found" });
+      }
+      await storage.deleteDripCampaign(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting drip campaign:", error);
+      res.status(500).json({ error: "Failed to delete drip campaign" });
+    }
+  });
+
+  // Add step to drip campaign
+  app.post("/api/drip-campaigns/:id/steps", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const campaign = await storage.getDripCampaign(req.params.id);
+      if (!campaign || campaign.userId !== req.user.id) {
+        return res.status(404).json({ error: "Campaign not found" });
+      }
+      const { stepOrder, delayMinutes, messageContent, messageType, templateId } = req.body;
+      if (!messageContent) {
+        return res.status(400).json({ error: "Message content is required" });
+      }
+      const step = await storage.createDripStep({
+        campaignId: req.params.id,
+        stepOrder: stepOrder || 1,
+        delayMinutes: delayMinutes || 0,
+        messageContent,
+        messageType: messageType || "text",
+        templateId: templateId || null,
+      });
+      res.status(201).json(step);
+    } catch (error) {
+      console.error("Error adding drip step:", error);
+      res.status(500).json({ error: "Failed to add step" });
+    }
+  });
+
+  // Update drip step
+  app.patch("/api/drip-steps/:id", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const step = await storage.getDripStep(req.params.id);
+      if (!step) {
+        return res.status(404).json({ error: "Step not found" });
+      }
+      const campaign = await storage.getDripCampaign(step.campaignId);
+      if (!campaign || campaign.userId !== req.user.id) {
+        return res.status(404).json({ error: "Campaign not found" });
+      }
+      const updated = await storage.updateDripStep(req.params.id, req.body);
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating drip step:", error);
+      res.status(500).json({ error: "Failed to update step" });
+    }
+  });
+
+  // Delete drip step
+  app.delete("/api/drip-steps/:id", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const step = await storage.getDripStep(req.params.id);
+      if (!step) {
+        return res.status(404).json({ error: "Step not found" });
+      }
+      const campaign = await storage.getDripCampaign(step.campaignId);
+      if (!campaign || campaign.userId !== req.user.id) {
+        return res.status(404).json({ error: "Campaign not found" });
+      }
+      await storage.deleteDripStep(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting drip step:", error);
+      res.status(500).json({ error: "Failed to delete step" });
+    }
+  });
+
+  // Enroll chat in drip campaign
+  app.post("/api/drip-campaigns/:id/enroll", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const campaign = await storage.getDripCampaign(req.params.id);
+      if (!campaign || campaign.userId !== req.user.id) {
+        return res.status(404).json({ error: "Campaign not found" });
+      }
+      const { chatId } = req.body;
+      if (!chatId) {
+        return res.status(400).json({ error: "Chat ID is required" });
+      }
+      
+      // Check if already enrolled
+      const existing = await storage.getActiveEnrollmentForChat(chatId);
+      if (existing) {
+        return res.status(400).json({ error: "Chat is already enrolled in a campaign" });
+      }
+      
+      // Get first step to calculate nextSendAt
+      const steps = await storage.getDripSteps(req.params.id);
+      if (steps.length === 0) {
+        return res.status(400).json({ error: "Campaign has no steps" });
+      }
+      
+      const firstStep = steps[0];
+      const nextSendAt = new Date(Date.now() + (firstStep.delayMinutes || 0) * 60 * 1000);
+      
+      const enrollment = await storage.createDripEnrollment({
+        campaignId: req.params.id,
+        chatId,
+        currentStepOrder: 0,
+        status: "active",
+        nextSendAt,
+      });
+      res.status(201).json(enrollment);
+    } catch (error) {
+      console.error("Error enrolling in drip campaign:", error);
+      res.status(500).json({ error: "Failed to enroll" });
+    }
+  });
+
+  // Cancel drip enrollment
+  app.post("/api/drip-enrollments/:id/cancel", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const enrollment = await storage.getDripEnrollment(req.params.id);
+      if (!enrollment) {
+        return res.status(404).json({ error: "Enrollment not found" });
+      }
+      const campaign = await storage.getDripCampaign(enrollment.campaignId);
+      if (!campaign || campaign.userId !== req.user.id) {
+        return res.status(404).json({ error: "Campaign not found" });
+      }
+      await storage.cancelDripEnrollment(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error cancelling enrollment:", error);
+      res.status(500).json({ error: "Failed to cancel enrollment" });
+    }
+  });
+
   // ============= Advanced Reminders Endpoints =============
 
   // Get recurring reminders
