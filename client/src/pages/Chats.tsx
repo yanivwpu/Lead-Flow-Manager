@@ -273,6 +273,7 @@ export function Chats() {
 
   const [newMessage, setNewMessage] = useState("");
   const [localNotes, setLocalNotes] = useState("");
+  const [calendarOpen, setCalendarOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -790,7 +791,7 @@ export function Chats() {
                        {time}
                      </button>
                    ))}
-                   <Popover>
+                   <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
                      <PopoverTrigger asChild>
                        <button
                          className={cn(
@@ -815,6 +816,7 @@ export function Chats() {
                                followUp: formatted,
                                followUpDate: date.toISOString()
                              });
+                             setCalendarOpen(false);
                            }
                          }}
                          disabled={(date) => date < new Date()}
@@ -901,7 +903,7 @@ export function Chats() {
                           {time}
                         </button>
                       ))}
-                      <Popover>
+                      <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
                         <PopoverTrigger asChild>
                           <button
                             className={cn(
@@ -927,6 +929,7 @@ export function Chats() {
                                   followUp: formatted,
                                   followUpDate: date.toISOString()
                                 });
+                                setCalendarOpen(false);
                               }
                             }}
                             disabled={(date) => date < new Date()}
