@@ -24,8 +24,16 @@ import {
   CheckCircle2,
   Calendar as CalendarIcon,
   Image as ImageIcon,
-  FileText
+  FileText,
+  Download,
+  Loader2
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { format } from "date-fns";
@@ -581,9 +589,37 @@ export function Chats() {
                {viewMode === "team" ? "Team Inbox" : "Chats"}
              </h2>
              <div className="flex gap-2">
-               <button className="p-2 hover:bg-gray-200 rounded-full text-gray-600">
-                 <MoreVertical className="h-5 w-5" />
-               </button>
+               <DropdownMenu>
+                 <DropdownMenuTrigger asChild>
+                   <button className="p-2 hover:bg-gray-200 rounded-full text-gray-600" data-testid="button-chat-menu">
+                     <MoreVertical className="h-5 w-5" />
+                   </button>
+                 </DropdownMenuTrigger>
+                 <DropdownMenuContent align="end">
+                   <DropdownMenuItem 
+                     onClick={async () => {
+                       try {
+                         const res = await fetch('/api/chats/export', { credentials: 'include' });
+                         if (!res.ok) throw new Error('Export failed');
+                         const blob = await res.blob();
+                         const url = URL.createObjectURL(blob);
+                         const a = document.createElement('a');
+                         a.href = url;
+                         a.download = `chats-export-${new Date().toISOString().split('T')[0]}.csv`;
+                         a.click();
+                         URL.revokeObjectURL(url);
+                         toast({ title: "Export complete", description: "Your contacts have been downloaded" });
+                       } catch (err) {
+                         toast({ title: "Export failed", description: "Could not export contacts", variant: "destructive" });
+                       }
+                     }}
+                     data-testid="menu-export-csv"
+                   >
+                     <Download className="h-4 w-4 mr-2" />
+                     Export to CSV
+                   </DropdownMenuItem>
+                 </DropdownMenuContent>
+               </DropdownMenu>
              </div>
           </div>
           

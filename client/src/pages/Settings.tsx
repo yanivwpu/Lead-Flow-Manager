@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Bell, Mail, Smartphone, Shield, LogOut, Phone, Plus, Trash2, Loader2, CreditCard, ExternalLink, Zap, CheckCircle2, XCircle, MessageSquare, Copy, Check, AlertTriangle, Users, UserPlus, Crown, Clock, Building2 } from "lucide-react";
+import { Bell, Mail, Smartphone, Shield, LogOut, Phone, Plus, Trash2, Loader2, CreditCard, ExternalLink, Zap, CheckCircle2, XCircle, MessageSquare, Copy, Check, AlertTriangle, Users, UserPlus, Crown, Clock, Building2, FileText } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -280,6 +280,8 @@ export function Settings() {
   const [statusCopied, setStatusCopied] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteName, setInviteName] = useState("");
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [isImporting, setIsImporting] = useState(false);
   
   const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
   const webhookUrl = `${baseUrl}/api/webhook/twilio/incoming`;
@@ -918,6 +920,108 @@ export function Settings() {
 
            {/* Auto-Reply & Business Hours Section */}
            <AutoReplySettings />
+
+           {/* Import/Export Data Section */}
+           <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 shadow-sm">
+             <div className="flex items-center gap-3 mb-4 sm:mb-6">
+               <div className="h-9 w-9 sm:h-10 sm:w-10 bg-orange-50 rounded-lg flex items-center justify-center flex-shrink-0">
+                 <FileText className="h-4 w-4 sm:h-5 sm:w-5 text-orange-600" />
+               </div>
+               <div className="min-w-0">
+                 <h2 className="text-base sm:text-lg font-bold text-gray-900">Import Contacts</h2>
+                 <p className="text-xs sm:text-sm text-gray-500">Bulk import contacts from a CSV file.</p>
+               </div>
+             </div>
+
+             <div className="space-y-4">
+               <div className="p-4 bg-orange-50 rounded-lg border border-orange-200">
+                 <p className="text-sm text-orange-800 mb-2">
+                   <strong>CSV Format:</strong> Your file should have columns: Name, Phone, Tag, Notes
+                 </p>
+                 <p className="text-xs text-orange-700">
+                   Example: "John Doe", "+1234567890", "Hot", "Met at trade show"
+                 </p>
+               </div>
+
+               <div className="flex flex-col sm:flex-row gap-3">
+                 <label className="flex-1">
+                   <div className="flex items-center justify-center w-full h-24 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-orange-400 hover:bg-orange-50 transition-colors">
+                     <div className="text-center">
+                       <FileText className="h-6 w-6 mx-auto text-gray-400 mb-1" />
+                       <span className="text-sm text-gray-600">
+                         {importFile ? importFile.name : "Click to select CSV file"}
+                       </span>
+                     </div>
+                   </div>
+                   <input
+                     type="file"
+                     accept=".csv"
+                     className="hidden"
+                     onChange={(e) => setImportFile(e.target.files?.[0] || null)}
+                     data-testid="input-csv-file"
+                   />
+                 </label>
+               </div>
+
+               {importFile && (
+                 <Button
+                   onClick={async () => {
+                     if (!importFile) return;
+                     setIsImporting(true);
+                     try {
+                       const text = await importFile.text();
+                       const lines = text.split('\n').filter(line => line.trim());
+                       const contacts = [];
+                       
+                       for (let i = 1; i < lines.length; i++) {
+                         const values = lines[i].split(',').map(v => v.trim().replace(/^"|"$/g, ''));
+                         if (values.length >= 1) {
+                           contacts.push({
+                             name: values[0] || '',
+                             phone: values[1] || '',
+                             tag: values[2] || 'New',
+                             notes: values[3] || ''
+                           });
+                         }
+                       }
+                       
+                       const res = await fetch('/api/chats/import', {
+                         method: 'POST',
+                         headers: { 'Content-Type': 'application/json' },
+                         body: JSON.stringify({ contacts }),
+                         credentials: 'include'
+                       });
+                       
+                       if (res.ok) {
+                         const data = await res.json();
+                         toast({
+                           title: "Import complete",
+                           description: `Imported ${data.imported} contacts (${data.skipped} skipped)`
+                         });
+                         setImportFile(null);
+                         queryClient.invalidateQueries({ queryKey: ['/api/chats'] });
+                       } else {
+                         throw new Error('Import failed');
+                       }
+                     } catch (err) {
+                       toast({
+                         title: "Import failed",
+                         description: "Could not import contacts from CSV",
+                         variant: "destructive"
+                       });
+                     }
+                     setIsImporting(false);
+                   }}
+                   disabled={isImporting}
+                   className="w-full sm:w-auto bg-orange-600 hover:bg-orange-700"
+                   data-testid="button-import-csv"
+                 >
+                   {isImporting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                   Import {importFile.name}
+                 </Button>
+               )}
+             </div>
+           </div>
 
            {/* WhatsApp Phone Numbers Section */}
            <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 shadow-sm">

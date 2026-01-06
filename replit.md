@@ -25,6 +25,11 @@ The application is a full multi-tenant SaaS implementation with:
   - Business hours with day-of-week selection and time range
   - Away message for outside business hours
   - Settings persisted per user in database
+- **CSV Import/Export**: Bulk data management
+  - Export: Download all contacts as CSV from Chats menu (3-dot icon)
+  - Import: Upload CSV file in Settings to bulk-add contacts
+  - CSV columns: Name, Phone, Tag, Notes
+  - Automatic data validation and skip for invalid rows
 - **Native Integration Webhooks**: Full bi-directional integration sync
   - Shopify: Webhook receiver for orders/create, customers/create, checkouts/create
   - Calendly: Webhook receiver for invitee.created, invitee.canceled - auto-creates leads

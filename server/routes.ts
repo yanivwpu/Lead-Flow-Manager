@@ -150,6 +150,91 @@ export async function registerRoutes(
     }
   });
 
+  // Export chats to CSV
+  app.get("/api/chats/export", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const chats = await storage.getChats(req.user.id);
+      
+      const headers = ['Name', 'Phone', 'Tag', 'Pipeline Stage', 'Status', 'Notes', 'Follow-up', 'Last Message', 'Created'];
+      const rows = chats.map((chat: any) => [
+        chat.name || '',
+        chat.whatsappPhone || '',
+        chat.tag || '',
+        chat.pipelineStage || '',
+        chat.status || '',
+        (chat.notes || '').replace(/"/g, '""'),
+        chat.followUp || '',
+        (chat.lastMessage || '').replace(/"/g, '""'),
+        chat.createdAt ? new Date(chat.createdAt).toISOString().split('T')[0] : ''
+      ]);
+      
+      const csv = [
+        headers.join(','),
+        ...rows.map(row => row.map((cell: string) => `"${cell}"`).join(','))
+      ].join('\n');
+      
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', 'attachment; filename=chats-export.csv');
+      res.send(csv);
+    } catch (error) {
+      console.error("Error exporting chats:", error);
+      res.status(500).json({ error: "Failed to export chats" });
+    }
+  });
+
+  // Import chats from CSV
+  app.post("/api/chats/import", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      
+      const { contacts } = req.body;
+      if (!Array.isArray(contacts) || contacts.length === 0) {
+        return res.status(400).json({ error: "No contacts provided" });
+      }
+      
+      let imported = 0;
+      let skipped = 0;
+      
+      for (const contact of contacts) {
+        if (!contact.name && !contact.phone) {
+          skipped++;
+          continue;
+        }
+        
+        try {
+          await storage.createChat({
+            userId: req.user.id,
+            name: contact.name || 'Unknown',
+            whatsappPhone: contact.phone || null,
+            tag: contact.tag || 'New',
+            pipelineStage: contact.pipelineStage || 'Lead',
+            notes: contact.notes || '',
+            status: 'open',
+            avatar: '',
+            lastMessage: '',
+            time: new Date().toISOString(),
+            unread: 0,
+            messages: [],
+          });
+          imported++;
+        } catch (err) {
+          console.error("Error importing contact:", err);
+          skipped++;
+        }
+      }
+      
+      res.json({ imported, skipped, total: contacts.length });
+    } catch (error) {
+      console.error("Error importing chats:", error);
+      res.status(500).json({ error: "Failed to import chats" });
+    }
+  });
+
   // Get team inbox - all chats across team members (Pro feature)
   app.get("/api/chats/team", async (req, res) => {
     try {
