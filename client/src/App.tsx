@@ -13,6 +13,8 @@ import { WatiAlternative } from "@/pages/WatiAlternative";
 import { WhatsappCrm } from "@/pages/WhatsappCrm";
 import { CrmForWhatsappBusiness } from "@/pages/CrmForWhatsappBusiness";
 import { Contact } from "@/pages/Contact";
+import { Blog } from "@/pages/Blog";
+import { BlogPost } from "@/pages/BlogPost";
 import NotFound from "@/pages/not-found";
 import { AuthProvider, useAuth } from "@/lib/auth-context";
 import { Loader2 } from "lucide-react";
@@ -49,6 +51,8 @@ function Router() {
       <Route path="/whatsapp-crm" component={WhatsappCrm} />
       <Route path="/crm-for-whatsapp-business" component={CrmForWhatsappBusiness} />
       <Route path="/contact" component={Contact} />
+      <Route path="/blog/:slug" component={BlogPost} />
+      <Route path="/blog" component={Blog} />
       
       {/* Protected Routes */}
       <Route path="/app/*?">
