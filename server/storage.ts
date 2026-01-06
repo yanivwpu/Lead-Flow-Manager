@@ -99,6 +99,8 @@ export interface IStorage {
   // Integration methods
   getIntegrations(userId: string): Promise<Integration[]>;
   getIntegration(id: string): Promise<Integration | undefined>;
+  getIntegrationsByType(type: string): Promise<Integration[]>;
+  getIntegrationByUserAndType(userId: string, type: string): Promise<Integration | undefined>;
   createIntegration(integration: InsertIntegration): Promise<Integration>;
   updateIntegration(id: string, updates: Partial<Integration>): Promise<Integration | undefined>;
   deleteIntegration(id: string): Promise<void>;
@@ -535,6 +537,17 @@ export class DbStorage implements IStorage {
 
   async getIntegration(id: string): Promise<Integration | undefined> {
     const result = await db.select().from(integrations).where(eq(integrations.id, id));
+    return result[0];
+  }
+
+  async getIntegrationsByType(type: string): Promise<Integration[]> {
+    return await db.select().from(integrations)
+      .where(and(eq(integrations.type, type), eq(integrations.isActive, true)));
+  }
+
+  async getIntegrationByUserAndType(userId: string, type: string): Promise<Integration | undefined> {
+    const result = await db.select().from(integrations)
+      .where(and(eq(integrations.userId, userId), eq(integrations.type, type), eq(integrations.isActive, true)));
     return result[0];
   }
 

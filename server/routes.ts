@@ -28,6 +28,7 @@ import { subscriptionService } from "./subscriptionService";
 import { getStripePublishableKey } from "./stripeClient";
 import { sendWelcomeEmail, sendContactFormEmail } from "./email";
 import { triggerNewChatWorkflows, triggerKeywordWorkflows } from "./workflowEngine";
+import { registerIntegrationWebhooks } from "./integrationWebhooks";
 
 const TWILIO_BASE_COST_PER_MESSAGE = 0.005;
 const MARKUP_PERCENT = 5;
@@ -2122,6 +2123,9 @@ export async function registerRoutes(
       res.status(500).json({ error: "Failed to fetch usage data" });
     }
   });
+
+  // Register external integration webhook endpoints (Shopify, Calendly, Stripe, HubSpot)
+  registerIntegrationWebhooks(app);
 
   return httpServer;
 }
