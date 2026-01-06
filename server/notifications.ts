@@ -1,6 +1,7 @@
 import webPush from 'web-push';
 import cron from 'node-cron';
 import { storage } from './storage';
+import { sendUserWhatsAppMessage } from './userTwilio';
 import type { Chat, User } from '@shared/schema';
 
 // Generate VAPID keys if not set
@@ -96,10 +97,118 @@ async function checkFollowUps() {
   }
 }
 
+// Process drip campaign enrollments
+async function processDripEnrollments() {
+  try {
+    const dueEnrollments = await storage.getDueEnrollments();
+    
+    if (dueEnrollments.length === 0) {
+      return;
+    }
+
+    console.log(`Processing ${dueEnrollments.length} drip enrollments`);
+
+    for (const enrollment of dueEnrollments) {
+      try {
+        const campaign = await storage.getDripCampaign(enrollment.campaignId);
+        if (!campaign || !campaign.isActive) {
+          await storage.updateDripEnrollment(enrollment.id, { status: "cancelled" });
+          continue;
+        }
+
+        const chat = await storage.getChat(enrollment.chatId);
+        if (!chat || !chat.whatsappPhone) {
+          await storage.updateDripEnrollment(enrollment.id, { status: "cancelled" });
+          continue;
+        }
+
+        const steps = await storage.getDripSteps(enrollment.campaignId);
+        const nextStepOrder = (enrollment.currentStepOrder || 0) + 1;
+        const currentStep = steps.find(s => s.stepOrder === nextStepOrder);
+
+        if (!currentStep) {
+          await storage.updateDripEnrollment(enrollment.id, { 
+            status: "completed",
+            completedAt: new Date()
+          });
+          continue;
+        }
+
+        // Send the message via user's Twilio
+        const dripSend = await storage.createDripSend({
+          enrollmentId: enrollment.id,
+          stepId: currentStep.id,
+          status: "pending",
+        });
+
+        try {
+          const result = await sendUserWhatsAppMessage(
+            campaign.userId,
+            chat.whatsappPhone,
+            currentStep.messageContent
+          );
+
+          await storage.updateDripSend(dripSend.id, {
+            status: "sent",
+            twilioSid: result.sid,
+          });
+
+          // Record message in chat history
+          const dripMessage = {
+            id: `drip-${Date.now()}`,
+            text: currentStep.messageContent,
+            time: new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
+            sent: true,
+            sender: "me",
+          };
+          const currentChat = await storage.getChat(chat.id);
+          if (currentChat) {
+            const msgs = (currentChat.messages as any[]) || [];
+            msgs.push(dripMessage);
+            await storage.updateChat(chat.id, { messages: msgs });
+          }
+
+          console.log(`Drip message sent to ${chat.whatsappPhone} (step ${nextStepOrder})`);
+
+          // Calculate next send time
+          const nextStep = steps.find(s => s.stepOrder === nextStepOrder + 1);
+          if (nextStep) {
+            const nextSendAt = new Date(Date.now() + (nextStep.delayMinutes || 0) * 60 * 1000);
+            await storage.updateDripEnrollment(enrollment.id, {
+              currentStepOrder: nextStepOrder,
+              nextSendAt,
+            });
+          } else {
+            await storage.updateDripEnrollment(enrollment.id, {
+              currentStepOrder: nextStepOrder,
+              status: "completed",
+              completedAt: new Date(),
+            });
+          }
+        } catch (sendError: any) {
+          console.error(`Failed to send drip message:`, sendError);
+          await storage.updateDripSend(dripSend.id, {
+            status: "failed",
+            errorMessage: sendError.message || "Unknown error",
+          });
+        }
+      } catch (enrollmentError) {
+        console.error(`Error processing enrollment ${enrollment.id}:`, enrollmentError);
+      }
+    }
+  } catch (error) {
+    console.error('Error processing drip enrollments:', error);
+  }
+}
+
 export function startNotificationScheduler() {
   // Check for due follow-ups every minute
   cron.schedule('* * * * *', checkFollowUps);
   console.log('Notification scheduler started - checking every minute');
+  
+  // Process drip enrollments every minute
+  cron.schedule('* * * * *', processDripEnrollments);
+  console.log('Drip campaign scheduler started - checking every minute');
   
   // Run immediately on startup
   checkFollowUps();
