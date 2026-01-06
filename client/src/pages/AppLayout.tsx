@@ -19,7 +19,7 @@ function AppContent() {
   const [showOnboarding, setShowOnboarding] = useState(false);
   
   const { data: user } = useQuery<{ onboardingCompleted?: boolean }>({
-    queryKey: ["/api/user"],
+    queryKey: ["/api/auth/me"],
   });
   
   useEffect(() => {
