@@ -15,7 +15,8 @@ import { Link } from "wouter";
 import { 
   Plug, Plus, Trash2, Copy, Check, ExternalLink, Zap, Lock,
   ShoppingCart, FileSpreadsheet, Users, CreditCard, Building2, Home,
-  Webhook, Eye, EyeOff, RefreshCw, CheckCircle2, XCircle, Settings2
+  Webhook, Eye, EyeOff, RefreshCw, CheckCircle2, XCircle, Settings2,
+  Calendar
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 
@@ -134,6 +135,22 @@ const NATIVE_INTEGRATIONS: IntegrationConfig[] = [
       { id: "new_leads", label: "New Leads", description: "Create a chat for new property inquiries" },
       { id: "saved_searches", label: "Saved Searches", description: "Alert when leads save property searches" },
       { id: "favorites", label: "Property Favorites", description: "Notify when leads favorite properties" },
+    ]
+  },
+  { 
+    id: "calendly", 
+    name: "Calendly", 
+    icon: Calendar, 
+    description: "Auto-create leads when meetings are booked", 
+    color: "bg-blue-600",
+    fields: [
+      { key: "accessToken", label: "Personal Access Token", placeholder: "eyJraWQiOiIxY...", type: "password", helpText: "Create at calendly.com/integrations/api_webhooks" },
+      { key: "webhookSigningKey", label: "Webhook Signing Key", placeholder: "xxxxx", type: "password", helpText: "Optional: For webhook signature verification" },
+    ],
+    syncOptions: [
+      { id: "new_bookings", label: "New Bookings", description: "Create a chat when someone books a meeting" },
+      { id: "cancellations", label: "Cancellations", description: "Notify when meetings are cancelled" },
+      { id: "reschedules", label: "Reschedules", description: "Update chat when meetings are rescheduled" },
     ]
   },
 ];
