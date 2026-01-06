@@ -9,6 +9,7 @@ import { Settings } from "./Settings";
 import { Workflows } from "./Workflows";
 import { Integrations } from "./Integrations";
 import { Templates } from "./Templates";
+import { HelpCenter } from "./HelpCenter";
 import { UsageWarningBanner } from "@/components/UsageWarningBanner";
 import { TrialBanner } from "@/components/TrialBanner";
 import { OnboardingTour } from "@/components/OnboardingTour";
@@ -61,6 +62,7 @@ function AppContent() {
           <Route path="/app/integrations" component={Integrations} />
           <Route path="/app/search" component={Search} />
           <Route path="/app/settings" component={Settings} />
+          <Route path="/app/help" component={HelpCenter} />
         </Switch>
       </main>
       
