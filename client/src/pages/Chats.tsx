@@ -22,7 +22,9 @@ import {
   User,
   UserCheck,
   CheckCircle2,
-  Calendar as CalendarIcon
+  Calendar as CalendarIcon,
+  Image as ImageIcon,
+  FileText
 } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -41,6 +43,7 @@ import { UpgradeModal, type UpgradeReason } from "@/components/UpgradeModal";
 import { useSubscription } from "@/lib/subscription-context";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
+import EmojiPicker, { EmojiClickData } from "emoji-picker-react";
 
 interface TeamMember {
   id: string;
@@ -274,7 +277,121 @@ export function Chats() {
   const [newMessage, setNewMessage] = useState("");
   const [localNotes, setLocalNotes] = useState("");
   const [calendarOpen, setCalendarOpen] = useState(false);
+  const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [filePreview, setFilePreview] = useState<string | null>(null);
+  const [isUploadingFile, setIsUploadingFile] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const handleEmojiClick = (emojiData: EmojiClickData) => {
+    setNewMessage(prev => prev + emojiData.emoji);
+    setEmojiPickerOpen(false);
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 16 * 1024 * 1024) {
+        toast({
+          title: "File too large",
+          description: "Maximum file size is 16MB",
+          variant: "destructive",
+        });
+        return;
+      }
+      setSelectedFile(file);
+      if (file.type.startsWith('image/')) {
+        const reader = new FileReader();
+        reader.onload = (e) => setFilePreview(e.target?.result as string);
+        reader.readAsDataURL(file);
+      } else {
+        setFilePreview(null);
+      }
+    }
+  };
+
+  const clearSelectedFile = () => {
+    setSelectedFile(null);
+    setFilePreview(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const handleSendMedia = async () => {
+    if (!selectedFile || !selectedChat) return;
+    
+    if (demoMode) {
+      const newMsg = {
+        id: `demo-msg-${Date.now()}`,
+        text: `[${selectedFile.type.startsWith('image/') ? 'Image' : 'File'}: ${selectedFile.name}]`,
+        sender: "me",
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        mediaUrl: filePreview,
+        mediaType: selectedFile.type.startsWith('image/') ? 'image' : 'document',
+      };
+      setDemoChats(prev => prev.map(chat => 
+        chat.id === selectedChat.id 
+          ? { 
+              ...chat, 
+              messages: [...chat.messages, newMsg],
+              lastMessage: `[${selectedFile.type.startsWith('image/') ? 'Image' : 'File'}]`,
+              time: "Just now"
+            } 
+          : chat
+      ));
+      clearSelectedFile();
+      toast({
+        title: "Media sent",
+        description: "Your file has been sent (demo mode)",
+      });
+      return;
+    }
+
+    if (!selectedChat.whatsappPhone) {
+      toast({
+        title: "Cannot send",
+        description: "No WhatsApp phone number linked to this chat",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsUploadingFile(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', selectedFile);
+      formData.append('chatId', selectedChat.id);
+      formData.append('phone', selectedChat.whatsappPhone);
+
+      const response = await fetch('/api/chats/send-media', {
+        method: 'POST',
+        body: formData,
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to send media');
+      }
+
+      clearSelectedFile();
+      queryClient.invalidateQueries({ queryKey: ['/api/chats'] });
+      toast({
+        title: "Media sent",
+        description: "Your file has been sent via WhatsApp",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Failed to send",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsUploadingFile(false);
+    }
+  };
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "auto", block: "end" });
@@ -718,11 +835,65 @@ export function Chats() {
                 </div>
               </div>
 
+              {/* File Preview */}
+              {selectedFile && (
+                <div className="bg-gray-100 px-4 py-2 border-t border-gray-200 flex items-center gap-3">
+                  {filePreview ? (
+                    <img src={filePreview} alt="Preview" className="h-16 w-16 object-cover rounded-lg" />
+                  ) : (
+                    <div className="h-16 w-16 bg-gray-200 rounded-lg flex items-center justify-center">
+                      <FileText className="h-8 w-8 text-gray-500" />
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-900 truncate">{selectedFile.name}</p>
+                    <p className="text-xs text-gray-500">{(selectedFile.size / 1024).toFixed(1)} KB</p>
+                  </div>
+                  <button 
+                    onClick={clearSelectedFile}
+                    className="p-1.5 hover:bg-gray-200 rounded-full"
+                    data-testid="button-clear-file"
+                  >
+                    <X className="h-5 w-5 text-gray-500" />
+                  </button>
+                  <button 
+                    onClick={handleSendMedia}
+                    disabled={isUploadingFile}
+                    className="h-10 px-4 bg-brand-green hover:bg-emerald-700 rounded-lg flex items-center justify-center text-white text-sm font-medium transition-colors disabled:opacity-50"
+                    data-testid="button-send-file"
+                  >
+                    {isUploadingFile ? "Sending..." : "Send"}
+                  </button>
+                </div>
+              )}
+
               {/* Input Area */}
               <div className="bg-gray-50 px-2 sm:px-4 py-2 sm:py-3 border-t border-gray-200 flex items-center gap-2 sm:gap-3 shrink-0">
                  <div className="hidden sm:flex gap-4 text-gray-500">
-                    <Smile className="h-6 w-6 cursor-pointer hover:text-gray-700" />
-                    <Paperclip className="h-6 w-6 cursor-pointer hover:text-gray-700" />
+                    <Popover open={emojiPickerOpen} onOpenChange={setEmojiPickerOpen}>
+                      <PopoverTrigger asChild>
+                        <button className="hover:text-gray-700" data-testid="button-emoji">
+                          <Smile className="h-6 w-6 cursor-pointer" />
+                        </button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0 border-0" align="start" side="top">
+                        <EmojiPicker onEmojiClick={handleEmojiClick} />
+                      </PopoverContent>
+                    </Popover>
+                    <button 
+                      onClick={() => fileInputRef.current?.click()} 
+                      className="hover:text-gray-700"
+                      data-testid="button-attach-file"
+                    >
+                      <Paperclip className="h-6 w-6 cursor-pointer" />
+                    </button>
+                    <input 
+                      ref={fileInputRef}
+                      type="file" 
+                      className="hidden" 
+                      accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx"
+                      onChange={handleFileSelect}
+                    />
                  </div>
                  <input 
                    type="text" 
