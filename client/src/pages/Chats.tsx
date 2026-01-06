@@ -811,12 +811,27 @@ export function Chats() {
                             )}
                           >
                             <div className={cn(
-                              "max-w-[80%] md:max-w-[60%] rounded-md px-2.5 py-1.5 text-[13px] shadow-sm relative",
+                              "max-w-[80%] md:max-w-[60%] rounded-md shadow-sm relative overflow-hidden",
+                              msg.mediaUrl && msg.mediaType === 'image' ? "p-1" : "px-2.5 py-1.5",
                               msg.sender === 'me' 
                                 ? "bg-[#d9fdd3] text-gray-900 rounded-tr-none" 
                                 : "bg-white text-gray-900 rounded-tl-none"
                             )}>
-                              <p className="leading-snug">{highlightText(msg.text)}</p>
+                              {msg.mediaUrl && msg.mediaType === 'image' ? (
+                                <img 
+                                  src={msg.mediaUrl} 
+                                  alt="Shared image" 
+                                  className="max-w-full rounded cursor-pointer hover:opacity-90 transition-opacity"
+                                  onClick={() => window.open(msg.mediaUrl, '_blank')}
+                                />
+                              ) : msg.mediaType === 'document' ? (
+                                <div className="flex items-center gap-2 text-[13px]">
+                                  <FileText className="h-5 w-5 text-gray-500" />
+                                  <span className="leading-snug">{highlightText(msg.text)}</span>
+                                </div>
+                              ) : (
+                                <p className="leading-snug text-[13px]">{highlightText(msg.text)}</p>
+                              )}
                               <span className="text-[9px] text-gray-500 block text-right mt-0.5 opacity-70">
                                 {msg.time}
                               </span>
