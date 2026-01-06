@@ -83,12 +83,18 @@ export function WatiAlternative() {
             
             {[
               { feature: "Free plan", us: true, them: false },
+              { feature: "Zero message markup", us: true, them: false },
+              { feature: "Cancel anytime (self-service)", us: true, them: false },
+              { feature: "Multiple WhatsApp numbers", us: "Up to 3", them: "1 only" },
               { feature: "Simple setup", us: true, them: false },
               { feature: "No training required", us: true, them: false },
               { feature: "WhatsApp messaging", us: true, them: true },
               { feature: "Notes & tags", us: true, them: true },
               { feature: "Follow-up reminders", us: true, them: true },
-              { feature: "Starting price", us: "$0/free", them: "$49/month" },
+              { feature: "Workflow automation", us: "$49/mo", them: "$200+/mo" },
+              { feature: "Template messaging", us: "$49/mo", them: "$200+/mo" },
+              { feature: "Team inbox (10 users)", us: "$49/mo", them: "$200+/mo" },
+              { feature: "Starting price", us: "$0/free", them: "$30/month + fees" },
             ].map((row, i) => (
               <div key={i} className="grid grid-cols-3 p-4 border-t border-gray-100 items-center">
                 <div className="text-gray-700">{row.feature}</div>
@@ -119,18 +125,37 @@ export function WatiAlternative() {
             Why teams switch from WATI to WhachatCRM
           </h2>
           
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+            <div className="bg-red-50 border border-red-100 p-5 rounded-xl">
+              <h3 className="font-bold text-red-900 mb-2">WATI's Hidden Fees</h3>
+              <p className="text-red-700 text-sm">WATI charges up to 20% markup on every WhatsApp message. We charge zero.</p>
+            </div>
+            <div className="bg-red-50 border border-red-100 p-5 rounded-xl">
+              <h3 className="font-bold text-red-900 mb-2">Cancellation Nightmare</h3>
+              <p className="text-red-700 text-sm">WATI has no self-service cancel. You must email and wait days. We let you cancel with one click.</p>
+            </div>
+            <div className="bg-red-50 border border-red-100 p-5 rounded-xl">
+              <h3 className="font-bold text-red-900 mb-2">Single Number Lock</h3>
+              <p className="text-red-700 text-sm">WATI limits you to 1 WhatsApp number. Our Pro plan includes up to 3 numbers.</p>
+            </div>
+            <div className="bg-red-50 border border-red-100 p-5 rounded-xl">
+              <h3 className="font-bold text-red-900 mb-2">Enterprise Pricing</h3>
+              <p className="text-red-700 text-sm">WATI charges $200+/mo for features we include in our $49 Pro plan.</p>
+            </div>
+          </div>
+
           <div className="grid md:grid-cols-3 gap-6">
-            <div className="bg-gray-50 p-6 rounded-xl">
-              <h3 className="font-bold text-gray-900 mb-2">Simpler to Use</h3>
-              <p className="text-gray-600 text-sm">No complex workflows or training needed. Start managing chats in minutes.</p>
+            <div className="bg-emerald-50 border border-emerald-100 p-6 rounded-xl">
+              <h3 className="font-bold text-emerald-900 mb-2">Zero Message Markup</h3>
+              <p className="text-emerald-700 text-sm">You connect your own Twilio account. Pay Twilio directly - we never touch your message fees.</p>
             </div>
-            <div className="bg-gray-50 p-6 rounded-xl">
-              <h3 className="font-bold text-gray-900 mb-2">More Affordable</h3>
-              <p className="text-gray-600 text-sm">Free plan available. Paid plans start at just $19/month vs WATI's $49+.</p>
+            <div className="bg-emerald-50 border border-emerald-100 p-6 rounded-xl">
+              <h3 className="font-bold text-emerald-900 mb-2">Cancel Anytime</h3>
+              <p className="text-emerald-700 text-sm">One-click cancellation. No emails, no phone calls, no hassle. Because we earn your business every month.</p>
             </div>
-            <div className="bg-gray-50 p-6 rounded-xl">
-              <h3 className="font-bold text-gray-900 mb-2">Built for Small Teams</h3>
-              <p className="text-gray-600 text-sm">We focus on what small businesses actually need, not enterprise features.</p>
+            <div className="bg-emerald-50 border border-emerald-100 p-6 rounded-xl">
+              <h3 className="font-bold text-emerald-900 mb-2">$49 Gets You Everything</h3>
+              <p className="text-emerald-700 text-sm">Workflows, templates, 10 team members, 3 WhatsApp numbers - features WATI charges $200+/month for.</p>
             </div>
           </div>
         </div>

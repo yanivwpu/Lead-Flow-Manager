@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Check, Zap, Users, MessageSquare, Phone, Loader2, Shield, AlertTriangle, HelpCircle } from "lucide-react";
+import { ArrowLeft, Check, Zap, Users, MessageSquare, Phone, Loader2, Shield, AlertTriangle, HelpCircle, XCircle } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { useAuth } from "@/lib/auth-context";
 import { useToast } from "@/hooks/use-toast";
@@ -149,6 +149,17 @@ export function Pricing() {
           <p className="text-gray-500 mt-2 max-w-2xl mx-auto">
             WhachatCRM helps you manage, organize, and follow up on WhatsApp conversations — without locking you into message fees.
           </p>
+          
+          <div className="flex flex-wrap justify-center gap-4 mt-6">
+            <div className="inline-flex items-center gap-2 bg-emerald-50 border border-emerald-200 text-emerald-800 px-4 py-2 rounded-full text-sm font-medium">
+              <Shield className="h-4 w-4" />
+              No Markup Guarantee
+            </div>
+            <div className="inline-flex items-center gap-2 bg-blue-50 border border-blue-200 text-blue-800 px-4 py-2 rounded-full text-sm font-medium">
+              <XCircle className="h-4 w-4" />
+              Cancel Anytime
+            </div>
+          </div>
         </div>
 
         <div className="grid md:grid-cols-3 gap-6">
