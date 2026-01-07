@@ -1132,16 +1132,21 @@ export function Settings() {
                  <div className="p-4 bg-gradient-to-br from-slate-50 to-slate-100 rounded-lg border border-slate-200">
                    <div className="flex items-center justify-between mb-2">
                      <span className="text-xs text-slate-700 uppercase font-semibold">Current Plan</span>
-                     {subscriptionData?.subscription?.plan !== "free" && (
+                     {(subscriptionData?.limits?.plan !== "free" || subscriptionData?.limits?.isInTrial) && (
                        <span className="text-xs px-2 py-0.5 bg-slate-600 text-white rounded-full">
-                         {subscriptionData?.subscription?.status === "active" ? "Active" : subscriptionData?.subscription?.status}
+                         {subscriptionData?.limits?.isInTrial ? "Trial" : (subscriptionData?.subscription?.status === "active" ? "Active" : subscriptionData?.subscription?.status)}
                        </span>
                      )}
                    </div>
                    <p className="text-2xl font-bold text-slate-800" data-testid="text-current-plan">
-                     {PLAN_NAMES[subscriptionData?.subscription?.plan || "free"] || "Free"}
+                     {subscriptionData?.limits?.planName || "Free"}
                    </p>
-                   {subscriptionData?.subscription?.currentPeriodEnd && (
+                   {subscriptionData?.limits?.isInTrial && subscriptionData?.limits?.trialDaysRemaining > 0 && (
+                     <p className="text-sm text-slate-600 mt-1">
+                       {subscriptionData.limits.trialDaysRemaining} days remaining in trial
+                     </p>
+                   )}
+                   {!subscriptionData?.limits?.isInTrial && subscriptionData?.subscription?.currentPeriodEnd && (
                      <p className="text-sm text-slate-600 mt-1">
                        Renews {new Date(subscriptionData.subscription.currentPeriodEnd).toLocaleDateString()}
                      </p>
@@ -1170,10 +1175,10 @@ export function Settings() {
                    <Link href="/pricing" className="flex-1">
                      <Button className="w-full bg-brand-green hover:bg-emerald-700 text-sm sm:text-base" data-testid="button-view-plans">
                        <Zap className="h-4 w-4 mr-2" />
-                       {subscriptionData?.subscription?.plan === "free" ? "Upgrade Plan" : "View Plans"}
+                       {subscriptionData?.limits?.isInTrial ? "Upgrade Now" : (subscriptionData?.subscription?.plan === "free" ? "Upgrade Plan" : "View Plans")}
                      </Button>
                    </Link>
-                   {subscriptionData?.subscription?.plan !== "free" && (
+                   {(subscriptionData?.subscription?.plan !== "free" || subscriptionData?.limits?.isInTrial) && (
                      <Button
                        variant="outline"
                        onClick={() => portalMutation.mutate()}
@@ -1193,7 +1198,7 @@ export function Settings() {
                    )}
                  </div>
                  
-                 {subscriptionData?.subscription?.plan !== "free" && (
+                 {(subscriptionData?.subscription?.plan !== "free" || subscriptionData?.limits?.isInTrial) && (
                    <div className="pt-3 border-t border-gray-100">
                      <Button
                        variant="ghost"
