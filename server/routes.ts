@@ -113,6 +113,19 @@ export async function registerRoutes(
     }
   });
 
+  // Debug endpoint to check Stripe prices
+  app.get("/api/debug/stripe-prices", async (req, res) => {
+    try {
+      const allPrices = await storage.getAllPrices();
+      res.json({ 
+        count: allPrices.length, 
+        prices: allPrices.map(p => ({ id: p.id, amount: p.unit_amount, active: p.active })) 
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Debug endpoint to delete user by email (GET for browser access)
   app.get("/api/debug/delete-user/:email", async (req, res) => {
     try {
