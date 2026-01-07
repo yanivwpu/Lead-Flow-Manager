@@ -95,6 +95,24 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
   
+  // Debug endpoint to check user lookup (public - for debugging)
+  app.get("/api/debug/check-email/:email", async (req, res) => {
+    try {
+      const email = decodeURIComponent(req.params.email);
+      console.log('[DEBUG] Checking email:', email);
+      const user = await storage.getUserByEmail(email);
+      res.json({
+        email,
+        found: !!user,
+        userId: user?.id || null,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error: any) {
+      console.error('[DEBUG] Error checking email:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Contact form endpoint (public - no auth required)
   app.post("/api/contact", async (req, res) => {
     try {
