@@ -113,6 +113,23 @@ export async function registerRoutes(
     }
   });
 
+  // Debug endpoint to delete user by email (for fixing stuck users)
+  app.delete("/api/debug/delete-user/:email", async (req, res) => {
+    try {
+      const email = decodeURIComponent(req.params.email);
+      console.log('[DEBUG] Deleting user:', email);
+      const user = await storage.getUserByEmail(email);
+      if (!user) {
+        return res.json({ success: false, message: 'User not found' });
+      }
+      await storage.deleteUser(user.id);
+      res.json({ success: true, email, deletedUserId: user.id });
+    } catch (error: any) {
+      console.error('[DEBUG] Error deleting user:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Contact form endpoint (public - no auth required)
   app.post("/api/contact", async (req, res) => {
     try {
