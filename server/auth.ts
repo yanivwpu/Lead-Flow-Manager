@@ -96,14 +96,19 @@ export function registerAuthRoutes(app: Express) {
   app.post('/api/auth/signup', async (req, res) => {
     try {
       const { name, email, password, phoneNumber, businessName } = req.body;
+      console.log('[SIGNUP] Attempt for email:', email);
 
       if (!name || !email || !password) {
+        console.log('[SIGNUP] Missing required fields');
         return res.status(400).json({ error: 'Missing required fields' });
       }
 
       // Check if user already exists
+      console.log('[SIGNUP] Checking if user exists...');
       const existingUser = await storage.getUserByEmail(email);
+      console.log('[SIGNUP] getUserByEmail result:', existingUser ? 'FOUND' : 'NOT FOUND');
       if (existingUser) {
+        console.log('[SIGNUP] User exists with id:', existingUser.id);
         return res.status(400).json({ error: 'User already exists with that email' });
       }
 
