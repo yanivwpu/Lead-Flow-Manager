@@ -34,8 +34,16 @@ class SubscriptionService {
     const user = await storage.getUser(userId);
     if (!user) return null;
 
-    const plan = (user.subscriptionPlan || "free") as SubscriptionPlan;
-    const planLimits = PLAN_LIMITS[plan];
+    const now = new Date();
+    const isInTrial = user.trialEndsAt ? new Date(user.trialEndsAt) > now : false;
+    const trialDaysRemaining = user.trialEndsAt
+      ? Math.max(0, Math.ceil((new Date(user.trialEndsAt).getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))
+      : 0;
+
+    // During trial, users get Pro features regardless of their stored plan
+    const storedPlan = (user.subscriptionPlan || "free") as SubscriptionPlan;
+    const effectivePlan = isInTrial ? "pro" : storedPlan;
+    const planLimits = PLAN_LIMITS[effectivePlan];
 
     const conversationsUsed = user.lifetimeConversations || 0;
     const conversationsLimit = planLimits.conversationsPerMonth;
@@ -43,19 +51,13 @@ class SubscriptionService {
     const isAtLimit = conversationsRemaining <= 0;
     const isAtWarning = conversationsRemaining > 0 && conversationsRemaining <= 10;
 
-    const now = new Date();
-    const isInTrial = user.trialEndsAt ? new Date(user.trialEndsAt) > now : false;
-    const trialDaysRemaining = user.trialEndsAt
-      ? Math.max(0, Math.ceil((new Date(user.trialEndsAt).getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))
-      : 0;
-
     let suggestedUpgrade: SubscriptionPlan | null = null;
-    if (plan === "free") suggestedUpgrade = "starter";
-    else if (plan === "starter") suggestedUpgrade = "pro";
+    if (storedPlan === "free" && !isInTrial) suggestedUpgrade = "starter";
+    else if (storedPlan === "starter") suggestedUpgrade = "pro";
 
     return {
-      plan,
-      planName: planLimits.name,
+      plan: effectivePlan,
+      planName: isInTrial ? "Pro Trial" : planLimits.name,
       conversationsLimit: planLimits.conversationsPerMonth,
       conversationsUsed,
       conversationsRemaining,
