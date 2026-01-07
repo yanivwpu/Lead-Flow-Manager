@@ -18,16 +18,18 @@ import { SubscriptionProvider, useSubscription } from "@/lib/subscription-contex
 function AppContent() {
   const { data: subscription, isLoading } = useSubscription();
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [onboardingShown, setOnboardingShown] = useState(false);
   
   const { data: user } = useQuery<{ onboardingCompleted?: boolean }>({
     queryKey: ["/api/auth/me"],
   });
   
   useEffect(() => {
-    if (user && user.onboardingCompleted === false) {
+    if (user && user.onboardingCompleted === false && !onboardingShown) {
       setShowOnboarding(true);
+      setOnboardingShown(true);
     }
-  }, [user]);
+  }, [user, onboardingShown]);
   
   const showUsageBanner = !isLoading && subscription?.limits && 
     subscription.limits.conversationsLimit > 0 &&
