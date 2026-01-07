@@ -42,6 +42,8 @@ interface SubscriptionData {
     maxWhatsappNumbers: number;
     planName: string;
     plan: string;
+    isInTrial: boolean;
+    trialDaysRemaining: number;
   };
   subscription: {
     plan: string;
