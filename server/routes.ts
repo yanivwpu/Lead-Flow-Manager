@@ -1379,6 +1379,30 @@ export async function registerRoutes(
     }
   });
 
+  // Debug endpoint to test checkout creation (temporary)
+  app.get("/api/stripe/test-checkout/:plan", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Not authenticated - login first" });
+      }
+      const plan = req.params.plan as "starter" | "pro";
+      if (plan !== "starter" && plan !== "pro") {
+        return res.status(400).json({ error: "Plan must be 'starter' or 'pro'" });
+      }
+      const baseUrl = `${req.protocol}://${req.get('host')}`;
+      const result = await subscriptionService.createCheckoutSession(req.user.id, plan, baseUrl);
+      res.json({ success: true, url: result.url });
+    } catch (error: any) {
+      console.error("Test checkout error:", error);
+      res.json({ 
+        success: false, 
+        error: error.message,
+        stack: error.stack?.split('\n').slice(0, 5),
+        stripeError: error.raw || null
+      });
+    }
+  });
+
   // Create customer portal session for managing subscription
   app.post("/api/subscription/portal", async (req, res) => {
     try {
