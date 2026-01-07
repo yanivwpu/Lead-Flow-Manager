@@ -113,8 +113,8 @@ export async function registerRoutes(
     }
   });
 
-  // Debug endpoint to delete user by email (for fixing stuck users)
-  app.delete("/api/debug/delete-user/:email", async (req, res) => {
+  // Debug endpoint to delete user by email (GET for browser access)
+  app.get("/api/debug/delete-user/:email", async (req, res) => {
     try {
       const email = decodeURIComponent(req.params.email);
       console.log('[DEBUG] Deleting user:', email);
@@ -123,7 +123,7 @@ export async function registerRoutes(
         return res.json({ success: false, message: 'User not found' });
       }
       await storage.deleteUser(user.id);
-      res.json({ success: true, email, deletedUserId: user.id });
+      res.json({ success: true, email, deletedUserId: user.id, message: 'User deleted. You can now sign up again.' });
     } catch (error: any) {
       console.error('[DEBUG] Error deleting user:', error);
       res.status(500).json({ error: error.message });
