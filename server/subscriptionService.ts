@@ -137,13 +137,22 @@ class SubscriptionService {
 
   async createPortalSession(userId: string, returnUrl: string): Promise<{ url: string }> {
     const user = await storage.getUser(userId);
-    if (!user?.stripeCustomerId) {
-      throw new Error("No Stripe customer found for this user");
-    }
+    if (!user) throw new Error("User not found");
 
     const stripe = await getUncachableStripeClient();
+
+    let customerId = user.stripeCustomerId;
+    if (!customerId) {
+      const customer = await stripe.customers.create({
+        email: user.email,
+        metadata: { userId },
+      });
+      await storage.updateUser(userId, { stripeCustomerId: customer.id });
+      customerId = customer.id;
+    }
+
     const session = await stripe.billingPortal.sessions.create({
-      customer: user.stripeCustomerId,
+      customer: customerId,
       return_url: returnUrl,
     });
 
