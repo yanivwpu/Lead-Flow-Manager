@@ -129,26 +129,38 @@ export async function registerRoutes(
   // Debug endpoint to force re-sync prices from live Stripe
   app.get("/api/debug/resync-stripe", async (req, res) => {
     try {
-      const { getStripeSync } = await import('./stripeClient');
-      const stripeSync = await getStripeSync();
+      const { getStripeSync, getStripeSecretKey, getUncachableStripeClient } = await import('./stripeClient');
       
-      // Clear existing prices using raw SQL (stripe schema is managed by sync package)
+      // Get key info
+      const secretKey = await getStripeSecretKey();
+      const keyPrefix = secretKey.substring(0, 12) + '...';
+      const isLiveKey = secretKey.startsWith('sk_live_');
+      
+      // List products directly from Stripe API to verify
+      const stripe = await getUncachableStripeClient();
+      const products = await stripe.products.list({ limit: 10 });
+      const prices = await stripe.prices.list({ limit: 10, active: true });
+      
+      // Clear existing prices using raw SQL
       const { Pool } = await import('pg');
       const pool = new Pool({ connectionString: process.env.DATABASE_URL });
       await pool.query('DELETE FROM stripe.prices');
       await pool.end();
       console.log('[DEBUG] Cleared existing prices');
       
-      // Force re-sync from live Stripe
+      // Force re-sync from Stripe
+      const stripeSync = await getStripeSync();
       await stripeSync.syncBackfill();
-      console.log('[DEBUG] Re-synced from live Stripe');
+      console.log('[DEBUG] Re-synced from Stripe');
       
-      const allPrices = await storage.getAllPrices();
+      const syncedPrices = await storage.getAllPrices();
       res.json({ 
-        success: true, 
-        message: 'Prices re-synced from live Stripe',
-        count: allPrices.length,
-        prices: allPrices 
+        success: true,
+        keyPrefix,
+        isLiveKey,
+        stripeProducts: products.data.map(p => ({ id: p.id, name: p.name })),
+        stripePrices: prices.data.map(p => ({ id: p.id, amount: p.unit_amount, product: p.product })),
+        syncedPrices
       });
     } catch (error: any) {
       console.error('[DEBUG] Resync error:', error);
