@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Link, useParams, Redirect } from "wouter";
 import { Helmet } from "react-helmet";
 import { Calendar, Clock, ArrowLeft, ArrowRight, Share2, Twitter, Linkedin, Facebook } from "lucide-react";
@@ -1284,6 +1285,10 @@ Copy these templates, customize them for your business, and watch your engagemen
 export function BlogPost() {
   const params = useParams<{ slug: string }>();
   const slug = params.slug;
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [slug]);
   
   const post = BLOG_POSTS.find(p => p.slug === slug);
   const content = slug ? BLOG_CONTENT[slug] : null;

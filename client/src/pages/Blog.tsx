@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "wouter";
 import { Helmet } from "react-helmet";
 import { Calendar, Clock, ArrowRight, Search, Tag } from "lucide-react";
@@ -90,6 +90,10 @@ const CATEGORIES = ["All", "Guides", "Comparison", "Automation", "Tips", "Custom
 export function Blog() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
 
   const filteredPosts = BLOG_POSTS.filter(post => {
     const matchesSearch = searchQuery === "" || 
