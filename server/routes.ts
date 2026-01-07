@@ -1370,7 +1370,7 @@ export async function registerRoutes(
         return res.status(401).json({ error: "Unauthorized" });
       }
 
-      const returnUrl = `${req.protocol}://${req.get('host')}/settings`;
+      const returnUrl = `${req.protocol}://${req.get('host')}/app/settings`;
       const result = await subscriptionService.createPortalSession(req.user.id, returnUrl);
       res.json(result);
     } catch (error: any) {
