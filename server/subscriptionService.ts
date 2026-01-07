@@ -113,21 +113,28 @@ class SubscriptionService {
       customerId = customer.id;
     }
 
-    const priceIds: Record<SubscriptionPlan, string | null> = {
-      free: null,
-      starter: process.env.STRIPE_STARTER_PRICE_ID || null,
-      pro: process.env.STRIPE_PRO_PRICE_ID || null,
+    // Get price from synced Stripe data based on plan amount
+    const planAmounts: Record<SubscriptionPlan, number> = {
+      free: 0,
+      starter: 1900, // $19
+      pro: 4900, // $49
     };
 
-    const priceId = priceIds[plan];
-    if (!priceId) {
-      throw new Error(`No price configured for plan: ${plan}`);
+    const amount = planAmounts[plan];
+    if (amount === 0) {
+      throw new Error("Cannot checkout for free plan");
+    }
+
+    // Query the most recent active price matching the plan amount
+    const priceResult = await storage.getPriceByAmount(amount);
+    if (!priceResult) {
+      throw new Error(`No price found for plan: ${plan}. Please create a $${amount/100} recurring price in Stripe.`);
     }
 
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
       payment_method_types: ['card'],
-      line_items: [{ price: priceId, quantity: 1 }],
+      line_items: [{ price: priceResult.id, quantity: 1 }],
       mode: 'subscription',
       success_url: `${baseUrl}/settings?checkout=success`,
       cancel_url: `${baseUrl}/settings?checkout=cancel`,

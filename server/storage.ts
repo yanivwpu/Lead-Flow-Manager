@@ -748,6 +748,16 @@ export class DbStorage implements IStorage {
     const result = await db.update(dripSends).set(updates).where(eq(dripSends.id, id)).returning();
     return result[0];
   }
+
+  // Stripe price lookup - queries the synced stripe.prices table
+  async getPriceByAmount(amount: number): Promise<{ id: string; unit_amount: number } | null> {
+    const result = await db.execute(
+      sql`SELECT id, unit_amount FROM stripe.prices 
+          WHERE unit_amount = ${amount} AND active = true 
+          ORDER BY created DESC LIMIT 1`
+    );
+    return result.rows[0] as { id: string; unit_amount: number } | null;
+  }
 }
 
 export const storage = new DbStorage();
