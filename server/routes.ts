@@ -126,6 +126,29 @@ export async function registerRoutes(
     }
   });
 
+  // Debug endpoint to test checkout with detailed error
+  app.get("/api/debug/test-checkout/:email/:plan", async (req, res) => {
+    try {
+      const { email, plan } = req.params;
+      const user = await storage.getUserByEmail(email);
+      if (!user) {
+        return res.json({ error: 'User not found', email });
+      }
+      const baseUrl = process.env.APP_URL || `https://${req.get('host')}`;
+      console.log('[DEBUG] Testing checkout for', email, plan, 'baseUrl:', baseUrl);
+      const result = await subscriptionService.createCheckoutSession(user.id, plan as any, baseUrl);
+      res.json({ success: true, checkoutUrl: result.url });
+    } catch (error: any) {
+      console.error('[DEBUG] Checkout error:', error);
+      res.json({ 
+        success: false, 
+        error: error.message,
+        type: error.type,
+        code: error.code
+      });
+    }
+  });
+
   // Debug endpoint to delete user by email (GET for browser access)
   app.get("/api/debug/delete-user/:email", async (req, res) => {
     try {
