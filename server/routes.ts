@@ -1363,6 +1363,22 @@ export async function registerRoutes(
     }
   });
 
+  // Debug endpoint to check Stripe sync status (temporary)
+  app.get("/api/stripe/status", async (req, res) => {
+    try {
+      const allPrices = await storage.getAllPrices();
+      res.json({
+        syncedPrices: allPrices,
+        priceCount: allPrices.length,
+        environment: process.env.NODE_ENV,
+        hasStarter: allPrices.some(p => p.unit_amount === 1900),
+        hasPro: allPrices.some(p => p.unit_amount === 4900),
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Create customer portal session for managing subscription
   app.post("/api/subscription/portal", async (req, res) => {
     try {
