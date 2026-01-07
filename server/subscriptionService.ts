@@ -1,5 +1,6 @@
 import { storage } from "./storage";
 import { PLAN_LIMITS, type SubscriptionPlan } from "@shared/schema";
+import { getUncachableStripeClient } from "./stripeClient";
 
 export interface UserLimits {
   plan: SubscriptionPlan;
@@ -94,12 +95,59 @@ class SubscriptionService {
     return { allowed: true, remaining: limits.conversationsRemaining - 1 };
   }
 
-  async createCheckoutSession(userId: string, plan: SubscriptionPlan): Promise<{ url: string }> {
-    throw new Error("Stripe integration removed. Please contact support to upgrade your plan.");
+  async createCheckoutSession(userId: string, plan: SubscriptionPlan, baseUrl: string): Promise<{ url: string }> {
+    const user = await storage.getUser(userId);
+    if (!user) throw new Error("User not found");
+
+    const stripe = await getUncachableStripeClient();
+
+    let customerId = user.stripeCustomerId;
+    if (!customerId) {
+      const customer = await stripe.customers.create({
+        email: user.email,
+        metadata: { userId },
+      });
+      await storage.updateUser(userId, { stripeCustomerId: customer.id });
+      customerId = customer.id;
+    }
+
+    const priceIds: Record<SubscriptionPlan, string | null> = {
+      free: null,
+      starter: process.env.STRIPE_STARTER_PRICE_ID || null,
+      pro: process.env.STRIPE_PRO_PRICE_ID || null,
+    };
+
+    const priceId = priceIds[plan];
+    if (!priceId) {
+      throw new Error(`No price configured for plan: ${plan}`);
+    }
+
+    const session = await stripe.checkout.sessions.create({
+      customer: customerId,
+      payment_method_types: ['card'],
+      line_items: [{ price: priceId, quantity: 1 }],
+      mode: 'subscription',
+      success_url: `${baseUrl}/settings?checkout=success`,
+      cancel_url: `${baseUrl}/settings?checkout=cancel`,
+    });
+
+    if (!session.url) throw new Error("Failed to create checkout session");
+    return { url: session.url };
   }
 
-  async createPortalSession(userId: string): Promise<{ url: string }> {
-    throw new Error("Stripe integration removed. Please contact support to manage your subscription.");
+  async createPortalSession(userId: string, returnUrl: string): Promise<{ url: string }> {
+    const user = await storage.getUser(userId);
+    if (!user?.stripeCustomerId) {
+      throw new Error("No Stripe customer found for this user");
+    }
+
+    const stripe = await getUncachableStripeClient();
+    const session = await stripe.billingPortal.sessions.create({
+      customer: user.stripeCustomerId,
+      return_url: returnUrl,
+    });
+
+    return { url: session.url };
   }
 
   async cancelSubscription(userId: string): Promise<{ success: boolean; message: string }> {

@@ -1354,8 +1354,9 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Invalid plan" });
       }
 
-      const url = await subscriptionService.createCheckoutSession(req.user.id, planId);
-      res.json({ url });
+      const baseUrl = `${req.protocol}://${req.get('host')}`;
+      const result = await subscriptionService.createCheckoutSession(req.user.id, planId, baseUrl);
+      res.json(result);
     } catch (error: any) {
       console.error("Error creating checkout:", error);
       res.status(500).json({ error: error.message || "Failed to create checkout" });
@@ -1369,8 +1370,9 @@ export async function registerRoutes(
         return res.status(401).json({ error: "Unauthorized" });
       }
 
-      const url = await subscriptionService.createCustomerPortalSession(req.user.id);
-      res.json({ url });
+      const returnUrl = `${req.protocol}://${req.get('host')}/settings`;
+      const result = await subscriptionService.createPortalSession(req.user.id, returnUrl);
+      res.json(result);
     } catch (error: any) {
       console.error("Error creating portal:", error);
       res.status(500).json({ error: error.message || "Failed to create portal session" });
