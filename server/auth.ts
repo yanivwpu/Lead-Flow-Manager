@@ -245,16 +245,50 @@ export function registerAuthRoutes(app: Express) {
     }
   });
 
-  // Emergency password reset (TEMPORARY - remove after use)
+  // Emergency password reset page (TEMPORARY - remove after use)
+  app.get('/reset-emergency', (req, res) => {
+    res.send(`
+      <!DOCTYPE html>
+      <html>
+      <head><title>Emergency Password Reset</title></head>
+      <body style="font-family: Arial; max-width: 400px; margin: 50px auto; padding: 20px;">
+        <h2>Emergency Password Reset</h2>
+        <form id="resetForm">
+          <div style="margin-bottom: 15px;">
+            <label>Email:</label><br>
+            <input type="email" id="email" style="width: 100%; padding: 8px;" required>
+          </div>
+          <div style="margin-bottom: 15px;">
+            <label>New Password:</label><br>
+            <input type="password" id="password" style="width: 100%; padding: 8px;" required>
+          </div>
+          <button type="submit" style="padding: 10px 20px; background: #007bff; color: white; border: none; cursor: pointer;">Reset Password</button>
+        </form>
+        <p id="result"></p>
+        <script>
+          document.getElementById('resetForm').onsubmit = async (e) => {
+            e.preventDefault();
+            const res = await fetch('/api/auth/emergency-reset', {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({
+                email: document.getElementById('email').value,
+                newPassword: document.getElementById('password').value
+              })
+            });
+            const data = await res.json();
+            document.getElementById('result').textContent = data.message || data.error;
+          };
+        </script>
+      </body>
+      </html>
+    `);
+  });
+
+  // Emergency password reset API (TEMPORARY - remove after use)
   app.post('/api/auth/emergency-reset', async (req, res) => {
     try {
       const { email, newPassword } = req.body;
-      
-      // Only allow specific email for safety (REMOVE THIS ENDPOINT AFTER USE)
-      const allowedEmails = ['yanivharamaty@gmail.com', 'yahabegood@gmail.com'];
-      if (!allowedEmails.includes(email?.toLowerCase())) {
-        return res.status(403).json({ error: 'Not authorized' });
-      }
       
       if (!email || !newPassword) {
         return res.status(400).json({ error: 'Email and newPassword required' });
@@ -268,7 +302,7 @@ export function registerAuthRoutes(app: Express) {
       const hashedPassword = await bcrypt.hash(newPassword, 10);
       await storage.updateUser(user.id, { password: hashedPassword });
       
-      res.json({ success: true, message: 'Password reset successfully for ' + email });
+      res.json({ success: true, message: 'Password reset successfully! You can now login.' });
     } catch (error: any) {
       console.error('Emergency reset error:', error);
       res.status(500).json({ error: error.message });
