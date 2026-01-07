@@ -245,14 +245,15 @@ export function registerAuthRoutes(app: Express) {
     }
   });
 
-  // Emergency password reset (temporary - remove after use)
+  // Emergency password reset (TEMPORARY - remove after use)
   app.post('/api/auth/emergency-reset', async (req, res) => {
     try {
-      const { email, newPassword, adminKey } = req.body;
+      const { email, newPassword } = req.body;
       
-      // Simple security - require the session secret as key
-      if (adminKey !== process.env.SESSION_SECRET) {
-        return res.status(403).json({ error: 'Invalid admin key' });
+      // Only allow specific email for safety (REMOVE THIS ENDPOINT AFTER USE)
+      const allowedEmails = ['yanivharamaty@gmail.com', 'yahabegood@gmail.com'];
+      if (!allowedEmails.includes(email?.toLowerCase())) {
+        return res.status(403).json({ error: 'Not authorized' });
       }
       
       if (!email || !newPassword) {
@@ -261,14 +262,15 @@ export function registerAuthRoutes(app: Express) {
       
       const user = await storage.getUserByEmail(email);
       if (!user) {
-        return res.status(404).json({ error: 'User not found' });
+        return res.status(404).json({ error: 'User not found with that email' });
       }
       
       const hashedPassword = await bcrypt.hash(newPassword, 10);
       await storage.updateUser(user.id, { password: hashedPassword });
       
-      res.json({ success: true, message: 'Password reset successfully' });
+      res.json({ success: true, message: 'Password reset successfully for ' + email });
     } catch (error: any) {
+      console.error('Emergency reset error:', error);
       res.status(500).json({ error: error.message });
     }
   });
