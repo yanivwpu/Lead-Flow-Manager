@@ -12,7 +12,7 @@ interface AuthContextType {
   user: User | null;
   isLoading: boolean;
   login: (email: string, password: string, rememberMe?: boolean) => Promise<boolean>;
-  signup: (name: string, email: string, password: string, phoneNumber?: string, businessName?: string) => Promise<boolean>;
+  signup: (name: string, email: string, password: string, phoneNumber?: string, businessName?: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
 }
 
@@ -68,7 +68,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const signup = async (name: string, email: string, password: string, phoneNumber?: string, businessName?: string): Promise<boolean> => {
+  const signup = async (name: string, email: string, password: string, phoneNumber?: string, businessName?: string): Promise<{ success: boolean; error?: string }> => {
     try {
       const response = await fetch('/api/auth/signup', {
         method: 'POST',
@@ -82,12 +82,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (response.ok) {
         const userData = await response.json();
         setUser(userData);
-        return true;
+        return { success: true };
       }
-      return false;
+      const errorData = await response.json().catch(() => ({ error: 'Signup failed' }));
+      console.error('Signup failed:', response.status, errorData);
+      return { success: false, error: errorData.error || 'Signup failed' };
     } catch (error) {
       console.error('Signup error:', error);
-      return false;
+      return { success: false, error: 'Network error - please try again' };
     }
   };
 

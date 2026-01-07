@@ -76,11 +76,11 @@ export function AuthPage() {
           setError("Invalid email or password");
         }
       } else {
-        const success = await signup(name, email, password, "", businessName);
-        if (success) {
+        const result = await signup(name, email, password, "", businessName);
+        if (result.success) {
           setLocation("/app/chats");
         } else {
-          setError("User already exists with that email");
+          setError(result.error || "Signup failed");
         }
       }
     } catch (err) {
