@@ -161,6 +161,31 @@ class SubscriptionService {
   async cancelSubscriptionImmediately(userId: string): Promise<{ success: boolean; message: string }> {
     return this.cancelSubscription(userId);
   }
+
+  async canSendMessage(userId: string): Promise<{ allowed: boolean; reason?: string }> {
+    const limits = await this.getUserLimits(userId);
+    if (!limits) return { allowed: false, reason: "User not found" };
+    if (limits.isAtLimit) {
+      return { allowed: false, reason: "You have reached your conversation limit. Please upgrade your plan." };
+    }
+    return { allowed: true };
+  }
+
+  async canStartConversation(userId: string, _whatsappPhone: string): Promise<{ allowed: boolean; reason?: string }> {
+    const limits = await this.getUserLimits(userId);
+    if (!limits) return { allowed: false, reason: "User not found" };
+    if (limits.isAtLimit) {
+      return { allowed: false, reason: "You have reached your conversation limit. Please upgrade your plan." };
+    }
+    return { allowed: true };
+  }
+
+  async checkConversationThrottle(userId: string, _whatsappPhone: string): Promise<{ allowed: boolean; reason?: string; retryAfter?: number; messagesInWindow?: number }> {
+    return { allowed: true, messagesInWindow: 0 };
+  }
+
+  async trackConversationWindow(userId: string, _chatId: string | number, _whatsappPhone: string): Promise<void> {
+  }
 }
 
 export const subscriptionService = new SubscriptionService();
