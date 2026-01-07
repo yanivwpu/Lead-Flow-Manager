@@ -758,6 +758,14 @@ export class DbStorage implements IStorage {
     );
     return result.rows[0] as { id: string; unit_amount: number } | null;
   }
+
+  // Get all active prices for debugging
+  async getAllPrices(): Promise<{ id: string; unit_amount: number; active: boolean }[]> {
+    const result = await db.execute(
+      sql`SELECT id, unit_amount, active FROM stripe.prices ORDER BY unit_amount`
+    );
+    return result.rows as { id: string; unit_amount: number; active: boolean }[];
+  }
 }
 
 export const storage = new DbStorage();

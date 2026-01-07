@@ -126,10 +126,15 @@ class SubscriptionService {
     }
 
     // Query the most recent active price matching the plan amount
+    console.log(`Looking for price with amount: ${amount} cents for plan: ${plan}`);
     const priceResult = await storage.getPriceByAmount(amount);
     if (!priceResult) {
-      throw new Error(`No price found for plan: ${plan}. Please create a $${amount/100} recurring price in Stripe.`);
+      // Log all available prices for debugging
+      const allPrices = await storage.getAllPrices();
+      console.error(`No price found for amount ${amount}. Available prices:`, allPrices);
+      throw new Error(`No price found for plan: ${plan} ($${amount/100}). Synced prices: ${allPrices.length}. Please verify Stripe products are synced.`);
     }
+    console.log(`Found price: ${priceResult.id} for amount ${priceResult.unit_amount}`);
 
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
