@@ -29,7 +29,7 @@ export function setupAuth(app: Express) {
         maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
         httpOnly: true,
         secure: true, // Always secure since Replit serves over HTTPS
-        sameSite: 'lax',
+        sameSite: 'none', // Allow cross-site redirects from Stripe checkout
       },
     })
   );
