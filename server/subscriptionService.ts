@@ -113,7 +113,7 @@ class SubscriptionService {
       customerId = customer.id;
     }
 
-    // Get price from synced Stripe data based on plan amount
+    // Get price directly from Stripe API (bypassing sync issues)
     const planAmounts: Record<SubscriptionPlan, number> = {
       free: 0,
       starter: 1900, // $19
@@ -125,14 +125,14 @@ class SubscriptionService {
       throw new Error("Cannot checkout for free plan");
     }
 
-    // Query the most recent active price matching the plan amount
+    // Query prices directly from Stripe API
     console.log(`Looking for price with amount: ${amount} cents for plan: ${plan}`);
-    const priceResult = await storage.getPriceByAmount(amount);
+    const stripePrices = await stripe.prices.list({ active: true, limit: 20 });
+    const priceResult = stripePrices.data.find(p => p.unit_amount === amount);
+    
     if (!priceResult) {
-      // Log all available prices for debugging
-      const allPrices = await storage.getAllPrices();
-      console.error(`No price found for amount ${amount}. Available prices:`, allPrices);
-      throw new Error(`No price found for plan: ${plan} ($${amount/100}). Synced prices: ${allPrices.length}. Please verify Stripe products are synced.`);
+      console.error(`No price found for amount ${amount}. Available Stripe prices:`, stripePrices.data.map(p => ({ id: p.id, amount: p.unit_amount })));
+      throw new Error(`No price found for plan: ${plan} ($${amount/100}). Please create a $${amount/100}/month price in your Stripe dashboard.`);
     }
     console.log(`Found price: ${priceResult.id} for amount ${priceResult.unit_amount}`);
 
