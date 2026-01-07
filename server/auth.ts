@@ -4,26 +4,28 @@ import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import type { Express } from 'express';
 import session from 'express-session';
-import createMemoryStore from 'memorystore';
+import connectPgSimple from 'connect-pg-simple';
 import { storage } from './storage';
 import type { User } from '@shared/schema';
 
 const resetTokens = new Map<string, { email: string; expires: Date }>();
 
-const MemoryStore = createMemoryStore(session);
+const PgStore = connectPgSimple(session);
 
 export function setupAuth(app: Express) {
   // Trust proxy for Replit's reverse proxy
   app.set('trust proxy', 1);
 
-  // Session configuration
+  // Session configuration with PostgreSQL store for production persistence
   app.use(
     session({
       secret: process.env.SESSION_SECRET || 'whatsapp-crm-secret-key-change-in-production',
       resave: false,
       saveUninitialized: false,
-      store: new MemoryStore({
-        checkPeriod: 86400000, // prune expired entries every 24h
+      store: new PgStore({
+        conString: process.env.DATABASE_URL,
+        tableName: 'user_sessions',
+        createTableIfMissing: true,
       }),
       cookie: {
         maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
