@@ -136,8 +136,8 @@ class SubscriptionService {
       payment_method_types: ['card'],
       line_items: [{ price: priceResult.id, quantity: 1 }],
       mode: 'subscription',
-      success_url: `${baseUrl}/settings?checkout=success`,
-      cancel_url: `${baseUrl}/settings?checkout=cancel`,
+      success_url: `${baseUrl}/app/settings?checkout=success`,
+      cancel_url: `${baseUrl}/app/settings?checkout=cancel`,
     });
 
     if (!session.url) throw new Error("Failed to create checkout session");
