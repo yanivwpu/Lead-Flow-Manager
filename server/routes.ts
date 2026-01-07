@@ -126,6 +126,36 @@ export async function registerRoutes(
     }
   });
 
+  // Debug endpoint to force re-sync prices from live Stripe
+  app.get("/api/debug/resync-stripe", async (req, res) => {
+    try {
+      const { getStripeSync } = await import('./stripeClient');
+      const stripeSync = await getStripeSync();
+      
+      // Clear existing prices using raw SQL (stripe schema is managed by sync package)
+      const { Pool } = await import('pg');
+      const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+      await pool.query('DELETE FROM stripe.prices');
+      await pool.end();
+      console.log('[DEBUG] Cleared existing prices');
+      
+      // Force re-sync from live Stripe
+      await stripeSync.syncBackfill();
+      console.log('[DEBUG] Re-synced from live Stripe');
+      
+      const allPrices = await storage.getAllPrices();
+      res.json({ 
+        success: true, 
+        message: 'Prices re-synced from live Stripe',
+        count: allPrices.length,
+        prices: allPrices 
+      });
+    } catch (error: any) {
+      console.error('[DEBUG] Resync error:', error);
+      res.json({ success: false, error: error.message });
+    }
+  });
+
   // Debug endpoint to test checkout with detailed error
   app.get("/api/debug/test-checkout/:email/:plan", async (req, res) => {
     try {
