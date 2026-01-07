@@ -138,6 +138,14 @@ class SubscriptionService {
       mode: 'subscription',
       success_url: `${baseUrl}/app/settings?checkout=success`,
       cancel_url: `${baseUrl}/app/settings?checkout=cancel`,
+      subscription_data: {
+        description: 'WhachatCRM Subscription',
+      },
+      custom_text: {
+        submit: {
+          message: 'By subscribing, you authorize WhachatCRM to charge your payment method monthly until you cancel. You can cancel anytime from your account settings.',
+        },
+      },
     });
 
     if (!session.url) throw new Error("Failed to create checkout session");
