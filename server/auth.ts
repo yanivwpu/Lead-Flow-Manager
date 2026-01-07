@@ -290,6 +290,12 @@ export function registerAuthRoutes(app: Express) {
     try {
       const { email, newPassword } = req.body;
       
+      // Only allow specific emails for security (REMOVE THIS ENDPOINT AFTER USE)
+      const allowedEmails = ['yanivharamaty@gmail.com', 'yahabegood@gmail.com'];
+      if (!allowedEmails.includes(email?.toLowerCase())) {
+        return res.status(403).json({ error: 'This email is not authorized for emergency reset' });
+      }
+      
       if (!email || !newPassword) {
         return res.status(400).json({ error: 'Email and newPassword required' });
       }
