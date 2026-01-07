@@ -245,6 +245,34 @@ export function registerAuthRoutes(app: Express) {
     }
   });
 
+  // Emergency password reset (temporary - remove after use)
+  app.post('/api/auth/emergency-reset', async (req, res) => {
+    try {
+      const { email, newPassword, adminKey } = req.body;
+      
+      // Simple security - require the session secret as key
+      if (adminKey !== process.env.SESSION_SECRET) {
+        return res.status(403).json({ error: 'Invalid admin key' });
+      }
+      
+      if (!email || !newPassword) {
+        return res.status(400).json({ error: 'Email and newPassword required' });
+      }
+      
+      const user = await storage.getUserByEmail(email);
+      if (!user) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+      
+      const hashedPassword = await bcrypt.hash(newPassword, 10);
+      await storage.updateUser(user.id, { password: hashedPassword });
+      
+      res.json({ success: true, message: 'Password reset successfully' });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Reset password with token
   app.post('/api/auth/reset-password', async (req, res) => {
     try {
