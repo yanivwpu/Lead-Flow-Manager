@@ -116,6 +116,21 @@ export async function registerRoutes(
     }
   });
 
+  // Temporary endpoint to clear test mode Stripe customer ID
+  app.get("/api/debug/clear-stripe-customer/:email", async (req, res) => {
+    try {
+      const email = decodeURIComponent(req.params.email);
+      const user = await storage.getUserByEmail(email);
+      if (!user) {
+        return res.json({ error: 'User not found', email });
+      }
+      await storage.updateUser(user.id, { stripeCustomerId: null });
+      res.json({ success: true, message: 'Stripe customer ID cleared. Try checkout again.' });
+    } catch (error: any) {
+      res.json({ success: false, error: error.message });
+    }
+  });
+
   // Contact form endpoint (public - no auth required)
   app.post("/api/contact", async (req, res) => {
     try {
