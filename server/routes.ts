@@ -95,42 +95,6 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
 
-  // Temporary debug endpoint for checkout issues
-  app.get("/api/debug/checkout-test/:email/:plan", async (req, res) => {
-    try {
-      const { email, plan } = req.params;
-      const user = await storage.getUserByEmail(email);
-      if (!user) {
-        return res.json({ error: 'User not found', email });
-      }
-      const baseUrl = `https://${req.get('host')}`;
-      const result = await subscriptionService.createCheckoutSession(user.id, plan as any, baseUrl);
-      res.json({ success: true, checkoutUrl: result.url });
-    } catch (error: any) {
-      res.json({ 
-        success: false, 
-        error: error.message,
-        type: error.type,
-        code: error.code
-      });
-    }
-  });
-
-  // Temporary endpoint to clear test mode Stripe customer ID
-  app.get("/api/debug/clear-stripe-customer/:email", async (req, res) => {
-    try {
-      const email = decodeURIComponent(req.params.email);
-      const user = await storage.getUserByEmail(email);
-      if (!user) {
-        return res.json({ error: 'User not found', email });
-      }
-      await storage.updateUser(user.id, { stripeCustomerId: null });
-      res.json({ success: true, message: 'Stripe customer ID cleared. Try checkout again.' });
-    } catch (error: any) {
-      res.json({ success: false, error: error.message });
-    }
-  });
-
   // Contact form endpoint (public - no auth required)
   app.post("/api/contact", async (req, res) => {
     try {
