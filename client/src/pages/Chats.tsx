@@ -519,28 +519,14 @@ export function Chats() {
           </div>
           <h2 className="text-xl font-bold text-gray-900 mb-2">WhatsApp Not Connected</h2>
           <p className="text-gray-500 mb-6">
-            Connect your Twilio account to send and receive WhatsApp messages, or try our demo mode first.
+            Connect your Twilio account to send and receive WhatsApp messages.
           </p>
-          <div className="flex flex-col gap-3">
-            <Link href="/app/settings">
-              <Button className="w-full bg-brand-green hover:bg-brand-green/90" data-testid="button-go-to-settings">
-                <Settings className="h-4 w-4 mr-2" />
-                Connect WhatsApp in Settings
-              </Button>
-            </Link>
-            <Button 
-              variant="outline" 
-              className="w-full border-brand-green text-brand-green hover:bg-brand-green/5"
-              onClick={() => setDemoMode(true)}
-              data-testid="button-try-demo"
-            >
-              <Play className="h-4 w-4 mr-2" />
-              Try Demo Mode
+          <Link href="/app/settings">
+            <Button className="w-full bg-brand-green hover:bg-brand-green/90" data-testid="button-go-to-settings">
+              <Settings className="h-4 w-4 mr-2" />
+              Connect WhatsApp in Settings
             </Button>
-          </div>
-          <p className="text-xs text-gray-400 mt-4">
-            Demo mode lets you explore the CRM with sample data
-          </p>
+          </Link>
         </div>
       </div>
     );
