@@ -1,0 +1,93 @@
+ 
+ 
+ Stripe	
+ 
+ 
+ 
+ 
+ 
+Hello,	
+ 
+ 
+ 
+ 
+We’ve had some trouble sending requests in test mode to a webhook endpoint associated with your WhaChatCRM account. Stripe sends webhook events to your server to notify you of activity in your Stripe account, such as a completed payout or a newly created invoice.	
+ 
+ 
+ 
+ 
+The URL of the failing webhook endpoint is: https://lead-flow-manager--yanivharamaty.replit.app/api/stripe/webhook	
+ 
+ 
+ 
+ 
+You (or someone on your team) configured your Stripe account to send events to that URL. You can change your account’s webhook endpoints from the Dashboard.	
+ 
+ 
+ 
+ 
+In most cases, a failing webhook does not impact your payments or payouts. However:	
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+If you use subscriptions, we rely on your webhook endpoint to notify you of new invoices. These invoices may be delayed for up to three days if your endpoint is unable to successfully receive them.
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+If you use Checkout and rely on the checkout.session.completed event as part of your purchase fulfillment process, you should review your completed payments to ensure you have fulfilled all recent purchases.
+ 
+ 
+ 
+ 
+ 
+We’ve attempted to send event notifications to this endpoint 21 times since the first failure on January 7, 2026 at 4:33:56 AM UTC. If this endpoint is important to your application, please try and fix the issue. If you do not need this webhook endpoint, you can remove it from your Stripe webhook settings. We will stop sending event notifications to this webhook endpoint by January 16, 2026 at 4:33:56 AM UTC.	
+ 
+ 
+ 
+ 
+Here is the summary of errors we received while attempting to send webhook events:	
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+21 requests had other errors while sending the webhook event.	
+ 
+ 
+ 
+ 
+ 
+You need to return any status code between HTTP 200 to 299 for Stripe to consider the webhook event successfully delivered.	
+ 
+ 
+ 
+ 
+For more details on these errors and to review your account’s recent activity, you can find the full set of events and request logs on the Dashboard.	
+ 
+ 
+ 
+ 
+For more in-depth information on how to use webhooks, we recommend reviewing our documentation.	
+ 
+ 
+ 
+ 
+— The Stripe team
