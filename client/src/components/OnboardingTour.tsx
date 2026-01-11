@@ -168,28 +168,23 @@ export function OnboardingTour({ onComplete, isOpen }: OnboardingTourProps) {
   const isCentered = step.isCentered;
 
   return (
-    <div className="fixed inset-0 z-[100]">
-      <div 
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-        onClick={handleSkip}
-      />
-      
+    <div className="fixed inset-0 z-[100] pointer-events-none">
       {step.sidebarTestId && !isCentered && (
         <div 
-          className="absolute pointer-events-none"
+          className="absolute"
           style={{
-            top: tooltipPosition.top + (cardRef.current?.offsetHeight || 280) / 2,
+            top: tooltipPosition.top + (cardRef.current?.offsetHeight || 200) / 2 - 8,
             left: tooltipPosition.left - 8,
           }}
         >
-          <div className="w-0 h-0 border-t-8 border-b-8 border-r-8 border-transparent border-r-white" />
+          <div className="w-0 h-0 border-t-8 border-b-8 border-r-8 border-transparent border-r-white drop-shadow-md" />
         </div>
       )}
       
       <div 
         ref={cardRef}
         className={cn(
-          "absolute",
+          "absolute pointer-events-auto",
           isCentered && "inset-0 flex items-center justify-center p-4"
         )}
         style={!isCentered ? {
@@ -198,24 +193,24 @@ export function OnboardingTour({ onComplete, isOpen }: OnboardingTourProps) {
         } : undefined}
       >
         <Card className={cn(
-          "shadow-2xl border-0 animate-in fade-in zoom-in-95 duration-300",
-          isCentered ? "w-full max-w-md" : "w-[380px]"
+          "shadow-2xl border border-gray-200 animate-in fade-in zoom-in-95 duration-300",
+          isCentered ? "w-full max-w-sm" : "w-[320px]"
         )}>
-          <CardContent className="p-6">
-            <div className="flex items-start justify-between mb-4">
+          <CardContent className="p-4">
+            <div className="flex items-start justify-between mb-3">
               <div className={cn(
-                "w-12 h-12 rounded-xl flex items-center justify-center",
+                "w-10 h-10 rounded-lg flex items-center justify-center",
                 isLastStep ? "bg-green-100" : "bg-brand-green/10"
               )}>
                 <Icon className={cn(
-                  "h-6 w-6",
+                  "h-5 w-5",
                   isLastStep ? "text-green-600" : "text-brand-green"
                 )} />
               </div>
               <Button 
                 variant="ghost" 
                 size="icon" 
-                className="h-8 w-8 text-gray-400 hover:text-gray-600"
+                className="h-7 w-7 text-gray-400 hover:text-gray-600"
                 onClick={handleSkip}
                 data-testid="tour-skip-button"
               >
@@ -223,21 +218,21 @@ export function OnboardingTour({ onComplete, isOpen }: OnboardingTourProps) {
               </Button>
             </div>
 
-            <h3 className="text-xl font-bold text-gray-900 mb-2">
+            <h3 className="text-base font-bold text-gray-900 mb-1">
               {step.title}
             </h3>
-            <p className="text-gray-600 mb-4">
+            <p className="text-sm text-gray-600 mb-3">
               {step.description}
             </p>
 
             {step.helpArticleId && (
               <Link href={`/app/help?article=${step.helpArticleId}`}>
                 <a 
-                  className="inline-flex items-center gap-1.5 text-sm text-brand-green hover:text-emerald-700 font-medium mb-4"
+                  className="inline-flex items-center gap-1 text-xs text-brand-green hover:text-emerald-700 font-medium mb-3"
                   onClick={(e) => e.stopPropagation()}
                 >
-                  <HelpCircle className="h-4 w-4" />
-                  Learn more in Help Center
+                  <HelpCircle className="h-3.5 w-3.5" />
+                  Learn more
                   <ExternalLink className="h-3 w-3" />
                 </a>
               </Link>
@@ -246,10 +241,10 @@ export function OnboardingTour({ onComplete, isOpen }: OnboardingTourProps) {
             {isLastStep && (
               <Link href="/app/help">
                 <a 
-                  className="inline-flex items-center gap-1.5 text-sm text-brand-green hover:text-emerald-700 font-medium mb-4"
+                  className="inline-flex items-center gap-1 text-xs text-brand-green hover:text-emerald-700 font-medium mb-3"
                   onClick={(e) => e.stopPropagation()}
                 >
-                  <HelpCircle className="h-4 w-4" />
+                  <HelpCircle className="h-3.5 w-3.5" />
                   Visit Help Center
                   <ExternalLink className="h-3 w-3" />
                 </a>
@@ -257,12 +252,12 @@ export function OnboardingTour({ onComplete, isOpen }: OnboardingTourProps) {
             )}
 
             <div className="flex items-center justify-between">
-              <div className="flex gap-1.5">
+              <div className="flex gap-1">
                 {TOUR_STEPS.map((_, index) => (
                   <div
                     key={index}
                     className={cn(
-                      "w-2 h-2 rounded-full transition-colors",
+                      "w-1.5 h-1.5 rounded-full transition-colors",
                       index === currentStep ? "bg-brand-green" : "bg-gray-200"
                     )}
                   />
@@ -274,26 +269,27 @@ export function OnboardingTour({ onComplete, isOpen }: OnboardingTourProps) {
                   <Button
                     variant="outline"
                     size="sm"
+                    className="h-7 text-xs px-2"
                     onClick={handlePrev}
                   >
-                    <ChevronLeft className="h-4 w-4 mr-1" />
+                    <ChevronLeft className="h-3 w-3 mr-0.5" />
                     Back
                   </Button>
                 )}
                 <Button
                   size="sm"
-                  className="bg-brand-green hover:bg-brand-green/90"
+                  className="h-7 text-xs px-3 bg-brand-green hover:bg-brand-green/90"
                   onClick={handleNext}
                 >
                   {isLastStep ? "Get Started" : "Next"}
-                  {!isLastStep && <ChevronRight className="h-4 w-4 ml-1" />}
+                  {!isLastStep && <ChevronRight className="h-3 w-3 ml-0.5" />}
                 </Button>
               </div>
             </div>
 
             <button
               onClick={handleSkip}
-              className="w-full mt-4 text-sm text-gray-400 hover:text-gray-600"
+              className="w-full mt-3 text-xs text-gray-400 hover:text-gray-600"
               data-testid="tour-skip-text"
             >
               Skip tour
