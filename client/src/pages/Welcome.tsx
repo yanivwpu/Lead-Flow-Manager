@@ -12,11 +12,114 @@ import {
   Bell,
   Tag,
   ChevronRight,
-  Star
+  Star,
+  ShoppingCart,
+  FileSpreadsheet,
+  Building2,
+  CreditCard,
+  Home,
+  Calendar,
+  Mail
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import heroImage from "@assets/generated_images/whatsapp_crm_dashboard_mockup.png";
-import integrationsImage from "@assets/generated_images/geometric_integration_flowchart.png";
+
+const INTEGRATIONS = [
+  { name: "Shopify", icon: ShoppingCart, color: "bg-green-500" },
+  { name: "HubSpot", icon: Users, color: "bg-orange-500" },
+  { name: "Salesforce", icon: Building2, color: "bg-blue-500" },
+  { name: "Stripe", icon: CreditCard, color: "bg-purple-500" },
+  { name: "Twilio", icon: Phone, color: "bg-red-600" },
+  { name: "Calendly", icon: Calendar, color: "bg-sky-500" },
+  { name: "Mailchimp", icon: Mail, color: "bg-yellow-500" },
+  { name: "Google Sheets", icon: FileSpreadsheet, color: "bg-emerald-500" },
+  { name: "ShowcaseIDX", icon: Home, color: "bg-rose-500" },
+];
+
+function IntegrationsHub() {
+  const lineEndpoints = [
+    { x: 400, y: 50 },
+    { x: 620, y: 80 },
+    { x: 740, y: 180 },
+    { x: 740, y: 280 },
+    { x: 620, y: 380 },
+    { x: 400, y: 400 },
+    { x: 180, y: 380 },
+    { x: 60, y: 280 },
+    { x: 60, y: 180 },
+  ];
+
+  const positions = [
+    { top: "5%", left: "50%", transform: "translate(-50%, 0)" },
+    { top: "10%", right: "12%", transform: "translate(0, 0)" },
+    { top: "35%", right: "2%", transform: "translate(0, 0)" },
+    { top: "58%", right: "2%", transform: "translate(0, 0)" },
+    { bottom: "10%", right: "12%", transform: "translate(0, 0)" },
+    { bottom: "5%", left: "50%", transform: "translate(-50%, 0)" },
+    { bottom: "10%", left: "12%", transform: "translate(0, 0)" },
+    { top: "58%", left: "2%", transform: "translate(0, 0)" },
+    { top: "35%", left: "2%", transform: "translate(0, 0)" },
+  ];
+
+  return (
+    <div className="relative w-full max-w-5xl mx-auto aspect-[16/10] flex items-center justify-center py-8">
+      <svg className="absolute inset-0 w-full h-full" viewBox="0 0 800 500" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="lineGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor="#10b981" stopOpacity="0.9" />
+            <stop offset="100%" stopColor="#10b981" stopOpacity="0.3" />
+          </linearGradient>
+        </defs>
+        {lineEndpoints.map((end, i) => (
+          <motion.line
+            key={i}
+            x1="400"
+            y1="250"
+            x2={end.x}
+            y2={end.y}
+            stroke="url(#lineGrad)"
+            strokeWidth="2.5"
+            strokeDasharray="6 4"
+            initial={{ pathLength: 0, opacity: 0 }}
+            whileInView={{ pathLength: 1, opacity: 1 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.6, delay: i * 0.08 }}
+          />
+        ))}
+      </svg>
+      
+      <motion.div 
+        className="absolute z-10 h-20 w-20 md:h-28 md:w-28 bg-brand-green rounded-2xl shadow-2xl flex items-center justify-center border-4 border-white"
+        initial={{ scale: 0 }}
+        whileInView={{ scale: 1 }}
+        viewport={{ once: true }}
+        transition={{ type: "spring", duration: 0.6 }}
+      >
+        <span className="text-white font-bold text-3xl md:text-4xl">W</span>
+      </motion.div>
+      
+      {INTEGRATIONS.map((integration, i) => {
+        const Icon = integration.icon;
+        return (
+          <motion.div
+            key={integration.name}
+            className="absolute z-10 flex flex-col items-center gap-1"
+            style={positions[i]}
+            initial={{ scale: 0, opacity: 0 }}
+            whileInView={{ scale: 1, opacity: 1 }}
+            viewport={{ once: true }}
+            transition={{ type: "spring", duration: 0.5, delay: 0.2 + i * 0.06 }}
+          >
+            <div className={`h-11 w-11 md:h-14 md:w-14 ${integration.color} rounded-xl shadow-lg flex items-center justify-center border-2 border-white`}>
+              <Icon className="h-5 w-5 md:h-7 md:w-7 text-white" />
+            </div>
+            <span className="text-[10px] md:text-xs font-semibold text-gray-700 whitespace-nowrap">{integration.name}</span>
+          </motion.div>
+        );
+      })}
+    </div>
+  );
+}
 
 export function Welcome() {
   const { user } = useAuth();
@@ -289,8 +392,8 @@ export function Welcome() {
       </section>
 
       {/* Integrations Section */}
-      <section className="px-4 md:px-6 py-16 md:py-20">
-        <div className="max-w-5xl mx-auto">
+      <section className="px-4 md:px-6 py-16 md:py-20 bg-gradient-to-b from-gray-50 to-white">
+        <div className="max-w-6xl mx-auto">
           <div className="text-center mb-10 md:mb-12">
             <h2 className="text-2xl md:text-4xl font-display font-bold text-gray-900 mb-3 md:mb-4">
               Connect Your Favorite Tools
@@ -300,28 +403,7 @@ export function Welcome() {
             </p>
           </div>
           
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="relative"
-          >
-            <img 
-              src={integrationsImage} 
-              alt="WhachatCRM integrations with Shopify, HubSpot, Salesforce, Stripe, Mailchimp, Calendly and more" 
-              className="w-full rounded-xl md:rounded-2xl"
-            />
-          </motion.div>
-          
-          <div className="flex flex-wrap justify-center gap-3 mt-8">
-            <span className="px-4 py-2 bg-green-50 border border-green-200 rounded-full text-sm font-medium text-green-700">Shopify</span>
-            <span className="px-4 py-2 bg-orange-50 border border-orange-200 rounded-full text-sm font-medium text-orange-700">HubSpot</span>
-            <span className="px-4 py-2 bg-blue-50 border border-blue-200 rounded-full text-sm font-medium text-blue-700">Salesforce</span>
-            <span className="px-4 py-2 bg-purple-50 border border-purple-200 rounded-full text-sm font-medium text-purple-700">Stripe</span>
-            <span className="px-4 py-2 bg-yellow-50 border border-yellow-200 rounded-full text-sm font-medium text-yellow-700">Mailchimp</span>
-            <span className="px-4 py-2 bg-sky-50 border border-sky-200 rounded-full text-sm font-medium text-sky-700">Calendly</span>
-            <span className="px-4 py-2 bg-emerald-50 border border-emerald-200 rounded-full text-sm font-medium text-emerald-700">Google Sheets</span>
-          </div>
+          <IntegrationsHub />
         </div>
       </section>
 
