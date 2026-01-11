@@ -31,6 +31,7 @@ export const PLAN_LIMITS = {
     integrationsEnabled: false,
     maxWebhooks: 0,
     templatesEnabled: false,
+    chatbotEnabled: false,
   },
   starter: {
     name: 'Starter',
@@ -49,14 +50,15 @@ export const PLAN_LIMITS = {
     integrationsEnabled: true,
     maxWebhooks: 3,
     templatesEnabled: false,
+    chatbotEnabled: true, // Visual chatbot builder
   },
   pro: {
     name: 'Pro',
     price: 49,
     conversationsPerMonth: 2000,
     isLifetimeLimit: false,
-    maxUsers: 10,
-    maxWhatsappNumbers: 3,
+    maxUsers: -1, // Unlimited team members
+    maxWhatsappNumbers: 5,
     canSendMessages: true,
     followUpsEnabled: true,
     emailNotifications: true,
@@ -67,6 +69,7 @@ export const PLAN_LIMITS = {
     integrationsEnabled: true,
     maxWebhooks: 10,
     templatesEnabled: true, // Pro feature: template messaging & retargeting
+    chatbotEnabled: true, // Visual chatbot builder
   },
 } as const;
 
@@ -476,6 +479,49 @@ export const insertDripSendSchema = createInsertSchema(dripSends).omit({
   sentAt: true,
 });
 
+// Chatbot Flows (Visual chatbot builder)
+export const chatbotFlows = pgTable("chatbot_flows", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  description: text("description"),
+  isActive: boolean("is_active").default(false),
+  triggerKeywords: text("trigger_keywords").array().default(sql`'{}'::text[]`), // Keywords that trigger this flow
+  triggerOnNewChat: boolean("trigger_on_new_chat").default(false), // Trigger when new chat starts
+  nodes: jsonb("nodes").notNull().default(sql`'[]'::jsonb`), // Array of flow nodes
+  edges: jsonb("edges").notNull().default(sql`'[]'::jsonb`), // Connections between nodes
+  executionCount: integer("execution_count").default(0),
+  lastExecutedAt: timestamp("last_executed_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Chatbot execution sessions
+export const chatbotSessions = pgTable("chatbot_sessions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  flowId: varchar("flow_id").notNull().references(() => chatbotFlows.id, { onDelete: "cascade" }),
+  chatId: varchar("chat_id").notNull().references(() => chats.id, { onDelete: "cascade" }),
+  currentNodeId: text("current_node_id"), // Current position in the flow
+  sessionData: jsonb("session_data").default(sql`'{}'::jsonb`), // Variables collected during session
+  status: text("status").notNull().default("active"), // active, completed, waiting_input, failed
+  startedAt: timestamp("started_at").defaultNow(),
+  completedAt: timestamp("completed_at"),
+});
+
+export const insertChatbotFlowSchema = createInsertSchema(chatbotFlows).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  executionCount: true,
+  lastExecutedAt: true,
+});
+
+export const insertChatbotSessionSchema = createInsertSchema(chatbotSessions).omit({
+  id: true,
+  startedAt: true,
+  completedAt: true,
+});
+
 export type InsertMessageTemplate = z.infer<typeof insertMessageTemplateSchema>;
 export type MessageTemplate = typeof messageTemplates.$inferSelect;
 export type InsertTemplateSend = z.infer<typeof insertTemplateSendSchema>;
@@ -488,3 +534,7 @@ export type InsertDripEnrollment = z.infer<typeof insertDripEnrollmentSchema>;
 export type DripEnrollment = typeof dripEnrollments.$inferSelect;
 export type InsertDripSend = z.infer<typeof insertDripSendSchema>;
 export type DripSend = typeof dripSends.$inferSelect;
+export type InsertChatbotFlow = z.infer<typeof insertChatbotFlowSchema>;
+export type ChatbotFlow = typeof chatbotFlows.$inferSelect;
+export type InsertChatbotSession = z.infer<typeof insertChatbotSessionSchema>;
+export type ChatbotSession = typeof chatbotSessions.$inferSelect;
