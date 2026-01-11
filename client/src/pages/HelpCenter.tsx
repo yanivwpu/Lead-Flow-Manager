@@ -3,8 +3,9 @@ import { Helmet } from "react-helmet";
 import { 
   Search, ChevronRight, MessageSquare, Settings, Zap, Plug, 
   Phone, Bell, Users, FileText, Tag, Clock, Mail, Shield,
-  CreditCard, HelpCircle, BookOpen, Smartphone, Globe
+  CreditCard, HelpCircle, BookOpen, Smartphone, Globe, Heart, X
 } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
@@ -990,6 +991,120 @@ const CATEGORIES = [
   { name: "Support", icon: HelpCircle },
 ];
 
+function FeedbackSection({ articleId, articleTitle }: { articleId: string; articleTitle: string }) {
+  const [feedback, setFeedback] = useState<'yes' | 'no' | null>(null);
+  const [showFeedbackForm, setShowFeedbackForm] = useState(false);
+  const [feedbackText, setFeedbackText] = useState("");
+  const [submitted, setSubmitted] = useState(false);
+  const [sending, setSending] = useState(false);
+
+  const handleYes = () => {
+    setFeedback('yes');
+    setShowFeedbackForm(false);
+  };
+
+  const handleNo = () => {
+    setFeedback('no');
+    setShowFeedbackForm(true);
+  };
+
+  const handleSubmitFeedback = async () => {
+    if (!feedbackText.trim()) return;
+    
+    setSending(true);
+    try {
+      await fetch('/api/help-feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          articleId,
+          articleTitle,
+          feedback: feedbackText
+        })
+      });
+    } catch (error) {
+      console.error('Error sending feedback:', error);
+    }
+    setSending(false);
+    setSubmitted(true);
+    setShowFeedbackForm(false);
+  };
+
+  if (feedback === 'yes') {
+    return (
+      <div className="mt-8 pt-6 border-t border-gray-200 pb-16">
+        <div className="flex items-center gap-3 text-pink-500">
+          <Heart className="h-8 w-8 fill-current animate-pulse" />
+          <span className="text-lg font-medium">Thank you! We're glad it helped.</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (feedback === 'no' && submitted) {
+    return (
+      <div className="mt-8 pt-6 border-t border-gray-200 pb-16">
+        <div className="flex items-center gap-3 text-gray-600">
+          <Heart className="h-6 w-6 text-brand-green" />
+          <span className="text-base font-medium">Thank you for your feedback! We'll work on improving.</span>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-8 pt-6 border-t border-gray-200 pb-16">
+      {!feedback && (
+        <>
+          <p className="text-sm text-gray-500 mb-2">Was this helpful?</p>
+          <div className="flex gap-2">
+            <button 
+              onClick={handleYes}
+              className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-green-100 hover:text-green-700 rounded-lg transition-colors"
+            >
+              Yes, thanks!
+            </button>
+            <button 
+              onClick={handleNo}
+              className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+            >
+              Not really
+            </button>
+          </div>
+        </>
+      )}
+
+      {showFeedbackForm && (
+        <div className="mt-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-sm font-medium text-gray-700">Oh.. How can we improve?</p>
+            <button 
+              onClick={() => { setFeedback(null); setShowFeedbackForm(false); }}
+              className="text-gray-400 hover:text-gray-600"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          <Textarea
+            value={feedbackText}
+            onChange={(e) => setFeedbackText(e.target.value)}
+            placeholder="Tell us what was missing or unclear..."
+            className="mb-3 resize-none"
+            rows={3}
+          />
+          <button
+            onClick={handleSubmitFeedback}
+            disabled={sending || !feedbackText.trim()}
+            className="px-4 py-2 text-sm font-medium text-white bg-brand-green hover:bg-green-600 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {sending ? 'Sending...' : 'Send Feedback'}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function HelpCenter() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
@@ -1187,17 +1302,7 @@ export function HelpCenter() {
                 {renderMarkdown(selectedArticle.content)}
               </article>
 
-              <div className="mt-8 pt-6 border-t border-gray-200 pb-16">
-                <p className="text-sm text-gray-500 mb-2">Was this helpful?</p>
-                <div className="flex gap-2">
-                  <button className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">
-                    Yes, thanks!
-                  </button>
-                  <button className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">
-                    Not really
-                  </button>
-                </div>
-              </div>
+              <FeedbackSection articleId={selectedArticle.id} articleTitle={selectedArticle.title} />
             </div>
           </div>
         )}

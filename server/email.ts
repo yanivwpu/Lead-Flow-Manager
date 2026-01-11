@@ -225,6 +225,47 @@ export async function sendSubscriptionConfirmationEmail(name: string, email: str
   });
 }
 
+export async function sendHelpCenterFeedback(articleId: string, articleTitle: string, feedback: string): Promise<boolean> {
+  const SUPPORT_EMAIL = 'support@whachatcrm.com';
+  
+  return sendEmail({
+    to: SUPPORT_EMAIL,
+    subject: `Help Center Feedback: ${articleTitle}`,
+    html: `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      </head>
+      <body style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #334155; margin: 0; padding: 0; background-color: #f1f5f9;">
+        <div style="padding: 40px 20px;">
+          <div style="max-width: 600px; margin: 0 auto; background: white; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+            <div style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); color: white; padding: 40px 30px; text-align: center;">
+              <div style="width: 50px; height: 50px; background: #059669; border-radius: 12px; display: inline-block; margin-bottom: 16px; font-size: 24px; line-height: 50px;">📝</div>
+              <h1 style="margin: 0; font-size: 24px; font-weight: 600;">Help Center Feedback</h1>
+            </div>
+            <div style="padding: 40px 30px;">
+              <div style="background: #fef3c7; border: 1px solid #fcd34d; padding: 16px; border-radius: 8px; margin-bottom: 20px;">
+                <p style="margin: 0; color: #92400e; font-size: 14px;"><strong>Article:</strong> ${articleTitle}</p>
+                <p style="margin: 4px 0 0 0; color: #92400e; font-size: 12px;">ID: ${articleId}</p>
+              </div>
+              <h3 style="color: #1e293b; font-size: 16px; margin-bottom: 8px;">User Feedback:</h3>
+              <div style="background: #f8fafc; border: 1px solid #e2e8f0; padding: 20px; border-radius: 8px;">
+                <p style="margin: 0; color: #475569; font-size: 15px; white-space: pre-wrap;">${feedback}</p>
+              </div>
+            </div>
+            <div style="text-align: center; padding: 24px 30px; background: #f8fafc; border-top: 1px solid #e2e8f0;">
+              <p style="margin: 0; color: #94a3b8; font-size: 12px;">&copy; ${new Date().getFullYear()} WhaChatCRM. All rights reserved.</p>
+            </div>
+          </div>
+        </div>
+      </body>
+      </html>
+    `
+  });
+}
+
 export async function sendFollowUpReminderEmail(email: string, chatName: string, followUp: string, notes: string, chatId: string): Promise<boolean> {
   return sendEmail({
     to: email,

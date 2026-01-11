@@ -116,6 +116,28 @@ export async function registerRoutes(
     }
   });
 
+  // Help center feedback endpoint (public - no auth required)
+  app.post("/api/help-feedback", async (req, res) => {
+    try {
+      const { articleId, articleTitle, feedback } = req.body;
+      
+      if (!articleId || !articleTitle || !feedback) {
+        return res.status(400).json({ error: "Article ID, title, and feedback are required" });
+      }
+      
+      const { sendHelpCenterFeedback } = await import("./email");
+      const success = await sendHelpCenterFeedback(articleId, articleTitle, feedback);
+      if (success) {
+        res.json({ message: "Thank you for your feedback!" });
+      } else {
+        res.json({ message: "Feedback received (email delivery pending)" });
+      }
+    } catch (error) {
+      console.error("Error sending help feedback:", error);
+      res.status(500).json({ error: "Failed to send feedback" });
+    }
+  });
+
   // Get all chats for the current user
   app.get("/api/chats", async (req, res) => {
     try {
