@@ -1038,7 +1038,8 @@ export async function registerRoutes(
       }
 
       const currentCount = await storage.getTeamMemberCount(req.user.id);
-      if (currentCount >= limits.maxUsers) {
+      // -1 means unlimited team members
+      if (limits.maxUsers !== -1 && currentCount >= limits.maxUsers) {
         return res.status(403).json({ 
           error: `Your ${limits.planName} plan allows ${limits.maxUsers} team member(s). Upgrade to add more.`,
           upgradeRequired: true
@@ -2415,6 +2416,134 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error sending template:", error);
       res.status(500).json({ error: "Failed to send template" });
+    }
+  });
+
+  // ============= Chatbot Flow Endpoints =============
+
+  // Get all chatbot flows for current user
+  app.get("/api/chatbot-flows", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      
+      const limits = await subscriptionService.getUserLimits(req.user.id);
+      if (!(limits as any)?.chatbotEnabled) {
+        return res.status(403).json({ error: "Visual chatbot builder requires a paid plan" });
+      }
+      
+      const flows = await storage.getChatbotFlows(req.user.id);
+      res.json(flows);
+    } catch (error) {
+      console.error("Error fetching chatbot flows:", error);
+      res.status(500).json({ error: "Failed to fetch chatbot flows" });
+    }
+  });
+
+  // Get a single chatbot flow
+  app.get("/api/chatbot-flows/:id", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      
+      const flow = await storage.getChatbotFlow(req.params.id);
+      if (!flow || flow.userId !== req.user.id) {
+        return res.status(404).json({ error: "Flow not found" });
+      }
+      
+      res.json(flow);
+    } catch (error) {
+      console.error("Error fetching chatbot flow:", error);
+      res.status(500).json({ error: "Failed to fetch chatbot flow" });
+    }
+  });
+
+  // Create a new chatbot flow
+  app.post("/api/chatbot-flows", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      
+      const limits = await subscriptionService.getUserLimits(req.user.id);
+      if (!(limits as any)?.chatbotEnabled) {
+        return res.status(403).json({ error: "Visual chatbot builder requires a paid plan" });
+      }
+      
+      const { name, description, nodes, edges, triggerKeywords, triggerOnNewChat } = req.body;
+      
+      if (!name) {
+        return res.status(400).json({ error: "Flow name is required" });
+      }
+      
+      const flow = await storage.createChatbotFlow({
+        userId: req.user.id,
+        name,
+        description: description || null,
+        nodes: nodes || [],
+        edges: edges || [],
+        triggerKeywords: triggerKeywords || [],
+        triggerOnNewChat: triggerOnNewChat || false,
+        isActive: false,
+      });
+      
+      res.status(201).json(flow);
+    } catch (error) {
+      console.error("Error creating chatbot flow:", error);
+      res.status(500).json({ error: "Failed to create chatbot flow" });
+    }
+  });
+
+  // Update a chatbot flow
+  app.patch("/api/chatbot-flows/:id", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      
+      const existingFlow = await storage.getChatbotFlow(req.params.id);
+      if (!existingFlow || existingFlow.userId !== req.user.id) {
+        return res.status(404).json({ error: "Flow not found" });
+      }
+      
+      const { name, description, nodes, edges, triggerKeywords, triggerOnNewChat, isActive } = req.body;
+      
+      const flow = await storage.updateChatbotFlow(req.params.id, {
+        ...(name !== undefined && { name }),
+        ...(description !== undefined && { description }),
+        ...(nodes !== undefined && { nodes }),
+        ...(edges !== undefined && { edges }),
+        ...(triggerKeywords !== undefined && { triggerKeywords }),
+        ...(triggerOnNewChat !== undefined && { triggerOnNewChat }),
+        ...(isActive !== undefined && { isActive }),
+      });
+      
+      res.json(flow);
+    } catch (error) {
+      console.error("Error updating chatbot flow:", error);
+      res.status(500).json({ error: "Failed to update chatbot flow" });
+    }
+  });
+
+  // Delete a chatbot flow
+  app.delete("/api/chatbot-flows/:id", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      
+      const existingFlow = await storage.getChatbotFlow(req.params.id);
+      if (!existingFlow || existingFlow.userId !== req.user.id) {
+        return res.status(404).json({ error: "Flow not found" });
+      }
+      
+      await storage.deleteChatbotFlow(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting chatbot flow:", error);
+      res.status(500).json({ error: "Failed to delete chatbot flow" });
     }
   });
 

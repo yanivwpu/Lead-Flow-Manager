@@ -1168,7 +1168,7 @@ export function Settings() {
                    <div className="p-3 sm:p-4 bg-gray-50 rounded-lg border border-gray-200">
                      <span className="text-xs text-gray-500 uppercase font-semibold">Team Members</span>
                      <p className="text-base sm:text-lg font-bold text-gray-900 mt-1" data-testid="text-users-usage">
-                       {subscriptionData?.limits.usersCount || 1} / {subscriptionData?.limits.usersLimit === null ? "∞" : subscriptionData?.limits.usersLimit}
+                       {subscriptionData?.limits.usersCount || 1} / {subscriptionData?.limits.usersLimit === -1 || subscriptionData?.limits.usersLimit === null ? "Unlimited" : subscriptionData?.limits.usersLimit}
                      </p>
                    </div>
                  </div>
@@ -1293,8 +1293,8 @@ export function Settings() {
                    ))}
                  </div>
 
-                 {/* Invite form - only show if under limit */}
-                 {(subscriptionData?.limits.usersLimit || 1) > teamMembers.length ? (
+                 {/* Invite form - only show if under limit (-1 means unlimited) */}
+                 {(subscriptionData?.limits.usersLimit === -1 || (subscriptionData?.limits.usersLimit || 1) > teamMembers.length) ? (
                    <div className="pt-2 border-t border-gray-200">
                      <p className="text-sm font-medium text-gray-700 mb-2">Invite a team member</p>
                      <div className="flex flex-col sm:flex-row gap-2">
@@ -1333,7 +1333,7 @@ export function Settings() {
                  ) : (
                    <div className="pt-2 border-t border-gray-200">
                      <p className="text-sm text-gray-500 mb-2">
-                       You've reached your team member limit ({subscriptionData?.limits.usersLimit}).
+                       You've reached your team member limit ({subscriptionData?.limits.usersLimit === -1 ? "Unlimited" : subscriptionData?.limits.usersLimit}).
                      </p>
                      <Link href="/pricing">
                        <Button variant="outline" size="sm" data-testid="button-upgrade-team">

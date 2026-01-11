@@ -10,6 +10,7 @@ import { Workflows } from "./Workflows";
 import { Integrations } from "./Integrations";
 import { Templates } from "./Templates";
 import { HelpCenter } from "./HelpCenter";
+import { ChatbotBuilder } from "./ChatbotBuilder";
 import { UsageWarningBanner } from "@/components/UsageWarningBanner";
 import { TrialBanner } from "@/components/TrialBanner";
 import { OnboardingTour } from "@/components/OnboardingTour";
@@ -60,6 +61,7 @@ function AppContent() {
           <Route path="/app/chats" component={Chats} />
           <Route path="/app/followups" component={FollowUps} />
           <Route path="/app/workflows" component={Workflows} />
+          <Route path="/app/chatbot" component={ChatbotBuilder} />
           <Route path="/app/templates" component={Templates} />
           <Route path="/app/integrations" component={Integrations} />
           <Route path="/app/search" component={Search} />

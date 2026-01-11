@@ -21,6 +21,7 @@ export interface UserLimits {
   integrationsEnabled: boolean;
   maxWebhooks: number;
   templatesEnabled: boolean;
+  chatbotEnabled: boolean;
   isAtLimit: boolean;
   isAtWarning: boolean;
   suggestedUpgrade: SubscriptionPlan | null;
@@ -74,6 +75,7 @@ class SubscriptionService {
       integrationsEnabled: planLimits.integrationsEnabled,
       maxWebhooks: planLimits.maxWebhooks,
       templatesEnabled: planLimits.templatesEnabled,
+      chatbotEnabled: (planLimits as any).chatbotEnabled || false,
       isAtLimit,
       isAtWarning,
       suggestedUpgrade,

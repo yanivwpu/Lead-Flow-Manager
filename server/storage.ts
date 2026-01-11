@@ -14,10 +14,12 @@ import {
   type DripCampaign, type InsertDripCampaign,
   type DripStep, type InsertDripStep,
   type DripEnrollment, type InsertDripEnrollment,
-  type DripSend, type InsertDripSend
+  type DripSend, type InsertDripSend,
+  type ChatbotFlow, type InsertChatbotFlow,
+  type ChatbotSession, type InsertChatbotSession
 } from "@shared/schema";
 import { db } from "../drizzle/db";
-import { users, chats, registeredPhones, messageUsage, conversationWindows, teamMembers, workflows, workflowExecutions, recurringReminders, webhooks, webhookDeliveries, integrations, messageTemplates, templateSends, dripCampaigns, dripSteps, dripEnrollments, dripSends, type InsertConversationWindow, type ConversationWindow } from "@shared/schema";
+import { users, chats, registeredPhones, messageUsage, conversationWindows, teamMembers, workflows, workflowExecutions, recurringReminders, webhooks, webhookDeliveries, integrations, messageTemplates, templateSends, dripCampaigns, dripSteps, dripEnrollments, dripSends, chatbotFlows, chatbotSessions, type InsertConversationWindow, type ConversationWindow } from "@shared/schema";
 import { eq, and, lte, sql, isNotNull, asc, desc, gte, sum, gt, or, like, ilike } from "drizzle-orm";
 
 export interface IStorage {
@@ -125,6 +127,21 @@ export interface IStorage {
   
   // Retargetable chats (outside 24-hour window)
   getRetargetableChats(userId: string): Promise<Chat[]>;
+  
+  // Chatbot Flow methods
+  getChatbotFlows(userId: string): Promise<ChatbotFlow[]>;
+  getChatbotFlow(id: string): Promise<ChatbotFlow | undefined>;
+  getActiveChatbotFlows(userId: string): Promise<ChatbotFlow[]>;
+  createChatbotFlow(flow: InsertChatbotFlow): Promise<ChatbotFlow>;
+  updateChatbotFlow(id: string, updates: Partial<ChatbotFlow>): Promise<ChatbotFlow | undefined>;
+  deleteChatbotFlow(id: string): Promise<void>;
+  incrementChatbotFlowExecution(id: string): Promise<void>;
+  
+  // Chatbot Session methods
+  getChatbotSession(chatId: string): Promise<ChatbotSession | undefined>;
+  createChatbotSession(session: InsertChatbotSession): Promise<ChatbotSession>;
+  updateChatbotSession(id: string, updates: Partial<ChatbotSession>): Promise<ChatbotSession | undefined>;
+  deleteChatbotSession(id: string): Promise<void>;
 }
 
 export class DbStorage implements IStorage {
@@ -770,6 +787,73 @@ export class DbStorage implements IStorage {
       sql`SELECT id, unit_amount, active FROM stripe.prices ORDER BY unit_amount`
     );
     return result.rows as { id: string; unit_amount: number; active: boolean }[];
+  }
+
+  // Chatbot Flow methods
+  async getChatbotFlows(userId: string): Promise<ChatbotFlow[]> {
+    return await db.select().from(chatbotFlows)
+      .where(eq(chatbotFlows.userId, userId))
+      .orderBy(desc(chatbotFlows.createdAt));
+  }
+
+  async getChatbotFlow(id: string): Promise<ChatbotFlow | undefined> {
+    const result = await db.select().from(chatbotFlows).where(eq(chatbotFlows.id, id));
+    return result[0];
+  }
+
+  async getActiveChatbotFlows(userId: string): Promise<ChatbotFlow[]> {
+    return await db.select().from(chatbotFlows)
+      .where(and(eq(chatbotFlows.userId, userId), eq(chatbotFlows.isActive, true)));
+  }
+
+  async createChatbotFlow(flow: InsertChatbotFlow): Promise<ChatbotFlow> {
+    const result = await db.insert(chatbotFlows).values(flow).returning();
+    return result[0];
+  }
+
+  async updateChatbotFlow(id: string, updates: Partial<ChatbotFlow>): Promise<ChatbotFlow | undefined> {
+    const result = await db.update(chatbotFlows)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(chatbotFlows.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async deleteChatbotFlow(id: string): Promise<void> {
+    await db.delete(chatbotFlows).where(eq(chatbotFlows.id, id));
+  }
+
+  async incrementChatbotFlowExecution(id: string): Promise<void> {
+    await db.update(chatbotFlows)
+      .set({ 
+        executionCount: sql`${chatbotFlows.executionCount} + 1`,
+        lastExecutedAt: new Date()
+      })
+      .where(eq(chatbotFlows.id, id));
+  }
+
+  // Chatbot Session methods
+  async getChatbotSession(chatId: string): Promise<ChatbotSession | undefined> {
+    const result = await db.select().from(chatbotSessions)
+      .where(and(eq(chatbotSessions.chatId, chatId), eq(chatbotSessions.status, 'active')));
+    return result[0];
+  }
+
+  async createChatbotSession(session: InsertChatbotSession): Promise<ChatbotSession> {
+    const result = await db.insert(chatbotSessions).values(session).returning();
+    return result[0];
+  }
+
+  async updateChatbotSession(id: string, updates: Partial<ChatbotSession>): Promise<ChatbotSession | undefined> {
+    const result = await db.update(chatbotSessions)
+      .set(updates)
+      .where(eq(chatbotSessions.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async deleteChatbotSession(id: string): Promise<void> {
+    await db.delete(chatbotSessions).where(eq(chatbotSessions.id, id));
   }
 }
 

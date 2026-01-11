@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { MessageSquare, ListTodo, Search, LogOut, Settings, Zap, Plug, FileText, HelpCircle } from "lucide-react";
+import { MessageSquare, ListTodo, Search, LogOut, Settings, Zap, Plug, FileText, HelpCircle, Bot } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 
@@ -10,6 +10,7 @@ export function Sidebar() {
   const navItems = [
     { icon: MessageSquare, label: "Chats", href: "/app/chats" },
     { icon: ListTodo, label: "Follow-ups", href: "/app/followups" },
+    { icon: Bot, label: "Chatbot", href: "/app/chatbot" },
     { icon: Zap, label: "Automation", href: "/app/workflows" },
     { icon: FileText, label: "Templates", href: "/app/templates" },
     { icon: Plug, label: "Integrations", href: "/app/integrations" },
