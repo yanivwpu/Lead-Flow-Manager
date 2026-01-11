@@ -91,7 +91,7 @@ export function AuthPage() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col md:flex-row bg-white">
+    <div className="h-screen flex flex-col md:flex-row bg-white overflow-hidden">
       {/* Left Panel - Branding */}
       <div className="flex-1 bg-brand-dark relative overflow-hidden flex flex-col justify-between p-8 md:p-12 text-white">
         <div className="relative z-10">
