@@ -37,86 +37,69 @@ const INTEGRATIONS = [
 ];
 
 function IntegrationsHub() {
-  const lineEndpoints = [
-    { x: 400, y: 50 },
-    { x: 620, y: 80 },
-    { x: 740, y: 180 },
-    { x: 740, y: 280 },
-    { x: 620, y: 380 },
-    { x: 400, y: 400 },
-    { x: 180, y: 380 },
-    { x: 60, y: 280 },
-    { x: 60, y: 180 },
-  ];
-
-  const positions = [
-    { top: "5%", left: "50%", transform: "translate(-50%, 0)" },
-    { top: "10%", right: "12%", transform: "translate(0, 0)" },
-    { top: "35%", right: "2%", transform: "translate(0, 0)" },
-    { top: "58%", right: "2%", transform: "translate(0, 0)" },
-    { bottom: "10%", right: "12%", transform: "translate(0, 0)" },
-    { bottom: "5%", left: "50%", transform: "translate(-50%, 0)" },
-    { bottom: "10%", left: "12%", transform: "translate(0, 0)" },
-    { top: "58%", left: "2%", transform: "translate(0, 0)" },
-    { top: "35%", left: "2%", transform: "translate(0, 0)" },
-  ];
-
   return (
-    <div className="relative w-full max-w-5xl mx-auto aspect-[16/10] flex items-center justify-center py-8">
-      <svg className="absolute inset-0 w-full h-full" viewBox="0 0 800 500" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <defs>
-          <linearGradient id="lineGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor="#10b981" stopOpacity="0.9" />
-            <stop offset="100%" stopColor="#10b981" stopOpacity="0.3" />
-          </linearGradient>
-        </defs>
-        {lineEndpoints.map((end, i) => (
-          <motion.line
-            key={i}
-            x1="400"
-            y1="250"
-            x2={end.x}
-            y2={end.y}
-            stroke="url(#lineGrad)"
-            strokeWidth="2.5"
-            strokeDasharray="6 4"
-            initial={{ pathLength: 0, opacity: 0 }}
-            whileInView={{ pathLength: 1, opacity: 1 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.6, delay: i * 0.08 }}
-          />
-        ))}
-      </svg>
-      
-      <motion.div 
-        className="absolute z-10 h-20 w-20 md:h-28 md:w-28 bg-brand-green rounded-2xl shadow-2xl flex items-center justify-center border-4 border-white"
-        initial={{ scale: 0 }}
-        whileInView={{ scale: 1 }}
-        viewport={{ once: true }}
-        transition={{ type: "spring", duration: 0.6 }}
-      >
-        <span className="text-white font-bold text-3xl md:text-4xl">W</span>
-      </motion.div>
-      
-      {INTEGRATIONS.map((integration, i) => {
-        const Icon = integration.icon;
-        return (
-          <motion.div
-            key={integration.name}
-            className="absolute z-10 flex flex-col items-center gap-1"
-            style={positions[i]}
+    <div className="relative w-full max-w-5xl mx-auto py-12">
+      <div className="relative flex items-center justify-center" style={{ minHeight: "400px" }}>
+        <div className="absolute inset-0 flex items-center justify-center">
+          <motion.div 
+            className="absolute w-[280px] h-[280px] md:w-[380px] md:h-[380px] rounded-full border border-gray-200"
             initial={{ scale: 0, opacity: 0 }}
             whileInView={{ scale: 1, opacity: 1 }}
             viewport={{ once: true }}
-            transition={{ type: "spring", duration: 0.5, delay: 0.2 + i * 0.06 }}
-          >
-            <div className={`h-11 w-11 md:h-14 md:w-14 ${integration.color} rounded-xl shadow-lg flex items-center justify-center border-2 border-white`}>
-              <Icon className="h-5 w-5 md:h-7 md:w-7 text-white" />
-            </div>
-            <span className="text-[10px] md:text-xs font-semibold text-gray-700 whitespace-nowrap">{integration.name}</span>
-          </motion.div>
-        );
-      })}
+            transition={{ duration: 0.8 }}
+          />
+          <motion.div 
+            className="absolute w-[420px] h-[420px] md:w-[560px] md:h-[560px] rounded-full border border-gray-100"
+            initial={{ scale: 0, opacity: 0 }}
+            whileInView={{ scale: 1, opacity: 1 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.8, delay: 0.1 }}
+          />
+        </div>
+        
+        <motion.div 
+          className="relative z-20 h-24 w-24 md:h-32 md:w-32 bg-brand-green rounded-2xl shadow-2xl flex items-center justify-center"
+          initial={{ scale: 0 }}
+          whileInView={{ scale: 1 }}
+          viewport={{ once: true }}
+          transition={{ type: "spring", duration: 0.6 }}
+        >
+          <span className="text-white font-bold text-4xl md:text-5xl">W</span>
+        </motion.div>
+        
+        {INTEGRATIONS.map((integration, i) => {
+          const Icon = integration.icon;
+          const total = INTEGRATIONS.length;
+          const angle = (i * 360 / total) - 90;
+          const radius = 180;
+          const radiusMd = 240;
+          
+          return (
+            <motion.div
+              key={integration.name}
+              className="absolute z-10 flex flex-col items-center gap-1"
+              style={{
+                left: "50%",
+                top: "50%",
+              }}
+              initial={{ scale: 0, opacity: 0, x: 0, y: 0 }}
+              whileInView={{ 
+                scale: 1, 
+                opacity: 1,
+                x: `calc(${Math.cos(angle * Math.PI / 180) * radius}px - 50%)`,
+                y: `calc(${Math.sin(angle * Math.PI / 180) * radius}px - 50%)`,
+              }}
+              viewport={{ once: true }}
+              transition={{ type: "spring", duration: 0.6, delay: 0.3 + i * 0.06 }}
+            >
+              <div className={`h-12 w-12 md:h-14 md:w-14 ${integration.color} rounded-xl shadow-lg flex items-center justify-center`}>
+                <Icon className="h-6 w-6 md:h-7 md:w-7 text-white" />
+              </div>
+              <span className="text-[10px] md:text-xs font-semibold text-gray-700 whitespace-nowrap mt-1">{integration.name}</span>
+            </motion.div>
+          );
+        })}
+      </div>
     </div>
   );
 }
