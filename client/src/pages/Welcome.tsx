@@ -37,80 +37,83 @@ const INTEGRATIONS = [
 ];
 
 function IntegrationsHub() {
-  const total = INTEGRATIONS.length;
-  const radius = 160;
-  
-  const getPosition = (index: number) => {
-    const angle = (index * 360 / total) - 90;
-    const x = Math.cos(angle * Math.PI / 180) * radius;
-    const y = Math.sin(angle * Math.PI / 180) * radius;
-    return { x, y, angle };
-  };
+  const topRow = INTEGRATIONS.slice(0, 4);
+  const bottomRow = INTEGRATIONS.slice(4);
 
   return (
-    <div className="relative w-full max-w-4xl mx-auto py-8">
-      <div className="relative flex items-center justify-center" style={{ minHeight: "420px" }}>
-        <svg 
-          className="absolute inset-0 w-full h-full" 
-          viewBox="-250 -210 500 420" 
-          fill="none"
-          style={{ overflow: "visible" }}
-        >
-          {INTEGRATIONS.map((_, i) => {
-            const { x, y } = getPosition(i);
+    <div className="w-full max-w-6xl mx-auto px-4">
+      <div className="flex flex-col items-center gap-6 md:gap-8">
+        <div className="flex flex-wrap justify-center gap-4 md:gap-8 w-full">
+          {topRow.map((integration, i) => {
+            const Icon = integration.icon;
             return (
-              <motion.line
-                key={i}
-                x1="0"
-                y1="0"
-                x2={x}
-                y2={y}
-                stroke="#e5e7eb"
-                strokeWidth="2"
-                initial={{ pathLength: 0 }}
-                whileInView={{ pathLength: 1 }}
+              <motion.div
+                key={integration.name}
+                className="flex flex-col items-center"
+                initial={{ opacity: 0, y: -20 }}
+                whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
-                transition={{ duration: 0.5, delay: 0.2 + i * 0.05 }}
-              />
+                transition={{ duration: 0.4, delay: i * 0.08 }}
+              >
+                <div className={`h-14 w-14 md:h-16 md:w-16 ${integration.color} rounded-xl shadow-lg flex items-center justify-center`}>
+                  <Icon className="h-7 w-7 md:h-8 md:w-8 text-white" />
+                </div>
+                <span className="text-xs md:text-sm font-medium text-gray-600 mt-2">{integration.name}</span>
+              </motion.div>
             );
           })}
-        </svg>
-        
-        <motion.div 
-          className="relative z-20 h-20 w-20 md:h-24 md:w-24 bg-brand-green rounded-2xl shadow-xl flex items-center justify-center"
-          initial={{ scale: 0 }}
-          whileInView={{ scale: 1 }}
-          viewport={{ once: true }}
-          transition={{ type: "spring", duration: 0.5 }}
-        >
-          <span className="text-white font-bold text-3xl md:text-4xl">W</span>
-        </motion.div>
-        
-        {INTEGRATIONS.map((integration, i) => {
-          const Icon = integration.icon;
-          const { x, y } = getPosition(i);
+        </div>
+
+        <div className="flex items-center gap-4 md:gap-6 w-full justify-center">
+          <motion.div 
+            className="h-1 bg-gradient-to-r from-transparent via-gray-300 to-gray-300 flex-1 max-w-[120px] md:max-w-[200px] rounded-full"
+            initial={{ scaleX: 0 }}
+            whileInView={{ scaleX: 1 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.5 }}
+            style={{ originX: 1 }}
+          />
           
-          return (
-            <motion.div
-              key={integration.name}
-              className="absolute z-10 flex flex-col items-center"
-              style={{
-                left: "50%",
-                top: "50%",
-                transform: `translate(calc(${x}px - 50%), calc(${y}px - 50%))`,
-              }}
-              initial={{ scale: 0, opacity: 0 }}
-              whileInView={{ scale: 1, opacity: 1 }}
-              viewport={{ once: true }}
-              transition={{ type: "spring", duration: 0.5, delay: 0.3 + i * 0.05 }}
-            >
-              <div className={`h-12 w-12 md:h-14 md:w-14 ${integration.color} rounded-xl shadow-lg flex items-center justify-center`}>
-                <Icon className="h-6 w-6 md:h-7 md:w-7 text-white" />
-              </div>
-              <span className="text-[10px] md:text-xs font-medium text-gray-600 whitespace-nowrap mt-1.5">{integration.name}</span>
-            </motion.div>
-          );
-        })}
+          <motion.div 
+            className="h-20 w-20 md:h-28 md:w-28 bg-brand-green rounded-2xl shadow-2xl flex items-center justify-center shrink-0"
+            initial={{ scale: 0 }}
+            whileInView={{ scale: 1 }}
+            viewport={{ once: true }}
+            transition={{ type: "spring", duration: 0.5, delay: 0.2 }}
+          >
+            <span className="text-white font-bold text-3xl md:text-5xl">W</span>
+          </motion.div>
+          
+          <motion.div 
+            className="h-1 bg-gradient-to-l from-transparent via-gray-300 to-gray-300 flex-1 max-w-[120px] md:max-w-[200px] rounded-full"
+            initial={{ scaleX: 0 }}
+            whileInView={{ scaleX: 1 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.5 }}
+            style={{ originX: 0 }}
+          />
+        </div>
+
+        <div className="flex flex-wrap justify-center gap-4 md:gap-8 w-full">
+          {bottomRow.map((integration, i) => {
+            const Icon = integration.icon;
+            return (
+              <motion.div
+                key={integration.name}
+                className="flex flex-col items-center"
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.4, delay: 0.3 + i * 0.08 }}
+              >
+                <div className={`h-14 w-14 md:h-16 md:w-16 ${integration.color} rounded-xl shadow-lg flex items-center justify-center`}>
+                  <Icon className="h-7 w-7 md:h-8 md:w-8 text-white" />
+                </div>
+                <span className="text-xs md:text-sm font-medium text-gray-600 mt-2">{integration.name}</span>
+              </motion.div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
