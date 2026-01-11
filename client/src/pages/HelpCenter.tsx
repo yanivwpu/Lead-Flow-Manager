@@ -406,6 +406,98 @@ A workflow has:
     `
   },
   {
+    id: "chatbot-automation",
+    title: "Chatbot Automation (Visual Builder)",
+    category: "Automation",
+    icon: Zap,
+    keywords: ["chatbot", "bot", "automation", "flow", "builder", "visual", "drag", "drop", "nodes"],
+    content: \`
+# Chatbot Automation
+
+Build intelligent automated conversations with our visual drag-and-drop chatbot builder.
+
+*Available on Pro plan*
+
+## Accessing the Chatbot Builder
+
+1. Navigate to **Chatbot** in the sidebar
+2. You'll see a visual canvas for building your conversation flows
+3. The left panel shows available node types
+4. The right panel shows the flow canvas
+
+## Node Types
+
+### Message Node
+Send a message to the customer:
+- Add text content that will be sent via WhatsApp
+- Great for greetings, information, and responses
+
+### Question Node
+Ask for customer input:
+- Pose a question and wait for the customer's reply
+- Capture responses for personalization or routing
+
+### Delay Node
+Add a pause between messages:
+- Set delays from seconds to hours
+- Makes conversations feel more natural
+- Gives customers time to read messages
+
+### Action Node
+Perform automated actions:
+- **Assign to team member**: Route the conversation
+- **Set tag**: Apply tags based on conversation flow
+- **Set follow-up**: Create automatic reminders
+
+## Building a Flow
+
+1. **Drag nodes** from the left panel onto the canvas
+2. **Connect nodes** by dragging from a node's bottom handle to another node's top handle
+3. **Configure each node** by clicking on it and editing its settings
+4. **Save your flow** by clicking the Save button
+
+## Example: Welcome Bot
+
+**Step 1**: Add a Message node
+"Hi! Welcome to our store. How can I help you today?"
+
+**Step 2**: Add a Question node
+"Please choose an option:
+1. Product information
+2. Order status
+3. Talk to an agent"
+
+**Step 3**: Based on response, add Action nodes:
+- Option 1: Set tag "Product Inquiry"
+- Option 2: Set tag "Order Support"
+- Option 3: Assign to team member
+
+## Activating Your Chatbot
+
+1. Build and save your flow
+2. Toggle the chatbot to **Active** status
+3. New incoming messages will trigger the flow
+4. Monitor sessions in the Chatbot Sessions tab
+
+## Managing Chatbot Sessions
+
+View active and completed chatbot sessions:
+- See which customers are in the flow
+- Track their progress through nodes
+- View conversation history
+- Manually take over when needed
+
+## Best Practices
+
+- **Start simple**: Begin with a basic flow and expand over time
+- **Test thoroughly**: Try different customer responses
+- **Use delays**: Make conversations feel natural
+- **Include escape routes**: Always offer "talk to human" options
+- **Monitor performance**: Review sessions regularly
+- **Iterate**: Improve based on customer interactions
+    \`
+  },
+  {
     id: "integrations",
     title: "Integrations Overview",
     category: "Integrations",
@@ -566,7 +658,7 @@ They'll receive an email to join your workspace.
 
 - **Free**: 1 user
 - **Starter**: Up to 3 users
-- **Pro**: Up to 10 users
+- **Pro**: Unlimited team members
 
 ## Assigning Chats
 
@@ -680,9 +772,10 @@ Manage your WhachatCRM subscription and billing.
 
 **Pro - $49/month**
 - 2,000 active conversations
-- 10 users
+- Unlimited team members
 - Drip sequences
 - Workflow automation
+- Chatbot automation
 - Priority support
 
 ## Upgrading Your Plan
