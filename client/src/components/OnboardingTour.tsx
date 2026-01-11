@@ -229,7 +229,7 @@ export function OnboardingTour({ onComplete, isOpen }: OnboardingTourProps) {
               <Link href={`/app/help?article=${step.helpArticleId}`}>
                 <a 
                   className="inline-flex items-center gap-1 text-xs text-brand-green hover:text-emerald-700 font-medium mb-3"
-                  onClick={(e) => e.stopPropagation()}
+                  onClick={() => handleComplete()}
                 >
                   <HelpCircle className="h-3.5 w-3.5" />
                   Learn more
@@ -242,7 +242,7 @@ export function OnboardingTour({ onComplete, isOpen }: OnboardingTourProps) {
               <Link href="/app/help">
                 <a 
                   className="inline-flex items-center gap-1 text-xs text-brand-green hover:text-emerald-700 font-medium mb-3"
-                  onClick={(e) => e.stopPropagation()}
+                  onClick={() => handleComplete()}
                 >
                   <HelpCircle className="h-3.5 w-3.5" />
                   Visit Help Center
