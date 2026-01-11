@@ -411,7 +411,7 @@ A workflow has:
     category: "Automation",
     icon: Zap,
     keywords: ["chatbot", "bot", "automation", "flow", "builder", "visual", "drag", "drop", "nodes"],
-    content: \`
+    content: `
 # Chatbot Automation
 
 Build intelligent automated conversations with our visual drag-and-drop chatbot builder.
@@ -421,124 +421,100 @@ Build intelligent automated conversations with our visual drag-and-drop chatbot 
 ## Accessing the Chatbot Builder
 
 1. Navigate to **Chatbot** in the sidebar
-2. You'll see a visual canvas for building your conversation flows
+2. You will see a visual canvas for building your conversation flows
 3. The left panel shows available node types
 4. The right panel shows the flow canvas
 
 ## Node Types
 
 ### Message Node
-Send a message to the customer:
-- Add text content that will be sent via WhatsApp
-- Great for greetings, information, and responses
+Send a message to the customer. Add text content that will be sent via WhatsApp. Great for greetings, information, and responses.
 
 ### Question Node
-Ask for customer input:
-- Pose a question and wait for the customer's reply
-- Capture responses for personalization or routing
+Ask for customer input. Pose a question and wait for the customer reply. Capture responses for personalization or routing.
 
 ### Delay Node
-Add a pause between messages:
-- Set delays from seconds to hours
-- Makes conversations feel more natural
-- Gives customers time to read messages
+Add a pause between messages. Set delays from seconds to hours. Makes conversations feel more natural. Gives customers time to read messages.
 
 ### Action Node
-Perform automated actions:
-- **Assign to team member**: Route the conversation
-- **Set tag**: Apply tags based on conversation flow
-- **Set follow-up**: Create automatic reminders
+Perform automated actions like assign to team member, set tag based on conversation flow, or set follow-up reminders.
 
 ## Building a Flow
 
-1. **Drag nodes** from the left panel onto the canvas
-2. **Connect nodes** by dragging from a node's bottom handle to another node's top handle
-3. **Configure each node** by clicking on it and editing its settings
-4. **Save your flow** by clicking the Save button
-
-## Example: Welcome Bot
-
-**Step 1**: Add a Message node
-"Hi! Welcome to our store. How can I help you today?"
-
-**Step 2**: Add a Question node
-"Please choose an option:
-1. Product information
-2. Order status
-3. Talk to an agent"
-
-**Step 3**: Based on response, add Action nodes:
-- Option 1: Set tag "Product Inquiry"
-- Option 2: Set tag "Order Support"
-- Option 3: Assign to team member
+1. Drag nodes from the left panel onto the canvas
+2. Connect nodes by dragging from a node bottom handle to another node top handle
+3. Configure each node by clicking on it and editing its settings
+4. Save your flow by clicking the Save button
 
 ## Activating Your Chatbot
 
 1. Build and save your flow
-2. Toggle the chatbot to **Active** status
+2. Toggle the chatbot to Active status
 3. New incoming messages will trigger the flow
 4. Monitor sessions in the Chatbot Sessions tab
 
-## Managing Chatbot Sessions
-
-View active and completed chatbot sessions:
-- See which customers are in the flow
-- Track their progress through nodes
-- View conversation history
-- Manually take over when needed
-
 ## Best Practices
 
-- **Start simple**: Begin with a basic flow and expand over time
-- **Test thoroughly**: Try different customer responses
-- **Use delays**: Make conversations feel natural
-- **Include escape routes**: Always offer "talk to human" options
-- **Monitor performance**: Review sessions regularly
-- **Iterate**: Improve based on customer interactions
-    \`
+Start simple and expand over time. Test thoroughly with different customer responses. Use delays to make conversations feel natural. Always offer talk to human options. Monitor performance and iterate based on customer interactions.
+    `
   },
   {
     id: "integrations",
     title: "Integrations Overview",
     category: "Integrations",
     icon: Plug,
-    keywords: ["integration", "connect", "api", "webhook", "third-party", "external"],
+    keywords: ["integration", "connect", "api", "webhook", "third-party", "external", "shopify", "hubspot", "salesforce", "calendly", "mailchimp", "google sheets"],
     content: `
 # Integrations
 
 Connect WhachatCRM with your other business tools.
 
-## Available Integrations
+## Native Integrations
 
-WhachatCRM integrates with popular platforms and supports custom webhooks for advanced use cases.
+WhachatCRM integrates with popular platforms to streamline your workflow:
 
-### Native Integrations
+### Communication
+- **Twilio**: WhatsApp messaging (required for sending messages)
 
+### E-commerce
+- **Shopify**: Sync orders, customers, and product info with your store
 - **Stripe**: Payment processing and subscription management
-- **Twilio**: WhatsApp messaging (required)
-- **Webhooks**: Connect to any external service
 
-### Webhooks
+### CRM Systems
+- **HubSpot**: Sync contacts and deals with HubSpot CRM
+- **Salesforce**: Connect to Salesforce for enterprise CRM integration
 
-Send data to external services when events occur:
+### Scheduling
+- **Calendly**: Let customers book appointments directly from chat
+
+### Marketing
+- **Mailchimp**: Sync contacts with your email marketing lists. Configure your API key, server prefix, and audience ID
+
+### Productivity
+- **Google Sheets**: Export data and sync contacts with spreadsheets
+
+### Real Estate
+- **ShowcaseIDX**: Connect your real estate listings and lead capture
+
+## Setting Up Integrations
+
+1. Navigate to **Integrations** in the sidebar
+2. Find the integration you want to connect
+3. Click on the integration card
+4. Enter your API credentials (API key, tokens, etc.)
+5. Click **Save** to activate the integration
+
+## Custom Webhooks
+
+For services not listed above, use webhooks to connect any external service:
+
 1. Go to **Integrations** page
 2. Click **Add Webhook**
 3. Enter your webhook URL
-4. Select events to trigger the webhook:
-   - New message received
-   - Chat created
-   - Tag changed
-   - Follow-up due
+4. Select events to trigger the webhook (new message, chat created, tag changed, follow-up due)
 5. Save and test
 
-### API Access
-
-For advanced integrations, WhachatCRM provides API endpoints:
-- Authentication via session
-- REST API for chats, messages, and contacts
-- Webhook callbacks for real-time events
-
-## Stripe Integration
+## Stripe Integration Details
 
 WhachatCRM uses Stripe for subscriptions:
 - Secure payment processing
