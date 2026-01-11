@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import heroImage from "@assets/generated_images/whatsapp_crm_dashboard_mockup.png";
-import integrationsImage from "@assets/generated_images/crm_integrations_hub_diagram.png";
+import integrationsImage from "@assets/generated_images/whachatcrm_integration_hub_graphic.png";
 
 export function Welcome() {
   const { user } = useAuth();
@@ -314,13 +314,14 @@ export function Welcome() {
           </motion.div>
           
           <div className="flex flex-wrap justify-center gap-3 mt-8">
-            <span className="px-4 py-2 bg-gray-100 rounded-full text-sm font-medium text-gray-700">Shopify</span>
-            <span className="px-4 py-2 bg-gray-100 rounded-full text-sm font-medium text-gray-700">HubSpot</span>
-            <span className="px-4 py-2 bg-gray-100 rounded-full text-sm font-medium text-gray-700">Salesforce</span>
-            <span className="px-4 py-2 bg-gray-100 rounded-full text-sm font-medium text-gray-700">Stripe</span>
-            <span className="px-4 py-2 bg-gray-100 rounded-full text-sm font-medium text-gray-700">Mailchimp</span>
-            <span className="px-4 py-2 bg-gray-100 rounded-full text-sm font-medium text-gray-700">Calendly</span>
-            <span className="px-4 py-2 bg-gray-100 rounded-full text-sm font-medium text-gray-700">Google Sheets</span>
+            <span className="px-4 py-2 bg-green-50 border border-green-200 rounded-full text-sm font-medium text-green-700">Shopify</span>
+            <span className="px-4 py-2 bg-orange-50 border border-orange-200 rounded-full text-sm font-medium text-orange-700">HubSpot</span>
+            <span className="px-4 py-2 bg-blue-50 border border-blue-200 rounded-full text-sm font-medium text-blue-700">Salesforce</span>
+            <span className="px-4 py-2 bg-purple-50 border border-purple-200 rounded-full text-sm font-medium text-purple-700">Stripe</span>
+            <span className="px-4 py-2 bg-yellow-50 border border-yellow-200 rounded-full text-sm font-medium text-yellow-700">Mailchimp</span>
+            <span className="px-4 py-2 bg-sky-50 border border-sky-200 rounded-full text-sm font-medium text-sky-700">Calendly</span>
+            <span className="px-4 py-2 bg-emerald-50 border border-emerald-200 rounded-full text-sm font-medium text-emerald-700">Google Sheets</span>
+            <span className="px-4 py-2 bg-red-50 border border-red-200 rounded-full text-sm font-medium text-red-700">ShowcaseIDX</span>
           </div>
         </div>
       </section>
