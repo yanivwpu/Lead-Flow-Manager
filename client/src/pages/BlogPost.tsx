@@ -526,7 +526,7 @@ WATI (WhatsApp Team Inbox) is a popular WhatsApp Business solution, but it's not
 ### Pricing
 - Free: $0/month (50 conversations, 1 user)
 - Starter: $19/month (500 conversations, 3 users)
-- Pro: $49/month (2,000 conversations, 10 users)
+- Pro: $49/month (2,000 conversations, unlimited users)
 
 ### Key Differences from WATI
 - **No message markup** - Pay Twilio directly
