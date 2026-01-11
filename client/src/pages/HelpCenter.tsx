@@ -1187,7 +1187,7 @@ export function HelpCenter() {
                 {renderMarkdown(selectedArticle.content)}
               </article>
 
-              <div className="mt-8 pt-6 border-t border-gray-200">
+              <div className="mt-8 pt-6 border-t border-gray-200 pb-16">
                 <p className="text-sm text-gray-500 mb-2">Was this helpful?</p>
                 <div className="flex gap-2">
                   <button className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">
