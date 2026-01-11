@@ -8,15 +8,15 @@ export function Sidebar() {
   const { logout, user } = useAuth();
 
   const navItems = [
-    { icon: MessageSquare, label: "Chats", href: "/app/chats" },
-    { icon: ListTodo, label: "Follow-ups", href: "/app/followups" },
-    { icon: Bot, label: "Chatbot", href: "/app/chatbot" },
-    { icon: Zap, label: "Automation", href: "/app/workflows" },
-    { icon: FileText, label: "Templates", href: "/app/templates" },
-    { icon: Plug, label: "Integrations", href: "/app/integrations" },
-    { icon: Search, label: "Search", href: "/app/search" },
-    { icon: Settings, label: "Settings", href: "/app/settings" },
-    { icon: HelpCircle, label: "Help", href: "/app/help" },
+    { icon: MessageSquare, label: "Chats", href: "/app/chats", testId: "sidebar-chats" },
+    { icon: ListTodo, label: "Follow-ups", href: "/app/followups", testId: "sidebar-followups" },
+    { icon: Bot, label: "Chatbot", href: "/app/chatbot", testId: "sidebar-chatbot" },
+    { icon: Zap, label: "Automation", href: "/app/workflows", testId: "sidebar-automation" },
+    { icon: FileText, label: "Templates", href: "/app/templates", testId: "sidebar-templates" },
+    { icon: Plug, label: "Integrations", href: "/app/integrations", testId: "sidebar-integrations" },
+    { icon: Search, label: "Search", href: "/app/search", testId: "sidebar-search" },
+    { icon: Settings, label: "Settings", href: "/app/settings", testId: "sidebar-settings" },
+    { icon: HelpCircle, label: "Help", href: "/app/help", testId: "sidebar-help" },
   ];
 
   return (
@@ -36,6 +36,7 @@ export function Sidebar() {
           return (
             <Link key={item.href} href={item.href}>
               <a
+                data-testid={item.testId}
                 className={cn(
                   "flex items-center p-2 rounded-lg transition-colors group relative md:w-full justify-center md:justify-start",
                   isActive

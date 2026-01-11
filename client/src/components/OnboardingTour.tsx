@@ -1,9 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Link } from "wouter";
 import { 
-  MessageSquare, Users, Bell, Settings, Plug, Zap, 
-  ChevronRight, ChevronLeft, X, Sparkles, CheckCircle2
+  MessageSquare, ListTodo, Bot, Zap, Plug, Settings, 
+  ChevronRight, ChevronLeft, X, Sparkles, CheckCircle2, HelpCircle, ExternalLink
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -13,8 +14,9 @@ interface TourStep {
   title: string;
   description: string;
   icon: any;
-  highlight?: string;
-  position?: "center" | "bottom-left" | "bottom-right";
+  sidebarTestId?: string;
+  helpArticleId?: string;
+  isCentered?: boolean;
 }
 
 const TOUR_STEPS: TourStep[] = [
@@ -23,46 +25,62 @@ const TOUR_STEPS: TourStep[] = [
     title: "Welcome to WhachatCRM!",
     description: "Let's take a quick tour to help you get started. You'll be managing WhatsApp leads like a pro in no time.",
     icon: Sparkles,
-    position: "center",
+    isCentered: true,
   },
   {
     id: "chats",
     title: "Your Chat Inbox",
-    description: "This is where all your WhatsApp conversations live. Click any chat to view the full conversation and manage the lead.",
+    description: "This is where all your WhatsApp conversations live. Click any chat to view messages, add notes, tags, and manage your leads.",
     icon: MessageSquare,
-    highlight: "[data-testid='sidebar-chats']",
-  },
-  {
-    id: "pipeline",
-    title: "Track Your Pipeline",
-    description: "Tag leads as Hot, Quoted, or Paid. Set pipeline stages to track deals from Lead to Closed. Never lose track of a sale again!",
-    icon: Users,
+    sidebarTestId: "sidebar-chats",
+    helpArticleId: "getting-started",
   },
   {
     id: "followups",
-    title: "Never Forget Follow-ups",
-    description: "Set reminders for tomorrow, 3 days, or any custom date. Get notified when it's time to reach out.",
-    icon: Bell,
+    title: "Never Miss a Follow-up",
+    description: "Set reminders for tomorrow, 3 days, or any custom date. Get notified when it's time to reach out to your leads.",
+    icon: ListTodo,
+    sidebarTestId: "sidebar-followups",
+    helpArticleId: "follow-up-reminders",
+  },
+  {
+    id: "chatbot",
+    title: "Visual Chatbot Builder",
+    description: "Build automated WhatsApp flows with our drag-and-drop builder. Create welcome messages, FAQs, and lead qualification bots.",
+    icon: Bot,
+    sidebarTestId: "sidebar-chatbot",
+    helpArticleId: "chatbot-automation",
+  },
+  {
+    id: "automation",
+    title: "Automate Your Workflows",
+    description: "Set up drip campaigns, auto-replies, and scheduled messages. Let automation handle repetitive tasks while you focus on closing deals.",
+    icon: Zap,
+    sidebarTestId: "sidebar-automation",
+    helpArticleId: "drip-campaigns",
   },
   {
     id: "integrations",
     title: "Connect Your Tools",
-    description: "Link Shopify, Calendly, Stripe, and more. Automatically create leads when customers book or buy.",
+    description: "Link Shopify, HubSpot, Stripe, Calendly and more. Automatically sync leads and orders across all your business tools.",
     icon: Plug,
+    sidebarTestId: "sidebar-integrations",
+    helpArticleId: "native-integrations",
   },
   {
-    id: "twilio",
+    id: "settings",
     title: "Connect WhatsApp",
     description: "Head to Settings to connect your Twilio account. Once connected, you can send and receive WhatsApp messages directly.",
     icon: Settings,
-    highlight: "[data-testid='sidebar-settings']",
+    sidebarTestId: "sidebar-settings",
+    helpArticleId: "twilio-setup",
   },
   {
     id: "complete",
     title: "You're All Set!",
-    description: "Start by connecting your Twilio account in Settings, then import your contacts or wait for new messages to arrive.",
+    description: "Start by connecting your Twilio account in Settings, then import your contacts or wait for new messages to arrive. Need help? Visit our Help Center anytime.",
     icon: CheckCircle2,
-    position: "center",
+    isCentered: true,
   },
 ];
 
@@ -74,7 +92,9 @@ interface OnboardingTourProps {
 export function OnboardingTour({ onComplete, isOpen }: OnboardingTourProps) {
   const [currentStep, setCurrentStep] = useState(0);
   const [isVisible, setIsVisible] = useState(isOpen);
+  const [tooltipPosition, setTooltipPosition] = useState({ top: 0, left: 0 });
   const queryClient = useQueryClient();
+  const cardRef = useRef<HTMLDivElement>(null);
 
   const completeTourMutation = useMutation({
     mutationFn: async () => {
@@ -93,6 +113,25 @@ export function OnboardingTour({ onComplete, isOpen }: OnboardingTourProps) {
   useEffect(() => {
     setIsVisible(isOpen);
   }, [isOpen]);
+
+  useEffect(() => {
+    const step = TOUR_STEPS[currentStep];
+    if (step.sidebarTestId && !step.isCentered) {
+      const element = document.querySelector(`[data-testid="${step.sidebarTestId}"]`);
+      if (element) {
+        const rect = element.getBoundingClientRect();
+        const cardWidth = 380;
+        const cardHeight = cardRef.current?.offsetHeight || 280;
+        
+        let top = rect.top + rect.height / 2 - cardHeight / 2;
+        top = Math.max(20, Math.min(top, window.innerHeight - cardHeight - 20));
+        
+        const left = rect.right + 16;
+        
+        setTooltipPosition({ top, left });
+      }
+    }
+  }, [currentStep]);
 
   const handleNext = () => {
     if (currentStep < TOUR_STEPS.length - 1) {
@@ -126,6 +165,7 @@ export function OnboardingTour({ onComplete, isOpen }: OnboardingTourProps) {
   const Icon = step.icon;
   const isLastStep = currentStep === TOUR_STEPS.length - 1;
   const isFirstStep = currentStep === 0;
+  const isCentered = step.isCentered;
 
   return (
     <div className="fixed inset-0 z-[100]">
@@ -134,14 +174,33 @@ export function OnboardingTour({ onComplete, isOpen }: OnboardingTourProps) {
         onClick={handleSkip}
       />
       
-      <div className={cn(
-        "absolute flex items-center justify-center p-4",
-        step.position === "center" && "inset-0",
-        step.position === "bottom-left" && "bottom-4 left-4",
-        step.position === "bottom-right" && "bottom-4 right-4",
-        !step.position && "inset-0"
-      )}>
-        <Card className="w-full max-w-md shadow-2xl border-0 animate-in fade-in zoom-in-95 duration-300">
+      {step.sidebarTestId && !isCentered && (
+        <div 
+          className="absolute pointer-events-none"
+          style={{
+            top: tooltipPosition.top + (cardRef.current?.offsetHeight || 280) / 2,
+            left: tooltipPosition.left - 8,
+          }}
+        >
+          <div className="w-0 h-0 border-t-8 border-b-8 border-r-8 border-transparent border-r-white" />
+        </div>
+      )}
+      
+      <div 
+        ref={cardRef}
+        className={cn(
+          "absolute",
+          isCentered && "inset-0 flex items-center justify-center p-4"
+        )}
+        style={!isCentered ? {
+          top: tooltipPosition.top,
+          left: tooltipPosition.left,
+        } : undefined}
+      >
+        <Card className={cn(
+          "shadow-2xl border-0 animate-in fade-in zoom-in-95 duration-300",
+          isCentered ? "w-full max-w-md" : "w-[380px]"
+        )}>
           <CardContent className="p-6">
             <div className="flex items-start justify-between mb-4">
               <div className={cn(
@@ -158,6 +217,7 @@ export function OnboardingTour({ onComplete, isOpen }: OnboardingTourProps) {
                 size="icon" 
                 className="h-8 w-8 text-gray-400 hover:text-gray-600"
                 onClick={handleSkip}
+                data-testid="tour-skip-button"
               >
                 <X className="h-4 w-4" />
               </Button>
@@ -166,9 +226,35 @@ export function OnboardingTour({ onComplete, isOpen }: OnboardingTourProps) {
             <h3 className="text-xl font-bold text-gray-900 mb-2">
               {step.title}
             </h3>
-            <p className="text-gray-600 mb-6">
+            <p className="text-gray-600 mb-4">
               {step.description}
             </p>
+
+            {step.helpArticleId && (
+              <Link href={`/app/help?article=${step.helpArticleId}`}>
+                <a 
+                  className="inline-flex items-center gap-1.5 text-sm text-brand-green hover:text-emerald-700 font-medium mb-4"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <HelpCircle className="h-4 w-4" />
+                  Learn more in Help Center
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+              </Link>
+            )}
+
+            {isLastStep && (
+              <Link href="/app/help">
+                <a 
+                  className="inline-flex items-center gap-1.5 text-sm text-brand-green hover:text-emerald-700 font-medium mb-4"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <HelpCircle className="h-4 w-4" />
+                  Visit Help Center
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+              </Link>
+            )}
 
             <div className="flex items-center justify-between">
               <div className="flex gap-1.5">
@@ -205,14 +291,13 @@ export function OnboardingTour({ onComplete, isOpen }: OnboardingTourProps) {
               </div>
             </div>
 
-            {isFirstStep && (
-              <button
-                onClick={handleSkip}
-                className="w-full mt-4 text-sm text-gray-400 hover:text-gray-600"
-              >
-                Skip tour
-              </button>
-            )}
+            <button
+              onClick={handleSkip}
+              className="w-full mt-4 text-sm text-gray-400 hover:text-gray-600"
+              data-testid="tour-skip-text"
+            >
+              Skip tour
+            </button>
           </CardContent>
         </Card>
       </div>
