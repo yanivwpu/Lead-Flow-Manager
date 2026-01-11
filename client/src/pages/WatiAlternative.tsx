@@ -85,7 +85,9 @@ export function WatiAlternative() {
               { feature: "Free plan", us: true, them: false },
               { feature: "Zero message markup", us: true, them: false },
               { feature: "Cancel anytime (self-service)", us: true, them: false },
-              { feature: "Multiple WhatsApp numbers", us: "Up to 3", them: "1 only" },
+              { feature: "Multiple WhatsApp numbers", us: "Up to 5", them: "1 only" },
+              { feature: "Unlimited team members", us: "$49/mo", them: "$200+/mo" },
+              { feature: "Visual chatbot builder", us: "$19/mo", them: "$100+/mo" },
               { feature: "Simple setup", us: true, them: false },
               { feature: "No training required", us: true, them: false },
               { feature: "WhatsApp messaging", us: true, them: true },
@@ -93,7 +95,6 @@ export function WatiAlternative() {
               { feature: "Follow-up reminders", us: true, them: true },
               { feature: "Workflow automation", us: "$49/mo", them: "$200+/mo" },
               { feature: "Template messaging", us: "$49/mo", them: "$200+/mo" },
-              { feature: "Team inbox (10 users)", us: "$49/mo", them: "$200+/mo" },
               { feature: "Starting price", us: "$0/free", them: "$30/month + fees" },
             ].map((row, i) => (
               <div key={i} className="grid grid-cols-3 p-4 border-t border-gray-100 items-center">

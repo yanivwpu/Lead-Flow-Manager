@@ -40,8 +40,10 @@ const PLANS = [
     features: [
       "Everything in Free, plus:",
       "Up to 3 team members",
+      "1 WhatsApp Business number",
       "500 active conversations / month",
       "Shared team inbox",
+      "Visual chatbot builder",
       "Auto-reply messages",
       "Keyword triggers",
       "CSV import contacts",
@@ -60,9 +62,10 @@ const PLANS = [
     popular: false,
     features: [
       "Everything in Starter, plus:",
-      "Up to 3 WhatsApp Business numbers",
-      "Up to 10 team members",
+      "Up to 5 WhatsApp Business numbers",
+      "Unlimited team members",
       "2,000 active conversations / month",
+      "Visual chatbot builder",
       "Drip sequences & campaigns",
       "Workflow automation",
       "Template messaging & retargeting",

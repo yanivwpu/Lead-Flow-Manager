@@ -200,7 +200,7 @@ export function Welcome() {
             </h2>
           </div>
           
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6 md:gap-8">
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6 md:gap-8">
             <motion.div 
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
@@ -252,15 +252,29 @@ export function Welcome() {
               <div className="h-12 w-12 bg-purple-100 rounded-xl flex items-center justify-center mb-4">
                 <Users className="h-6 w-6 text-purple-600" />
               </div>
-              <h3 className="text-lg font-bold text-gray-900 mb-2">Built for Teams</h3>
-              <p className="text-gray-600">Assign conversations, track progress, and stay aligned.</p>
+              <h3 className="text-lg font-bold text-gray-900 mb-2">Unlimited Team Members</h3>
+              <p className="text-gray-600">Add your entire team with no per-seat fees. Assign conversations and stay aligned.</p>
+            </motion.div>
+
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ delay: 0.4 }}
+              className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100"
+            >
+              <div className="h-12 w-12 bg-cyan-100 rounded-xl flex items-center justify-center mb-4">
+                <Phone className="h-6 w-6 text-cyan-600" />
+              </div>
+              <h3 className="text-lg font-bold text-gray-900 mb-2">Visual Chatbot Builder</h3>
+              <p className="text-gray-600">Build automated flows with our drag-and-drop chatbot builder. No coding required.</p>
             </motion.div>
             
             <motion.div 
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
-              transition={{ delay: 0.4 }}
+              transition={{ delay: 0.5 }}
               className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100"
             >
               <div className="h-12 w-12 bg-pink-100 rounded-xl flex items-center justify-center mb-4">
