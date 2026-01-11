@@ -1,4 +1,4 @@
-import { useState, ReactNode } from "react";
+import { useState, useRef, ReactNode } from "react";
 import { Helmet } from "react-helmet";
 import { 
   Search, ChevronRight, MessageSquare, Settings, Zap, Plug, 
@@ -1109,6 +1109,14 @@ export function HelpCenter() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  const scrollToTop = () => {
+    const scrollable = contentRef.current?.querySelector('.overflow-auto');
+    scrollable?.scrollTo(0, 0);
+    contentRef.current?.scrollTo(0, 0);
+    window.scrollTo(0, 0);
+  };
 
   const filteredArticles = HELP_ARTICLES.filter(article => {
     const matchesSearch = searchQuery === "" || 
@@ -1207,7 +1215,7 @@ export function HelpCenter() {
         <p className="text-sm text-gray-500 mt-1">Find answers and learn how to use WhachatCRM</p>
       </div>
 
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex overflow-hidden" ref={contentRef}>
         {!selectedArticle ? (
           <div className="flex-1 overflow-auto p-4 sm:p-6">
             <div className="max-w-3xl mx-auto">
@@ -1227,7 +1235,7 @@ export function HelpCenter() {
                   {CATEGORIES.map((cat) => (
                     <button
                       key={cat.name}
-                      onClick={() => { setSelectedCategory(cat.name); window.scrollTo(0, 0); }}
+                      onClick={() => { setSelectedCategory(cat.name); scrollToTop(); }}
                       className="flex flex-col items-center gap-2 p-4 rounded-lg border border-gray-200 hover:border-brand-green hover:bg-green-50/50 transition-colors text-center"
                       data-testid={`button-category-${cat.name.toLowerCase().replace(/\s/g, '-')}`}
                     >
@@ -1243,7 +1251,7 @@ export function HelpCenter() {
               {selectedCategory && (
                 <div className="mb-4 flex items-center gap-2">
                   <button
-                    onClick={() => { setSelectedCategory(null); window.scrollTo(0, 0); }}
+                    onClick={() => { setSelectedCategory(null); scrollToTop(); }}
                     className="text-sm text-brand-green hover:underline"
                   >
                     All Categories
@@ -1257,7 +1265,7 @@ export function HelpCenter() {
                 {filteredArticles.map((article) => (
                   <button
                     key={article.id}
-                    onClick={() => { setSelectedArticle(article); window.scrollTo(0, 0); }}
+                    onClick={() => { setSelectedArticle(article); scrollToTop(); }}
                     className="w-full flex items-center gap-3 p-4 rounded-lg border border-gray-200 hover:border-brand-green hover:bg-green-50/30 transition-colors text-left"
                     data-testid={`button-article-${article.id}`}
                   >
@@ -1286,7 +1294,7 @@ export function HelpCenter() {
           <div className="flex-1 overflow-auto p-4 sm:p-6">
             <div className="max-w-3xl mx-auto">
               <button
-                onClick={() => { setSelectedArticle(null); window.scrollTo(0, 0); }}
+                onClick={() => { setSelectedArticle(null); scrollToTop(); }}
                 className="flex items-center gap-1 text-sm text-brand-green hover:underline mb-6"
                 data-testid="button-back-to-articles"
               >
