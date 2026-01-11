@@ -42,7 +42,7 @@ function AppContent() {
   return (
     <div className="flex h-full bg-white overflow-hidden">
       <Sidebar />
-      <main className="flex-1 flex flex-col min-w-0 min-h-0 bg-gray-50 overflow-hidden relative">
+      <main className="flex-1 flex flex-col min-w-0 min-h-0 bg-white overflow-hidden relative">
         {showTrialBanner && subscription?.limits && (
           <TrialBanner
             daysRemaining={subscription.limits.trialDaysRemaining}

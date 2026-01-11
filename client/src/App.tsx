@@ -29,7 +29,7 @@ function ProtectedRoute({ component: Component, ...rest }: any) {
 
   if (isLoading) {
     return (
-      <div className="flex h-screen items-center justify-center bg-gray-50">
+      <div className="flex h-full items-center justify-center bg-white">
         <Loader2 className="h-8 w-8 text-brand-green animate-spin" />
       </div>
     );
