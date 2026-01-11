@@ -538,3 +538,75 @@ export type InsertChatbotFlow = z.infer<typeof insertChatbotFlowSchema>;
 export type ChatbotFlow = typeof chatbotFlows.$inferSelect;
 export type InsertChatbotSession = z.infer<typeof insertChatbotSessionSchema>;
 export type ChatbotSession = typeof chatbotSessions.$inferSelect;
+
+// Salespeople for demo bookings
+export const salespeople = pgTable("salespeople", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  email: text("email").notNull(),
+  phone: text("phone"),
+  isActive: boolean("is_active").default(true),
+  totalBookings: integer("total_bookings").default(0),
+  totalConversions: integer("total_conversions").default(0),
+  totalEarnings: numeric("total_earnings", { precision: 10, scale: 2 }).default("0"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Demo bookings from visitors
+export const demoBookings = pgTable("demo_bookings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  salespersonId: varchar("salesperson_id").notNull().references(() => salespeople.id, { onDelete: "cascade" }),
+  visitorName: text("visitor_name").notNull(),
+  visitorEmail: text("visitor_email").notNull(),
+  visitorPhone: text("visitor_phone").notNull(),
+  scheduledDate: timestamp("scheduled_date").notNull(),
+  consentGiven: boolean("consent_given").default(true),
+  status: text("status").notNull().default("pending"), // pending, completed, cancelled, converted
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Conversion tracking - when a demo leads to a paid subscription
+export const salesConversions = pgTable("sales_conversions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  bookingId: varchar("booking_id").notNull().references(() => demoBookings.id, { onDelete: "cascade" }),
+  salespersonId: varchar("salesperson_id").notNull().references(() => salespeople.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "set null" }), // The user who subscribed
+  amount: numeric("amount", { precision: 10, scale: 2 }).default("50"), // Commission amount
+  paid: boolean("paid").default(false),
+  paidAt: timestamp("paid_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Admin settings (password protected admin area)
+export const adminSettings = pgTable("admin_settings", {
+  id: varchar("id").primaryKey().default("admin"),
+  passwordHash: text("password_hash").notNull(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertSalespersonSchema = createInsertSchema(salespeople).omit({
+  id: true,
+  createdAt: true,
+  totalBookings: true,
+  totalConversions: true,
+  totalEarnings: true,
+});
+
+export const insertDemoBookingSchema = createInsertSchema(demoBookings).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertSalesConversionSchema = createInsertSchema(salesConversions).omit({
+  id: true,
+  createdAt: true,
+  paidAt: true,
+});
+
+export type InsertSalesperson = z.infer<typeof insertSalespersonSchema>;
+export type Salesperson = typeof salespeople.$inferSelect;
+export type InsertDemoBooking = z.infer<typeof insertDemoBookingSchema>;
+export type DemoBooking = typeof demoBookings.$inferSelect;
+export type InsertSalesConversion = z.infer<typeof insertSalesConversionSchema>;
+export type SalesConversion = typeof salesConversions.$inferSelect;
