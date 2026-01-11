@@ -16,10 +16,13 @@ import {
   type DripEnrollment, type InsertDripEnrollment,
   type DripSend, type InsertDripSend,
   type ChatbotFlow, type InsertChatbotFlow,
-  type ChatbotSession, type InsertChatbotSession
+  type ChatbotSession, type InsertChatbotSession,
+  type Salesperson, type InsertSalesperson,
+  type DemoBooking, type InsertDemoBooking,
+  type SalesConversion, type InsertSalesConversion
 } from "@shared/schema";
 import { db } from "../drizzle/db";
-import { users, chats, registeredPhones, messageUsage, conversationWindows, teamMembers, workflows, workflowExecutions, recurringReminders, webhooks, webhookDeliveries, integrations, messageTemplates, templateSends, dripCampaigns, dripSteps, dripEnrollments, dripSends, chatbotFlows, chatbotSessions, type InsertConversationWindow, type ConversationWindow } from "@shared/schema";
+import { users, chats, registeredPhones, messageUsage, conversationWindows, teamMembers, workflows, workflowExecutions, recurringReminders, webhooks, webhookDeliveries, integrations, messageTemplates, templateSends, dripCampaigns, dripSteps, dripEnrollments, dripSends, chatbotFlows, chatbotSessions, salespeople, demoBookings, salesConversions, adminSettings, type InsertConversationWindow, type ConversationWindow } from "@shared/schema";
 import { eq, and, lte, sql, isNotNull, asc, desc, gte, sum, gt, or, like, ilike } from "drizzle-orm";
 
 export interface IStorage {
@@ -854,6 +857,126 @@ export class DbStorage implements IStorage {
 
   async deleteChatbotSession(id: string): Promise<void> {
     await db.delete(chatbotSessions).where(eq(chatbotSessions.id, id));
+  }
+
+  // Salesperson methods
+  async getSalespeople(): Promise<Salesperson[]> {
+    return await db.select().from(salespeople).orderBy(desc(salespeople.createdAt));
+  }
+
+  async getActiveSalespeople(): Promise<Salesperson[]> {
+    return await db.select().from(salespeople)
+      .where(eq(salespeople.isActive, true))
+      .orderBy(desc(salespeople.createdAt));
+  }
+
+  async getSalesperson(id: string): Promise<Salesperson | undefined> {
+    const result = await db.select().from(salespeople).where(eq(salespeople.id, id));
+    return result[0];
+  }
+
+  async createSalesperson(person: InsertSalesperson): Promise<Salesperson> {
+    const result = await db.insert(salespeople).values(person).returning();
+    return result[0];
+  }
+
+  async updateSalesperson(id: string, updates: Partial<Salesperson>): Promise<Salesperson | undefined> {
+    const result = await db.update(salespeople)
+      .set(updates)
+      .where(eq(salespeople.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async deleteSalesperson(id: string): Promise<void> {
+    await db.delete(salespeople).where(eq(salespeople.id, id));
+  }
+
+  // Demo Booking methods
+  async getDemoBookings(): Promise<DemoBooking[]> {
+    return await db.select().from(demoBookings).orderBy(desc(demoBookings.createdAt));
+  }
+
+  async getDemoBookingsBySalesperson(salespersonId: string): Promise<DemoBooking[]> {
+    return await db.select().from(demoBookings)
+      .where(eq(demoBookings.salespersonId, salespersonId))
+      .orderBy(desc(demoBookings.createdAt));
+  }
+
+  async getDemoBooking(id: string): Promise<DemoBooking | undefined> {
+    const result = await db.select().from(demoBookings).where(eq(demoBookings.id, id));
+    return result[0];
+  }
+
+  async getDemoBookingByEmail(email: string): Promise<DemoBooking | undefined> {
+    const result = await db.select().from(demoBookings)
+      .where(eq(demoBookings.visitorEmail, email))
+      .orderBy(desc(demoBookings.createdAt));
+    return result[0];
+  }
+
+  async createDemoBooking(booking: InsertDemoBooking): Promise<DemoBooking> {
+    const result = await db.insert(demoBookings).values(booking).returning();
+    await db.update(salespeople)
+      .set({ totalBookings: sql`${salespeople.totalBookings} + 1` })
+      .where(eq(salespeople.id, booking.salespersonId));
+    return result[0];
+  }
+
+  async updateDemoBooking(id: string, updates: Partial<DemoBooking>): Promise<DemoBooking | undefined> {
+    const result = await db.update(demoBookings)
+      .set(updates)
+      .where(eq(demoBookings.id, id))
+      .returning();
+    return result[0];
+  }
+
+  // Sales Conversion methods
+  async getSalesConversions(): Promise<SalesConversion[]> {
+    return await db.select().from(salesConversions).orderBy(desc(salesConversions.createdAt));
+  }
+
+  async getSalesConversionsBySalesperson(salespersonId: string): Promise<SalesConversion[]> {
+    return await db.select().from(salesConversions)
+      .where(eq(salesConversions.salespersonId, salespersonId))
+      .orderBy(desc(salesConversions.createdAt));
+  }
+
+  async createSalesConversion(conversion: InsertSalesConversion): Promise<SalesConversion> {
+    const result = await db.insert(salesConversions).values(conversion).returning();
+    await db.update(salespeople)
+      .set({ 
+        totalConversions: sql`${salespeople.totalConversions} + 1`,
+        totalEarnings: sql`${salespeople.totalEarnings} + ${conversion.amount || 50}`
+      })
+      .where(eq(salespeople.id, conversion.salespersonId));
+    await db.update(demoBookings)
+      .set({ status: 'converted' })
+      .where(eq(demoBookings.id, conversion.bookingId));
+    return result[0];
+  }
+
+  async markConversionPaid(id: string): Promise<SalesConversion | undefined> {
+    const result = await db.update(salesConversions)
+      .set({ paid: true, paidAt: new Date() })
+      .where(eq(salesConversions.id, id))
+      .returning();
+    return result[0];
+  }
+
+  // Admin settings methods
+  async getAdminPasswordHash(): Promise<string | undefined> {
+    const result = await db.select().from(adminSettings).where(eq(adminSettings.id, 'admin'));
+    return result[0]?.passwordHash;
+  }
+
+  async setAdminPassword(passwordHash: string): Promise<void> {
+    await db.insert(adminSettings)
+      .values({ id: 'admin', passwordHash, updatedAt: new Date() })
+      .onConflictDoUpdate({
+        target: adminSettings.id,
+        set: { passwordHash, updatedAt: new Date() }
+      });
   }
 }
 

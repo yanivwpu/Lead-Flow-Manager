@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertChatSchema, insertRegisteredPhoneSchema, PLAN_LIMITS, type SubscriptionPlan } from "@shared/schema";
+import { insertChatSchema, insertRegisteredPhoneSchema, insertSalespersonSchema, insertDemoBookingSchema, PLAN_LIMITS, type SubscriptionPlan } from "@shared/schema";
 import { z } from "zod";
 import { getVapidPublicKey } from "./notifications";
 import {
@@ -25,7 +25,8 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import { subscriptionService } from "./subscriptionService";
-import { sendWelcomeEmail, sendContactFormEmail } from "./email";
+import { sendWelcomeEmail, sendContactFormEmail, sendDemoBookingNotification } from "./email";
+import bcrypt from "bcryptjs";
 import { triggerNewChatWorkflows, triggerKeywordWorkflows } from "./workflowEngine";
 
 const TWILIO_BASE_COST_PER_MESSAGE = 0.005;
@@ -2600,6 +2601,224 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error fetching admin usage:", error);
       res.status(500).json({ error: "Failed to fetch usage data" });
+    }
+  });
+
+  // ============= Demo Booking System =============
+
+  // Get available salespeople (public endpoint for booking form)
+  app.get("/api/demo/salespeople", async (req, res) => {
+    try {
+      const people = await storage.getActiveSalespeople();
+      res.json(people.map(p => ({ id: p.id, name: p.name })));
+    } catch (error) {
+      console.error("Error fetching salespeople:", error);
+      res.status(500).json({ error: "Failed to fetch salespeople" });
+    }
+  });
+
+  // Book a demo (public endpoint)
+  app.post("/api/demo/book", async (req, res) => {
+    try {
+      const { name, email, phone, scheduledDate, consent } = req.body;
+      
+      if (!name || !email || !phone || !scheduledDate || !consent) {
+        return res.status(400).json({ error: "All fields are required including consent" });
+      }
+
+      // Get an active salesperson (round-robin style - pick the one with fewest bookings)
+      const salespeople = await storage.getActiveSalespeople();
+      if (salespeople.length === 0) {
+        return res.status(400).json({ error: "No salespeople available" });
+      }
+
+      // Pick salesperson with fewest bookings
+      const salesperson = salespeople.reduce((min, p) => 
+        (p.totalBookings || 0) < (min.totalBookings || 0) ? p : min
+      );
+
+      const booking = await storage.createDemoBooking({
+        salespersonId: salesperson.id,
+        visitorName: name,
+        visitorEmail: email,
+        visitorPhone: phone,
+        scheduledDate: new Date(scheduledDate),
+        consentGiven: consent,
+        status: 'pending'
+      });
+
+      // Send email notification to salesperson
+      await sendDemoBookingNotification(
+        salesperson.email,
+        salesperson.name,
+        { name, email, phone, scheduledDate: new Date(scheduledDate) }
+      );
+
+      res.json({ success: true, bookingId: booking.id });
+    } catch (error) {
+      console.error("Error booking demo:", error);
+      res.status(500).json({ error: "Failed to book demo" });
+    }
+  });
+
+  // Admin authentication
+  app.post("/api/admin/login", async (req, res) => {
+    try {
+      const { password } = req.body;
+      const storedHash = await storage.getAdminPasswordHash();
+
+      if (!storedHash) {
+        // First-time setup: set the password
+        const hash = await bcrypt.hash(password, 10);
+        await storage.setAdminPassword(hash);
+        (req.session as any).isAdmin = true;
+        return res.json({ success: true, message: "Admin password set" });
+      }
+
+      const valid = await bcrypt.compare(password, storedHash);
+      if (!valid) {
+        return res.status(401).json({ error: "Invalid password" });
+      }
+
+      (req.session as any).isAdmin = true;
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error in admin login:", error);
+      res.status(500).json({ error: "Login failed" });
+    }
+  });
+
+  app.get("/api/admin/check", async (req, res) => {
+    const isAdmin = (req.session as any)?.isAdmin === true;
+    res.json({ isAdmin });
+  });
+
+  app.post("/api/admin/logout", async (req, res) => {
+    (req.session as any).isAdmin = false;
+    res.json({ success: true });
+  });
+
+  // Admin middleware
+  const requireAdmin = (req: any, res: any, next: any) => {
+    if ((req.session as any)?.isAdmin !== true) {
+      return res.status(401).json({ error: "Admin authentication required" });
+    }
+    next();
+  };
+
+  // Admin: Get all salespeople
+  app.get("/api/admin/salespeople", requireAdmin, async (req, res) => {
+    try {
+      const people = await storage.getSalespeople();
+      res.json(people);
+    } catch (error) {
+      console.error("Error fetching salespeople:", error);
+      res.status(500).json({ error: "Failed to fetch salespeople" });
+    }
+  });
+
+  // Admin: Create salesperson
+  app.post("/api/admin/salespeople", requireAdmin, async (req, res) => {
+    try {
+      const data = insertSalespersonSchema.parse(req.body);
+      const person = await storage.createSalesperson(data);
+      res.json(person);
+    } catch (error) {
+      console.error("Error creating salesperson:", error);
+      res.status(500).json({ error: "Failed to create salesperson" });
+    }
+  });
+
+  // Admin: Update salesperson
+  app.patch("/api/admin/salespeople/:id", requireAdmin, async (req, res) => {
+    try {
+      const { name, email, phone, isActive } = req.body;
+      const person = await storage.updateSalesperson(req.params.id, {
+        ...(name !== undefined && { name }),
+        ...(email !== undefined && { email }),
+        ...(phone !== undefined && { phone }),
+        ...(isActive !== undefined && { isActive }),
+      });
+      res.json(person);
+    } catch (error) {
+      console.error("Error updating salesperson:", error);
+      res.status(500).json({ error: "Failed to update salesperson" });
+    }
+  });
+
+  // Admin: Delete salesperson
+  app.delete("/api/admin/salespeople/:id", requireAdmin, async (req, res) => {
+    try {
+      await storage.deleteSalesperson(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting salesperson:", error);
+      res.status(500).json({ error: "Failed to delete salesperson" });
+    }
+  });
+
+  // Admin: Get all bookings
+  app.get("/api/admin/bookings", requireAdmin, async (req, res) => {
+    try {
+      const bookings = await storage.getDemoBookings();
+      res.json(bookings);
+    } catch (error) {
+      console.error("Error fetching bookings:", error);
+      res.status(500).json({ error: "Failed to fetch bookings" });
+    }
+  });
+
+  // Admin: Update booking status
+  app.patch("/api/admin/bookings/:id", requireAdmin, async (req, res) => {
+    try {
+      const { status, notes } = req.body;
+      const booking = await storage.updateDemoBooking(req.params.id, {
+        ...(status !== undefined && { status }),
+        ...(notes !== undefined && { notes }),
+      });
+      res.json(booking);
+    } catch (error) {
+      console.error("Error updating booking:", error);
+      res.status(500).json({ error: "Failed to update booking" });
+    }
+  });
+
+  // Admin: Get all conversions
+  app.get("/api/admin/conversions", requireAdmin, async (req, res) => {
+    try {
+      const conversions = await storage.getSalesConversions();
+      res.json(conversions);
+    } catch (error) {
+      console.error("Error fetching conversions:", error);
+      res.status(500).json({ error: "Failed to fetch conversions" });
+    }
+  });
+
+  // Admin: Create conversion (when a booking leads to a paid subscription)
+  app.post("/api/admin/conversions", requireAdmin, async (req, res) => {
+    try {
+      const { bookingId, salespersonId, userId, amount } = req.body;
+      const conversion = await storage.createSalesConversion({
+        bookingId,
+        salespersonId,
+        userId,
+        amount: amount || "50"
+      });
+      res.json(conversion);
+    } catch (error) {
+      console.error("Error creating conversion:", error);
+      res.status(500).json({ error: "Failed to create conversion" });
+    }
+  });
+
+  // Admin: Mark conversion as paid
+  app.patch("/api/admin/conversions/:id/paid", requireAdmin, async (req, res) => {
+    try {
+      const conversion = await storage.markConversionPaid(req.params.id);
+      res.json(conversion);
+    } catch (error) {
+      console.error("Error marking conversion paid:", error);
+      res.status(500).json({ error: "Failed to mark conversion paid" });
     }
   });
 

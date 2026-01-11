@@ -266,6 +266,66 @@ export async function sendHelpCenterFeedback(articleId: string, articleTitle: st
   });
 }
 
+export async function sendDemoBookingNotification(
+  salespersonEmail: string, 
+  salespersonName: string, 
+  visitor: { name: string; email: string; phone: string; scheduledDate: Date }
+): Promise<boolean> {
+  const formattedDate = visitor.scheduledDate.toLocaleDateString('en-US', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZone: 'America/New_York'
+  });
+
+  return sendEmail({
+    to: salespersonEmail,
+    subject: `New Demo Booking: ${visitor.name}`,
+    html: `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      </head>
+      <body style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #334155; margin: 0; padding: 0; background-color: #f1f5f9;">
+        <div style="padding: 40px 20px;">
+          <div style="max-width: 600px; margin: 0 auto; background: white; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+            <div style="background: linear-gradient(135deg, #059669 0%, #047857 100%); color: white; padding: 40px 30px; text-align: center;">
+              <div style="width: 50px; height: 50px; background: white; border-radius: 12px; display: inline-block; margin-bottom: 16px; font-size: 24px; line-height: 50px;">📅</div>
+              <h1 style="margin: 0; font-size: 24px; font-weight: 600;">New Demo Booking!</h1>
+            </div>
+            <div style="padding: 40px 30px;">
+              <h2 style="color: #1e293b; margin-top: 0; font-size: 20px;">Hi ${salespersonName}!</h2>
+              <p style="color: #475569; font-size: 15px;">You have a new demo scheduled. Here are the details:</p>
+              
+              <div style="background: #ecfdf5; border: 1px solid #a7f3d0; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                <p style="margin: 8px 0; color: #065f46; font-size: 15px;"><strong>Visitor Name:</strong> ${visitor.name}</p>
+                <p style="margin: 8px 0; color: #065f46; font-size: 15px;"><strong>Email:</strong> ${visitor.email}</p>
+                <p style="margin: 8px 0; color: #065f46; font-size: 15px;"><strong>Phone:</strong> ${visitor.phone}</p>
+                <p style="margin: 8px 0; color: #065f46; font-size: 15px;"><strong>Scheduled:</strong> ${formattedDate} EST</p>
+              </div>
+              
+              <p style="color: #475569; font-size: 15px;">Please reach out to the visitor to confirm the demo. Remember, you earn $50 for every successful conversion!</p>
+              
+              <div style="text-align: center;">
+                <a href="mailto:${visitor.email}" style="display: inline-block; background: #059669; color: white; padding: 14px 32px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px; margin: 24px 0;">Contact Visitor</a>
+              </div>
+            </div>
+            <div style="text-align: center; padding: 24px 30px; background: #f8fafc; border-top: 1px solid #e2e8f0;">
+              <p style="margin: 0; color: #94a3b8; font-size: 12px;">&copy; ${new Date().getFullYear()} WhaChatCRM. All rights reserved.</p>
+            </div>
+          </div>
+        </div>
+      </body>
+      </html>
+    `
+  });
+}
+
 export async function sendFollowUpReminderEmail(email: string, chatName: string, followUp: string, notes: string, chatId: string): Promise<boolean> {
   return sendEmail({
     to: email,
