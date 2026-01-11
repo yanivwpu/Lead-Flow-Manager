@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import heroImage from "@assets/generated_images/whatsapp_crm_dashboard_mockup.png";
+import integrationsImage from "@assets/generated_images/crm_integrations_hub_diagram.png";
 
 export function Welcome() {
   const { user } = useAuth();
@@ -287,15 +288,15 @@ export function Welcome() {
         </div>
       </section>
 
-      {/* Product Screenshot Section */}
+      {/* Integrations Section */}
       <section className="px-4 md:px-6 py-16 md:py-20">
         <div className="max-w-5xl mx-auto">
           <div className="text-center mb-10 md:mb-12">
             <h2 className="text-2xl md:text-4xl font-display font-bold text-gray-900 mb-3 md:mb-4">
-              See WhachatCRM in Action
+              Connect Your Favorite Tools
             </h2>
             <p className="text-base md:text-lg text-gray-600 max-w-2xl mx-auto">
-              Everything happens in one clean dashboard — no switching tools, no chaos.
+              WhachatCRM integrates seamlessly with the apps you already use — sync leads, automate workflows, and keep everything in one place.
             </p>
           </div>
           
@@ -306,11 +307,21 @@ export function Welcome() {
             className="relative"
           >
             <img 
-              src={heroImage} 
-              alt="WhachatCRM Dashboard showing WhatsApp conversations with notes and tags" 
-              className="w-full rounded-xl md:rounded-2xl shadow-2xl border border-gray-200"
+              src={integrationsImage} 
+              alt="WhachatCRM integrations with Shopify, HubSpot, Salesforce, Stripe, Mailchimp, Calendly and more" 
+              className="w-full rounded-xl md:rounded-2xl"
             />
           </motion.div>
+          
+          <div className="flex flex-wrap justify-center gap-3 mt-8">
+            <span className="px-4 py-2 bg-gray-100 rounded-full text-sm font-medium text-gray-700">Shopify</span>
+            <span className="px-4 py-2 bg-gray-100 rounded-full text-sm font-medium text-gray-700">HubSpot</span>
+            <span className="px-4 py-2 bg-gray-100 rounded-full text-sm font-medium text-gray-700">Salesforce</span>
+            <span className="px-4 py-2 bg-gray-100 rounded-full text-sm font-medium text-gray-700">Stripe</span>
+            <span className="px-4 py-2 bg-gray-100 rounded-full text-sm font-medium text-gray-700">Mailchimp</span>
+            <span className="px-4 py-2 bg-gray-100 rounded-full text-sm font-medium text-gray-700">Calendly</span>
+            <span className="px-4 py-2 bg-gray-100 rounded-full text-sm font-medium text-gray-700">Google Sheets</span>
+          </div>
         </div>
       </section>
 
