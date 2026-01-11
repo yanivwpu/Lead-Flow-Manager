@@ -1,9 +1,10 @@
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useRoute, useLocation } from "wouter";
 import { ChatListItem } from "@/components/ChatListItem";
 import { TAG_COLORS, PIPELINE_STAGES } from "@/lib/data";
 import { useAuth } from "@/lib/auth-context";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { usePresence } from "@/lib/usePresence";
 import { 
   Search, 
   MoreVertical, 
@@ -107,6 +108,10 @@ export function Chats() {
   const [viewMode, setViewMode] = useState<"my" | "team">("my");
   const [conversationSearch, setConversationSearch] = useState("");
   const [showConversationSearch, setShowConversationSearch] = useState(false);
+  
+  const selectedChatId = match ? params?.id : null;
+  const { viewers, setTyping } = usePresence(selectedChatId);
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
   const canSendMessages = subscription?.limits?.canSendMessages ?? false;
   const isAtLimit = subscription?.limits?.isAtLimit ?? false;
@@ -224,7 +229,6 @@ export function Chats() {
     }
   };
 
-  const selectedChatId = params?.id;
   const activeChats = viewMode === "team" ? teamChats : chats;
   const selectedChat = demoMode 
     ? demoChats.find(c => c.id === selectedChatId)
@@ -699,7 +703,21 @@ export function Chats() {
                      )}
                      <div>
                        <h3 className="font-semibold text-gray-900">{selectedChat.name}</h3>
-                       <span className="text-xs text-gray-500">last seen today at 10:45 AM</span>
+                       {viewers.length > 0 ? (
+                         <div className="flex items-center gap-1">
+                           <span className="relative flex h-2 w-2">
+                             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                             <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+                           </span>
+                           <span className="text-xs text-amber-600">
+                             {viewers.some(v => v.isTyping) 
+                               ? `${viewers.find(v => v.isTyping)?.userName} is typing...`
+                               : `${viewers.map(v => v.userName).join(', ')} viewing`}
+                           </span>
+                         </div>
+                       ) : (
+                         <span className="text-xs text-gray-500">last seen today at 10:45 AM</span>
+                       )}
                      </div>
                    </div>
                    <div className="flex items-center gap-4 text-gray-500">
@@ -939,8 +957,19 @@ export function Chats() {
                    placeholder="Type a message" 
                    className="flex-1 min-w-0 bg-white border border-gray-200 rounded-lg px-3 sm:px-4 py-2 text-sm focus:outline-none focus:border-brand-green"
                    value={newMessage}
-                   onChange={(e) => setNewMessage(e.target.value)}
-                   onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
+                   onChange={(e) => {
+                     setNewMessage(e.target.value);
+                     setTyping(true);
+                     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+                     typingTimeoutRef.current = setTimeout(() => setTyping(false), 2000);
+                   }}
+                   onKeyDown={(e) => {
+                     if (e.key === 'Enter') {
+                       setTyping(false);
+                       handleSendMessage();
+                     }
+                   }}
+                   onBlur={() => setTyping(false)}
                    data-testid="input-message"
                  />
                  <button 

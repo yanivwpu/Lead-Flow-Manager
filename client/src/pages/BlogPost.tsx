@@ -659,7 +659,7 @@ WATI (WhatsApp Team Inbox) is a popular WhatsApp Business solution, but it's not
 | Tool | Shared Inbox | Assignment | Notes | Collision Detection |
 |------|--------------|------------|-------|---------------------|
 | WATI | ✅ | ✅ | ✅ | ✅ |
-| WhachatCRM | ✅ | ✅ | ✅ | ❌ |
+| WhachatCRM | ✅ | ✅ | ✅ | ✅ |
 | Respond.io | ✅ | ✅ | ✅ | ✅ |
 | Trengo | ✅ | ✅ | ✅ | ✅ |
 
