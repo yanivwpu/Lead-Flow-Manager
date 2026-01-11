@@ -7,9 +7,12 @@ import { setupAuth, registerAuthRoutes } from "./auth";
 import { runMigrations } from "stripe-replit-sync";
 import { getStripeSync } from "./stripeClient";
 import { WebhookHandlers } from "./webhookHandlers";
+import { setupPresenceServer } from "./presence";
 
 const app = express();
 const httpServer = createServer(app);
+
+setupPresenceServer(httpServer);
 
 async function initStripe() {
   const databaseUrl = process.env.DATABASE_URL;
