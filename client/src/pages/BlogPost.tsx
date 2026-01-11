@@ -650,7 +650,7 @@ WATI (WhatsApp Team Inbox) is a popular WhatsApp Business solution, but it's not
 | Tool | Auto-Reply | Drip Campaigns | Chatbots | Workflows |
 |------|------------|----------------|----------|-----------|
 | WATI | ✅ | ✅ | ✅ | ✅ |
-| WhachatCRM | ✅ | ✅ | ❌ | ✅ |
+| WhachatCRM | ✅ | ✅ | ✅ | ✅ |
 | Respond.io | ✅ | ✅ | ✅ | ✅ |
 | Trengo | ✅ | Limited | Limited | ✅ |
 
