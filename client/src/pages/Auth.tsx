@@ -91,18 +91,20 @@ export function AuthPage() {
   };
 
   return (
-    <div className="h-screen flex flex-col md:flex-row bg-white overflow-hidden">
+    <div className="min-h-screen flex flex-col md:flex-row bg-white overflow-auto">
       {/* Left Panel - Branding */}
-      <div className="flex-1 bg-brand-dark relative overflow-hidden flex flex-col justify-between p-8 md:p-12 text-white">
+      <div className="md:flex-1 bg-brand-dark relative overflow-hidden flex flex-col justify-between p-6 md:p-12 text-white">
         <div className="relative z-10">
-          <div className="h-10 w-10 bg-brand-green rounded-xl flex items-center justify-center mb-6">
-             <span className="text-white font-bold text-xl">C</span>
+          <div className="flex items-center gap-3 mb-4 md:mb-6">
+            <div className="h-10 w-10 bg-brand-green rounded-xl flex items-center justify-center">
+               <span className="text-white font-bold text-xl">W</span>
+            </div>
+            <span className="font-display font-bold text-xl md:hidden">WhachatCRM</span>
           </div>
-          <h1 className="text-4xl md:text-5xl font-display font-bold mb-4 leading-tight">
-            Manage your <br/>
-            <span className="text-brand-green">WhatsApp</span> business.
+          <h1 className="text-2xl md:text-5xl font-display font-bold mb-2 md:mb-4 leading-tight">
+            Manage your <span className="text-brand-green">WhatsApp</span> business.
           </h1>
-          <p className="text-brand-teal/80 text-lg max-w-md leading-relaxed">
+          <p className="text-brand-teal/80 text-sm md:text-lg max-w-md leading-relaxed hidden md:block">
             The all-in-one CRM for WhatsApp-first teams. Organize leads, automate follow-ups, and close more deals.
           </p>
         </div>
@@ -128,14 +130,14 @@ export function AuthPage() {
       </div>
 
       {/* Right Panel - Form */}
-      <div className="flex-1 flex items-center justify-center p-6 bg-gray-50">
+      <div className="flex-1 flex items-center justify-center p-4 md:p-6 bg-gray-50">
         <motion.div 
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="w-full max-w-md bg-white p-8 rounded-2xl shadow-sm border border-gray-100"
+          className="w-full max-w-md bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-gray-100 my-4"
         >
-          <div className="mb-8 text-center">
-            <h2 className="text-2xl font-bold text-gray-900 font-display">
+          <div className="mb-6 md:mb-8 text-center">
+            <h2 className="text-xl md:text-2xl font-bold text-gray-900 font-display">
               {isLogin ? "Welcome back" : "Create your account"}
             </h2>
             <p className="text-gray-500 mt-2 text-sm">
