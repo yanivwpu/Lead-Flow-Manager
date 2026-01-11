@@ -65,7 +65,6 @@ const PLANS = [
       "Up to 5 WhatsApp Business numbers",
       "Unlimited team members",
       "2,000 active conversations / month",
-      "Visual chatbot builder",
       "Drip sequences & campaigns",
       "Workflow automation",
       "Template messaging & retargeting",

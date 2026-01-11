@@ -416,7 +416,7 @@ A workflow has:
 
 Build intelligent automated conversations with our visual drag-and-drop chatbot builder.
 
-*Available on Pro plan*
+*Available on Starter and Pro plans*
 
 ## Accessing the Chatbot Builder
 
