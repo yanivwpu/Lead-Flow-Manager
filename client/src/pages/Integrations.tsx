@@ -16,7 +16,7 @@ import {
   Plug, Plus, Trash2, Copy, Check, ExternalLink, Zap, Lock,
   ShoppingCart, FileSpreadsheet, Users, CreditCard, Building2, Home,
   Webhook, Eye, EyeOff, RefreshCw, CheckCircle2, XCircle, Settings2,
-  Calendar
+  Calendar, Mail
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 
@@ -151,6 +151,23 @@ const NATIVE_INTEGRATIONS: IntegrationConfig[] = [
       { id: "new_bookings", label: "New Bookings", description: "Create a chat when someone books a meeting" },
       { id: "cancellations", label: "Cancellations", description: "Notify when meetings are cancelled" },
       { id: "reschedules", label: "Reschedules", description: "Update chat when meetings are rescheduled" },
+    ]
+  },
+  { 
+    id: "mailchimp", 
+    name: "Mailchimp", 
+    icon: Mail, 
+    description: "Sync contacts to email lists and trigger campaigns", 
+    color: "bg-yellow-500",
+    fields: [
+      { key: "apiKey", label: "API Key", placeholder: "xxxxxxxx-us21", type: "password", helpText: "Found in Mailchimp > Account > Extras > API keys" },
+      { key: "serverPrefix", label: "Server Prefix", placeholder: "us21", helpText: "The 'usX' at the end of your API key (e.g., us21)" },
+      { key: "audienceId", label: "Audience ID", placeholder: "a1b2c3d4e5", helpText: "Found in Audience > Settings > Audience name and defaults" },
+    ],
+    syncOptions: [
+      { id: "sync_contacts", label: "Sync Contacts", description: "Add WhatsApp contacts to your Mailchimp audience" },
+      { id: "tag_subscribers", label: "Tag Subscribers", description: "Apply tags based on chat pipeline stages" },
+      { id: "trigger_automations", label: "Trigger Automations", description: "Start email sequences when chats reach certain stages" },
     ]
   },
 ];
