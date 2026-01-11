@@ -1,22 +1,25 @@
 import { motion } from "framer-motion";
 import { Link } from "wouter";
-import { ArrowRight, CheckCircle2, XCircle, ChevronRight } from "lucide-react";
+import { ArrowRight, CheckCircle2, XCircle } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { Helmet } from "react-helmet";
 
-export function WatiAlternative() {
+export function PabblyAlternative() {
   const { user } = useAuth();
 
   return (
     <div className="min-h-screen bg-white">
       <Helmet>
-        <title>Best WATI Alternative for Small Teams – WhachatCRM</title>
-        <meta name="description" content="Looking for a simpler, more affordable WATI alternative? WhachatCRM offers WhatsApp CRM features without the complexity. Free plan available." />
-        <meta name="keywords" content="WATI alternative, WhatsApp CRM, WATI competitor, simple WhatsApp CRM, affordable WhatsApp business tool" />
-        <link rel="canonical" href="https://whachatcrm.com/wati-alternative" />
+        <title>Best Pabbly Chatflow Alternative for SMBs – WhachatCRM</title>
+        <meta name="description" content="Looking for a Pabbly Chatflow alternative without the upfront cost? WhachatCRM offers WhatsApp CRM starting at $19/month with no credit limits. Try free." />
+        <meta name="keywords" content="Pabbly alternative, Pabbly Chatflow alternative, WhatsApp CRM, WhatsApp automation, Pabbly competitor" />
+        <link rel="canonical" href="https://whachatcrm.com/pabbly-alternative" />
+        <meta property="og:title" content="Best Pabbly Chatflow Alternative for SMBs – WhachatCRM" />
+        <meta property="og:description" content="Looking for a Pabbly Chatflow alternative without the upfront cost? WhachatCRM offers WhatsApp CRM starting at $19/month with no credit limits." />
+        <meta property="og:url" content="https://whachatcrm.com/pabbly-alternative" />
+        <meta property="og:type" content="website" />
       </Helmet>
 
-      {/* Navigation */}
       <nav className="p-4 md:p-6 flex justify-between items-center max-w-7xl mx-auto">
         <Link href="/">
           <div className="flex items-center gap-2 cursor-pointer">
@@ -38,7 +41,6 @@ export function WatiAlternative() {
         </div>
       </nav>
 
-      {/* Hero */}
       <section className="px-4 md:px-6 pt-12 pb-16 max-w-5xl mx-auto text-center">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -46,13 +48,13 @@ export function WatiAlternative() {
           transition={{ duration: 0.6 }}
         >
           <span className="inline-block bg-emerald-100 text-brand-green text-sm font-medium px-4 py-1 rounded-full mb-6">
-            WATI Alternative
+            Pabbly Alternative
           </span>
           <h1 className="text-3xl md:text-5xl font-display font-bold text-gray-900 leading-tight mb-6">
-            The Simple WATI Alternative for Small Teams
+            The Affordable Pabbly Chatflow Alternative
           </h1>
           <p className="text-lg md:text-xl text-gray-600 mb-8 max-w-2xl mx-auto">
-            WATI is powerful but complex. WhachatCRM gives you the WhatsApp CRM features you need — without the steep learning curve or enterprise pricing.
+            Pabbly requires $249+ upfront and limits your messages with credits. WhachatCRM starts at $19/month with no message limits and no commitment.
           </p>
           
           <div className="flex flex-col sm:flex-row gap-3 justify-center mb-4">
@@ -63,39 +65,37 @@ export function WatiAlternative() {
               </button>
             </Link>
           </div>
-          <p className="text-sm text-gray-500">Free plan available · Paid plans from $19/month</p>
+          <p className="text-sm text-gray-500">Free plan available · No credit card required · Cancel anytime</p>
         </motion.div>
       </section>
 
-      {/* Comparison Table */}
       <section className="px-4 md:px-6 py-16 bg-gray-50">
         <div className="max-w-4xl mx-auto">
           <h2 className="text-2xl md:text-3xl font-display font-bold text-gray-900 text-center mb-10">
-            WhachatCRM vs WATI
+            WhachatCRM vs Pabbly Chatflow
           </h2>
           
           <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
             <div className="grid grid-cols-3 bg-gray-100 p-4 font-semibold text-gray-900">
               <div>Feature</div>
               <div className="text-center">WhachatCRM</div>
-              <div className="text-center">WATI</div>
+              <div className="text-center">Pabbly Chatflow</div>
             </div>
             
             {[
               { feature: "Free plan", us: true, them: false },
-              { feature: "Zero message markup", us: true, them: false },
-              { feature: "Cancel anytime (self-service)", us: true, them: false },
-              { feature: "Multiple WhatsApp numbers", us: "Up to 5", them: "1 only" },
-              { feature: "Unlimited team members", us: "$49/mo", them: "$200+/mo" },
-              { feature: "Visual chatbot builder", us: "$19/mo", them: "$100+/mo" },
-              { feature: "Simple setup", us: true, them: false },
-              { feature: "No training required", us: true, them: false },
-              { feature: "WhatsApp messaging", us: true, them: true },
-              { feature: "Notes & tags", us: true, them: true },
-              { feature: "Follow-up reminders", us: true, them: true },
-              { feature: "Workflow automation", us: "$49/mo", them: "$200+/mo" },
-              { feature: "Template messaging", us: "$49/mo", them: "$200+/mo" },
-              { feature: "Starting price", us: "$0/free", them: "$30/month + fees" },
+              { feature: "Monthly pricing", us: "$19/mo", them: "$249+ one-time" },
+              { feature: "No message credits", us: true, them: false },
+              { feature: "Cancel anytime", us: true, them: "30-day refund only" },
+              { feature: "Unlimited team members", us: "$49/mo", them: true },
+              { feature: "Visual chatbot builder", us: true, them: true },
+              { feature: "Multiple WhatsApp numbers", us: "Up to 5", them: "Unlimited" },
+              { feature: "No upfront investment", us: true, them: false },
+              { feature: "Try before you commit", us: "14-day Pro trial", them: "30-day refund" },
+              { feature: "Drip campaigns", us: true, them: true },
+              { feature: "Workflow automation", us: true, them: true },
+              { feature: "Team inbox", us: true, them: true },
+              { feature: "Risk level", us: "Low ($19)", them: "High ($249+)" },
             ].map((row, i) => (
               <div key={i} className="grid grid-cols-3 p-4 border-t border-gray-100 items-center">
                 <div className="text-gray-700">{row.feature}</div>
@@ -119,57 +119,55 @@ export function WatiAlternative() {
         </div>
       </section>
 
-      {/* Why Switch */}
       <section className="px-4 md:px-6 py-16">
         <div className="max-w-4xl mx-auto">
           <h2 className="text-2xl md:text-3xl font-display font-bold text-gray-900 text-center mb-10">
-            Why teams switch from WATI to WhachatCRM
+            Why businesses choose WhachatCRM over Pabbly
           </h2>
           
           <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
             <div className="bg-red-50 border border-red-100 p-5 rounded-xl">
-              <h3 className="font-bold text-red-900 mb-2">WATI's Hidden Fees</h3>
-              <p className="text-red-700 text-sm">WATI charges up to 20% markup on every WhatsApp message. We charge zero.</p>
+              <h3 className="font-bold text-red-900 mb-2">Pabbly's Upfront Cost</h3>
+              <p className="text-red-700 text-sm">$249-$699 upfront before you even know if it works for your business. We let you start at $19/month.</p>
             </div>
             <div className="bg-red-50 border border-red-100 p-5 rounded-xl">
-              <h3 className="font-bold text-red-900 mb-2">Cancellation Nightmare</h3>
-              <p className="text-red-700 text-sm">WATI has no self-service cancel. You must email and wait days. We let you cancel with one click.</p>
+              <h3 className="font-bold text-red-900 mb-2">Credit Limits</h3>
+              <p className="text-red-700 text-sm">Pabbly limits messages with monthly credits. Run out mid-campaign and you're stuck. We have no message limits.</p>
             </div>
             <div className="bg-red-50 border border-red-100 p-5 rounded-xl">
-              <h3 className="font-bold text-red-900 mb-2">Single Number Lock</h3>
-              <p className="text-red-700 text-sm">WATI limits you to 1 WhatsApp number. Our Pro plan includes up to 3 numbers.</p>
+              <h3 className="font-bold text-red-900 mb-2">30-Day Decision</h3>
+              <p className="text-red-700 text-sm">With Pabbly, you must decide within 30 days or lose your money. With us, cancel anytime - no pressure.</p>
             </div>
             <div className="bg-red-50 border border-red-100 p-5 rounded-xl">
-              <h3 className="font-bold text-red-900 mb-2">Enterprise Pricing</h3>
-              <p className="text-red-700 text-sm">WATI charges $200+/mo for features we include in our $49 Pro plan.</p>
+              <h3 className="font-bold text-red-900 mb-2">Complex Setup</h3>
+              <p className="text-red-700 text-sm">Pabbly requires technical setup and understanding credits. WhachatCRM is simple - connect and go.</p>
             </div>
           </div>
 
           <div className="grid md:grid-cols-3 gap-6">
             <div className="bg-emerald-50 border border-emerald-100 p-6 rounded-xl">
-              <h3 className="font-bold text-emerald-900 mb-2">Zero Message Markup</h3>
-              <p className="text-emerald-700 text-sm">You connect your own Twilio account. Pay Twilio directly - we never touch your message fees.</p>
+              <h3 className="font-bold text-emerald-900 mb-2">Start Small, Scale Up</h3>
+              <p className="text-emerald-700 text-sm">Begin with $19/month. Upgrade to Pro at $49/month when ready. No big upfront investment needed.</p>
             </div>
             <div className="bg-emerald-50 border border-emerald-100 p-6 rounded-xl">
-              <h3 className="font-bold text-emerald-900 mb-2">Cancel Anytime</h3>
-              <p className="text-emerald-700 text-sm">One-click cancellation. No emails, no phone calls, no hassle. Because we earn your business every month.</p>
+              <h3 className="font-bold text-emerald-900 mb-2">No Credit Counting</h3>
+              <p className="text-emerald-700 text-sm">Send as many messages as you need. You pay your WhatsApp provider directly - we never limit or mark up messages.</p>
             </div>
             <div className="bg-emerald-50 border border-emerald-100 p-6 rounded-xl">
-              <h3 className="font-bold text-emerald-900 mb-2">$49 Gets You Everything</h3>
-              <p className="text-emerald-700 text-sm">Workflows, templates, 10 team members, 3 WhatsApp numbers - features WATI charges $200+/month for.</p>
+              <h3 className="font-bold text-emerald-900 mb-2">Cancel Anytime Freedom</h3>
+              <p className="text-emerald-700 text-sm">Monthly plans with one-click cancellation. No contracts, no commitments, no risk.</p>
             </div>
           </div>
         </div>
       </section>
 
-      {/* CTA */}
       <section className="px-4 md:px-6 py-16 bg-brand-green">
         <div className="max-w-3xl mx-auto text-center">
           <h2 className="text-2xl md:text-3xl font-display font-bold text-white mb-4">
-            Ready to switch from WATI?
+            Ready to try without the $249 risk?
           </h2>
           <p className="text-emerald-100 mb-8">
-            Try WhachatCRM free and see the difference simplicity makes.
+            Start with our free plan or 14-day Pro trial. No credit card required.
           </p>
           <Link href="/auth">
             <button className="h-14 px-8 bg-white text-brand-green font-semibold rounded-full inline-flex items-center gap-2 hover:bg-gray-100 transition-colors">
@@ -180,22 +178,18 @@ export function WatiAlternative() {
         </div>
       </section>
 
-      {/* Related Pages */}
       <section className="px-4 md:px-6 py-12 border-t border-gray-100">
         <div className="max-w-4xl mx-auto">
           <h3 className="text-lg font-bold text-gray-900 mb-4">Related Comparisons</h3>
           <div className="flex flex-wrap gap-4">
-            <Link href="/pabbly-alternative">
-              <span className="text-brand-green hover:underline cursor-pointer">Pabbly Alternative</span>
+            <Link href="/wati-alternative">
+              <span className="text-brand-green hover:underline cursor-pointer">WATI Alternative</span>
             </Link>
             <Link href="/interakt-alternative">
               <span className="text-brand-green hover:underline cursor-pointer">Interakt Alternative</span>
             </Link>
             <Link href="/respond-io-alternative">
               <span className="text-brand-green hover:underline cursor-pointer">Respond.io Alternative</span>
-            </Link>
-            <Link href="/waba360-alternative">
-              <span className="text-brand-green hover:underline cursor-pointer">360dialog Alternative</span>
             </Link>
             <Link href="/pricing">
               <span className="text-brand-green hover:underline cursor-pointer">Pricing</span>
@@ -204,7 +198,6 @@ export function WatiAlternative() {
         </div>
       </section>
 
-      {/* Footer */}
       <footer className="px-4 md:px-6 py-8 border-t border-gray-100">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
           <Link href="/">

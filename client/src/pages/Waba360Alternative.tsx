@@ -1,22 +1,25 @@
 import { motion } from "framer-motion";
 import { Link } from "wouter";
-import { ArrowRight, CheckCircle2, XCircle, ChevronRight } from "lucide-react";
+import { ArrowRight, CheckCircle2, XCircle } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { Helmet } from "react-helmet";
 
-export function WatiAlternative() {
+export function Waba360Alternative() {
   const { user } = useAuth();
 
   return (
     <div className="min-h-screen bg-white">
       <Helmet>
-        <title>Best WATI Alternative for Small Teams – WhachatCRM</title>
-        <meta name="description" content="Looking for a simpler, more affordable WATI alternative? WhachatCRM offers WhatsApp CRM features without the complexity. Free plan available." />
-        <meta name="keywords" content="WATI alternative, WhatsApp CRM, WATI competitor, simple WhatsApp CRM, affordable WhatsApp business tool" />
-        <link rel="canonical" href="https://whachatcrm.com/wati-alternative" />
+        <title>Best 360dialog Alternative for SMBs – WhachatCRM</title>
+        <meta name="description" content="Looking for a 360dialog/WABA360 alternative with built-in CRM? WhachatCRM offers WhatsApp CRM from $19/month with visual chatbot builder and team inbox." />
+        <meta name="keywords" content="360dialog alternative, WABA360 alternative, WhatsApp CRM, WhatsApp business tool, affordable WhatsApp CRM" />
+        <link rel="canonical" href="https://whachatcrm.com/waba360-alternative" />
+        <meta property="og:title" content="Best 360dialog Alternative for SMBs – WhachatCRM" />
+        <meta property="og:description" content="Looking for a 360dialog/WABA360 alternative with built-in CRM? WhachatCRM offers WhatsApp CRM from $19/month." />
+        <meta property="og:url" content="https://whachatcrm.com/waba360-alternative" />
+        <meta property="og:type" content="website" />
       </Helmet>
 
-      {/* Navigation */}
       <nav className="p-4 md:p-6 flex justify-between items-center max-w-7xl mx-auto">
         <Link href="/">
           <div className="flex items-center gap-2 cursor-pointer">
@@ -38,7 +41,6 @@ export function WatiAlternative() {
         </div>
       </nav>
 
-      {/* Hero */}
       <section className="px-4 md:px-6 pt-12 pb-16 max-w-5xl mx-auto text-center">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -46,13 +48,13 @@ export function WatiAlternative() {
           transition={{ duration: 0.6 }}
         >
           <span className="inline-block bg-emerald-100 text-brand-green text-sm font-medium px-4 py-1 rounded-full mb-6">
-            WATI Alternative
+            360dialog Alternative
           </span>
           <h1 className="text-3xl md:text-5xl font-display font-bold text-gray-900 leading-tight mb-6">
-            The Simple WATI Alternative for Small Teams
+            The Complete 360dialog Alternative with Built-in CRM
           </h1>
           <p className="text-lg md:text-xl text-gray-600 mb-8 max-w-2xl mx-auto">
-            WATI is powerful but complex. WhachatCRM gives you the WhatsApp CRM features you need — without the steep learning curve or enterprise pricing.
+            360dialog provides the API, but you still need CRM software. WhachatCRM gives you everything in one place — WhatsApp messaging plus full CRM features.
           </p>
           
           <div className="flex flex-col sm:flex-row gap-3 justify-center mb-4">
@@ -63,39 +65,36 @@ export function WatiAlternative() {
               </button>
             </Link>
           </div>
-          <p className="text-sm text-gray-500">Free plan available · Paid plans from $19/month</p>
+          <p className="text-sm text-gray-500">Free plan available · No credit card required · Cancel anytime</p>
         </motion.div>
       </section>
 
-      {/* Comparison Table */}
       <section className="px-4 md:px-6 py-16 bg-gray-50">
         <div className="max-w-4xl mx-auto">
           <h2 className="text-2xl md:text-3xl font-display font-bold text-gray-900 text-center mb-10">
-            WhachatCRM vs WATI
+            WhachatCRM vs 360dialog
           </h2>
           
           <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
             <div className="grid grid-cols-3 bg-gray-100 p-4 font-semibold text-gray-900">
               <div>Feature</div>
               <div className="text-center">WhachatCRM</div>
-              <div className="text-center">WATI</div>
+              <div className="text-center">360dialog</div>
             </div>
             
             {[
+              { feature: "Built-in CRM", us: true, them: false },
+              { feature: "Visual chatbot builder", us: true, them: false },
+              { feature: "Team inbox", us: true, them: false },
+              { feature: "Notes & tags", us: true, them: false },
+              { feature: "Follow-up reminders", us: true, them: false },
+              { feature: "Drip campaigns", us: true, them: false },
+              { feature: "No coding required", us: true, them: false },
+              { feature: "WhatsApp API access", us: "Via Twilio", them: true },
+              { feature: "Starting price", us: "$19/mo", them: "API only pricing" },
               { feature: "Free plan", us: true, them: false },
-              { feature: "Zero message markup", us: true, them: false },
-              { feature: "Cancel anytime (self-service)", us: true, them: false },
-              { feature: "Multiple WhatsApp numbers", us: "Up to 5", them: "1 only" },
-              { feature: "Unlimited team members", us: "$49/mo", them: "$200+/mo" },
-              { feature: "Visual chatbot builder", us: "$19/mo", them: "$100+/mo" },
-              { feature: "Simple setup", us: true, them: false },
-              { feature: "No training required", us: true, them: false },
-              { feature: "WhatsApp messaging", us: true, them: true },
-              { feature: "Notes & tags", us: true, them: true },
-              { feature: "Follow-up reminders", us: true, them: true },
-              { feature: "Workflow automation", us: "$49/mo", them: "$200+/mo" },
-              { feature: "Template messaging", us: "$49/mo", them: "$200+/mo" },
-              { feature: "Starting price", us: "$0/free", them: "$30/month + fees" },
+              { feature: "Unlimited team members", us: "$49/mo", them: "N/A" },
+              { feature: "Ready to use", us: true, them: "Requires development" },
             ].map((row, i) => (
               <div key={i} className="grid grid-cols-3 p-4 border-t border-gray-100 items-center">
                 <div className="text-gray-700">{row.feature}</div>
@@ -119,57 +118,55 @@ export function WatiAlternative() {
         </div>
       </section>
 
-      {/* Why Switch */}
       <section className="px-4 md:px-6 py-16">
         <div className="max-w-4xl mx-auto">
           <h2 className="text-2xl md:text-3xl font-display font-bold text-gray-900 text-center mb-10">
-            Why teams switch from WATI to WhachatCRM
+            Why businesses choose WhachatCRM over 360dialog
           </h2>
           
           <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
             <div className="bg-red-50 border border-red-100 p-5 rounded-xl">
-              <h3 className="font-bold text-red-900 mb-2">WATI's Hidden Fees</h3>
-              <p className="text-red-700 text-sm">WATI charges up to 20% markup on every WhatsApp message. We charge zero.</p>
+              <h3 className="font-bold text-red-900 mb-2">API Only</h3>
+              <p className="text-red-700 text-sm">360dialog provides the API, but you need to build or buy CRM software separately.</p>
             </div>
             <div className="bg-red-50 border border-red-100 p-5 rounded-xl">
-              <h3 className="font-bold text-red-900 mb-2">Cancellation Nightmare</h3>
-              <p className="text-red-700 text-sm">WATI has no self-service cancel. You must email and wait days. We let you cancel with one click.</p>
+              <h3 className="font-bold text-red-900 mb-2">Development Required</h3>
+              <p className="text-red-700 text-sm">Using 360dialog means hiring developers or integrating multiple tools.</p>
             </div>
             <div className="bg-red-50 border border-red-100 p-5 rounded-xl">
-              <h3 className="font-bold text-red-900 mb-2">Single Number Lock</h3>
-              <p className="text-red-700 text-sm">WATI limits you to 1 WhatsApp number. Our Pro plan includes up to 3 numbers.</p>
+              <h3 className="font-bold text-red-900 mb-2">No Team Features</h3>
+              <p className="text-red-700 text-sm">360dialog is infrastructure, not a team inbox. You need more tools for collaboration.</p>
             </div>
             <div className="bg-red-50 border border-red-100 p-5 rounded-xl">
-              <h3 className="font-bold text-red-900 mb-2">Enterprise Pricing</h3>
-              <p className="text-red-700 text-sm">WATI charges $200+/mo for features we include in our $49 Pro plan.</p>
+              <h3 className="font-bold text-red-900 mb-2">Technical Setup</h3>
+              <p className="text-red-700 text-sm">Requires technical knowledge to set up and maintain. Not built for non-technical teams.</p>
             </div>
           </div>
 
           <div className="grid md:grid-cols-3 gap-6">
             <div className="bg-emerald-50 border border-emerald-100 p-6 rounded-xl">
-              <h3 className="font-bold text-emerald-900 mb-2">Zero Message Markup</h3>
-              <p className="text-emerald-700 text-sm">You connect your own Twilio account. Pay Twilio directly - we never touch your message fees.</p>
+              <h3 className="font-bold text-emerald-900 mb-2">All-in-One Solution</h3>
+              <p className="text-emerald-700 text-sm">WhatsApp messaging + CRM + team inbox + automation in one platform. No assembly required.</p>
             </div>
             <div className="bg-emerald-50 border border-emerald-100 p-6 rounded-xl">
-              <h3 className="font-bold text-emerald-900 mb-2">Cancel Anytime</h3>
-              <p className="text-emerald-700 text-sm">One-click cancellation. No emails, no phone calls, no hassle. Because we earn your business every month.</p>
+              <h3 className="font-bold text-emerald-900 mb-2">No Coding Needed</h3>
+              <p className="text-emerald-700 text-sm">Visual chatbot builder and workflows. Set up automations without writing code.</p>
             </div>
             <div className="bg-emerald-50 border border-emerald-100 p-6 rounded-xl">
-              <h3 className="font-bold text-emerald-900 mb-2">$49 Gets You Everything</h3>
-              <p className="text-emerald-700 text-sm">Workflows, templates, 10 team members, 3 WhatsApp numbers - features WATI charges $200+/month for.</p>
+              <h3 className="font-bold text-emerald-900 mb-2">Ready in Minutes</h3>
+              <p className="text-emerald-700 text-sm">Connect your WhatsApp and start managing conversations immediately. No development time.</p>
             </div>
           </div>
         </div>
       </section>
 
-      {/* CTA */}
       <section className="px-4 md:px-6 py-16 bg-brand-green">
         <div className="max-w-3xl mx-auto text-center">
           <h2 className="text-2xl md:text-3xl font-display font-bold text-white mb-4">
-            Ready to switch from WATI?
+            Ready to skip the development work?
           </h2>
           <p className="text-emerald-100 mb-8">
-            Try WhachatCRM free and see the difference simplicity makes.
+            Get a complete WhatsApp CRM solution without building it yourself.
           </p>
           <Link href="/auth">
             <button className="h-14 px-8 bg-white text-brand-green font-semibold rounded-full inline-flex items-center gap-2 hover:bg-gray-100 transition-colors">
@@ -180,11 +177,13 @@ export function WatiAlternative() {
         </div>
       </section>
 
-      {/* Related Pages */}
       <section className="px-4 md:px-6 py-12 border-t border-gray-100">
         <div className="max-w-4xl mx-auto">
           <h3 className="text-lg font-bold text-gray-900 mb-4">Related Comparisons</h3>
           <div className="flex flex-wrap gap-4">
+            <Link href="/wati-alternative">
+              <span className="text-brand-green hover:underline cursor-pointer">WATI Alternative</span>
+            </Link>
             <Link href="/pabbly-alternative">
               <span className="text-brand-green hover:underline cursor-pointer">Pabbly Alternative</span>
             </Link>
@@ -194,9 +193,6 @@ export function WatiAlternative() {
             <Link href="/respond-io-alternative">
               <span className="text-brand-green hover:underline cursor-pointer">Respond.io Alternative</span>
             </Link>
-            <Link href="/waba360-alternative">
-              <span className="text-brand-green hover:underline cursor-pointer">360dialog Alternative</span>
-            </Link>
             <Link href="/pricing">
               <span className="text-brand-green hover:underline cursor-pointer">Pricing</span>
             </Link>
@@ -204,7 +200,6 @@ export function WatiAlternative() {
         </div>
       </section>
 
-      {/* Footer */}
       <footer className="px-4 md:px-6 py-8 border-t border-gray-100">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
           <Link href="/">

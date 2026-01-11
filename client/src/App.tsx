@@ -10,6 +10,10 @@ import { PrivacyPolicy } from "@/pages/PrivacyPolicy";
 import { TermsOfUse } from "@/pages/TermsOfUse";
 import { Pricing } from "@/pages/Pricing";
 import { WatiAlternative } from "@/pages/WatiAlternative";
+import { PabblyAlternative } from "@/pages/PabblyAlternative";
+import { InteraktAlternative } from "@/pages/InteraktAlternative";
+import { RespondIoAlternative } from "@/pages/RespondIoAlternative";
+import { Waba360Alternative } from "@/pages/Waba360Alternative";
 import { WhatsappCrm } from "@/pages/WhatsappCrm";
 import { CrmForWhatsappBusiness } from "@/pages/CrmForWhatsappBusiness";
 import { Contact } from "@/pages/Contact";
@@ -48,6 +52,10 @@ function Router() {
       <Route path="/terms-of-use" component={TermsOfUse} />
       <Route path="/pricing" component={Pricing} />
       <Route path="/wati-alternative" component={WatiAlternative} />
+      <Route path="/pabbly-alternative" component={PabblyAlternative} />
+      <Route path="/interakt-alternative" component={InteraktAlternative} />
+      <Route path="/respond-io-alternative" component={RespondIoAlternative} />
+      <Route path="/waba360-alternative" component={Waba360Alternative} />
       <Route path="/whatsapp-crm" component={WhatsappCrm} />
       <Route path="/crm-for-whatsapp-business" component={CrmForWhatsappBusiness} />
       <Route path="/contact" component={Contact} />
