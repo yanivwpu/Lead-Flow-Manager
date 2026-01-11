@@ -1257,7 +1257,7 @@ export function HelpCenter() {
                 {filteredArticles.map((article) => (
                   <button
                     key={article.id}
-                    onClick={() => setSelectedArticle(article)}
+                    onClick={() => { setSelectedArticle(article); window.scrollTo(0, 0); }}
                     className="w-full flex items-center gap-3 p-4 rounded-lg border border-gray-200 hover:border-brand-green hover:bg-green-50/30 transition-colors text-left"
                     data-testid={`button-article-${article.id}`}
                   >
@@ -1286,7 +1286,7 @@ export function HelpCenter() {
           <div className="flex-1 overflow-auto p-4 sm:p-6">
             <div className="max-w-3xl mx-auto">
               <button
-                onClick={() => setSelectedArticle(null)}
+                onClick={() => { setSelectedArticle(null); window.scrollTo(0, 0); }}
                 className="flex items-center gap-1 text-sm text-brand-green hover:underline mb-6"
                 data-testid="button-back-to-articles"
               >
