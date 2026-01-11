@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import heroImage from "@assets/generated_images/whatsapp_crm_dashboard_mockup.png";
-import integrationsImage from "@assets/generated_images/whachatcrm_integration_hub_graphic.png";
+import integrationsImage from "@assets/generated_images/geometric_integration_flowchart.png";
 
 export function Welcome() {
   const { user } = useAuth();
@@ -321,7 +321,6 @@ export function Welcome() {
             <span className="px-4 py-2 bg-yellow-50 border border-yellow-200 rounded-full text-sm font-medium text-yellow-700">Mailchimp</span>
             <span className="px-4 py-2 bg-sky-50 border border-sky-200 rounded-full text-sm font-medium text-sky-700">Calendly</span>
             <span className="px-4 py-2 bg-emerald-50 border border-emerald-200 rounded-full text-sm font-medium text-emerald-700">Google Sheets</span>
-            <span className="px-4 py-2 bg-red-50 border border-red-200 rounded-full text-sm font-medium text-red-700">ShowcaseIDX</span>
           </div>
         </div>
       </section>
