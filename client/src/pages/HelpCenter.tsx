@@ -1227,7 +1227,7 @@ export function HelpCenter() {
                   {CATEGORIES.map((cat) => (
                     <button
                       key={cat.name}
-                      onClick={() => setSelectedCategory(cat.name)}
+                      onClick={() => { setSelectedCategory(cat.name); window.scrollTo(0, 0); }}
                       className="flex flex-col items-center gap-2 p-4 rounded-lg border border-gray-200 hover:border-brand-green hover:bg-green-50/50 transition-colors text-center"
                       data-testid={`button-category-${cat.name.toLowerCase().replace(/\s/g, '-')}`}
                     >
@@ -1243,7 +1243,7 @@ export function HelpCenter() {
               {selectedCategory && (
                 <div className="mb-4 flex items-center gap-2">
                   <button
-                    onClick={() => setSelectedCategory(null)}
+                    onClick={() => { setSelectedCategory(null); window.scrollTo(0, 0); }}
                     className="text-sm text-brand-green hover:underline"
                   >
                     All Categories
