@@ -19,6 +19,7 @@ import { CrmForWhatsappBusiness } from "@/pages/CrmForWhatsappBusiness";
 import { Contact } from "@/pages/Contact";
 import { Blog } from "@/pages/Blog";
 import { BlogPost } from "@/pages/BlogPost";
+import { Admin } from "@/pages/Admin";
 import NotFound from "@/pages/not-found";
 import { AuthProvider, useAuth } from "@/lib/auth-context";
 import { Loader2 } from "lucide-react";
@@ -61,6 +62,7 @@ function Router() {
       <Route path="/contact" component={Contact} />
       <Route path="/blog/:slug" component={BlogPost} />
       <Route path="/blog" component={Blog} />
+      <Route path="/sales-admin" component={Admin} />
       
       {/* Protected Routes */}
       <Route path="/app/*?">

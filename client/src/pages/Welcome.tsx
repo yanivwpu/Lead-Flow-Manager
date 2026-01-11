@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { motion } from "framer-motion";
 import { Link } from "wouter";
 import { 
@@ -22,6 +23,7 @@ import {
   Mail
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
+import { BookDemoModal } from "@/components/BookDemoModal";
 import heroImage from "@assets/generated_images/whatsapp_crm_dashboard_mockup.png";
 
 const INTEGRATIONS = [
@@ -121,9 +123,11 @@ function IntegrationsHub() {
 
 export function Welcome() {
   const { user } = useAuth();
+  const [showDemoModal, setShowDemoModal] = useState(false);
 
   return (
     <div className="min-h-screen bg-white">
+      <BookDemoModal isOpen={showDemoModal} onClose={() => setShowDemoModal(false)} />
       {/* Navigation */}
       <nav className="p-4 md:p-6 flex justify-between items-center max-w-7xl mx-auto">
         <div className="flex items-center gap-2">
@@ -189,6 +193,14 @@ export function Welcome() {
                   <ChevronRight className="h-4 w-4" />
                 </button>
               </Link>
+              <button 
+                onClick={() => setShowDemoModal(true)}
+                className="w-full sm:w-auto h-12 px-6 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-medium rounded-full flex items-center justify-center gap-2 hover:from-amber-600 hover:to-orange-600 transition-colors shadow-md"
+                data-testid="button-book-demo"
+              >
+                <Calendar className="h-4 w-4" />
+                Book a Demo — We're sure you'll love it!
+              </button>
             </div>
             
             <div className="flex items-center gap-2 mb-6">
