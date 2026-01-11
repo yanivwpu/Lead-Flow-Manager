@@ -193,14 +193,17 @@ export function Welcome() {
                   <ChevronRight className="h-4 w-4" />
                 </button>
               </Link>
-              <button 
-                onClick={() => setShowDemoModal(true)}
-                className="w-full sm:w-auto h-12 px-6 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-medium rounded-full flex items-center justify-center gap-2 hover:from-amber-600 hover:to-orange-600 transition-colors shadow-md"
-                data-testid="button-book-demo"
-              >
-                <Calendar className="h-4 w-4" />
-                Book a Demo
-              </button>
+              <div className="flex flex-col items-center sm:items-start">
+                <button 
+                  onClick={() => setShowDemoModal(true)}
+                  className="w-full sm:w-auto h-12 px-6 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-medium rounded-full flex items-center justify-center gap-2 hover:from-amber-600 hover:to-orange-600 transition-colors shadow-md"
+                  data-testid="button-book-demo"
+                >
+                  <Calendar className="h-4 w-4" />
+                  Book a Demo
+                </button>
+                <span className="text-xs text-amber-600 mt-1 font-medium">We're sure you'll love it!</span>
+              </div>
             </div>
             
             <div className="flex items-center gap-2 mb-6">
