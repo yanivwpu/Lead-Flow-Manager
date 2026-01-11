@@ -199,7 +199,7 @@ export function Welcome() {
                 data-testid="button-book-demo"
               >
                 <Calendar className="h-4 w-4" />
-                Book a Demo — We're sure you'll love it!
+                Book a Demo
               </button>
             </div>
             
