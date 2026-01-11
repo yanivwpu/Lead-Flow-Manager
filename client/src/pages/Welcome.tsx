@@ -232,12 +232,12 @@ export function Welcome() {
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.8, delay: 0.2 }}
-            className="relative md:mt-2 flex items-start"
+            className="relative"
           >
             <img 
               src={heroImage} 
               alt="WhachatCRM Dashboard - WhatsApp CRM Interface" 
-              className="w-full max-w-none md:w-[120%] h-auto object-contain rounded-xl md:rounded-2xl shadow-2xl border border-gray-200"
+              className="w-full rounded-xl md:rounded-2xl shadow-2xl border border-gray-200 md:scale-105 origin-top"
             />
           </motion.div>
         </div>
