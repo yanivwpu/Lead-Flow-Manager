@@ -134,6 +134,11 @@ export function OnboardingTour({ onComplete, isOpen }: OnboardingTourProps) {
   }, [currentStep]);
 
   const handleNext = () => {
+    // Mark tour as complete on first Next click so it won't show again if user navigates away
+    if (currentStep === 0) {
+      completeTourMutation.mutate();
+    }
+    
     if (currentStep < TOUR_STEPS.length - 1) {
       setCurrentStep(currentStep + 1);
     } else {
