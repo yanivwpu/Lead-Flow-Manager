@@ -599,7 +599,7 @@ export function Admin() {
                   console.error('Create salesperson error:', err);
                 }
               }}
-              className="bg-[#25D366] hover:bg-[#128C7E] text-white w-full min-h-[52px] text-base font-medium rounded-md disabled:opacity-50"
+              className="bg-brand-green hover:bg-brand-dark text-white w-full min-h-[52px] text-base font-medium rounded-md disabled:opacity-50"
               data-testid="button-submit-salesperson"
             >
               {createSalesperson.isPending ? "Adding..." : "Add Salesperson"}
