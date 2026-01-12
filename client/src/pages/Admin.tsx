@@ -565,14 +565,21 @@ export function Admin() {
               />
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsAddingPerson(false)}>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button 
+              variant="outline" 
+              onClick={() => setIsAddingPerson(false)}
+              className="w-full sm:w-auto min-h-[44px] touch-manipulation"
+              type="button"
+            >
               Cancel
             </Button>
             <Button 
               onClick={() => createSalesperson.mutate(newPerson)}
               disabled={!newPerson.name || !newPerson.email}
-              className="bg-brand-green hover:bg-brand-dark"
+              className="bg-brand-green hover:bg-brand-dark w-full sm:w-auto min-h-[44px] touch-manipulation"
+              type="button"
+              data-testid="button-submit-salesperson"
             >
               Add Salesperson
             </Button>
