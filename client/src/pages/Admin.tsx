@@ -64,6 +64,7 @@ export function Admin() {
   const [editingPerson, setEditingPerson] = useState<Salesperson | null>(null);
   const [isAddingPerson, setIsAddingPerson] = useState(false);
   const [newPerson, setNewPerson] = useState({ name: "", email: "", phone: "" });
+  const [addError, setAddError] = useState("");
   
   const queryClient = useQueryClient();
 
@@ -138,9 +139,10 @@ export function Admin() {
       queryClient.invalidateQueries({ queryKey: ['/api/admin/salespeople'] });
       setIsAddingPerson(false);
       setNewPerson({ name: "", email: "", phone: "" });
+      setAddError("");
     },
     onError: (error: Error) => {
-      alert('Error: ' + error.message);
+      setAddError(error.message);
     }
   });
 
@@ -539,72 +541,77 @@ export function Admin() {
         </Tabs>
       </main>
 
-      <Sheet open={isAddingPerson} onOpenChange={setIsAddingPerson}>
+      <Sheet open={isAddingPerson} onOpenChange={(open) => {
+          setIsAddingPerson(open);
+          if (!open) setAddError("");
+        }}>
         <SheetContent side="bottom" className="rounded-t-xl pb-8">
           <SheetHeader className="pb-4">
             <SheetTitle>Add Salesperson</SheetTitle>
           </SheetHeader>
-          <form onSubmit={(e) => {
-            e.preventDefault();
-            if (newPerson.name && newPerson.email) {
-              createSalesperson.mutate(newPerson);
-            }
-          }}>
-            <div className="space-y-4">
-              <div>
-                <Label htmlFor="new-name">Name</Label>
-                <Input
-                  id="new-name"
-                  value={newPerson.name}
-                  onChange={(e) => setNewPerson({ ...newPerson, name: e.target.value })}
-                  placeholder="John Smith"
-                  className="text-base"
-                  required
-                />
-              </div>
-              <div>
-                <Label htmlFor="new-email">Email</Label>
-                <Input
-                  id="new-email"
-                  type="email"
-                  value={newPerson.email}
-                  onChange={(e) => setNewPerson({ ...newPerson, email: e.target.value })}
-                  placeholder="john@company.com"
-                  className="text-base"
-                  required
-                />
-              </div>
-              <div>
-                <Label htmlFor="new-phone">Phone (optional)</Label>
-                <Input
-                  id="new-phone"
-                  type="tel"
-                  value={newPerson.phone}
-                  onChange={(e) => setNewPerson({ ...newPerson, phone: e.target.value })}
-                  placeholder="+1 (555) 123-4567"
-                  className="text-base"
-                />
-              </div>
+          {addError && (
+            <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+              {addError}
             </div>
-            <div className="flex flex-col gap-3 pt-6">
-              <Button 
-                type="submit"
-                disabled={createSalesperson.isPending}
-                className="bg-brand-green hover:bg-brand-dark w-full min-h-[52px] text-base"
-                data-testid="button-submit-salesperson"
-              >
-                {createSalesperson.isPending ? "Adding..." : "Add Salesperson"}
-              </Button>
-              <Button 
-                variant="outline" 
-                onClick={() => setIsAddingPerson(false)}
-                className="w-full min-h-[52px] text-base"
-                type="button"
-              >
-                Cancel
-              </Button>
+          )}
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="new-name">Name</Label>
+              <Input
+                id="new-name"
+                value={newPerson.name}
+                onChange={(e) => setNewPerson({ ...newPerson, name: e.target.value })}
+                placeholder="John Smith"
+                className="text-base"
+              />
             </div>
-          </form>
+            <div>
+              <Label htmlFor="new-email">Email</Label>
+              <Input
+                id="new-email"
+                type="email"
+                value={newPerson.email}
+                onChange={(e) => setNewPerson({ ...newPerson, email: e.target.value })}
+                placeholder="john@company.com"
+                className="text-base"
+              />
+            </div>
+            <div>
+              <Label htmlFor="new-phone">Phone (optional)</Label>
+              <Input
+                id="new-phone"
+                type="tel"
+                value={newPerson.phone}
+                onChange={(e) => setNewPerson({ ...newPerson, phone: e.target.value })}
+                placeholder="+1 (555) 123-4567"
+                className="text-base"
+              />
+            </div>
+          </div>
+          <div className="flex flex-col gap-3 pt-6">
+            <button 
+              type="button"
+              disabled={!newPerson.name || !newPerson.email || createSalesperson.isPending}
+              onClick={async () => {
+                try {
+                  await createSalesperson.mutateAsync(newPerson);
+                } catch (err: any) {
+                  console.error('Create salesperson error:', err);
+                }
+              }}
+              className="bg-[#25D366] hover:bg-[#128C7E] text-white w-full min-h-[52px] text-base font-medium rounded-md disabled:opacity-50"
+              data-testid="button-submit-salesperson"
+            >
+              {createSalesperson.isPending ? "Adding..." : "Add Salesperson"}
+            </button>
+            <button 
+              type="button"
+              onClick={() => setIsAddingPerson(false)}
+              className="border border-gray-300 bg-white w-full min-h-[52px] text-base font-medium rounded-md"
+            >
+              Cancel
+            </button>
+          </div>
         </SheetContent>
       </Sheet>
 
