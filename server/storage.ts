@@ -1014,6 +1014,28 @@ export class DbStorage implements IStorage {
     return result[0];
   }
 
+  async getSalesConversionByUserId(userId: string): Promise<SalesConversion | undefined> {
+    const result = await db.select().from(salesConversions)
+      .where(eq(salesConversions.userId, userId));
+    return result[0];
+  }
+
+  async addConversionRevenue(userId: string, amount: number): Promise<void> {
+    await db.update(salesConversions)
+      .set({ 
+        totalRevenue: sql`COALESCE(${salesConversions.totalRevenue}, 0) + ${amount}`
+      })
+      .where(eq(salesConversions.userId, userId));
+  }
+
+  async getConversionROIStats(): Promise<{ totalCost: number; totalRevenue: number; roi: number }> {
+    const conversions = await db.select().from(salesConversions);
+    const totalCost = conversions.reduce((sum, c) => sum + parseFloat(c.amount || '0'), 0);
+    const totalRevenue = conversions.reduce((sum, c) => sum + parseFloat(c.totalRevenue || '0'), 0);
+    const roi = totalCost > 0 ? ((totalRevenue / totalCost) * 100) : 0;
+    return { totalCost, totalRevenue, roi };
+  }
+
   // Admin settings methods
   async getAdminPasswordHash(): Promise<string | undefined> {
     const result = await db.select().from(adminSettings).where(eq(adminSettings.id, 'admin'));
