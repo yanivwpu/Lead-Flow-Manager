@@ -309,14 +309,15 @@ export function Admin() {
 
           <TabsContent value="salespeople">
             <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-              <div className="p-4 border-b border-gray-200 flex justify-between items-center">
+              <div className="p-4 border-b border-gray-200 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                 <h2 className="font-semibold text-gray-900">Sales Team</h2>
                 <Button 
                   onClick={() => setIsAddingPerson(true)}
-                  className="bg-brand-green hover:bg-brand-dark"
-                  size="sm"
+                  className="bg-brand-green hover:bg-brand-dark min-h-[44px] min-w-[44px] touch-manipulation"
+                  size="default"
+                  data-testid="button-add-salesperson"
                 >
-                  <Plus className="h-4 w-4 mr-1" />
+                  <Plus className="h-5 w-5 mr-2" />
                   Add Salesperson
                 </Button>
               </div>
