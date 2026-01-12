@@ -565,21 +565,27 @@ export function Admin() {
               />
             </div>
           </div>
-          <DialogFooter className="flex-col sm:flex-row gap-2">
+          <DialogFooter className="flex-col sm:flex-row gap-3 pt-4">
             <Button 
               variant="outline" 
               onClick={() => setIsAddingPerson(false)}
-              className="w-full sm:w-auto min-h-[44px] touch-manipulation"
+              className="w-full sm:w-auto min-h-[48px] touch-manipulation cursor-pointer active:scale-95"
               type="button"
+              style={{ WebkitTapHighlightColor: 'transparent', touchAction: 'manipulation' }}
             >
               Cancel
             </Button>
             <Button 
-              onClick={() => createSalesperson.mutate(newPerson)}
+              onPointerDown={(e) => {
+                if (!newPerson.name || !newPerson.email) return;
+                e.preventDefault();
+                createSalesperson.mutate(newPerson);
+              }}
               disabled={!newPerson.name || !newPerson.email}
-              className="bg-brand-green hover:bg-brand-dark w-full sm:w-auto min-h-[44px] touch-manipulation"
+              className="bg-brand-green hover:bg-brand-dark w-full sm:w-auto min-h-[48px] touch-manipulation cursor-pointer active:scale-95 relative z-10"
               type="button"
               data-testid="button-submit-salesperson"
+              style={{ WebkitTapHighlightColor: 'transparent', touchAction: 'manipulation' }}
             >
               Add Salesperson
             </Button>
