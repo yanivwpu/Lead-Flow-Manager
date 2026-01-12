@@ -574,6 +574,7 @@ export const salesConversions = pgTable("sales_conversions", {
   salespersonId: varchar("salesperson_id").notNull().references(() => salespeople.id, { onDelete: "cascade" }),
   userId: varchar("user_id").references(() => users.id, { onDelete: "set null" }), // The user who subscribed
   amount: numeric("amount", { precision: 10, scale: 2 }).default("50"), // Commission amount
+  totalRevenue: numeric("total_revenue", { precision: 10, scale: 2 }).default("0"), // Cumulative subscription revenue from this user
   paid: boolean("paid").default(false),
   paidAt: timestamp("paid_at"),
   createdAt: timestamp("created_at").defaultNow(),
