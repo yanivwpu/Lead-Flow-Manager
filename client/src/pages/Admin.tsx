@@ -121,6 +121,11 @@ export function Admin() {
     enabled: isLoggedIn,
   });
 
+  const { data: roiStats } = useQuery<{ totalCost: number; totalRevenue: number; roi: number }>({
+    queryKey: ['/api/admin/conversions/roi'],
+    enabled: isLoggedIn,
+  });
+
   const createSalesperson = useMutation({
     mutationFn: async (data: { name: string; email: string; phone?: string }) => {
       const res = await fetch('/api/admin/salespeople', {
@@ -205,7 +210,6 @@ export function Admin() {
   const totalCost = salespeople.reduce((sum, p) => sum + parseFloat(p.totalEarnings || '0'), 0);
   const totalConversions = salespeople.reduce((sum, p) => sum + (p.totalConversions || 0), 0);
   const pendingBookings = bookings.filter(b => b.status === 'pending').length;
-  const totalRevenue = conversions.filter(c => c.paid).reduce((sum, c) => sum + parseFloat(c.amount || '0'), 0);
   const conversionRate = bookings.length > 0 
     ? ((bookings.filter(b => b.status === 'converted').length / bookings.length) * 100).toFixed(1)
     : '0';
@@ -277,7 +281,7 @@ export function Admin() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 mb-8">
           <div className="bg-white rounded-xl p-6 border border-gray-200">
             <div className="flex items-center gap-3 mb-2">
               <div className="h-10 w-10 bg-blue-100 rounded-lg flex items-center justify-center">
@@ -312,7 +316,8 @@ export function Admin() {
               </div>
               <span className="text-gray-600">Total Revenue</span>
             </div>
-            <p className="text-3xl font-bold text-gray-900">${totalRevenue.toFixed(2)}</p>
+            <p className="text-3xl font-bold text-gray-900">${(roiStats?.totalRevenue || 0).toFixed(2)}</p>
+            <p className="text-xs text-gray-500 mt-1">From converted users</p>
           </div>
           <div className="bg-white rounded-xl p-6 border border-gray-200">
             <div className="flex items-center gap-3 mb-2">
@@ -322,6 +327,18 @@ export function Admin() {
               <span className="text-gray-600">Conversion Rate</span>
             </div>
             <p className="text-3xl font-bold text-gray-900">{conversionRate}%</p>
+          </div>
+          <div className="bg-white rounded-xl p-6 border border-gray-200">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="h-10 w-10 bg-amber-100 rounded-lg flex items-center justify-center">
+                <DollarSign className="h-5 w-5 text-amber-600" />
+              </div>
+              <span className="text-gray-600">Revenue ROI</span>
+            </div>
+            <p className={`text-3xl font-bold ${(roiStats?.roi || 0) >= 100 ? 'text-green-600' : 'text-red-600'}`}>
+              {(roiStats?.roi || 0).toFixed(0)}%
+            </p>
+            <p className="text-xs text-gray-500 mt-1">Revenue vs Commission</p>
           </div>
         </div>
 
