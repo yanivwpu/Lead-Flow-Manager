@@ -588,6 +588,7 @@ export const adminSettings = pgTable("admin_settings", {
 
 export const insertSalespersonSchema = createInsertSchema(salespeople).omit({
   id: true,
+  loginCode: true,
   createdAt: true,
   totalBookings: true,
   totalConversions: true,
