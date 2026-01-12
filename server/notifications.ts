@@ -42,11 +42,9 @@ async function sendEmailNotification(chatId: string, email: string, chatName: st
 
 async function checkFollowUps() {
   try {
-    console.log('Checking for due follow-ups...');
     const dueFollowUps = await storage.getDueFollowUps();
     
     if (dueFollowUps.length === 0) {
-      console.log('No due follow-ups found');
       return;
     }
 
@@ -202,14 +200,7 @@ async function processDripEnrollments() {
 }
 
 export function startNotificationScheduler() {
-  // Check for due follow-ups every minute
   cron.schedule('* * * * *', checkFollowUps);
-  console.log('Notification scheduler started - checking every minute');
-  
-  // Process drip enrollments every minute
   cron.schedule('* * * * *', processDripEnrollments);
-  console.log('Drip campaign scheduler started - checking every minute');
-  
-  // Run immediately on startup
-  checkFollowUps();
+  console.log('Schedulers started');
 }
