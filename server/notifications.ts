@@ -200,7 +200,7 @@ async function processDripEnrollments() {
 }
 
 export function startNotificationScheduler() {
-  cron.schedule('* * * * *', checkFollowUps);
-  cron.schedule('* * * * *', processDripEnrollments);
+  cron.schedule('*/5 * * * *', checkFollowUps);
+  cron.schedule('*/5 * * * *', processDripEnrollments);
   console.log('Schedulers started');
 }

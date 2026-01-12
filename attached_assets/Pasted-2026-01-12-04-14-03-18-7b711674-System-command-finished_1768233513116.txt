@@ -1,0 +1,68 @@
+2026-01-12 04:14:03.18
+7b711674
+System
+command finished with error [node ./dist/index.cjs]: signal: terminated
+2026-01-12 04:21:01.94
+7b711674
+User
+[2026-01-12T09:21:01.943Z] [PID: 27] [NODE-CRON] [WARN] missed execution at Mon Jan 12 2026 09:21:00 GMT+0000 (Coordinated Universal Time)! Possible blocking IO or high CPU user at the same process used by node-cron.
+2026-01-12 04:22:01.34
+7b711674
+User
+[2026-01-12T09:22:01.343Z] [PID: 27] [NODE-CRON] [WARN] missed execution at Mon Jan 12 2026 09:22:00 GMT+0000 (Coordinated Universal Time)! Possible blocking IO or high CPU user at the same process used by node-cron.
+2026-01-12 04:25:01.34
+7b711674
+User
+[2026-01-12T09:25:01.345Z] [PID: 27] [NODE-CRON] [WARN] missed execution at Mon Jan 12 2026 09:25:00 GMT+0000 (Coordinated Universal Time)! Possible blocking IO or high CPU user at the same process used by node-cron.
+2026-01-12 04:27:01.04
+7b711674
+User
+[2026-01-12T09:27:01.043Z] [PID: 27] [NODE-CRON] [WARN] missed execution at Mon Jan 12 2026 09:27:00 GMT+0000 (Coordinated Universal Time)! Possible blocking IO or high CPU user at the same process used by node-cron.
+2026-01-12 04:32:01.84
+7b711674
+User
+[2026-01-12T09:32:01.844Z] [PID: 27] [NODE-CRON] [WARN] missed execution at Mon Jan 12 2026 09:32:00 GMT+0000 (Coordinated Universal Time)! Possible blocking IO or high CPU user at the same process used by node-cron.
+2026-01-12 04:53:01.04
+7b711674
+User
+[2026-01-12T09:53:01.042Z] [PID: 27] [NODE-CRON] [WARN] missed execution at Mon Jan 12 2026 09:53:00 GMT+0000 (Coordinated Universal Time)! Possible blocking IO or high CPU user at the same process used by node-cron.
+2026-01-12 05:02:01.24
+7b711674
+User
+[2026-01-12T10:02:01.244Z] [PID: 27] [NODE-CRON] [WARN] missed execution at Mon Jan 12 2026 10:02:00 GMT+0000 (Coordinated Universal Time)! Possible blocking IO or high CPU user at the same process used by node-cron.
+2026-01-12 06:42:01.24
+7b711674
+User
+[2026-01-12T11:42:01.142Z] [PID: 27] [NODE-CRON] [WARN] missed execution at Mon Jan 12 2026 11:42:00 GMT+0000 (Coordinated Universal Time)! Possible blocking IO or high CPU user at the same process used by node-cron.
+2026-01-12 06:55:01.04
+7b711674
+User
+[2026-01-12T11:55:01.043Z] [PID: 27] [NODE-CRON] [WARN] missed execution at Mon Jan 12 2026 11:55:00 GMT+0000 (Coordinated Universal Time)! Possible blocking IO or high CPU user at the same process used by node-cron.
+2026-01-12 07:23:02.04
+7b711674
+User
+[2026-01-12T12:23:02.042Z] [PID: 27] [NODE-CRON] [WARN] missed execution at Mon Jan 12 2026 12:23:00 GMT+0000 (Coordinated Universal Time)! Possible blocking IO or high CPU user at the same process used by node-cron.
+2026-01-12 07:31:01.24
+7b711674
+User
+[2026-01-12T12:31:01.242Z] [PID: 27] [NODE-CRON] [WARN] missed execution at Mon Jan 12 2026 12:31:00 GMT+0000 (Coordinated Universal Time)! Possible blocking IO or high CPU user at the same process used by node-cron.
+2026-01-12 07:52:01.14
+7b711674
+User
+[2026-01-12T12:52:01.144Z] [PID: 27] [NODE-CRON] [WARN] missed execution at Mon Jan 12 2026 12:52:00 GMT+0000 (Coordinated Universal Time)! Possible blocking IO or high CPU user at the same process used by node-cron.
+2026-01-12 08:55:01.04
+7b711674
+User
+[2026-01-12T13:55:01.043Z] [PID: 27] [NODE-CRON] [WARN] missed execution at Mon Jan 12 2026 13:55:00 GMT+0000 (Coordinated Universal Time)! Possible blocking IO or high CPU user at the same process used by node-cron.
+2026-01-12 09:32:02.44
+7b711674
+User
+[2026-01-12T14:32:02.046Z] [PID: 27] [NODE-CRON] [WARN] missed execution at Mon Jan 12 2026 14:32:00 GMT+0000 (Coordinated Universal Time)! Possible blocking IO or high CPU user at the same process used by node-cron.
+2026-01-12 09:37:01.14
+7b711674
+User
+[2026-01-12T14:37:01.143Z] [PID: 27] [NODE-CRON] [WARN] missed execution at Mon Jan 12 2026 14:37:00 GMT+0000 (Coordinated Universal Time)! Possible blocking IO or high CPU user at the same process used by node-cron.
+2026-01-12 09:40:01.34
+7b711674
+User
+[2026-01-12T14:40:01.342Z] [PID: 27] [NODE-CRON] [WARN] missed execution at Mon Jan 12 2026 14:40:00 GMT+0000 (Coordinated Universal Time)! Possible blocking IO or high CPU user at the same process used by node-cron.
