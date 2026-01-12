@@ -2856,6 +2856,17 @@ export async function registerRoutes(
     }
   });
 
+  // Admin: Get conversion ROI stats
+  app.get("/api/admin/conversions/roi", requireAdmin, async (req, res) => {
+    try {
+      const stats = await storage.getConversionROIStats();
+      res.json(stats);
+    } catch (error) {
+      console.error("Error fetching ROI stats:", error);
+      res.status(500).json({ error: "Failed to fetch ROI stats" });
+    }
+  });
+
   // ================== SALESPERSON PORTAL ==================
 
   // Salesperson Portal: Login
