@@ -125,6 +125,7 @@ export function Admin() {
       const res = await fetch('/api/admin/salespeople', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify(data)
       });
       if (!res.ok) {
@@ -543,63 +544,67 @@ export function Admin() {
           <SheetHeader className="pb-4">
             <SheetTitle>Add Salesperson</SheetTitle>
           </SheetHeader>
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="new-name">Name</Label>
-              <Input
-                id="new-name"
-                value={newPerson.name}
-                onChange={(e) => setNewPerson({ ...newPerson, name: e.target.value })}
-                placeholder="John Smith"
-                className="text-base"
-              />
+          <form onSubmit={(e) => {
+            e.preventDefault();
+            if (newPerson.name && newPerson.email) {
+              createSalesperson.mutate(newPerson);
+            }
+          }}>
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="new-name">Name</Label>
+                <Input
+                  id="new-name"
+                  value={newPerson.name}
+                  onChange={(e) => setNewPerson({ ...newPerson, name: e.target.value })}
+                  placeholder="John Smith"
+                  className="text-base"
+                  required
+                />
+              </div>
+              <div>
+                <Label htmlFor="new-email">Email</Label>
+                <Input
+                  id="new-email"
+                  type="email"
+                  value={newPerson.email}
+                  onChange={(e) => setNewPerson({ ...newPerson, email: e.target.value })}
+                  placeholder="john@company.com"
+                  className="text-base"
+                  required
+                />
+              </div>
+              <div>
+                <Label htmlFor="new-phone">Phone (optional)</Label>
+                <Input
+                  id="new-phone"
+                  type="tel"
+                  value={newPerson.phone}
+                  onChange={(e) => setNewPerson({ ...newPerson, phone: e.target.value })}
+                  placeholder="+1 (555) 123-4567"
+                  className="text-base"
+                />
+              </div>
             </div>
-            <div>
-              <Label htmlFor="new-email">Email</Label>
-              <Input
-                id="new-email"
-                type="email"
-                value={newPerson.email}
-                onChange={(e) => setNewPerson({ ...newPerson, email: e.target.value })}
-                placeholder="john@company.com"
-                className="text-base"
-              />
+            <div className="flex flex-col gap-3 pt-6">
+              <Button 
+                type="submit"
+                disabled={createSalesperson.isPending}
+                className="bg-brand-green hover:bg-brand-dark w-full min-h-[52px] text-base"
+                data-testid="button-submit-salesperson"
+              >
+                {createSalesperson.isPending ? "Adding..." : "Add Salesperson"}
+              </Button>
+              <Button 
+                variant="outline" 
+                onClick={() => setIsAddingPerson(false)}
+                className="w-full min-h-[52px] text-base"
+                type="button"
+              >
+                Cancel
+              </Button>
             </div>
-            <div>
-              <Label htmlFor="new-phone">Phone (optional)</Label>
-              <Input
-                id="new-phone"
-                type="tel"
-                value={newPerson.phone}
-                onChange={(e) => setNewPerson({ ...newPerson, phone: e.target.value })}
-                placeholder="+1 (555) 123-4567"
-                className="text-base"
-              />
-            </div>
-          </div>
-          <SheetFooter className="flex-col gap-3 pt-6">
-            <Button 
-              onClick={() => {
-                if (newPerson.name && newPerson.email) {
-                  createSalesperson.mutate(newPerson);
-                }
-              }}
-              disabled={!newPerson.name || !newPerson.email || createSalesperson.isPending}
-              className="bg-brand-green hover:bg-brand-dark w-full min-h-[52px] text-base"
-              type="button"
-              data-testid="button-submit-salesperson"
-            >
-              {createSalesperson.isPending ? "Adding..." : "Add Salesperson"}
-            </Button>
-            <Button 
-              variant="outline" 
-              onClick={() => setIsAddingPerson(false)}
-              className="w-full min-h-[52px] text-base"
-              type="button"
-            >
-              Cancel
-            </Button>
-          </SheetFooter>
+          </form>
         </SheetContent>
       </Sheet>
 
