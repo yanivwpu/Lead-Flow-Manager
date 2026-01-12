@@ -48,6 +48,9 @@
     @apply border-border;
     box-sizing: border-box;
   }
+  html {
+    overflow-y: scroll;
+  }
   html, body, #root {
     height: 100%;
     width: 100%;
