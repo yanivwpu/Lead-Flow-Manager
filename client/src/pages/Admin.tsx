@@ -202,9 +202,13 @@ export function Admin() {
     return salespeople.find(p => p.id === id)?.name || 'Unknown';
   };
 
-  const totalEarnings = salespeople.reduce((sum, p) => sum + parseFloat(p.totalEarnings || '0'), 0);
+  const totalCost = salespeople.reduce((sum, p) => sum + parseFloat(p.totalEarnings || '0'), 0);
   const totalConversions = salespeople.reduce((sum, p) => sum + (p.totalConversions || 0), 0);
   const pendingBookings = bookings.filter(b => b.status === 'pending').length;
+  const totalRevenue = conversions.filter(c => c.paid).reduce((sum, c) => sum + parseFloat(c.amount || '0'), 0);
+  const conversionRate = bookings.length > 0 
+    ? ((bookings.filter(b => b.status === 'converted').length / bookings.length) * 100).toFixed(1)
+    : '0';
 
   if (!isLoggedIn) {
     return (
@@ -273,7 +277,7 @@ export function Admin() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
           <div className="bg-white rounded-xl p-6 border border-gray-200">
             <div className="flex items-center gap-3 mb-2">
               <div className="h-10 w-10 bg-blue-100 rounded-lg flex items-center justify-center">
@@ -294,12 +298,30 @@ export function Admin() {
           </div>
           <div className="bg-white rounded-xl p-6 border border-gray-200">
             <div className="flex items-center gap-3 mb-2">
+              <div className="h-10 w-10 bg-red-100 rounded-lg flex items-center justify-center">
+                <DollarSign className="h-5 w-5 text-red-600" />
+              </div>
+              <span className="text-gray-600">Total Cost</span>
+            </div>
+            <p className="text-3xl font-bold text-gray-900">${totalCost.toFixed(2)}</p>
+          </div>
+          <div className="bg-white rounded-xl p-6 border border-gray-200">
+            <div className="flex items-center gap-3 mb-2">
               <div className="h-10 w-10 bg-emerald-100 rounded-lg flex items-center justify-center">
                 <DollarSign className="h-5 w-5 text-emerald-600" />
               </div>
-              <span className="text-gray-600">Total Earnings</span>
+              <span className="text-gray-600">Total Revenue</span>
             </div>
-            <p className="text-3xl font-bold text-gray-900">${totalEarnings.toFixed(2)}</p>
+            <p className="text-3xl font-bold text-gray-900">${totalRevenue.toFixed(2)}</p>
+          </div>
+          <div className="bg-white rounded-xl p-6 border border-gray-200">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="h-10 w-10 bg-purple-100 rounded-lg flex items-center justify-center">
+                <CheckCircle className="h-5 w-5 text-purple-600" />
+              </div>
+              <span className="text-gray-600">Conversion Rate</span>
+            </div>
+            <p className="text-3xl font-bold text-gray-900">{conversionRate}%</p>
           </div>
         </div>
 
