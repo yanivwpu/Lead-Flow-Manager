@@ -2791,10 +2791,25 @@ export async function registerRoutes(
   app.patch("/api/admin/bookings/:id", requireAdmin, async (req, res) => {
     try {
       const { status, notes } = req.body;
+      
+      // Get the current booking to check if status is changing to converted
+      const currentBooking = await storage.getDemoBooking(req.params.id);
+      
       const booking = await storage.updateDemoBooking(req.params.id, {
         ...(status !== undefined && { status }),
         ...(notes !== undefined && { notes }),
       });
+      
+      // If status changed to 'converted', automatically create a conversion record
+      if (status === 'converted' && currentBooking && currentBooking.status !== 'converted') {
+        await storage.createSalesConversion({
+          bookingId: req.params.id,
+          salespersonId: currentBooking.salespersonId,
+          userId: null,
+          amount: "50"
+        });
+      }
+      
       res.json(booking);
     } catch (error) {
       console.error("Error updating booking:", error);
