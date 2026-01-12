@@ -25,7 +25,7 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import { subscriptionService } from "./subscriptionService";
-import { sendWelcomeEmail, sendContactFormEmail, sendDemoBookingNotification, sendSalespersonWelcomeEmail } from "./email";
+import { sendWelcomeEmail, sendContactFormEmail, sendDemoBookingNotification, sendDemoConfirmationEmail, sendSalespersonWelcomeEmail } from "./email";
 import bcrypt from "bcryptjs";
 import { triggerNewChatWorkflows, triggerKeywordWorkflows } from "./workflowEngine";
 
@@ -2652,6 +2652,14 @@ export async function registerRoutes(
         salesperson.email,
         salesperson.name,
         { name, email, phone, scheduledDate: new Date(scheduledDate) }
+      );
+
+      // Send confirmation email to visitor
+      await sendDemoConfirmationEmail(
+        email,
+        name,
+        new Date(scheduledDate),
+        salesperson.name
       );
 
       res.json({ success: true, bookingId: booking.id });

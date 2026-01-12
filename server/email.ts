@@ -326,6 +326,73 @@ export async function sendDemoBookingNotification(
   });
 }
 
+export async function sendDemoConfirmationEmail(
+  visitorEmail: string,
+  visitorName: string,
+  scheduledDate: Date,
+  salespersonName: string
+): Promise<boolean> {
+  const formattedDate = scheduledDate.toLocaleDateString('en-US', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZone: 'America/New_York'
+  });
+
+  return sendEmail({
+    to: visitorEmail,
+    subject: 'Your Demo is Confirmed! - WhaChatCRM',
+    html: `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      </head>
+      <body style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #334155; margin: 0; padding: 0; background-color: #f1f5f9;">
+        <div style="padding: 40px 20px;">
+          <div style="max-width: 600px; margin: 0 auto; background: white; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+            <div style="background: linear-gradient(135deg, #059669 0%, #047857 100%); color: white; padding: 40px 30px; text-align: center;">
+              <div style="width: 50px; height: 50px; background: white; border-radius: 12px; display: inline-block; margin-bottom: 16px; font-size: 24px; line-height: 50px;">✅</div>
+              <h1 style="margin: 0; font-size: 24px; font-weight: 600;">Demo Confirmed!</h1>
+            </div>
+            <div style="padding: 40px 30px;">
+              <h2 style="color: #1e293b; margin-top: 0; font-size: 20px;">Hi ${visitorName}!</h2>
+              <p style="color: #475569; font-size: 15px;">Thank you for booking a demo with WhaChatCRM. We're excited to show you how our platform can help transform your business communication.</p>
+              
+              <div style="background: #ecfdf5; border: 1px solid #a7f3d0; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                <p style="margin: 8px 0; color: #065f46; font-size: 15px;"><strong>Scheduled Date:</strong> ${formattedDate} EST</p>
+                <p style="margin: 8px 0; color: #065f46; font-size: 15px;"><strong>Your Demo Specialist:</strong> ${salespersonName}</p>
+              </div>
+              
+              <h3 style="color: #1e293b; font-size: 16px; margin-bottom: 8px;">What to Expect</h3>
+              <ul style="color: #475569; font-size: 15px; padding-left: 20px;">
+                <li style="margin-bottom: 8px;">A personalized walkthrough of WhaChatCRM features</li>
+                <li style="margin-bottom: 8px;">How to integrate WhatsApp with your existing workflow</li>
+                <li style="margin-bottom: 8px;">Q&A session to address your specific needs</li>
+                <li style="margin-bottom: 8px;">Special offer for demo participants</li>
+              </ul>
+              
+              <p style="color: #475569; font-size: 15px;">${salespersonName} will reach out to you shortly to confirm the meeting details. If you have any questions before the demo, feel free to reply to this email.</p>
+              
+              <div style="text-align: center;">
+                <a href="${APP_URL}" style="display: inline-block; background: #059669; color: white; padding: 14px 32px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px; margin: 24px 0;">Visit WhaChatCRM</a>
+              </div>
+            </div>
+            <div style="text-align: center; padding: 24px 30px; background: #f8fafc; border-top: 1px solid #e2e8f0;">
+              <p style="margin: 0; color: #94a3b8; font-size: 12px;">&copy; ${new Date().getFullYear()} WhaChatCRM. All rights reserved.</p>
+            </div>
+          </div>
+        </div>
+      </body>
+      </html>
+    `
+  });
+}
+
 export async function sendSalespersonWelcomeEmail(
   name: string, 
   email: string, 
