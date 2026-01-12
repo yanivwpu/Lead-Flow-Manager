@@ -6,6 +6,9 @@ import { Label } from "@/components/ui/label";
 import { 
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter 
 } from "@/components/ui/dialog";
+import {
+  Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter
+} from "@/components/ui/sheet";
 import { 
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow 
 } from "@/components/ui/table";
@@ -535,11 +538,11 @@ export function Admin() {
         </Tabs>
       </main>
 
-      <Dialog open={isAddingPerson} onOpenChange={setIsAddingPerson}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Add Salesperson</DialogTitle>
-          </DialogHeader>
+      <Sheet open={isAddingPerson} onOpenChange={setIsAddingPerson}>
+        <SheetContent side="bottom" className="rounded-t-xl pb-8">
+          <SheetHeader className="pb-4">
+            <SheetTitle>Add Salesperson</SheetTitle>
+          </SheetHeader>
           <div className="space-y-4">
             <div>
               <Label htmlFor="new-name">Name</Label>
@@ -548,6 +551,7 @@ export function Admin() {
                 value={newPerson.name}
                 onChange={(e) => setNewPerson({ ...newPerson, name: e.target.value })}
                 placeholder="John Smith"
+                className="text-base"
               />
             </div>
             <div>
@@ -558,6 +562,7 @@ export function Admin() {
                 value={newPerson.email}
                 onChange={(e) => setNewPerson({ ...newPerson, email: e.target.value })}
                 placeholder="john@company.com"
+                className="text-base"
               />
             </div>
             <div>
@@ -568,18 +573,11 @@ export function Admin() {
                 value={newPerson.phone}
                 onChange={(e) => setNewPerson({ ...newPerson, phone: e.target.value })}
                 placeholder="+1 (555) 123-4567"
+                className="text-base"
               />
             </div>
           </div>
-          <DialogFooter className="flex-col sm:flex-row gap-3 pt-4">
-            <Button 
-              variant="outline" 
-              onClick={() => setIsAddingPerson(false)}
-              className="w-full sm:w-auto min-h-[48px]"
-              type="button"
-            >
-              Cancel
-            </Button>
+          <SheetFooter className="flex-col gap-3 pt-6">
             <Button 
               onClick={() => {
                 if (newPerson.name && newPerson.email) {
@@ -587,15 +585,23 @@ export function Admin() {
                 }
               }}
               disabled={!newPerson.name || !newPerson.email || createSalesperson.isPending}
-              className="bg-brand-green hover:bg-brand-dark w-full sm:w-auto min-h-[48px]"
+              className="bg-brand-green hover:bg-brand-dark w-full min-h-[52px] text-base"
               type="button"
               data-testid="button-submit-salesperson"
             >
               {createSalesperson.isPending ? "Adding..." : "Add Salesperson"}
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+            <Button 
+              variant="outline" 
+              onClick={() => setIsAddingPerson(false)}
+              className="w-full min-h-[52px] text-base"
+              type="button"
+            >
+              Cancel
+            </Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
 
       <Dialog open={!!editingPerson} onOpenChange={() => setEditingPerson(null)}>
         <DialogContent>
