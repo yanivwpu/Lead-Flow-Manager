@@ -124,13 +124,19 @@ export function Admin() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data)
       });
-      if (!res.ok) throw new Error('Failed to create salesperson');
+      if (!res.ok) {
+        const errorData = await res.text();
+        throw new Error(errorData || 'Failed to create salesperson');
+      }
       return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/admin/salespeople'] });
       setIsAddingPerson(false);
       setNewPerson({ name: "", email: "", phone: "" });
+    },
+    onError: (error: Error) => {
+      alert('Error: ' + error.message);
     }
   });
 
