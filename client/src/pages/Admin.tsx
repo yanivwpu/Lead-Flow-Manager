@@ -569,25 +569,23 @@ export function Admin() {
             <Button 
               variant="outline" 
               onClick={() => setIsAddingPerson(false)}
-              className="w-full sm:w-auto min-h-[48px] touch-manipulation cursor-pointer active:scale-95"
+              className="w-full sm:w-auto min-h-[48px]"
               type="button"
-              style={{ WebkitTapHighlightColor: 'transparent', touchAction: 'manipulation' }}
             >
               Cancel
             </Button>
             <Button 
-              onPointerDown={(e) => {
-                if (!newPerson.name || !newPerson.email) return;
-                e.preventDefault();
-                createSalesperson.mutate(newPerson);
+              onClick={() => {
+                if (newPerson.name && newPerson.email) {
+                  createSalesperson.mutate(newPerson);
+                }
               }}
-              disabled={!newPerson.name || !newPerson.email}
-              className="bg-brand-green hover:bg-brand-dark w-full sm:w-auto min-h-[48px] touch-manipulation cursor-pointer active:scale-95 relative z-10"
+              disabled={!newPerson.name || !newPerson.email || createSalesperson.isPending}
+              className="bg-brand-green hover:bg-brand-dark w-full sm:w-auto min-h-[48px]"
               type="button"
               data-testid="button-submit-salesperson"
-              style={{ WebkitTapHighlightColor: 'transparent', touchAction: 'manipulation' }}
             >
-              Add Salesperson
+              {createSalesperson.isPending ? "Adding..." : "Add Salesperson"}
             </Button>
           </DialogFooter>
         </DialogContent>
