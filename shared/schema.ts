@@ -542,6 +542,7 @@ export type ChatbotSession = typeof chatbotSessions.$inferSelect;
 // Salespeople for demo bookings
 export const salespeople = pgTable("salespeople", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  loginCode: varchar("login_code", { length: 6 }).notNull().unique(),
   name: text("name").notNull(),
   email: text("email").notNull(),
   phone: text("phone"),

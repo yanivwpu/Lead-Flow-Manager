@@ -2721,7 +2721,8 @@ export async function registerRoutes(
   app.post("/api/admin/salespeople", requireAdmin, async (req, res) => {
     try {
       const data = insertSalespersonSchema.parse(req.body);
-      const person = await storage.createSalesperson(data);
+      const loginCode = await storage.generateUniqueLoginCode();
+      const person = await storage.createSalesperson({ ...data, loginCode });
       res.json(person);
     } catch (error) {
       console.error("Error creating salesperson:", error);
@@ -2819,6 +2820,129 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error marking conversion paid:", error);
       res.status(500).json({ error: "Failed to mark conversion paid" });
+    }
+  });
+
+  // ================== SALESPERSON PORTAL ==================
+
+  // Salesperson Portal: Login
+  app.post("/api/sales-portal/login", async (req, res) => {
+    try {
+      const { email, loginCode } = req.body;
+      
+      if (!email || !loginCode) {
+        return res.status(400).json({ error: "Email and login code required" });
+      }
+
+      const salesperson = await storage.getSalespersonByEmailAndCode(email.toLowerCase().trim(), loginCode.trim());
+      
+      if (!salesperson) {
+        return res.status(401).json({ error: "Invalid email or login code" });
+      }
+
+      if (!salesperson.isActive) {
+        return res.status(401).json({ error: "Account is inactive" });
+      }
+
+      (req.session as any).salespersonId = salesperson.id;
+      res.json({ 
+        success: true, 
+        salesperson: {
+          id: salesperson.id,
+          name: salesperson.name,
+          email: salesperson.email
+        }
+      });
+    } catch (error) {
+      console.error("Salesperson login error:", error);
+      res.status(500).json({ error: "Login failed" });
+    }
+  });
+
+  // Salesperson Portal: Check auth
+  app.get("/api/sales-portal/check", async (req, res) => {
+    const salespersonId = (req.session as any)?.salespersonId;
+    if (!salespersonId) {
+      return res.json({ authenticated: false });
+    }
+    const salesperson = await storage.getSalesperson(salespersonId);
+    if (!salesperson || !salesperson.isActive) {
+      return res.json({ authenticated: false });
+    }
+    res.json({ 
+      authenticated: true, 
+      salesperson: {
+        id: salesperson.id,
+        name: salesperson.name,
+        email: salesperson.email
+      }
+    });
+  });
+
+  // Salesperson Portal: Logout
+  app.post("/api/sales-portal/logout", async (req, res) => {
+    (req.session as any).salespersonId = null;
+    res.json({ success: true });
+  });
+
+  // Salesperson middleware
+  const requireSalesperson = async (req: any, res: any, next: any) => {
+    const salespersonId = (req.session as any)?.salespersonId;
+    if (!salespersonId) {
+      return res.status(401).json({ error: "Salesperson authentication required" });
+    }
+    const salesperson = await storage.getSalesperson(salespersonId);
+    if (!salesperson || !salesperson.isActive) {
+      return res.status(401).json({ error: "Invalid salesperson session" });
+    }
+    req.salesperson = salesperson;
+    next();
+  };
+
+  // Salesperson Portal: Get my stats
+  app.get("/api/sales-portal/stats", requireSalesperson, async (req: any, res) => {
+    const salesperson = req.salesperson;
+    res.json({
+      totalBookings: salesperson.totalBookings || 0,
+      totalConversions: salesperson.totalConversions || 0,
+      totalEarnings: salesperson.totalEarnings || "0",
+    });
+  });
+
+  // Salesperson Portal: Get my demos
+  app.get("/api/sales-portal/demos", requireSalesperson, async (req: any, res) => {
+    try {
+      const demos = await storage.getDemoBookingsBySalesperson(req.salesperson.id);
+      res.json(demos);
+    } catch (error) {
+      console.error("Error fetching salesperson demos:", error);
+      res.status(500).json({ error: "Failed to fetch demos" });
+    }
+  });
+
+  // Salesperson Portal: Mark demo as completed
+  app.patch("/api/sales-portal/demos/:id/complete", requireSalesperson, async (req: any, res) => {
+    try {
+      const demo = await storage.getDemoBooking(req.params.id);
+      if (!demo || demo.salespersonId !== req.salesperson.id) {
+        return res.status(404).json({ error: "Demo not found" });
+      }
+      const updated = await storage.updateDemoBooking(req.params.id, { status: 'completed' });
+      res.json(updated);
+    } catch (error) {
+      console.error("Error completing demo:", error);
+      res.status(500).json({ error: "Failed to complete demo" });
+    }
+  });
+
+  // Salesperson Portal: Get my conversions
+  app.get("/api/sales-portal/conversions", requireSalesperson, async (req: any, res) => {
+    try {
+      const conversions = await storage.getSalesConversionsBySalesperson(req.salesperson.id);
+      res.json(conversions);
+    } catch (error) {
+      console.error("Error fetching salesperson conversions:", error);
+      res.status(500).json({ error: "Failed to fetch conversions" });
     }
   });
 

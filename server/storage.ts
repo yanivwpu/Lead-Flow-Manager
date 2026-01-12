@@ -875,9 +875,59 @@ export class DbStorage implements IStorage {
     return result[0];
   }
 
-  async createSalesperson(person: InsertSalesperson): Promise<Salesperson> {
+  async getSalespersonByLoginCode(loginCode: string): Promise<Salesperson | undefined> {
+    const result = await db.select().from(salespeople).where(eq(salespeople.loginCode, loginCode));
+    return result[0];
+  }
+
+  async getSalespersonByEmailAndCode(email: string, loginCode: string): Promise<Salesperson | undefined> {
+    const result = await db.select().from(salespeople)
+      .where(and(eq(salespeople.email, email), eq(salespeople.loginCode, loginCode)));
+    return result[0];
+  }
+
+  async generateUniqueLoginCode(): Promise<string> {
+    let code: string;
+    let exists = true;
+    while (exists) {
+      code = Math.floor(100000 + Math.random() * 900000).toString();
+      const existing = await this.getSalespersonByLoginCode(code);
+      exists = !!existing;
+    }
+    return code!;
+  }
+
+  async createSalesperson(person: InsertSalesperson & { loginCode: string }): Promise<Salesperson> {
     const result = await db.insert(salespeople).values(person).returning();
     return result[0];
+  }
+
+  async findMatchingDemoBooking(name: string, email: string, phone: string): Promise<DemoBooking | undefined> {
+    const normalizedEmail = email.toLowerCase().trim();
+    const normalizedName = name.toLowerCase().trim();
+    const normalizedPhone = phone.replace(/\D/g, '');
+
+    const recentBookings = await db.select().from(demoBookings)
+      .where(and(
+        eq(demoBookings.status, 'completed'),
+        sql`${demoBookings.createdAt} > NOW() - INTERVAL '90 days'`
+      ))
+      .orderBy(desc(demoBookings.createdAt));
+
+    for (const booking of recentBookings) {
+      let matchCount = 0;
+      
+      if (booking.visitorEmail.toLowerCase().trim() === normalizedEmail) matchCount++;
+      if (booking.visitorName.toLowerCase().trim() === normalizedName || 
+          booking.visitorName.toLowerCase().includes(normalizedName) ||
+          normalizedName.includes(booking.visitorName.toLowerCase())) matchCount++;
+      if (booking.visitorPhone.replace(/\D/g, '') === normalizedPhone) matchCount++;
+      
+      if (matchCount >= 2) {
+        return booking;
+      }
+    }
+    return undefined;
   }
 
   async updateSalesperson(id: string, updates: Partial<Salesperson>): Promise<Salesperson | undefined> {

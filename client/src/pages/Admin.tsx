@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils";
 
 interface Salesperson {
   id: string;
+  loginCode: string;
   name: string;
   email: string;
   phone?: string;
@@ -323,6 +324,7 @@ export function Admin() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Name</TableHead>
+                    <TableHead>Login Code</TableHead>
                     <TableHead>Email</TableHead>
                     <TableHead>Phone</TableHead>
                     <TableHead>Bookings</TableHead>
@@ -335,7 +337,7 @@ export function Admin() {
                 <TableBody>
                   {salespeople.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={8} className="text-center py-8 text-gray-500">
+                      <TableCell colSpan={9} className="text-center py-8 text-gray-500">
                         No salespeople yet. Add your first salesperson to get started.
                       </TableCell>
                     </TableRow>
@@ -343,6 +345,11 @@ export function Admin() {
                     salespeople.map((person) => (
                       <TableRow key={person.id}>
                         <TableCell className="font-medium">{person.name}</TableCell>
+                        <TableCell>
+                          <code className="bg-gray-100 px-2 py-1 rounded text-sm font-mono">
+                            {person.loginCode}
+                          </code>
+                        </TableCell>
                         <TableCell>{person.email}</TableCell>
                         <TableCell>{person.phone || '-'}</TableCell>
                         <TableCell>{person.totalBookings || 0}</TableCell>
