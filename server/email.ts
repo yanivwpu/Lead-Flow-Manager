@@ -373,10 +373,9 @@ export async function sendDemoConfirmationEmail(
                 <li style="margin-bottom: 8px;">A personalized walkthrough of WhaChatCRM features</li>
                 <li style="margin-bottom: 8px;">How to integrate WhatsApp with your existing workflow</li>
                 <li style="margin-bottom: 8px;">Q&A session to address your specific needs</li>
-                <li style="margin-bottom: 8px;">Special offer for demo participants</li>
               </ul>
               
-              <p style="color: #475569; font-size: 15px;">${salespersonName} will reach out to you shortly to confirm the meeting details. If you have any questions before the demo, feel free to reply to this email.</p>
+              <p style="color: #475569; font-size: 15px;">If you have any questions before the demo, feel free to reply to this email.</p>
               
               <div style="text-align: center;">
                 <a href="${APP_URL}" style="display: inline-block; background: #059669; color: white; padding: 14px 32px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px; margin: 24px 0;">Visit WhaChatCRM</a>
