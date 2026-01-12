@@ -50,3 +50,6 @@ VAPID_PUBLIC_KEY = "BFPzTJh87JHoq7y-Pn0adv2b4vRBOXouLmqrZO46DGcDHRMdEh_MNFMSlTbW
 VAPID_PRIVATE_KEY = "NoLYiJ4lztcATms8h7lhqaABpJHA1kyYHXtBTGDWTbk"
 VAPID_EMAIL = "mailto:support@whachatcrm.com"
 APP_URL = "https://whachatcrm.com"
+
+[userenv.production]
+NODE_ENV = "production"
