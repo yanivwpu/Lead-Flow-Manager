@@ -25,7 +25,7 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import { subscriptionService } from "./subscriptionService";
-import { sendWelcomeEmail, sendContactFormEmail, sendDemoBookingNotification } from "./email";
+import { sendWelcomeEmail, sendContactFormEmail, sendDemoBookingNotification, sendSalespersonWelcomeEmail } from "./email";
 import bcrypt from "bcryptjs";
 import { triggerNewChatWorkflows, triggerKeywordWorkflows } from "./workflowEngine";
 
@@ -2723,6 +2723,16 @@ export async function registerRoutes(
       const data = insertSalespersonSchema.parse(req.body);
       const loginCode = await storage.generateUniqueLoginCode();
       const person = await storage.createSalesperson({ ...data, loginCode });
+      
+      // Send welcome email with login credentials
+      sendSalespersonWelcomeEmail(person.name, person.email, person.loginCode)
+        .then(sent => {
+          if (sent) {
+            console.log(`[Admin] Welcome email sent to salesperson: ${person.email}`);
+          }
+        })
+        .catch(err => console.error('[Admin] Failed to send welcome email:', err));
+      
       res.json(person);
     } catch (error) {
       console.error("Error creating salesperson:", error);
