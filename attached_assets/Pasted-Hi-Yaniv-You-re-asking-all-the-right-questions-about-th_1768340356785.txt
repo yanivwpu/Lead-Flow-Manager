@@ -1,0 +1,51 @@
+Hi Yaniv,
+
+You’re asking all the right questions about the business side of being a Twilio ISV/Tech Provider for WhatsApp, so let’s get into the details—what you actually get (and what you don’t) from the program, especially around promotion and referrals.
+
+Confirmed Benefits of the Twilio WhatsApp Tech Provider Program
+
+Here’s what’s officially on the table for ISVs/Tech Providers who integrate with Twilio for WhatsApp:
+
+1. Streamlined Customer Onboarding
+
+Embedded signup: You can let your customers create a WhatsApp Business Account (WABA), connect a number, and approve Meta/Twilio business access—right inside your app, without bouncing out to separate sites. This is way smoother for onboarding new brands.
+Subaccount mapping: Each client gets a dedicated Twilio subaccount, so their WhatsApp traffic is isolated (and easy to manage or bill).
+Supports Twilio and non-Twilio numbers: Your users can provision a Twilio number directly, or bring their own number as long as it meets WhatsApp’s requirements.
+Self-service scalability: As a vetted Tech Provider, you can onboard up to 200 new WABA businesses per rolling 7 days after you're fully live.
+More on these benefits here: Tech Provider program overview
+
+2. Ease of Technical Support
+
+You get a support ticket with Twilio’s Channel Operations team during onboarding; this is your lifeline if you hit any odd integration bugs.
+After you’re live, you and your customers use the standard support channels.
+3. Control Over Monetization
+
+You own your SaaS pricing. Each business you onboard uses their own Twilio account (and their spend flows through Twilio, billed at normal rates); you capture your value through your service subscription/fees.
+There’s no “referral cut” or commission from Twilio revenue; your business model is yours, and Twilio just bills the API usage to your customer's account.
+If you negotiate high enough volumes, you can look into Twilio’s committed use pricing for direct accounts (but this isn’t a formal revenue-share for ISVs).
+Some more details on pricing/limits in the FAQ.
+
+What’s Not Included: Referral Revenue or Built-in Co-Marketing Programs
+
+This is the straightforward bit—you don’t get:
+
+A formal Twilio referral/commission program for Tech Providers. Right now, there’s no standardized rev share, referral payout, or affiliate program for ISV-sourced WhatsApp business. You’re monetizing by being the SaaS layer on top, not by getting a cut of Twilio’s API revenue.
+Guaranteed co-marketing or app directory listing. Getting through the Tech Provider program doesn’t get you listed in a Twilio app marketplace or give you built-in marketing/lead-gen from Twilio. If this ever becomes an option, it’s typically a separate application/process.
+Official partner badges or eligibility for joint promotions (unless you join a separate, designated Twilio partner track. The Tech Provider path alone is focused on technical enablement and scale onboarding.)
+If visibility is critical, you could:
+
+Promote your “Powered by Twilio” implementation in your own materials (this is common and allowed; just follow Twilio’s brand guidelines).
+If you get to a high enough volume or strategic relevance, reach out to the Twilio Partner Team about additional opportunities, but there’s nothing built-in with just ISV/Tech Provider status.
+What I’d Do Next For Your Use Case
+
+Move forward with the Tech Provider onboarding; you’ll unlock the most streamlined experience (with Embedded Signup, subaccount provisioning, etc.).
+Plan to drive customer acquisition through your own initiatives (SEO, industry content, social, direct sales, or relevant WhatsApp business communities) rather than expecting traffic or leads from Twilio directly.
+Keep an eye out for updates—if Twilio rolls out a public ISV/app directory or spiffs, it’ll be announced and would be a separate application.
+Official docs if you want to dig in:
+
+Tech Provider program overview
+WhatsApp Tech Provider program integration guide
+WhatsApp Tech Provider Program FAQ
+If anything changes or if there’s a new program/promotion for ISVs, I’ll definitely let you know—but right now, everything above is the most up-to-date info.
+
+Is there a particular volume you’re aiming for, or a region you’re targeting? Sometimes there are local ecosystem opportunities we can brainstorm, even if it’s not an official Twilio program. Let me know!
