@@ -48,18 +48,27 @@ export function setupAuth(app: Express) {
       },
       async (email, password, done) => {
         try {
+          console.log('[LOGIN] Attempting login for:', email);
           const user = await storage.getUserByEmail(email);
           if (!user) {
+            console.log('[LOGIN] User not found for email:', email);
             return done(null, false, { message: 'Invalid email or password' });
           }
-
+          console.log('[LOGIN] User found:', user.id, '| Password hash length:', user.password?.length);
+          console.log('[LOGIN] Hash starts with $2:', user.password?.startsWith('$2'));
+          
           const isValid = await bcrypt.compare(password, user.password);
+          console.log('[LOGIN] bcrypt.compare result:', isValid);
+          
           if (!isValid) {
+            console.log('[LOGIN] Password mismatch for user:', user.id);
             return done(null, false, { message: 'Invalid email or password' });
           }
 
+          console.log('[LOGIN] Login successful for user:', user.id);
           return done(null, user);
         } catch (error) {
+          console.error('[LOGIN] Error during authentication:', error);
           return done(error);
         }
       }
