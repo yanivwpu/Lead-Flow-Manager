@@ -244,9 +244,10 @@ export function registerAuthRoutes(app: Express) {
           expires: new Date(Date.now() + 60 * 60 * 1000) // 1 hour
         });
         
-        import('./email').then(({ sendPasswordResetEmail }) => {
-          sendPasswordResetEmail(user.email, token);
-        });
+        // Send password reset email with proper error handling
+        const { sendPasswordResetEmail } = await import('./email');
+        const emailSent = await sendPasswordResetEmail(user.email, token);
+        console.log(`[AUTH] Password reset email to ${user.email}: ${emailSent ? 'SENT' : 'FAILED'}`);
       }
 
       res.json({ success: true, message: 'If an account exists, a reset link will be sent.' });
