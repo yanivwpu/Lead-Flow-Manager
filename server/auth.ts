@@ -350,8 +350,21 @@ export function registerAuthRoutes(app: Express) {
         return res.status(400).json({ error: 'User not found' });
       }
 
+      console.log('[RESET] Found user:', user.id, user.email);
       const hashedPassword = await bcrypt.hash(password, 10);
-      await storage.updateUser(user.id, { password: hashedPassword });
+      console.log('[RESET] New hash generated, updating user...');
+      
+      const updatedUser = await storage.updateUser(user.id, { password: hashedPassword });
+      console.log('[RESET] Update result:', updatedUser ? 'SUCCESS' : 'FAILED');
+      
+      if (!updatedUser) {
+        return res.status(500).json({ error: 'Failed to update password in database' });
+      }
+      
+      // Verify the password was actually saved
+      const verifyUser = await storage.getUserByEmail(tokenData.email);
+      const verifyMatch = verifyUser ? await bcrypt.compare(password, verifyUser.password) : false;
+      console.log('[RESET] Verification - password matches after save:', verifyMatch);
       
       resetTokens.delete(token);
 
