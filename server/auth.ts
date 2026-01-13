@@ -355,7 +355,17 @@ export function registerAuthRoutes(app: Express) {
       
       resetTokens.delete(token);
 
-      res.json({ success: true, message: 'Password has been reset successfully' });
+      // Automatically log the user in after password reset
+      req.login(user, (loginErr: any) => {
+        if (loginErr) {
+          // Password was reset but login failed - still return success
+          console.error('Auto-login after reset failed:', loginErr);
+          return res.json({ success: true, message: 'Password has been reset successfully. Please log in.' });
+        }
+        
+        const { password: _, ...safeUser } = user;
+        res.json({ success: true, message: 'Password has been reset successfully', user: safeUser });
+      });
     } catch (error) {
       console.error('Reset password error:', error);
       res.status(500).json({ error: 'Failed to reset password' });
