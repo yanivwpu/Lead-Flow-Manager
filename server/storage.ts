@@ -35,8 +35,8 @@ export interface IStorage {
   deleteUser(id: string): Promise<void>;
   
   // Chat methods
-  getChats(userId: string): Promise<Chat[]>;
-  getTeamChats(ownerId: string): Promise<Chat[]>;
+  getChats(userId: string, limit?: number): Promise<Chat[]>;
+  getTeamChats(ownerId: string, limit?: number): Promise<Chat[]>;
   getChat(id: string): Promise<Chat | undefined>;
   createChat(chat: InsertChat): Promise<Chat>;
   updateChat(id: string, updates: Partial<Chat>): Promise<Chat | undefined>;
@@ -93,7 +93,7 @@ export interface IStorage {
   deleteRecurringReminder(id: string): Promise<void>;
   
   // Message search for conversation history
-  searchMessages(userId: string, query: string): Promise<Chat[]>;
+  searchMessages(userId: string, query: string, limit?: number): Promise<Chat[]>;
   
   // Webhook methods
   getWebhooks(userId: string): Promise<Webhook[]>;
@@ -129,7 +129,7 @@ export interface IStorage {
   updateTemplateSendStatus(id: string, status: string, deliveredAt?: Date, readAt?: Date, failureReason?: string): Promise<void>;
   
   // Retargetable chats (outside 24-hour window)
-  getRetargetableChats(userId: string): Promise<Chat[]>;
+  getRetargetableChats(userId: string, limit?: number): Promise<Chat[]>;
   
   // Chatbot Flow methods
   getChatbotFlows(userId: string): Promise<ChatbotFlow[]>;
@@ -177,11 +177,11 @@ export class DbStorage implements IStorage {
     await db.delete(users).where(eq(users.id, id));
   }
 
-  async getChats(userId: string): Promise<Chat[]> {
-    return await db.select().from(chats).where(eq(chats.userId, userId)).orderBy(asc(chats.createdAt), asc(chats.id));
+  async getChats(userId: string, limit: number = 10000): Promise<Chat[]> {
+    return await db.select().from(chats).where(eq(chats.userId, userId)).orderBy(desc(chats.updatedAt)).limit(limit);
   }
 
-  async getTeamChats(ownerId: string): Promise<Chat[]> {
+  async getTeamChats(ownerId: string, limit: number = 10000): Promise<Chat[]> {
     const members = await db.select().from(teamMembers).where(eq(teamMembers.ownerId, ownerId));
     const memberUserIds = members
       .filter(m => m.memberId !== null)
@@ -189,14 +189,15 @@ export class DbStorage implements IStorage {
     const allUserIds = [ownerId, ...memberUserIds];
     
     if (allUserIds.length === 1) {
-      return await db.select().from(chats).where(eq(chats.userId, ownerId)).orderBy(desc(chats.updatedAt));
+      return await db.select().from(chats).where(eq(chats.userId, ownerId)).orderBy(desc(chats.updatedAt)).limit(limit);
     }
     
     return await db
       .select()
       .from(chats)
       .where(or(...allUserIds.map(id => eq(chats.userId, id))))
-      .orderBy(desc(chats.updatedAt));
+      .orderBy(desc(chats.updatedAt))
+      .limit(limit);
   }
 
   async getChat(id: string): Promise<Chat | undefined> {
@@ -494,7 +495,7 @@ export class DbStorage implements IStorage {
   }
 
   // Message search for conversation history
-  async searchMessages(userId: string, query: string): Promise<Chat[]> {
+  async searchMessages(userId: string, query: string, limit: number = 50): Promise<Chat[]> {
     const searchPattern = `%${query}%`;
     return await db.select().from(chats).where(
       and(
@@ -505,7 +506,7 @@ export class DbStorage implements IStorage {
           sql`${chats.messages}::text ILIKE ${searchPattern}`
         )
       )
-    ).orderBy(desc(chats.updatedAt));
+    ).orderBy(desc(chats.updatedAt)).limit(limit);
   }
 
   // Webhook methods
@@ -648,7 +649,7 @@ export class DbStorage implements IStorage {
   }
 
   // Get chats outside the 24-hour window (eligible for template messaging)
-  async getRetargetableChats(userId: string): Promise<Chat[]> {
+  async getRetargetableChats(userId: string, limit: number = 5000): Promise<Chat[]> {
     const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
     return await db.select().from(chats)
       .where(and(
@@ -656,7 +657,8 @@ export class DbStorage implements IStorage {
         isNotNull(chats.whatsappPhone),
         lte(chats.updatedAt, twentyFourHoursAgo)
       ))
-      .orderBy(desc(chats.updatedAt));
+      .orderBy(desc(chats.updatedAt))
+      .limit(limit);
   }
 
   // Drip Campaign methods
