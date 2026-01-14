@@ -30,17 +30,16 @@ const HELP_ARTICLES: Article[] = [
 
 Welcome to WhachatCRM! This guide will help you get up and running quickly.
 
-## Step 1: Connect Your Twilio Account
+## Step 1: Connect Your WhatsApp Provider
 
-WhachatCRM uses your own Twilio account for WhatsApp messaging. This means:
-- **Zero message markup** - You pay Twilio directly at their rates
-- **Full control** - Your messages, your account
-- **Better deliverability** - Direct connection to WhatsApp
+WhachatCRM supports two official ways to connect:
+- **Meta WhatsApp Business API** (Recommended)
+- **Twilio WhatsApp API**
 
-To connect Twilio:
+To connect:
 1. Go to **Settings** > **WhatsApp Connection**
-2. Enter your Twilio Account SID and Auth Token (find these in your Twilio Console)
-3. Add your Twilio WhatsApp phone number
+2. Choose your preferred provider
+3. Follow the connection wizard instructions
 4. Click **Save & Test Connection**
 
 ## Step 2: Import or Add Contacts
@@ -64,6 +63,50 @@ Save time with automated features:
 - **Auto-Responders**: Reply instantly to new messages
 - **Drip Sequences**: Send scheduled message series (Pro plan)
 - **Workflows**: Automate tagging and assignments (Pro plan)
+    `
+  },
+  {
+    id: "connect-meta",
+    title: "How to Connect Meta for WhatsApp",
+    category: "Getting Started",
+    icon: Smartphone,
+    keywords: ["meta", "connect", "whatsapp", "facebook", "business", "setup", "api", "token"],
+    content: `
+# Connecting Meta WhatsApp Business API
+
+WhachatCRM supports the official Meta WhatsApp Business API for better performance and no message markup.
+
+## Prerequisites
+
+1. A Meta Developer account
+2. A Meta Business Account
+3. A registered phone number for WhatsApp
+
+## Finding Your Credentials
+
+1. Log in to the [Meta Developers Console](https://developers.facebook.com)
+2. Create or select your App
+3. Navigate to **WhatsApp** > **API Setup**
+4. Copy your **Phone Number ID** and **WhatsApp Business Account ID**
+5. Generate a **Permanent Access Token** in your Business Settings
+
+## Connecting to WhachatCRM
+
+1. Go to **Settings** in WhachatCRM
+2. Find the **WhatsApp Connection** section
+3. Click **Connect Meta**
+4. Enter your credentials:
+   - Access Token
+   - Phone Number ID
+   - Business Account ID
+5. Click **Save Connection**
+
+## Webhook Configuration
+
+1. In Meta Developer Console, go to **WhatsApp** > **Configuration**
+2. Set the Callback URL to: \`https://your-app.replit.app/api/webhooks/meta\`
+3. Set the Verify Token to the one provided in WhachatCRM
+4. Subscribe to **messages** under Webhook Fields
     `
   },
   {
@@ -149,7 +192,7 @@ Click a chat to see:
 
 In the message input:
 - Type your message and press Enter or click Send
-- Messages are sent via WhatsApp through your Twilio account
+- Messages are sent via WhatsApp through your connected account
 - Delivery status shows when messages are sent/delivered
 
 ## Adding Notes
@@ -275,7 +318,7 @@ This is great for:
 
 - Each customer receives only one auto-reply per conversation
 - Away messages respect your timezone setting
-- Both features require an active Twilio connection
+- Both features require an active WhatsApp connection
     `
   },
   {
@@ -475,7 +518,7 @@ Connect WhachatCRM with your other business tools.
 WhachatCRM integrates with popular platforms to streamline your workflow:
 
 ### Communication
-- **Twilio**: WhatsApp messaging (required for sending messages)
+- **Meta/Twilio**: WhatsApp messaging (required for sending messages)
 
 ### E-commerce
 - **Shopify**: Sync orders, customers, and product info with your store
@@ -787,126 +830,6 @@ Payments are processed securely through Stripe.
 1. Go to Settings > Billing
 2. Click "Billing History"
 3. Download invoices as needed
-
-## Cancellation
-
-To cancel your subscription:
-1. Go to Settings > Billing
-2. Click "Cancel Subscription"
-3. Confirm cancellation
-
-You'll retain access until the end of your billing period.
-    `
-  },
-  {
-    id: "privacy-security",
-    title: "Privacy & Security",
-    category: "Account",
-    icon: Shield,
-    keywords: ["privacy", "security", "data", "password", "safe", "protect"],
-    content: `
-# Privacy & Security
-
-Your data security is our priority.
-
-## Data Protection
-
-- All data encrypted in transit (HTTPS)
-- Secure database storage
-- Regular security audits
-- GDPR compliant
-
-## Password Security
-
-Protect your account:
-- Use a strong, unique password
-- Never share your credentials
-- Enable two-factor authentication (coming soon)
-
-## Session Management
-
-- Sessions expire after inactivity
-- "Remember Me" extends session to 30 days
-- Log out from all devices in Settings
-
-## API Security
-
-- API access requires authentication
-- Tokens can be revoked anytime
-- Rate limiting prevents abuse
-
-## Twilio Credentials
-
-Your Twilio credentials are:
-- Encrypted at rest
-- Never exposed in logs
-- Only used for messaging
-
-## Data Ownership
-
-You own your data:
-- Export anytime
-- Delete on request
-- We don't sell your data
-
-## Reporting Issues
-
-Found a security issue?
-Contact us immediately at security@whachatcrm.com
-
-## Privacy Policy
-
-Read our full privacy policy for details on data handling, retention, and your rights.
-    `
-  },
-  {
-    id: "mobile-pwa",
-    title: "Mobile App & PWA",
-    category: "Getting Started",
-    icon: Smartphone,
-    keywords: ["mobile", "app", "pwa", "install", "phone", "ios", "android"],
-    content: `
-# Mobile App
-
-WhachatCRM is a Progressive Web App (PWA) that works great on mobile devices.
-
-## Installing on Your Phone
-
-**iPhone/iPad:**
-1. Open WhachatCRM in Safari
-2. Tap the Share button
-3. Scroll down and tap "Add to Home Screen"
-4. Tap "Add"
-
-**Android:**
-1. Open WhachatCRM in Chrome
-2. Tap the menu (three dots)
-3. Tap "Install app" or "Add to Home Screen"
-4. Confirm installation
-
-## Mobile Features
-
-The mobile experience includes:
-- Full chat functionality
-- Push notifications
-- Offline access to recent data
-- Touch-optimized interface
-
-## Tips for Mobile
-
-- Enable push notifications for real-time alerts
-- Use the quick-reply templates for faster responses
-- Swipe to navigate between chats
-- Pull down to refresh
-
-## Offline Mode
-
-When offline:
-- View cached conversations
-- Draft messages (sent when online)
-- Access notes and contact info
-
-New messages sync automatically when you reconnect.
     `
   },
   {
@@ -914,22 +837,18 @@ New messages sync automatically when you reconnect.
     title: "Troubleshooting Common Issues",
     category: "Support",
     icon: HelpCircle,
-    keywords: ["problem", "issue", "error", "help", "fix", "troubleshoot", "not working"],
+    keywords: ["error", "fix", "issue", "problem", "not working", "fail", "trouble"],
     content: `
-# Troubleshooting
+# Troubleshooting Common Issues
 
-Solutions to common issues.
+Find solutions to common problems you might encounter.
 
-## Messages Not Sending
+## Message Delivery Failures
 
-**Check your Twilio connection:**
+**Verify your WhatsApp connection:**
 1. Go to Settings > WhatsApp Connection
-2. Verify status shows "Connected"
-3. Test the connection
-
-**Check Twilio balance:**
-- Log into Twilio Console
-- Verify account has sufficient balance
+2. Ensure the status shows "Connected"
+3. Verify account has sufficient balance
 
 **Check number format:**
 - Ensure phone numbers include country code
@@ -938,12 +857,9 @@ Solutions to common issues.
 ## Not Receiving Messages
 
 **Verify webhook configuration:**
-1. In Twilio Console, check incoming message webhook
-2. URL should point to WhachatCRM
-
-**Check Twilio Console logs:**
-- Look for incoming message errors
-- Verify messages are reaching Twilio
+1. For Meta: Check your developer console configuration
+2. For Twilio: Check incoming message webhook in console
+3. URL should point to WhachatCRM
 
 ## Login Issues
 
@@ -1112,9 +1028,9 @@ export function HelpCenter() {
   const contentRef = useRef<HTMLDivElement>(null);
 
   const scrollToTop = () => {
-    const scrollable = contentRef.current?.querySelector('.overflow-auto');
-    scrollable?.scrollTo(0, 0);
-    contentRef.current?.scrollTo(0, 0);
+    if (contentRef.current) {
+      contentRef.current.scrollTop = 0;
+    }
     window.scrollTo(0, 0);
   };
 
@@ -1205,20 +1121,20 @@ export function HelpCenter() {
   };
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full bg-white">
       <Helmet>
         <title>Help Center | WhachatCRM</title>
       </Helmet>
 
-      <div className="p-4 sm:p-6 border-b border-gray-200 bg-gray-50">
+      <div className="p-4 sm:p-6 border-b border-gray-200 bg-gray-50 shrink-0">
         <h1 className="text-xl sm:text-2xl font-display font-bold text-gray-900">Help Center</h1>
         <p className="text-sm text-gray-500 mt-1">Find answers and learn how to use WhachatCRM</p>
       </div>
 
-      <div className="flex-1 flex overflow-hidden" ref={contentRef}>
-        {!selectedArticle ? (
-          <div className="flex-1 overflow-auto p-4 sm:p-6">
-            <div className="max-w-3xl mx-auto">
+      <div className="flex-1 overflow-y-auto" ref={contentRef}>
+        <div className="max-w-3xl mx-auto p-4 sm:p-6 pb-24">
+          {!selectedArticle ? (
+            <div>
               <div className="relative mb-6">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
                 <Input
@@ -1289,10 +1205,8 @@ export function HelpCenter() {
                 )}
               </div>
             </div>
-          </div>
-        ) : (
-          <div className="flex-1 overflow-auto p-4 sm:p-6">
-            <div className="max-w-3xl mx-auto">
+          ) : (
+            <div>
               <button
                 onClick={() => { setSelectedArticle(null); scrollToTop(); }}
                 className="flex items-center gap-1 text-sm text-brand-green hover:underline mb-6"
@@ -1312,8 +1226,8 @@ export function HelpCenter() {
 
               <FeedbackSection articleId={selectedArticle.id} articleTitle={selectedArticle.title} />
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );
