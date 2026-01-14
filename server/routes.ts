@@ -486,8 +486,8 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Invalid avatar format" });
       }
 
-      // Limit size (max ~2MB for base64)
-      if (avatarUrl.length > 2800000) {
+      // Limit size (max ~4MB for base64 string to be safe for 2MB actual file)
+      if (avatarUrl.length > 5000000) {
         return res.status(400).json({ error: "Image too large. Please use an image under 2MB" });
       }
 

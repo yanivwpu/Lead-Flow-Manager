@@ -316,6 +316,16 @@ export function Settings() {
     const reader = new FileReader();
     reader.onloadend = () => {
       const base64String = reader.result as string;
+      // Extract just the base64 part for size validation if it's a data URL
+      const base64Content = base64String.includes(',') ? base64String.split(',')[1] : base64String;
+      
+      // Rough check for base64 size (4 chars = 3 bytes)
+      if (base64Content.length > 2800000) {
+        toast({ title: "File too large", description: "The processed image is too large. Please try a smaller file.", variant: "destructive" });
+        setIsUploading(false);
+        return;
+      }
+      
       updateAvatarMutation.mutate(base64String);
       setIsUploading(false);
     };
