@@ -486,9 +486,9 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Invalid avatar format" });
       }
 
-      // Limit size (max ~500KB for base64)
-      if (avatarUrl.length > 700000) {
-        return res.status(400).json({ error: "Image too large. Please use an image under 500KB" });
+      // Limit size (max ~2MB for base64)
+      if (avatarUrl.length > 2800000) {
+        return res.status(400).json({ error: "Image too large. Please use an image under 2MB" });
       }
 
       const updated = await storage.updateUser(req.user.id, { avatarUrl });

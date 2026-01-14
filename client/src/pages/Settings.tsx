@@ -307,8 +307,8 @@ export function Settings() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 500000) {
-      toast({ title: "File too large", description: "Please use an image under 500KB", variant: "destructive" });
+    if (file.size > 2000000) {
+      toast({ title: "File too large", description: "Please use an image under 2MB", variant: "destructive" });
       return;
     }
 
