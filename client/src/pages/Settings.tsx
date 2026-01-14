@@ -278,6 +278,50 @@ export function Settings() {
   const [importFile, setImportFile] = useState<File | null>(null);
   const [isImporting, setIsImporting] = useState(false);
 
+  const [isUploading, setIsUploading] = useState(false);
+
+  const updateAvatarMutation = useMutation({
+    mutationFn: async (avatarUrl: string) => {
+      const res = await fetch("/api/users/avatar", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ avatarUrl }),
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || "Failed to update avatar");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+      toast({ title: "Avatar Updated", description: "Your profile picture has been updated successfully." });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 500000) {
+      toast({ title: "File too large", description: "Please use an image under 500KB", variant: "destructive" });
+      return;
+    }
+
+    setIsUploading(true);
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const base64String = reader.result as string;
+      updateAvatarMutation.mutate(base64String);
+      setIsUploading(false);
+    };
+    reader.readAsDataURL(file);
+  };
+
   useEffect(() => {
     const params = new URLSearchParams(searchString);
     if (params.get('subscription') === 'success') {
@@ -707,18 +751,38 @@ export function Settings() {
             </div>
 
             <div className="flex items-center gap-4">
-              <div className="relative">
+              <div className="relative group">
                 {user?.avatarUrl ? (
-                  <img src={user.avatarUrl} alt={user.name || 'Profile'} className="h-16 w-16 rounded-full object-cover" />
+                  <img src={user.avatarUrl} alt={user.name || 'Profile'} className="h-16 w-16 rounded-full object-cover border-2 border-white shadow-sm" />
                 ) : (
-                  <div className="h-16 w-16 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 text-xl font-bold">
+                  <div className="h-16 w-16 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 text-xl font-bold border-2 border-white shadow-sm">
                     {user?.name?.charAt(0)?.toUpperCase() || 'U'}
                   </div>
                 )}
+                <label className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-full opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
+                  {isUploading ? (
+                    <Loader2 className="h-5 w-5 text-white animate-spin" />
+                  ) : (
+                    <Smartphone className="h-5 w-5 text-white" />
+                  )}
+                  <input
+                    type="file"
+                    className="hidden"
+                    accept="image/*"
+                    onChange={handleAvatarChange}
+                    disabled={isUploading}
+                  />
+                </label>
               </div>
               <div>
                 <p className="font-medium text-gray-900">{user?.name}</p>
                 <p className="text-sm text-gray-500">{user?.email}</p>
+                <button 
+                  onClick={() => document.querySelector<HTMLInputElement>('input[type="file"]')?.click()}
+                  className="text-xs text-blue-600 hover:text-blue-700 font-medium mt-1"
+                >
+                  Change Photo
+                </button>
               </div>
             </div>
           </div>
