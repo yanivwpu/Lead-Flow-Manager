@@ -53,13 +53,6 @@ interface SubscriptionData {
   } | null;
 }
 
-const PLAN_NAMES: Record<string, string> = {
-  free: "Free",
-  starter: "Starter",
-  growth: "Growth",
-  pro: "Pro",
-};
-
 const DAYS_OF_WEEK = [
   { id: 0, label: "Sun" },
   { id: 1, label: "Mon" },
@@ -280,30 +273,11 @@ export function Settings() {
   const [syncingSubscription, setSyncingSubscription] = useState(false);
   const [connectTwilioOpen, setConnectTwilioOpen] = useState(false);
   const [connectMetaOpen, setConnectMetaOpen] = useState(false);
-  const [webhookCopied, setWebhookCopied] = useState(false);
-  const [statusCopied, setStatusCopied] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteName, setInviteName] = useState("");
   const [importFile, setImportFile] = useState<File | null>(null);
   const [isImporting, setIsImporting] = useState(false);
-  
-  const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
-  const webhookUrl = `${baseUrl}/api/webhook/twilio/incoming`;
-  const statusCallbackUrl = `${baseUrl}/api/webhook/twilio/status`;
 
-  const handleCopyWebhook = async () => {
-    await navigator.clipboard.writeText(webhookUrl);
-    setWebhookCopied(true);
-    setTimeout(() => setWebhookCopied(false), 2000);
-  };
-
-  const handleCopyStatus = async () => {
-    await navigator.clipboard.writeText(statusCallbackUrl);
-    setStatusCopied(true);
-    setTimeout(() => setStatusCopied(false), 2000);
-  };
-
-  // Auto-sync subscription when returning from Stripe checkout
   useEffect(() => {
     const params = new URLSearchParams(searchString);
     if (params.get('subscription') === 'success') {
@@ -321,7 +295,6 @@ export function Settings() {
             });
           }
           queryClient.invalidateQueries({ queryKey: ["/api/subscription"] });
-          // Remove the query param from URL
           window.history.replaceState({}, '', '/app/settings');
         })
         .catch(err => {
@@ -333,17 +306,14 @@ export function Settings() {
     }
   }, [searchString, queryClient]);
 
-  // Fetch Twilio connection status
   const { data: twilioStatus, isLoading: twilioLoading } = useQuery<{ connected: boolean; whatsappNumber: string | null }>({
     queryKey: ["/api/twilio/status"],
   });
 
-  // Fetch Meta connection status
   const { data: metaStatus, isLoading: metaLoading } = useQuery<{ connected: boolean; phoneNumber: string | null; activeProvider: string }>({
     queryKey: ["/api/meta/status"],
   });
 
-  // Switch provider mutation
   const switchProviderMutation = useMutation({
     mutationFn: async (provider: "twilio" | "meta") => {
       const res = await fetch("/api/whatsapp/switch-provider", {
@@ -362,7 +332,6 @@ export function Settings() {
     },
   });
 
-  // Disconnect Twilio mutation
   const disconnectTwilioMutation = useMutation({
     mutationFn: async () => {
       const res = await fetch("/api/twilio/disconnect", { method: "POST", credentials: "include" });
@@ -371,29 +340,34 @@ export function Settings() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/twilio/status"] });
-      toast({ title: "WhatsApp Disconnected", description: "Your Twilio account has been disconnected." });
-    },
-    onError: () => {
-      toast({ title: "Error", description: "Failed to disconnect Twilio", variant: "destructive" });
+      toast({ title: "Twilio Disconnected", description: "Your Twilio account has been disconnected." });
     },
   });
 
-  // Fetch registered phones
+  const disconnectMetaMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/meta/disconnect", { method: "POST", credentials: "include" });
+      if (!res.ok) throw new Error("Failed to disconnect");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/meta/status"] });
+      toast({ title: "Meta Disconnected", description: "Your Meta account has been disconnected." });
+    },
+  });
+
   const { data: phones = [], isLoading: phonesLoading } = useQuery<RegisteredPhone[]>({
     queryKey: ["/api/phones"],
   });
 
-  // Fetch subscription data
   const { data: subscriptionData, isLoading: subscriptionLoading } = useQuery<SubscriptionData>({
     queryKey: ["/api/subscription"],
   });
 
-  // Fetch team members
   const { data: teamMembers = [], isLoading: teamLoading } = useQuery<TeamMember[]>({
     queryKey: ["/api/team"],
   });
 
-  // Invite team member mutation
   const inviteMutation = useMutation({
     mutationFn: async (data: { email: string; name?: string }) => {
       const res = await fetch("/api/team", {
@@ -425,7 +399,6 @@ export function Settings() {
     },
   });
 
-  // Remove team member mutation
   const removeMemberMutation = useMutation({
     mutationFn: async (id: string) => {
       const res = await fetch(`/api/team/${id}`, {
@@ -440,12 +413,8 @@ export function Settings() {
       queryClient.invalidateQueries({ queryKey: ["/api/subscription"] });
       toast({ title: "Removed", description: "Team member has been removed." });
     },
-    onError: () => {
-      toast({ title: "Error", description: "Failed to remove team member", variant: "destructive" });
-    },
   });
 
-  // Manage billing portal
   const portalMutation = useMutation({
     mutationFn: async () => {
       const res = await fetch("/api/subscription/portal", {
@@ -460,16 +429,8 @@ export function Settings() {
         window.location.href = data.url;
       }
     },
-    onError: () => {
-      toast({
-        title: "Error",
-        description: "Could not open billing portal. Make sure you have an active subscription.",
-        variant: "destructive",
-      });
-    },
   });
 
-  // Cancel subscription - one-click cancellation
   const cancelMutation = useMutation({
     mutationFn: async () => {
       const res = await fetch("/api/subscription/cancel", {
@@ -486,21 +447,10 @@ export function Settings() {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/subscription"] });
-      toast({
-        title: "Subscription Canceled",
-        description: data.message,
-      });
-    },
-    onError: (error: Error) => {
-      toast({
-        title: "Error",
-        description: error.message || "Could not cancel subscription.",
-        variant: "destructive",
-      });
+      toast({ title: "Subscription Canceled", description: data.message });
     },
   });
 
-  // Register phone mutation
   const registerPhoneMutation = useMutation({
     mutationFn: async (data: { phoneNumber: string; businessName: string }) => {
       const res = await fetch("/api/phones", {
@@ -521,12 +471,8 @@ export function Settings() {
       setBusinessName("");
       toast({ title: "Phone Registered", description: "WhatsApp number added successfully." });
     },
-    onError: (error: Error) => {
-      toast({ title: "Registration Failed", description: error.message, variant: "destructive" });
-    },
   });
 
-  // Delete phone mutation
   const deletePhoneMutation = useMutation({
     mutationFn: async (id: string) => {
       const res = await fetch(`/api/phones/${id}`, {
@@ -542,7 +488,6 @@ export function Settings() {
   });
 
   useEffect(() => {
-    // Load saved settings
     const savedPush = localStorage.getItem("chatcrm_push_enabled") === "true";
     const savedEmail = localStorage.getItem("chatcrm_email_enabled") === "true";
     const notificationGranted = typeof Notification !== 'undefined' && Notification.permission === "granted";
@@ -555,71 +500,28 @@ export function Settings() {
       toast({ title: "Error", description: "Please enter a phone number", variant: "destructive" });
       return;
     }
-    
     const maxNumbers = subscriptionData?.limits?.maxWhatsappNumbers || 1;
     if (phones.length >= maxNumbers) {
       setUpgradeReason("add_whatsapp_number");
       setUpgradeModalOpen(true);
       return;
     }
-    
     registerPhoneMutation.mutate({ phoneNumber: newPhone, businessName });
   };
 
   const handlePushToggle = async (checked: boolean) => {
-    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || 
-                         (window.navigator as any).standalone === true;
-    
     if (typeof Notification === 'undefined') {
-      if (isIOS && !isStandalone) {
-        toast({
-          title: "Install App First",
-          description: "On iPhone/iPad, tap Share > Add to Home Screen, then open from there to enable notifications.",
-          variant: "destructive"
-        });
-      } else {
-        toast({
-          title: "Not Supported",
-          description: "Your browser doesn't support push notifications. Try Chrome, Firefox, or Edge.",
-          variant: "destructive"
-        });
-      }
+      toast({ title: "Not Supported", description: "Your browser doesn't support push notifications.", variant: "destructive" });
       return;
     }
-    
     if (checked) {
       const result = await Notification.requestPermission();
       setPermission(result);
       if (result === 'granted') {
         setPushEnabled(true);
         localStorage.setItem("chatcrm_push_enabled", "true");
-        new Notification("Notifications Enabled", {
-          body: "You will now receive follow-up reminders.",
-          icon: "/pwa-icon.png"
-        });
-      } else if (result === 'denied') {
-        setPushEnabled(false);
-        if (isIOS) {
-          toast({
-            title: "Permission Blocked",
-            description: "Go to Settings > Notifications > Find this app and enable notifications.",
-            variant: "destructive"
-          });
-        } else {
-          toast({
-            title: "Permission Blocked",
-            description: "Click the lock icon in your browser's address bar to allow notifications.",
-            variant: "destructive"
-          });
-        }
       } else {
         setPushEnabled(false);
-        toast({
-          title: "Permission Required",
-          description: "Please allow notifications when prompted to receive reminders.",
-          variant: "destructive"
-        });
       }
     } else {
       setPushEnabled(false);
@@ -629,816 +531,335 @@ export function Settings() {
 
   const handleEmailToggle = (checked: boolean) => {
     setEmailEnabled(checked);
-    localStorage.setItem("chatcrm_email_enabled", String(checked));
-    if (checked) {
-      toast({
-        title: "Email Reminders Enabled",
-        description: `Reminders will be sent to ${user?.email}`,
-      });
-    }
+    localStorage.setItem("chatcrm_email_enabled", checked.toString());
   };
 
   return (
     <div className="flex-1 h-full bg-white flex flex-col overflow-hidden">
-       <div className="px-4 sm:px-8 py-4 sm:py-6 border-b border-gray-100 flex-shrink-0">
-         <h1 className="text-2xl sm:text-3xl font-display font-bold text-gray-900">Settings</h1>
-         <p className="text-gray-500 mt-1 text-sm sm:text-base">Manage notifications and preferences.</p>
-       </div>
+      <div className="px-4 sm:px-8 py-4 sm:py-6 border-b border-gray-100 flex-shrink-0">
+        <h1 className="text-2xl sm:text-3xl font-display font-bold text-gray-900">Settings</h1>
+        <p className="text-gray-500 mt-1 text-sm sm:text-base">Manage notifications and preferences.</p>
+      </div>
 
-       <div className="flex-1 overflow-y-auto px-4 sm:px-8 py-4 sm:py-6">
-         <div className="max-w-2xl mx-auto space-y-6 sm:space-y-8">
-           
-           {/* WhatsApp Provider Section */}
-           <div className={cn(
-             "bg-white border rounded-xl p-4 sm:p-6 shadow-sm",
-             (twilioStatus?.connected || metaStatus?.connected) ? "border-gray-200" : "border-slate-300 bg-slate-50"
-           )}>
-             <div className="flex items-center gap-3 mb-4 sm:mb-6">
-               <div className={cn(
-                 "h-9 w-9 sm:h-10 sm:w-10 rounded-lg flex items-center justify-center flex-shrink-0",
-                 (twilioStatus?.connected || metaStatus?.connected) ? "bg-green-50" : "bg-slate-100"
-               )}>
-                 <MessageSquare className={cn(
-                   "h-4 w-4 sm:h-5 sm:w-5",
-                   (twilioStatus?.connected || metaStatus?.connected) ? "text-emerald-600" : "text-slate-600"
-                 )} />
-               </div>
-               <div className="min-w-0 flex-1">
-                 <h2 className="text-base sm:text-lg font-bold text-gray-900" data-testid="text-whatsapp-connection-title">
-                   WhatsApp Provider
-                 </h2>
-                 <p className="text-xs sm:text-sm text-gray-500">
-                   {metaStatus?.connected 
-                     ? "Official Meta WhatsApp Business API is connected."
-                     : twilioStatus?.connected 
-                       ? "Twilio WhatsApp is connected."
-                       : "Connect a WhatsApp provider to start messaging."}
-                 </p>
-               </div>
-               {(twilioStatus?.connected || metaStatus?.connected) ? (
-                 <CheckCircle2 className="h-5 w-5 text-emerald-600 flex-shrink-0" />
-               ) : (
-                 <XCircle className="h-5 w-5 text-amber-500 flex-shrink-0" />
-               )}
-             </div>
+      <div className="flex-1 overflow-y-auto px-4 sm:px-8 py-4 sm:py-6">
+        <div className="max-w-4xl mx-auto space-y-6 sm:space-y-8">
+          
+          {/* WhatsApp Connection Section */}
+          <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 shadow-sm">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="h-10 w-10 bg-blue-50 rounded-lg flex items-center justify-center">
+                <Smartphone className="h-5 w-5 text-blue-600" />
+              </div>
+              <div>
+                <h2 className="text-lg font-bold text-gray-900">WhatsApp Connection</h2>
+                <p className="text-sm text-gray-500">Connect your preferred WhatsApp provider.</p>
+              </div>
+            </div>
 
-             <div className="space-y-6">
-               {/* Provider Selector */}
-               <div className="grid grid-cols-2 gap-3">
-                 <button
-                   onClick={() => metaStatus?.connected && switchProviderMutation.mutate("meta")}
-                   disabled={!metaStatus?.connected}
-                   className={cn(
-                     "flex flex-col items-center gap-2 p-4 rounded-lg border text-sm transition-all",
-                     metaStatus?.activeProvider === "meta" 
-                       ? "bg-emerald-50 border-emerald-300 text-emerald-900 ring-2 ring-emerald-200"
-                       : metaStatus?.connected
-                         ? "bg-white border-gray-200 text-gray-600 hover:border-emerald-200 hover:bg-emerald-50/50 cursor-pointer"
-                         : "bg-gray-50 border-gray-200 text-gray-400 cursor-not-allowed"
-                   )}
-                 >
-                   <div className="flex items-center gap-2">
-                     <span className="font-bold">Meta API</span>
-                     <span className="text-[10px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded uppercase font-bold tracking-wider">Official</span>
-                   </div>
-                   <p className="text-[10px] text-center text-gray-500">Direct API - No Markup</p>
-                   {metaStatus?.connected && metaStatus?.activeProvider === "meta" && (
-                     <span className="text-[10px] text-emerald-600 font-medium">Active</span>
-                   )}
-                 </button>
-                 <button
-                   onClick={() => twilioStatus?.connected && switchProviderMutation.mutate("twilio")}
-                   disabled={!twilioStatus?.connected}
-                   className={cn(
-                     "flex flex-col items-center gap-2 p-4 rounded-lg border text-sm transition-all",
-                     metaStatus?.activeProvider === "twilio" 
-                       ? "bg-brand-green/10 border-brand-green/30 text-brand-green ring-2 ring-brand-green/20"
-                       : twilioStatus?.connected
-                         ? "bg-white border-gray-200 text-gray-600 hover:border-brand-green/20 hover:bg-brand-green/5 cursor-pointer"
-                         : "bg-gray-50 border-gray-200 text-gray-400 cursor-not-allowed"
-                   )}
-                 >
-                   <span className="font-bold">Twilio</span>
-                   <p className="text-[10px] text-center text-gray-500">Sandbox & Production</p>
-                   {twilioStatus?.connected && metaStatus?.activeProvider === "twilio" && (
-                     <span className="text-[10px] text-brand-green font-medium">Active</span>
-                   )}
-                 </button>
-               </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Meta Provider */}
+              <div className={cn(
+                "relative flex flex-col p-5 rounded-xl border-2 transition-all",
+                metaStatus?.activeProvider === "meta" 
+                  ? "border-blue-600 bg-blue-50/30" 
+                  : "border-gray-100 bg-white hover:border-gray-200"
+              )}>
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 bg-white border border-gray-100 rounded-lg flex items-center justify-center shadow-sm">
+                      <img src="https://upload.wikimedia.org/wikipedia/commons/7/7b/Meta_Platforms_Inc._logo.svg" alt="Meta" className="h-6 w-6" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-gray-900">Meta WhatsApp</h3>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">Official</span>
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded">Recommended</span>
+                      </div>
+                    </div>
+                  </div>
+                  {metaStatus?.connected && (
+                    <div className="flex items-center gap-1.5 px-2 py-1 bg-white border border-gray-100 rounded-full shadow-sm">
+                      <div className="h-2 w-2 rounded-full bg-red-600 animate-pulse" />
+                      <span className="text-[10px] font-bold text-gray-600 uppercase">Connected</span>
+                    </div>
+                  )}
+                </div>
 
-               {/* Meta API Connection */}
-               <div className="p-4 bg-emerald-50/50 rounded-lg border border-emerald-100">
-                 <div className="flex items-center justify-between mb-3">
-                   <div className="flex items-center gap-2">
-                     <h3 className="font-semibold text-gray-900">Meta WhatsApp Business API</h3>
-                     <span className="text-[10px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded uppercase font-bold">Recommended</span>
-                   </div>
-                   {metaStatus?.connected ? (
-                     <span className="text-xs text-emerald-600 font-medium flex items-center gap-1">
-                       <CheckCircle2 className="h-3 w-3" /> Connected
-                     </span>
-                   ) : null}
-                 </div>
-                 {metaStatus?.connected ? (
-                   <div className="space-y-3">
-                     <div className="flex items-center justify-between p-2 bg-white rounded border border-emerald-200">
-                       <div className="flex items-center gap-2">
-                         <Phone className="h-4 w-4 text-emerald-600" />
-                         <span className="font-mono text-sm">{metaStatus.phoneNumber || "Connected"}</span>
-                       </div>
-                     </div>
-                     <Button 
-                       variant="outline" 
-                       size="sm"
-                       onClick={async () => {
-                         await fetch("/api/meta/disconnect", { method: "POST", credentials: "include" });
-                         queryClient.invalidateQueries({ queryKey: ["/api/meta/status"] });
-                         toast({ title: "Disconnected", description: "Meta WhatsApp API has been disconnected." });
-                       }}
-                       className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                     >
-                       Disconnect Meta API
-                     </Button>
-                   </div>
-                 ) : (
-                   <div className="space-y-3">
-                     <p className="text-sm text-gray-600">
-                       Connect your official Meta WhatsApp Business API for the best performance and lowest messaging costs.
-                     </p>
-                     <Button 
-                       onClick={() => setConnectMetaOpen(true)}
-                       className="bg-emerald-600 hover:bg-emerald-700"
-                       data-testid="button-connect-meta"
-                     >
-                       Connect Meta API
-                     </Button>
-                   </div>
-                 )}
-               </div>
+                <div className="mt-auto space-y-3">
+                  {!metaStatus?.connected ? (
+                    <Button 
+                      onClick={() => setConnectMetaOpen(true)}
+                      className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold"
+                    >
+                      Connect Meta
+                    </Button>
+                  ) : (
+                    <div className="flex flex-col gap-2">
+                      {metaStatus.activeProvider !== "meta" ? (
+                        <Button 
+                          onClick={() => switchProviderMutation.mutate("meta")}
+                          disabled={switchProviderMutation.isPending}
+                          className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold"
+                        >
+                          {switchProviderMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Switch to Meta"}
+                        </Button>
+                      ) : (
+                        <div className="w-full py-2 px-3 bg-blue-100 text-blue-700 rounded-lg text-center text-sm font-bold flex items-center justify-center gap-2">
+                          <CheckCircle2 className="h-4 w-4" /> Active Provider
+                        </div>
+                      )}
+                      <Button 
+                        variant="ghost" 
+                        size="sm"
+                        onClick={() => disconnectMetaMutation.mutate()}
+                        className="text-gray-400 hover:text-red-600 text-xs font-medium"
+                      >
+                        Disconnect Meta API
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </div>
 
-               {/* Twilio Connection */}
-               <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
-                 <div className="flex items-center justify-between mb-3">
-                   <h3 className="font-semibold text-gray-900">Twilio WhatsApp</h3>
-                   {twilioStatus?.connected ? (
-                     <span className="text-xs text-brand-green font-medium flex items-center gap-1">
-                       <CheckCircle2 className="h-3 w-3" /> Connected
-                     </span>
-                   ) : null}
-                 </div>
-                 {twilioLoading ? (
-                   <div className="flex items-center justify-center py-4">
-                     <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
-                   </div>
-                 ) : twilioStatus?.connected ? (
-                   <div className="space-y-3">
-                     <div className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
-                       <div className="flex items-center gap-2">
-                         <Phone className="h-4 w-4 text-brand-green" />
-                         <span className="font-mono text-sm">{twilioStatus.whatsappNumber}</span>
-                       </div>
-                     </div>
-                     <Button 
-                       variant="outline" 
-                       size="sm"
-                       onClick={() => disconnectTwilioMutation.mutate()}
-                       disabled={disconnectTwilioMutation.isPending}
-                       className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                       data-testid="button-disconnect-twilio"
-                     >
-                       {disconnectTwilioMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                       Disconnect Twilio
-                     </Button>
-                   </div>
-                 ) : (
-                   <div className="space-y-3">
-                     <p className="text-sm text-gray-600">
-                       Connect your Twilio account for sandbox testing or production messaging.
-                     </p>
-                     <Button 
-                       onClick={() => setConnectTwilioOpen(true)}
-                       className="bg-brand-green hover:bg-brand-green/90"
-                       data-testid="button-connect-twilio"
-                     >
-                       Connect Twilio Account
-                     </Button>
-                   </div>
-                 )}
-               </div>
-             </div>
-           </div>
+              {/* Twilio Provider */}
+              <div className={cn(
+                "relative flex flex-col p-5 rounded-xl border-2 transition-all",
+                metaStatus?.activeProvider === "twilio" 
+                  ? "border-blue-600 bg-blue-50/30" 
+                  : "border-gray-100 bg-white hover:border-gray-200"
+              )}>
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 bg-white border border-gray-100 rounded-lg flex items-center justify-center shadow-sm">
+                      <Phone className="h-5 w-5 text-gray-400" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-gray-900">Twilio</h3>
+                      <p className="text-[10px] text-gray-500 font-medium">Alternative Provider</p>
+                    </div>
+                  </div>
+                  {twilioStatus?.connected && (
+                    <div className="flex items-center gap-1.5 px-2 py-1 bg-white border border-gray-100 rounded-full shadow-sm">
+                      <div className="h-2 w-2 rounded-full bg-red-600 animate-pulse" />
+                      <span className="text-[10px] font-bold text-gray-600 uppercase">Connected</span>
+                    </div>
+                  )}
+                </div>
 
-           <ConnectTwilioWizard 
-             open={connectTwilioOpen} 
-             onOpenChange={setConnectTwilioOpen} 
-           />
+                <div className="mt-auto space-y-3">
+                  {!twilioStatus?.connected ? (
+                    <Button 
+                      onClick={() => setConnectTwilioOpen(true)}
+                      variant="outline"
+                      className="w-full border-gray-200 hover:bg-gray-50 text-gray-700 font-semibold"
+                    >
+                      Connect Twilio
+                    </Button>
+                  ) : (
+                    <div className="flex flex-col gap-2">
+                      {metaStatus?.activeProvider !== "twilio" ? (
+                        <Button 
+                          onClick={() => switchProviderMutation.mutate("twilio")}
+                          disabled={switchProviderMutation.isPending}
+                          variant="outline"
+                          className="w-full border-gray-200 hover:bg-gray-50 text-gray-700 font-semibold"
+                        >
+                          {switchProviderMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Switch to Twilio"}
+                        </Button>
+                      ) : (
+                        <div className="w-full py-2 px-3 bg-blue-100 text-blue-700 rounded-lg text-center text-sm font-bold flex items-center justify-center gap-2">
+                          <CheckCircle2 className="h-4 w-4" /> Active Provider
+                        </div>
+                      )}
+                      <Button 
+                        variant="ghost" 
+                        size="sm"
+                        onClick={() => disconnectTwilioMutation.mutate()}
+                        className="text-gray-400 hover:text-red-600 text-xs font-medium"
+                      >
+                        Disconnect Twilio
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+            
+            <div className="mt-4 p-4 bg-gray-50 rounded-lg border border-gray-200 flex items-start gap-3">
+              <Shield className="h-5 w-5 text-gray-400 mt-0.5" />
+              <div>
+                <p className="text-xs font-bold text-gray-700 uppercase tracking-wide">Enterprise Security</p>
+                <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">Your API credentials are encrypted and stored securely.</p>
+              </div>
+            </div>
+          </div>
 
-           <ConnectMetaWizard
-             open={connectMetaOpen}
-             onOpenChange={setConnectMetaOpen}
-           />
+          {/* Profile Section */}
+          <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 shadow-sm">
+            <div className="flex items-center gap-3 mb-4 sm:mb-6">
+              <div className="h-9 w-9 sm:h-10 sm:w-10 bg-blue-50 rounded-lg flex items-center justify-center flex-shrink-0">
+                <Users className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600" />
+              </div>
+              <div className="min-w-0">
+                <h2 className="text-base sm:text-lg font-bold text-gray-900">Your Profile</h2>
+                <p className="text-xs sm:text-sm text-gray-500">Customize how you appear to your team.</p>
+              </div>
+            </div>
 
-           {/* Profile Section */}
-           <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 shadow-sm">
-             <div className="flex items-center gap-3 mb-4 sm:mb-6">
-               <div className="h-9 w-9 sm:h-10 sm:w-10 bg-emerald-50 rounded-lg flex items-center justify-center flex-shrink-0">
-                 <Users className="h-4 w-4 sm:h-5 sm:w-5 text-emerald-600" />
-               </div>
-               <div className="min-w-0">
-                 <h2 className="text-base sm:text-lg font-bold text-gray-900">Your Profile</h2>
-                 <p className="text-xs sm:text-sm text-gray-500">Customize how you appear to your team.</p>
-               </div>
-             </div>
+            <div className="flex items-center gap-4">
+              <div className="relative">
+                {user?.avatarUrl ? (
+                  <img src={user.avatarUrl} alt={user.name || 'Profile'} className="h-16 w-16 rounded-full object-cover" />
+                ) : (
+                  <div className="h-16 w-16 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 text-xl font-bold">
+                    {user?.name?.charAt(0)?.toUpperCase() || 'U'}
+                  </div>
+                )}
+              </div>
+              <div>
+                <p className="font-medium text-gray-900">{user?.name}</p>
+                <p className="text-sm text-gray-500">{user?.email}</p>
+              </div>
+            </div>
+          </div>
 
-             <div className="flex items-center gap-4">
-               <div className="relative">
-                 {user?.avatarUrl ? (
-                   <img 
-                     src={user.avatarUrl} 
-                     alt={user.name || 'Profile'} 
-                     className="h-16 w-16 rounded-full object-cover"
-                   />
-                 ) : (
-                   <div className="h-16 w-16 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-700 text-xl font-bold">
-                     {user?.name?.charAt(0)?.toUpperCase() || 'U'}
-                   </div>
-                 )}
-                 <label 
-                   htmlFor="avatar-upload"
-                   className="absolute -bottom-1 -right-1 h-7 w-7 bg-emerald-600 hover:bg-emerald-700 rounded-full flex items-center justify-center cursor-pointer transition-colors shadow-sm"
-                 >
-                   <Plus className="h-4 w-4 text-white" />
-                   <input
-                     id="avatar-upload"
-                     type="file"
-                     accept="image/*"
-                     className="hidden"
-                     onChange={async (e) => {
-                       const file = e.target.files?.[0];
-                       if (!file) return;
-                       
-                       if (file.size > 500000) {
-                         toast({
-                           title: "Image too large",
-                           description: "Please use an image under 500KB",
-                           variant: "destructive"
-                         });
-                         return;
-                       }
-                       
-                       const reader = new FileReader();
-                       reader.onload = async (event) => {
-                         const dataUrl = event.target?.result as string;
-                         try {
-                           const res = await fetch('/api/users/avatar', {
-                             method: 'PATCH',
-                             headers: { 'Content-Type': 'application/json' },
-                             body: JSON.stringify({ avatarUrl: dataUrl }),
-                             credentials: 'include'
-                           });
-                           if (res.ok) {
-                             toast({
-                               title: "Avatar updated",
-                               description: "Your profile picture has been updated"
-                             });
-                             window.location.reload();
-                           } else {
-                             const data = await res.json();
-                             toast({
-                               title: "Upload failed",
-                               description: data.error || "Failed to update avatar",
-                               variant: "destructive"
-                             });
-                           }
-                         } catch (err) {
-                           toast({
-                             title: "Upload failed",
-                             description: "Failed to update avatar",
-                             variant: "destructive"
-                           });
-                         }
-                       };
-                       reader.readAsDataURL(file);
-                     }}
-                     data-testid="input-avatar-upload"
-                   />
-                 </label>
-               </div>
-               <div>
-                 <p className="font-medium text-gray-900">{user?.name}</p>
-                 <p className="text-sm text-gray-500">{user?.email}</p>
-                 <p className="text-xs text-gray-400 mt-1">Click the + to upload a profile picture</p>
-               </div>
-             </div>
-           </div>
+          {/* Notifications Section */}
+          <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 shadow-sm">
+            <div className="flex items-center gap-3 mb-4 sm:mb-6">
+              <div className="h-9 w-9 sm:h-10 sm:w-10 bg-blue-50 rounded-lg flex items-center justify-center flex-shrink-0">
+                <Bell className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600" />
+              </div>
+              <div className="min-w-0">
+                <h2 className="text-base sm:text-lg font-bold text-gray-900">Notifications</h2>
+                <p className="text-xs sm:text-sm text-gray-500">Choose how you want to be reminded.</p>
+              </div>
+            </div>
 
-           {/* Notifications Section */}
-           <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 shadow-sm">
-             <div className="flex items-center gap-3 mb-4 sm:mb-6">
-               <div className="h-9 w-9 sm:h-10 sm:w-10 bg-blue-50 rounded-lg flex items-center justify-center flex-shrink-0">
-                 <Bell className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600" />
-               </div>
-               <div className="min-w-0">
-                 <h2 className="text-base sm:text-lg font-bold text-gray-900">Notifications</h2>
-                 <p className="text-xs sm:text-sm text-gray-500">Choose how you want to be reminded.</p>
-               </div>
-             </div>
+            <div className="space-y-4 sm:space-y-6">
+              <div className="flex items-center justify-between gap-3">
+                <div className="space-y-0.5 min-w-0 flex-1">
+                  <Label className="text-sm sm:text-base font-medium">Push Notifications</Label>
+                  <p className="text-xs sm:text-sm text-gray-500">Receive alerts on your device.</p>
+                </div>
+                <Switch checked={pushEnabled} onCheckedChange={handlePushToggle} className="flex-shrink-0" />
+              </div>
+              <div className="h-px bg-gray-100" />
+              <div className="flex items-center justify-between gap-3">
+                <div className="space-y-0.5 min-w-0 flex-1">
+                  <Label className="text-sm sm:text-base font-medium">Email Reminders</Label>
+                  <p className="text-xs sm:text-sm text-gray-500">Get a daily summary sent to your inbox.</p>
+                </div>
+                <Switch checked={emailEnabled} onCheckedChange={handleEmailToggle} className="flex-shrink-0" />
+              </div>
+            </div>
+          </div>
 
-             <div className="space-y-4 sm:space-y-6">
-               <div className="flex items-center justify-between gap-3">
-                 <div className="space-y-0.5 min-w-0 flex-1">
-                   <Label className="text-sm sm:text-base font-medium">Push Notifications</Label>
-                   <p className="text-xs sm:text-sm text-gray-500">Receive alerts on your device for due follow-ups.</p>
-                 </div>
-                 <Switch 
-                   checked={pushEnabled}
-                   onCheckedChange={handlePushToggle}
-                   className="flex-shrink-0"
-                 />
-               </div>
-               
-               <div className="h-px bg-gray-100" />
+          <AutoReplySettings />
 
-               <div className="flex items-center justify-between gap-3">
-                 <div className="space-y-0.5 min-w-0 flex-1">
-                   <Label className="text-sm sm:text-base font-medium">Email Reminders</Label>
-                   <p className="text-xs sm:text-sm text-gray-500">Get a daily summary of tasks sent to your inbox.</p>
-                 </div>
-                 <Switch 
-                    checked={emailEnabled}
-                    onCheckedChange={handleEmailToggle}
-                    className="flex-shrink-0"
-                 />
-               </div>
-             </div>
-           </div>
+          {/* Subscription Section */}
+          <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 shadow-sm">
+            <div className="flex items-center gap-3 mb-4 sm:mb-6">
+              <div className="h-9 w-9 sm:h-10 sm:w-10 bg-slate-50 rounded-lg flex items-center justify-center flex-shrink-0">
+                <CreditCard className="h-4 w-4 sm:h-5 sm:w-5 text-slate-600" />
+              </div>
+              <div className="min-w-0">
+                <h2 className="text-base sm:text-lg font-bold text-gray-900">Subscription</h2>
+                <p className="text-xs sm:text-sm text-gray-500">Manage your plan and billing.</p>
+              </div>
+            </div>
 
-           {/* Auto-Reply & Business Hours Section */}
-           <AutoReplySettings />
+            {subscriptionLoading ? (
+              <div className="flex justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="p-4 bg-gradient-to-br from-slate-50 to-slate-100 rounded-lg border border-slate-200">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs text-slate-700 uppercase font-semibold">Current Plan</span>
+                  </div>
+                  <p className="text-2xl font-bold text-slate-800">{subscriptionData?.limits?.planName || "Free"}</p>
+                </div>
 
-           {/* Import/Export Data Section */}
-           <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 shadow-sm">
-             <div className="flex items-center gap-3 mb-4 sm:mb-6">
-               <div className="h-9 w-9 sm:h-10 sm:w-10 bg-orange-50 rounded-lg flex items-center justify-center flex-shrink-0">
-                 <FileText className="h-4 w-4 sm:h-5 sm:w-5 text-orange-600" />
-               </div>
-               <div className="min-w-0">
-                 <h2 className="text-base sm:text-lg font-bold text-gray-900">Import Contacts</h2>
-                 <p className="text-xs sm:text-sm text-gray-500">Bulk import contacts from a CSV file.</p>
-               </div>
-             </div>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <Link href="/pricing" className="flex-1">
+                    <Button className="w-full bg-blue-600 hover:bg-blue-700 text-sm sm:text-base">
+                      <Zap className="h-4 w-4 mr-2" />
+                      {subscriptionData?.subscription?.plan === "free" ? "Upgrade Plan" : "View Plans"}
+                    </Button>
+                  </Link>
+                  {subscriptionData?.subscription?.plan !== "free" && (
+                    <Button variant="outline" onClick={() => portalMutation.mutate()} disabled={portalMutation.isPending}>
+                      {portalMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Manage Billing"}
+                    </Button>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
 
-             <div className="space-y-4">
-               <div className="p-4 bg-orange-50 rounded-lg border border-orange-200">
-                 <p className="text-sm text-orange-800 mb-2">
-                   <strong>CSV Format:</strong> Your file should have columns: Name, Phone, Tag, Notes
-                 </p>
-                 <p className="text-xs text-orange-700">
-                   Example: "John Doe", "+1234567890", "Hot", "Met at trade show"
-                 </p>
-               </div>
+          {/* Team Members Section */}
+          <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 shadow-sm">
+            <div className="flex items-center gap-3 mb-4 sm:mb-6">
+              <div className="h-9 w-9 sm:h-10 sm:w-10 bg-blue-50 rounded-lg flex items-center justify-center flex-shrink-0">
+                <Users className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600" />
+              </div>
+              <div className="min-w-0">
+                <h2 className="text-base sm:text-lg font-bold text-gray-900">Team Members</h2>
+                <p className="text-xs sm:text-sm text-gray-500">Manage your team.</p>
+              </div>
+            </div>
 
-               <div className="flex flex-col sm:flex-row gap-3">
-                 <label className="flex-1">
-                   <div className="flex items-center justify-center w-full h-24 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-orange-400 hover:bg-orange-50 transition-colors">
-                     <div className="text-center">
-                       <FileText className="h-6 w-6 mx-auto text-gray-400 mb-1" />
-                       <span className="text-sm text-gray-600">
-                         {importFile ? importFile.name : "Click to select CSV file"}
-                       </span>
-                     </div>
-                   </div>
-                   <input
-                     type="file"
-                     accept=".csv"
-                     className="hidden"
-                     onChange={(e) => setImportFile(e.target.files?.[0] || null)}
-                     data-testid="input-csv-file"
-                   />
-                 </label>
-               </div>
+            {teamLoading ? (
+              <div className="flex justify-center py-4">
+                <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  {teamMembers.map((member) => (
+                    <div key={member.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-100">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="h-8 w-8 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
+                          {member.role === "owner" ? (
+                            <Crown className="h-4 w-4 text-blue-600" />
+                          ) : (
+                            <span className="text-sm font-medium text-blue-600">{(member.name || member.email)[0].toUpperCase()}</span>
+                          )}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-medium text-gray-900 truncate">{member.name || member.email.split("@")[0]}</p>
+                          <p className="text-xs text-gray-500 truncate">{member.email}</p>
+                        </div>
+                      </div>
+                      {member.role !== "owner" && (
+                        <Button variant="ghost" size="sm" onClick={() => removeMemberMutation.mutate(member.id)} className="text-red-500 hover:text-red-700 hover:bg-red-50">
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                </div>
 
-               {importFile && (
-                 <Button
-                   onClick={async () => {
-                     if (!importFile) return;
-                     setIsImporting(true);
-                     try {
-                       const text = await importFile.text();
-                       const lines = text.split('\n').filter(line => line.trim());
-                       const contacts = [];
-                       
-                       for (let i = 1; i < lines.length; i++) {
-                         const values = lines[i].split(',').map(v => v.trim().replace(/^"|"$/g, ''));
-                         if (values.length >= 1) {
-                           contacts.push({
-                             name: values[0] || '',
-                             phone: values[1] || '',
-                             tag: values[2] || 'New',
-                             notes: values[3] || ''
-                           });
-                         }
-                       }
-                       
-                       const res = await fetch('/api/chats/import', {
-                         method: 'POST',
-                         headers: { 'Content-Type': 'application/json' },
-                         body: JSON.stringify({ contacts }),
-                         credentials: 'include'
-                       });
-                       
-                       if (res.ok) {
-                         const data = await res.json();
-                         toast({
-                           title: "Import complete",
-                           description: `Imported ${data.imported} contacts (${data.skipped} skipped)`
-                         });
-                         setImportFile(null);
-                         queryClient.invalidateQueries({ queryKey: ['/api/chats'] });
-                       } else {
-                         throw new Error('Import failed');
-                       }
-                     } catch (err) {
-                       toast({
-                         title: "Import failed",
-                         description: "Could not import contacts from CSV",
-                         variant: "destructive"
-                       });
-                     }
-                     setIsImporting(false);
-                   }}
-                   disabled={isImporting}
-                   className="w-full sm:w-auto bg-orange-600 hover:bg-orange-700"
-                   data-testid="button-import-csv"
-                 >
-                   {isImporting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                   Import {importFile.name}
-                 </Button>
-               )}
-             </div>
-           </div>
+                <div className="pt-2 border-t border-gray-200">
+                  <p className="text-sm font-medium text-gray-700 mb-2">Invite a team member</p>
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <Input type="email" placeholder="Email address" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} className="flex-1" />
+                    <Button onClick={() => inviteMutation.mutate({ email: inviteEmail, name: inviteName || undefined })} disabled={!inviteEmail || inviteMutation.isPending} className="bg-blue-600 hover:bg-blue-700">
+                      {inviteMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <><UserPlus className="h-4 w-4 mr-1" /> Invite</>}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
 
-           {/* WhatsApp Phone Numbers Section */}
-           <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 shadow-sm">
-             <div className="flex items-center gap-3 mb-4 sm:mb-6">
-               <div className="h-9 w-9 sm:h-10 sm:w-10 bg-green-50 rounded-lg flex items-center justify-center flex-shrink-0">
-                 <Phone className="h-4 w-4 sm:h-5 sm:w-5 text-emerald-600" />
-               </div>
-               <div className="min-w-0">
-                 <h2 className="text-base sm:text-lg font-bold text-gray-900" data-testid="text-phones-title">WhatsApp Numbers</h2>
-                 <p className="text-xs sm:text-sm text-gray-500">Register your WhatsApp Business phone numbers.</p>
-               </div>
-             </div>
-
-             <div className="space-y-4">
-               {/* Add new phone form */}
-               <div className="flex flex-col sm:flex-row gap-2">
-                 <Input
-                   placeholder="+1234567890"
-                   value={newPhone}
-                   onChange={(e) => setNewPhone(e.target.value)}
-                   className="flex-1"
-                   data-testid="input-phone-number"
-                 />
-                 <Input
-                   placeholder="Business Name (optional)"
-                   value={businessName}
-                   onChange={(e) => setBusinessName(e.target.value)}
-                   className="flex-1"
-                   data-testid="input-business-name"
-                 />
-                 <Button 
-                   onClick={handleRegisterPhone}
-                   disabled={registerPhoneMutation.isPending}
-                   className="bg-emerald-600 hover:bg-emerald-700 w-full sm:w-auto"
-                   data-testid="button-register-phone"
-                 >
-                   {registerPhoneMutation.isPending ? (
-                     <Loader2 className="h-4 w-4 animate-spin" />
-                   ) : (
-                     <>
-                       <Plus className="h-4 w-4 sm:mr-0 mr-2" />
-                       <span className="sm:hidden">Add Number</span>
-                     </>
-                   )}
-                 </Button>
-               </div>
-
-               {/* Registered phones list */}
-               {phonesLoading ? (
-                 <div className="flex justify-center py-4">
-                   <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
-                 </div>
-               ) : phones.length === 0 ? (
-                 <p className="text-sm text-gray-500 text-center py-4" data-testid="text-no-phones">
-                   No phone numbers registered yet.
-                 </p>
-               ) : (
-                 <div className="space-y-2">
-                   {phones.map((phone) => (
-                     <div 
-                       key={phone.id} 
-                       className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
-                       data-testid={`card-phone-${phone.id}`}
-                     >
-                       <div>
-                         <p className="font-medium text-gray-900" data-testid={`text-phone-number-${phone.id}`}>
-                           {phone.phoneNumber.replace("whatsapp:", "")}
-                         </p>
-                         {phone.businessName && (
-                           <p className="text-sm text-gray-500">{phone.businessName}</p>
-                         )}
-                       </div>
-                       <Button
-                         variant="ghost"
-                         size="sm"
-                         onClick={() => deletePhoneMutation.mutate(phone.id)}
-                         disabled={deletePhoneMutation.isPending}
-                         className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                         data-testid={`button-delete-phone-${phone.id}`}
-                       >
-                         <Trash2 className="h-4 w-4" />
-                       </Button>
-                     </div>
-                   ))}
-                 </div>
-               )}
-             </div>
-           </div>
-
-           {/* Subscription Section */}
-           <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 shadow-sm">
-             <div className="flex items-center gap-3 mb-4 sm:mb-6">
-               <div className="h-9 w-9 sm:h-10 sm:w-10 bg-slate-50 rounded-lg flex items-center justify-center flex-shrink-0">
-                 <CreditCard className="h-4 w-4 sm:h-5 sm:w-5 text-slate-600" />
-               </div>
-               <div className="min-w-0">
-                 <h2 className="text-base sm:text-lg font-bold text-gray-900" data-testid="text-subscription-title">Subscription</h2>
-                 <p className="text-xs sm:text-sm text-gray-500">Manage your plan and billing.</p>
-               </div>
-             </div>
-
-             {subscriptionLoading ? (
-               <div className="flex justify-center py-8">
-                 <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
-               </div>
-             ) : (
-               <div className="space-y-4">
-                 <div className="p-4 bg-gradient-to-br from-slate-50 to-slate-100 rounded-lg border border-slate-200">
-                   <div className="flex items-center justify-between mb-2">
-                     <span className="text-xs text-slate-700 uppercase font-semibold">Current Plan</span>
-                     {(subscriptionData?.limits?.plan !== "free" || subscriptionData?.limits?.isInTrial) && (
-                       <span className="text-xs px-2 py-0.5 bg-slate-600 text-white rounded-full">
-                         {subscriptionData?.limits?.isInTrial ? "Trial" : (subscriptionData?.subscription?.status === "active" ? "Active" : subscriptionData?.subscription?.status)}
-                       </span>
-                     )}
-                   </div>
-                   <p className="text-2xl font-bold text-slate-800" data-testid="text-current-plan">
-                     {subscriptionData?.limits?.planName || "Free"}
-                   </p>
-                   {subscriptionData?.limits?.isInTrial && subscriptionData?.limits?.trialDaysRemaining > 0 && (
-                     <p className="text-sm text-slate-600 mt-1">
-                       {subscriptionData.limits.trialDaysRemaining} days remaining in trial
-                     </p>
-                   )}
-                   {!subscriptionData?.limits?.isInTrial && subscriptionData?.subscription?.currentPeriodEnd && (
-                     <p className="text-sm text-slate-600 mt-1">
-                       Renews {new Date(subscriptionData.subscription.currentPeriodEnd).toLocaleDateString()}
-                     </p>
-                   )}
-                 </div>
-
-                 <div className="grid grid-cols-2 gap-3 sm:gap-4">
-                   <div className="p-3 sm:p-4 bg-gray-50 rounded-lg border border-gray-200">
-                     <span className="text-xs text-gray-500 uppercase font-semibold">Conversations</span>
-                     <p className="text-base sm:text-lg font-bold text-gray-900 mt-1" data-testid="text-conversations-usage">
-                       {subscriptionData?.limits.conversationsUsed || 0} / {subscriptionData?.limits.conversationsLimit === null ? "∞" : subscriptionData?.limits.conversationsLimit}
-                     </p>
-                     <p className="text-xs text-gray-500">
-                       {subscriptionData?.limits.isLifetimeLimit ? "Lifetime" : "This month"}
-                     </p>
-                   </div>
-                   <div className="p-3 sm:p-4 bg-gray-50 rounded-lg border border-gray-200">
-                     <span className="text-xs text-gray-500 uppercase font-semibold">Team Members</span>
-                     <p className="text-base sm:text-lg font-bold text-gray-900 mt-1" data-testid="text-users-usage">
-                       {subscriptionData?.limits.usersCount || 1} / {subscriptionData?.limits.usersLimit === -1 || subscriptionData?.limits.usersLimit === null ? "Unlimited" : subscriptionData?.limits.usersLimit}
-                     </p>
-                   </div>
-                 </div>
-
-                 <div className="flex flex-col sm:flex-row gap-2">
-                   <Link href="/pricing" className="flex-1">
-                     <Button className="w-full bg-brand-green hover:bg-emerald-700 text-sm sm:text-base" data-testid="button-view-plans">
-                       <Zap className="h-4 w-4 mr-2" />
-                       {subscriptionData?.limits?.isInTrial ? "Upgrade Now" : (subscriptionData?.subscription?.plan === "free" ? "Upgrade Plan" : "View Plans")}
-                     </Button>
-                   </Link>
-                   {(subscriptionData?.subscription?.plan !== "free" || subscriptionData?.limits?.isInTrial) && (
-                     <Button
-                       variant="outline"
-                       onClick={() => portalMutation.mutate()}
-                       disabled={portalMutation.isPending}
-                       className="text-sm sm:text-base"
-                       data-testid="button-manage-billing"
-                     >
-                       {portalMutation.isPending ? (
-                         <Loader2 className="h-4 w-4 animate-spin" />
-                       ) : (
-                         <>
-                           Manage Billing
-                           <ExternalLink className="h-4 w-4 ml-2" />
-                         </>
-                       )}
-                     </Button>
-                   )}
-                 </div>
-                 
-                 {(subscriptionData?.subscription?.plan !== "free" || subscriptionData?.limits?.isInTrial) && (
-                   <div className="pt-3 border-t border-gray-100">
-                     <Button
-                       variant="ghost"
-                       onClick={() => {
-                         if (confirm("Are you sure you want to cancel your subscription? You'll keep access until the end of your billing period.")) {
-                           cancelMutation.mutate();
-                         }
-                       }}
-                       disabled={cancelMutation.isPending}
-                       className="text-sm text-gray-500 hover:text-red-600 hover:bg-red-50"
-                       data-testid="button-cancel-subscription"
-                     >
-                       {cancelMutation.isPending ? (
-                         <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                       ) : null}
-                       Cancel Subscription
-                     </Button>
-                   </div>
-                 )}
-               </div>
-             )}
-           </div>
-
-           {/* Team Members Section */}
-           <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 shadow-sm">
-             <div className="flex items-center gap-3 mb-4 sm:mb-6">
-               <div className="h-9 w-9 sm:h-10 sm:w-10 bg-blue-50 rounded-lg flex items-center justify-center flex-shrink-0">
-                 <Users className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600" />
-               </div>
-               <div className="min-w-0">
-                 <h2 className="text-base sm:text-lg font-bold text-gray-900">Team Members</h2>
-                 <p className="text-xs sm:text-sm text-gray-500">Manage your team and invite new members.</p>
-               </div>
-             </div>
-
-             {teamLoading ? (
-               <div className="flex justify-center py-4">
-                 <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
-               </div>
-             ) : (
-               <div className="space-y-4">
-                 {/* Team member list */}
-                 <div className="space-y-2">
-                   {teamMembers.map((member) => (
-                     <div 
-                       key={member.id} 
-                       className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-100"
-                       data-testid={`team-member-${member.id}`}
-                     >
-                       <div className="flex items-center gap-3 min-w-0">
-                         <div className="h-8 w-8 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
-                           {member.role === "owner" ? (
-                             <Crown className="h-4 w-4 text-blue-600" />
-                           ) : (
-                             <span className="text-sm font-medium text-blue-600">
-                               {(member.name || member.email)[0].toUpperCase()}
-                             </span>
-                           )}
-                         </div>
-                         <div className="min-w-0">
-                           <div className="flex items-center gap-2">
-                             <p className="font-medium text-gray-900 truncate">
-                               {member.name || member.email.split("@")[0]}
-                             </p>
-                             {member.role === "owner" && (
-                               <span className="text-xs px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded">Owner</span>
-                             )}
-                             {member.status === "pending" && (
-                               <span className="text-xs px-1.5 py-0.5 bg-slate-100 text-slate-700 rounded flex items-center gap-1">
-                                 <Clock className="h-3 w-3" /> Pending
-                               </span>
-                             )}
-                           </div>
-                           <p className="text-xs text-gray-500 truncate">{member.email}</p>
-                         </div>
-                       </div>
-                       {member.role !== "owner" && (
-                         <Button
-                           variant="ghost"
-                           size="sm"
-                           onClick={() => removeMemberMutation.mutate(member.id)}
-                           disabled={removeMemberMutation.isPending}
-                           className="text-red-500 hover:text-red-700 hover:bg-red-50"
-                           data-testid={`button-remove-member-${member.id}`}
-                         >
-                           <Trash2 className="h-4 w-4" />
-                         </Button>
-                       )}
-                     </div>
-                   ))}
-                 </div>
-
-                 {/* Invite form - only show if under limit (-1 means unlimited) */}
-                 {(subscriptionData?.limits.usersLimit === -1 || (subscriptionData?.limits.usersLimit || 1) > teamMembers.length) ? (
-                   <div className="pt-2 border-t border-gray-200">
-                     <p className="text-sm font-medium text-gray-700 mb-2">Invite a team member</p>
-                     <div className="flex flex-col sm:flex-row gap-2">
-                       <Input
-                         type="email"
-                         placeholder="Email address"
-                         value={inviteEmail}
-                         onChange={(e) => setInviteEmail(e.target.value)}
-                         className="flex-1"
-                         data-testid="input-invite-email"
-                       />
-                       <Input
-                         type="text"
-                         placeholder="Name (optional)"
-                         value={inviteName}
-                         onChange={(e) => setInviteName(e.target.value)}
-                         className="flex-1 sm:max-w-[150px]"
-                         data-testid="input-invite-name"
-                       />
-                       <Button
-                         onClick={() => inviteMutation.mutate({ email: inviteEmail, name: inviteName || undefined })}
-                         disabled={!inviteEmail || inviteMutation.isPending}
-                         className="bg-blue-600 hover:bg-blue-700"
-                         data-testid="button-invite-member"
-                       >
-                         {inviteMutation.isPending ? (
-                           <Loader2 className="h-4 w-4 animate-spin" />
-                         ) : (
-                           <>
-                             <UserPlus className="h-4 w-4 mr-1" /> Invite
-                           </>
-                         )}
-                       </Button>
-                     </div>
-                   </div>
-                 ) : (
-                   <div className="pt-2 border-t border-gray-200">
-                     <p className="text-sm text-gray-500 mb-2">
-                       You've reached your team member limit ({subscriptionData?.limits.usersLimit === -1 ? "Unlimited" : subscriptionData?.limits.usersLimit}).
-                     </p>
-                     <Link href="/pricing">
-                       <Button variant="outline" size="sm" data-testid="button-upgrade-team">
-                         <Zap className="h-4 w-4 mr-1" /> Upgrade for more
-                       </Button>
-                     </Link>
-                   </div>
-                 )}
-               </div>
-             )}
-           </div>
-
-           {/* Account Section */}
-           <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 shadow-sm">
-             <div className="flex items-center gap-3 mb-4 sm:mb-6">
-               <div className="h-9 w-9 sm:h-10 sm:w-10 bg-gray-50 rounded-lg flex items-center justify-center flex-shrink-0">
-                 <Shield className="h-4 w-4 sm:h-5 sm:w-5 text-gray-600" />
-               </div>
-               <div className="min-w-0">
-                 <h2 className="text-base sm:text-lg font-bold text-gray-900">Account</h2>
-                 <p className="text-xs sm:text-sm text-gray-500">Manage your profile and session.</p>
-               </div>
-             </div>
-
-             <div className="space-y-4">
-               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                 <div className="p-3 bg-gray-50 rounded-lg overflow-hidden">
-                   <span className="text-xs text-gray-500 uppercase font-semibold">Name</span>
-                   <p className="font-medium text-gray-900 truncate">{user?.name}</p>
-                 </div>
-                 <div className="p-3 bg-gray-50 rounded-lg overflow-hidden">
-                   <span className="text-xs text-gray-500 uppercase font-semibold">Email</span>
-                   <p className="font-medium text-gray-900 truncate">{user?.email}</p>
-                 </div>
-               </div>
-             </div>
-           </div>
-
-         </div>
-       </div>
-       
-       <UpgradeModal
-         open={upgradeModalOpen}
-         onOpenChange={setUpgradeModalOpen}
-         reason={upgradeReason}
-         currentPlan={subscriptionData?.limits?.plan}
-       />
-       
-       <ConnectTwilioWizard
-         open={connectTwilioOpen}
-         onOpenChange={setConnectTwilioOpen}
-       />
+        </div>
+      </div>
+      
+      <UpgradeModal open={upgradeModalOpen} onOpenChange={setUpgradeModalOpen} reason={upgradeReason} currentPlan={subscriptionData?.limits?.plan} />
+      <ConnectTwilioWizard open={connectTwilioOpen} onOpenChange={setConnectTwilioOpen} />
+      <ConnectMetaWizard open={connectMetaOpen} onOpenChange={setConnectMetaOpen} />
     </div>
   );
 }
