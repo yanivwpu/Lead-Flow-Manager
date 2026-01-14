@@ -282,7 +282,23 @@ export function Settings() {
 
   const updateAvatarMutation = useMutation({
     mutationFn: async (avatarUrl: string) => {
-      const res = await fetch("/api/users/avatar", {
+      // For Replit environment, we'll try a different approach if standard fetch fails
+      const fetchWithRetry = async (url: string, options: any, retries = 1) => {
+        try {
+          const res = await fetch(url, options);
+          if (res.status === 401 && retries > 0) {
+            // If unauthorized, try to refresh session once
+            await fetch('/api/auth/me', { credentials: 'include' });
+            return fetch(url, options);
+          }
+          return res;
+        } catch (e) {
+          if (retries > 0) return fetchWithRetry(url, options, retries - 1);
+          throw e;
+        }
+      };
+
+      const res = await fetchWithRetry("/api/users/avatar", {
         method: "PATCH",
         headers: { 
           "Content-Type": "application/json",
@@ -291,6 +307,7 @@ export function Settings() {
         body: JSON.stringify({ avatarUrl }),
         credentials: "include",
       });
+      
       if (!res.ok) {
         const error = await res.json().catch(() => ({ error: "Failed to update avatar" }));
         throw new Error(error.error || "Failed to update avatar");
