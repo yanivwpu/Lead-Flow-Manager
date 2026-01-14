@@ -26,7 +26,7 @@ export function PrivacyPolicy() {
           <ul className="list-disc list-inside text-gray-600 mb-4 space-y-2">
             <li><strong>Account Information:</strong> Name, email address, password, and business name you provide during registration</li>
             <li><strong>WhatsApp Data:</strong> Messages, contacts, and conversation history synced through our platform</li>
-            <li><strong>Twilio Credentials:</strong> Your Twilio Account SID, Auth Token (encrypted), and WhatsApp Business number for message delivery</li>
+            <li><strong>Provider Credentials:</strong> Your Twilio credentials (Account SID, Auth Token) or Meta WhatsApp Business API credentials (Phone Number ID, Access Token), encrypted for message delivery</li>
             <li><strong>Usage Data:</strong> Conversation counts and platform activity for plan limit tracking</li>
             <li><strong>Device Information:</strong> Browser type, IP address, and device identifiers</li>
           </ul>
@@ -35,7 +35,7 @@ export function PrivacyPolicy() {
           <p className="text-gray-600 mb-4">We use your information to:</p>
           <ul className="list-disc list-inside text-gray-600 mb-4 space-y-2">
             <li>Provide and maintain our CRM services</li>
-            <li>Connect to your Twilio account for WhatsApp message delivery</li>
+            <li>Connect to your WhatsApp provider (Twilio or Meta) for message delivery</li>
             <li>Track conversation usage against your plan limits</li>
             <li>Send you service notifications and updates</li>
             <li>Improve our platform and user experience</li>
@@ -47,7 +47,7 @@ export function PrivacyPolicy() {
             We implement industry-standard security measures to protect your data, including:
           </p>
           <ul className="list-disc list-inside text-gray-600 mb-4 space-y-2">
-            <li>Encryption of Twilio credentials at rest using AES-256-GCM</li>
+            <li>Encryption of provider credentials (Twilio and Meta) at rest using AES-256-GCM</li>
             <li>Secure HTTPS connections for all data transmission</li>
             <li>Password hashing using bcrypt</li>
             <li>Regular security audits</li>
@@ -61,9 +61,10 @@ export function PrivacyPolicy() {
             WhachatCRM integrates with third-party services:
           </p>
           <ul className="list-disc list-inside text-gray-600 mb-4 space-y-2">
-            <li><strong>Twilio:</strong> You connect your own Twilio account for WhatsApp Business API access. Your Twilio credentials are stored securely and used only to send/receive messages on your behalf.</li>
+            <li><strong>Twilio:</strong> You can connect your Twilio account for WhatsApp Business API access. Your Twilio credentials are stored securely and used only to send/receive messages on your behalf.</li>
+            <li><strong>Meta WhatsApp Business API:</strong> You can connect directly to Meta's WhatsApp Business API. Your access tokens are stored securely and used only to send/receive messages on your behalf.</li>
             <li><strong>Stripe:</strong> For payment processing. We do not store your credit card information.</li>
-            <li><strong>WhatsApp:</strong> Message delivery through the official WhatsApp Business API via your Twilio account.</li>
+            <li><strong>WhatsApp:</strong> Message delivery through the official WhatsApp Business API via your chosen provider (Twilio or Meta).</li>
           </ul>
 
           <h2 className="text-xl font-bold text-gray-900 mt-8 mb-4">6. Data Sharing</h2>
@@ -71,7 +72,7 @@ export function PrivacyPolicy() {
             We do not sell your personal information. We may share data with:
           </p>
           <ul className="list-disc list-inside text-gray-600 mb-4 space-y-2">
-            <li><strong>Your Twilio Account:</strong> To facilitate message delivery using your credentials</li>
+            <li><strong>Your WhatsApp Provider:</strong> To facilitate message delivery using your Twilio or Meta credentials</li>
             <li><strong>Legal Requirements:</strong> When required by law or to protect our rights</li>
           </ul>
 
@@ -81,7 +82,7 @@ export function PrivacyPolicy() {
             <li>Access your personal data</li>
             <li>Request correction of inaccurate data</li>
             <li>Request deletion of your account and data</li>
-            <li>Disconnect your Twilio account at any time</li>
+            <li>Disconnect your WhatsApp provider (Twilio or Meta) at any time</li>
             <li>Export your data</li>
             <li>Opt out of marketing communications</li>
           </ul>

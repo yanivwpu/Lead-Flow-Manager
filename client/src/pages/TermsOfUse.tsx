@@ -23,7 +23,7 @@ export function TermsOfUse() {
 
           <h2 className="text-xl font-bold text-gray-900 mt-8 mb-4">2. Description of Service</h2>
           <p className="text-gray-600 mb-4">
-            WhachatCRM is a customer relationship management (CRM) platform that enables businesses to manage WhatsApp conversations, organize leads, set follow-up reminders, and track sales pipelines. The Service connects to your own Twilio account for WhatsApp Business API access.
+            WhachatCRM is a customer relationship management (CRM) platform that enables businesses to manage WhatsApp conversations, organize leads, set follow-up reminders, and track sales pipelines. The Service connects to your own WhatsApp Business API provider (Twilio or Meta WhatsApp Business API) for message delivery.
           </p>
 
           <h2 className="text-xl font-bold text-gray-900 mt-8 mb-4">3. Account Registration</h2>
@@ -32,7 +32,7 @@ export function TermsOfUse() {
             <li>Provide accurate and complete registration information</li>
             <li>Be at least 18 years old or have legal authority to enter into agreements</li>
             <li>Maintain the security of your account credentials</li>
-            <li>Have a valid Twilio account with WhatsApp Business API access</li>
+            <li>Have a valid WhatsApp Business API provider account (Twilio or Meta)</li>
             <li>Notify us immediately of any unauthorized access</li>
           </ul>
 
@@ -48,11 +48,13 @@ export function TermsOfUse() {
           <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4">
             <p className="text-gray-700 font-medium mb-2">Important - Separate Costs:</p>
             <p className="text-gray-600 mb-3">
-              WhachatCRM subscription fees cover CRM functionality only. WhatsApp message delivery costs are billed separately by your provider (e.g., Twilio). WhachatCRM does not charge per message.
+              WhachatCRM subscription fees cover CRM functionality only. WhatsApp message delivery costs are billed separately by your provider (Twilio or Meta). WhachatCRM does not charge per message.
             </p>
             <p className="text-gray-600 text-sm">
-              <strong>View message costs for US and international use:</strong>{" "}
-              <a href="https://www.twilio.com/en-us/whatsapp/pricing" target="_blank" rel="noopener noreferrer" className="text-brand-green hover:underline">Twilio WhatsApp Pricing</a>
+              <strong>View message costs:</strong>{" "}
+              <a href="https://www.twilio.com/en-us/whatsapp/pricing" target="_blank" rel="noopener noreferrer" className="text-brand-green hover:underline">Twilio</a>
+              {" | "}
+              <a href="https://developers.facebook.com/docs/whatsapp/pricing" target="_blank" rel="noopener noreferrer" className="text-brand-green hover:underline">Meta WhatsApp</a>
             </p>
           </div>
           <p className="text-gray-600 mb-4">
@@ -68,18 +70,18 @@ export function TermsOfUse() {
             <li>All fees are non-refundable unless required by law</li>
           </ul>
 
-          <h2 className="text-xl font-bold text-gray-900 mt-8 mb-4">5. Twilio Integration</h2>
+          <h2 className="text-xl font-bold text-gray-900 mt-8 mb-4">5. WhatsApp Provider Integration</h2>
           <p className="text-gray-600 mb-4">
-            You are responsible for:
+            WhachatCRM supports two WhatsApp Business API providers: Twilio and Meta WhatsApp Business API. You are responsible for:
           </p>
           <ul className="list-disc list-inside text-gray-600 mb-4 space-y-2">
-            <li>Maintaining a valid Twilio account with sufficient funds</li>
-            <li>Keeping your Twilio credentials secure</li>
-            <li>Complying with Twilio's Terms of Service and Acceptable Use Policy</li>
-            <li>All message delivery costs charged by Twilio</li>
+            <li>Maintaining a valid account with your chosen provider (Twilio or Meta)</li>
+            <li>Keeping your provider credentials and access tokens secure</li>
+            <li>Complying with your provider's Terms of Service and policies</li>
+            <li>All message delivery costs charged by your provider</li>
           </ul>
           <p className="text-gray-600 mb-4">
-            WhachatCRM stores your Twilio credentials securely (encrypted at rest) and uses them only to send and receive WhatsApp messages on your behalf.
+            WhachatCRM stores your provider credentials securely (encrypted at rest) and uses them only to send and receive WhatsApp messages on your behalf.
           </p>
 
           <h2 className="text-xl font-bold text-gray-900 mt-8 mb-4">6. Acceptable Use</h2>
@@ -106,7 +108,7 @@ export function TermsOfUse() {
 
           <h2 className="text-xl font-bold text-gray-900 mt-8 mb-4">9. Limitation of Liability</h2>
           <p className="text-gray-600 mb-4">
-            To the maximum extent permitted by law, WhachatCRM shall not be liable for any indirect, incidental, special, consequential, or punitive damages, including loss of profits, data, or business opportunities. We are not responsible for message delivery failures, Twilio service interruptions, or costs incurred through your Twilio account.
+            To the maximum extent permitted by law, WhachatCRM shall not be liable for any indirect, incidental, special, consequential, or punitive damages, including loss of profits, data, or business opportunities. We are not responsible for message delivery failures, provider service interruptions (Twilio or Meta), or costs incurred through your provider account.
           </p>
 
           <h2 className="text-xl font-bold text-gray-900 mt-8 mb-4">10. Service Availability</h2>
@@ -116,7 +118,7 @@ export function TermsOfUse() {
 
           <h2 className="text-xl font-bold text-gray-900 mt-8 mb-4">11. Termination</h2>
           <p className="text-gray-600 mb-4">
-            We may suspend or terminate your account for violations of these Terms. You may also close your account at any time through the Settings page. Upon termination, your Twilio credentials will be removed from our system.
+            We may suspend or terminate your account for violations of these Terms. You may also close your account at any time through the Settings page. Upon termination, your provider credentials (Twilio or Meta) will be removed from our system.
           </p>
 
           <h2 className="text-xl font-bold text-gray-900 mt-8 mb-4">12. Changes to Terms</h2>

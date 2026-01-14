@@ -252,24 +252,38 @@ export function Pricing() {
             <div>
               <h3 className="font-semibold text-amber-900 mb-2">Important: WhatsApp Message Costs</h3>
               <p className="text-amber-800 text-sm mb-3">
-                WhatsApp message delivery is billed separately by your provider (e.g. Twilio).
+                WhatsApp message delivery is billed separately by your provider (Twilio or Meta WhatsApp Business API).
               </p>
               <ul className="text-sm text-amber-800 space-y-1 mb-3">
                 <li><strong>WhachatCRM does not charge per message.</strong></li>
                 <li>Your plan only controls how many conversations you manage inside the CRM.</li>
                 <li>This keeps pricing transparent and predictable.</li>
               </ul>
-              <p className="text-sm text-amber-800">
-                <strong>View message costs for US and international use:</strong>{" "}
-                <a 
-                  href="https://www.twilio.com/en-us/whatsapp/pricing" 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="text-amber-900 hover:text-amber-700 underline"
-                >
-                  Twilio WhatsApp Pricing
-                </a>
+              <p className="text-sm text-amber-800 mb-2">
+                <strong>View message costs:</strong>
               </p>
+              <ul className="text-sm text-amber-800 space-y-1">
+                <li>
+                  <a 
+                    href="https://www.twilio.com/en-us/whatsapp/pricing" 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="text-amber-900 hover:text-amber-700 underline"
+                  >
+                    Twilio WhatsApp Pricing
+                  </a>
+                </li>
+                <li>
+                  <a 
+                    href="https://developers.facebook.com/docs/whatsapp/pricing" 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="text-amber-900 hover:text-amber-700 underline"
+                  >
+                    Meta WhatsApp Business API Pricing
+                  </a>
+                </li>
+              </ul>
             </div>
           </div>
         </div>
@@ -319,12 +333,12 @@ export function Pricing() {
           <Accordion type="single" collapsible className="space-y-4">
             <AccordionItem value="pay-twice" className="bg-white border border-gray-200 rounded-xl px-6">
               <AccordionTrigger className="text-left font-semibold text-gray-900 hover:no-underline" data-testid="faq-pay-twice">
-                Do I pay twice — once to Twilio and once to WhachatCRM?
+                Do I pay twice — once to my provider and once to WhachatCRM?
               </AccordionTrigger>
               <AccordionContent className="text-gray-600">
                 <p className="mb-3">No. You're paying for two different things:</p>
                 <ul className="list-disc list-inside space-y-1 mb-3">
-                  <li><strong>Twilio (or provider):</strong> WhatsApp message delivery</li>
+                  <li><strong>Your provider (Twilio or Meta):</strong> WhatsApp message delivery</li>
                   <li><strong>WhachatCRM:</strong> Managing conversations, teams, notes, tasks & workflows</li>
                 </ul>
                 <p>Think of it like email: Gmail sends emails, CRM manages customers.</p>
@@ -352,49 +366,55 @@ export function Pricing() {
               </AccordionContent>
             </AccordionItem>
 
-            <AccordionItem value="need-twilio" className="bg-white border border-gray-200 rounded-xl px-6">
-              <AccordionTrigger className="text-left font-semibold text-gray-900 hover:no-underline" data-testid="faq-need-twilio">
-                Do I need a Twilio account?
+            <AccordionItem value="which-provider" className="bg-white border border-gray-200 rounded-xl px-6">
+              <AccordionTrigger className="text-left font-semibold text-gray-900 hover:no-underline" data-testid="faq-which-provider">
+                Which WhatsApp providers do you support?
               </AccordionTrigger>
               <AccordionContent className="text-gray-600">
-                <p className="mb-3">Yes — currently WhachatCRM supports WhatsApp Business API via Twilio.</p>
+                <p className="mb-3">WhachatCRM supports two official WhatsApp Business API providers:</p>
                 <ul className="list-disc list-inside space-y-1 mb-3">
-                  <li>If you already use Twilio, you can connect in minutes.</li>
-                  <li>If not, we guide you step-by-step during setup.</li>
+                  <li><strong>Twilio:</strong> Fast approval, reliable infrastructure, great for teams new to WhatsApp Business</li>
+                  <li><strong>Meta WhatsApp Business API:</strong> Direct integration with Meta, official green checkmark verification, access to native WhatsApp features</li>
                 </ul>
+                <p className="mb-3">Choose the provider that best fits your needs — we guide you step-by-step during setup.</p>
                 <p className="text-amber-700 font-medium">The WhatsApp Business mobile app is not supported.</p>
               </AccordionContent>
             </AccordionItem>
 
-            <AccordionItem value="why-twilio" className="bg-white border border-gray-200 rounded-xl px-6">
-              <AccordionTrigger className="text-left font-semibold text-gray-900 hover:no-underline" data-testid="faq-why-twilio">
-                Why only Twilio?
+            <AccordionItem value="twilio-vs-meta" className="bg-white border border-gray-200 rounded-xl px-6">
+              <AccordionTrigger className="text-left font-semibold text-gray-900 hover:no-underline" data-testid="faq-twilio-vs-meta">
+                Twilio vs Meta — which should I choose?
               </AccordionTrigger>
               <AccordionContent className="text-gray-600">
-                <p className="mb-3">Twilio offers:</p>
+                <p className="mb-3"><strong>Choose Twilio if:</strong></p>
                 <ul className="list-disc list-inside space-y-1 mb-3">
-                  <li>Fast WhatsApp approval</li>
-                  <li>Reliable infrastructure</li>
-                  <li>Clear compliance rules</li>
-                  <li>Easier setup for non-technical teams</li>
+                  <li>You want the easiest setup experience</li>
+                  <li>You need Twilio's other communication tools (SMS, voice)</li>
+                  <li>You prefer an intermediary handling WhatsApp compliance</li>
                 </ul>
-                <p>We're designing WhachatCRM to support additional WhatsApp providers in the future, based on customer demand.</p>
+                <p className="mb-3"><strong>Choose Meta WhatsApp Business API if:</strong></p>
+                <ul className="list-disc list-inside space-y-1 mb-3">
+                  <li>You already have a WhatsApp Business account</li>
+                  <li>You want the official green checkmark verification</li>
+                  <li>You need lower messaging costs for high-volume usage</li>
+                  <li>You want access to native WhatsApp features (catalogs, interactive buttons)</li>
+                </ul>
               </AccordionContent>
             </AccordionItem>
 
             <AccordionItem value="other-providers" className="bg-white border border-gray-200 rounded-xl px-6">
               <AccordionTrigger className="text-left font-semibold text-gray-900 hover:no-underline" data-testid="faq-other-providers">
-                I already use another WhatsApp provider. Can I still use WhachatCRM?
+                Do you support other WhatsApp providers?
               </AccordionTrigger>
               <AccordionContent className="text-gray-600">
-                <p className="mb-3">Not yet — but we're collecting demand.</p>
-                <p className="mb-3">If you use providers like:</p>
+                <p className="mb-3">Currently we support Twilio and Meta WhatsApp Business API.</p>
+                <p className="mb-3">We're collecting demand for additional providers like:</p>
                 <ul className="list-disc list-inside space-y-1 mb-3">
                   <li>360dialog</li>
                   <li>Gupshup</li>
-                  <li>Meta Cloud API</li>
+                  <li>MessageBird</li>
                 </ul>
-                <p>You can contact us and help shape future integrations.</p>
+                <p>Contact us to help shape future integrations.</p>
               </AccordionContent>
             </AccordionItem>
 
