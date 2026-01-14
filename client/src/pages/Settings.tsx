@@ -284,12 +284,15 @@ export function Settings() {
     mutationFn: async (avatarUrl: string) => {
       const res = await fetch("/api/users/avatar", {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
         body: JSON.stringify({ avatarUrl }),
         credentials: "include",
       });
       if (!res.ok) {
-        const error = await res.json();
+        const error = await res.json().catch(() => ({ error: "Failed to update avatar" }));
         throw new Error(error.error || "Failed to update avatar");
       }
       return res.json();

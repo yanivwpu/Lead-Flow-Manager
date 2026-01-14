@@ -471,7 +471,14 @@ export async function registerRoutes(
   // Update user avatar
   app.patch("/api/users/avatar", async (req, res) => {
     try {
+      console.log("[AVATAR] PATCH /api/users/avatar called");
+      console.log("[AVATAR] req.isAuthenticated():", req.isAuthenticated());
+      console.log("[AVATAR] req.user:", req.user ? { id: req.user.id, email: req.user.email } : "null");
+      console.log("[AVATAR] Session ID:", req.sessionID);
+      console.log("[AVATAR] Cookies:", req.headers.cookie);
+
       if (!req.user) {
+        console.error("[AVATAR] Unauthorized: req.user is null");
         return res.status(401).json({ error: "Unauthorized" });
       }
 

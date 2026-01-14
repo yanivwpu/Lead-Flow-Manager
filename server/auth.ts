@@ -31,7 +31,7 @@ export function setupAuth(app: Express) {
         maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
         httpOnly: true,
         secure: false, // Set to false for Replit development to ensure cookies are sent
-        sameSite: 'none',
+        sameSite: 'lax',
       },
     })
   );
@@ -214,10 +214,15 @@ export function registerAuthRoutes(app: Express) {
 
   // Check if user is authenticated
   app.get('/api/auth/me', (req, res) => {
+    console.log("[AUTH] GET /api/auth/me called");
+    console.log("[AUTH] req.isAuthenticated():", req.isAuthenticated());
+    console.log("[AUTH] Session ID:", req.sessionID);
+    
     if (req.isAuthenticated()) {
       const { password: _, ...safeUser } = req.user as User;
       res.json(safeUser);
     } else {
+      console.warn("[AUTH] /api/auth/me: User not authenticated");
       res.status(401).json({ error: 'Not authenticated' });
     }
   });
