@@ -629,7 +629,7 @@ export function Settings() {
               <div className={cn(
                 "relative flex flex-col p-5 rounded-xl border-2 transition-all",
                 metaStatus?.activeProvider === "twilio" 
-                  ? "border-red-600 bg-red-50/30" 
+                  ? "border-blue-600 bg-blue-50/30" 
                   : "border-gray-100 bg-white hover:border-gray-200"
               )}>
                 <div className="flex items-center justify-between mb-4">
@@ -649,7 +649,7 @@ export function Settings() {
                   {twilioStatus?.connected && (
                     <div className="flex items-center gap-1.5 px-2 py-1 bg-white border border-gray-100 rounded-full shadow-sm">
                       <div className="h-2 w-2 rounded-full bg-red-600 animate-pulse" />
-                      <span className="text-[10px] font-bold text-gray-600 uppercase">Connected</span>
+                      <span className="text-[10px] font-bold text-red-600 uppercase">Connected</span>
                     </div>
                   )}
                 </div>
@@ -659,7 +659,7 @@ export function Settings() {
                     <Button 
                       onClick={() => setConnectTwilioOpen(true)}
                       variant="outline"
-                      className="w-full border-red-200 hover:bg-red-50 text-red-700 font-semibold"
+                      className="w-full border-gray-200 hover:bg-gray-50 text-gray-700 font-semibold"
                     >
                       Connect Twilio
                     </Button>
@@ -670,12 +670,12 @@ export function Settings() {
                           onClick={() => switchProviderMutation.mutate("twilio")}
                           disabled={switchProviderMutation.isPending}
                           variant="outline"
-                          className="w-full border-red-200 hover:bg-red-50 text-red-700 font-semibold"
+                          className="w-full border-gray-200 hover:bg-gray-50 text-gray-700 font-semibold"
                         >
                           {switchProviderMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Switch to Twilio"}
                         </Button>
                       ) : (
-                        <div className="w-full py-2 px-3 bg-red-100 text-red-700 rounded-lg text-center text-sm font-bold flex items-center justify-center gap-2">
+                        <div className="w-full py-2 px-3 bg-blue-100 text-blue-700 rounded-lg text-center text-sm font-bold flex items-center justify-center gap-2">
                           <CheckCircle2 className="h-4 w-4" /> Active Provider
                         </div>
                       )}
