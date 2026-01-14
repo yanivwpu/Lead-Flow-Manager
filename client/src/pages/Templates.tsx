@@ -232,7 +232,7 @@ export function Templates() {
             data-testid="button-sync-templates"
           >
             <RefreshCw className={`h-4 w-4 mr-2 ${syncTemplatesMutation.isPending ? 'animate-spin' : ''}`} />
-            Sync from Twilio
+            Sync Templates
           </Button>
         </div>
 
@@ -259,7 +259,7 @@ export function Templates() {
                   <FileText className="h-12 w-12 mx-auto mb-4 text-gray-300" />
                   <h3 className="font-semibold text-gray-900 mb-2">No Templates Found</h3>
                   <p className="text-gray-500 text-sm mb-4">
-                    Sync your approved templates from Twilio to start sending messages.
+                    Sync your approved templates from your WhatsApp provider to start sending messages.
                   </p>
                   <Button 
                     onClick={() => syncTemplatesMutation.mutate()}
@@ -340,8 +340,8 @@ export function Templates() {
                   <AlertCircle className="h-5 w-5 text-blue-600 shrink-0 mt-0.5" />
                   <div className="text-sm text-blue-800">
                     <p className="font-medium mb-1">About WhatsApp Templates</p>
-                    <p>Templates must be created and approved in your Twilio console before they appear here. 
-                    Use the "Sync from Twilio" button to fetch your latest approved templates.</p>
+                    <p>Templates must be created and approved in your WhatsApp Business (Meta) or Twilio console before they appear here. 
+                    Use the "Sync Templates" button to fetch your latest approved templates from your active provider.</p>
                   </div>
                 </div>
               </CardContent>
