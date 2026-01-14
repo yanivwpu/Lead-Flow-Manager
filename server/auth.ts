@@ -20,8 +20,8 @@ export function setupAuth(app: Express) {
   app.use(
     session({
       secret: process.env.SESSION_SECRET || 'whatsapp-crm-secret-key-change-in-production',
-      resave: false,
-      saveUninitialized: false,
+      resave: true,
+      saveUninitialized: true, // Changed to true to help with session persistence
       store: new PgStore({
         conString: process.env.DATABASE_URL,
         tableName: 'user_sessions',
@@ -30,8 +30,8 @@ export function setupAuth(app: Express) {
       cookie: {
         maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
         httpOnly: true,
-        secure: true, // Always secure since Replit serves over HTTPS
-        sameSite: 'none', // Allow cross-site redirects from Stripe checkout
+        secure: false, // Set to false for Replit development to ensure cookies are sent
+        sameSite: 'lax',
       },
     })
   );

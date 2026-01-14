@@ -1682,12 +1682,12 @@ export async function registerRoutes(
 
         // Trigger workflows for new chats
         if (messages.length === 1) {
-          await triggerNewChatWorkflows(chat);
+          await triggerNewChatWorkflows(user.id, chat);
         }
 
         // Trigger keyword workflows
         if (incomingMessage.text) {
-          await triggerKeywordWorkflows(chat, incomingMessage.text);
+          await triggerKeywordWorkflows(user.id, chat, incomingMessage.text);
         }
 
         // Handle auto-reply if enabled
