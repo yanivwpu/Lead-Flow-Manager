@@ -53,7 +53,7 @@ export function ConnectMetaWizard({ open, onOpenChange, onSuccess }: ConnectMeta
       }
 
       setWebhookUrl(data.webhookUrl);
-      setVerifyToken(data.verifyToken);
+      setVerifyToken(data.webhookVerifyToken || data.verifyToken);
       setStep("webhook");
     } catch (err: any) {
       setError(err.message || "Connection failed");

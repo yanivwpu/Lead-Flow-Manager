@@ -648,168 +648,195 @@ export function Settings() {
        <div className="flex-1 overflow-y-auto px-4 sm:px-8 py-4 sm:py-6">
          <div className="max-w-2xl mx-auto space-y-6 sm:space-y-8">
            
-           {/* WhatsApp Connection Section - Most Important */}
+           {/* WhatsApp Provider Section */}
            <div className={cn(
              "bg-white border rounded-xl p-4 sm:p-6 shadow-sm",
-             twilioStatus?.connected ? "border-gray-200" : "border-slate-300 bg-slate-50"
+             (twilioStatus?.connected || metaStatus?.connected) ? "border-gray-200" : "border-slate-300 bg-slate-50"
            )}>
              <div className="flex items-center gap-3 mb-4 sm:mb-6">
                <div className={cn(
                  "h-9 w-9 sm:h-10 sm:w-10 rounded-lg flex items-center justify-center flex-shrink-0",
-                 twilioStatus?.connected ? "bg-green-50" : "bg-slate-100"
+                 (twilioStatus?.connected || metaStatus?.connected) ? "bg-green-50" : "bg-slate-100"
                )}>
                  <MessageSquare className={cn(
                    "h-4 w-4 sm:h-5 sm:w-5",
-                   twilioStatus?.connected ? "text-emerald-600" : "text-slate-600"
+                   (twilioStatus?.connected || metaStatus?.connected) ? "text-emerald-600" : "text-slate-600"
                  )} />
                </div>
                <div className="min-w-0 flex-1">
                  <h2 className="text-base sm:text-lg font-bold text-gray-900" data-testid="text-whatsapp-connection-title">
-                   WhatsApp Connection
+                   WhatsApp Provider
                  </h2>
                  <p className="text-xs sm:text-sm text-gray-500">
-                   {twilioStatus?.connected 
-                     ? "Your Twilio account is connected and ready to send/receive messages."
-                     : "Connect your Twilio account to start messaging."}
+                   {metaStatus?.connected 
+                     ? "Official Meta WhatsApp Business API is connected."
+                     : twilioStatus?.connected 
+                       ? "Twilio WhatsApp is connected."
+                       : "Connect a WhatsApp provider to start messaging."}
                  </p>
                </div>
-               {twilioStatus?.connected ? (
+               {(twilioStatus?.connected || metaStatus?.connected) ? (
                  <CheckCircle2 className="h-5 w-5 text-emerald-600 flex-shrink-0" />
                ) : (
                  <XCircle className="h-5 w-5 text-amber-500 flex-shrink-0" />
                )}
              </div>
 
-             {twilioLoading ? (
-               <div className="flex items-center justify-center py-4">
-                 <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
+             <div className="space-y-6">
+               {/* Provider Selector */}
+               <div className="grid grid-cols-2 gap-3">
+                 <button
+                   onClick={() => metaStatus?.connected && switchProviderMutation.mutate("meta")}
+                   disabled={!metaStatus?.connected}
+                   className={cn(
+                     "flex flex-col items-center gap-2 p-4 rounded-lg border text-sm transition-all",
+                     metaStatus?.activeProvider === "meta" 
+                       ? "bg-emerald-50 border-emerald-300 text-emerald-900 ring-2 ring-emerald-200"
+                       : metaStatus?.connected
+                         ? "bg-white border-gray-200 text-gray-600 hover:border-emerald-200 hover:bg-emerald-50/50 cursor-pointer"
+                         : "bg-gray-50 border-gray-200 text-gray-400 cursor-not-allowed"
+                   )}
+                 >
+                   <div className="flex items-center gap-2">
+                     <span className="font-bold">Meta API</span>
+                     <span className="text-[10px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded uppercase font-bold tracking-wider">Official</span>
+                   </div>
+                   <p className="text-[10px] text-center text-gray-500">Direct API - No Markup</p>
+                   {metaStatus?.connected && metaStatus?.activeProvider === "meta" && (
+                     <span className="text-[10px] text-emerald-600 font-medium">Active</span>
+                   )}
+                 </button>
+                 <button
+                   onClick={() => twilioStatus?.connected && switchProviderMutation.mutate("twilio")}
+                   disabled={!twilioStatus?.connected}
+                   className={cn(
+                     "flex flex-col items-center gap-2 p-4 rounded-lg border text-sm transition-all",
+                     metaStatus?.activeProvider === "twilio" 
+                       ? "bg-brand-green/10 border-brand-green/30 text-brand-green ring-2 ring-brand-green/20"
+                       : twilioStatus?.connected
+                         ? "bg-white border-gray-200 text-gray-600 hover:border-brand-green/20 hover:bg-brand-green/5 cursor-pointer"
+                         : "bg-gray-50 border-gray-200 text-gray-400 cursor-not-allowed"
+                   )}
+                 >
+                   <span className="font-bold">Twilio</span>
+                   <p className="text-[10px] text-center text-gray-500">Sandbox & Production</p>
+                   {twilioStatus?.connected && metaStatus?.activeProvider === "twilio" && (
+                     <span className="text-[10px] text-brand-green font-medium">Active</span>
+                   )}
+                 </button>
                </div>
-             ) : twilioStatus?.connected ? (
-               <div className="space-y-4">
-                 <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg border border-emerald-100">
-                   <div className="flex items-center gap-3">
-                     <Phone className="h-4 w-4 text-emerald-600" />
-                     <span className="font-mono text-sm text-green-800">{twilioStatus.whatsappNumber}</span>
-                   </div>
-                   <span className="text-xs text-emerald-600 font-medium">Connected</span>
-                 </div>
-                 
-                 {/* Webhook Configuration Reminder */}
-                 <div className="p-4 bg-slate-50 rounded-lg border border-slate-200">
-                   <div className="flex items-start gap-3 mb-3">
-                     <AlertTriangle className="h-4 w-4 text-slate-600 mt-0.5 flex-shrink-0" />
-                     <div>
-                       <p className="text-sm font-medium text-slate-900">Not receiving messages?</p>
-                       <p className="text-xs text-slate-700 mt-1">
-                         Make sure you've configured both webhook URLs in your Twilio Console.
-                       </p>
-                     </div>
-                   </div>
-                   
-                   <div className="space-y-3">
-                     <div className="space-y-1">
-                       <Label className="text-xs text-slate-800">When a message comes in:</Label>
-                       <div className="flex items-center gap-2">
-                         <Input 
-                           value={webhookUrl} 
-                           readOnly 
-                           className="font-mono text-xs bg-white border-slate-300"
-                           data-testid="input-webhook-url-settings"
-                         />
-                         <Button 
-                           variant="outline" 
-                           size="icon" 
-                           onClick={handleCopyWebhook}
-                           className="flex-shrink-0 border-slate-300 hover:bg-slate-100"
-                           data-testid="button-copy-webhook-settings"
-                         >
-                           {webhookCopied ? <Check className="h-4 w-4 text-emerald-600" /> : <Copy className="h-4 w-4 text-slate-600" />}
-                         </Button>
-                       </div>
-                     </div>
-                     
-                     <div className="space-y-1">
-                       <Label className="text-xs text-slate-800">Status callback URL:</Label>
-                       <div className="flex items-center gap-2">
-                         <Input 
-                           value={statusCallbackUrl} 
-                           readOnly 
-                           className="font-mono text-xs bg-white border-slate-300"
-                           data-testid="input-status-url-settings"
-                         />
-                         <Button 
-                           variant="outline" 
-                           size="icon" 
-                           onClick={handleCopyStatus}
-                           className="flex-shrink-0 border-slate-300 hover:bg-slate-100"
-                           data-testid="button-copy-status-settings"
-                         >
-                           {statusCopied ? <Check className="h-4 w-4 text-emerald-600" /> : <Copy className="h-4 w-4 text-slate-600" />}
-                         </Button>
-                       </div>
-                     </div>
-                   </div>
-                   
-                   <a
-                     href="https://console.twilio.com/us1/develop/sms/try-it-out/whatsapp-learn"
-                     target="_blank"
-                     rel="noopener noreferrer"
-                     className="inline-flex items-center gap-1 mt-3 text-xs text-slate-800 hover:text-slate-900 underline"
-                   >
-                     Open Twilio Sandbox Settings <ExternalLink className="h-3 w-3" />
-                   </a>
-                </div>
 
-                {/* Business Profile Section */}
-                <div className="p-4 bg-sky-50 rounded-lg border border-sky-200">
-                  <div className="flex items-start gap-3 mb-3">
-                    <Building2 className="h-4 w-4 text-sky-600 mt-0.5 flex-shrink-0" />
-                    <div>
-                      <p className="text-sm font-medium text-sky-900">Business Profile</p>
-                      <p className="text-xs text-sky-700 mt-1">
-                        Your business name, logo, and description that customers see on WhatsApp are managed in your Twilio Console.
-                      </p>
-                    </div>
-                  </div>
-                  <a
-                    href="https://console.twilio.com/us1/develop/sms/senders/whatsapp-senders"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 px-3 py-2 bg-white border border-sky-300 rounded-lg text-sm text-sky-700 hover:bg-sky-50 transition-colors"
-                    data-testid="link-whatsapp-profile"
-                  >
-                    <span>Customize Your WhatsApp Business Profile</span>
-                    <ExternalLink className="h-3 w-3" />
-                  </a>
+               {/* Meta API Connection */}
+               <div className="p-4 bg-emerald-50/50 rounded-lg border border-emerald-100">
+                 <div className="flex items-center justify-between mb-3">
+                   <div className="flex items-center gap-2">
+                     <h3 className="font-semibold text-gray-900">Meta WhatsApp Business API</h3>
+                     <span className="text-[10px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded uppercase font-bold">Recommended</span>
+                   </div>
+                   {metaStatus?.connected ? (
+                     <span className="text-xs text-emerald-600 font-medium flex items-center gap-1">
+                       <CheckCircle2 className="h-3 w-3" /> Connected
+                     </span>
+                   ) : null}
                  </div>
-                 
-                 <Button 
-                   variant="outline" 
-                   size="sm"
-                   onClick={() => disconnectTwilioMutation.mutate()}
-                   disabled={disconnectTwilioMutation.isPending}
-                   className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                   data-testid="button-disconnect-twilio"
-                 >
-                   {disconnectTwilioMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                   Disconnect
-                 </Button>
+                 {metaStatus?.connected ? (
+                   <div className="space-y-3">
+                     <div className="flex items-center justify-between p-2 bg-white rounded border border-emerald-200">
+                       <div className="flex items-center gap-2">
+                         <Phone className="h-4 w-4 text-emerald-600" />
+                         <span className="font-mono text-sm">{metaStatus.phoneNumber || "Connected"}</span>
+                       </div>
+                     </div>
+                     <Button 
+                       variant="outline" 
+                       size="sm"
+                       onClick={async () => {
+                         await fetch("/api/meta/disconnect", { method: "POST", credentials: "include" });
+                         queryClient.invalidateQueries({ queryKey: ["/api/meta/status"] });
+                         toast({ title: "Disconnected", description: "Meta WhatsApp API has been disconnected." });
+                       }}
+                       className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                     >
+                       Disconnect Meta API
+                     </Button>
+                   </div>
+                 ) : (
+                   <div className="space-y-3">
+                     <p className="text-sm text-gray-600">
+                       Connect your official Meta WhatsApp Business API for the best performance and lowest messaging costs.
+                     </p>
+                     <Button 
+                       onClick={() => setConnectMetaOpen(true)}
+                       className="bg-emerald-600 hover:bg-emerald-700"
+                       data-testid="button-connect-meta"
+                     >
+                       Connect Meta API
+                     </Button>
+                   </div>
+                 )}
                </div>
-             ) : (
-               <div className="space-y-4">
-                 <p className="text-sm text-slate-800">
-                   You need to connect your Twilio account before you can send or receive WhatsApp messages.
-                 </p>
-                 <Button 
-                   onClick={() => setConnectTwilioOpen(true)}
-                   className="bg-brand-green hover:bg-brand-green/90"
-                   data-testid="button-connect-twilio"
-                 >
-                   Connect Twilio Account
-                 </Button>
+
+               {/* Twilio Connection */}
+               <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+                 <div className="flex items-center justify-between mb-3">
+                   <h3 className="font-semibold text-gray-900">Twilio WhatsApp</h3>
+                   {twilioStatus?.connected ? (
+                     <span className="text-xs text-brand-green font-medium flex items-center gap-1">
+                       <CheckCircle2 className="h-3 w-3" /> Connected
+                     </span>
+                   ) : null}
+                 </div>
+                 {twilioLoading ? (
+                   <div className="flex items-center justify-center py-4">
+                     <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
+                   </div>
+                 ) : twilioStatus?.connected ? (
+                   <div className="space-y-3">
+                     <div className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
+                       <div className="flex items-center gap-2">
+                         <Phone className="h-4 w-4 text-brand-green" />
+                         <span className="font-mono text-sm">{twilioStatus.whatsappNumber}</span>
+                       </div>
+                     </div>
+                     <Button 
+                       variant="outline" 
+                       size="sm"
+                       onClick={() => disconnectTwilioMutation.mutate()}
+                       disabled={disconnectTwilioMutation.isPending}
+                       className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                       data-testid="button-disconnect-twilio"
+                     >
+                       {disconnectTwilioMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                       Disconnect Twilio
+                     </Button>
+                   </div>
+                 ) : (
+                   <div className="space-y-3">
+                     <p className="text-sm text-gray-600">
+                       Connect your Twilio account for sandbox testing or production messaging.
+                     </p>
+                     <Button 
+                       onClick={() => setConnectTwilioOpen(true)}
+                       className="bg-brand-green hover:bg-brand-green/90"
+                       data-testid="button-connect-twilio"
+                     >
+                       Connect Twilio Account
+                     </Button>
+                   </div>
+                 )}
                </div>
-             )}
+             </div>
            </div>
+
+           <ConnectTwilioWizard 
+             open={connectTwilioOpen} 
+             onOpenChange={setConnectTwilioOpen} 
+           />
+
+           <ConnectMetaWizard
+             open={connectMetaOpen}
+             onOpenChange={setConnectMetaOpen}
+           />
 
            {/* Profile Section */}
            <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 shadow-sm">
