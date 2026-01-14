@@ -1,0 +1,104 @@
+2026-01-13 19:23:40.94
+0cbefa5d
+User
+12:23:40 AM [express] POST /api 200 in 1ms
+2026-01-13 19:54:37.02
+0cbefa5d
+User
+12:54:37 AM [express] POST /api 200 in 1ms
+2026-01-13 20:00:01.57
+0cbefa5d
+User
+[2026-01-14T01:00:01.575Z] [PID: 28] [NODE-CRON] [WARN] missed execution at Wed Jan 14 2026 01:00:00 GMT+0000 (Coordinated Universal Time)! Possible blocking IO or high CPU user at the same process used by node-cron.
+2026-01-13 20:03:26.99
+0cbefa5d
+User
+1:03:26 AM [express] POST /api 200 in 1ms
+2026-01-13 20:24:46.56
+0cbefa5d
+User
+1:24:46 AM [express] POST /api 200 in 1ms
+2026-01-13 20:41:19.65
+0cbefa5d
+User
+1:41:19 AM [express] GET /api/twilio/status 304 in 75ms :: {"connected":false,"whatsappNumber":null,"hasCredentials":false}
+2026-01-13 20:41:19.78
+0cbefa5d
+User
+1:41:19 AM [express] GET /api/chats 304 in 79ms :: []
+2026-01-13 20:41:19.81
+0cbefa5d
+User
+1:41:19 AM [express] GET /api/team 304 in 109ms :: [{"id":"owner","ownerId":"3f447188-d2e9-476f-b037-0f7ad8eb5beb","memberId":"3f447188-d2e9-476f-b037-0f7ad8eb5beb","email":"yahabegood@gmail.com","name":"Yaniv Haramaty","role":"owner","status":"active","invitedAt":"2026-01-07T20:12:37.987Z","joinedAt":"2026-01-07T20:12:37.987Z"}]
+2026-01-13 20:41:23.38
+0cbefa5d
+User
+1:41:23 AM [express] POST /api/auth/logout 200 in 102ms :: {"success":true}
+2026-01-13 20:54:35.00
+0cbefa5d
+User
+1:54:35 AM [express] POST /api 200 in 2ms
+2026-01-13 21:44:32.50
+0cbefa5d
+User
+2:44:32 AM [express] GET /api/auth/me 401 in 42ms :: {"error":"Not authenticated"}
+2026-01-13 21:54:07.29
+0cbefa5d
+User
+2:54:07 AM [express] POST /api 200 in 1ms
+2026-01-13 22:00:01.57
+0cbefa5d
+User
+[2026-01-14T03:00:01.574Z] [PID: 28] [NODE-CRON] [WARN] missed execution at Wed Jan 14 2026 03:00:00 GMT+0000 (Coordinated Universal Time)! Possible blocking IO or high CPU user at the same process used by node-cron.
+2026-01-13 22:11:01.09
+0cbefa5d
+User
+3:11:01 AM [express] POST /api/auth/login 200 in 458ms :: {"id":"3f447188-d2e9-476f-b037-0f7ad8eb5beb","name":"Yaniv Haramaty","email":"yahabegood@gmail.com","avatarUrl":null,"pushEnabled":false,"emailEnabled":false,"pushSubscription":null,"twilioAccountSid":null,"twilioAuthToken":null,"twilioWhatsappNumber":null,"twilioConnected":false,"subscriptionPlan":"free","stripeCustomerId":"cus_Tkgm4dWlgJrkKm","stripeSubscriptionId":null,"subscriptionStatus":"active","currentPeriodStart":null,"currentPeriodEnd":null,"trialEndsAt":"2026-01-21T20:12:37.966Z","lifetimeConversations":0,"monthlyConversations":0,"monthlyTwilioUsage":"0.00","businessHoursEnabled":false,"businessHoursStart":"09:00","businessHoursEnd":"17:00","businessDays":[1,2,3,4,5],"timezone":"America/New_York","awayMessageEnabled":false,"awayMessage":"Thanks for reaching out! We're currently away but will respond as soon as we're back.","autoReplyEnabled":false,"autoReplyMessage":"Thanks for your message! We'll get back to you shortly.","autoReplyDelay":0,"onboardingCompleted":true,"createdAt":"2026-01-07T20:12:37.987Z"}
+2026-01-13 22:11:01.40
+0cbefa5d
+User
+3:11:01 AM [express] GET /api/chats 304 in 68ms :: []
+2026-01-13 22:11:01.53
+0cbefa5d
+User
+3:11:01 AM [express] GET /api/auth/me 304 in 227ms :: {"id":"3f447188-d2e9-476f-b037-0f7ad8eb5beb","name":"Yaniv Haramaty","email":"yahabegood@gmail.com","avatarUrl":null,"pushEnabled":false,"emailEnabled":false,"pushSubscription":null,"twilioAccountSid":null,"twilioAuthToken":null,"twilioWhatsappNumber":null,"twilioConnected":false,"subscriptionPlan":"free","stripeCustomerId":"cus_Tkgm4dWlgJrkKm","stripeSubscriptionId":null,"subscriptionStatus":"active","currentPeriodStart":null,"currentPeriodEnd":null,"trialEndsAt":"2026-01-21T20:12:37.966Z","lifetimeConversations":0,"monthlyConversations":0,"monthlyTwilioUsage":"0.00","businessHoursEnabled":false,"businessHoursStart":"09:00","businessHoursEnd":"17:00","businessDays":[1,2,3,4,5],"timezone":"America/New_York","awayMessageEnabled":false,"awayMessage":"Thanks for reaching out! We're currently away but will respond as soon as we're back.","autoReplyEnabled":false,"autoReplyMessage":"Thanks for your message! We'll get back to you shortly.","autoReplyDelay":0,"onboardingCompleted":true,"createdAt":"2026-01-07T20:12:37.987Z"}
+2026-01-13 22:11:01.59
+0cbefa5d
+User
+3:11:01 AM [express] GET /api/twilio/status 304 in 62ms :: {"connected":false,"whatsappNumber":null,"hasCredentials":false}
+2026-01-13 22:11:01.68
+0cbefa5d
+User
+3:11:01 AM [express] GET /api/subscription 304 in 140ms :: {"limits":{"plan":"pro","planName":"Pro Trial","conversationsLimit":2000,"conversationsUsed":0,"conversationsRemaining":2000,"isLifetimeLimit":true,"maxUsers":-1,"maxWhatsappNumbers":5,"canSendMessages":true,"followUpsEnabled":true,"emailNotifications":true,"pushNotifications":true,"teamInbox":true,"assignmentEnabled":true,"workflowsEnabled":true,"integrationsEnabled":true,"maxWebhooks":10,"templatesEnabled":true,"chatbotEnabled":true,"isAtLimit":false,"isAtWarning":false,"suggestedUpgrade":null,"isInTrial":true,"trialEndsAt":"2026-01-21T20:12:37.966Z","trialDaysRemaining":8,"usersCount":1,"usersLimit":-1},"subscription":{"plan":"free","status":"active","currentPeriodEnd":null}}
+2026-01-13 22:11:01.96
+0cbefa5d
+User
+3:11:01 AM [express] GET /api/team 304 in 97ms :: [{"id":"owner","ownerId":"3f447188-d2e9-476f-b037-0f7ad8eb5beb","memberId":"3f447188-d2e9-476f-b037-0f7ad8eb5beb","email":"yahabegood@gmail.com","name":"Yaniv Haramaty","role":"owner","status":"active","invitedAt":"2026-01-07T20:12:37.987Z","joinedAt":"2026-01-07T20:12:37.987Z"}]
+2026-01-13 22:11:09.15
+0cbefa5d
+User
+3:11:09 AM [express] GET /api/users/auto-reply-settings 304 in 61ms :: {"businessHoursEnabled":false,"businessHoursStart":"09:00","businessHoursEnd":"17:00","businessDays":[1,2,3,4,5],"awayMessageEnabled":false,"awayMessage":"Thanks for reaching out! We're currently away but will respond as soon as we're back.","autoReplyEnabled":false,"autoReplyMessage":"Thanks for your message! We'll get back to you shortly."}
+2026-01-13 22:11:09.16
+0cbefa5d
+User
+3:11:09 AM [express] GET /api/phones 304 in 69ms :: []
+2026-01-13 22:11:36.98
+0cbefa5d
+User
+3:11:36 AM [express] GET /api/chatbot-flows 304 in 115ms :: []
+2026-01-13 22:23:16.09
+0cbefa5d
+User
+3:23:16 AM [express] POST /api 200 in 2ms
+2026-01-13 22:44:11.12
+0cbefa5d
+User
+3:44:11 AM [express] GET /api/auth/me 304 in 32ms :: {"id":"3f447188-d2e9-476f-b037-0f7ad8eb5beb","name":"Yaniv Haramaty","email":"yahabegood@gmail.com","avatarUrl":null,"pushEnabled":false,"emailEnabled":false,"pushSubscription":null,"twilioAccountSid":null,"twilioAuthToken":null,"twilioWhatsappNumber":null,"twilioConnected":false,"subscriptionPlan":"free","stripeCustomerId":"cus_Tkgm4dWlgJrkKm","stripeSubscriptionId":null,"subscriptionStatus":"active","currentPeriodStart":null,"currentPeriodEnd":null,"trialEndsAt":"2026-01-21T20:12:37.966Z","lifetimeConversations":0,"monthlyConversations":0,"monthlyTwilioUsage":"0.00","businessHoursEnabled":false,"businessHoursStart":"09:00","businessHoursEnd":"17:00","businessDays":[1,2,3,4,5],"timezone":"America/New_York","awayMessageEnabled":false,"awayMessage":"Thanks for reaching out! We're currently away but will respond as soon as we're back.","autoReplyEnabled":false,"autoReplyMessage":"Thanks for your message! We'll get back to you shortly.","autoReplyDelay":0,"onboardingCompleted":true,"createdAt":"2026-01-07T20:12:37.987Z"}
+2026-01-13 22:45:54.24
+0cbefa5d
+User
+3:45:54 AM [express] POST /api 200 in 1ms
+2026-01-13 22:54:52.99
+0cbefa5d
+User
+3:54:52 AM [express] GET /api/subscription 304 in 158ms :: {"limits":{"plan":"pro","planName":"Pro Trial","conversationsLimit":2000,"conversationsUsed":0,"conversationsRemaining":2000,"isLifetimeLimit":true,"maxUsers":-1,"maxWhatsappNumbers":5,"canSendMessages":true,"followUpsEnabled":true,"emailNotifications":true,"pushNotifications":true,"teamInbox":true,"assignmentEnabled":true,"workflowsEnabled":true,"integrationsEnabled":true,"maxWebhooks":10,"templatesEnabled":true,"chatbotEnabled":true,"isAtLimit":false,"isAtWarning":false,"suggestedUpgrade":null,"isInTrial":true,"trialEndsAt":"2026-01-21T20:12:37.966Z","trialDaysRemaining":8,"usersCount":1,"usersLimit":-1},"subscription":{"plan":"free","status":"active","currentPeriodEnd":null}}
