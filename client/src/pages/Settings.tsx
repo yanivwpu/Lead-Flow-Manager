@@ -10,6 +10,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link, useSearch } from "wouter";
 import { UpgradeModal, type UpgradeReason } from "@/components/UpgradeModal";
 import { ConnectTwilioWizard } from "@/components/ConnectTwilioWizard";
+import { ConnectMetaWizard } from "@/components/ConnectMetaWizard";
 import { cn } from "@/lib/utils";
 
 interface TeamMember {
@@ -278,6 +279,7 @@ export function Settings() {
   const [upgradeReason, setUpgradeReason] = useState<UpgradeReason>("add_whatsapp_number");
   const [syncingSubscription, setSyncingSubscription] = useState(false);
   const [connectTwilioOpen, setConnectTwilioOpen] = useState(false);
+  const [connectMetaOpen, setConnectMetaOpen] = useState(false);
   const [webhookCopied, setWebhookCopied] = useState(false);
   const [statusCopied, setStatusCopied] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
@@ -334,6 +336,30 @@ export function Settings() {
   // Fetch Twilio connection status
   const { data: twilioStatus, isLoading: twilioLoading } = useQuery<{ connected: boolean; whatsappNumber: string | null }>({
     queryKey: ["/api/twilio/status"],
+  });
+
+  // Fetch Meta connection status
+  const { data: metaStatus, isLoading: metaLoading } = useQuery<{ connected: boolean; phoneNumber: string | null; activeProvider: string }>({
+    queryKey: ["/api/meta/status"],
+  });
+
+  // Switch provider mutation
+  const switchProviderMutation = useMutation({
+    mutationFn: async (provider: "twilio" | "meta") => {
+      const res = await fetch("/api/whatsapp/switch-provider", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ provider }),
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to switch provider");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/twilio/status"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/meta/status"] });
+      toast({ title: "Provider Switched", description: "Your WhatsApp provider has been updated." });
+    },
   });
 
   // Disconnect Twilio mutation
