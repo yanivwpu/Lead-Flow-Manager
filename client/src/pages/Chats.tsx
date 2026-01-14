@@ -445,7 +445,7 @@ export function Chats() {
       setNewMessage("");
       toast({
         title: "Demo Mode",
-        description: "Message simulated. Connect Twilio to send real messages.",
+        description: "Message simulated. Connect a WhatsApp provider to send real messages.",
       });
       return;
     }
@@ -523,7 +523,7 @@ export function Chats() {
           </div>
           <h2 className="text-xl font-bold text-gray-900 mb-2">WhatsApp Not Connected</h2>
           <p className="text-gray-500 mb-6">
-            Connect your Twilio account to send and receive WhatsApp messages.
+            Connect your WhatsApp account to send and receive messages.
           </p>
           <Link href="/app/settings">
             <Button className="w-full bg-brand-green hover:bg-brand-green/90" data-testid="button-go-to-settings">
@@ -549,7 +549,7 @@ export function Chats() {
             <Link href="/app/settings">
               <Button size="sm" variant="secondary" className="h-7 text-xs bg-white text-slate-600 hover:bg-slate-50">
                 <Settings className="h-3 w-3 mr-1" />
-                Connect Twilio
+                Connect WhatsApp
               </Button>
             </Link>
             <button 
