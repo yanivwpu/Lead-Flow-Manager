@@ -566,8 +566,12 @@ export function Settings() {
               )}>
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 bg-white border border-gray-100 rounded-lg flex items-center justify-center shadow-sm">
-                      <img src="https://upload.wikimedia.org/wikipedia/commons/7/7b/Meta_Platforms_Inc._logo.svg" alt="Meta" className="h-6 w-6" />
+                    <div className="h-10 w-10 bg-white border border-gray-100 rounded-lg flex items-center justify-center shadow-sm overflow-hidden p-1">
+                      <img 
+                        src="https://upload.wikimedia.org/wikipedia/commons/7/7b/Meta_Platforms_Inc._logo.svg" 
+                        alt="Meta" 
+                        className="h-full w-full object-contain" 
+                      />
                     </div>
                     <div>
                       <h3 className="font-bold text-gray-900">Meta WhatsApp</h3>
@@ -625,13 +629,17 @@ export function Settings() {
               <div className={cn(
                 "relative flex flex-col p-5 rounded-xl border-2 transition-all",
                 metaStatus?.activeProvider === "twilio" 
-                  ? "border-blue-600 bg-blue-50/30" 
+                  ? "border-red-600 bg-red-50/30" 
                   : "border-gray-100 bg-white hover:border-gray-200"
               )}>
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 bg-white border border-gray-100 rounded-lg flex items-center justify-center shadow-sm">
-                      <Phone className="h-5 w-5 text-gray-400" />
+                    <div className="h-10 w-10 bg-white border border-gray-100 rounded-lg flex items-center justify-center shadow-sm overflow-hidden p-1">
+                      <img 
+                        src="https://www.vectorlogo.zone/logos/twilio/twilio-icon.svg" 
+                        alt="Twilio" 
+                        className="h-full w-full object-contain" 
+                      />
                     </div>
                     <div>
                       <h3 className="font-bold text-gray-900">Twilio</h3>
@@ -651,7 +659,7 @@ export function Settings() {
                     <Button 
                       onClick={() => setConnectTwilioOpen(true)}
                       variant="outline"
-                      className="w-full border-gray-200 hover:bg-gray-50 text-gray-700 font-semibold"
+                      className="w-full border-red-200 hover:bg-red-50 text-red-700 font-semibold"
                     >
                       Connect Twilio
                     </Button>
@@ -662,12 +670,12 @@ export function Settings() {
                           onClick={() => switchProviderMutation.mutate("twilio")}
                           disabled={switchProviderMutation.isPending}
                           variant="outline"
-                          className="w-full border-gray-200 hover:bg-gray-50 text-gray-700 font-semibold"
+                          className="w-full border-red-200 hover:bg-red-50 text-red-700 font-semibold"
                         >
                           {switchProviderMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Switch to Twilio"}
                         </Button>
                       ) : (
-                        <div className="w-full py-2 px-3 bg-blue-100 text-blue-700 rounded-lg text-center text-sm font-bold flex items-center justify-center gap-2">
+                        <div className="w-full py-2 px-3 bg-red-100 text-red-700 rounded-lg text-center text-sm font-bold flex items-center justify-center gap-2">
                           <CheckCircle2 className="h-4 w-4" /> Active Provider
                         </div>
                       )}
@@ -677,7 +685,7 @@ export function Settings() {
                         onClick={() => disconnectTwilioMutation.mutate()}
                         className="text-gray-400 hover:text-red-600 text-xs font-medium"
                       >
-                        Disconnect Twilio
+                        Disconnect Twilio Account
                       </Button>
                     </div>
                   )}
@@ -774,25 +782,42 @@ export function Settings() {
               </div>
             ) : (
               <div className="space-y-4">
-                <div className="p-4 bg-gradient-to-br from-slate-50 to-slate-100 rounded-lg border border-slate-200">
-                  <div className="flex items-center justify-between mb-2">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="p-4 bg-gradient-to-br from-slate-50 to-slate-100 rounded-lg border border-slate-200">
                     <span className="text-xs text-slate-700 uppercase font-semibold">Current Plan</span>
+                    <p className="text-2xl font-bold text-slate-800">{subscriptionData?.limits?.planName || "Free"}</p>
+                    {subscriptionData?.subscription?.currentPeriodEnd && (
+                      <p className="text-xs text-slate-500 mt-1">
+                        Next billing: {new Date(subscriptionData.subscription.currentPeriodEnd).toLocaleDateString()}
+                      </p>
+                    )}
                   </div>
-                  <p className="text-2xl font-bold text-slate-800">{subscriptionData?.limits?.planName || "Free"}</p>
-                </div>
 
-                <div className="flex flex-col sm:flex-row gap-2">
-                  <Link href="/pricing" className="flex-1">
-                    <Button className="w-full bg-blue-600 hover:bg-blue-700 text-sm sm:text-base">
-                      <Zap className="h-4 w-4 mr-2" />
-                      {subscriptionData?.subscription?.plan === "free" ? "Upgrade Plan" : "View Plans"}
-                    </Button>
-                  </Link>
-                  {subscriptionData?.subscription?.plan !== "free" && (
-                    <Button variant="outline" onClick={() => portalMutation.mutate()} disabled={portalMutation.isPending}>
-                      {portalMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Manage Billing"}
-                    </Button>
-                  )}
+                  <div className="flex flex-col gap-2 justify-center">
+                    <Link href="/pricing" className="w-full">
+                      <Button className="w-full bg-blue-600 hover:bg-blue-700 text-sm">
+                        <Zap className="h-4 w-4 mr-2" />
+                        {subscriptionData?.subscription?.plan === "free" ? "Upgrade Plan" : "View Plans"}
+                      </Button>
+                    </Link>
+                    {subscriptionData?.subscription?.plan !== "free" && (
+                      <Button 
+                        variant="outline" 
+                        className="w-full border-gray-200"
+                        onClick={() => portalMutation.mutate()} 
+                        disabled={portalMutation.isPending}
+                      >
+                        {portalMutation.isPending ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <>
+                            <ExternalLink className="h-4 w-4 mr-2" />
+                            Manage Subscription
+                          </>
+                        )}
+                      </Button>
+                    )}
+                  </div>
                 </div>
               </div>
             )}
