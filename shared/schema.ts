@@ -86,6 +86,15 @@ export const users = pgTable("users", {
   twilioAuthToken: text("twilio_auth_token"),
   twilioWhatsappNumber: text("twilio_whatsapp_number"),
   twilioConnected: boolean("twilio_connected").default(false),
+  // Meta WhatsApp Business API fields
+  metaAccessToken: text("meta_access_token"),
+  metaPhoneNumberId: text("meta_phone_number_id"),
+  metaBusinessAccountId: text("meta_business_account_id"),
+  metaAppSecret: text("meta_app_secret"),
+  metaWebhookVerifyToken: text("meta_webhook_verify_token"),
+  metaConnected: boolean("meta_connected").default(false),
+  // Active provider selection
+  whatsappProvider: text("whatsapp_provider").default("twilio"), // 'twilio' or 'meta'
   // Subscription fields
   subscriptionPlan: text("subscription_plan").default("free"),
   stripeCustomerId: text("stripe_customer_id"),

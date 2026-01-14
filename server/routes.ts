@@ -21,6 +21,25 @@ import {
   type WhatsAppMessage,
   type TwilioCredentials,
 } from "./userTwilio";
+import {
+  sendMetaWhatsAppMessage,
+  sendMetaWhatsAppMedia,
+  sendMetaWhatsAppTemplate,
+  verifyMetaConnection,
+  connectUserMeta,
+  disconnectUserMeta,
+  validateMetaCredentials,
+  switchProvider,
+  parseMetaIncomingWebhook,
+  parseMetaStatusWebhook,
+  findUserByMetaPhoneNumberId,
+  getMetaMessageTemplates,
+  markMessageAsRead,
+  verifyMetaWebhookSignature,
+  decryptCredential as decryptMetaCredential,
+  isEncrypted as isMetaEncrypted,
+  type MetaCredentials,
+} from "./userMeta";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
@@ -715,12 +734,26 @@ export async function registerRoutes(
         });
       }
 
-      const isConnected = await verifyUserTwilioConnection(req.user.id);
-      if (!isConnected) {
-        return res.status(400).json({ 
-          error: "WhatsApp not connected. Please connect your Twilio account first.",
-          code: "TWILIO_NOT_CONNECTED"
-        });
+      // Check which provider is active and verify connection
+      const user = await storage.getUser(req.user.id);
+      const activeProvider = user?.whatsappProvider || "twilio";
+      
+      if (activeProvider === "meta") {
+        const isMetaConnected = await verifyMetaConnection(req.user.id);
+        if (!isMetaConnected) {
+          return res.status(400).json({ 
+            error: "Meta WhatsApp not connected. Please connect your Meta WhatsApp Business API first.",
+            code: "META_NOT_CONNECTED"
+          });
+        }
+      } else {
+        const isTwilioConnected = await verifyUserTwilioConnection(req.user.id);
+        if (!isTwilioConnected) {
+          return res.status(400).json({ 
+            error: "WhatsApp not connected. Please connect your Twilio account first.",
+            code: "TWILIO_NOT_CONNECTED"
+          });
+        }
       }
 
       const { message } = req.body;
@@ -728,7 +761,15 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Message is required" });
       }
 
-      const result = await sendUserWhatsAppMessage(req.user.id, chat.whatsappPhone, message);
+      let messageId: string;
+      
+      if (activeProvider === "meta") {
+        const result = await sendMetaWhatsAppMessage(req.user.id, chat.whatsappPhone, message);
+        messageId = result.messageId;
+      } else {
+        const result = await sendUserWhatsAppMessage(req.user.id, chat.whatsappPhone, message);
+        messageId = result.sid;
+      }
 
       // Track conversation window (24-hour)
       await subscriptionService.trackConversationWindow(req.user.id, chat.id, chat.whatsappPhone);
@@ -740,20 +781,20 @@ export async function registerRoutes(
         chatId: chat.id,
         direction: "outbound",
         messageType: "text",
-        twilioSid: result.sid,
+        twilioSid: messageId,
         twilioCost: costs.twilioCost,
         markupPercent: costs.markupPercent,
         totalCost: costs.totalCost,
       });
 
       const newMessage: WhatsAppMessage = {
-        id: result.sid,
+        id: messageId,
         text: message,
         time: new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
         sent: true,
         sender: "me",
         status: "sent",
-        twilioSid: result.sid,
+        twilioSid: messageId,
       };
 
       const messages = (chat.messages as WhatsAppMessage[]) || [];
@@ -1007,6 +1048,194 @@ export async function registerRoutes(
     } catch (error: any) {
       console.error("Error validating Twilio:", error);
       res.status(500).json({ valid: false, error: error.message || "Validation failed" });
+    }
+  });
+
+  // ============= Meta WhatsApp Business API Connection Endpoints =============
+
+  // Get Meta connection status
+  app.get("/api/meta/status", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      
+      const user = await storage.getUser(req.user.id);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      const webhookBaseUrl = process.env.APP_URL || `https://${process.env.REPLIT_DOMAINS?.split(',')[0]}`;
+      
+      res.json({
+        connected: user.metaConnected || false,
+        phoneNumberId: user.metaPhoneNumberId || null,
+        businessAccountId: user.metaBusinessAccountId || null,
+        hasCredentials: !!(user.metaAccessToken && user.metaPhoneNumberId),
+        activeProvider: user.whatsappProvider || "twilio",
+        twilioConnected: user.twilioConnected || false,
+        webhookUrl: `${webhookBaseUrl}/api/webhook/meta`,
+        webhookVerifyToken: user.metaConnected ? user.metaWebhookVerifyToken : null,
+      });
+    } catch (error) {
+      console.error("Error getting Meta status:", error);
+      res.status(500).json({ error: "Failed to get Meta status" });
+    }
+  });
+
+  // Connect Meta WhatsApp Business API
+  app.post("/api/meta/connect", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const { accessToken, phoneNumberId, businessAccountId, appSecret, webhookVerifyToken } = req.body;
+
+      if (!accessToken || !phoneNumberId || !businessAccountId) {
+        return res.status(400).json({ 
+          error: "Access Token, Phone Number ID, and Business Account ID are required" 
+        });
+      }
+
+      const credentials: MetaCredentials = {
+        accessToken,
+        phoneNumberId,
+        businessAccountId,
+        appSecret,
+        webhookVerifyToken,
+      };
+
+      const result = await connectUserMeta(req.user.id, credentials);
+
+      if (!result.success) {
+        return res.status(400).json({ error: result.error });
+      }
+
+      const webhookBaseUrl = process.env.APP_URL || `https://${process.env.REPLIT_DOMAINS?.split(',')[0]}`;
+      
+      // Get the actual stored verify token to return to user
+      const updatedUser = await storage.getUser(req.user.id);
+      
+      res.json({ 
+        success: true, 
+        message: "Meta WhatsApp Business API connected successfully!",
+        phoneNumber: result.phoneNumber,
+        webhookUrl: `${webhookBaseUrl}/api/webhook/meta`,
+        webhookVerifyToken: updatedUser?.metaWebhookVerifyToken || webhookVerifyToken,
+      });
+    } catch (error: any) {
+      console.error("Error connecting Meta:", error);
+      res.status(500).json({ error: error.message || "Failed to connect Meta WhatsApp" });
+    }
+  });
+
+  // Disconnect Meta WhatsApp Business API
+  app.post("/api/meta/disconnect", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      await disconnectUserMeta(req.user.id);
+      res.json({ success: true, message: "Meta WhatsApp disconnected" });
+    } catch (error: any) {
+      console.error("Error disconnecting Meta:", error);
+      res.status(500).json({ error: error.message || "Failed to disconnect Meta" });
+    }
+  });
+
+  // Validate Meta credentials (without saving)
+  app.post("/api/meta/validate", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const { accessToken, phoneNumberId, businessAccountId } = req.body;
+
+      if (!accessToken || !phoneNumberId || !businessAccountId) {
+        return res.status(400).json({ 
+          error: "Access Token, Phone Number ID, and Business Account ID are required" 
+        });
+      }
+
+      const result = await validateMetaCredentials({ accessToken, phoneNumberId, businessAccountId });
+      res.json(result);
+    } catch (error: any) {
+      console.error("Error validating Meta:", error);
+      res.status(500).json({ valid: false, error: error.message || "Validation failed" });
+    }
+  });
+
+  // Switch WhatsApp provider (Twilio or Meta)
+  app.post("/api/whatsapp/switch-provider", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const { provider } = req.body;
+
+      if (!provider || !["twilio", "meta"].includes(provider)) {
+        return res.status(400).json({ error: "Provider must be 'twilio' or 'meta'" });
+      }
+
+      const result = await switchProvider(req.user.id, provider);
+
+      if (!result.success) {
+        return res.status(400).json({ error: result.error });
+      }
+
+      res.json({ success: true, message: `Switched to ${provider === 'meta' ? 'Meta WhatsApp Business API' : 'Twilio'}` });
+    } catch (error: any) {
+      console.error("Error switching provider:", error);
+      res.status(500).json({ error: error.message || "Failed to switch provider" });
+    }
+  });
+
+  // Get provider status (combined view)
+  app.get("/api/whatsapp/providers", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      
+      const user = await storage.getUser(req.user.id);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      res.json({
+        activeProvider: user.whatsappProvider || "twilio",
+        twilio: {
+          connected: user.twilioConnected || false,
+          whatsappNumber: user.twilioWhatsappNumber || null,
+        },
+        meta: {
+          connected: user.metaConnected || false,
+          phoneNumberId: user.metaPhoneNumberId || null,
+          businessAccountId: user.metaBusinessAccountId || null,
+        },
+      });
+    } catch (error) {
+      console.error("Error getting provider status:", error);
+      res.status(500).json({ error: "Failed to get provider status" });
+    }
+  });
+
+  // Get Meta message templates
+  app.get("/api/meta/templates", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const templates = await getMetaMessageTemplates(req.user.id);
+      res.json(templates);
+    } catch (error: any) {
+      console.error("Error fetching Meta templates:", error);
+      res.status(500).json({ error: error.message || "Failed to fetch templates" });
     }
   });
 
@@ -1299,6 +1528,208 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Status webhook error:", error);
       res.status(200).send("");
+    }
+  });
+
+  // ============= Meta WhatsApp Business API Webhooks =============
+
+  // Meta webhook verification (GET for verification handshake)
+  app.get("/api/webhook/meta", async (req, res) => {
+    try {
+      const mode = req.query["hub.mode"];
+      const token = req.query["hub.verify_token"];
+      const challenge = req.query["hub.challenge"];
+
+      console.log("Meta webhook verification attempt:", { mode, token });
+
+      if (mode === "subscribe") {
+        // Find user with matching verify token
+        const { db } = await import("../drizzle/db");
+        const { users } = await import("@shared/schema");
+        const { eq } = await import("drizzle-orm");
+
+        const allUsers = await db.select().from(users).where(eq(users.metaConnected, true));
+        const matchingUser = allUsers.find(u => u.metaWebhookVerifyToken === token);
+
+        if (matchingUser) {
+          console.log("Meta webhook verified for user:", matchingUser.id);
+          return res.status(200).send(challenge);
+        }
+
+        // Also check against a global verify token from env if set
+        const globalToken = process.env.META_WEBHOOK_VERIFY_TOKEN;
+        if (globalToken && token === globalToken) {
+          console.log("Meta webhook verified with global token");
+          return res.status(200).send(challenge);
+        }
+      }
+
+      console.log("Meta webhook verification failed");
+      res.status(403).send("Verification failed");
+    } catch (error) {
+      console.error("Meta webhook verification error:", error);
+      res.status(500).send("Error");
+    }
+  });
+
+  // Meta webhook for incoming messages and status updates
+  app.post("/api/webhook/meta", async (req, res) => {
+    try {
+      console.log("Meta webhook received:", JSON.stringify(req.body).substring(0, 500));
+
+      // Verify webhook signature for security - REQUIRED
+      const signature = req.headers["x-hub-signature-256"] as string;
+      
+      // Reject requests without signature header (security requirement)
+      if (!signature) {
+        console.warn("Meta webhook rejected: Missing X-Hub-Signature-256 header");
+        return res.status(403).send("Missing signature");
+      }
+      
+      // Get the raw body for signature verification
+      const rawBody = JSON.stringify(req.body);
+      
+      // Check against global app secret first
+      const globalAppSecret = process.env.META_APP_SECRET;
+      let signatureValid = false;
+      
+      if (globalAppSecret) {
+        signatureValid = verifyMetaWebhookSignature(rawBody, signature, globalAppSecret);
+      }
+      
+      // If not valid with global secret, try to find user's app secret from phone number ID
+      if (!signatureValid) {
+        const entry = req.body.entry?.[0];
+        const phoneNumberId = entry?.changes?.[0]?.value?.metadata?.phone_number_id;
+        
+        if (phoneNumberId) {
+          const user = await findUserByMetaPhoneNumberId(phoneNumberId);
+          if (user?.metaAppSecret) {
+            const userSecret = isMetaEncrypted(user.metaAppSecret)
+              ? decryptMetaCredential(user.metaAppSecret)
+              : user.metaAppSecret;
+            signatureValid = verifyMetaWebhookSignature(rawBody, signature, userSecret);
+          }
+        }
+      }
+      
+      if (!signatureValid) {
+        console.warn("Meta webhook signature verification failed");
+        // Respond 403 for invalid signatures
+        return res.status(403).send("Invalid signature");
+      }
+
+      // Always respond quickly to avoid timeout
+      res.status(200).send("EVENT_RECEIVED");
+
+      // Process message asynchronously
+      const incomingMessage = parseMetaIncomingWebhook(req.body);
+      const statusUpdate = parseMetaStatusWebhook(req.body);
+
+      if (incomingMessage) {
+        console.log("Parsed incoming Meta message:", incomingMessage);
+
+        // Find user by phone number ID
+        const user = await findUserByMetaPhoneNumberId(incomingMessage.phoneNumberId);
+        if (!user) {
+          console.log("No user found for phone number ID:", incomingMessage.phoneNumberId);
+          return;
+        }
+
+        // Find or create chat
+        const chat = await findOrCreateChatByPhone(
+          user.id,
+          incomingMessage.from,
+          incomingMessage.profileName || incomingMessage.from
+        );
+
+        // Add message to chat
+        const newMessage = {
+          id: incomingMessage.messageId,
+          text: incomingMessage.text || incomingMessage.caption || `[${incomingMessage.type}]`,
+          time: new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
+          sent: false,
+          sender: "them" as const,
+          status: "delivered" as const,
+          metaMessageId: incomingMessage.messageId,
+        };
+
+        const messages = (chat.messages as any[]) || [];
+        messages.push(newMessage);
+
+        await storage.updateChat(chat.id, {
+          messages,
+          lastMessage: newMessage.text,
+          time: newMessage.time,
+          unread: (chat.unread || 0) + 1,
+        });
+
+        // Track usage
+        const costs = calculateCostWithMarkup(TWILIO_BASE_COST_PER_MESSAGE);
+        await storage.recordMessageUsage({
+          userId: user.id,
+          chatId: chat.id,
+          direction: "inbound",
+          messageType: incomingMessage.type === "text" ? "text" : "media",
+          twilioSid: incomingMessage.messageId,
+          twilioCost: costs.twilioCost,
+          markupPercent: costs.markupPercent,
+          totalCost: costs.totalCost,
+        });
+
+        // Mark message as read
+        await markMessageAsRead(user.id, incomingMessage.messageId);
+
+        // Trigger workflows for new chats
+        if (messages.length === 1) {
+          await triggerNewChatWorkflows(chat);
+        }
+
+        // Trigger keyword workflows
+        if (incomingMessage.text) {
+          await triggerKeywordWorkflows(chat, incomingMessage.text);
+        }
+
+        // Handle auto-reply if enabled
+        if (user.autoReplyEnabled && user.autoReplyMessage) {
+          try {
+            const delay = user.autoReplyDelay || 0;
+            setTimeout(async () => {
+              try {
+                await sendMetaWhatsAppMessage(user.id, incomingMessage.from, user.autoReplyMessage!);
+                
+                const autoReplyMsg = {
+                  id: `auto-${Date.now()}`,
+                  text: user.autoReplyMessage,
+                  time: new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
+                  sent: true,
+                  sender: "me" as const,
+                };
+                const currentChat = await storage.getChat(chat.id);
+                if (currentChat) {
+                  const msgs = (currentChat.messages as any[]) || [];
+                  msgs.push(autoReplyMsg);
+                  await storage.updateChat(chat.id, { messages: msgs });
+                }
+              } catch (err) {
+                console.error("Failed to send auto-reply via Meta:", err);
+              }
+            }, delay * 1000);
+          } catch (autoReplyError) {
+            console.error("Auto-reply error:", autoReplyError);
+          }
+        }
+
+        console.log("Meta message processed successfully");
+      }
+
+      if (statusUpdate) {
+        console.log("Meta status update:", statusUpdate);
+        // Could update message status in the chat if needed
+      }
+    } catch (error) {
+      console.error("Meta webhook error:", error);
+      // Don't return error - Meta expects 200
     }
   });
 
