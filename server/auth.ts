@@ -31,7 +31,7 @@ export function setupAuth(app: Express) {
         maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
         httpOnly: true,
         secure: false, // Set to false for Replit development to ensure cookies are sent
-        sameSite: 'lax',
+        sameSite: 'none',
       },
     })
   );
