@@ -1,4 +1,6 @@
 User-agent: *
 Allow: /
+Disallow: /api/
+Disallow: /app/
 
 Sitemap: https://whachatcrm.com/sitemap.xml
