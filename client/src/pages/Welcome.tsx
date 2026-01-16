@@ -117,9 +117,6 @@ export function Welcome() {
           <Link href="/blog">
             <button className="text-sm font-medium text-gray-600 hover:text-gray-900 hidden sm:block">Blog</button>
           </Link>
-          <Link href="/best-whatsapp-crm-2026">
-            <button className="text-sm font-medium text-gray-600 hover:text-gray-900 hidden sm:block text-brand-green">Comparison Guide</button>
-          </Link>
           {user ? (
             <Link href="/app/chats">
               <button className="text-sm font-medium px-4 py-2 bg-brand-green text-white rounded-full hover:bg-emerald-700">
@@ -518,6 +515,9 @@ export function Welcome() {
             </Link>
             <Link href="/blog">
               <span className="hover:text-gray-900 cursor-pointer">Blog</span>
+            </Link>
+            <Link href="/best-whatsapp-crm-2026">
+              <span className="text-brand-green hover:text-emerald-700 cursor-pointer font-medium">Comparison Guide</span>
             </Link>
             <Link href="/contact">
               <span className="hover:text-gray-900 cursor-pointer">Contact</span>
