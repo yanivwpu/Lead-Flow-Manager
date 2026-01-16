@@ -57,6 +57,7 @@ export function Comparison() {
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:image" content="https://whachatcrm.com/og-image.png" />
         <meta name="twitter:title" content="Best WhatsApp CRM Software in 2026 | WhachatCRM Guide" />
+        <meta name="twitter:description" content="Discover the best WhatsApp CRM software in 2026. Compare CRM-first platforms vs. BSP providers. A comprehensive guide for small business sales and support." />
         <script type="application/ld+json">
           {JSON.stringify(faqSchema)}
         </script>

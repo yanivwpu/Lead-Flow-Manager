@@ -112,6 +112,8 @@ export function Welcome() {
         <meta property="og:image:height" content="627" />
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:image" content="https://whachatcrm.com/og-image.png" />
+        <meta name="twitter:title" content="WhatsApp CRM for Small Teams | WhachatCRM" />
+        <meta name="twitter:description" content="Simple WhatsApp CRM to manage chats, notes, tags & follow-ups. Free plan available. Paid plans start at $19/month." />
       </Helmet>
       <BookDemoModal isOpen={showDemoModal} onClose={() => setShowDemoModal(false)} />
       {/* Navigation */}
