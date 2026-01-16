@@ -15,6 +15,7 @@ import { InteraktAlternative } from "@/pages/InteraktAlternative";
 import { RespondIoAlternative } from "@/pages/RespondIoAlternative";
 import { Waba360Alternative } from "@/pages/Waba360Alternative";
 import { WhatsappCrm } from "@/pages/WhatsappCrm";
+import { Comparison } from "@/pages/Comparison";
 import { CrmForWhatsappBusiness } from "@/pages/CrmForWhatsappBusiness";
 import { Contact } from "@/pages/Contact";
 import { Blog } from "@/pages/Blog";
@@ -59,6 +60,7 @@ function Router() {
       <Route path="/respond-io-alternative" component={RespondIoAlternative} />
       <Route path="/waba360-alternative" component={Waba360Alternative} />
       <Route path="/whatsapp-crm" component={WhatsappCrm} />
+      <Route path="/best-whatsapp-crm-2026" component={Comparison} />
       <Route path="/crm-for-whatsapp-business" component={CrmForWhatsappBusiness} />
       <Route path="/contact" component={Contact} />
       <Route path="/blog/:slug" component={BlogPost} />
