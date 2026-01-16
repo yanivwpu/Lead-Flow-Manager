@@ -1,0 +1,76 @@
+✅ 1️⃣ Organization Schema (HOMEPAGE – REQUIRED)
+
+📍 Use once, globally (homepage or main layout)
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Organization",
+  "@id": "https://whachatcrm.com/#organization",
+  "name": "WhachatCRM",
+  "url": "https://whachatcrm.com",
+  "logo": "https://whachatcrm.com/logo.png",
+  "description": "WhachatCRM is a CRM-first WhatsApp sales platform built for SMBs to manage leads, conversations, follow-ups, and deals without per-message fees.",
+  "sameAs": [
+    "https://www.linkedin.com/company/whachatcrm",
+    "https://twitter.com/whachatcrm"
+  ]
+}
+</script>
+
+
+⚠️ Replace the logo URL only if your actual logo path is different.
+
+✅ 2️⃣ SoftwareApplication Schema (HOMEPAGE or FEATURES PAGE)
+
+📍 Helps Google & AI understand what you sell
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "@id": "https://whachatcrm.com/#software",
+  "name": "WhachatCRM",
+  "applicationCategory": "BusinessApplication",
+  "applicationSubCategory": "CRM Software",
+  "operatingSystem": "Web",
+  "url": "https://whachatcrm.com",
+  "description": "WhachatCRM is a CRM-first WhatsApp platform that helps small and medium businesses manage leads, automate follow-ups, and close deals without WhatsApp message markups.",
+  "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "USD",
+    "availability": "https://schema.org/OnlineOnly"
+  },
+  "publisher": {
+    "@id": "https://whachatcrm.com/#organization"
+  }
+}
+</script>
+
+
+✅ Using "price": "0" is acceptable only if you offer a free plan or free trial
+If not, tell your Replit agent to remove the offers block.
+
+✅ 3️⃣ WebSite + SearchAction Schema (OPTIONAL BUT RECOMMENDED)
+
+📍 Helps AI + Google understand your site structure
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  "@id": "https://whachatcrm.com/#website",
+  "url": "https://whachatcrm.com",
+  "name": "WhachatCRM",
+  "publisher": {
+    "@id": "https://whachatcrm.com/#organization"
+  }
+}
+</script>
+
+🧠 WHERE THESE SHOULD BE ADDED
+
+✅ Best location: inside <head>
+✅ Acceptable: right before </body>
+❌ Do NOT inline into JSX text or UI components
