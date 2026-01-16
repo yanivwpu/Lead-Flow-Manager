@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { motion } from "framer-motion";
 import { Link } from "wouter";
 import { 
   ArrowRight, 
@@ -50,70 +49,44 @@ function IntegrationsHub() {
           {topRow.map((integration, i) => {
             const Icon = integration.icon;
             return (
-              <motion.div
+              <div
                 key={integration.name}
-                className="flex flex-col items-center"
-                initial={{ opacity: 0, y: -20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.4, delay: i * 0.08 }}
+                className="flex flex-col items-center animate-fade-in-up"
+                style={{ animationDelay: `${i * 80}ms` }}
               >
                 <div className={`h-14 w-14 md:h-16 md:w-16 ${integration.color} rounded-xl shadow-lg flex items-center justify-center`}>
                   <Icon className="h-7 w-7 md:h-8 md:w-8 text-white" />
                 </div>
                 <span className="text-xs md:text-sm font-medium text-gray-600 mt-2">{integration.name}</span>
-              </motion.div>
+              </div>
             );
           })}
         </div>
 
         <div className="flex items-center gap-4 md:gap-6 w-full justify-center">
-          <motion.div 
-            className="h-1 bg-gradient-to-r from-transparent via-gray-300 to-gray-300 flex-1 max-w-[120px] md:max-w-[200px] rounded-full"
-            initial={{ scaleX: 0 }}
-            whileInView={{ scaleX: 1 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.5 }}
-            style={{ originX: 1 }}
-          />
+          <div className="h-1 bg-gradient-to-r from-transparent via-gray-300 to-gray-300 flex-1 max-w-[120px] md:max-w-[200px] rounded-full animate-scale-in-right" />
           
-          <motion.div 
-            className="h-20 w-20 md:h-28 md:w-28 bg-brand-green rounded-2xl shadow-2xl flex items-center justify-center shrink-0"
-            initial={{ scale: 0 }}
-            whileInView={{ scale: 1 }}
-            viewport={{ once: true }}
-            transition={{ type: "spring", duration: 0.5, delay: 0.2 }}
-          >
+          <div className="h-20 w-20 md:h-28 md:w-28 bg-brand-green rounded-2xl shadow-2xl flex items-center justify-center shrink-0 animate-scale-in">
             <span className="text-white font-bold text-3xl md:text-5xl">W</span>
-          </motion.div>
+          </div>
           
-          <motion.div 
-            className="h-1 bg-gradient-to-l from-transparent via-gray-300 to-gray-300 flex-1 max-w-[120px] md:max-w-[200px] rounded-full"
-            initial={{ scaleX: 0 }}
-            whileInView={{ scaleX: 1 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.5 }}
-            style={{ originX: 0 }}
-          />
+          <div className="h-1 bg-gradient-to-l from-transparent via-gray-300 to-gray-300 flex-1 max-w-[120px] md:max-w-[200px] rounded-full animate-scale-in-left" />
         </div>
 
         <div className="flex flex-wrap justify-center gap-4 md:gap-8 w-full">
           {bottomRow.map((integration, i) => {
             const Icon = integration.icon;
             return (
-              <motion.div
+              <div
                 key={integration.name}
-                className="flex flex-col items-center"
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.4, delay: 0.3 + i * 0.08 }}
+                className="flex flex-col items-center animate-fade-in-up"
+                style={{ animationDelay: `${300 + i * 80}ms` }}
               >
                 <div className={`h-14 w-14 md:h-16 md:w-16 ${integration.color} rounded-xl shadow-lg flex items-center justify-center`}>
                   <Icon className="h-7 w-7 md:h-8 md:w-8 text-white" />
                 </div>
                 <span className="text-xs md:text-sm font-medium text-gray-600 mt-2">{integration.name}</span>
-              </motion.div>
+              </div>
             );
           })}
         </div>
@@ -171,11 +144,7 @@ export function Welcome() {
       {/* Hero Section */}
       <section className="px-4 md:px-6 pt-4 md:pt-8 pb-12 md:pb-20 max-w-7xl mx-auto">
         <div className="grid md:grid-cols-2 gap-8 md:gap-12 items-start">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6 }}
-          >
+          <div className="animate-hero-text">
             <h1 className="text-3xl md:text-5xl lg:text-6xl font-display font-bold text-gray-900 leading-[1.1] mb-4 md:mb-6">
               WhatsApp CRM for Small Teams & Growing Businesses
             </h1>
@@ -230,14 +199,9 @@ export function Welcome() {
                 <span>Designed for founders, sales teams & support teams</span>
               </div>
             </div>
-          </motion.div>
+          </div>
           
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.8, delay: 0.2 }}
-            className="relative"
-          >
+          <div className="relative animate-hero-image">
             <picture>
               <source srcSet={heroImageWebp} type="image/webp" />
               <img 
@@ -251,7 +215,7 @@ export function Welcome() {
                 decoding="async"
               />
             </picture>
-          </motion.div>
+          </div>
         </div>
       </section>
 
@@ -330,88 +294,29 @@ export function Welcome() {
           </div>
           
           <div className="grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6 md:gap-8">
-            <motion.div 
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100"
-            >
-              <div className="h-12 w-12 bg-emerald-100 rounded-xl flex items-center justify-center mb-4">
-                <MessageSquare className="h-6 w-6 text-brand-green" />
-              </div>
-              <h3 className="text-lg font-bold text-gray-900 mb-2">Organized Conversations</h3>
-              <p className="text-gray-600">Every WhatsApp chat becomes a customer record — no more searching or guessing.</p>
-            </motion.div>
-            
-            <motion.div 
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ delay: 0.1 }}
-              className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100"
-            >
-              <div className="h-12 w-12 bg-blue-100 rounded-xl flex items-center justify-center mb-4">
-                <Tag className="h-6 w-6 text-blue-600" />
-              </div>
-              <h3 className="text-lg font-bold text-gray-900 mb-2">Notes & Tags</h3>
-              <p className="text-gray-600">Add internal notes and tags so your team always knows the full context.</p>
-            </motion.div>
-            
-            <motion.div 
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ delay: 0.2 }}
-              className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100"
-            >
-              <div className="h-12 w-12 bg-amber-100 rounded-xl flex items-center justify-center mb-4">
-                <Bell className="h-6 w-6 text-amber-600" />
-              </div>
-              <h3 className="text-lg font-bold text-gray-900 mb-2">Follow-Ups & Tasks</h3>
-              <p className="text-gray-600">Set reminders and tasks to make sure every lead is followed up on time.</p>
-            </motion.div>
-            
-            <motion.div 
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ delay: 0.3 }}
-              className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100"
-            >
-              <div className="h-12 w-12 bg-purple-100 rounded-xl flex items-center justify-center mb-4">
-                <Users className="h-6 w-6 text-purple-600" />
-              </div>
-              <h3 className="text-lg font-bold text-gray-900 mb-2">Unlimited Team Members</h3>
-              <p className="text-gray-600">Add your entire team with no per-seat fees. Assign conversations and stay aligned.</p>
-            </motion.div>
-
-            <motion.div 
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ delay: 0.4 }}
-              className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100"
-            >
-              <div className="h-12 w-12 bg-cyan-100 rounded-xl flex items-center justify-center mb-4">
-                <Phone className="h-6 w-6 text-cyan-600" />
-              </div>
-              <h3 className="text-lg font-bold text-gray-900 mb-2">Visual Chatbot Builder</h3>
-              <p className="text-gray-600">Build automated flows with our drag-and-drop chatbot builder. No coding required.</p>
-            </motion.div>
-            
-            <motion.div 
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ delay: 0.5 }}
-              className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100"
-            >
-              <div className="h-12 w-12 bg-pink-100 rounded-xl flex items-center justify-center mb-4">
-                <Zap className="h-6 w-6 text-pink-600" />
-              </div>
-              <h3 className="text-lg font-bold text-gray-900 mb-2">Multi-Channel Integrations</h3>
-              <p className="text-gray-600">Connect with Shopify, HubSpot, Salesforce, Stripe & more to sync leads across all your tools.</p>
-            </motion.div>
+            {[
+              { icon: MessageSquare, color: "bg-emerald-100", iconColor: "text-brand-green", title: "Organized Conversations", desc: "Every WhatsApp chat becomes a customer record — no more searching or guessing." },
+              { icon: Tag, color: "bg-blue-100", iconColor: "text-blue-600", title: "Notes & Tags", desc: "Add internal notes and tags so your team always knows the full context." },
+              { icon: Bell, color: "bg-amber-100", iconColor: "text-amber-600", title: "Follow-Ups & Tasks", desc: "Set reminders and tasks to make sure every lead is followed up on time." },
+              { icon: Users, color: "bg-purple-100", iconColor: "text-purple-600", title: "Unlimited Team Members", desc: "Add your entire team with no per-seat fees. Assign conversations and stay aligned." },
+              { icon: Phone, color: "bg-cyan-100", iconColor: "text-cyan-600", title: "Visual Chatbot Builder", desc: "Build automated flows with our drag-and-drop chatbot builder. No coding required." },
+              { icon: Zap, color: "bg-pink-100", iconColor: "text-pink-600", title: "Multi-Channel Integrations", desc: "Connect with Shopify, HubSpot, Salesforce, Stripe & more to sync leads across all your tools." },
+            ].map((benefit, i) => {
+              const Icon = benefit.icon;
+              return (
+                <div 
+                  key={benefit.title}
+                  className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 animate-fade-in-up"
+                  style={{ animationDelay: `${i * 100}ms` }}
+                >
+                  <div className={`h-12 w-12 ${benefit.color} rounded-xl flex items-center justify-center mb-4`}>
+                    <Icon className={`h-6 w-6 ${benefit.iconColor}`} />
+                  </div>
+                  <h3 className="text-lg font-bold text-gray-900 mb-2">{benefit.title}</h3>
+                  <p className="text-gray-600">{benefit.desc}</p>
+                </div>
+              );
+            })}
           </div>
         </div>
       </section>

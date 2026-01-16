@@ -3,28 +3,30 @@ import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { Welcome } from "@/pages/Welcome";
-import { AppLayout } from "@/pages/AppLayout";
 import { AuthPage } from "@/pages/Auth";
-import { ResetPassword } from "@/pages/ResetPassword";
-import { PrivacyPolicy } from "@/pages/PrivacyPolicy";
-import { TermsOfUse } from "@/pages/TermsOfUse";
-import { Pricing } from "@/pages/Pricing";
-import { WatiAlternative } from "@/pages/WatiAlternative";
-import { PabblyAlternative } from "@/pages/PabblyAlternative";
-import { InteraktAlternative } from "@/pages/InteraktAlternative";
-import { RespondIoAlternative } from "@/pages/RespondIoAlternative";
-import { Waba360Alternative } from "@/pages/Waba360Alternative";
-import { WhatsappCrm } from "@/pages/WhatsappCrm";
-import { Comparison } from "@/pages/Comparison";
-import { CrmForWhatsappBusiness } from "@/pages/CrmForWhatsappBusiness";
-import { Contact } from "@/pages/Contact";
-import { Blog } from "@/pages/Blog";
-import { BlogPost } from "@/pages/BlogPost";
-import { Admin } from "@/pages/Admin";
-import { SalesPortal } from "@/pages/SalesPortal";
-import NotFound from "@/pages/not-found";
 import { AuthProvider, useAuth } from "@/lib/auth-context";
 import { Loader2 } from "lucide-react";
+import { lazy, Suspense } from "react";
+
+const AppLayout = lazy(() => import("@/pages/AppLayout").then(m => ({ default: m.AppLayout })));
+const ResetPassword = lazy(() => import("@/pages/ResetPassword").then(m => ({ default: m.ResetPassword })));
+const PrivacyPolicy = lazy(() => import("@/pages/PrivacyPolicy").then(m => ({ default: m.PrivacyPolicy })));
+const TermsOfUse = lazy(() => import("@/pages/TermsOfUse").then(m => ({ default: m.TermsOfUse })));
+const Pricing = lazy(() => import("@/pages/Pricing").then(m => ({ default: m.Pricing })));
+const WatiAlternative = lazy(() => import("@/pages/WatiAlternative").then(m => ({ default: m.WatiAlternative })));
+const PabblyAlternative = lazy(() => import("@/pages/PabblyAlternative").then(m => ({ default: m.PabblyAlternative })));
+const InteraktAlternative = lazy(() => import("@/pages/InteraktAlternative").then(m => ({ default: m.InteraktAlternative })));
+const RespondIoAlternative = lazy(() => import("@/pages/RespondIoAlternative").then(m => ({ default: m.RespondIoAlternative })));
+const Waba360Alternative = lazy(() => import("@/pages/Waba360Alternative").then(m => ({ default: m.Waba360Alternative })));
+const WhatsappCrm = lazy(() => import("@/pages/WhatsappCrm").then(m => ({ default: m.WhatsappCrm })));
+const Comparison = lazy(() => import("@/pages/Comparison").then(m => ({ default: m.Comparison })));
+const CrmForWhatsappBusiness = lazy(() => import("@/pages/CrmForWhatsappBusiness").then(m => ({ default: m.CrmForWhatsappBusiness })));
+const Contact = lazy(() => import("@/pages/Contact").then(m => ({ default: m.Contact })));
+const Blog = lazy(() => import("@/pages/Blog").then(m => ({ default: m.Blog })));
+const BlogPost = lazy(() => import("@/pages/BlogPost").then(m => ({ default: m.BlogPost })));
+const Admin = lazy(() => import("@/pages/Admin").then(m => ({ default: m.Admin })));
+const SalesPortal = lazy(() => import("@/pages/SalesPortal").then(m => ({ default: m.SalesPortal })));
+const NotFound = lazy(() => import("@/pages/not-found"));
 
 // Wrapper for protected routes
 function ProtectedRoute({ component: Component, ...rest }: any) {
@@ -78,12 +80,20 @@ function Router() {
   );
 }
 
+const PageLoader = () => (
+  <div className="flex h-screen items-center justify-center bg-gray-50">
+    <Loader2 className="h-8 w-8 text-brand-green animate-spin" />
+  </div>
+);
+
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <Toaster />
-        <Router />
+        <Suspense fallback={<PageLoader />}>
+          <Router />
+        </Suspense>
       </AuthProvider>
     </QueryClientProvider>
   );
