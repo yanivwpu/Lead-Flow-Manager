@@ -50,6 +50,8 @@ export function Comparison() {
         <title>Best WhatsApp CRM Software in 2026 | WhachatCRM Guide</title>
         <meta name="description" content="Discover the best WhatsApp CRM software in 2026. Compare CRM-first platforms vs. BSP providers. A comprehensive guide for small business sales and support." />
         <link rel="canonical" href="https://whachatcrm.com/best-whatsapp-crm-2026" />
+        <meta property="og:title" content="Best WhatsApp CRM Software in 2026 | WhachatCRM Guide" />
+        <meta name="twitter:title" content="Best WhatsApp CRM Software in 2026 | WhachatCRM Guide" />
         <script type="application/ld+json">
           {JSON.stringify(faqSchema)}
         </script>
