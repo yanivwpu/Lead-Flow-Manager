@@ -24,7 +24,8 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { BookDemoModal } from "@/components/BookDemoModal";
-import heroImage from "@assets/generated_images/whatsapp_crm_dashboard_mockup.png";
+import heroImage from "@assets/generated_images/whatsapp_crm_dashboard_mockup_resized.png";
+import heroImageWebp from "@assets/generated_images/whatsapp_crm_dashboard_mockup.webp";
 
 const INTEGRATIONS = [
   { name: "Shopify", icon: ShoppingCart, color: "bg-green-500" },
@@ -237,11 +238,18 @@ export function Welcome() {
             transition={{ duration: 0.8, delay: 0.2 }}
             className="relative"
           >
-            <img 
-              src={heroImage} 
-              alt="WhachatCRM Dashboard - WhatsApp CRM Interface" 
-              className="w-full rounded-xl md:rounded-2xl shadow-2xl border border-gray-200 md:scale-105 origin-top"
-            />
+            <picture>
+              <source srcSet={heroImageWebp} type="image/webp" />
+              <img 
+                src={heroImage} 
+                alt="WhachatCRM Dashboard - WhatsApp CRM Interface" 
+                className="w-full rounded-xl md:rounded-2xl shadow-2xl border border-gray-200 md:scale-105 origin-top"
+                width="704"
+                height="384"
+                loading="eager"
+                decoding="async"
+              />
+            </picture>
           </motion.div>
         </div>
       </section>
