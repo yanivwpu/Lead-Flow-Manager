@@ -247,6 +247,7 @@ export function Welcome() {
                 width="704"
                 height="384"
                 loading="eager"
+                fetchPriority="high"
                 decoding="async"
               />
             </picture>
