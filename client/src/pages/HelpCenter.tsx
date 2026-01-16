@@ -766,6 +766,28 @@ Customize what you're notified about:
     `
   },
   {
+    id: "faq-general",
+    title: "General FAQ",
+    category: "FAQ",
+    icon: HelpCircle,
+    keywords: ["faq", "questions", "whatsapp", "crm", "cost", "official"],
+    content: `
+# Frequently Asked Questions
+
+## What is a WhatsApp CRM?
+A WhatsApp CRM is a customer relationship management tool specifically designed to help businesses manage their WhatsApp conversations. Unlike the standard WhatsApp Business app, a CRM allows for team collaboration, lead tagging, automated follow-ups, and integration with other business tools like Shopify or HubSpot.
+
+## Does WhachatCRM charge per message?
+No. WhachatCRM does not charge any per-message markups. You only pay your monthly subscription fee. If you use the Meta WhatsApp Business API, you pay Meta directly for their conversation-based pricing (which includes a generous free tier of 1,000 service conversations per month).
+
+## Who is WhachatCRM best for?
+WhachatCRM is built specifically for small and medium-sized teams who handle high volumes of sales or support inquiries via WhatsApp. It's ideal for real estate agents, e-commerce stores, service providers, and any business that wants to stop losing leads in a messy WhatsApp inbox.
+
+## Is WhachatCRM an official WhatsApp solution?
+Yes. WhachatCRM connects to WhatsApp via official APIs provided by Meta and Twilio. This ensures your account remains compliant with WhatsApp's terms of service and provides a much more stable connection than "grey market" web-scraping solutions.
+    `
+  },
+  {
     id: "billing",
     title: "Billing & Subscriptions",
     category: "Account",
