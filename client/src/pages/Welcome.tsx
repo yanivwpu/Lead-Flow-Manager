@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "wouter";
+import { Helmet } from "react-helmet";
 import { 
   ArrowRight, 
   CheckCircle2, 
@@ -101,6 +102,17 @@ export function Welcome() {
 
   return (
     <div className="min-h-screen bg-white">
+      <Helmet>
+        <title>WhatsApp CRM for Small Teams | WhachatCRM</title>
+        <meta name="description" content="Simple WhatsApp CRM to manage chats, notes, tags & follow-ups. Free plan available. Paid plans start at $19/month." />
+        <meta property="og:title" content="WhatsApp CRM for Small Teams | WhachatCRM" />
+        <meta property="og:description" content="Simple WhatsApp CRM to manage chats, notes, tags & follow-ups. Free plan available. Paid plans start at $19/month." />
+        <meta property="og:image" content="https://whachatcrm.com/og-image.png" />
+        <meta property="og:image:width" content="1200" />
+        <meta property="og:image:height" content="627" />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:image" content="https://whachatcrm.com/og-image.png" />
+      </Helmet>
       <BookDemoModal isOpen={showDemoModal} onClose={() => setShowDemoModal(false)} />
       {/* Navigation */}
       <nav className="p-4 md:p-6 flex justify-between items-center max-w-7xl mx-auto">
