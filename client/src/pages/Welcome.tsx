@@ -101,7 +101,7 @@ export function Welcome() {
   const [showDemoModal, setShowDemoModal] = useState(false);
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-white overflow-x-hidden">
       <Helmet>
         <title>WhatsApp CRM for Small Teams | WhachatCRM</title>
         <meta name="description" content="Simple WhatsApp CRM to manage chats, notes, tags & follow-ups. Free plan available. Paid plans start at $19/month." />
@@ -212,13 +212,13 @@ export function Welcome() {
             </div>
           </div>
           
-          <div className="relative animate-hero-image">
+          <div className="relative animate-hero-image overflow-visible">
             <picture>
               <source srcSet={heroImageWebp} type="image/webp" />
               <img 
                 src={heroImage} 
                 alt="WhachatCRM Dashboard - WhatsApp CRM Interface" 
-                className="w-full rounded-xl md:rounded-2xl shadow-2xl border border-gray-200 md:scale-105 origin-top"
+                className="w-full rounded-xl md:rounded-2xl shadow-2xl border border-gray-200 md:scale-105 origin-top relative z-10"
                 width="704"
                 height="384"
                 loading="eager"
