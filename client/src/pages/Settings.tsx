@@ -655,7 +655,7 @@ export function Settings() {
                   {metaStatus?.connected && (
                     <div className="flex items-center gap-1.5 px-2 py-1 bg-white border border-gray-100 rounded-full shadow-sm">
                       <div className="h-2 w-2 rounded-full bg-red-600 animate-pulse" />
-                      <span className="text-[10px] font-bold text-red-600 uppercase">Connected</span>
+                      <span className="text-[10px] font-bold text-red-600 uppercase whitespace-nowrap">Connected</span>
                     </div>
                   )}
                 </div>
@@ -717,7 +717,7 @@ export function Settings() {
                   {twilioStatus?.connected && (
                     <div className="flex items-center gap-1.5 px-2 py-1 bg-white border border-gray-100 rounded-full shadow-sm">
                       <div className="h-2 w-2 rounded-full bg-red-600 animate-pulse" />
-                      <span className="text-[10px] font-bold text-red-600 uppercase">Connected</span>
+                      <span className="text-[10px] font-bold text-red-600 uppercase whitespace-nowrap">Connected</span>
                     </div>
                   )}
                 </div>

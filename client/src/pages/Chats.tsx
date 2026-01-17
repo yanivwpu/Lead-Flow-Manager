@@ -123,7 +123,14 @@ export function Chats() {
     enabled: !!user,
   });
 
+  const { data: metaStatus } = useQuery<{ connected: boolean; phoneNumber: string | null }>({
+    queryKey: ["/api/meta/status"],
+    enabled: !!user,
+  });
+
   const isTwilioConnected = twilioStatus?.connected ?? false;
+  const isMetaConnected = metaStatus?.connected ?? false;
+  const isAnyProviderConnected = isTwilioConnected || isMetaConnected;
 
   const { data: chats = [], isLoading } = useQuery<Chat[]>({
     queryKey: ['/api/chats'],
@@ -514,7 +521,7 @@ export function Chats() {
     );
   }
 
-  if (!isTwilioConnected && !demoMode) {
+  if (!isAnyProviderConnected && !demoMode) {
     return (
       <div className="flex h-full w-full items-center justify-center bg-white">
         <div className="max-w-md text-center p-8">

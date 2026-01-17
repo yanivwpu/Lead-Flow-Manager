@@ -165,18 +165,22 @@ export function Welcome() {
             
             {/* Stacked CTAs for mobile */}
             <div className="flex flex-col gap-3 mb-4">
-              <Link href={user ? "/app/chats" : "/auth"} className="w-full sm:w-auto">
-                <button className="w-full sm:w-auto h-14 px-8 bg-brand-green hover:bg-emerald-700 text-white font-semibold rounded-full flex items-center justify-center gap-2 transition-all shadow-lg hover:shadow-xl" data-testid="button-hero-cta">
-                  Start Your 14-Day Pro Trial
-                  <ArrowRight className="h-5 w-5" />
-                </button>
-              </Link>
-              <Link href="/pricing" className="w-full sm:w-auto">
-                <button className="w-full sm:w-auto h-12 px-6 bg-white border border-gray-200 text-gray-700 font-medium rounded-full flex items-center justify-center gap-2 hover:bg-gray-50 transition-colors" data-testid="button-hero-pricing">
-                  Compare Plans
-                  <ChevronRight className="h-4 w-4" />
-                </button>
-              </Link>
+              <div className="w-full sm:w-auto">
+                <Link href={user ? "/app/chats" : "/auth"}>
+                  <button className="w-full sm:w-auto h-14 px-8 bg-brand-green hover:bg-emerald-700 text-white font-semibold rounded-full flex items-center justify-center gap-2 transition-all shadow-lg hover:shadow-xl" data-testid="button-hero-cta">
+                    Start Your 14-Day Pro Trial
+                    <ArrowRight className="h-5 w-5" />
+                  </button>
+                </Link>
+              </div>
+              <div className="w-full sm:w-auto">
+                <Link href="/pricing">
+                  <button className="w-full sm:w-auto h-12 px-6 bg-white border border-gray-200 text-gray-700 font-medium rounded-full flex items-center justify-center gap-2 hover:bg-gray-50 transition-colors" data-testid="button-hero-pricing">
+                    Compare Plans
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+                </Link>
+              </div>
               <div className="flex flex-col items-center sm:items-start">
                 <button 
                   onClick={() => setShowDemoModal(true)}
