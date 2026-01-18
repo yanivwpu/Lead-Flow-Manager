@@ -1258,6 +1258,9 @@ export async function registerRoutes(
       const members = await storage.getTeamMembers(req.user.id);
       const user = await storage.getUser(req.user.id);
       
+      // Filter out any owner entries from database (owner is added dynamically)
+      const nonOwnerMembers = members.filter(m => m.role !== 'owner');
+      
       // Include the owner as the first team member
       const ownerMember = {
         id: "owner",
@@ -1271,7 +1274,7 @@ export async function registerRoutes(
         joinedAt: user?.createdAt,
       };
       
-      res.json([ownerMember, ...members]);
+      res.json([ownerMember, ...nonOwnerMembers]);
     } catch (error) {
       console.error("Error fetching team members:", error);
       res.status(500).json({ error: "Failed to fetch team members" });
