@@ -36,7 +36,7 @@ export function ChatListItem({ chat, isActive }: ChatListItemProps) {
         data-testid={`chat-item-${chat.id}`}
       >
         <div className="relative shrink-0">
-          {(chat.avatar?.startsWith('http') || chat.avatar?.startsWith('/') || chat.avatar?.includes('.') || chat.avatar?.includes('/')) ? (
+          {(chat.avatar?.startsWith('http') || chat.avatar?.startsWith('/') || chat.avatar?.includes('.') || chat.avatar?.includes('/') || chat.avatar?.includes('attached_assets')) ? (
             <img 
               src={chat.avatar} 
               alt={chat.name} 
