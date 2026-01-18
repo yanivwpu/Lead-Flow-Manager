@@ -697,7 +697,7 @@ export function Chats() {
                      <button onClick={() => setLocation('/app/chats')} className="md:hidden">
                        <span className="text-2xl mr-2">←</span>
                      </button>
-                     {(selectedChat.avatar?.startsWith('http') || selectedChat.avatar?.startsWith('/') || selectedChat.avatar?.includes('.')) ? (
+                     {(selectedChat.avatar?.startsWith('http') || selectedChat.avatar?.startsWith('/') || selectedChat.avatar?.includes('.') || selectedChat.avatar?.includes('/')) ? (
                        <img 
                          src={selectedChat.avatar} 
                          alt={selectedChat.name} 

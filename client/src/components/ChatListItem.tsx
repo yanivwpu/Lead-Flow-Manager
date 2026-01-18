@@ -36,14 +36,14 @@ export function ChatListItem({ chat, isActive }: ChatListItemProps) {
         data-testid={`chat-item-${chat.id}`}
       >
         <div className="relative shrink-0">
-          {(chat.avatar?.startsWith('http') || chat.avatar?.startsWith('/') || chat.avatar?.includes('.')) ? (
+          {(chat.avatar?.startsWith('http') || chat.avatar?.startsWith('/') || chat.avatar?.includes('.') || chat.avatar?.includes('/')) ? (
             <img 
               src={chat.avatar} 
               alt={chat.name} 
-              className="h-11 w-11 rounded-full object-cover"
+              className="h-11 w-11 rounded-full object-cover shrink-0"
             />
           ) : (
-            <div className="h-11 w-11 rounded-full bg-brand-green/10 flex items-center justify-center text-brand-green font-semibold text-sm">
+            <div className="h-11 w-11 rounded-full bg-brand-green/10 flex items-center justify-center text-brand-green font-semibold text-sm shrink-0">
               {chat.avatar?.substring(0, 2).toUpperCase()}
             </div>
           )}
