@@ -686,11 +686,11 @@ export function Chats() {
       {/* Chat Detail + CRM Panel */}
       {selectedChat ? (
         <div className={cn(
-          "flex-1 flex flex-col md:flex-row h-full min-w-0 bg-[#efeae2]",
+          "flex-1 flex flex-col md:flex-row h-full min-w-0 bg-[#efeae2] overflow-hidden",
           demoMode && "pt-10"
         )}>
            {/* Chat Conversation Area */}
-           <div className="flex-[65] md:flex-1 flex flex-col min-w-0 h-full overflow-hidden">
+           <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden">
               {/* Header */}
               <div className="bg-gray-50 px-4 py-3 border-b border-gray-200 shrink-0">
                  <div className="flex justify-between items-center">
@@ -986,7 +986,7 @@ export function Chats() {
            </div>
 
            {/* Mobile Lead Details Panel - Compact version for mobile */}
-           <div className="flex md:hidden flex-[35] min-h-0 bg-white border-t border-gray-200 overflow-y-auto shrink-0 flex-col">
+           <div className="hidden md:hidden bg-white border-t border-gray-200 overflow-y-auto max-h-[120px] shrink-0 flex-col">
               <div className="p-3 space-y-3">
                  <div className="flex items-center justify-between">
                    <h3 className="font-display font-bold text-gray-900 text-sm">Lead Details</h3>
