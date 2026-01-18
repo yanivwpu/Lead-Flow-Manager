@@ -17,6 +17,12 @@ export function serveStatic(app: Express) {
   }
   app.use("/uploads", express.static(uploadsPath));
 
+  // Serve attached assets (avatars, stock images, etc.)
+  const attachedAssetsPath = path.resolve(process.cwd(), "attached_assets");
+  if (fs.existsSync(attachedAssetsPath)) {
+    app.use("/attached_assets", express.static(attachedAssetsPath));
+  }
+
   app.use(express.static(distPath));
 
   // fall through to index.html if the file doesn't exist

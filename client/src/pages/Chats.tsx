@@ -53,6 +53,7 @@ import { useSubscription } from "@/lib/subscription-context";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
 import EmojiPicker, { EmojiClickData } from "emoji-picker-react";
+import { ChatAvatar } from "@/components/ChatAvatar";
 
 interface TeamMember {
   id: string;
@@ -697,17 +698,7 @@ export function Chats() {
                      <button onClick={() => setLocation('/app/chats')} className="md:hidden">
                        <span className="text-2xl mr-2">←</span>
                      </button>
-                     {(selectedChat.avatar?.startsWith('http') || selectedChat.avatar?.startsWith('/') || selectedChat.avatar?.includes('.') || selectedChat.avatar?.includes('/') || selectedChat.avatar?.includes('attached_assets')) ? (
-                       <img 
-                         src={selectedChat.avatar} 
-                         alt={selectedChat.name} 
-                         className="h-10 w-10 rounded-full object-cover shrink-0"
-                       />
-                     ) : (
-                       <div className="h-10 w-10 rounded-full bg-brand-green/10 flex items-center justify-center text-brand-green font-semibold shrink-0">
-                         {selectedChat.avatar?.substring(0, 2).toUpperCase()}
-                       </div>
-                     )}
+                     <ChatAvatar src={selectedChat.avatar} name={selectedChat.name} size="md" />
                      <div>
                        <h3 className="font-semibold text-gray-900">{selectedChat.name}</h3>
                        {viewers.length > 0 ? (
