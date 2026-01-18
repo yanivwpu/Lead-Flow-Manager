@@ -690,7 +690,7 @@ export function Chats() {
           demoMode && "pt-10"
         )}>
            {/* Chat Conversation Area */}
-           <div className="flex-[65] md:flex-1 flex flex-col min-w-0 min-h-0 relative">
+           <div className="flex-[65] md:flex-1 flex flex-col min-w-0 h-full overflow-hidden">
               {/* Header */}
               <div className="bg-gray-50 px-4 py-3 border-b border-gray-200 shrink-0">
                  <div className="flex justify-between items-center">
