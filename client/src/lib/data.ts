@@ -35,7 +35,7 @@ export const MOCK_CHATS: Chat[] = [
   {
     id: '1',
     name: 'Sarah Wilson',
-    avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=150&h=150',
+    avatar: 'https://i.pravatar.cc/150?u=sarahw',
     lastMessage: 'That sounds great! Can you send the pricing?',
     time: '10:42 AM',
     unread: 2,
@@ -53,7 +53,7 @@ export const MOCK_CHATS: Chat[] = [
   {
     id: '2',
     name: 'TechCorp Solutions',
-    avatar: 'https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&w=150&h=150',
+    avatar: 'https://i.pravatar.cc/150?u=techcorp',
     lastMessage: 'Payment has been processed.',
     time: 'Yesterday',
     unread: 0,
@@ -69,7 +69,7 @@ export const MOCK_CHATS: Chat[] = [
   {
     id: '3',
     name: 'David Chen',
-    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&h=150',
+    avatar: 'https://i.pravatar.cc/150?u=davidc',
     lastMessage: 'Let me think about it.',
     time: 'Mon',
     unread: 0,
@@ -86,7 +86,7 @@ export const MOCK_CHATS: Chat[] = [
   {
     id: '4',
     name: 'Emma Davis',
-    avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?auto=format&fit=crop&w=150&h=150',
+    avatar: 'https://i.pravatar.cc/150?u=emmad',
     lastMessage: 'Is this available in Spanish?',
     time: 'Mon',
     unread: 1,
@@ -102,7 +102,7 @@ export const MOCK_CHATS: Chat[] = [
   {
     id: '5',
     name: 'Robert Fox',
-    avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=150&h=150',
+    avatar: 'https://i.pravatar.cc/150?u=robertf',
     lastMessage: 'Not interested right now.',
     time: 'Last Week',
     unread: 0,

@@ -533,12 +533,29 @@ export function Chats() {
           <p className="text-gray-500 mb-6">
             Connect your WhatsApp account to send and receive messages.
           </p>
-          <Link href="/app/settings">
-            <Button className="w-full bg-brand-green hover:bg-brand-green/90" data-testid="button-go-to-settings">
-              <Settings className="h-4 w-4 mr-2" />
-              Connect WhatsApp in Settings
+          <div className="flex flex-col gap-3">
+            <Link href="/app/settings">
+              <Button className="w-full bg-brand-green hover:bg-brand-green/90" data-testid="button-go-to-settings">
+                <Settings className="h-4 w-4 mr-2" />
+                Connect WhatsApp in Settings
+              </Button>
+            </Link>
+            <Button 
+              variant="outline" 
+              className="w-full"
+              onClick={() => {
+                setDemoMode(true);
+                setDemoChats(DEMO_CHATS);
+                if (DEMO_CHATS.length > 0) {
+                  setLocation(`/app/chats/${DEMO_CHATS[0].id}`);
+                }
+              }}
+              data-testid="button-try-demo"
+            >
+              <Play className="h-4 w-4 mr-2" />
+              Try Demo Mode
             </Button>
-          </Link>
+          </div>
         </div>
       </div>
     );
