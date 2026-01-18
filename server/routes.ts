@@ -489,7 +489,7 @@ export async function registerRoutes(
       }
 
       // Validate that it's a data URL or a valid URL
-      if (!avatarUrl.startsWith('data:image/') && !avatarUrl.startsWith('http')) {
+      if (!avatarUrl.startsWith('data:image/') && !avatarUrl.startsWith('http') && !avatarUrl.startsWith('/') && !avatarUrl.includes('attached_assets')) {
         return res.status(400).json({ error: "Invalid avatar format" });
       }
 
