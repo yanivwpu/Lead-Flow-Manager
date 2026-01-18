@@ -633,7 +633,8 @@ export function Settings() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* Meta Provider */}
               <div className={cn(
-                "relative flex flex-col p-5 rounded-xl border-2 transition-all bg-white border-gray-100 hover:border-gray-200"
+                "relative flex flex-col p-5 rounded-xl border-2 transition-all bg-white border-gray-100 hover:border-gray-200",
+                metaStatus?.connected && "border-blue-100 bg-blue-50/10"
               )}>
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-3">
@@ -653,9 +654,8 @@ export function Settings() {
                     </div>
                   </div>
                   {metaStatus?.connected && (
-                    <div className="flex items-center gap-1.5 px-2 py-1 bg-white border border-gray-100 rounded-full shadow-sm">
-                      <div className="h-2 w-2 rounded-full bg-red-600 animate-pulse" />
-                      <span className="text-[10px] font-bold text-red-600 uppercase whitespace-nowrap">Connected</span>
+                    <div className="absolute top-3 right-3">
+                      <div className="h-2 w-2 rounded-full bg-red-600 animate-pulse shadow-[0_0_8px_rgba(220,38,38,0.5)]" />
                     </div>
                   )}
                 </div>
@@ -698,7 +698,8 @@ export function Settings() {
 
               {/* Twilio Provider */}
               <div className={cn(
-                "relative flex flex-col p-5 rounded-xl border-2 transition-all bg-white border-gray-100 hover:border-gray-200"
+                "relative flex flex-col p-5 rounded-xl border-2 transition-all bg-white border-gray-100 hover:border-gray-200",
+                twilioStatus?.connected && "border-red-100 bg-red-50/10"
               )}>
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-3">
@@ -715,9 +716,8 @@ export function Settings() {
                     </div>
                   </div>
                   {twilioStatus?.connected && (
-                    <div className="flex items-center gap-1.5 px-2 py-1 bg-white border border-gray-100 rounded-full shadow-sm">
-                      <div className="h-2 w-2 rounded-full bg-red-600 animate-pulse" />
-                      <span className="text-[10px] font-bold text-red-600 uppercase whitespace-nowrap">Connected</span>
+                    <div className="absolute top-3 right-3">
+                      <div className="h-2 w-2 rounded-full bg-red-600 animate-pulse shadow-[0_0_8px_rgba(220,38,38,0.5)]" />
                     </div>
                   )}
                 </div>
