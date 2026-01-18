@@ -533,29 +533,12 @@ export function Chats() {
           <p className="text-gray-500 mb-6">
             Connect your WhatsApp account to send and receive messages.
           </p>
-          <div className="flex flex-col gap-3">
-            <Link href="/app/settings">
-              <Button className="w-full bg-brand-green hover:bg-brand-green/90" data-testid="button-go-to-settings">
-                <Settings className="h-4 w-4 mr-2" />
-                Connect WhatsApp in Settings
-              </Button>
-            </Link>
-            <Button 
-              variant="outline" 
-              className="w-full"
-              onClick={() => {
-                setDemoMode(true);
-                setDemoChats(DEMO_CHATS);
-                if (DEMO_CHATS.length > 0) {
-                  setLocation(`/app/chats/${DEMO_CHATS[0].id}`);
-                }
-              }}
-              data-testid="button-try-demo"
-            >
-              <Play className="h-4 w-4 mr-2" />
-              Try Demo Mode
+          <Link href="/app/settings">
+            <Button className="w-full bg-brand-green hover:bg-brand-green/90" data-testid="button-go-to-settings">
+              <Settings className="h-4 w-4 mr-2" />
+              Connect WhatsApp in Settings
             </Button>
-          </div>
+          </Link>
         </div>
       </div>
     );
@@ -843,11 +826,15 @@ export function Chats() {
                     </div>
                   ) : (
                     (selectedChat.messages || [])
-                      .filter((msg: any) => 
-                        !conversationSearch || 
-                        msg.text?.toLowerCase().includes(conversationSearch.toLowerCase())
-                      )
-                      .map((msg: any) => {
+                      .filter((msg: any) => {
+                        const msgText = msg.text || msg.content || '';
+                        return !conversationSearch || 
+                          msgText.toLowerCase().includes(conversationSearch.toLowerCase());
+                      })
+                      .map((msg: any, index: number) => {
+                        const msgText = msg.text || msg.content || '';
+                        const isFromMe = msg.sender === 'me' || msg.role === 'assistant';
+                        
                         const highlightText = (text: string) => {
                           if (!conversationSearch || !text) return text;
                           const parts = text.split(new RegExp(`(${conversationSearch})`, 'gi'));
@@ -860,16 +847,16 @@ export function Chats() {
                         
                         return (
                           <div 
-                            key={msg.id} 
+                            key={msg.id || index} 
                             className={cn(
                               "flex", 
-                              msg.sender === 'me' ? "justify-end" : "justify-start"
+                              isFromMe ? "justify-end" : "justify-start"
                             )}
                           >
                             <div className={cn(
                               "max-w-[80%] md:max-w-[60%] rounded-md shadow-sm relative overflow-hidden",
                               msg.mediaUrl && msg.mediaType === 'image' ? "p-1" : "px-2.5 py-1.5",
-                              msg.sender === 'me' 
+                              isFromMe 
                                 ? "bg-[#d9fdd3] text-gray-900 rounded-tr-none" 
                                 : "bg-white text-gray-900 rounded-tl-none"
                             )}>
@@ -883,22 +870,23 @@ export function Chats() {
                               ) : msg.mediaType === 'document' ? (
                                 <div className="flex items-center gap-2 text-[13px]">
                                   <FileText className="h-5 w-5 text-gray-500" />
-                                  <span className="leading-snug">{highlightText(msg.text)}</span>
+                                  <span className="leading-snug">{highlightText(msgText)}</span>
                                 </div>
                               ) : (
-                                <p className="leading-snug text-[13px]">{highlightText(msg.text)}</p>
+                                <p className="leading-snug text-[13px]">{highlightText(msgText)}</p>
                               )}
                               <span className="text-[9px] text-gray-500 block text-right mt-0.5 opacity-70">
-                                {msg.time}
+                                {msg.time || ''}
                               </span>
                             </div>
                           </div>
                         );
                       })
                   )}
-                  {conversationSearch && (selectedChat.messages || []).filter((msg: any) => 
-                    msg.text?.toLowerCase().includes(conversationSearch.toLowerCase())
-                  ).length === 0 && (
+                  {conversationSearch && (selectedChat.messages || []).filter((msg: any) => {
+                    const msgText = msg.text || msg.content || '';
+                    return msgText.toLowerCase().includes(conversationSearch.toLowerCase());
+                  }).length === 0 && (
                     <div className="text-center text-gray-500 py-8">
                       <p>No messages found for "{conversationSearch}"</p>
                     </div>
