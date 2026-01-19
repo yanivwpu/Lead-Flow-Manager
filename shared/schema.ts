@@ -622,3 +622,229 @@ export type InsertDemoBooking = z.infer<typeof insertDemoBookingSchema>;
 export type DemoBooking = typeof demoBookings.$inferSelect;
 export type InsertSalesConversion = z.infer<typeof insertSalesConversionSchema>;
 export type SalesConversion = typeof salesConversions.$inferSelect;
+
+// ============= MULTI-CHANNEL CRM SCHEMA =============
+
+// Channel enum - all supported messaging channels
+export const CHANNELS = ['whatsapp', 'instagram', 'facebook', 'sms', 'webchat', 'telegram', 'tiktok'] as const;
+export type Channel = typeof CHANNELS[number];
+
+// Channel metadata for UI and logic
+export const CHANNEL_INFO: Record<Channel, { 
+  label: string; 
+  icon: string; 
+  color: string;
+  isMessaging: boolean; // false for lead-intake only (TikTok)
+  supportsMedia: boolean;
+}> = {
+  whatsapp: { label: 'WhatsApp', icon: 'message-circle', color: '#25D366', isMessaging: true, supportsMedia: true },
+  instagram: { label: 'Instagram', icon: 'instagram', color: '#E4405F', isMessaging: true, supportsMedia: true },
+  facebook: { label: 'Messenger', icon: 'facebook', color: '#1877F2', isMessaging: true, supportsMedia: true },
+  sms: { label: 'SMS', icon: 'smartphone', color: '#6B7280', isMessaging: true, supportsMedia: false },
+  webchat: { label: 'Web Chat', icon: 'globe', color: '#3B82F6', isMessaging: true, supportsMedia: true },
+  telegram: { label: 'Telegram', icon: 'send', color: '#0088CC', isMessaging: true, supportsMedia: true },
+  tiktok: { label: 'TikTok', icon: 'video', color: '#000000', isMessaging: false, supportsMedia: false }, // Lead-intake only
+};
+
+// Unified contacts table - one record per lead
+export const contacts = pgTable("contacts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  email: text("email"),
+  phone: text("phone"), // Primary phone number (E.164 format)
+  avatar: text("avatar"),
+  
+  // Channel identifiers (platform-specific IDs)
+  whatsappId: text("whatsapp_id"), // WhatsApp phone number
+  instagramId: text("instagram_id"), // Instagram user ID
+  facebookId: text("facebook_id"), // Facebook PSID
+  telegramId: text("telegram_id"), // Telegram chat ID
+  
+  // Primary channel logic
+  primaryChannel: text("primary_channel").notNull().default("whatsapp"), // Auto-detected from last incoming message
+  primaryChannelOverride: text("primary_channel_override"), // Manual override if user explicitly selects
+  lastIncomingChannel: text("last_incoming_channel"), // Channel of most recent incoming message
+  lastIncomingAt: timestamp("last_incoming_at"),
+  
+  // Lead source tracking
+  source: text("source").default("manual"), // manual, whatsapp, instagram, facebook, tiktok, webchat, import
+  sourceDetails: jsonb("source_details").default(sql`'{}'::jsonb`), // e.g., { campaign: "summer_sale", adId: "123" }
+  
+  // CRM fields
+  tag: text("tag").notNull().default("New"),
+  pipelineStage: text("pipeline_stage").notNull().default("Lead"),
+  notes: text("notes").default(""),
+  
+  // Follow-up
+  followUp: text("follow_up"),
+  followUpDate: timestamp("follow_up_date"),
+  
+  // Assignment (team feature)
+  assignedTo: varchar("assigned_to").references(() => users.id, { onDelete: "set null" }),
+  
+  // Custom fields (flexible JSON)
+  customFields: jsonb("custom_fields").default(sql`'{}'::jsonb`),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Conversations table - one per channel per contact
+export const conversations = pgTable("conversations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  contactId: varchar("contact_id").notNull().references(() => contacts.id, { onDelete: "cascade" }),
+  channel: text("channel").notNull(), // whatsapp, instagram, facebook, sms, webchat, telegram
+  
+  // Channel-specific metadata
+  channelAccountId: text("channel_account_id"), // Which connected account (for multi-number setups)
+  externalThreadId: text("external_thread_id"), // Platform's thread/conversation ID
+  
+  // Status
+  status: text("status").notNull().default("open"), // open, pending, resolved, closed
+  unreadCount: integer("unread_count").default(0),
+  
+  // 24-hour window tracking (WhatsApp Business API)
+  windowActive: boolean("window_active").default(false),
+  windowExpiresAt: timestamp("window_expires_at"),
+  
+  // Last activity
+  lastMessageAt: timestamp("last_message_at"),
+  lastMessagePreview: text("last_message_preview"),
+  lastMessageDirection: text("last_message_direction"), // inbound, outbound
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Messages table - individual messages within conversations
+export const messages = pgTable("messages", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  conversationId: varchar("conversation_id").notNull().references(() => conversations.id, { onDelete: "cascade" }),
+  contactId: varchar("contact_id").notNull().references(() => contacts.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  
+  // Message content
+  direction: text("direction").notNull(), // inbound, outbound
+  content: text("content"), // Text content
+  contentType: text("content_type").notNull().default("text"), // text, image, video, audio, document, location, template
+  
+  // Media attachments
+  mediaUrl: text("media_url"),
+  mediaType: text("media_type"), // image/jpeg, video/mp4, etc.
+  mediaThumbnail: text("media_thumbnail"),
+  mediaFilename: text("media_filename"),
+  
+  // Template message (for outbound templates)
+  templateId: varchar("template_id"),
+  templateVariables: jsonb("template_variables"),
+  
+  // Delivery tracking
+  status: text("status").notNull().default("pending"), // pending, sent, delivered, read, failed
+  externalMessageId: text("external_message_id"), // Platform's message ID
+  errorCode: text("error_code"),
+  errorMessage: text("error_message"),
+  
+  // Timestamps
+  sentAt: timestamp("sent_at"),
+  deliveredAt: timestamp("delivered_at"),
+  readAt: timestamp("read_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Activity events for timeline (messages, AI events, status changes)
+export const activityEvents = pgTable("activity_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  contactId: varchar("contact_id").notNull().references(() => contacts.id, { onDelete: "cascade" }),
+  conversationId: varchar("conversation_id").references(() => conversations.id, { onDelete: "cascade" }),
+  
+  // Event type
+  eventType: text("event_type").notNull(), // message, tag_change, stage_change, assignment, note, ai_response, lead_created, channel_switch
+  
+  // Event data (flexible JSON)
+  eventData: jsonb("event_data").notNull().default(sql`'{}'::jsonb`),
+  
+  // Actor (who triggered the event)
+  actorType: text("actor_type").notNull().default("system"), // user, contact, system, ai
+  actorId: varchar("actor_id"), // User ID if actorType is 'user'
+  
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Channel feature flags - enable/disable channels per user
+export const channelSettings = pgTable("channel_settings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  channel: text("channel").notNull(), // whatsapp, instagram, facebook, sms, webchat, telegram, tiktok
+  
+  // Connection status
+  isEnabled: boolean("is_enabled").default(false),
+  isConnected: boolean("is_connected").default(false),
+  
+  // Channel-specific credentials/config (encrypted)
+  config: jsonb("config").default(sql`'{}'::jsonb`),
+  
+  // Fallback settings
+  fallbackEnabled: boolean("fallback_enabled").default(false), // Allow this channel as fallback
+  fallbackPriority: integer("fallback_priority").default(0), // Lower = higher priority
+  
+  // Rate limiting
+  dailyLimit: integer("daily_limit"),
+  messagesSentToday: integer("messages_sent_today").default(0),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Insert schemas
+export const insertContactSchema = createInsertSchema(contacts).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertConversationSchema = createInsertSchema(conversations).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertMessageSchema = createInsertSchema(messages).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertActivityEventSchema = createInsertSchema(activityEvents).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertChannelSettingSchema = createInsertSchema(channelSettings).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+// Types
+export type InsertContact = z.infer<typeof insertContactSchema>;
+export type Contact = typeof contacts.$inferSelect;
+export type InsertConversation = z.infer<typeof insertConversationSchema>;
+export type Conversation = typeof conversations.$inferSelect;
+export type InsertMessage = z.infer<typeof insertMessageSchema>;
+export type Message = typeof messages.$inferSelect;
+export type InsertActivityEvent = z.infer<typeof insertActivityEventSchema>;
+export type ActivityEvent = typeof activityEvents.$inferSelect;
+export type InsertChannelSetting = z.infer<typeof insertChannelSettingSchema>;
+export type ChannelSetting = typeof channelSettings.$inferSelect;
+
+// Unified inbox item type (for API responses)
+export type InboxItem = {
+  contact: Contact;
+  conversation: Conversation;
+  channel: Channel;
+  lastMessage: string;
+  lastMessageAt: Date | null;
+  unreadCount: number;
+};
