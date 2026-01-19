@@ -8,6 +8,7 @@ import { runMigrations } from "stripe-replit-sync";
 import { getStripeSync } from "./stripeClient";
 import { WebhookHandlers } from "./webhookHandlers";
 import { setupPresenceServer } from "./presence";
+import { registerChannelAdapters } from "./channelAdapters";
 
 const app = express();
 const httpServer = createServer(app);
@@ -125,6 +126,9 @@ app.use((req, res, next) => {
 (async () => {
   // Register authentication routes
   registerAuthRoutes(app);
+  
+  // Register channel adapters for unified inbox
+  registerChannelAdapters();
   
   await registerRoutes(httpServer, app);
 
