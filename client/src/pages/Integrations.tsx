@@ -441,8 +441,8 @@ export function Integrations() {
   }
 
   return (
-    <div className="flex-1 overflow-auto">
-      <div className="p-4 md:p-6 max-w-4xl mx-auto">
+    <div className="h-full overflow-y-auto">
+      <div className="p-4 md:p-6 max-w-4xl mx-auto pb-20">
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-gray-900">Integrations</h1>
           <p className="text-gray-500 mt-1">Connect WhachatCRM with your existing tools and workflows</p>
