@@ -18,6 +18,7 @@ import {
   ArrowRightLeft,
 } from "lucide-react";
 import { ConnectMetaWizard } from "@/components/ConnectMetaWizard";
+import { ConnectTwilioWizard } from "@/components/ConnectTwilioWizard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -107,6 +108,7 @@ export function ChannelSettings() {
   const [telegramToken, setTelegramToken] = useState("");
   const [copied, setCopied] = useState(false);
   const [connectMetaOpen, setConnectMetaOpen] = useState(false);
+  const [connectTwilioOpen, setConnectTwilioOpen] = useState(false);
 
   const { data: channels = [], isLoading } = useQuery<ChannelSetting[]>({
     queryKey: ["/api/channels"],
@@ -326,12 +328,7 @@ export function ChannelSettings() {
                     variant="outline"
                     data-testid="button-setup-sms"
                     size="sm"
-                    onClick={() => {
-                      const settingsSection = document.querySelector('[data-testid="twilio-section"]');
-                      if (settingsSection) {
-                        settingsSection.scrollIntoView({ behavior: 'smooth' });
-                      }
-                    }}
+                    onClick={() => setConnectTwilioOpen(true)}
                   >
                     Setup Twilio
                   </Button>
@@ -377,10 +374,7 @@ export function ChannelSettings() {
                 onClick={() => {
                   if (!user?.twilioConnected) {
                     setConfigChannel(null);
-                    const settingsSection = document.querySelector('[data-testid="twilio-section"]');
-                    if (settingsSection) {
-                      settingsSection.scrollIntoView({ behavior: 'smooth' });
-                    }
+                    setConnectTwilioOpen(true);
                   } else if (user?.whatsappProvider !== 'twilio') {
                     switchProviderMutation.mutate('twilio');
                   }
@@ -482,6 +476,7 @@ export function ChannelSettings() {
       </Dialog>
 
       <ConnectMetaWizard open={connectMetaOpen} onOpenChange={setConnectMetaOpen} />
+      <ConnectTwilioWizard open={connectTwilioOpen} onOpenChange={setConnectTwilioOpen} />
 
       <Dialog open={configChannel === 'telegram'} onOpenChange={() => setConfigChannel(null)}>
         <DialogContent>
