@@ -619,54 +619,11 @@ export function Settings() {
       <div className="flex-1 overflow-y-auto px-4 sm:px-8 py-4 sm:py-6">
         <div className="max-w-4xl mx-auto space-y-6 sm:space-y-8">
           
-          {/* Profile Section */}
-          <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 shadow-sm">
-            <div className="flex items-center gap-3 mb-4 sm:mb-6">
-              <div className="h-9 w-9 sm:h-10 sm:w-10 bg-blue-50 rounded-lg flex items-center justify-center flex-shrink-0">
-                <Users className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600" />
-              </div>
-              <div className="min-w-0">
-                <h2 className="text-base sm:text-lg font-bold text-gray-900">Your Profile</h2>
-                <p className="text-xs sm:text-sm text-gray-500">Customize how you appear to your team.</p>
-              </div>
-            </div>
+          {/* Communication Channels - First */}
+          <ChannelSettings />
 
-            <div className="flex items-center gap-4">
-              <div className="relative group">
-                {user?.avatarUrl ? (
-                  <img src={user.avatarUrl} alt={user.name || 'Profile'} className="h-16 w-16 rounded-full object-cover border-2 border-white shadow-sm" />
-                ) : (
-                  <div className="h-16 w-16 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 text-xl font-bold border-2 border-white shadow-sm">
-                    {user?.name?.charAt(0)?.toUpperCase() || 'U'}
-                  </div>
-                )}
-                <label className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-full opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
-                  {isUploading ? (
-                    <Loader2 className="h-5 w-5 text-white animate-spin" />
-                  ) : (
-                    <Smartphone className="h-5 w-5 text-white" />
-                  )}
-                  <input
-                    type="file"
-                    className="hidden"
-                    accept="image/*"
-                    onChange={handleAvatarChange}
-                    disabled={isUploading}
-                  />
-                </label>
-              </div>
-              <div>
-                <p className="font-medium text-gray-900">{user?.name}</p>
-                <p className="text-sm text-gray-500">{user?.email}</p>
-                <button 
-                  onClick={() => document.querySelector<HTMLInputElement>('input[type="file"]')?.click()}
-                  className="text-xs text-blue-600 hover:text-blue-700 font-medium mt-1"
-                >
-                  Change Photo
-                </button>
-              </div>
-            </div>
-          </div>
+          {/* Auto-Reply & Business Hours */}
+          <AutoReplySettings />
 
           {/* Notifications Section */}
           <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 shadow-sm">
@@ -699,9 +656,61 @@ export function Settings() {
             </div>
           </div>
 
-          <AutoReplySettings />
+          {/* Team Members Section */}
+          <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 shadow-sm">
+            <div className="flex items-center gap-3 mb-4 sm:mb-6">
+              <div className="h-9 w-9 sm:h-10 sm:w-10 bg-blue-50 rounded-lg flex items-center justify-center flex-shrink-0">
+                <Users className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600" />
+              </div>
+              <div className="min-w-0">
+                <h2 className="text-base sm:text-lg font-bold text-gray-900">Team Members</h2>
+                <p className="text-xs sm:text-sm text-gray-500">Manage your team.</p>
+              </div>
+            </div>
 
-          <ChannelSettings />
+            {teamLoading ? (
+              <div className="flex justify-center py-4">
+                <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  {teamMembers.map((member) => (
+                    <div key={member.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-100">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="h-8 w-8 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
+                          {member.role === "owner" ? (
+                            <Crown className="h-4 w-4 text-blue-600" />
+                          ) : (
+                            <span className="text-sm font-medium text-blue-600">{(member.name || member.email)[0].toUpperCase()}</span>
+                          )}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-medium text-gray-900 truncate">{member.name || member.email.split("@")[0]}</p>
+                          <p className="text-xs text-gray-500 truncate">{member.email}</p>
+                        </div>
+                      </div>
+                      {member.role !== "owner" && (
+                        <Button variant="ghost" size="sm" onClick={() => removeMemberMutation.mutate(member.id)} className="text-red-500 hover:text-red-700 hover:bg-red-50">
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                <div className="pt-2 border-t border-gray-200">
+                  <p className="text-sm font-medium text-gray-700 mb-2">Invite a team member</p>
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <Input type="email" placeholder="Email address" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} className="flex-1" />
+                    <Button onClick={() => inviteMutation.mutate({ email: inviteEmail, name: inviteName || undefined })} disabled={!inviteEmail || inviteMutation.isPending} className="bg-blue-600 hover:bg-blue-700">
+                      {inviteMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <><UserPlus className="h-4 w-4 mr-1" /> Invite</>}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
 
           {/* Subscription Section */}
           <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 shadow-sm">
@@ -778,60 +787,53 @@ export function Settings() {
             )}
           </div>
 
-          {/* Team Members Section */}
+          {/* Your Profile Section - Last */}
           <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 shadow-sm">
             <div className="flex items-center gap-3 mb-4 sm:mb-6">
               <div className="h-9 w-9 sm:h-10 sm:w-10 bg-blue-50 rounded-lg flex items-center justify-center flex-shrink-0">
                 <Users className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600" />
               </div>
               <div className="min-w-0">
-                <h2 className="text-base sm:text-lg font-bold text-gray-900">Team Members</h2>
-                <p className="text-xs sm:text-sm text-gray-500">Manage your team.</p>
+                <h2 className="text-base sm:text-lg font-bold text-gray-900">Your Profile</h2>
+                <p className="text-xs sm:text-sm text-gray-500">Customize how you appear to your team.</p>
               </div>
             </div>
 
-            {teamLoading ? (
-              <div className="flex justify-center py-4">
-                <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
-              </div>
-            ) : (
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  {teamMembers.map((member) => (
-                    <div key={member.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-100">
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className="h-8 w-8 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
-                          {member.role === "owner" ? (
-                            <Crown className="h-4 w-4 text-blue-600" />
-                          ) : (
-                            <span className="text-sm font-medium text-blue-600">{(member.name || member.email)[0].toUpperCase()}</span>
-                          )}
-                        </div>
-                        <div className="min-w-0">
-                          <p className="font-medium text-gray-900 truncate">{member.name || member.email.split("@")[0]}</p>
-                          <p className="text-xs text-gray-500 truncate">{member.email}</p>
-                        </div>
-                      </div>
-                      {member.role !== "owner" && (
-                        <Button variant="ghost" size="sm" onClick={() => removeMemberMutation.mutate(member.id)} className="text-red-500 hover:text-red-700 hover:bg-red-50">
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      )}
-                    </div>
-                  ))}
-                </div>
-
-                <div className="pt-2 border-t border-gray-200">
-                  <p className="text-sm font-medium text-gray-700 mb-2">Invite a team member</p>
-                  <div className="flex flex-col sm:flex-row gap-2">
-                    <Input type="email" placeholder="Email address" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} className="flex-1" />
-                    <Button onClick={() => inviteMutation.mutate({ email: inviteEmail, name: inviteName || undefined })} disabled={!inviteEmail || inviteMutation.isPending} className="bg-blue-600 hover:bg-blue-700">
-                      {inviteMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <><UserPlus className="h-4 w-4 mr-1" /> Invite</>}
-                    </Button>
+            <div className="flex items-center gap-4">
+              <div className="relative group">
+                {user?.avatarUrl ? (
+                  <img src={user.avatarUrl} alt={user.name || 'Profile'} className="h-16 w-16 rounded-full object-cover border-2 border-white shadow-sm" />
+                ) : (
+                  <div className="h-16 w-16 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 text-xl font-bold border-2 border-white shadow-sm">
+                    {user?.name?.charAt(0)?.toUpperCase() || 'U'}
                   </div>
-                </div>
+                )}
+                <label className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-full opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
+                  {isUploading ? (
+                    <Loader2 className="h-5 w-5 text-white animate-spin" />
+                  ) : (
+                    <Smartphone className="h-5 w-5 text-white" />
+                  )}
+                  <input
+                    type="file"
+                    className="hidden"
+                    accept="image/*"
+                    onChange={handleAvatarChange}
+                    disabled={isUploading}
+                  />
+                </label>
               </div>
-            )}
+              <div>
+                <p className="font-medium text-gray-900">{user?.name}</p>
+                <p className="text-sm text-gray-500">{user?.email}</p>
+                <button 
+                  onClick={() => document.querySelector<HTMLInputElement>('input[type="file"]')?.click()}
+                  className="text-xs text-blue-600 hover:text-blue-700 font-medium mt-1"
+                >
+                  Change Photo
+                </button>
+              </div>
+            </div>
           </div>
 
         </div>
