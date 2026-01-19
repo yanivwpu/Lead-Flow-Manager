@@ -103,17 +103,17 @@ export function Welcome() {
   return (
     <div className="min-h-screen bg-white overflow-x-hidden">
       <Helmet>
-        <title>WhatsApp CRM for Small Teams | WhachatCRM</title>
-        <meta name="description" content="Simple WhatsApp CRM to manage chats, notes, tags & follow-ups. Free plan available. Paid plans start at $19/month." />
-        <meta property="og:title" content="WhatsApp CRM for Small Teams | WhachatCRM" />
-        <meta property="og:description" content="Simple WhatsApp CRM to manage chats, notes, tags & follow-ups. Free plan available. Paid plans start at $19/month." />
+        <title>Multi-Channel CRM for Small Teams | WhachatCRM</title>
+        <meta name="description" content="Unified inbox for WhatsApp, SMS, Telegram, Instagram, Facebook & Web Chat. One inbox, every channel. Free plan available." />
+        <meta property="og:title" content="Multi-Channel CRM for Small Teams | WhachatCRM" />
+        <meta property="og:description" content="Unified inbox for WhatsApp, SMS, Telegram, Instagram, Facebook & Web Chat. One inbox, every channel. Free plan available." />
         <meta property="og:image" content="https://whachatcrm.com/og-image.png" />
         <meta property="og:image:width" content="1200" />
         <meta property="og:image:height" content="627" />
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:image" content="https://whachatcrm.com/og-image.png" />
-        <meta name="twitter:title" content="WhatsApp CRM for Small Teams | WhachatCRM" />
-        <meta name="twitter:description" content="Simple WhatsApp CRM to manage chats, notes, tags & follow-ups. Free plan available. Paid plans start at $19/month." />
+        <meta name="twitter:title" content="Multi-Channel CRM for Small Teams | WhachatCRM" />
+        <meta name="twitter:description" content="Unified inbox for WhatsApp, SMS, Telegram, Instagram, Facebook & Web Chat. One inbox, every channel. Free plan available." />
       </Helmet>
       <BookDemoModal isOpen={showDemoModal} onClose={() => setShowDemoModal(false)} />
       {/* Navigation */}
@@ -157,10 +157,10 @@ export function Welcome() {
         <div className="grid md:grid-cols-2 gap-8 md:gap-12 items-start">
           <div className="animate-hero-text">
             <h1 className="text-3xl md:text-5xl lg:text-6xl font-display font-bold text-gray-900 leading-[1.1] mb-4 md:mb-6">
-              WhatsApp CRM for Small Teams & Growing Businesses
+              One Inbox. Every Channel. Zero Complexity.
             </h1>
             <p className="text-lg md:text-xl text-gray-600 mb-6 md:mb-8 leading-relaxed">
-              Organize WhatsApp conversations, add notes & tags, and never miss a follow-up — all in one simple CRM built for WhatsApp Business.
+              WhatsApp, SMS, Telegram, Instagram, Facebook, Web Chat — all in one unified inbox. Stop juggling apps. Respond faster, never lose a lead.
             </p>
             
             {/* Stacked CTAs for mobile */}

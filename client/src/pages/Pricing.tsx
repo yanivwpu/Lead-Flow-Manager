@@ -13,14 +13,15 @@ const PLANS = [
     name: "Free",
     badge: "Forever Free",
     price: 0,
-    description: "Try WhachatCRM with real workflows",
+    description: "Try unified inbox with real workflows",
     cta: "Start Free",
     popular: false,
     features: [
-      "1 WhatsApp Business number",
+      "Unified inbox (all channels)",
+      "WhatsApp + Web Chat",
       "1 user",
       "50 active conversations / month",
-      "Shared inbox (read-only)",
+      "Auto channel routing",
       "Tags & internal notes",
       "Tasks & reminders",
       "Away messages (business hours)",
@@ -39,18 +40,18 @@ const PLANS = [
     popular: true,
     features: [
       "Everything in Free, plus:",
+      "All channels: WhatsApp, SMS, Telegram, Instagram, Facebook, Web Chat",
+      "TikTok lead intake",
       "Up to 3 team members",
-      "1 WhatsApp Business number",
       "500 active conversations / month",
-      "Shared team inbox",
       "Visual chatbot builder",
       "Auto-reply messages",
-      "Keyword triggers",
+      "Smart fallback routing",
       "CSV import contacts",
       "Email & push notifications",
       "3 webhook integrations",
     ],
-    note: "Best for getting started with WhatsApp sales & support",
+    note: "Best for multi-channel sales & support",
   },
   {
     id: "pro",
@@ -71,7 +72,7 @@ const PLANS = [
       "10 webhook + native integrations",
       "Priority support",
     ],
-    note: "Built for serious WhatsApp operations",
+    note: "Built for serious multi-channel operations",
   },
 ];
 
@@ -146,21 +147,25 @@ export function Pricing() {
 
         <div className="text-center mb-12">
           <h1 className="text-4xl font-display font-bold text-gray-900 mb-4">
-            Simple Pricing for WhatsApp Teams
+            One Inbox. Every Channel. Simple Pricing.
           </h1>
           <p className="text-xl text-gray-600 max-w-2xl mx-auto">
-            You bring WhatsApp. We power the CRM.
+            WhatsApp, SMS, Telegram, Instagram, Facebook, Web Chat — all in one place.
           </p>
           <p className="text-gray-500 mt-2 max-w-2xl mx-auto">
-            WhachatCRM helps you manage, organize, and follow up on WhatsApp conversations — without locking you into message fees.
+            Stop juggling apps. Respond faster, never lose a lead, and look bigger than you are.
           </p>
           
           <div className="flex flex-wrap justify-center gap-4 mt-6">
             <div className="inline-flex items-center gap-2 bg-emerald-50 border border-emerald-200 text-emerald-800 px-4 py-2 rounded-full text-sm font-medium">
               <Shield className="h-4 w-4" />
-              No Markup Guarantee
+              No Markup on Messages
             </div>
             <div className="inline-flex items-center gap-2 bg-blue-50 border border-blue-200 text-blue-800 px-4 py-2 rounded-full text-sm font-medium">
+              <MessageSquare className="h-4 w-4" />
+              7 Channels Supported
+            </div>
+            <div className="inline-flex items-center gap-2 bg-purple-50 border border-purple-200 text-purple-800 px-4 py-2 rounded-full text-sm font-medium">
               <XCircle className="h-4 w-4" />
               Cancel Anytime
             </div>
@@ -366,6 +371,25 @@ export function Pricing() {
               </AccordionContent>
             </AccordionItem>
 
+            <AccordionItem value="which-channels" className="bg-white border border-gray-200 rounded-xl px-6">
+              <AccordionTrigger className="text-left font-semibold text-gray-900 hover:no-underline" data-testid="faq-which-channels">
+                Which channels do you support?
+              </AccordionTrigger>
+              <AccordionContent className="text-gray-600">
+                <p className="mb-3">WhachatCRM supports 7 messaging channels in one unified inbox:</p>
+                <ul className="list-disc list-inside space-y-1 mb-3">
+                  <li><strong>WhatsApp:</strong> Via Twilio or Meta Business API (your choice)</li>
+                  <li><strong>SMS:</strong> Via Twilio</li>
+                  <li><strong>Telegram:</strong> Connect your bot</li>
+                  <li><strong>Instagram DM:</strong> Via Meta integration</li>
+                  <li><strong>Facebook Messenger:</strong> Via Meta integration</li>
+                  <li><strong>Web Chat:</strong> Embeddable widget for your website</li>
+                  <li><strong>TikTok:</strong> Lead intake only (capture leads from TikTok ads)</li>
+                </ul>
+                <p className="text-amber-700 font-medium">Note: SMS requires Twilio. Meta only supports WhatsApp, not SMS.</p>
+              </AccordionContent>
+            </AccordionItem>
+
             <AccordionItem value="which-provider" className="bg-white border border-gray-200 rounded-xl px-6">
               <AccordionTrigger className="text-left font-semibold text-gray-900 hover:no-underline" data-testid="faq-which-provider">
                 Which WhatsApp providers do you support?
@@ -373,8 +397,8 @@ export function Pricing() {
               <AccordionContent className="text-gray-600">
                 <p className="mb-3">WhachatCRM supports two official WhatsApp Business API providers:</p>
                 <ul className="list-disc list-inside space-y-1 mb-3">
-                  <li><strong>Twilio:</strong> Fast approval, reliable infrastructure, great for teams new to WhatsApp Business</li>
-                  <li><strong>Meta WhatsApp Business API:</strong> Direct integration with Meta, official green checkmark verification, access to native WhatsApp features</li>
+                  <li><strong>Twilio:</strong> Fast approval, reliable infrastructure, includes SMS support</li>
+                  <li><strong>Meta WhatsApp Business API:</strong> Direct integration, green checkmark verification, WhatsApp-only</li>
                 </ul>
                 <p className="mb-3">Choose the provider that best fits your needs — we guide you step-by-step during setup.</p>
                 <p className="text-amber-700 font-medium">The WhatsApp Business mobile app is not supported.</p>
@@ -432,11 +456,11 @@ export function Pricing() {
         {/* Footer CTA */}
         <div className="mt-16 bg-gray-900 rounded-2xl p-4 sm:p-8 text-center text-white overflow-hidden">
           <div className="flex justify-center mb-4">
-            <Shield className="h-10 w-10 text-brand-green" />
+            <MessageSquare className="h-10 w-10 text-brand-green" />
           </div>
-          <h2 className="text-xl sm:text-2xl font-bold mb-2">Start Free. Upgrade When WhatsApp Works for You.</h2>
+          <h2 className="text-xl sm:text-2xl font-bold mb-2">One Inbox. Every Channel. Start Free.</h2>
           <p className="text-gray-400 mb-6 max-w-lg mx-auto text-sm sm:text-base">
-            WhachatCRM uses the official WhatsApp Business API. Your data is secure and compliant with Meta's policies.
+            Stop juggling 7 apps. Manage WhatsApp, SMS, Telegram, Instagram, Facebook, and Web Chat in one place.
           </p>
           <Link href="/auth">
             <Button className="bg-brand-green hover:bg-emerald-700 text-white px-4 sm:px-8 whitespace-normal h-auto py-3" data-testid="button-start-free-footer">
@@ -448,8 +472,8 @@ export function Pricing() {
 
         {/* Legal Disclaimer */}
         <div className="mt-8 text-center text-xs text-gray-400 space-y-1">
-          <p>WhachatCRM is a CRM platform and is not affiliated with Meta or WhatsApp.</p>
-          <p>WhatsApp Business API access is provided by approved third-party providers.</p>
+          <p>WhachatCRM is a CRM platform and is not affiliated with Meta, WhatsApp, or Telegram.</p>
+          <p>Channel integrations are provided through official APIs and approved third-party providers.</p>
         </div>
       </div>
     </div>

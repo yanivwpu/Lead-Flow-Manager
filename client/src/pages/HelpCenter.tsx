@@ -24,23 +24,30 @@ const HELP_ARTICLES: Article[] = [
     title: "Getting Started with WhachatCRM",
     category: "Getting Started",
     icon: BookOpen,
-    keywords: ["start", "begin", "new", "setup", "introduction"],
+    keywords: ["start", "begin", "new", "setup", "introduction", "channels", "unified inbox"],
     content: `
 # Getting Started with WhachatCRM
 
-Welcome to WhachatCRM! This guide will help you get up and running quickly.
+Welcome to WhachatCRM! This guide will help you get up and running quickly with our unified multi-channel inbox.
 
-## Step 1: Connect Your WhatsApp Provider
+## Step 1: Connect Your Channels
 
-WhachatCRM supports two official ways to connect:
-- **Meta WhatsApp Business API** (Recommended)
-- **Twilio WhatsApp API**
+WhachatCRM supports 7 messaging channels in one unified inbox:
+- **WhatsApp**: Via Twilio or Meta Business API (your choice)
+- **SMS**: Via Twilio
+- **Telegram**: Connect your bot
+- **Instagram DM**: Via Meta integration
+- **Facebook Messenger**: Via Meta integration
+- **Web Chat**: Embeddable widget for your website
+- **TikTok**: Lead intake only
 
 To connect:
-1. Go to **Settings** > **WhatsApp Connection**
-2. Choose your preferred provider
-3. Follow the connection wizard instructions
-4. Click **Save & Test Connection**
+1. Go to **Settings** > **Communication Channels**
+2. Click **Connect** on the channel you want to add
+3. Follow the setup wizard instructions
+4. Toggle the channel on when ready
+
+**Note:** SMS requires Twilio. Meta only supports WhatsApp, not SMS.
 
 ## Step 2: Import or Add Contacts
 
@@ -51,7 +58,8 @@ You can add contacts manually or import them:
 ## Step 3: Start Messaging
 
 Once connected, you can:
-- Send and receive WhatsApp messages
+- Send and receive messages from all channels in one inbox
+- System automatically routes replies to the right channel
 - Add notes and tags to conversations
 - Set follow-up reminders
 - Track deals through pipeline stages
@@ -61,6 +69,7 @@ Once connected, you can:
 Save time with automated features:
 - **Away Messages**: Auto-reply outside business hours
 - **Auto-Responders**: Reply instantly to new messages
+- **Smart Fallback**: Auto-route to backup channel if primary fails
 - **Drip Sequences**: Send scheduled message series (Pro plan)
 - **Workflows**: Automate tagging and assignments (Pro plan)
     `

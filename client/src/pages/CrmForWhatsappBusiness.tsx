@@ -10,9 +10,9 @@ export function CrmForWhatsappBusiness() {
   return (
     <div className="min-h-screen bg-white">
       <Helmet>
-        <title>CRM for WhatsApp Business – Manage Leads & Chats | WhachatCRM</title>
-        <meta name="description" content="The best CRM for WhatsApp Business. Manage leads, add notes, set follow-up reminders, and close more deals. Free plan available. Start in 2 minutes." />
-        <meta name="keywords" content="CRM for WhatsApp Business, WhatsApp Business CRM, WhatsApp lead management, WhatsApp business tool, small business CRM" />
+        <title>Multi-Channel CRM for WhatsApp Business | WhachatCRM</title>
+        <meta name="description" content="Unified inbox for WhatsApp, SMS, Telegram, Instagram, Facebook & Web Chat. Manage all conversations in one place. Free plan available." />
+        <meta name="keywords" content="CRM for WhatsApp Business, multi-channel CRM, unified inbox, WhatsApp lead management, small business CRM, SMS, Telegram" />
         <link rel="canonical" href="https://whachatcrm.com/crm-for-whatsapp-business" />
       </Helmet>
 
@@ -46,13 +46,13 @@ export function CrmForWhatsappBusiness() {
           transition={{ duration: 0.6 }}
         >
           <span className="inline-block bg-emerald-100 text-brand-green text-sm font-medium px-4 py-1 rounded-full mb-6">
-            For WhatsApp Business Users
+            7 Channels, One Inbox
           </span>
           <h1 className="text-3xl md:text-5xl font-display font-bold text-gray-900 leading-tight mb-6">
-            The CRM Built for WhatsApp Business
+            Multi-Channel CRM for Small Business
           </h1>
           <p className="text-lg md:text-xl text-gray-600 mb-8 max-w-2xl mx-auto">
-            Turn your WhatsApp Business chats into organized leads. Add notes, set reminders, and never let a customer slip through the cracks.
+            WhatsApp, SMS, Telegram, Instagram, Facebook, Web Chat — all in one unified inbox. Stop juggling apps and never lose a lead.
           </p>
           
           <div className="flex flex-col sm:flex-row gap-3 justify-center mb-4">
