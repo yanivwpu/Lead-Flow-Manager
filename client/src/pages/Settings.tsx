@@ -11,6 +11,7 @@ import { Link, useSearch } from "wouter";
 import { UpgradeModal, type UpgradeReason } from "@/components/UpgradeModal";
 import { ConnectTwilioWizard } from "@/components/ConnectTwilioWizard";
 import { ConnectMetaWizard } from "@/components/ConnectMetaWizard";
+import { ChannelSettings } from "@/components/ChannelSettings";
 import { cn } from "@/lib/utils";
 
 interface TeamMember {
@@ -849,6 +850,8 @@ export function Settings() {
           </div>
 
           <AutoReplySettings />
+
+          <ChannelSettings />
 
           {/* Subscription Section */}
           <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 shadow-sm">
