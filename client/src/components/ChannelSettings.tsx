@@ -15,7 +15,9 @@ import {
   Check,
   Settings2,
   ChevronRight,
+  ArrowRightLeft,
 } from "lucide-react";
+import { ConnectMetaWizard } from "@/components/ConnectMetaWizard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -52,7 +54,7 @@ const CHANNEL_CONFIG: Record<Channel, {
     icon: MessageCircle, 
     color: '#25D366', 
     label: 'WhatsApp',
-    description: 'Primary messaging channel via Twilio',
+    description: 'Primary messaging channel',
     isMessaging: true,
   },
   instagram: { 
@@ -104,6 +106,7 @@ export function ChannelSettings() {
   const [configChannel, setConfigChannel] = useState<Channel | null>(null);
   const [telegramToken, setTelegramToken] = useState("");
   const [copied, setCopied] = useState(false);
+  const [connectMetaOpen, setConnectMetaOpen] = useState(false);
 
   const { data: channels = [], isLoading } = useQuery<ChannelSetting[]>({
     queryKey: ["/api/channels"],
@@ -132,6 +135,39 @@ export function ChannelSettings() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/channels"] });
       toast({ title: "Channel updated" });
+    },
+  });
+
+  const switchProviderMutation = useMutation({
+    mutationFn: async (provider: 'twilio' | 'meta') => {
+      const res = await fetch("/api/user/whatsapp-provider", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ provider }),
+      });
+      if (!res.ok) throw new Error("Failed to switch provider");
+      return res.json();
+    },
+    onSuccess: (_, provider) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+      toast({ title: `Switched to ${provider === 'meta' ? 'Meta' : 'Twilio'} WhatsApp` });
+      setConfigChannel(null);
+    },
+  });
+
+  const disconnectMetaMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/user/meta/disconnect", {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to disconnect Meta");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+      toast({ title: "Meta disconnected" });
     },
   });
 
@@ -275,10 +311,20 @@ export function ChannelSettings() {
                     Connect
                   </Button>
                 )}
-                {status === 'disconnected' && (channel === 'whatsapp' || channel === 'sms') && (
+                {status === 'disconnected' && channel === 'whatsapp' && (
                   <Button
                     variant="outline"
-                    data-testid={`button-setup-twilio-${channel}`}
+                    data-testid="button-setup-whatsapp"
+                    size="sm"
+                    onClick={() => setConfigChannel('whatsapp')}
+                  >
+                    Connect
+                  </Button>
+                )}
+                {status === 'disconnected' && channel === 'sms' && (
+                  <Button
+                    variant="outline"
+                    data-testid="button-setup-sms"
                     size="sm"
                     onClick={() => {
                       const settingsSection = document.querySelector('[data-testid="twilio-section"]');
@@ -306,6 +352,136 @@ export function ChannelSettings() {
           );
         })}
       </div>
+
+      <Dialog open={configChannel === 'whatsapp'} onOpenChange={() => setConfigChannel(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <MessageCircle className="h-5 w-5" style={{ color: CHANNEL_CONFIG.whatsapp.color }} />
+              WhatsApp Provider
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 mt-4">
+            <p className="text-sm text-gray-600">
+              Choose how you want to connect WhatsApp. You can switch providers anytime.
+            </p>
+            
+            <div className="space-y-3">
+              <div 
+                className={cn(
+                  "border rounded-lg p-4 cursor-pointer transition-all",
+                  user?.whatsappProvider === 'twilio' && user?.twilioConnected
+                    ? "border-emerald-500 bg-emerald-50"
+                    : "border-gray-200 hover:border-gray-300"
+                )}
+                onClick={() => {
+                  if (!user?.twilioConnected) {
+                    setConfigChannel(null);
+                    const settingsSection = document.querySelector('[data-testid="twilio-section"]');
+                    if (settingsSection) {
+                      settingsSection.scrollIntoView({ behavior: 'smooth' });
+                    }
+                  } else if (user?.whatsappProvider !== 'twilio') {
+                    switchProviderMutation.mutate('twilio');
+                  }
+                }}
+                data-testid="option-twilio-whatsapp"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 bg-red-50 rounded-lg flex items-center justify-center">
+                      <Smartphone className="h-5 w-5 text-red-600" />
+                    </div>
+                    <div>
+                      <h4 className="font-medium text-gray-900">Twilio</h4>
+                      <p className="text-xs text-gray-500">Best for getting started quickly</p>
+                    </div>
+                  </div>
+                  {user?.twilioConnected ? (
+                    user?.whatsappProvider === 'twilio' ? (
+                      <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-1 rounded-full">Active</span>
+                    ) : (
+                      <span className="text-xs text-gray-500">Connected</span>
+                    )
+                  ) : (
+                    <span className="text-xs text-blue-600">Setup required</span>
+                  )}
+                </div>
+              </div>
+
+              <div 
+                className={cn(
+                  "border rounded-lg p-4 cursor-pointer transition-all",
+                  user?.whatsappProvider === 'meta' && user?.metaConnected
+                    ? "border-emerald-500 bg-emerald-50"
+                    : "border-gray-200 hover:border-gray-300"
+                )}
+                onClick={() => {
+                  if (!user?.metaConnected) {
+                    setConfigChannel(null);
+                    setConnectMetaOpen(true);
+                  } else if (user?.whatsappProvider !== 'meta') {
+                    switchProviderMutation.mutate('meta');
+                  }
+                }}
+                data-testid="option-meta-whatsapp"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 bg-blue-50 rounded-lg flex items-center justify-center">
+                      <img 
+                        src="https://upload.wikimedia.org/wikipedia/commons/7/7b/Meta_Platforms_Inc._logo.svg" 
+                        alt="Meta" 
+                        className="h-5 w-5"
+                      />
+                    </div>
+                    <div>
+                      <h4 className="font-medium text-gray-900">Meta Business API</h4>
+                      <p className="text-xs text-gray-500">For approved business numbers</p>
+                    </div>
+                  </div>
+                  {user?.metaConnected ? (
+                    user?.whatsappProvider === 'meta' ? (
+                      <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-1 rounded-full">Active</span>
+                    ) : (
+                      <span className="text-xs text-gray-500">Connected</span>
+                    )
+                  ) : (
+                    <span className="text-xs text-blue-600">Connect</span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {(user?.twilioConnected || user?.metaConnected) && user?.whatsappProvider && (
+              <div className="pt-2 border-t">
+                <p className="text-xs text-gray-500 flex items-center gap-1">
+                  <ArrowRightLeft className="h-3 w-3" />
+                  Click on the other provider to switch
+                </p>
+              </div>
+            )}
+
+            {user?.metaConnected && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-full text-red-600 hover:text-red-700 hover:bg-red-50"
+                onClick={() => disconnectMetaMutation.mutate()}
+                disabled={disconnectMetaMutation.isPending}
+                data-testid="button-disconnect-meta"
+              >
+                {disconnectMetaMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                ) : null}
+                Disconnect Meta
+              </Button>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <ConnectMetaWizard open={connectMetaOpen} onOpenChange={setConnectMetaOpen} />
 
       <Dialog open={configChannel === 'telegram'} onOpenChange={() => setConfigChannel(null)}>
         <DialogContent>
