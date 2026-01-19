@@ -19,10 +19,16 @@ import {
   type ChatbotSession, type InsertChatbotSession,
   type Salesperson, type InsertSalesperson,
   type DemoBooking, type InsertDemoBooking,
-  type SalesConversion, type InsertSalesConversion
+  type SalesConversion, type InsertSalesConversion,
+  type Contact, type InsertContact,
+  type Conversation, type InsertConversation,
+  type Message, type InsertMessage,
+  type ActivityEvent, type InsertActivityEvent,
+  type ChannelSetting, type InsertChannelSetting,
+  type Channel, type InboxItem
 } from "@shared/schema";
 import { db } from "../drizzle/db";
-import { users, chats, registeredPhones, messageUsage, conversationWindows, teamMembers, workflows, workflowExecutions, recurringReminders, webhooks, webhookDeliveries, integrations, messageTemplates, templateSends, dripCampaigns, dripSteps, dripEnrollments, dripSends, chatbotFlows, chatbotSessions, salespeople, demoBookings, salesConversions, adminSettings, type InsertConversationWindow, type ConversationWindow } from "@shared/schema";
+import { users, chats, registeredPhones, messageUsage, conversationWindows, teamMembers, workflows, workflowExecutions, recurringReminders, webhooks, webhookDeliveries, integrations, messageTemplates, templateSends, dripCampaigns, dripSteps, dripEnrollments, dripSends, chatbotFlows, chatbotSessions, salespeople, demoBookings, salesConversions, adminSettings, contacts, conversations, messages, activityEvents, channelSettings, type InsertConversationWindow, type ConversationWindow } from "@shared/schema";
 import { eq, and, lte, sql, isNotNull, asc, desc, gte, sum, gt, or, like, ilike } from "drizzle-orm";
 
 export interface IStorage {
@@ -145,6 +151,44 @@ export interface IStorage {
   createChatbotSession(session: InsertChatbotSession): Promise<ChatbotSession>;
   updateChatbotSession(id: string, updates: Partial<ChatbotSession>): Promise<ChatbotSession | undefined>;
   deleteChatbotSession(id: string): Promise<void>;
+  
+  // ============= MULTI-CHANNEL CRM METHODS =============
+  
+  // Contact methods
+  getContacts(userId: string, limit?: number): Promise<Contact[]>;
+  getContact(id: string): Promise<Contact | undefined>;
+  getContactByChannelId(userId: string, channel: Channel, channelId: string): Promise<Contact | undefined>;
+  createContact(contact: InsertContact): Promise<Contact>;
+  updateContact(id: string, updates: Partial<Contact>): Promise<Contact | undefined>;
+  deleteContact(id: string): Promise<void>;
+  searchContacts(userId: string, query: string, limit?: number): Promise<Contact[]>;
+  
+  // Conversation methods
+  getConversations(userId: string, limit?: number): Promise<Conversation[]>;
+  getConversation(id: string): Promise<Conversation | undefined>;
+  getConversationByContactAndChannel(contactId: string, channel: Channel): Promise<Conversation | undefined>;
+  createConversation(conversation: InsertConversation): Promise<Conversation>;
+  updateConversation(id: string, updates: Partial<Conversation>): Promise<Conversation | undefined>;
+  deleteConversation(id: string): Promise<void>;
+  
+  // Message methods
+  getMessages(conversationId: string, limit?: number, offset?: number): Promise<Message[]>;
+  getMessage(id: string): Promise<Message | undefined>;
+  createMessage(message: InsertMessage): Promise<Message>;
+  updateMessage(id: string, updates: Partial<Message>): Promise<Message | undefined>;
+  
+  // Unified inbox methods
+  getUnifiedInbox(userId: string, limit?: number): Promise<InboxItem[]>;
+  getContactWithConversations(contactId: string): Promise<{ contact: Contact; conversations: Conversation[] } | undefined>;
+  
+  // Activity event methods
+  getActivityEvents(contactId: string, limit?: number): Promise<ActivityEvent[]>;
+  createActivityEvent(event: InsertActivityEvent): Promise<ActivityEvent>;
+  
+  // Channel settings methods
+  getChannelSettings(userId: string): Promise<ChannelSetting[]>;
+  getChannelSetting(userId: string, channel: Channel): Promise<ChannelSetting | undefined>;
+  upsertChannelSetting(userId: string, channel: Channel, updates: Partial<ChannelSetting>): Promise<ChannelSetting>;
 }
 
 export class DbStorage implements IStorage {
@@ -1051,6 +1095,245 @@ export class DbStorage implements IStorage {
         target: adminSettings.id,
         set: { passwordHash, updatedAt: new Date() }
       });
+  }
+
+  // ============= MULTI-CHANNEL CRM IMPLEMENTATION =============
+
+  // Contact methods
+  async getContacts(userId: string, limit: number = 1000): Promise<Contact[]> {
+    return await db.select().from(contacts)
+      .where(eq(contacts.userId, userId))
+      .orderBy(desc(contacts.updatedAt))
+      .limit(limit);
+  }
+
+  async getContact(id: string): Promise<Contact | undefined> {
+    const result = await db.select().from(contacts).where(eq(contacts.id, id));
+    return result[0];
+  }
+
+  async getContactByChannelId(userId: string, channel: Channel, channelId: string): Promise<Contact | undefined> {
+    let whereClause;
+    switch (channel) {
+      case 'whatsapp':
+        whereClause = and(eq(contacts.userId, userId), eq(contacts.whatsappId, channelId));
+        break;
+      case 'instagram':
+        whereClause = and(eq(contacts.userId, userId), eq(contacts.instagramId, channelId));
+        break;
+      case 'facebook':
+        whereClause = and(eq(contacts.userId, userId), eq(contacts.facebookId, channelId));
+        break;
+      case 'telegram':
+        whereClause = and(eq(contacts.userId, userId), eq(contacts.telegramId, channelId));
+        break;
+      default:
+        whereClause = and(eq(contacts.userId, userId), eq(contacts.phone, channelId));
+    }
+    const result = await db.select().from(contacts).where(whereClause);
+    return result[0];
+  }
+
+  async createContact(contact: InsertContact): Promise<Contact> {
+    const result = await db.insert(contacts).values(contact).returning();
+    return result[0];
+  }
+
+  async updateContact(id: string, updates: Partial<Contact>): Promise<Contact | undefined> {
+    const result = await db.update(contacts)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(contacts.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async deleteContact(id: string): Promise<void> {
+    await db.delete(contacts).where(eq(contacts.id, id));
+  }
+
+  async searchContacts(userId: string, query: string, limit: number = 50): Promise<Contact[]> {
+    const searchPattern = `%${query}%`;
+    return await db.select().from(contacts)
+      .where(and(
+        eq(contacts.userId, userId),
+        or(
+          ilike(contacts.name, searchPattern),
+          ilike(contacts.email, searchPattern),
+          ilike(contacts.phone, searchPattern),
+          ilike(contacts.notes, searchPattern)
+        )
+      ))
+      .orderBy(desc(contacts.updatedAt))
+      .limit(limit);
+  }
+
+  // Conversation methods
+  async getConversations(userId: string, limit: number = 1000): Promise<Conversation[]> {
+    return await db.select().from(conversations)
+      .where(eq(conversations.userId, userId))
+      .orderBy(desc(conversations.lastMessageAt))
+      .limit(limit);
+  }
+
+  async getConversation(id: string): Promise<Conversation | undefined> {
+    const result = await db.select().from(conversations).where(eq(conversations.id, id));
+    return result[0];
+  }
+
+  async getConversationByContactAndChannel(contactId: string, channel: Channel): Promise<Conversation | undefined> {
+    const result = await db.select().from(conversations)
+      .where(and(
+        eq(conversations.contactId, contactId),
+        eq(conversations.channel, channel)
+      ));
+    return result[0];
+  }
+
+  async createConversation(conversation: InsertConversation): Promise<Conversation> {
+    const result = await db.insert(conversations).values(conversation).returning();
+    return result[0];
+  }
+
+  async updateConversation(id: string, updates: Partial<Conversation>): Promise<Conversation | undefined> {
+    const result = await db.update(conversations)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(conversations.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async deleteConversation(id: string): Promise<void> {
+    await db.delete(conversations).where(eq(conversations.id, id));
+  }
+
+  // Message methods
+  async getMessages(conversationId: string, limit: number = 100, offset: number = 0): Promise<Message[]> {
+    return await db.select().from(messages)
+      .where(eq(messages.conversationId, conversationId))
+      .orderBy(desc(messages.createdAt))
+      .limit(limit)
+      .offset(offset);
+  }
+
+  async getMessage(id: string): Promise<Message | undefined> {
+    const result = await db.select().from(messages).where(eq(messages.id, id));
+    return result[0];
+  }
+
+  async createMessage(message: InsertMessage): Promise<Message> {
+    const result = await db.insert(messages).values(message).returning();
+    return result[0];
+  }
+
+  async updateMessage(id: string, updates: Partial<Message>): Promise<Message | undefined> {
+    const result = await db.update(messages)
+      .set(updates)
+      .where(eq(messages.id, id))
+      .returning();
+    return result[0];
+  }
+
+  // Unified inbox methods
+  async getUnifiedInbox(userId: string, limit: number = 100): Promise<InboxItem[]> {
+    const userContacts = await db.select().from(contacts)
+      .where(eq(contacts.userId, userId))
+      .orderBy(desc(contacts.updatedAt))
+      .limit(limit);
+
+    const inboxItems: InboxItem[] = [];
+    
+    for (const contact of userContacts) {
+      const convs = await db.select().from(conversations)
+        .where(eq(conversations.contactId, contact.id))
+        .orderBy(desc(conversations.lastMessageAt));
+      
+      const primaryConv = convs[0];
+      if (primaryConv) {
+        inboxItems.push({
+          contact,
+          conversation: primaryConv,
+          channel: (contact.primaryChannelOverride || contact.primaryChannel) as Channel,
+          lastMessage: primaryConv.lastMessagePreview || '',
+          lastMessageAt: primaryConv.lastMessageAt,
+          unreadCount: convs.reduce((sum, c) => sum + (c.unreadCount || 0), 0),
+        });
+      } else {
+        inboxItems.push({
+          contact,
+          conversation: null as any,
+          channel: (contact.primaryChannelOverride || contact.primaryChannel) as Channel,
+          lastMessage: '',
+          lastMessageAt: null,
+          unreadCount: 0,
+        });
+      }
+    }
+
+    return inboxItems.sort((a, b) => {
+      const aTime = a.lastMessageAt?.getTime() || 0;
+      const bTime = b.lastMessageAt?.getTime() || 0;
+      return bTime - aTime;
+    });
+  }
+
+  async getContactWithConversations(contactId: string): Promise<{ contact: Contact; conversations: Conversation[] } | undefined> {
+    const contact = await this.getContact(contactId);
+    if (!contact) return undefined;
+
+    const convs = await db.select().from(conversations)
+      .where(eq(conversations.contactId, contactId))
+      .orderBy(desc(conversations.lastMessageAt));
+
+    return { contact, conversations: convs };
+  }
+
+  // Activity event methods
+  async getActivityEvents(contactId: string, limit: number = 100): Promise<ActivityEvent[]> {
+    return await db.select().from(activityEvents)
+      .where(eq(activityEvents.contactId, contactId))
+      .orderBy(desc(activityEvents.createdAt))
+      .limit(limit);
+  }
+
+  async createActivityEvent(event: InsertActivityEvent): Promise<ActivityEvent> {
+    const result = await db.insert(activityEvents).values(event).returning();
+    return result[0];
+  }
+
+  // Channel settings methods
+  async getChannelSettings(userId: string): Promise<ChannelSetting[]> {
+    return await db.select().from(channelSettings)
+      .where(eq(channelSettings.userId, userId));
+  }
+
+  async getChannelSetting(userId: string, channel: Channel): Promise<ChannelSetting | undefined> {
+    const result = await db.select().from(channelSettings)
+      .where(and(
+        eq(channelSettings.userId, userId),
+        eq(channelSettings.channel, channel)
+      ));
+    return result[0];
+  }
+
+  async upsertChannelSetting(userId: string, channel: Channel, updates: Partial<ChannelSetting>): Promise<ChannelSetting> {
+    const existing = await this.getChannelSetting(userId, channel);
+    
+    if (existing) {
+      const result = await db.update(channelSettings)
+        .set({ ...updates, updatedAt: new Date() })
+        .where(eq(channelSettings.id, existing.id))
+        .returning();
+      return result[0];
+    } else {
+      const result = await db.insert(channelSettings)
+        .values({
+          userId,
+          channel,
+          ...updates
+        })
+        .returning();
+      return result[0];
+    }
   }
 }
 
