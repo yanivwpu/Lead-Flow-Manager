@@ -49,7 +49,7 @@ class ChannelService {
       }
     }
     
-    return [...new Set(enabledChannels)];
+    return Array.from(new Set(enabledChannels));
   }
 
   async getFallbackChannels(userId: string): Promise<Channel[]> {
