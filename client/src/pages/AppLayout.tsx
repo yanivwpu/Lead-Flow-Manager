@@ -11,6 +11,7 @@ import { Integrations } from "./Integrations";
 import { Templates } from "./Templates";
 import { HelpCenter } from "./HelpCenter";
 import { ChatbotBuilder } from "./ChatbotBuilder";
+import { UnifiedInbox } from "./UnifiedInbox";
 import { UsageWarningBanner } from "@/components/UsageWarningBanner";
 import { TrialBanner } from "@/components/TrialBanner";
 import { OnboardingTour } from "@/components/OnboardingTour";
@@ -58,6 +59,8 @@ function AppContent() {
         )}
         <div className="flex-1 min-h-0 overflow-hidden">
           <Switch>
+            <Route path="/app/inbox/:contactId" component={UnifiedInbox} />
+            <Route path="/app/inbox" component={UnifiedInbox} />
             <Route path="/app/chats/:id" component={Chats} />
             <Route path="/app/chats" component={Chats} />
             <Route path="/app/followups" component={FollowUps} />

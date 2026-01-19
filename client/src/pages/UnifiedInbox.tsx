@@ -1,0 +1,484 @@
+import { useState, useEffect, useRef } from "react";
+import { useRoute, useLocation } from "wouter";
+import { useAuth } from "@/lib/auth-context";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { 
+  Search, 
+  Send,
+  Plus,
+  User,
+  Phone,
+  Mail,
+  Tag,
+  Clock,
+  MessageCircle,
+  Instagram,
+  Facebook,
+  Smartphone,
+  Globe,
+  Video,
+  MoreVertical,
+  Loader2,
+  ChevronDown
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { cn } from "@/lib/utils";
+import { format, formatDistanceToNow } from "date-fns";
+
+type Channel = 'whatsapp' | 'instagram' | 'facebook' | 'sms' | 'webchat' | 'telegram' | 'tiktok';
+
+interface Contact {
+  id: string;
+  name: string;
+  email?: string;
+  phone?: string;
+  avatar?: string;
+  primaryChannel: Channel;
+  primaryChannelOverride?: Channel;
+  tag: string;
+  pipelineStage: string;
+  notes?: string;
+  lastIncomingAt?: string;
+  createdAt: string;
+}
+
+interface Conversation {
+  id: string;
+  channel: Channel;
+  status: string;
+  unreadCount: number;
+  lastMessageAt?: string;
+  lastMessagePreview?: string;
+  lastMessageDirection?: string;
+}
+
+interface Message {
+  id: string;
+  direction: 'inbound' | 'outbound';
+  content: string;
+  contentType: string;
+  status: string;
+  createdAt: string;
+}
+
+interface InboxItem {
+  contact: Contact;
+  conversation: Conversation | null;
+  channel: Channel;
+  lastMessage: string;
+  lastMessageAt: string | null;
+  unreadCount: number;
+}
+
+const CHANNEL_CONFIG: Record<Channel, { icon: any; color: string; label: string }> = {
+  whatsapp: { icon: MessageCircle, color: '#25D366', label: 'WhatsApp' },
+  instagram: { icon: Instagram, color: '#E4405F', label: 'Instagram' },
+  facebook: { icon: Facebook, color: '#1877F2', label: 'Messenger' },
+  sms: { icon: Smartphone, color: '#6B7280', label: 'SMS' },
+  webchat: { icon: Globe, color: '#3B82F6', label: 'Web Chat' },
+  telegram: { icon: Send, color: '#0088CC', label: 'Telegram' },
+  tiktok: { icon: Video, color: '#000000', label: 'TikTok' },
+};
+
+const TAG_COLORS: Record<string, string> = {
+  'New': 'bg-blue-100 text-blue-700',
+  'Hot': 'bg-red-100 text-red-700',
+  'Warm': 'bg-orange-100 text-orange-700',
+  'Cold': 'bg-slate-100 text-slate-700',
+  'VIP': 'bg-purple-100 text-purple-700',
+  'Closed': 'bg-gray-100 text-gray-700',
+};
+
+export function UnifiedInbox() {
+  const [match, params] = useRoute("/app/inbox/:contactId");
+  const [, setLocation] = useLocation();
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  
+  const [searchQuery, setSearchQuery] = useState("");
+  const [messageInput, setMessageInput] = useState("");
+  const [showNewContact, setShowNewContact] = useState(false);
+  const [newContactForm, setNewContactForm] = useState({ name: "", phone: "", email: "" });
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const selectedContactId = match ? params?.contactId : null;
+
+  const { data: inbox = [], isLoading: inboxLoading } = useQuery<InboxItem[]>({
+    queryKey: ["/api/inbox"],
+  });
+
+  const { data: contactData } = useQuery<{ contact: Contact; conversations: Conversation[] }>({
+    queryKey: ["/api/contacts", selectedContactId],
+    enabled: !!selectedContactId,
+  });
+
+  const primaryConversation = contactData?.conversations?.find(
+    c => c.channel === (contactData?.contact?.primaryChannelOverride || contactData?.contact?.primaryChannel)
+  ) || contactData?.conversations?.[0];
+
+  const { data: messages = [] } = useQuery<Message[]>({
+    queryKey: ["/api/conversations", primaryConversation?.id, "messages"],
+    enabled: !!primaryConversation?.id,
+  });
+
+  const sendMessageMutation = useMutation({
+    mutationFn: async (data: { contactId: string; content: string }) => {
+      const res = await fetch(`/api/contacts/${data.contactId}/send`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ content: data.content }),
+      });
+      if (!res.ok) throw new Error("Failed to send message");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/inbox"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
+      setMessageInput("");
+    },
+  });
+
+  const createContactMutation = useMutation({
+    mutationFn: async (data: { name: string; phone?: string; email?: string }) => {
+      const res = await fetch("/api/contacts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) throw new Error("Failed to create contact");
+      return res.json();
+    },
+    onSuccess: (contact) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/inbox"] });
+      setShowNewContact(false);
+      setNewContactForm({ name: "", phone: "", email: "" });
+      setLocation(`/app/inbox/${contact.id}`);
+    },
+  });
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  const filteredInbox = inbox.filter(item =>
+    item.contact.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    item.contact.phone?.includes(searchQuery) ||
+    item.contact.email?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const handleSendMessage = () => {
+    if (!messageInput.trim() || !selectedContactId) return;
+    sendMessageMutation.mutate({ contactId: selectedContactId, content: messageInput });
+  };
+
+  const getChannelIcon = (channel: Channel) => {
+    const config = CHANNEL_CONFIG[channel];
+    const Icon = config.icon;
+    return <Icon className="w-3 h-3" style={{ color: config.color }} />;
+  };
+
+  const formatTime = (dateStr: string | null) => {
+    if (!dateStr) return "";
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
+    
+    if (diffDays === 0) return format(date, "h:mm a");
+    if (diffDays === 1) return "Yesterday";
+    if (diffDays < 7) return format(date, "EEEE");
+    return format(date, "MMM d");
+  };
+
+  if (inboxLoading) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex h-full bg-white" data-testid="unified-inbox">
+      <div className="w-80 border-r flex flex-col">
+        <div className="p-4 border-b">
+          <div className="flex items-center gap-2 mb-3">
+            <h2 className="text-lg font-semibold flex-1">Inbox</h2>
+            <Dialog open={showNewContact} onOpenChange={setShowNewContact}>
+              <DialogTrigger asChild>
+                <Button size="sm" data-testid="button-new-contact">
+                  <Plus className="w-4 h-4 mr-1" /> New
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Add New Contact</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4 mt-4">
+                  <div>
+                    <Label htmlFor="name">Name</Label>
+                    <Input
+                      id="name"
+                      value={newContactForm.name}
+                      onChange={(e) => setNewContactForm({ ...newContactForm, name: e.target.value })}
+                      placeholder="Contact name"
+                      data-testid="input-contact-name"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="phone">Phone</Label>
+                    <Input
+                      id="phone"
+                      value={newContactForm.phone}
+                      onChange={(e) => setNewContactForm({ ...newContactForm, phone: e.target.value })}
+                      placeholder="+1234567890"
+                      data-testid="input-contact-phone"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="email">Email</Label>
+                    <Input
+                      id="email"
+                      value={newContactForm.email}
+                      onChange={(e) => setNewContactForm({ ...newContactForm, email: e.target.value })}
+                      placeholder="email@example.com"
+                      data-testid="input-contact-email"
+                    />
+                  </div>
+                  <Button
+                    className="w-full"
+                    onClick={() => createContactMutation.mutate(newContactForm)}
+                    disabled={!newContactForm.name || createContactMutation.isPending}
+                    data-testid="button-save-contact"
+                  >
+                    {createContactMutation.isPending ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      "Add Contact"
+                    )}
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+          </div>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              placeholder="Search contacts..."
+              className="pl-9"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              data-testid="input-search-inbox"
+            />
+          </div>
+        </div>
+        
+        <div className="flex-1 overflow-y-auto">
+          {filteredInbox.length === 0 ? (
+            <div className="p-4 text-center text-muted-foreground">
+              <User className="w-12 h-12 mx-auto mb-2 opacity-50" />
+              <p>No contacts yet</p>
+              <p className="text-sm">Add your first contact to get started</p>
+            </div>
+          ) : (
+            filteredInbox.map((item) => (
+              <div
+                key={item.contact.id}
+                onClick={() => setLocation(`/app/inbox/${item.contact.id}`)}
+                className={cn(
+                  "p-3 border-b cursor-pointer hover:bg-slate-50 transition-colors",
+                  selectedContactId === item.contact.id && "bg-slate-100"
+                )}
+                data-testid={`inbox-item-${item.contact.id}`}
+              >
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary/20 to-primary/40 flex items-center justify-center flex-shrink-0">
+                    <span className="text-sm font-medium text-primary">
+                      {item.contact.name.charAt(0).toUpperCase()}
+                    </span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium truncate">{item.contact.name}</span>
+                      {getChannelIcon(item.channel)}
+                      {item.unreadCount > 0 && (
+                        <Badge variant="default" className="ml-auto text-xs px-1.5 py-0">
+                          {item.unreadCount}
+                        </Badge>
+                      )}
+                    </div>
+                    <p className="text-sm text-muted-foreground truncate">
+                      {item.lastMessage || "No messages yet"}
+                    </p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <Badge 
+                        variant="secondary" 
+                        className={cn("text-xs", TAG_COLORS[item.contact.tag] || TAG_COLORS['New'])}
+                      >
+                        {item.contact.tag}
+                      </Badge>
+                      <span className="text-xs text-muted-foreground">
+                        {formatTime(item.lastMessageAt)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+
+      <div className="flex-1 flex flex-col">
+        {selectedContactId && contactData?.contact ? (
+          <>
+            <div className="p-4 border-b flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary/20 to-primary/40 flex items-center justify-center">
+                <span className="text-sm font-medium text-primary">
+                  {contactData.contact.name.charAt(0).toUpperCase()}
+                </span>
+              </div>
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <h3 className="font-semibold">{contactData.contact.name}</h3>
+                  {getChannelIcon(contactData.contact.primaryChannelOverride as Channel || contactData.contact.primaryChannel)}
+                  <span className="text-xs text-muted-foreground">
+                    {CHANNEL_CONFIG[contactData.contact.primaryChannelOverride as Channel || contactData.contact.primaryChannel]?.label}
+                  </span>
+                </div>
+                <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                  {contactData.contact.phone && (
+                    <span className="flex items-center gap-1">
+                      <Phone className="w-3 h-3" /> {contactData.contact.phone}
+                    </span>
+                  )}
+                  {contactData.contact.email && (
+                    <span className="flex items-center gap-1">
+                      <Mail className="w-3 h-3" /> {contactData.contact.email}
+                    </span>
+                  )}
+                </div>
+              </div>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" data-testid="button-contact-menu">
+                    <MoreVertical className="w-4 h-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem>Edit Contact</DropdownMenuItem>
+                  <DropdownMenuItem>View Timeline</DropdownMenuItem>
+                  <DropdownMenuItem className="text-red-600">Delete Contact</DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50">
+              {messages.length === 0 ? (
+                <div className="text-center text-muted-foreground py-8">
+                  <MessageCircle className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                  <p>No messages yet</p>
+                  <p className="text-sm">Send a message to start the conversation</p>
+                </div>
+              ) : (
+                [...messages].reverse().map((message) => (
+                  <div
+                    key={message.id}
+                    className={cn(
+                      "flex",
+                      message.direction === 'outbound' ? "justify-end" : "justify-start"
+                    )}
+                  >
+                    <div
+                      className={cn(
+                        "max-w-[70%] rounded-lg px-4 py-2",
+                        message.direction === 'outbound'
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-white border"
+                      )}
+                      data-testid={`message-${message.id}`}
+                    >
+                      <p className="whitespace-pre-wrap">{message.content}</p>
+                      <div className={cn(
+                        "text-xs mt-1 flex items-center gap-1",
+                        message.direction === 'outbound' ? "text-primary-foreground/70" : "text-muted-foreground"
+                      )}>
+                        {format(new Date(message.createdAt), "h:mm a")}
+                        {message.direction === 'outbound' && message.status === 'sent' && (
+                          <span>✓</span>
+                        )}
+                        {message.direction === 'outbound' && message.status === 'delivered' && (
+                          <span>✓✓</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+              <div ref={messagesEndRef} />
+            </div>
+
+            <div className="p-4 border-t bg-white">
+              <div className="flex items-center gap-2">
+                <Textarea
+                  placeholder="Type a message..."
+                  className="min-h-[44px] max-h-32 resize-none"
+                  value={messageInput}
+                  onChange={(e) => setMessageInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSendMessage();
+                    }
+                  }}
+                  data-testid="input-message"
+                />
+                <Button
+                  onClick={handleSendMessage}
+                  disabled={!messageInput.trim() || sendMessageMutation.isPending}
+                  data-testid="button-send-message"
+                >
+                  {sendMessageMutation.isPending ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Send className="w-4 h-4" />
+                  )}
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
+                {getChannelIcon(contactData.contact.primaryChannelOverride as Channel || contactData.contact.primaryChannel)}
+                Sending via {CHANNEL_CONFIG[contactData.contact.primaryChannelOverride as Channel || contactData.contact.primaryChannel]?.label}
+              </p>
+            </div>
+          </>
+        ) : (
+          <div className="flex-1 flex items-center justify-center text-muted-foreground">
+            <div className="text-center">
+              <MessageCircle className="w-16 h-16 mx-auto mb-4 opacity-30" />
+              <h3 className="text-lg font-medium mb-1">Select a contact</h3>
+              <p className="text-sm">Choose a contact to view their conversation</p>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
