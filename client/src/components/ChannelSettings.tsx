@@ -388,7 +388,7 @@ export function ChannelSettings() {
                     </div>
                     <div>
                       <h4 className="font-medium text-gray-900">Twilio</h4>
-                      <p className="text-xs text-gray-500">Best for getting started quickly</p>
+                      <p className="text-xs text-gray-500">WhatsApp + SMS support</p>
                     </div>
                   </div>
                   {user?.twilioConnected ? (
@@ -431,7 +431,7 @@ export function ChannelSettings() {
                     </div>
                     <div>
                       <h4 className="font-medium text-gray-900">Meta Business API</h4>
-                      <p className="text-xs text-gray-500">For approved business numbers</p>
+                      <p className="text-xs text-gray-500">WhatsApp only (no SMS)</p>
                     </div>
                   </div>
                   {user?.metaConnected ? (
@@ -445,6 +445,12 @@ export function ChannelSettings() {
                   )}
                 </div>
               </div>
+            </div>
+
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+              <p className="text-xs text-amber-800">
+                <strong>Note:</strong> SMS messaging requires Twilio. Meta only supports WhatsApp.
+              </p>
             </div>
 
             {(user?.twilioConnected || user?.metaConnected) && user?.whatsappProvider && (
