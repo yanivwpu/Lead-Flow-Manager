@@ -16,7 +16,8 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { 
   Users, Calendar, DollarSign, Plus, Edit2, Trash2, 
-  LogOut, Loader2, CheckCircle, XCircle, Lock
+  LogOut, Loader2, CheckCircle, XCircle, Lock, UserCircle,
+  AlertCircle, MessageCircle, ArrowUpDown
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -54,6 +55,25 @@ interface Conversion {
   paid: boolean;
   paidAt?: string;
   createdAt: string;
+}
+
+interface AdminUser {
+  id: string;
+  name: string | null;
+  email: string;
+  avatarUrl: string | null;
+  subscriptionPlan: string | null;
+  subscriptionStatus: string | null;
+  trialEndsAt: string | null;
+  twilioConnected: boolean | null;
+  metaConnected: boolean | null;
+  createdAt: string | null;
+  hasDemo: boolean;
+  demoStatus: string | null;
+  demoDate: string | null;
+  openTicketCount: number;
+  totalTicketCount: number;
+  latestTicket: any | null;
 }
 
 export function Admin() {
@@ -125,6 +145,13 @@ export function Admin() {
     queryKey: ['/api/admin/conversions/roi'],
     enabled: isLoggedIn,
   });
+
+  const { data: adminUsers = [] } = useQuery<AdminUser[]>({
+    queryKey: ['/api/admin/users'],
+    enabled: isLoggedIn,
+  });
+
+  const [userSort, setUserSort] = useState<'date' | 'support' | 'plan'>('support');
 
   const createSalesperson = useMutation({
     mutationFn: async (data: { name: string; email: string; phone?: string }) => {
@@ -356,6 +383,15 @@ export function Admin() {
               <DollarSign className="h-4 w-4" />
               Conversions
             </TabsTrigger>
+            <TabsTrigger value="users" className="gap-2">
+              <UserCircle className="h-4 w-4" />
+              Users
+              {adminUsers.filter(u => u.openTicketCount > 0).length > 0 && (
+                <Badge variant="destructive" className="ml-1 px-1.5 py-0.5 text-xs">
+                  {adminUsers.filter(u => u.openTicketCount > 0).length}
+                </Badge>
+              )}
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="salespeople">
@@ -575,6 +611,216 @@ export function Admin() {
                   )}
                 </TableBody>
               </Table>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="users">
+            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+              <div className="p-4 border-b border-gray-200 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                <h2 className="font-semibold text-gray-900">
+                  All Users ({adminUsers.length})
+                </h2>
+                <div className="flex gap-2">
+                  <Button
+                    variant={userSort === 'support' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setUserSort('support')}
+                    className={userSort === 'support' ? 'bg-brand-green hover:bg-brand-dark' : ''}
+                  >
+                    <AlertCircle className="h-4 w-4 mr-1" />
+                    Support First
+                  </Button>
+                  <Button
+                    variant={userSort === 'date' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setUserSort('date')}
+                    className={userSort === 'date' ? 'bg-brand-green hover:bg-brand-dark' : ''}
+                  >
+                    <ArrowUpDown className="h-4 w-4 mr-1" />
+                    Date
+                  </Button>
+                  <Button
+                    variant={userSort === 'plan' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setUserSort('plan')}
+                    className={userSort === 'plan' ? 'bg-brand-green hover:bg-brand-dark' : ''}
+                  >
+                    <DollarSign className="h-4 w-4 mr-1" />
+                    Plan
+                  </Button>
+                </div>
+              </div>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>User</TableHead>
+                      <TableHead>Plan</TableHead>
+                      <TableHead>Demo</TableHead>
+                      <TableHead>Support</TableHead>
+                      <TableHead>Connected</TableHead>
+                      <TableHead>Signed Up</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {adminUsers.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={6} className="text-center py-8 text-gray-500">
+                          No users yet.
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      [...adminUsers]
+                        .sort((a, b) => {
+                          if (userSort === 'support') {
+                            if (a.openTicketCount > 0 && b.openTicketCount === 0) return -1;
+                            if (b.openTicketCount > 0 && a.openTicketCount === 0) return 1;
+                            return new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime();
+                          } else if (userSort === 'plan') {
+                            const planOrder = { 'scale': 0, 'pro': 1, 'starter': 2, 'free': 3 };
+                            const aOrder = planOrder[a.subscriptionPlan as keyof typeof planOrder] ?? 4;
+                            const bOrder = planOrder[b.subscriptionPlan as keyof typeof planOrder] ?? 4;
+                            return aOrder - bOrder;
+                          }
+                          return new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime();
+                        })
+                        .map((user) => (
+                          <TableRow 
+                            key={user.id}
+                            className={user.openTicketCount > 0 ? 'bg-red-50' : ''}
+                          >
+                            <TableCell>
+                              <div className="flex items-center gap-2">
+                                {user.avatarUrl ? (
+                                  <img 
+                                    src={user.avatarUrl} 
+                                    alt="" 
+                                    className="w-8 h-8 rounded-full"
+                                  />
+                                ) : (
+                                  <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center">
+                                    <UserCircle className="h-5 w-5 text-gray-500" />
+                                  </div>
+                                )}
+                                <div>
+                                  <div className="font-medium">{user.name || 'No name'}</div>
+                                  <div className="text-sm text-gray-500">{user.email}</div>
+                                </div>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex flex-col gap-1">
+                                <Badge 
+                                  variant={
+                                    user.subscriptionPlan === 'scale' ? 'default' :
+                                    user.subscriptionPlan === 'pro' ? 'default' :
+                                    user.subscriptionPlan === 'starter' ? 'secondary' : 'outline'
+                                  }
+                                  className={
+                                    user.subscriptionPlan === 'scale' ? 'bg-purple-600' :
+                                    user.subscriptionPlan === 'pro' ? 'bg-brand-green' : ''
+                                  }
+                                >
+                                  {user.subscriptionPlan || 'free'}
+                                </Badge>
+                                {user.subscriptionStatus && (
+                                  <span className="text-xs text-gray-500">
+                                    {user.subscriptionStatus}
+                                  </span>
+                                )}
+                                {user.trialEndsAt && (
+                                  <span className="text-xs text-amber-600">
+                                    Trial ends: {new Date(user.trialEndsAt).toLocaleDateString()}
+                                  </span>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              {user.hasDemo ? (
+                                <div className="flex flex-col gap-1">
+                                  <Badge 
+                                    variant={
+                                      user.demoStatus === 'converted' ? 'default' :
+                                      user.demoStatus === 'completed' ? 'secondary' :
+                                      user.demoStatus === 'scheduled' ? 'outline' : 'destructive'
+                                    }
+                                    className={user.demoStatus === 'converted' ? 'bg-brand-green' : ''}
+                                  >
+                                    {user.demoStatus}
+                                  </Badge>
+                                  {user.demoDate && (
+                                    <span className="text-xs text-gray-500">
+                                      {new Date(user.demoDate).toLocaleDateString()}
+                                    </span>
+                                  )}
+                                </div>
+                              ) : (
+                                <span className="text-gray-400">-</span>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              {user.openTicketCount > 0 ? (
+                                <div className="flex items-center gap-1">
+                                  <Badge 
+                                    variant={user.latestTicket?.priority === 'urgent' ? 'destructive' : 'default'}
+                                    className={cn(
+                                      "flex items-center gap-1",
+                                      user.latestTicket?.priority === 'urgent' && 'bg-red-600',
+                                      user.latestTicket?.priority === 'high' && 'bg-orange-500',
+                                      user.latestTicket?.priority === 'normal' && 'bg-amber-500',
+                                      user.latestTicket?.priority === 'low' && 'bg-gray-400'
+                                    )}
+                                  >
+                                    <MessageCircle className="h-3 w-3" />
+                                    {user.openTicketCount} open
+                                  </Badge>
+                                  {user.latestTicket && (
+                                    <Badge 
+                                      variant="outline" 
+                                      className={cn(
+                                        "text-xs ml-1",
+                                        user.latestTicket.priority === 'urgent' && 'border-red-500 text-red-600',
+                                        user.latestTicket.priority === 'high' && 'border-orange-500 text-orange-600',
+                                        user.latestTicket.priority === 'normal' && 'border-amber-500 text-amber-600',
+                                        user.latestTicket.priority === 'low' && 'border-gray-400 text-gray-500'
+                                      )}
+                                    >
+                                      {user.latestTicket.priority}
+                                    </Badge>
+                                  )}
+                                </div>
+                              ) : user.totalTicketCount > 0 ? (
+                                <span className="text-gray-500 text-sm">
+                                  {user.totalTicketCount} resolved
+                                </span>
+                              ) : (
+                                <span className="text-gray-400">-</span>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex gap-2">
+                                {user.twilioConnected && (
+                                  <Badge variant="outline" className="text-xs">Twilio</Badge>
+                                )}
+                                {user.metaConnected && (
+                                  <Badge variant="outline" className="text-xs">Meta</Badge>
+                                )}
+                                {!user.twilioConnected && !user.metaConnected && (
+                                  <span className="text-gray-400">-</span>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <span className="text-sm text-gray-600">
+                                {user.createdAt ? new Date(user.createdAt).toLocaleDateString() : '-'}
+                              </span>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
             </div>
           </TabsContent>
         </Tabs>
