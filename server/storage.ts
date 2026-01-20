@@ -25,10 +25,11 @@ import {
   type Message, type InsertMessage,
   type ActivityEvent, type InsertActivityEvent,
   type ChannelSetting, type InsertChannelSetting,
-  type Channel, type InboxItem
+  type Channel, type InboxItem,
+  type SupportTicket, type InsertSupportTicket
 } from "@shared/schema";
 import { db } from "../drizzle/db";
-import { users, chats, registeredPhones, messageUsage, conversationWindows, teamMembers, workflows, workflowExecutions, recurringReminders, webhooks, webhookDeliveries, integrations, messageTemplates, templateSends, dripCampaigns, dripSteps, dripEnrollments, dripSends, chatbotFlows, chatbotSessions, salespeople, demoBookings, salesConversions, adminSettings, contacts, conversations, messages, activityEvents, channelSettings, type InsertConversationWindow, type ConversationWindow } from "@shared/schema";
+import { users, chats, registeredPhones, messageUsage, conversationWindows, teamMembers, workflows, workflowExecutions, recurringReminders, webhooks, webhookDeliveries, integrations, messageTemplates, templateSends, dripCampaigns, dripSteps, dripEnrollments, dripSends, chatbotFlows, chatbotSessions, salespeople, demoBookings, salesConversions, adminSettings, contacts, conversations, messages, activityEvents, channelSettings, supportTickets, type InsertConversationWindow, type ConversationWindow } from "@shared/schema";
 import { eq, and, lte, sql, isNotNull, asc, desc, gte, sum, gt, or, like, ilike } from "drizzle-orm";
 
 export interface IStorage {
@@ -1334,6 +1335,53 @@ export class DbStorage implements IStorage {
         .returning();
       return result[0];
     }
+  }
+
+  // Admin: Get all users
+  async getAllUsers(): Promise<User[]> {
+    return await db.select().from(users).orderBy(desc(users.createdAt));
+  }
+
+  // Support ticket methods
+  async getSupportTickets(): Promise<SupportTicket[]> {
+    return await db.select().from(supportTickets).orderBy(desc(supportTickets.createdAt));
+  }
+
+  async getSupportTicket(id: string): Promise<SupportTicket | undefined> {
+    const result = await db.select().from(supportTickets).where(eq(supportTickets.id, id));
+    return result[0];
+  }
+
+  async getSupportTicketsByUser(userId: string): Promise<SupportTicket[]> {
+    return await db.select().from(supportTickets)
+      .where(eq(supportTickets.userId, userId))
+      .orderBy(desc(supportTickets.createdAt));
+  }
+
+  async getOpenSupportTicketsByEmail(email: string): Promise<SupportTicket[]> {
+    return await db.select().from(supportTickets)
+      .where(and(
+        eq(supportTickets.userEmail, email),
+        or(eq(supportTickets.status, 'open'), eq(supportTickets.status, 'in_progress'))
+      ))
+      .orderBy(desc(supportTickets.createdAt));
+  }
+
+  async createSupportTicket(ticket: InsertSupportTicket): Promise<SupportTicket> {
+    const result = await db.insert(supportTickets).values(ticket).returning();
+    return result[0];
+  }
+
+  async updateSupportTicket(id: string, updates: Partial<SupportTicket>): Promise<SupportTicket | undefined> {
+    const result = await db.update(supportTickets)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(supportTickets.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async deleteSupportTicket(id: string): Promise<void> {
+    await db.delete(supportTickets).where(eq(supportTickets.id, id));
   }
 }
 

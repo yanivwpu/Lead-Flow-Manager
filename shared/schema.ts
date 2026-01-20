@@ -843,6 +843,33 @@ export type ActivityEvent = typeof activityEvents.$inferSelect;
 export type InsertChannelSetting = z.infer<typeof insertChannelSettingSchema>;
 export type ChannelSetting = typeof channelSettings.$inferSelect;
 
+// Support tickets table - for tracking user support requests
+export const supportTickets = pgTable("support_tickets", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "set null" }),
+  userEmail: text("user_email").notNull(),
+  userName: text("user_name"),
+  subject: text("subject").notNull(),
+  message: text("message").notNull(),
+  status: text("status").notNull().default("open"), // open, in_progress, resolved, closed
+  priority: text("priority").default("normal"), // low, normal, high, urgent
+  category: text("category"), // billing, technical, feature_request, bug, other
+  assignedTo: text("assigned_to"), // admin/support person handling it
+  notes: text("notes"), // internal notes
+  resolvedAt: timestamp("resolved_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertSupportTicketSchema = createInsertSchema(supportTickets).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  resolvedAt: true,
+});
+export type InsertSupportTicket = z.infer<typeof insertSupportTicketSchema>;
+export type SupportTicket = typeof supportTickets.$inferSelect;
+
 // Unified inbox item type (for API responses)
 export type InboxItem = {
   contact: Contact;

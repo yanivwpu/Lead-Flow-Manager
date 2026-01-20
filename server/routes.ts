@@ -3309,6 +3309,130 @@ export async function registerRoutes(
     }
   });
 
+  // Admin: Get all users with support ticket status
+  app.get("/api/admin/users", requireAdmin, async (req, res) => {
+    try {
+      const allUsers = await storage.getAllUsers();
+      const allBookings = await storage.getDemoBookings();
+      const allTickets = await storage.getSupportTickets();
+      
+      const usersWithInfo = allUsers.map(user => {
+        const userBookings = allBookings.filter(b => b.visitorEmail === user.email);
+        const userTickets = allTickets.filter(t => t.userEmail === user.email || t.userId === user.id);
+        const openTickets = userTickets.filter(t => t.status === 'open' || t.status === 'in_progress');
+        
+        return {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          avatarUrl: user.avatarUrl,
+          subscriptionPlan: user.subscriptionPlan,
+          subscriptionStatus: user.subscriptionStatus,
+          trialEndsAt: user.trialEndsAt,
+          twilioConnected: user.twilioConnected,
+          metaConnected: user.metaConnected,
+          createdAt: user.createdAt,
+          hasDemo: userBookings.length > 0,
+          demoStatus: userBookings[0]?.status || null,
+          demoDate: userBookings[0]?.scheduledDate || null,
+          openTicketCount: openTickets.length,
+          totalTicketCount: userTickets.length,
+          latestTicket: openTickets[0] || null,
+        };
+      });
+      
+      // Sort: users with open tickets first, then by created date
+      usersWithInfo.sort((a, b) => {
+        if (a.openTicketCount > 0 && b.openTicketCount === 0) return -1;
+        if (b.openTicketCount > 0 && a.openTicketCount === 0) return 1;
+        return new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime();
+      });
+      
+      res.json(usersWithInfo);
+    } catch (error) {
+      console.error("Error fetching admin users:", error);
+      res.status(500).json({ error: "Failed to fetch users" });
+    }
+  });
+
+  // Admin: Get all support tickets
+  app.get("/api/admin/support-tickets", requireAdmin, async (req, res) => {
+    try {
+      const tickets = await storage.getSupportTickets();
+      res.json(tickets);
+    } catch (error) {
+      console.error("Error fetching support tickets:", error);
+      res.status(500).json({ error: "Failed to fetch tickets" });
+    }
+  });
+
+  // Admin: Create support ticket (for tracking incoming emails)
+  app.post("/api/admin/support-tickets", requireAdmin, async (req, res) => {
+    try {
+      const { userEmail, userName, subject, message, priority, category, userId } = req.body;
+      
+      if (!userEmail || !subject || !message) {
+        return res.status(400).json({ error: "Email, subject, and message are required" });
+      }
+      
+      const ticket = await storage.createSupportTicket({
+        userId: userId || null,
+        userEmail,
+        userName: userName || null,
+        subject,
+        message,
+        priority: priority || 'normal',
+        category: category || null,
+        status: 'open',
+      });
+      
+      res.status(201).json(ticket);
+    } catch (error) {
+      console.error("Error creating support ticket:", error);
+      res.status(500).json({ error: "Failed to create ticket" });
+    }
+  });
+
+  // Admin: Update support ticket
+  app.patch("/api/admin/support-tickets/:id", requireAdmin, async (req, res) => {
+    try {
+      const { status, priority, assignedTo, notes, category } = req.body;
+      
+      const updates: any = {};
+      if (status !== undefined) {
+        updates.status = status;
+        if (status === 'resolved' || status === 'closed') {
+          updates.resolvedAt = new Date();
+        }
+      }
+      if (priority !== undefined) updates.priority = priority;
+      if (assignedTo !== undefined) updates.assignedTo = assignedTo;
+      if (notes !== undefined) updates.notes = notes;
+      if (category !== undefined) updates.category = category;
+      
+      const ticket = await storage.updateSupportTicket(req.params.id, updates);
+      if (!ticket) {
+        return res.status(404).json({ error: "Ticket not found" });
+      }
+      
+      res.json(ticket);
+    } catch (error) {
+      console.error("Error updating support ticket:", error);
+      res.status(500).json({ error: "Failed to update ticket" });
+    }
+  });
+
+  // Admin: Delete support ticket
+  app.delete("/api/admin/support-tickets/:id", requireAdmin, async (req, res) => {
+    try {
+      await storage.deleteSupportTicket(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting support ticket:", error);
+      res.status(500).json({ error: "Failed to delete ticket" });
+    }
+  });
+
   // ================== SALESPERSON PORTAL ==================
 
   // Salesperson Portal: Login
