@@ -1,0 +1,93 @@
+Please treat the following as an end-to-end acceptance test (not a feature request).
+
+Go through each step and confirm:
+- ✅ Works as described
+- ❌ Does not work (explain exactly what’s missing or broken)
+- ⚠️ Works partially (explain the gap)
+
+For each ❌ or ⚠️, suggest the minimum change needed to make it work.
+
+---
+
+REAL ESTATE AGENT END-TO-END STRESS TEST
+
+DAY 0 – SETUP
+Agent signs up and opens Settings → Communication Channels.
+WhatsApp is connected and set as primary.
+Web Chat is available to embed.
+Instagram / Facebook / Telegram / TikTok integrations are visible.
+
+Confirm whether onboarding clearly guides the agent to a recommended default setup (WhatsApp + Web Chat).
+
+---
+
+DAY 1 – WEBSITE LEAD (WEB CHAT)
+Buyer sends a message via Web Chat on a ShowcaseIDX website.
+System creates a new contact with source = website.
+Conversation appears in the unified inbox.
+Primary channel is Web Chat.
+Agent replies without choosing a channel.
+
+Confirm this flow works exactly as described.
+
+---
+
+DAY 1 – HANDOFF TO WHATSAPP
+Buyer asks to continue on WhatsApp.
+Agent switches the conversation to WhatsApp.
+WhatsApp becomes the primary channel for that contact.
+Future replies automatically send via WhatsApp.
+
+Confirm whether this is supported and how the switch is triggered in the UI.
+
+---
+
+DAY 2 – INSTAGRAM DM
+Buyer sends an Instagram DM.
+Message appears in the unified inbox.
+A contact is created or matched.
+Primary channel is Instagram.
+Agent replies from the same inbox without extra steps.
+
+Confirm message restrictions, edge cases, or failures.
+
+---
+
+DAY 3 – TIKTOK LEAD
+Lead is captured from TikTok (no direct messaging).
+Contact is created with source = TikTok.
+Inbox shows a lead without a message thread.
+Agent is prompted to reach out via WhatsApp or SMS.
+
+Confirm this behavior.
+
+---
+
+DAY 4 – DELIVERY FAILURE & FALLBACK
+Agent sends a WhatsApp message.
+Delivery fails (no WhatsApp account).
+System automatically falls back to SMS.
+Delivery method is logged and visible to the agent.
+
+Confirm fallback logic and UI visibility.
+
+---
+
+DAY 7 – BUSY DAY STRESS TEST
+Multiple active conversations across:
+- WhatsApp
+- Instagram
+- Web Chat
+- TikTok leads
+
+Inbox remains usable:
+- Sorted by recent activity
+- One reply box
+- Channel handled automatically
+
+Confirm whether any steps break, feel confusing, or fail silently.
+
+---
+
+After reviewing:
+List the top 3 real failure points for a solo real estate agent using this system.
