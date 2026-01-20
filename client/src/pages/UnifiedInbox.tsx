@@ -76,6 +76,8 @@ interface Message {
   contentType: string;
   status: string;
   createdAt: string;
+  sentViaFallback?: boolean;
+  fallbackChannel?: Channel;
 }
 
 interface InboxItem {
@@ -172,6 +174,23 @@ export function UnifiedInbox() {
       setShowNewContact(false);
       setNewContactForm({ name: "", phone: "", email: "" });
       setLocation(`/app/inbox/${contact.id}`);
+    },
+  });
+
+  const switchChannelMutation = useMutation({
+    mutationFn: async (data: { contactId: string; channel: Channel }) => {
+      const res = await fetch(`/api/contacts/${data.contactId}/channel`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ channel: data.channel }),
+      });
+      if (!res.ok) throw new Error("Failed to switch channel");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/contacts"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/inbox"] });
     },
   });
 
@@ -379,6 +398,38 @@ export function UnifiedInbox() {
               </div>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className="gap-2" data-testid="button-switch-channel">
+                    {getChannelIcon(contactData.contact.primaryChannelOverride as Channel || contactData.contact.primaryChannel)}
+                    <span className="text-xs">
+                      {CHANNEL_CONFIG[contactData.contact.primaryChannelOverride as Channel || contactData.contact.primaryChannel]?.label}
+                    </span>
+                    <ChevronDown className="w-3 h-3" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  {Object.entries(CHANNEL_CONFIG)
+                    .filter(([key, config]) => config.label !== 'TikTok')
+                    .map(([key, config]) => {
+                      const Icon = config.icon;
+                      const isActive = (contactData.contact.primaryChannelOverride || contactData.contact.primaryChannel) === key;
+                      return (
+                        <DropdownMenuItem
+                          key={key}
+                          onClick={() => switchChannelMutation.mutate({ contactId: selectedContactId!, channel: key as Channel })}
+                          className={cn("gap-2", isActive && "bg-slate-100")}
+                          data-testid={`channel-option-${key}`}
+                        >
+                          <Icon className="w-4 h-4" style={{ color: config.color }} />
+                          {config.label}
+                          {isActive && <span className="ml-auto text-xs text-muted-foreground">Active</span>}
+                        </DropdownMenuItem>
+                      );
+                    })}
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
                   <Button variant="ghost" size="icon" data-testid="button-contact-menu">
                     <MoreVertical className="w-4 h-4" />
                   </Button>
@@ -427,6 +478,11 @@ export function UnifiedInbox() {
                         )}
                         {message.direction === 'outbound' && message.status === 'delivered' && (
                           <span>✓✓</span>
+                        )}
+                        {message.sentViaFallback && message.fallbackChannel && (
+                          <span className="ml-1 text-amber-200 flex items-center gap-1">
+                            • via {CHANNEL_CONFIG[message.fallbackChannel]?.label}
+                          </span>
                         )}
                       </div>
                     </div>

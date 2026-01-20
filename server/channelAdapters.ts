@@ -144,6 +144,203 @@ class WebChatAdapter implements ChannelAdapter {
   }
 }
 
+class InstagramAdapter implements ChannelAdapter {
+  async send(params: {
+    contactId: string;
+    conversationId: string;
+    content: string;
+    contentType?: string;
+    mediaUrl?: string;
+  }): Promise<{ success: boolean; externalMessageId?: string; error?: string }> {
+    try {
+      const conversation = await storage.getConversation(params.conversationId);
+      if (!conversation) {
+        return { success: false, error: "Conversation not found" };
+      }
+
+      const contact = await storage.getContact(params.contactId);
+      if (!contact || !contact.instagramId) {
+        return { success: false, error: "Contact Instagram ID not found" };
+      }
+
+      const settings = await storage.getChannelSettings(conversation.userId);
+      const instagramSettings = settings.find(s => s.channel === 'instagram');
+      
+      if (!instagramSettings?.config) {
+        return { success: false, error: "Instagram not configured" };
+      }
+
+      const config = instagramSettings.config as any;
+      if (!config.accessToken) {
+        return { success: false, error: "Instagram access token missing" };
+      }
+      if (!config.pageId) {
+        return { success: false, error: "Instagram page ID missing" };
+      }
+
+      const accessToken = config.accessToken;
+      const pageId = config.pageId;
+      const recipientId = contact.instagramId;
+
+      const response = await fetch(
+        `https://graph.facebook.com/v19.0/${pageId}/messages`,
+        {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${accessToken}`
+          },
+          body: JSON.stringify({
+            recipient: { id: recipientId },
+            message: params.mediaUrl 
+              ? { attachment: { type: 'image', payload: { url: params.mediaUrl } } }
+              : { text: params.content },
+            messaging_type: 'RESPONSE',
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("Instagram API HTTP error:", response.status, errorText);
+        return { success: false, error: `Instagram API error: ${response.status}` };
+      }
+
+      const result = await response.json();
+
+      if (result.error) {
+        return { success: false, error: result.error.message || "Instagram API error" };
+      }
+
+      return {
+        success: true,
+        externalMessageId: result.message_id,
+      };
+    } catch (error: any) {
+      console.error("Instagram send error:", error);
+      return {
+        success: false,
+        error: error.message || "Failed to send Instagram message",
+      };
+    }
+  }
+
+  async isAvailable(userId: string): Promise<boolean> {
+    const settings = await storage.getChannelSettings(userId);
+    const instagramSettings = settings.find(s => s.channel === 'instagram');
+    const config = instagramSettings?.config as any;
+    return !!(instagramSettings?.isConnected && config?.accessToken && config?.pageId);
+  }
+}
+
+class FacebookAdapter implements ChannelAdapter {
+  async send(params: {
+    contactId: string;
+    conversationId: string;
+    content: string;
+    contentType?: string;
+    mediaUrl?: string;
+  }): Promise<{ success: boolean; externalMessageId?: string; error?: string }> {
+    try {
+      const conversation = await storage.getConversation(params.conversationId);
+      if (!conversation) {
+        return { success: false, error: "Conversation not found" };
+      }
+
+      const contact = await storage.getContact(params.contactId);
+      if (!contact || !contact.facebookId) {
+        return { success: false, error: "Contact Facebook ID not found" };
+      }
+
+      const settings = await storage.getChannelSettings(conversation.userId);
+      const facebookSettings = settings.find(s => s.channel === 'facebook');
+      
+      if (!facebookSettings?.config) {
+        return { success: false, error: "Facebook Messenger not configured" };
+      }
+
+      const config = facebookSettings.config as any;
+      if (!config.accessToken) {
+        return { success: false, error: "Facebook access token missing" };
+      }
+      if (!config.pageId) {
+        return { success: false, error: "Facebook page ID missing" };
+      }
+
+      const accessToken = config.accessToken;
+      const pageId = config.pageId;
+      const recipientId = contact.facebookId;
+
+      const response = await fetch(
+        `https://graph.facebook.com/v19.0/${pageId}/messages`,
+        {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${accessToken}`
+          },
+          body: JSON.stringify({
+            recipient: { id: recipientId },
+            message: params.mediaUrl 
+              ? { attachment: { type: 'image', payload: { url: params.mediaUrl } } }
+              : { text: params.content },
+            messaging_type: 'RESPONSE',
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("Facebook API HTTP error:", response.status, errorText);
+        return { success: false, error: `Facebook API error: ${response.status}` };
+      }
+
+      const result = await response.json();
+
+      if (result.error) {
+        return { success: false, error: result.error.message || "Facebook API error" };
+      }
+
+      return {
+        success: true,
+        externalMessageId: result.message_id,
+      };
+    } catch (error: any) {
+      console.error("Facebook send error:", error);
+      return {
+        success: false,
+        error: error.message || "Failed to send Facebook message",
+      };
+    }
+  }
+
+  async isAvailable(userId: string): Promise<boolean> {
+    const settings = await storage.getChannelSettings(userId);
+    const facebookSettings = settings.find(s => s.channel === 'facebook');
+    const config = facebookSettings?.config as any;
+    return !!(facebookSettings?.isConnected && config?.accessToken && config?.pageId);
+  }
+}
+
+class TiktokAdapter implements ChannelAdapter {
+  async send(params: {
+    contactId: string;
+    conversationId: string;
+    content: string;
+    contentType?: string;
+    mediaUrl?: string;
+  }): Promise<{ success: boolean; externalMessageId?: string; error?: string }> {
+    return { 
+      success: false, 
+      error: "TikTok does not support direct messaging. Please reach out via WhatsApp or SMS." 
+    };
+  }
+
+  async isAvailable(userId: string): Promise<boolean> {
+    return false;
+  }
+}
+
 class TelegramAdapter implements ChannelAdapter {
   async send(params: {
     contactId: string;
@@ -216,6 +413,9 @@ export function registerChannelAdapters(): void {
   channelService.registerAdapter('sms', new SMSAdapter());
   channelService.registerAdapter('webchat', new WebChatAdapter());
   channelService.registerAdapter('telegram', new TelegramAdapter());
+  channelService.registerAdapter('instagram', new InstagramAdapter());
+  channelService.registerAdapter('facebook', new FacebookAdapter());
+  channelService.registerAdapter('tiktok', new TiktokAdapter());
   
-  console.log("Channel adapters registered: whatsapp, sms, webchat, telegram");
+  console.log("Channel adapters registered: whatsapp, sms, webchat, telegram, instagram, facebook, tiktok");
 }

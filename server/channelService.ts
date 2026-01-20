@@ -160,6 +160,8 @@ class ChannelService {
           status: 'sent',
           externalMessageId: fallbackResult.externalMessageId,
           sentAt: new Date(),
+          sentViaFallback: true,
+          fallbackChannel: fallbackChannel,
         });
 
         await storage.updateConversation(fallbackConv.id, {

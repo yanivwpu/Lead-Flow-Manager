@@ -3561,6 +3561,53 @@ export async function registerRoutes(
     }
   });
 
+  // Switch primary channel for a contact (handoff to WhatsApp, etc.)
+  app.patch("/api/contacts/:id/channel", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const contact = await storage.getContact(req.params.id);
+      if (!contact) {
+        return res.status(404).json({ error: "Contact not found" });
+      }
+      if (contact.userId !== req.user.id) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+      
+      const { channel } = req.body;
+      const validChannels = ['whatsapp', 'instagram', 'facebook', 'sms', 'webchat', 'telegram'];
+      if (!channel || !validChannels.includes(channel)) {
+        return res.status(400).json({ error: "Invalid channel" });
+      }
+      
+      const updated = await storage.updateContact(req.params.id, { 
+        primaryChannelOverride: channel 
+      });
+      
+      // Log the channel switch in activity events
+      const { channelService } = await import("./channelService");
+      await channelService.logActivity(
+        req.user.id,
+        req.params.id,
+        undefined,
+        'channel_switch',
+        {
+          from: contact.primaryChannel,
+          to: channel,
+          reason: 'manual_switch',
+        },
+        'user',
+        req.user.id
+      );
+      
+      res.json(updated);
+    } catch (error) {
+      console.error("Error switching channel:", error);
+      res.status(500).json({ error: "Failed to switch channel" });
+    }
+  });
+
   // Get conversation messages
   app.get("/api/conversations/:id/messages", async (req, res) => {
     try {

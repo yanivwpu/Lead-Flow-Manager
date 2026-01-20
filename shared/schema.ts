@@ -746,6 +746,10 @@ export const messages = pgTable("messages", {
   errorCode: text("error_code"),
   errorMessage: text("error_message"),
   
+  // Fallback delivery tracking
+  sentViaFallback: boolean("sent_via_fallback").default(false),
+  fallbackChannel: text("fallback_channel"), // Channel used for fallback delivery
+  
   // Timestamps
   sentAt: timestamp("sent_at"),
   deliveredAt: timestamp("delivered_at"),
