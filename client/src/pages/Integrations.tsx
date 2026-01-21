@@ -16,7 +16,7 @@ import {
   Plug, Plus, Trash2, Copy, Check, ExternalLink, Zap, Lock,
   ShoppingCart, FileSpreadsheet, Users, CreditCard, Building2, Home,
   Webhook, Eye, EyeOff, RefreshCw, CheckCircle2, XCircle, Settings2,
-  Calendar, Mail
+  Calendar, Mail, Facebook, Instagram
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 
@@ -168,6 +168,34 @@ const NATIVE_INTEGRATIONS: IntegrationConfig[] = [
       { id: "sync_contacts", label: "Sync Contacts", description: "Add WhatsApp contacts to your Mailchimp audience" },
       { id: "tag_subscribers", label: "Tag Subscribers", description: "Apply tags based on chat pipeline stages" },
       { id: "trigger_automations", label: "Trigger Automations", description: "Start email sequences when chats reach certain stages" },
+    ]
+  },
+  { 
+    id: "meta_facebook", 
+    name: "Meta (Facebook)", 
+    icon: Facebook, 
+    description: "Connect Facebook Messenger for multi-channel support", 
+    color: "bg-blue-700",
+    fields: [
+      { key: "accessToken", label: "Page Access Token", placeholder: "EAAB...", type: "password", helpText: "From Meta for Developers portal" },
+      { key: "pageId", label: "Page ID", placeholder: "123456789", helpText: "Your Facebook Page ID" },
+    ],
+    syncOptions: [
+      { id: "messenger_sync", label: "Messenger Sync", description: "Receive and reply to Facebook messages" },
+    ]
+  },
+  { 
+    id: "meta_instagram", 
+    name: "Instagram", 
+    icon: Instagram, 
+    description: "Connect Instagram DM for multi-channel support", 
+    color: "bg-pink-600",
+    fields: [
+      { key: "accessToken", label: "Instagram Graph Token", placeholder: "IGQB...", type: "password", helpText: "From Meta for Developers portal" },
+      { key: "instagramId", label: "Instagram Account ID", placeholder: "17841...", helpText: "Your Professional Instagram ID" },
+    ],
+    syncOptions: [
+      { id: "instagram_sync", label: "Instagram Sync", description: "Receive and reply to Instagram DMs" },
     ]
   },
 ];
