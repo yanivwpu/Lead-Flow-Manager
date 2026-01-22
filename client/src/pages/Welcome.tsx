@@ -103,17 +103,17 @@ export function Welcome() {
   return (
     <div className="min-h-screen bg-white overflow-x-hidden">
       <Helmet>
-        <title>Multi-Channel CRM for Small Teams | WhachatCRM</title>
-        <meta name="description" content="Unified inbox for WhatsApp, SMS, Telegram, Instagram, Facebook & Web Chat. One inbox, every channel. Free plan available." />
-        <meta property="og:title" content="Multi-Channel CRM for Small Teams | WhachatCRM" />
-        <meta property="og:description" content="Unified inbox for WhatsApp, SMS, Telegram, Instagram, Facebook & Web Chat. One inbox, every channel. Free plan available." />
+        <title>Official WhatsApp API, Instagram & SMS - One Unified Inbox | WhachatCRM</title>
+        <meta name="description" content="Manage all your customer conversations from WhatsApp Business API, Instagram, Facebook, SMS and more in one unified inbox. Built for SMBs and solo founders." />
+        <meta property="og:title" content="Official WhatsApp API, Instagram & SMS - One Unified Inbox | WhachatCRM" />
+        <meta property="og:description" content="Manage all your customer conversations from WhatsApp Business API, Instagram, Facebook, SMS and more in one unified inbox. Built for SMBs and solo founders." />
         <meta property="og:image" content="https://whachatcrm.com/og-image.png" />
         <meta property="og:image:width" content="1200" />
         <meta property="og:image:height" content="627" />
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:image" content="https://whachatcrm.com/og-image.png" />
-        <meta name="twitter:title" content="Multi-Channel CRM for Small Teams | WhachatCRM" />
-        <meta name="twitter:description" content="Unified inbox for WhatsApp, SMS, Telegram, Instagram, Facebook & Web Chat. One inbox, every channel. Free plan available." />
+        <meta name="twitter:title" content="Official WhatsApp API, Instagram & SMS - One Unified Inbox | WhachatCRM" />
+        <meta name="twitter:description" content="Manage all your customer conversations from WhatsApp Business API, Instagram, Facebook, SMS and more in one unified inbox. Built for SMBs and solo founders." />
       </Helmet>
       <BookDemoModal isOpen={showDemoModal} onClose={() => setShowDemoModal(false)} />
       {/* Navigation */}
