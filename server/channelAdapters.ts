@@ -8,6 +8,80 @@ import {
 } from "./userTwilio";
 import type { Channel } from "@shared/schema";
 
+// Meta's 24-hour messaging window constants
+const META_WINDOW_HOURS = 24;
+const META_WINDOW_WARNING_HOURS = 4; // Warn when less than 4 hours remaining
+
+// Helper to check Meta messaging window status
+interface WindowStatus {
+  isActive: boolean;
+  expiresAt: Date | null;
+  hoursRemaining: number | null;
+  isExpiringSoon: boolean; // Less than 4 hours remaining
+}
+
+async function checkMetaWindow(conversationId: string): Promise<WindowStatus> {
+  const conversation = await storage.getConversation(conversationId);
+  
+  if (!conversation) {
+    return { isActive: false, expiresAt: null, hoursRemaining: null, isExpiringSoon: false };
+  }
+
+  // If no window expiry set, assume window is NOT active (user hasn't messaged yet)
+  if (!conversation.windowExpiresAt) {
+    return { isActive: false, expiresAt: null, hoursRemaining: null, isExpiringSoon: false };
+  }
+
+  const now = new Date();
+  const expiresAt = new Date(conversation.windowExpiresAt);
+  const hoursRemaining = (expiresAt.getTime() - now.getTime()) / (1000 * 60 * 60);
+
+  return {
+    isActive: expiresAt > now,
+    expiresAt,
+    hoursRemaining: Math.max(0, hoursRemaining),
+    isExpiringSoon: hoursRemaining > 0 && hoursRemaining < META_WINDOW_WARNING_HOURS,
+  };
+}
+
+// Update the messaging window when receiving an inbound message
+export async function updateMetaWindowOnInbound(conversationId: string): Promise<void> {
+  const windowExpiresAt = new Date(Date.now() + META_WINDOW_HOURS * 60 * 60 * 1000);
+  await storage.updateConversation(conversationId, {
+    windowActive: true,
+    windowExpiresAt,
+  });
+}
+
+// Parse Meta API errors into user-friendly messages
+function parseMetaError(error: any, channel: string): string {
+  const code = error?.code;
+  const subcode = error?.error_subcode;
+  const message = error?.message || '';
+
+  // Common Meta error codes
+  if (code === 10 || message.includes('permission')) {
+    return `${channel} permissions error. Please reconnect your ${channel} account in Settings.`;
+  }
+  if (code === 100 && subcode === 2018278) {
+    return `The 24-hour messaging window has expired. You can only respond after the customer messages you first.`;
+  }
+  if (code === 100 && message.includes('recipient')) {
+    return `Cannot reach this user on ${channel}. They may have blocked messages or their account is unavailable.`;
+  }
+  if (code === 190) {
+    return `${channel} access token expired. Please reconnect your account in Settings.`;
+  }
+  if (code === 551) {
+    return `This user cannot receive messages on ${channel}. They may need to start the conversation first.`;
+  }
+  if (message.includes('rate limit') || code === 4) {
+    return `Too many messages sent. Please wait a moment before sending more.`;
+  }
+
+  return error?.message || `Failed to send ${channel} message`;
+}
+
 class WhatsAppAdapter implements ChannelAdapter {
   async send(params: {
     contactId: string;
@@ -151,7 +225,7 @@ class InstagramAdapter implements ChannelAdapter {
     content: string;
     contentType?: string;
     mediaUrl?: string;
-  }): Promise<{ success: boolean; externalMessageId?: string; error?: string }> {
+  }): Promise<{ success: boolean; externalMessageId?: string; error?: string; windowStatus?: WindowStatus }> {
     try {
       const conversation = await storage.getConversation(params.conversationId);
       if (!conversation) {
@@ -163,24 +237,37 @@ class InstagramAdapter implements ChannelAdapter {
         return { success: false, error: "Contact Instagram ID not found" };
       }
 
+      // Check 24-hour messaging window (Meta policy)
+      const windowStatus = await checkMetaWindow(params.conversationId);
+      if (!windowStatus.isActive) {
+        return { 
+          success: false, 
+          error: "The 24-hour Instagram messaging window has expired. You can only respond after the customer messages you first.",
+          windowStatus,
+        };
+      }
+
       const settings = await storage.getChannelSettings(conversation.userId);
       const instagramSettings = settings.find(s => s.channel === 'instagram');
       
       if (!instagramSettings?.config) {
-        return { success: false, error: "Instagram not configured" };
+        return { success: false, error: "Instagram not configured. Please connect your Instagram account in Settings > Integrations." };
       }
 
       const config = instagramSettings.config as any;
       if (!config.accessToken) {
-        return { success: false, error: "Instagram access token missing" };
+        return { success: false, error: "Instagram access token missing. Please reconnect your Instagram account." };
       }
       if (!config.pageId) {
-        return { success: false, error: "Instagram page ID missing" };
+        return { success: false, error: "Instagram page ID missing. Please reconnect your Instagram account." };
       }
 
       const accessToken = config.accessToken;
       const pageId = config.pageId;
       const recipientId = contact.instagramId;
+
+      // Use RESPONSE messaging type (within 24-hour window) or MESSAGE_TAG for allowed cases
+      const messagingType = windowStatus.isExpiringSoon ? 'RESPONSE' : 'RESPONSE';
 
       const response = await fetch(
         `https://graph.facebook.com/v19.0/${pageId}/messages`,
@@ -195,32 +282,29 @@ class InstagramAdapter implements ChannelAdapter {
             message: params.mediaUrl 
               ? { attachment: { type: 'image', payload: { url: params.mediaUrl } } }
               : { text: params.content },
-            messaging_type: 'RESPONSE',
+            messaging_type: messagingType,
           }),
         }
       );
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error("Instagram API HTTP error:", response.status, errorText);
-        return { success: false, error: `Instagram API error: ${response.status}` };
-      }
-
       const result = await response.json();
 
-      if (result.error) {
-        return { success: false, error: result.error.message || "Instagram API error" };
+      if (!response.ok || result.error) {
+        const errorMessage = parseMetaError(result.error, 'Instagram');
+        console.error("Instagram API error:", response.status, result.error);
+        return { success: false, error: errorMessage, windowStatus };
       }
 
       return {
         success: true,
         externalMessageId: result.message_id,
+        windowStatus,
       };
     } catch (error: any) {
       console.error("Instagram send error:", error);
       return {
         success: false,
-        error: error.message || "Failed to send Instagram message",
+        error: parseMetaError(error, 'Instagram'),
       };
     }
   }
@@ -231,6 +315,11 @@ class InstagramAdapter implements ChannelAdapter {
     const config = instagramSettings?.config as any;
     return !!(instagramSettings?.isConnected && config?.accessToken && config?.pageId);
   }
+
+  // Check window status without sending (for UI)
+  async getWindowStatus(conversationId: string): Promise<WindowStatus> {
+    return checkMetaWindow(conversationId);
+  }
 }
 
 class FacebookAdapter implements ChannelAdapter {
@@ -240,7 +329,7 @@ class FacebookAdapter implements ChannelAdapter {
     content: string;
     contentType?: string;
     mediaUrl?: string;
-  }): Promise<{ success: boolean; externalMessageId?: string; error?: string }> {
+  }): Promise<{ success: boolean; externalMessageId?: string; error?: string; windowStatus?: WindowStatus }> {
     try {
       const conversation = await storage.getConversation(params.conversationId);
       if (!conversation) {
@@ -252,24 +341,37 @@ class FacebookAdapter implements ChannelAdapter {
         return { success: false, error: "Contact Facebook ID not found" };
       }
 
+      // Check 24-hour messaging window (Meta policy)
+      const windowStatus = await checkMetaWindow(params.conversationId);
+      if (!windowStatus.isActive) {
+        return { 
+          success: false, 
+          error: "The 24-hour Facebook Messenger window has expired. You can only respond after the customer messages you first.",
+          windowStatus,
+        };
+      }
+
       const settings = await storage.getChannelSettings(conversation.userId);
       const facebookSettings = settings.find(s => s.channel === 'facebook');
       
       if (!facebookSettings?.config) {
-        return { success: false, error: "Facebook Messenger not configured" };
+        return { success: false, error: "Facebook Messenger not configured. Please connect your Facebook Page in Settings > Integrations." };
       }
 
       const config = facebookSettings.config as any;
       if (!config.accessToken) {
-        return { success: false, error: "Facebook access token missing" };
+        return { success: false, error: "Facebook access token missing. Please reconnect your Facebook Page." };
       }
       if (!config.pageId) {
-        return { success: false, error: "Facebook page ID missing" };
+        return { success: false, error: "Facebook page ID missing. Please reconnect your Facebook Page." };
       }
 
       const accessToken = config.accessToken;
       const pageId = config.pageId;
       const recipientId = contact.facebookId;
+
+      // Use RESPONSE messaging type (within 24-hour window)
+      const messagingType = 'RESPONSE';
 
       const response = await fetch(
         `https://graph.facebook.com/v19.0/${pageId}/messages`,
@@ -284,32 +386,29 @@ class FacebookAdapter implements ChannelAdapter {
             message: params.mediaUrl 
               ? { attachment: { type: 'image', payload: { url: params.mediaUrl } } }
               : { text: params.content },
-            messaging_type: 'RESPONSE',
+            messaging_type: messagingType,
           }),
         }
       );
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error("Facebook API HTTP error:", response.status, errorText);
-        return { success: false, error: `Facebook API error: ${response.status}` };
-      }
-
       const result = await response.json();
 
-      if (result.error) {
-        return { success: false, error: result.error.message || "Facebook API error" };
+      if (!response.ok || result.error) {
+        const errorMessage = parseMetaError(result.error, 'Facebook Messenger');
+        console.error("Facebook API error:", response.status, result.error);
+        return { success: false, error: errorMessage, windowStatus };
       }
 
       return {
         success: true,
         externalMessageId: result.message_id,
+        windowStatus,
       };
     } catch (error: any) {
       console.error("Facebook send error:", error);
       return {
         success: false,
-        error: error.message || "Failed to send Facebook message",
+        error: parseMetaError(error, 'Facebook Messenger'),
       };
     }
   }
@@ -319,6 +418,11 @@ class FacebookAdapter implements ChannelAdapter {
     const facebookSettings = settings.find(s => s.channel === 'facebook');
     const config = facebookSettings?.config as any;
     return !!(facebookSettings?.isConnected && config?.accessToken && config?.pageId);
+  }
+
+  // Check window status without sending (for UI)
+  async getWindowStatus(conversationId: string): Promise<WindowStatus> {
+    return checkMetaWindow(conversationId);
   }
 }
 

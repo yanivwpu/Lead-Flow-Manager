@@ -19,7 +19,9 @@ import {
   Video,
   MoreVertical,
   Loader2,
-  ChevronDown
+  ChevronDown,
+  AlertCircle,
+  AlertTriangle
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -138,6 +140,23 @@ export function UnifiedInbox() {
   const { data: messages = [] } = useQuery<Message[]>({
     queryKey: ["/api/conversations", primaryConversation?.id, "messages"],
     enabled: !!primaryConversation?.id,
+  });
+
+  // Window status for Meta channels (Instagram, Facebook)
+  interface WindowStatus {
+    hasRestriction: boolean;
+    isActive: boolean;
+    windowExpiresAt?: string;
+    hoursRemaining?: number;
+    isExpiringSoon?: boolean;
+    channel: string;
+    message?: string;
+  }
+
+  const { data: windowStatus } = useQuery<WindowStatus>({
+    queryKey: ["/api/conversations", primaryConversation?.id, "window-status"],
+    enabled: !!primaryConversation?.id,
+    refetchInterval: 60000, // Refresh every minute
   });
 
   const sendMessageMutation = useMutation({
@@ -493,9 +512,36 @@ export function UnifiedInbox() {
             </div>
 
             <div className="p-4 border-t bg-white">
+              {/* Meta 24-hour window warning */}
+              {windowStatus?.hasRestriction && !windowStatus?.isActive && (
+                <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2">
+                  <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-medium text-red-700">Messaging window expired</p>
+                    <p className="text-xs text-red-600 mt-0.5">
+                      The 24-hour {windowStatus.channel === 'instagram' ? 'Instagram' : 'Facebook Messenger'} messaging window has closed. 
+                      You can only respond after {contactData?.contact?.name || 'the customer'} messages you first.
+                    </p>
+                  </div>
+                </div>
+              )}
+              {windowStatus?.hasRestriction && windowStatus?.isExpiringSoon && windowStatus?.isActive && (
+                <div className="mb-3 p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-2">
+                  <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-medium text-amber-700">Window expiring soon</p>
+                    <p className="text-xs text-amber-600 mt-0.5">
+                      Only {windowStatus.hoursRemaining?.toFixed(1)} hours left to reply via {windowStatus.channel === 'instagram' ? 'Instagram' : 'Facebook Messenger'}. 
+                      After that, you'll need to wait for the customer to message first.
+                    </p>
+                  </div>
+                </div>
+              )}
               <div className="flex items-center gap-2">
                 <Textarea
-                  placeholder="Type a message..."
+                  placeholder={windowStatus?.hasRestriction && !windowStatus?.isActive 
+                    ? "Cannot send - messaging window expired" 
+                    : "Type a message..."}
                   className="min-h-[44px] max-h-32 resize-none"
                   value={messageInput}
                   onChange={(e) => setMessageInput(e.target.value)}
@@ -505,11 +551,12 @@ export function UnifiedInbox() {
                       handleSendMessage();
                     }
                   }}
+                  disabled={windowStatus?.hasRestriction && !windowStatus?.isActive}
                   data-testid="input-message"
                 />
                 <Button
                   onClick={handleSendMessage}
-                  disabled={!messageInput.trim() || sendMessageMutation.isPending}
+                  disabled={!messageInput.trim() || sendMessageMutation.isPending || (windowStatus?.hasRestriction && !windowStatus?.isActive)}
                   data-testid="button-send-message"
                 >
                   {sendMessageMutation.isPending ? (
@@ -522,6 +569,11 @@ export function UnifiedInbox() {
               <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
                 {getChannelIcon(contactData.contact.primaryChannelOverride as Channel || contactData.contact.primaryChannel)}
                 Sending via {CHANNEL_CONFIG[contactData.contact.primaryChannelOverride as Channel || contactData.contact.primaryChannel]?.label}
+                {windowStatus?.hasRestriction && windowStatus?.isActive && windowStatus?.hoursRemaining && (
+                  <span className="ml-2 text-amber-600">
+                    ({Math.round(windowStatus.hoursRemaining)}h window remaining)
+                  </span>
+                )}
               </p>
             </div>
           </>
