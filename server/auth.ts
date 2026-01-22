@@ -54,6 +54,7 @@ export function setupAuth(app: Express) {
           
           if (email.toLowerCase() === DEMO_EMAIL && password === DEMO_PASSWORD) {
             let user = await storage.getUserByEmail(DEMO_EMAIL);
+            let needsSampleData = false;
             
             if (!user) {
               // Create demo user if it doesn't exist
@@ -63,6 +64,7 @@ export function setupAuth(app: Express) {
                 email: DEMO_EMAIL,
                 password: hashedPassword,
               });
+              needsSampleData = true;
               console.log('[AUTH] Demo user created on-demand');
             } else {
               // Verify password, if wrong fix it
@@ -72,6 +74,22 @@ export function setupAuth(app: Express) {
                 user = await storage.updateUser(user.id, { password: hashedPassword }) || user;
                 console.log('[AUTH] Demo user password fixed on-demand');
               }
+            }
+            
+            // Ensure Pro subscription
+            if (user.subscriptionPlan !== 'pro') {
+              user = await storage.updateUser(user.id, { 
+                subscriptionPlan: 'pro',
+                onboardingCompleted: true,
+                twilioConnected: true
+              }) || user;
+            }
+            
+            // Add sample data if needed (check if chats exist)
+            const existingChats = await storage.getChats(user.id);
+            if (existingChats.length === 0) {
+              await setupDemoSampleData(user.id);
+              console.log('[AUTH] Demo sample data created');
             }
             
             return done(null, user);
@@ -404,6 +422,133 @@ export function registerAuthRoutes(app: Express) {
       res.status(500).json({ error: 'Failed to reset password' });
     }
   });
+}
+
+// Setup demo sample data for showcase
+async function setupDemoSampleData(userId: string) {
+  const sampleChats = [
+    {
+      userId,
+      name: 'Sarah Johnson',
+      avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Sarah',
+      whatsappPhone: 'whatsapp:+14155551234',
+      lastMessage: 'Thanks! I\'ll check it out.',
+      time: new Date().toISOString(),
+      unread: 2,
+      tag: 'Hot Lead',
+      pipelineStage: 'Qualified',
+      status: 'open',
+      notes: 'Interested in 3BR property in downtown area. Budget $500-600k.',
+      messages: JSON.stringify([
+        { id: '1', text: 'Hi! I saw your listing for the downtown condo. Is it still available?', sender: 'customer', time: '10:30 AM', channel: 'whatsapp' },
+        { id: '2', text: 'Yes, it\'s still available! Would you like to schedule a viewing?', sender: 'agent', time: '10:32 AM', channel: 'whatsapp' },
+        { id: '3', text: 'That would be great! What times work this week?', sender: 'customer', time: '10:35 AM', channel: 'whatsapp' },
+        { id: '4', text: 'I have openings Thursday at 2pm or Saturday at 11am. Which works better for you?', sender: 'agent', time: '10:38 AM', channel: 'whatsapp' },
+        { id: '5', text: 'Saturday at 11am would be perfect!', sender: 'customer', time: '10:40 AM', channel: 'whatsapp' },
+        { id: '6', text: 'Great! I\'ll send you the property details and confirmation.', sender: 'agent', time: '10:42 AM', channel: 'whatsapp' },
+        { id: '7', text: 'Thanks! I\'ll check it out.', sender: 'customer', time: '10:45 AM', channel: 'whatsapp' },
+      ]),
+    },
+    {
+      userId,
+      name: 'Michael Chen',
+      avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Michael',
+      whatsappPhone: 'sms:+14155552345',
+      lastMessage: 'Perfect, see you tomorrow!',
+      time: new Date(Date.now() - 3600000).toISOString(),
+      unread: 0,
+      tag: 'Customer',
+      pipelineStage: 'Closed Won',
+      status: 'resolved',
+      notes: 'Just closed on beach house property. Very happy client!',
+      messages: JSON.stringify([
+        { id: '1', text: 'Hi! Just wanted to confirm our closing meeting tomorrow at 3pm?', sender: 'agent', time: '2:00 PM', channel: 'sms' },
+        { id: '2', text: 'Yes! We\'re so excited! Do we need to bring anything else?', sender: 'customer', time: '2:05 PM', channel: 'sms' },
+        { id: '3', text: 'Just photo IDs and your checkbook for any remaining fees. Everything else is ready!', sender: 'agent', time: '2:08 PM', channel: 'sms' },
+        { id: '4', text: 'Perfect, see you tomorrow!', sender: 'customer', time: '2:10 PM', channel: 'sms' },
+      ]),
+    },
+    {
+      userId,
+      name: 'Emma Williams',
+      avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Emma',
+      whatsappPhone: 'webchat:visitor_emma_123',
+      lastMessage: 'What\'s the pet policy for rentals?',
+      time: new Date(Date.now() - 7200000).toISOString(),
+      unread: 1,
+      tag: 'New',
+      pipelineStage: 'Lead',
+      status: 'open',
+      notes: '',
+      messages: JSON.stringify([
+        { id: '1', text: 'Hello! I\'m looking for a pet-friendly rental apartment in the city.', sender: 'customer', time: '11:00 AM', channel: 'webchat' },
+        { id: '2', text: 'Welcome! We have several pet-friendly options. What\'s your budget range?', sender: 'agent', time: '11:02 AM', channel: 'webchat' },
+        { id: '3', text: 'Around $2000-2500/month. I have a medium-sized dog.', sender: 'customer', time: '11:05 AM', channel: 'webchat' },
+        { id: '4', text: 'What\'s the pet policy for rentals?', sender: 'customer', time: '11:06 AM', channel: 'webchat' },
+      ]),
+    },
+    {
+      userId,
+      name: 'David Martinez',
+      avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=David',
+      whatsappPhone: 'telegram:@david_m',
+      lastMessage: 'Can I get more photos of the kitchen?',
+      time: new Date(Date.now() - 14400000).toISOString(),
+      unread: 1,
+      tag: 'Warm Lead',
+      pipelineStage: 'Proposal',
+      status: 'pending',
+      notes: 'Relocating from NYC. Looking for family home with good schools nearby.',
+      messages: JSON.stringify([
+        { id: '1', text: 'I\'m interested in the 4BR home on Oak Street you posted.', sender: 'customer', time: '9:00 AM', channel: 'telegram' },
+        { id: '2', text: 'Great choice! It\'s a beautiful property. The asking price is $750,000.', sender: 'agent', time: '9:15 AM', channel: 'telegram' },
+        { id: '3', text: 'Can I get more photos of the kitchen?', sender: 'customer', time: '9:20 AM', channel: 'telegram' },
+      ]),
+    },
+    {
+      userId,
+      name: 'Lisa Thompson',
+      avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Lisa',
+      whatsappPhone: 'instagram:lisathompson_realestate',
+      lastMessage: 'Love this property! DM sent.',
+      time: new Date(Date.now() - 28800000).toISOString(),
+      unread: 1,
+      tag: 'Hot Lead',
+      pipelineStage: 'Qualified',
+      status: 'open',
+      notes: 'Instagram lead from property showcase reel',
+      messages: JSON.stringify([
+        { id: '1', text: 'Hi! Saw your reel about the luxury penthouse. Is it available?', sender: 'customer', time: '4:00 PM', channel: 'instagram' },
+        { id: '2', text: 'Yes it is! Would you like to schedule a private viewing?', sender: 'agent', time: '4:30 PM', channel: 'instagram' },
+        { id: '3', text: 'Love this property! DM sent.', sender: 'customer', time: '5:00 PM', channel: 'instagram' },
+      ]),
+    },
+    {
+      userId,
+      name: 'James Wilson',
+      avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=James',
+      whatsappPhone: 'facebook:james.wilson.investor',
+      lastMessage: 'Looking for investment properties with good ROI.',
+      time: new Date(Date.now() - 43200000).toISOString(),
+      unread: 0,
+      tag: 'Investor',
+      pipelineStage: 'Negotiation',
+      status: 'open',
+      notes: 'Commercial investor. Looking for multi-family units.',
+      messages: JSON.stringify([
+        { id: '1', text: 'Hello! I\'m an investor looking for multi-family properties.', sender: 'customer', time: '10:00 AM', channel: 'facebook' },
+        { id: '2', text: 'Welcome James! We have several excellent multi-family options with strong rental income potential.', sender: 'agent', time: '10:30 AM', channel: 'facebook' },
+        { id: '3', text: 'Great! What kind of cap rates are you seeing?', sender: 'customer', time: '11:00 AM', channel: 'facebook' },
+        { id: '4', text: 'Currently seeing 5-7% cap rates in our market. I can send you a curated list.', sender: 'agent', time: '11:15 AM', channel: 'facebook' },
+        { id: '5', text: 'Looking for investment properties with good ROI.', sender: 'customer', time: '11:30 AM', channel: 'facebook' },
+      ]),
+    },
+  ];
+
+  // Create all sample chats
+  for (const chatData of sampleChats) {
+    await storage.createChat(chatData as any);
+  }
 }
 
 // Extend Express Request type to include user
