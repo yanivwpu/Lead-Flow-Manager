@@ -48,6 +48,36 @@ export function setupAuth(app: Express) {
       },
       async (email, password, done) => {
         try {
+          // Special handling for demo account - auto-create/fix in any environment
+          const DEMO_EMAIL = 'demo@whachat.com';
+          const DEMO_PASSWORD = 'demo_password_123';
+          
+          if (email.toLowerCase() === DEMO_EMAIL && password === DEMO_PASSWORD) {
+            let user = await storage.getUserByEmail(DEMO_EMAIL);
+            
+            if (!user) {
+              // Create demo user if it doesn't exist
+              const hashedPassword = await bcrypt.hash(DEMO_PASSWORD, 10);
+              user = await storage.createUser({
+                name: 'Demo Agent',
+                email: DEMO_EMAIL,
+                password: hashedPassword,
+              });
+              console.log('[AUTH] Demo user created on-demand');
+            } else {
+              // Verify password, if wrong fix it
+              const isValid = await bcrypt.compare(DEMO_PASSWORD, user.password);
+              if (!isValid) {
+                const hashedPassword = await bcrypt.hash(DEMO_PASSWORD, 10);
+                user = await storage.updateUser(user.id, { password: hashedPassword }) || user;
+                console.log('[AUTH] Demo user password fixed on-demand');
+              }
+            }
+            
+            return done(null, user);
+          }
+          
+          // Normal login flow for non-demo accounts
           const user = await storage.getUserByEmail(email);
           if (!user) {
             return done(null, false, { message: 'Invalid email or password' });
