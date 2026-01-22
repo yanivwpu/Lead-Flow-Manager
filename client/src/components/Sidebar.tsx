@@ -21,7 +21,7 @@ export function Sidebar() {
   ];
 
   return (
-    <div className="h-full w-[60px] md:w-[240px] bg-white border-r flex flex-col items-center md:items-stretch py-3 z-20">
+    <div className="h-full w-[50px] md:w-[200px] bg-white border-r flex flex-col items-center md:items-stretch py-3 z-20">
       <div className="mb-4 px-0 md:px-6 flex items-center justify-center md:justify-start">
         <div className="h-8 w-8 rounded-full bg-brand-green flex items-center justify-center text-white font-bold shrink-0">
           C

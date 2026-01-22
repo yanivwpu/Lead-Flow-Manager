@@ -577,7 +577,7 @@ export function Chats() {
       
       {/* Chat List */}
       <div className={cn(
-        "w-full md:w-[300px] lg:w-[320px] flex flex-col border-r border-gray-200 bg-white",
+        "w-full md:w-[280px] lg:w-[300px] flex flex-col border-r border-gray-200 bg-white",
         selectedChatId ? "hidden md:flex" : "flex",
         demoMode && "pt-10"
       )}>
@@ -814,7 +814,7 @@ export function Chats() {
 
               {/* Messages Area */}
               <div 
-                className="flex-1 overflow-y-auto p-2 sm:p-4 md:p-8 relative min-h-0" 
+                className="flex-1 overflow-y-auto p-2 sm:p-3 md:p-4 relative min-h-0" 
                 style={{ backgroundImage: 'url("https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png")', backgroundRepeat: 'repeat', backgroundSize: '400px' }}
               >
                 <div className="absolute inset-0 bg-[#efeae2]/90 pointer-events-none" />
@@ -854,7 +854,7 @@ export function Chats() {
                             )}
                           >
                             <div className={cn(
-                              "max-w-[80%] md:max-w-[60%] rounded-md shadow-sm relative overflow-hidden",
+                              "max-w-[90%] md:max-w-[75%] rounded-lg shadow-sm relative overflow-hidden",
                               msg.mediaUrl && msg.mediaType === 'image' ? "p-1" : "px-2.5 py-1.5",
                               isFromMe 
                                 ? "bg-[#d9fdd3] text-gray-900 rounded-tr-none" 
