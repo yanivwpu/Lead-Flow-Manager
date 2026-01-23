@@ -176,6 +176,30 @@ export function registerAuthRoutes(app: Express) {
         trialEndsAt,
       });
 
+      // Check for referral attribution (partner referral from session)
+      const referralPartnerId = (req.session as any)?.referralPartnerId;
+      if (referralPartnerId) {
+        try {
+          // Prevent self-referral (partner cannot earn commission on own account)
+          const partner = await storage.getPartner(referralPartnerId);
+          if (partner && partner.email.toLowerCase() !== email.toLowerCase()) {
+            // Assign partner (first-touch wins, cannot be overwritten)
+            const assigned = await storage.assignPartnerToUser(user.id, referralPartnerId);
+            if (assigned) {
+              // Increment partner referral count
+              await storage.incrementPartnerReferrals(referralPartnerId);
+              console.log(`[REFERRAL] User ${user.email} attributed to partner ${partner.name}`);
+            }
+          }
+          // Clear referral session after attribution
+          (req.session as any).referralCode = null;
+          (req.session as any).referralPartnerId = null;
+        } catch (refError) {
+          console.error('Referral attribution error:', refError);
+          // Continue with signup even if referral fails
+        }
+      }
+
       // Register phone number if provided
       if (phoneNumber && phoneNumber.trim()) {
         try {

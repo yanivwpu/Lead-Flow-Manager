@@ -3556,6 +3556,333 @@ export async function registerRoutes(
     }
   });
 
+  // ================== PARTNER PORTAL ==================
+
+  // Partner Portal: Login (email + password)
+  app.post("/api/partner-portal/login", async (req, res) => {
+    try {
+      const { email, password } = req.body;
+      
+      if (!email || !password) {
+        return res.status(400).json({ error: "Email and password required" });
+      }
+
+      const partner = await storage.getPartnerByEmail(email.toLowerCase().trim());
+      
+      if (!partner) {
+        return res.status(401).json({ error: "Invalid email or password" });
+      }
+
+      const validPassword = await bcrypt.compare(password, partner.password);
+      
+      if (!validPassword) {
+        return res.status(401).json({ error: "Invalid email or password" });
+      }
+
+      if (partner.status !== 'active') {
+        return res.status(401).json({ error: "Account is paused" });
+      }
+
+      (req.session as any).partnerId = partner.id;
+      res.json({ 
+        success: true, 
+        partner: {
+          id: partner.id,
+          name: partner.name,
+          email: partner.email,
+          refCode: partner.refCode
+        }
+      });
+    } catch (error) {
+      console.error("Partner login error:", error);
+      res.status(500).json({ error: "Login failed" });
+    }
+  });
+
+  // Partner Portal: Check auth
+  app.get("/api/partner-portal/check", async (req, res) => {
+    const partnerId = (req.session as any)?.partnerId;
+    if (!partnerId) {
+      return res.json({ authenticated: false });
+    }
+    const partner = await storage.getPartner(partnerId);
+    if (!partner || partner.status !== 'active') {
+      return res.json({ authenticated: false });
+    }
+    res.json({ 
+      authenticated: true, 
+      partner: {
+        id: partner.id,
+        name: partner.name,
+        email: partner.email,
+        refCode: partner.refCode
+      }
+    });
+  });
+
+  // Partner Portal: Logout
+  app.post("/api/partner-portal/logout", async (req, res) => {
+    (req.session as any).partnerId = null;
+    res.json({ success: true });
+  });
+
+  // Partner middleware
+  const requirePartner = async (req: any, res: any, next: any) => {
+    const partnerId = (req.session as any)?.partnerId;
+    if (!partnerId) {
+      return res.status(401).json({ error: "Partner authentication required" });
+    }
+    const partner = await storage.getPartner(partnerId);
+    if (!partner || partner.status !== 'active') {
+      return res.status(401).json({ error: "Partner authentication required" });
+    }
+    req.partner = partner;
+    next();
+  };
+
+  // Partner Portal: Get dashboard stats
+  app.get("/api/partner-portal/stats", requirePartner, async (req: any, res) => {
+    try {
+      const partner = req.partner;
+      
+      // Get referred users
+      const referredUsers = await storage.getUsersByPartnerId(partner.id);
+      
+      // Get commission stats
+      const commissionStats = await storage.getPartnerCommissionStats(partner.id);
+      
+      // Count active paid users
+      const activePaidUsers = referredUsers.filter(u => 
+        u.subscriptionPlan && u.subscriptionPlan !== 'free' && 
+        u.subscriptionStatus === 'active'
+      ).length;
+      
+      res.json({
+        refCode: partner.refCode,
+        refLink: `https://whachatcrm.com/?ref=${partner.refCode}`,
+        totalReferrals: partner.totalReferrals || referredUsers.length,
+        activePaidUsers,
+        totalEarnings: commissionStats.totalEarnings,
+        pendingEarnings: commissionStats.pendingEarnings,
+        paidEarnings: commissionStats.paidEarnings,
+        thisMonthEarnings: commissionStats.thisMonthEarnings,
+        commissionRate: partner.commissionRate,
+        commissionDurationMonths: partner.commissionDurationMonths,
+      });
+    } catch (error) {
+      console.error("Error fetching partner stats:", error);
+      res.status(500).json({ error: "Failed to fetch stats" });
+    }
+  });
+
+  // Partner Portal: Get referred users list
+  app.get("/api/partner-portal/referrals", requirePartner, async (req: any, res) => {
+    try {
+      const referredUsers = await storage.getUsersByPartnerId(req.partner.id);
+      
+      // Return only safe user info
+      const safeUsers = referredUsers.map(u => ({
+        id: u.id,
+        name: u.name,
+        email: u.email,
+        subscriptionPlan: u.subscriptionPlan,
+        subscriptionStatus: u.subscriptionStatus,
+        signupDate: u.createdAt,
+      }));
+      
+      res.json(safeUsers);
+    } catch (error) {
+      console.error("Error fetching partner referrals:", error);
+      res.status(500).json({ error: "Failed to fetch referrals" });
+    }
+  });
+
+  // Partner Portal: Get commissions list
+  app.get("/api/partner-portal/commissions", requirePartner, async (req: any, res) => {
+    try {
+      const commissions = await storage.getCommissionsByPartner(req.partner.id);
+      res.json(commissions);
+    } catch (error) {
+      console.error("Error fetching partner commissions:", error);
+      res.status(500).json({ error: "Failed to fetch commissions" });
+    }
+  });
+
+  // ================== ADMIN PARTNER MANAGEMENT ==================
+
+  // Admin: Get all partners
+  app.get("/api/admin/partners", requireAdmin, async (req, res) => {
+    try {
+      const allPartners = await storage.getPartners();
+      res.json(allPartners);
+    } catch (error) {
+      console.error("Error fetching partners:", error);
+      res.status(500).json({ error: "Failed to fetch partners" });
+    }
+  });
+
+  // Admin: Create partner
+  app.post("/api/admin/partners", requireAdmin, async (req, res) => {
+    try {
+      const { name, email, password, commissionRate, commissionDurationMonths } = req.body;
+      
+      if (!name || !email || !password) {
+        return res.status(400).json({ error: "Name, email, and password are required" });
+      }
+
+      // Check if email already exists
+      const existing = await storage.getPartnerByEmail(email);
+      if (existing) {
+        return res.status(400).json({ error: "A partner with this email already exists" });
+      }
+
+      // Generate unique ref code
+      const refCode = await storage.generateUniqueRefCode();
+      
+      // Hash password
+      const hashedPassword = await bcrypt.hash(password, 10);
+      
+      const partner = await storage.createPartner({
+        name,
+        email,
+        password: hashedPassword,
+        refCode,
+        commissionRate: commissionRate || '20.00',
+        commissionDurationMonths: commissionDurationMonths || 6,
+        status: 'active',
+      });
+      
+      res.status(201).json(partner);
+    } catch (error) {
+      console.error("Error creating partner:", error);
+      res.status(500).json({ error: "Failed to create partner" });
+    }
+  });
+
+  // Admin: Update partner
+  app.patch("/api/admin/partners/:id", requireAdmin, async (req, res) => {
+    try {
+      const { name, email, password, commissionRate, commissionDurationMonths, status } = req.body;
+      
+      const updates: any = {};
+      if (name !== undefined) updates.name = name;
+      if (email !== undefined) updates.email = email.toLowerCase();
+      if (commissionRate !== undefined) updates.commissionRate = commissionRate;
+      if (commissionDurationMonths !== undefined) updates.commissionDurationMonths = commissionDurationMonths;
+      if (status !== undefined) updates.status = status;
+      
+      // If password is provided, hash it
+      if (password) {
+        updates.password = await bcrypt.hash(password, 10);
+      }
+      
+      const partner = await storage.updatePartner(req.params.id, updates);
+      if (!partner) {
+        return res.status(404).json({ error: "Partner not found" });
+      }
+      
+      res.json(partner);
+    } catch (error) {
+      console.error("Error updating partner:", error);
+      res.status(500).json({ error: "Failed to update partner" });
+    }
+  });
+
+  // Admin: Delete partner
+  app.delete("/api/admin/partners/:id", requireAdmin, async (req, res) => {
+    try {
+      await storage.deletePartner(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting partner:", error);
+      res.status(500).json({ error: "Failed to delete partner" });
+    }
+  });
+
+  // Admin: Get all commissions
+  app.get("/api/admin/commissions", requireAdmin, async (req, res) => {
+    try {
+      const { partnerId, salespersonId, status } = req.query;
+      const commissions = await storage.getCommissions({
+        partnerId: partnerId as string,
+        salespersonId: salespersonId as string,
+        status: status as string,
+      });
+      res.json(commissions);
+    } catch (error) {
+      console.error("Error fetching commissions:", error);
+      res.status(500).json({ error: "Failed to fetch commissions" });
+    }
+  });
+
+  // Admin: Mark commission as paid
+  app.patch("/api/admin/commissions/:id/pay", requireAdmin, async (req, res) => {
+    try {
+      const commission = await storage.markCommissionPaid(req.params.id);
+      if (!commission) {
+        return res.status(404).json({ error: "Commission not found" });
+      }
+      res.json(commission);
+    } catch (error) {
+      console.error("Error paying commission:", error);
+      res.status(500).json({ error: "Failed to pay commission" });
+    }
+  });
+
+  // Admin: Get users with attribution source
+  app.get("/api/admin/users-attribution", requireAdmin, async (req, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 100;
+      const usersWithAttribution = await storage.getUsersWithAttribution(limit);
+      res.json(usersWithAttribution);
+    } catch (error) {
+      console.error("Error fetching users attribution:", error);
+      res.status(500).json({ error: "Failed to fetch users attribution" });
+    }
+  });
+
+  // Public: Track referral on page visit (store in session)
+  app.post("/api/referral/track", async (req, res) => {
+    try {
+      const { refCode } = req.body;
+      
+      if (!refCode) {
+        return res.status(400).json({ error: "Ref code required" });
+      }
+
+      // Validate the ref code exists and is active
+      const partner = await storage.getPartnerByRefCode(refCode);
+      if (!partner || partner.status !== 'active') {
+        return res.status(400).json({ error: "Invalid referral code" });
+      }
+
+      // Store in session
+      (req.session as any).referralCode = refCode;
+      (req.session as any).referralPartnerId = partner.id;
+      
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error tracking referral:", error);
+      res.status(500).json({ error: "Failed to track referral" });
+    }
+  });
+
+  // Public: Get current referral session
+  app.get("/api/referral/current", async (req, res) => {
+    const refCode = (req.session as any)?.referralCode;
+    const partnerId = (req.session as any)?.referralPartnerId;
+    
+    if (!refCode || !partnerId) {
+      return res.json({ hasReferral: false });
+    }
+    
+    res.json({ 
+      hasReferral: true, 
+      refCode,
+      partnerId
+    });
+  });
+
   // ============= UNIFIED INBOX API (Multi-Channel CRM) =============
 
   // Get unified inbox - all contacts sorted by last activity
