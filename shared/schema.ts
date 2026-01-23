@@ -119,6 +119,9 @@ export const users = pgTable("users", {
   autoReplyDelay: integer("auto_reply_delay").default(0), // seconds to wait before sending
   // Onboarding
   onboardingCompleted: boolean("onboarding_completed").default(false),
+  // Partner referral tracking - locked after first assignment (first-touch wins)
+  partnerId: varchar("partner_id"),
+  partnerAssignedAt: timestamp("partner_assigned_at"), // when partner was assigned (for commission duration)
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -595,6 +598,54 @@ export const adminSettings = pgTable("admin_settings", {
   passwordHash: text("password_hash").notNull(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
+
+// Partners for referral program
+export const partners = pgTable("partners", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  email: text("email").notNull().unique(),
+  password: text("password").notNull(), // hashed password
+  refCode: varchar("ref_code", { length: 12 }).notNull().unique(), // unique, immutable referral code
+  commissionRate: numeric("commission_rate", { precision: 5, scale: 2 }).default("20.00"), // default 20%
+  commissionDurationMonths: integer("commission_duration_months").default(6), // default 6 months
+  status: text("status").notNull().default("active"), // active, paused
+  totalReferrals: integer("total_referrals").default(0),
+  totalEarnings: numeric("total_earnings", { precision: 10, scale: 2 }).default("0"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Commissions for both partners and salespeople
+export const commissions = pgTable("commissions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }), // the paying user
+  partnerId: varchar("partner_id").references(() => partners.id, { onDelete: "set null" }), // nullable
+  salespersonId: varchar("salesperson_id").references(() => salespeople.id, { onDelete: "set null" }), // nullable
+  amount: numeric("amount", { precision: 10, scale: 2 }).notNull(),
+  billingPeriod: timestamp("billing_period").notNull(), // the invoice/subscription period
+  invoiceId: text("invoice_id"), // Stripe invoice ID
+  status: text("status").notNull().default("pending"), // pending, approved, paid
+  paidAt: timestamp("paid_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertPartnerSchema = createInsertSchema(partners).omit({
+  id: true,
+  refCode: true,
+  createdAt: true,
+  totalReferrals: true,
+  totalEarnings: true,
+});
+
+export const insertCommissionSchema = createInsertSchema(commissions).omit({
+  id: true,
+  createdAt: true,
+  paidAt: true,
+});
+
+export type InsertPartner = z.infer<typeof insertPartnerSchema>;
+export type Partner = typeof partners.$inferSelect;
+export type InsertCommission = z.infer<typeof insertCommissionSchema>;
+export type Commission = typeof commissions.$inferSelect;
 
 export const insertSalespersonSchema = createInsertSchema(salespeople).omit({
   id: true,
