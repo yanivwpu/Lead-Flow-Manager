@@ -26,7 +26,9 @@ const Blog = lazy(() => import("@/pages/Blog").then(m => ({ default: m.Blog })))
 const BlogPost = lazy(() => import("@/pages/BlogPost").then(m => ({ default: m.BlogPost })));
 const Admin = lazy(() => import("@/pages/Admin").then(m => ({ default: m.Admin })));
 const SalesPortal = lazy(() => import("@/pages/SalesPortal").then(m => ({ default: m.SalesPortal })));
+const PartnerPortal = lazy(() => import("@/pages/PartnerPortal").then(m => ({ default: m.PartnerPortal })));
 const NotFound = lazy(() => import("@/pages/not-found"));
+import { ReferralCapture } from "@/components/ReferralCapture";
 
 // Wrapper for protected routes
 function ProtectedRoute({ component: Component, ...rest }: any) {
@@ -69,6 +71,7 @@ function Router() {
       <Route path="/blog" component={Blog} />
       <Route path="/sales-admin" component={Admin} />
       <Route path="/sales-portal" component={SalesPortal} />
+      <Route path="/partner-portal" component={PartnerPortal} />
       
       {/* Protected Routes */}
       <Route path="/app/*?">
@@ -90,6 +93,7 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
+        <ReferralCapture />
         <Toaster />
         <Suspense fallback={<PageLoader />}>
           <Router />
