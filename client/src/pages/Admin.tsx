@@ -17,7 +17,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { 
   Users, Calendar, DollarSign, Plus, Edit2, Trash2, 
   LogOut, Loader2, CheckCircle, XCircle, Lock, UserCircle,
-  AlertCircle, MessageCircle, ArrowUpDown
+  AlertCircle, MessageCircle, ArrowUpDown, Link2, Percent
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -76,6 +76,19 @@ interface AdminUser {
   latestTicket: any | null;
 }
 
+interface Partner {
+  id: string;
+  name: string;
+  email: string;
+  refCode: string;
+  commissionRate: string;
+  commissionDurationMonths: number;
+  status: string;
+  totalReferrals: number;
+  totalEarnings: string;
+  createdAt: string;
+}
+
 export function Admin() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [password, setPassword] = useState("");
@@ -85,6 +98,10 @@ export function Admin() {
   const [isAddingPerson, setIsAddingPerson] = useState(false);
   const [newPerson, setNewPerson] = useState({ name: "", email: "", phone: "" });
   const [addError, setAddError] = useState("");
+  const [editingPartner, setEditingPartner] = useState<Partner | null>(null);
+  const [isAddingPartner, setIsAddingPartner] = useState(false);
+  const [newPartner, setNewPartner] = useState({ name: "", email: "", password: "", commissionRate: "20.00", commissionDurationMonths: 6 });
+  const [addPartnerError, setAddPartnerError] = useState("");
   
   const queryClient = useQueryClient();
 
@@ -151,7 +168,63 @@ export function Admin() {
     enabled: isLoggedIn,
   });
 
+  const { data: partners = [] } = useQuery<Partner[]>({
+    queryKey: ['/api/admin/partners'],
+    enabled: isLoggedIn,
+  });
+
   const [userSort, setUserSort] = useState<'date' | 'support' | 'plan'>('support');
+
+  const createPartner = useMutation({
+    mutationFn: async (data: { name: string; email: string; password: string; commissionRate?: string; commissionDurationMonths?: number }) => {
+      const res = await fetch('/api/admin/partners', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(data)
+      });
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || 'Failed to create partner');
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/partners'] });
+      setIsAddingPartner(false);
+      setNewPartner({ name: "", email: "", password: "", commissionRate: "20.00", commissionDurationMonths: 6 });
+      setAddPartnerError("");
+    },
+    onError: (error: Error) => {
+      setAddPartnerError(error.message);
+    }
+  });
+
+  const updatePartner = useMutation({
+    mutationFn: async ({ id, ...data }: Partial<Partner> & { id: string }) => {
+      const res = await fetch(`/api/admin/partners/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      if (!res.ok) throw new Error('Failed to update partner');
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/partners'] });
+      setEditingPartner(null);
+    }
+  });
+
+  const deletePartner = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetch(`/api/admin/partners/${id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Failed to delete partner');
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/partners'] });
+    }
+  });
 
   const createSalesperson = useMutation({
     mutationFn: async (data: { name: string; email: string; phone?: string }) => {
@@ -391,6 +464,10 @@ export function Admin() {
                   {adminUsers.filter(u => u.openTicketCount > 0).length}
                 </Badge>
               )}
+            </TabsTrigger>
+            <TabsTrigger value="partners" className="gap-2" data-testid="tab-partners">
+              <Link2 className="h-4 w-4" />
+              Partners
             </TabsTrigger>
           </TabsList>
 
@@ -823,8 +900,291 @@ export function Admin() {
               </div>
             </div>
           </TabsContent>
+
+          <TabsContent value="partners">
+            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+              <div className="p-4 border-b border-gray-200 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                <h2 className="font-semibold text-gray-900">Partner Program</h2>
+                <Button 
+                  onClick={() => setIsAddingPartner(true)}
+                  className="bg-brand-green hover:bg-brand-dark min-h-[44px] min-w-[44px] touch-manipulation"
+                  size="default"
+                  data-testid="button-add-partner"
+                >
+                  <Plus className="h-5 w-5 mr-2" />
+                  Add Partner
+                </Button>
+              </div>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Ref Code</TableHead>
+                    <TableHead>Email</TableHead>
+                    <TableHead>Rate</TableHead>
+                    <TableHead>Duration</TableHead>
+                    <TableHead>Referrals</TableHead>
+                    <TableHead>Earnings</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {partners.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={9} className="text-center py-8 text-gray-500">
+                        No partners yet. Add your first partner to get started.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    partners.map(partner => (
+                      <TableRow key={partner.id} data-testid={`row-partner-${partner.id}`}>
+                        <TableCell className="font-medium">{partner.name}</TableCell>
+                        <TableCell>
+                          <code className="bg-gray-100 px-2 py-1 rounded text-sm">
+                            {partner.refCode}
+                          </code>
+                        </TableCell>
+                        <TableCell>{partner.email}</TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1">
+                            <Percent className="h-3 w-3 text-gray-400" />
+                            {partner.commissionRate}
+                          </div>
+                        </TableCell>
+                        <TableCell>{partner.commissionDurationMonths}mo</TableCell>
+                        <TableCell>{partner.totalReferrals || 0}</TableCell>
+                        <TableCell className="text-green-600 font-medium">
+                          ${parseFloat(partner.totalEarnings || '0').toFixed(2)}
+                        </TableCell>
+                        <TableCell>
+                          {partner.status === 'active' ? (
+                            <Badge className="bg-green-100 text-green-700">Active</Badge>
+                          ) : (
+                            <Badge variant="secondary">Paused</Badge>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex gap-2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="min-h-[44px] min-w-[44px]"
+                              onClick={() => setEditingPartner(partner)}
+                              data-testid={`button-edit-partner-${partner.id}`}
+                            >
+                              <Edit2 className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="min-h-[44px] min-w-[44px] text-red-600 hover:text-red-700"
+                              onClick={() => {
+                                if (confirm('Delete this partner? This cannot be undone.')) {
+                                  deletePartner.mutate(partner.id);
+                                }
+                              }}
+                              data-testid={`button-delete-partner-${partner.id}`}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </TabsContent>
         </Tabs>
       </main>
+
+      <Sheet open={isAddingPartner} onOpenChange={(open) => {
+          setIsAddingPartner(open);
+          if (!open) setAddPartnerError("");
+        }}>
+        <SheetContent side="bottom" className="rounded-t-xl pb-8">
+          <SheetHeader className="pb-4">
+            <SheetTitle>Add Partner</SheetTitle>
+          </SheetHeader>
+          {addPartnerError && (
+            <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+              {addPartnerError}
+            </div>
+          )}
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="new-partner-name">Name</Label>
+              <Input
+                id="new-partner-name"
+                value={newPartner.name}
+                onChange={(e) => setNewPartner({ ...newPartner, name: e.target.value })}
+                placeholder="Partner Name"
+                className="text-base"
+                data-testid="input-partner-name"
+              />
+            </div>
+            <div>
+              <Label htmlFor="new-partner-email">Email</Label>
+              <Input
+                id="new-partner-email"
+                type="email"
+                value={newPartner.email}
+                onChange={(e) => setNewPartner({ ...newPartner, email: e.target.value })}
+                placeholder="partner@example.com"
+                className="text-base"
+                data-testid="input-partner-email"
+              />
+            </div>
+            <div>
+              <Label htmlFor="new-partner-password">Password</Label>
+              <Input
+                id="new-partner-password"
+                type="password"
+                value={newPartner.password}
+                onChange={(e) => setNewPartner({ ...newPartner, password: e.target.value })}
+                placeholder="Set a password for portal access"
+                className="text-base"
+                data-testid="input-partner-password"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="new-partner-rate">Commission Rate (%)</Label>
+                <Input
+                  id="new-partner-rate"
+                  value={newPartner.commissionRate}
+                  onChange={(e) => setNewPartner({ ...newPartner, commissionRate: e.target.value })}
+                  placeholder="20.00"
+                  className="text-base"
+                  data-testid="input-partner-rate"
+                />
+              </div>
+              <div>
+                <Label htmlFor="new-partner-duration">Duration (months)</Label>
+                <Input
+                  id="new-partner-duration"
+                  type="number"
+                  value={newPartner.commissionDurationMonths}
+                  onChange={(e) => setNewPartner({ ...newPartner, commissionDurationMonths: parseInt(e.target.value) || 6 })}
+                  placeholder="6"
+                  className="text-base"
+                  data-testid="input-partner-duration"
+                />
+              </div>
+            </div>
+          </div>
+          <SheetFooter className="pt-6">
+            <Button
+              onClick={() => createPartner.mutate(newPartner)}
+              disabled={createPartner.isPending}
+              className="w-full bg-brand-green hover:bg-brand-dark min-h-[48px]"
+              data-testid="button-submit-partner"
+            >
+              {createPartner.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Creating...
+                </>
+              ) : (
+                'Create Partner'
+              )}
+            </Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
+
+      <Dialog open={!!editingPartner} onOpenChange={(open) => !open && setEditingPartner(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Partner</DialogTitle>
+          </DialogHeader>
+          {editingPartner && (
+            <div className="space-y-4">
+              <div>
+                <Label>Name</Label>
+                <Input
+                  value={editingPartner.name}
+                  onChange={(e) => setEditingPartner({ ...editingPartner, name: e.target.value })}
+                  data-testid="input-edit-partner-name"
+                />
+              </div>
+              <div>
+                <Label>Email</Label>
+                <Input
+                  type="email"
+                  value={editingPartner.email}
+                  onChange={(e) => setEditingPartner({ ...editingPartner, email: e.target.value })}
+                  data-testid="input-edit-partner-email"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Commission Rate (%)</Label>
+                  <Input
+                    value={editingPartner.commissionRate}
+                    onChange={(e) => setEditingPartner({ ...editingPartner, commissionRate: e.target.value })}
+                    data-testid="input-edit-partner-rate"
+                  />
+                </div>
+                <div>
+                  <Label>Duration (months)</Label>
+                  <Input
+                    type="number"
+                    value={editingPartner.commissionDurationMonths}
+                    onChange={(e) => setEditingPartner({ ...editingPartner, commissionDurationMonths: parseInt(e.target.value) || 6 })}
+                    data-testid="input-edit-partner-duration"
+                  />
+                </div>
+              </div>
+              <div>
+                <Label>Status</Label>
+                <div className="flex gap-2 mt-2">
+                  <Button
+                    variant={editingPartner.status === 'active' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setEditingPartner({ ...editingPartner, status: 'active' })}
+                  >
+                    Active
+                  </Button>
+                  <Button
+                    variant={editingPartner.status === 'paused' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setEditingPartner({ ...editingPartner, status: 'paused' })}
+                  >
+                    Paused
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditingPartner(null)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (editingPartner) {
+                  updatePartner.mutate({
+                    id: editingPartner.id,
+                    name: editingPartner.name,
+                    email: editingPartner.email,
+                    commissionRate: editingPartner.commissionRate,
+                    commissionDurationMonths: editingPartner.commissionDurationMonths,
+                    status: editingPartner.status,
+                  });
+                }
+              }}
+              disabled={updatePartner.isPending}
+              className="bg-brand-green hover:bg-brand-dark"
+              data-testid="button-save-partner"
+            >
+              {updatePartner.isPending ? 'Saving...' : 'Save Changes'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Sheet open={isAddingPerson} onOpenChange={(open) => {
           setIsAddingPerson(open);
