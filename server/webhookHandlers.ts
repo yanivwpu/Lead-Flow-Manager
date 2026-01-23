@@ -46,6 +46,7 @@ export class WebhookHandlers {
     const invoice = event.data.object;
     const customerId = invoice.customer;
     const amountPaid = invoice.amount_paid / 100; // Convert from cents to dollars
+    const stripePaymentId = invoice.id;
 
     if (!customerId || amountPaid <= 0) {
       return;
@@ -57,14 +58,55 @@ export class WebhookHandlers {
       return;
     }
 
-    // Check if this user came from a conversion
+    // Check if this user came from a salesperson conversion
     const conversion = await storage.getSalesConversionByUserId(user.id);
-    if (!conversion) {
-      return;
+    if (conversion) {
+      // Add this payment to the conversion's total revenue
+      await storage.addConversionRevenue(user.id, amountPaid);
+      console.log(`Added $${amountPaid} revenue to conversion for user ${user.id}`);
+      
+      // Create salesperson commission (30% rate)
+      const salespersonCommission = (amountPaid * 0.30).toFixed(2);
+      await storage.createCommission({
+        userId: user.id,
+        salespersonId: conversion.salespersonId,
+        partnerId: null,
+        amount: salespersonCommission,
+        invoiceId: stripePaymentId,
+        billingPeriod: new Date(),
+        status: 'pending',
+      });
+      console.log(`Created $${salespersonCommission} commission for salesperson ${conversion.salespersonId}`);
     }
 
-    // Add this payment to the conversion's total revenue
-    await storage.addConversionRevenue(user.id, amountPaid);
-    console.log(`Added $${amountPaid} revenue to conversion for user ${user.id}`);
+    // Check if user has a partner referral
+    if (user.partnerId) {
+      const partner = await storage.getPartner(user.partnerId);
+      if (partner && partner.status === 'active') {
+        // Check if user is still within commission duration from signup
+        const userCreatedAt = user.createdAt ? new Date(user.createdAt) : new Date();
+        const commissionEndDate = new Date(userCreatedAt);
+        commissionEndDate.setMonth(commissionEndDate.getMonth() + (partner.commissionDurationMonths || 6));
+        
+        if (new Date() <= commissionEndDate) {
+          // Create partner commission
+          const commissionRate = parseFloat(partner.commissionRate || '20') / 100;
+          const partnerCommission = (amountPaid * commissionRate).toFixed(2);
+          
+          await storage.createCommission({
+            userId: user.id,
+            partnerId: partner.id,
+            salespersonId: null,
+            amount: partnerCommission,
+            invoiceId: stripePaymentId,
+            billingPeriod: new Date(),
+            status: 'pending',
+          });
+          console.log(`Created $${partnerCommission} commission for partner ${partner.name}`);
+        } else {
+          console.log(`Partner commission period expired for user ${user.id}`);
+        }
+      }
+    }
   }
 }
