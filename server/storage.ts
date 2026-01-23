@@ -26,10 +26,12 @@ import {
   type ActivityEvent, type InsertActivityEvent,
   type ChannelSetting, type InsertChannelSetting,
   type Channel, type InboxItem,
-  type SupportTicket, type InsertSupportTicket
+  type SupportTicket, type InsertSupportTicket,
+  type Partner, type InsertPartner,
+  type Commission, type InsertCommission
 } from "@shared/schema";
 import { db } from "../drizzle/db";
-import { users, chats, registeredPhones, messageUsage, conversationWindows, teamMembers, workflows, workflowExecutions, recurringReminders, webhooks, webhookDeliveries, integrations, messageTemplates, templateSends, dripCampaigns, dripSteps, dripEnrollments, dripSends, chatbotFlows, chatbotSessions, salespeople, demoBookings, salesConversions, adminSettings, contacts, conversations, messages, activityEvents, channelSettings, supportTickets, type InsertConversationWindow, type ConversationWindow } from "@shared/schema";
+import { users, chats, registeredPhones, messageUsage, conversationWindows, teamMembers, workflows, workflowExecutions, recurringReminders, webhooks, webhookDeliveries, integrations, messageTemplates, templateSends, dripCampaigns, dripSteps, dripEnrollments, dripSends, chatbotFlows, chatbotSessions, salespeople, demoBookings, salesConversions, adminSettings, contacts, conversations, messages, activityEvents, channelSettings, supportTickets, partners, commissions, type InsertConversationWindow, type ConversationWindow } from "@shared/schema";
 import { eq, and, lte, sql, isNotNull, asc, desc, gte, sum, gt, or, like, ilike } from "drizzle-orm";
 
 export interface IStorage {
@@ -1382,6 +1384,293 @@ export class DbStorage implements IStorage {
 
   async deleteSupportTicket(id: string): Promise<void> {
     await db.delete(supportTickets).where(eq(supportTickets.id, id));
+  }
+
+  // ============= PARTNER PORTAL METHODS =============
+
+  // Partner methods
+  async getPartners(): Promise<Partner[]> {
+    return await db.select().from(partners).orderBy(desc(partners.createdAt));
+  }
+
+  async getActivePartners(): Promise<Partner[]> {
+    return await db.select().from(partners)
+      .where(eq(partners.status, 'active'))
+      .orderBy(desc(partners.createdAt));
+  }
+
+  async getPartner(id: string): Promise<Partner | undefined> {
+    const result = await db.select().from(partners).where(eq(partners.id, id));
+    return result[0];
+  }
+
+  async getPartnerByEmail(email: string): Promise<Partner | undefined> {
+    const result = await db.select().from(partners).where(eq(partners.email, email.toLowerCase()));
+    return result[0];
+  }
+
+  async getPartnerByRefCode(refCode: string): Promise<Partner | undefined> {
+    const result = await db.select().from(partners).where(eq(partners.refCode, refCode.toUpperCase()));
+    return result[0];
+  }
+
+  async generateUniqueRefCode(): Promise<string> {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let code: string | null = null;
+    let exists = true;
+    while (exists) {
+      code = '';
+      for (let i = 0; i < 8; i++) {
+        code += chars.charAt(Math.floor(Math.random() * chars.length));
+      }
+      const existing = await this.getPartnerByRefCode(code);
+      exists = !!existing;
+    }
+    return code!;
+  }
+
+  async createPartner(partner: InsertPartner & { refCode: string }): Promise<Partner> {
+    const result = await db.insert(partners).values({
+      ...partner,
+      email: partner.email.toLowerCase(),
+      refCode: partner.refCode.toUpperCase()
+    }).returning();
+    return result[0];
+  }
+
+  async updatePartner(id: string, updates: Partial<Partner>): Promise<Partner | undefined> {
+    const result = await db.update(partners)
+      .set(updates)
+      .where(eq(partners.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async deletePartner(id: string): Promise<void> {
+    await db.delete(partners).where(eq(partners.id, id));
+  }
+
+  async incrementPartnerReferrals(partnerId: string): Promise<void> {
+    await db.update(partners)
+      .set({ totalReferrals: sql`${partners.totalReferrals} + 1` })
+      .where(eq(partners.id, partnerId));
+  }
+
+  async addPartnerEarnings(partnerId: string, amount: number): Promise<void> {
+    await db.update(partners)
+      .set({ totalEarnings: sql`COALESCE(${partners.totalEarnings}, 0) + ${amount}` })
+      .where(eq(partners.id, partnerId));
+  }
+
+  // Get users referred by a partner
+  async getUsersByPartnerId(partnerId: string): Promise<User[]> {
+    return await db.select().from(users)
+      .where(eq(users.partnerId, partnerId))
+      .orderBy(desc(users.createdAt));
+  }
+
+  // Assign partner to user (first-touch wins, cannot be overwritten)
+  async assignPartnerToUser(userId: string, partnerId: string): Promise<boolean> {
+    const user = await this.getUser(userId);
+    if (!user) return false;
+    if (user.partnerId) return false; // Already assigned, first-touch wins
+    
+    await db.update(users)
+      .set({ 
+        partnerId, 
+        partnerAssignedAt: new Date() 
+      })
+      .where(and(
+        eq(users.id, userId),
+        sql`${users.partnerId} IS NULL` // Double-check to prevent race conditions
+      ));
+    return true;
+  }
+
+  // Commission methods
+  async getCommissions(filters?: { partnerId?: string; salespersonId?: string; userId?: string; status?: string }): Promise<Commission[]> {
+    let query = db.select().from(commissions);
+    const conditions = [];
+    
+    if (filters?.partnerId) {
+      conditions.push(eq(commissions.partnerId, filters.partnerId));
+    }
+    if (filters?.salespersonId) {
+      conditions.push(eq(commissions.salespersonId, filters.salespersonId));
+    }
+    if (filters?.userId) {
+      conditions.push(eq(commissions.userId, filters.userId));
+    }
+    if (filters?.status) {
+      conditions.push(eq(commissions.status, filters.status));
+    }
+    
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions)) as any;
+    }
+    
+    return await query.orderBy(desc(commissions.createdAt));
+  }
+
+  async getCommission(id: string): Promise<Commission | undefined> {
+    const result = await db.select().from(commissions).where(eq(commissions.id, id));
+    return result[0];
+  }
+
+  async createCommission(commission: InsertCommission): Promise<Commission> {
+    const result = await db.insert(commissions).values(commission).returning();
+    
+    // Update partner's total earnings if applicable
+    if (commission.partnerId) {
+      await this.addPartnerEarnings(commission.partnerId, parseFloat(commission.amount));
+    }
+    
+    // Update salesperson's total earnings if applicable
+    if (commission.salespersonId) {
+      await db.update(salespeople)
+        .set({ totalEarnings: sql`COALESCE(${salespeople.totalEarnings}, 0) + ${commission.amount}` })
+        .where(eq(salespeople.id, commission.salespersonId));
+    }
+    
+    return result[0];
+  }
+
+  async updateCommission(id: string, updates: Partial<Commission>): Promise<Commission | undefined> {
+    const result = await db.update(commissions)
+      .set(updates)
+      .where(eq(commissions.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async markCommissionPaid(id: string): Promise<Commission | undefined> {
+    const result = await db.update(commissions)
+      .set({ status: 'paid', paidAt: new Date() })
+      .where(eq(commissions.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async getCommissionsByPartner(partnerId: string): Promise<Commission[]> {
+    return await db.select().from(commissions)
+      .where(eq(commissions.partnerId, partnerId))
+      .orderBy(desc(commissions.createdAt));
+  }
+
+  async getCommissionsBySalesperson(salespersonId: string): Promise<Commission[]> {
+    return await db.select().from(commissions)
+      .where(eq(commissions.salespersonId, salespersonId))
+      .orderBy(desc(commissions.createdAt));
+  }
+
+  async getCommissionsByUser(userId: string): Promise<Commission[]> {
+    return await db.select().from(commissions)
+      .where(eq(commissions.userId, userId))
+      .orderBy(desc(commissions.createdAt));
+  }
+
+  // Get commission stats for partner dashboard
+  async getPartnerCommissionStats(partnerId: string): Promise<{
+    totalEarnings: number;
+    pendingEarnings: number;
+    paidEarnings: number;
+    thisMonthEarnings: number;
+  }> {
+    const allCommissions = await this.getCommissionsByPartner(partnerId);
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    
+    const stats = {
+      totalEarnings: 0,
+      pendingEarnings: 0,
+      paidEarnings: 0,
+      thisMonthEarnings: 0,
+    };
+    
+    for (const c of allCommissions) {
+      const amount = parseFloat(c.amount);
+      stats.totalEarnings += amount;
+      
+      if (c.status === 'paid') {
+        stats.paidEarnings += amount;
+      } else {
+        stats.pendingEarnings += amount;
+      }
+      
+      if (c.createdAt && c.createdAt >= startOfMonth) {
+        stats.thisMonthEarnings += amount;
+      }
+    }
+    
+    return stats;
+  }
+
+  // Check if commission duration is still active for a user
+  async isCommissionDurationActive(userId: string): Promise<{ partnerActive: boolean; salespersonActive: boolean }> {
+    const user = await this.getUser(userId);
+    if (!user) return { partnerActive: false, salespersonActive: false };
+    
+    const result = { partnerActive: false, salespersonActive: false };
+    const now = new Date();
+    
+    // Check partner commission duration
+    if (user.partnerId && user.partnerAssignedAt) {
+      const partner = await this.getPartner(user.partnerId);
+      if (partner && partner.status === 'active') {
+        const durationMonths = partner.commissionDurationMonths || 6;
+        const expiresAt = new Date(user.partnerAssignedAt);
+        expiresAt.setMonth(expiresAt.getMonth() + durationMonths);
+        result.partnerActive = now < expiresAt;
+      }
+    }
+    
+    // Salesperson commission follows same 6-month rule from conversion date
+    // (Checked via salesConversions table)
+    const conversion = await this.getSalesConversionByUserId(userId);
+    if (conversion) {
+      const conversionDate = conversion.createdAt || new Date();
+      const expiresAt = new Date(conversionDate);
+      expiresAt.setMonth(expiresAt.getMonth() + 6);
+      result.salespersonActive = now < expiresAt;
+    }
+    
+    return result;
+  }
+
+  // Get all users with their source attribution for admin dashboard
+  async getUsersWithAttribution(limit: number = 100): Promise<Array<User & { source: string; partnerName?: string; salespersonName?: string }>> {
+    const allUsers = await db.select().from(users).orderBy(desc(users.createdAt)).limit(limit);
+    
+    const result = [];
+    for (const user of allUsers) {
+      let source = 'organic';
+      let partnerName: string | undefined;
+      let salespersonName: string | undefined;
+      
+      // Check for partner attribution
+      if (user.partnerId) {
+        source = 'partner';
+        const partner = await this.getPartner(user.partnerId);
+        partnerName = partner?.name;
+      }
+      
+      // Check for salesperson attribution via demo booking
+      const conversion = await this.getSalesConversionByUserId(user.id);
+      if (conversion) {
+        if (source === 'organic') source = 'internal';
+        const salesperson = await this.getSalesperson(conversion.salespersonId);
+        salespersonName = salesperson?.name;
+      }
+      
+      result.push({
+        ...user,
+        source,
+        partnerName,
+        salespersonName,
+      });
+    }
+    
+    return result;
   }
 }
 
