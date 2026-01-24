@@ -8,9 +8,11 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow 
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Checkbox } from "@/components/ui/checkbox";
 import { 
   DollarSign, LogOut, Loader2, User, Mail, Link2, Copy, 
-  CheckCircle, Users, TrendingUp, Calendar
+  CheckCircle, Users, TrendingUp, Calendar, FileText, AlertCircle
 } from "lucide-react";
 
 interface ReferredUser {
@@ -52,6 +54,72 @@ interface PartnerInfo {
   refCode: string;
 }
 
+const PARTNER_AGREEMENT_TEXT = `Partner Referral Agreement
+
+WhachatCRM Partner Program
+Last updated: January 3, 2026
+
+This Partner Referral Agreement ("Agreement") governs participation in the WhachatCRM Partner Program.
+By registering as a Partner, you agree to these terms.
+
+1. Definitions
+"Company" – WhachatCRM
+"Partner" – An approved freelancer, agency, or individual promoting WhachatCRM
+"Referral Link" – A unique tracking link or identifier assigned to the Partner
+"Qualified Referral" – A referred user who becomes a paying subscriber in good standing
+
+2. Program Participation
+Participation is subject to approval by WhachatCRM
+Approval may be revoked at any time at WhachatCRM's discretion
+Partners must provide accurate payment and contact information
+
+3. Referral Attribution
+Attribution is determined solely by WhachatCRM's tracking systems
+Only the first valid referral recorded for a customer is eligible
+WhachatCRM's decision on attribution is final
+
+4. Commission Structure
+Partners earn 20% of subscription revenue collected from Qualified Referrals
+Commission duration: up to six (6) months from the customer's first paid invoice
+Commission applies only to net revenue actually received
+Free users generate no commission unless they upgrade
+If a referred customer upgrades plans, commission adjusts automatically based on the new subscription price.
+
+5. Payment Terms
+Commissions are calculated monthly
+Payouts are made after payment is successfully collected
+Refunds, failed payments, or chargebacks may result in commission reversal
+Minimum payout thresholds and payment methods are defined in the Partner Portal
+
+6. Partner Responsibilities
+Partners must:
+Market WhachatCRM honestly and accurately
+Avoid misleading claims, spam, or unauthorized discounts
+Comply with all applicable laws and platform policies
+
+7. Prohibited Activities
+Partners may not:
+Self-refer or create fake accounts
+Use spam, bots, or deceptive advertising
+Impersonate WhachatCRM or act as an employee
+Modify branding or make contractual promises
+Violations may result in immediate termination and forfeiture of unpaid commissions.
+
+8. Independent Contractor Relationship
+Partners are independent contractors, not employees, agents, or representatives of WhachatCRM.
+
+9. Termination
+Either party may terminate participation at any time.
+Upon termination:
+No new commissions accrue
+Earned but unpaid commissions may be paid at WhachatCRM's discretion
+
+10. Limitation of Liability
+WhachatCRM is not liable for indirect or consequential damages related to the Partner Program.
+
+11. Governing Law
+This Agreement is governed by the laws of the State of Florida, USA.`;
+
 export function PartnerPortal() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [partner, setPartner] = useState<PartnerInfo | null>(null);
@@ -60,6 +128,9 @@ export function PartnerPortal() {
   const [loginError, setLoginError] = useState("");
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [agreementRequired, setAgreementRequired] = useState(false);
+  const [agreementChecked, setAgreementChecked] = useState(false);
+  const [isAccepting, setIsAccepting] = useState(false);
   
   const queryClient = useQueryClient();
 
@@ -70,6 +141,7 @@ export function PartnerPortal() {
         if (data.authenticated) {
           setIsLoggedIn(true);
           setPartner(data.partner);
+          setAgreementRequired(data.agreementRequired === true);
         }
       })
       .catch(() => setIsLoggedIn(false));
@@ -97,10 +169,36 @@ export function PartnerPortal() {
       setPartner(data.partner);
       setEmail("");
       setPassword("");
+      
+      // Check if agreement is required after login
+      const checkRes = await fetch('/api/partner-portal/check');
+      const checkData = await checkRes.json();
+      setAgreementRequired(checkData.agreementRequired === true);
     } catch (err: any) {
       setLoginError(err.message);
     } finally {
       setIsLoggingIn(false);
+    }
+  };
+
+  const handleAcceptAgreement = async () => {
+    setIsAccepting(true);
+    try {
+      const res = await fetch('/api/partner-portal/accept-agreement', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      
+      if (!res.ok) {
+        throw new Error('Failed to accept agreement');
+      }
+      
+      setAgreementRequired(false);
+      setAgreementChecked(false);
+    } catch (err) {
+      console.error('Error accepting agreement:', err);
+    } finally {
+      setIsAccepting(false);
     }
   };
 
@@ -200,6 +298,85 @@ export function PartnerPortal() {
               ) : 'Log In'}
             </Button>
           </form>
+        </div>
+      </div>
+    );
+  }
+
+  // Agreement gate - must accept before accessing portal
+  if (agreementRequired) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl shadow-lg p-8 w-full max-w-2xl">
+          <div className="text-center mb-6">
+            <div className="h-14 w-14 bg-amber-100 rounded-xl flex items-center justify-center mx-auto mb-4">
+              <FileText className="h-7 w-7 text-amber-600" />
+            </div>
+            <h1 className="text-2xl font-display font-bold text-gray-900">Partner Referral Agreement</h1>
+            <p className="text-gray-600 mt-2">Please review and accept the agreement to continue</p>
+          </div>
+
+          <div className="mb-6">
+            <div className="flex items-center gap-2 mb-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+              <AlertCircle className="h-5 w-5 text-amber-600 flex-shrink-0" />
+              <p className="text-sm text-amber-800">
+                You must accept this agreement before accessing the Partner Portal.
+              </p>
+            </div>
+
+            <ScrollArea className="h-80 border rounded-lg p-4 bg-gray-50">
+              <pre className="whitespace-pre-wrap text-sm text-gray-700 font-sans">
+                {PARTNER_AGREEMENT_TEXT}
+              </pre>
+            </ScrollArea>
+          </div>
+
+          <div className="space-y-4">
+            <div className="flex items-start gap-3">
+              <Checkbox 
+                id="agreement-check"
+                checked={agreementChecked}
+                onCheckedChange={(checked) => setAgreementChecked(checked === true)}
+                data-testid="checkbox-agreement"
+              />
+              <label 
+                htmlFor="agreement-check" 
+                className="text-sm text-gray-700 cursor-pointer leading-relaxed"
+              >
+                I have read and agree to the Partner Referral Agreement. I understand that my acceptance 
+                is legally binding and my IP address and timestamp will be recorded.
+              </label>
+            </div>
+
+            <div className="flex gap-3">
+              <Button 
+                onClick={handleAcceptAgreement}
+                className="flex-1 bg-brand-green hover:bg-green-700"
+                disabled={!agreementChecked || isAccepting}
+                data-testid="button-accept-agreement"
+              >
+                {isAccepting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Accepting...
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle className="h-4 w-4 mr-2" />
+                    I Agree
+                  </>
+                )}
+              </Button>
+              <Button 
+                variant="outline"
+                onClick={handleLogout}
+                data-testid="button-logout-agreement"
+              >
+                <LogOut className="h-4 w-4 mr-2" />
+                Log Out
+              </Button>
+            </div>
+          </div>
         </div>
       </div>
     );

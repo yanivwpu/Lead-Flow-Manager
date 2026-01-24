@@ -110,6 +110,13 @@ function calculateNextDueDate(
   return nextDue;
 }
 
+// Current agreement versions - update these when agreements change
+// Partners/salespeople must re-accept if their stored version differs
+export const AGREEMENT_VERSIONS = {
+  partner_referral: "2026-01-03",
+  salesperson_commission: "2026-01-03",
+} as const;
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
@@ -3499,14 +3506,61 @@ export async function registerRoutes(
     if (!salesperson || !salesperson.isActive) {
       return res.json({ authenticated: false });
     }
+    
+    // Check if agreement needs to be accepted (version mismatch or never accepted)
+    const currentVersion = AGREEMENT_VERSIONS.salesperson_commission;
+    const agreementRequired = salesperson.agreementVersion !== currentVersion;
+    
     res.json({ 
-      authenticated: true, 
+      authenticated: true,
+      agreementRequired,
+      currentAgreementVersion: currentVersion,
       salesperson: {
         id: salesperson.id,
         name: salesperson.name,
         email: salesperson.email
       }
     });
+  });
+
+  // Salesperson Portal: Accept agreement
+  app.post("/api/sales-portal/accept-agreement", async (req, res) => {
+    try {
+      const salespersonId = (req.session as any)?.salespersonId;
+      if (!salespersonId) {
+        return res.status(401).json({ error: "Not authenticated" });
+      }
+      
+      const salesperson = await storage.getSalesperson(salespersonId);
+      if (!salesperson || !salesperson.isActive) {
+        return res.status(401).json({ error: "Salesperson not found" });
+      }
+      
+      const currentVersion = AGREEMENT_VERSIONS.salesperson_commission;
+      const ipAddress = req.headers['x-forwarded-for']?.toString().split(',')[0] || req.socket.remoteAddress || 'unknown';
+      const userAgent = req.headers['user-agent'] || 'unknown';
+      
+      // Record acceptance in audit table
+      await storage.recordAgreementAcceptance({
+        agreementType: 'salesperson_commission',
+        agreementVersion: currentVersion,
+        partnerId: null,
+        salespersonId: salesperson.id,
+        ipAddress,
+        userAgent,
+      });
+      
+      // Update salesperson record
+      await storage.updateSalesperson(salesperson.id, {
+        agreementAcceptedAt: new Date(),
+        agreementVersion: currentVersion,
+      });
+      
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Accept agreement error:", error);
+      res.status(500).json({ error: "Failed to accept agreement" });
+    }
   });
 
   // Salesperson Portal: Logout
@@ -3629,8 +3683,15 @@ export async function registerRoutes(
     if (!partner || partner.status !== 'active') {
       return res.json({ authenticated: false });
     }
+    
+    // Check if agreement needs to be accepted (version mismatch or never accepted)
+    const currentVersion = AGREEMENT_VERSIONS.partner_referral;
+    const agreementRequired = partner.agreementVersion !== currentVersion;
+    
     res.json({ 
-      authenticated: true, 
+      authenticated: true,
+      agreementRequired,
+      currentAgreementVersion: currentVersion,
       partner: {
         id: partner.id,
         name: partner.name,
@@ -3638,6 +3699,46 @@ export async function registerRoutes(
         refCode: partner.refCode
       }
     });
+  });
+
+  // Partner Portal: Accept agreement
+  app.post("/api/partner-portal/accept-agreement", async (req, res) => {
+    try {
+      const partnerId = (req.session as any)?.partnerId;
+      if (!partnerId) {
+        return res.status(401).json({ error: "Not authenticated" });
+      }
+      
+      const partner = await storage.getPartner(partnerId);
+      if (!partner || partner.status !== 'active') {
+        return res.status(401).json({ error: "Partner not found" });
+      }
+      
+      const currentVersion = AGREEMENT_VERSIONS.partner_referral;
+      const ipAddress = req.headers['x-forwarded-for']?.toString().split(',')[0] || req.socket.remoteAddress || 'unknown';
+      const userAgent = req.headers['user-agent'] || 'unknown';
+      
+      // Record acceptance in audit table
+      await storage.recordAgreementAcceptance({
+        agreementType: 'partner_referral',
+        agreementVersion: currentVersion,
+        partnerId: partner.id,
+        salespersonId: null,
+        ipAddress,
+        userAgent,
+      });
+      
+      // Update partner record
+      await storage.updatePartner(partner.id, {
+        agreementAcceptedAt: new Date(),
+        agreementVersion: currentVersion,
+      });
+      
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Accept agreement error:", error);
+      res.status(500).json({ error: "Failed to accept agreement" });
+    }
   });
 
   // Partner Portal: Logout

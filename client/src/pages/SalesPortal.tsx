@@ -8,9 +8,11 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow 
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Checkbox } from "@/components/ui/checkbox";
 import { 
   Calendar, DollarSign, CheckCircle, Clock, LogOut, Loader2, 
-  User, Phone, Mail, ExternalLink
+  User, Phone, Mail, ExternalLink, FileText, AlertCircle
 } from "lucide-react";
 
 interface Demo {
@@ -45,6 +47,60 @@ interface SalespersonInfo {
   email: string;
 }
 
+const SALESPERSON_AGREEMENT_TEXT = `Internal Sales Commission Policy
+
+WhachatCRM Internal Sales Team
+Last updated: January 3, 2026
+
+This document defines commission rules for WhachatCRM internal sales representatives.
+
+1. Purpose
+This policy governs commission eligibility, calculation, and payment for internal sales personnel who close customer subscriptions following demos or direct sales efforts.
+
+2. Eligibility
+A salesperson is eligible for commission if:
+They conduct or materially contribute to a demo or sales process
+The prospect becomes a paying customer
+Payment is successfully collected
+
+3. Lead Ownership
+Leads are assigned via WhachatCRM's internal systems
+Commission credit is based on recorded assignment at time of demo
+Management decisions on disputes are final
+
+4. Commission Structure
+Internal sales earn 30% of subscription revenue collected
+Commission duration: up to six (6) months from first payment
+Commission applies only while the customer remains active and paying
+Upgrades increase commission proportionally. Downgrades reduce commission.
+
+5. Exclusions
+No commission is paid for:
+Organic signups with no demo involvement
+Partner-referred customers (unless explicitly approved)
+Non-paying or refunded accounts
+
+6. Payment Timing
+Commissions are calculated monthly
+Paid after customer payment clears
+Refunds or chargebacks may result in commission reversal
+
+7. Employment Status
+Commission eligibility does not alter employment status.
+WhachatCRM may modify or discontinue commissions at any time.
+
+8. Misconduct
+Manipulating attribution, self-dealing, or falsifying activity may result in:
+Loss of commissions
+Termination
+Legal action if applicable
+
+9. Changes to Policy
+WhachatCRM reserves the right to modify this policy at any time.
+
+10. Governing Law
+This policy is governed by the laws of the State of Florida, USA.`;
+
 export function SalesPortal() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [salesperson, setSalesperson] = useState<SalespersonInfo | null>(null);
@@ -52,6 +108,9 @@ export function SalesPortal() {
   const [loginCode, setLoginCode] = useState("");
   const [loginError, setLoginError] = useState("");
   const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [agreementRequired, setAgreementRequired] = useState(false);
+  const [agreementChecked, setAgreementChecked] = useState(false);
+  const [isAccepting, setIsAccepting] = useState(false);
   
   const queryClient = useQueryClient();
 
@@ -62,6 +121,7 @@ export function SalesPortal() {
         if (data.authenticated) {
           setIsLoggedIn(true);
           setSalesperson(data.salesperson);
+          setAgreementRequired(data.agreementRequired === true);
         }
       })
       .catch(() => setIsLoggedIn(false));
@@ -89,10 +149,36 @@ export function SalesPortal() {
       setSalesperson(data.salesperson);
       setEmail("");
       setLoginCode("");
+      
+      // Check if agreement is required after login
+      const checkRes = await fetch('/api/sales-portal/check');
+      const checkData = await checkRes.json();
+      setAgreementRequired(checkData.agreementRequired === true);
     } catch (err: any) {
       setLoginError(err.message);
     } finally {
       setIsLoggingIn(false);
+    }
+  };
+
+  const handleAcceptAgreement = async () => {
+    setIsAccepting(true);
+    try {
+      const res = await fetch('/api/sales-portal/accept-agreement', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      
+      if (!res.ok) {
+        throw new Error('Failed to accept agreement');
+      }
+      
+      setAgreementRequired(false);
+      setAgreementChecked(false);
+    } catch (err) {
+      console.error('Error accepting agreement:', err);
+    } finally {
+      setIsAccepting(false);
     }
   };
 
@@ -187,6 +273,85 @@ export function SalesPortal() {
               {isLoggingIn ? <Loader2 className="h-4 w-4 animate-spin" /> : "Login"}
             </Button>
           </form>
+        </div>
+      </div>
+    );
+  }
+
+  // Agreement gate - must accept before accessing portal
+  if (agreementRequired) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl shadow-lg p-8 w-full max-w-2xl">
+          <div className="text-center mb-6">
+            <div className="h-14 w-14 bg-amber-100 rounded-xl flex items-center justify-center mx-auto mb-4">
+              <FileText className="h-7 w-7 text-amber-600" />
+            </div>
+            <h1 className="text-2xl font-display font-bold text-gray-900">Internal Sales Commission Policy</h1>
+            <p className="text-gray-600 mt-2">Please review and accept the policy to continue</p>
+          </div>
+
+          <div className="mb-6">
+            <div className="flex items-center gap-2 mb-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+              <AlertCircle className="h-5 w-5 text-amber-600 flex-shrink-0" />
+              <p className="text-sm text-amber-800">
+                You must accept this policy before accessing the Sales Portal.
+              </p>
+            </div>
+
+            <ScrollArea className="h-80 border rounded-lg p-4 bg-gray-50">
+              <pre className="whitespace-pre-wrap text-sm text-gray-700 font-sans">
+                {SALESPERSON_AGREEMENT_TEXT}
+              </pre>
+            </ScrollArea>
+          </div>
+
+          <div className="space-y-4">
+            <div className="flex items-start gap-3">
+              <Checkbox 
+                id="agreement-check"
+                checked={agreementChecked}
+                onCheckedChange={(checked) => setAgreementChecked(checked === true)}
+                data-testid="checkbox-agreement"
+              />
+              <label 
+                htmlFor="agreement-check" 
+                className="text-sm text-gray-700 cursor-pointer leading-relaxed"
+              >
+                I have read and agree to the Internal Sales Commission Policy. I understand that my acceptance 
+                is legally binding and my IP address and timestamp will be recorded.
+              </label>
+            </div>
+
+            <div className="flex gap-3">
+              <Button 
+                onClick={handleAcceptAgreement}
+                className="flex-1 bg-brand-green hover:bg-green-700"
+                disabled={!agreementChecked || isAccepting}
+                data-testid="button-accept-agreement"
+              >
+                {isAccepting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Accepting...
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle className="h-4 w-4 mr-2" />
+                    I Agree
+                  </>
+                )}
+              </Button>
+              <Button 
+                variant="outline"
+                onClick={handleLogout}
+                data-testid="button-logout-agreement"
+              >
+                <LogOut className="h-4 w-4 mr-2" />
+                Log Out
+              </Button>
+            </div>
+          </div>
         </div>
       </div>
     );
