@@ -74,6 +74,17 @@ export function injectSeoMeta(html: string, url: string): string {
     
     if (post) {
       const canonicalUrl = `${BASE_URL}/blog/${post.slug}`;
+      
+      // Remove existing OG and Twitter meta tags to prevent duplicates
+      html = html.replace(/<meta property="og:title"[^>]*>/gi, '');
+      html = html.replace(/<meta property="og:description"[^>]*>/gi, '');
+      html = html.replace(/<meta property="og:type"[^>]*>/gi, '');
+      html = html.replace(/<meta property="og:url"[^>]*>/gi, '');
+      html = html.replace(/<meta name="twitter:title"[^>]*>/gi, '');
+      html = html.replace(/<meta name="twitter:description"[^>]*>/gi, '');
+      html = html.replace(/<meta name="description"[^>]*>/gi, '');
+      html = html.replace(/<link rel="canonical"[^>]*>/gi, '');
+      
       const metaTags = `
     <title>${post.title} | WhachatCRM Blog</title>
     <meta name="description" content="${post.excerpt}" />
@@ -104,6 +115,17 @@ export function injectSeoMeta(html: string, url: string): string {
     }
   } else if (url === "/blog" || url === "/blog/") {
     const canonicalUrl = `${BASE_URL}/blog`;
+    
+    // Remove existing OG and Twitter meta tags to prevent duplicates
+    html = html.replace(/<meta property="og:title"[^>]*>/gi, '');
+    html = html.replace(/<meta property="og:description"[^>]*>/gi, '');
+    html = html.replace(/<meta property="og:type"[^>]*>/gi, '');
+    html = html.replace(/<meta property="og:url"[^>]*>/gi, '');
+    html = html.replace(/<meta name="twitter:title"[^>]*>/gi, '');
+    html = html.replace(/<meta name="twitter:description"[^>]*>/gi, '');
+    html = html.replace(/<meta name="description"[^>]*>/gi, '');
+    html = html.replace(/<link rel="canonical"[^>]*>/gi, '');
+    
     const metaTags = `
     <title>WhatsApp CRM Blog | Tips, Guides & Best Practices | WhachatCRM</title>
     <meta name="description" content="Learn how to grow your business with WhatsApp. Expert guides on WhatsApp CRM, automation, lead management, and customer service best practices." />
