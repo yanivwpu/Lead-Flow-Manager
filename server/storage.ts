@@ -1390,7 +1390,10 @@ export class DbStorage implements IStorage {
 
   // Partner methods
   async getPartners(): Promise<Partner[]> {
-    return await db.select().from(partners).orderBy(desc(partners.createdAt));
+    // Exclude deleted partners from admin list
+    return await db.select().from(partners)
+      .where(sql`${partners.status} != 'deleted'`)
+      .orderBy(desc(partners.createdAt));
   }
 
   async getActivePartners(): Promise<Partner[]> {
@@ -1447,7 +1450,11 @@ export class DbStorage implements IStorage {
   }
 
   async deletePartner(id: string): Promise<void> {
-    await db.delete(partners).where(eq(partners.id, id));
+    // Soft delete - mark as deleted instead of removing
+    // This preserves commission history and accounting integrity
+    await db.update(partners)
+      .set({ status: 'deleted' })
+      .where(eq(partners.id, id));
   }
 
   async incrementPartnerReferrals(partnerId: string): Promise<void> {

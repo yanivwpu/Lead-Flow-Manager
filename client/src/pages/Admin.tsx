@@ -978,15 +978,15 @@ export function Admin() {
                             <Button
                               variant="ghost"
                               size="sm"
-                              className="min-h-[44px] min-w-[44px] text-red-600 hover:text-red-700"
+                              className="min-h-[44px] min-w-[44px] text-amber-600 hover:text-amber-700"
                               onClick={() => {
-                                if (confirm('Delete this partner? This cannot be undone.')) {
+                                if (confirm('Deactivate this partner? They will no longer earn new commissions, but existing commission history will be preserved.')) {
                                   deletePartner.mutate(partner.id);
                                 }
                               }}
-                              data-testid={`button-delete-partner-${partner.id}`}
+                              data-testid={`button-deactivate-partner-${partner.id}`}
                             >
-                              <Trash2 className="h-4 w-4" />
+                              <XCircle className="h-4 w-4" />
                             </Button>
                           </div>
                         </TableCell>
