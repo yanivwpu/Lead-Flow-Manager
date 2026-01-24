@@ -737,7 +737,8 @@ export function Admin() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>User</TableHead>
-                      <TableHead>Source</TableHead>
+                      <TableHead>Acquisition</TableHead>
+                      <TableHead>Sales Conversion</TableHead>
                       <TableHead>Plan</TableHead>
                       <TableHead>Demo</TableHead>
                       <TableHead>Support</TableHead>
@@ -794,17 +795,24 @@ export function Admin() {
                             <TableCell>
                               <div className="flex flex-col gap-1">
                                 {user.partnerName ? (
-                                  <Badge className="bg-blue-100 text-blue-700">Partner</Badge>
-                                ) : user.salespersonName ? (
-                                  <Badge className="bg-purple-100 text-purple-700">Internal</Badge>
+                                  <>
+                                    <Badge className="bg-blue-100 text-blue-700 w-fit">Partner</Badge>
+                                    <span className="text-xs text-blue-600">{user.partnerName}</span>
+                                  </>
                                 ) : (
-                                  <Badge variant="secondary">Organic</Badge>
+                                  <Badge variant="secondary" className="w-fit">Organic</Badge>
                                 )}
-                                {user.partnerName && (
-                                  <span className="text-xs text-blue-600">{user.partnerName}</span>
-                                )}
-                                {user.salespersonName && (
-                                  <span className="text-xs text-purple-600">{user.salespersonName}</span>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex flex-col gap-1">
+                                {user.salespersonName ? (
+                                  <>
+                                    <Badge className="bg-purple-100 text-purple-700 w-fit">Internal</Badge>
+                                    <span className="text-xs text-purple-600">{user.salespersonName}</span>
+                                  </>
+                                ) : (
+                                  <span className="text-sm text-gray-400">-</span>
                                 )}
                               </div>
                             </TableCell>
