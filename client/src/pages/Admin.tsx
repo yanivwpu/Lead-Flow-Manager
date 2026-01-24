@@ -74,6 +74,11 @@ interface AdminUser {
   openTicketCount: number;
   totalTicketCount: number;
   latestTicket: any | null;
+  // Attribution fields
+  partnerId: string | null;
+  partnerName: string | null;
+  salespersonId: string | null;
+  salespersonName: string | null;
 }
 
 interface Partner {
@@ -732,6 +737,7 @@ export function Admin() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>User</TableHead>
+                      <TableHead>Source</TableHead>
                       <TableHead>Plan</TableHead>
                       <TableHead>Demo</TableHead>
                       <TableHead>Support</TableHead>
@@ -742,7 +748,7 @@ export function Admin() {
                   <TableBody>
                     {adminUsers.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={6} className="text-center py-8 text-gray-500">
+                        <TableCell colSpan={7} className="text-center py-8 text-gray-500">
                           No users yet.
                         </TableCell>
                       </TableRow>
@@ -783,6 +789,23 @@ export function Admin() {
                                   <div className="font-medium">{user.name || 'No name'}</div>
                                   <div className="text-sm text-gray-500">{user.email}</div>
                                 </div>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex flex-col gap-1">
+                                {user.partnerName ? (
+                                  <Badge className="bg-blue-100 text-blue-700">Partner</Badge>
+                                ) : user.salespersonName ? (
+                                  <Badge className="bg-purple-100 text-purple-700">Internal</Badge>
+                                ) : (
+                                  <Badge variant="secondary">Organic</Badge>
+                                )}
+                                {user.partnerName && (
+                                  <span className="text-xs text-blue-600">{user.partnerName}</span>
+                                )}
+                                {user.salespersonName && (
+                                  <span className="text-xs text-purple-600">{user.salespersonName}</span>
+                                )}
                               </div>
                             </TableCell>
                             <TableCell>

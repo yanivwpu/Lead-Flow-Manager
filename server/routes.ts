@@ -3309,17 +3309,32 @@ export async function registerRoutes(
     }
   });
 
-  // Admin: Get all users with support ticket status
+  // Admin: Get all users with support ticket status and attribution
   app.get("/api/admin/users", requireAdmin, async (req, res) => {
     try {
       const allUsers = await storage.getAllUsers();
       const allBookings = await storage.getDemoBookings();
       const allTickets = await storage.getSupportTickets();
+      const allConversions = await storage.getSalesConversions();
+      const allPartners = await storage.getPartners();
+      const allSalespeople = await storage.getSalespeople();
+      
+      // Build lookup maps
+      const partnerMap = new Map(allPartners.map(p => [p.id, p.name]));
+      const salespersonMap = new Map(allSalespeople.map(s => [s.id, s.name]));
       
       const usersWithInfo = allUsers.map(user => {
         const userBookings = allBookings.filter(b => b.visitorEmail === user.email);
         const userTickets = allTickets.filter(t => t.userEmail === user.email || t.userId === user.id);
         const openTickets = userTickets.filter(t => t.status === 'open' || t.status === 'in_progress');
+        
+        // Find salesperson attribution via conversions
+        const userConversion = allConversions.find(c => c.userId === user.id);
+        const salespersonId = userConversion?.salespersonId || null;
+        const salespersonName = salespersonId ? salespersonMap.get(salespersonId) || null : null;
+        
+        // Partner attribution from user record
+        const partnerName = user.partnerId ? partnerMap.get(user.partnerId) || null : null;
         
         return {
           id: user.id,
@@ -3338,6 +3353,11 @@ export async function registerRoutes(
           openTicketCount: openTickets.length,
           totalTicketCount: userTickets.length,
           latestTicket: openTickets[0] || null,
+          // Attribution fields
+          partnerId: user.partnerId || null,
+          partnerName,
+          salespersonId,
+          salespersonName,
         };
       });
       
