@@ -13,8 +13,9 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { 
   DollarSign, LogOut, Loader2, User, Mail, Link2, Copy, 
   CheckCircle, Users, TrendingUp, Calendar, FileText, AlertCircle,
-  Eye, EyeOff, Facebook, Instagram, Twitter, Share2
+  Eye, EyeOff, Facebook, Instagram, Twitter, Share2, BookOpen, Clock, ExternalLink
 } from "lucide-react";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 // Social Media Icons component for consistency
 const XIcon = ({ className }: { className?: string }) => (
@@ -66,6 +67,90 @@ interface PartnerInfo {
   email: string;
   refCode: string;
 }
+
+// Shareable content - blog posts and guides
+const SHAREABLE_CONTENT = [
+  {
+    id: "1",
+    type: "blog",
+    title: "WhatsApp CRM: The Complete Guide for Small Businesses in 2025",
+    description: "Learn how to use WhatsApp as a powerful CRM tool to manage customer relationships, automate responses, and grow your business.",
+    url: "/blog/whatsapp-crm-complete-guide-2025",
+    category: "Guide",
+    readTime: "12 min",
+    shareMessage: "Struggling to manage WhatsApp leads? This guide shows you how to turn WhatsApp into a powerful CRM. Check it out:",
+  },
+  {
+    id: "2",
+    type: "blog",
+    title: "WhatsApp Business API vs Business App: Which One Do You Need?",
+    description: "Confused about the difference between WhatsApp Business App and WhatsApp Business API? This guide breaks it all down.",
+    url: "/blog/whatsapp-business-api-vs-business-app",
+    category: "Comparison",
+    readTime: "8 min",
+    shareMessage: "Not sure which WhatsApp Business solution is right for you? This comparison will help you decide:",
+  },
+  {
+    id: "3",
+    type: "blog",
+    title: "How to Automate WhatsApp Messages for Your Small Business",
+    description: "Save hours every day with WhatsApp automation. Learn how to set up auto-replies, away messages, and workflow triggers.",
+    url: "/blog/automate-whatsapp-messages-small-business",
+    category: "Automation",
+    readTime: "10 min",
+    shareMessage: "Want to automate your WhatsApp messages and save hours every day? Here's how:",
+  },
+  {
+    id: "4",
+    type: "blog",
+    title: "10 WhatsApp Lead Management Tips That Actually Work",
+    description: "Stop losing leads in your WhatsApp inbox. These proven strategies help you organize conversations and close more deals.",
+    url: "/blog/whatsapp-lead-management-tips",
+    category: "Tips",
+    readTime: "7 min",
+    shareMessage: "Are you losing leads in your WhatsApp inbox? These 10 tips will change your game:",
+  },
+  {
+    id: "5",
+    type: "blog",
+    title: "Top 5 WATI Alternatives for WhatsApp Business in 2025",
+    description: "Looking for a WATI alternative? Compare pricing, features, and ease of use of the best WhatsApp CRM tools.",
+    url: "/blog/wati-alternatives-comparison",
+    category: "Comparison",
+    readTime: "9 min",
+    shareMessage: "Looking for a better WhatsApp CRM? Here are the top alternatives to check out:",
+  },
+  {
+    id: "6",
+    type: "blog",
+    title: "WhatsApp Customer Service: Best Practices for Teams",
+    description: "Deliver exceptional customer support via WhatsApp. Learn response time benchmarks and team collaboration tips.",
+    url: "/blog/whatsapp-customer-service-best-practices",
+    category: "Customer Service",
+    readTime: "8 min",
+    shareMessage: "Want to provide better customer support on WhatsApp? These best practices will help:",
+  },
+  {
+    id: "7",
+    type: "blog",
+    title: "How to Set Up Twilio for WhatsApp: Step-by-Step Guide",
+    description: "Complete walkthrough for connecting your WhatsApp Business to Twilio, including webhooks and your first message.",
+    url: "/blog/twilio-whatsapp-setup-guide",
+    category: "Tutorial",
+    readTime: "15 min",
+    shareMessage: "Setting up Twilio for WhatsApp? This step-by-step guide makes it easy:",
+  },
+  {
+    id: "8",
+    type: "blog",
+    title: "WhatsApp Drip Campaign Examples That Convert",
+    description: "Real examples of successful WhatsApp drip sequences for lead nurturing and customer onboarding.",
+    url: "/blog/whatsapp-drip-campaigns-examples",
+    category: "Templates",
+    readTime: "11 min",
+    shareMessage: "Looking for WhatsApp drip campaign examples that actually work? Check these out:",
+  },
+];
 
 const PARTNER_AGREEMENT_TEXT = `Partner Referral Agreement
 
@@ -581,7 +666,7 @@ export function PartnerPortal() {
         </div>
 
         <Tabs defaultValue="referrals" className="bg-white rounded-xl shadow-sm">
-          <TabsList className="border-b w-full justify-start rounded-none px-4 pt-2">
+          <TabsList className="border-b w-full justify-start rounded-none px-4 pt-2 flex-wrap">
             <TabsTrigger value="referrals" data-testid="tab-referrals">
               <Users className="h-4 w-4 mr-2" />
               Referred Users ({referrals.length})
@@ -589,6 +674,10 @@ export function PartnerPortal() {
             <TabsTrigger value="commissions" data-testid="tab-commissions">
               <DollarSign className="h-4 w-4 mr-2" />
               Commissions ({commissions.length})
+            </TabsTrigger>
+            <TabsTrigger value="content" data-testid="tab-content">
+              <BookOpen className="h-4 w-4 mr-2" />
+              Shareable Content
             </TabsTrigger>
           </TabsList>
 
@@ -693,6 +782,105 @@ export function PartnerPortal() {
                 </TableBody>
               </Table>
             )}
+          </TabsContent>
+
+          <TabsContent value="content" className="p-4">
+            <div className="mb-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Share Content & Earn</h3>
+              <p className="text-gray-600 text-sm">
+                Share these blog posts and guides on social media. All links include your referral code automatically!
+              </p>
+            </div>
+            
+            <div className="grid gap-4 md:grid-cols-2">
+              {SHAREABLE_CONTENT.map((content) => {
+                const baseUrl = "https://whachatcrm.com";
+                const contentUrl = `${baseUrl}${content.url}?ref=${partner?.refCode}`;
+                
+                return (
+                  <Card key={content.id} className="overflow-hidden" data-testid={`card-content-${content.id}`}>
+                    <CardHeader className="pb-3">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Badge variant="secondary" className="text-xs">
+                          {content.category}
+                        </Badge>
+                        <span className="text-xs text-gray-500 flex items-center gap-1">
+                          <Clock className="h-3 w-3" />
+                          {content.readTime}
+                        </span>
+                      </div>
+                      <CardTitle className="text-base leading-tight">{content.title}</CardTitle>
+                      <CardDescription className="text-sm line-clamp-2">
+                        {content.description}
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="pt-0">
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="text-xs gap-1.5"
+                          onClick={() => {
+                            navigator.clipboard.writeText(contentUrl);
+                            alert("Link copied with your referral code!");
+                          }}
+                          data-testid={`button-copy-content-${content.id}`}
+                        >
+                          <Copy className="h-3 w-3" />
+                          Copy Link
+                        </Button>
+                        <Button
+                          size="sm"
+                          className="text-xs gap-1.5 bg-[#1877F2] hover:bg-[#166fe5]"
+                          onClick={() => {
+                            window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(contentUrl)}&quote=${encodeURIComponent(content.shareMessage)}`, '_blank');
+                          }}
+                          data-testid={`button-share-fb-${content.id}`}
+                        >
+                          <Facebook className="h-3 w-3" />
+                          Facebook
+                        </Button>
+                        <Button
+                          size="sm"
+                          className="text-xs gap-1.5 bg-black hover:bg-gray-800"
+                          onClick={() => {
+                            window.open(`https://twitter.com/intent/tweet?url=${encodeURIComponent(contentUrl)}&text=${encodeURIComponent(content.shareMessage)}`, '_blank');
+                          }}
+                          data-testid={`button-share-x-${content.id}`}
+                        >
+                          <XIcon className="h-3 w-3" />
+                          X
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="text-xs gap-1.5"
+                          onClick={() => window.open(contentUrl, '_blank')}
+                          data-testid={`button-view-content-${content.id}`}
+                        >
+                          <ExternalLink className="h-3 w-3" />
+                          View
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+            
+            <div className="mt-8 p-4 bg-gray-50 rounded-lg border border-gray-200">
+              <div className="flex items-start gap-3">
+                <div className="h-10 w-10 rounded-lg bg-brand-green/10 flex items-center justify-center flex-shrink-0">
+                  <Share2 className="h-5 w-5 text-brand-green" />
+                </div>
+                <div>
+                  <h4 className="font-medium text-gray-900">Pro Tip: Personalize Your Shares</h4>
+                  <p className="text-sm text-gray-600 mt-1">
+                    Add your own experience or insights when sharing. Personal recommendations convert 3x better than generic shares!
+                  </p>
+                </div>
+              </div>
+            </div>
           </TabsContent>
         </Tabs>
       </main>
