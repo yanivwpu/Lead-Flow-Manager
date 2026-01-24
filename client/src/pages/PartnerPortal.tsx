@@ -12,7 +12,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Checkbox } from "@/components/ui/checkbox";
 import { 
   DollarSign, LogOut, Loader2, User, Mail, Link2, Copy, 
-  CheckCircle, Users, TrendingUp, Calendar, FileText, AlertCircle
+  CheckCircle, Users, TrendingUp, Calendar, FileText, AlertCircle,
+  Eye, EyeOff
 } from "lucide-react";
 
 interface ReferredUser {
@@ -132,6 +133,7 @@ export function PartnerPortal() {
   const [agreementChecked, setAgreementChecked] = useState(false);
   const [isAccepting, setIsAccepting] = useState(false);
   const [acceptError, setAcceptError] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   
   const queryClient = useQueryClient();
 
@@ -277,15 +279,30 @@ export function PartnerPortal() {
 
             <div>
               <Label htmlFor="password">Password</Label>
-              <Input 
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Your password"
-                required
-                data-testid="input-password"
-              />
+              <div className="relative mt-1">
+                <Input 
+                  id="password" 
+                  type={showPassword ? "text" : "password"} 
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Your password"
+                  required
+                  className="pr-10"
+                  data-testid="input-password"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none"
+                  data-testid="button-toggle-password"
+                >
+                  {showPassword ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                </button>
+              </div>
             </div>
 
             <Button 

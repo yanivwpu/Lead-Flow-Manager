@@ -17,7 +17,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { 
   Users, Calendar, DollarSign, Plus, Edit2, Trash2, 
   LogOut, Loader2, CheckCircle, XCircle, Lock, UserCircle,
-  AlertCircle, MessageCircle, ArrowUpDown, Link2, Percent
+  AlertCircle, MessageCircle, ArrowUpDown, Link2, Percent,
+  Eye, EyeOff
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -99,6 +100,7 @@ export function Admin() {
   const [password, setPassword] = useState("");
   const [loginError, setLoginError] = useState("");
   const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [editingPerson, setEditingPerson] = useState<Salesperson | null>(null);
   const [isAddingPerson, setIsAddingPerson] = useState(false);
   const [newPerson, setNewPerson] = useState({ name: "", email: "", phone: "" });
@@ -340,15 +342,29 @@ export function Admin() {
 
             <div>
               <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter admin password"
-                required
-                data-testid="input-admin-password"
-              />
+              <div className="relative">
+                <Input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Enter admin password"
+                  required
+                  className="pr-10"
+                  data-testid="input-admin-password"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none"
+                >
+                  {showPassword ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                </button>
+              </div>
               <p className="text-xs text-gray-500 mt-1">
                 First login will set the admin password
               </p>

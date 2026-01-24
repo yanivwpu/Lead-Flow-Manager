@@ -12,7 +12,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Checkbox } from "@/components/ui/checkbox";
 import { 
   Calendar, DollarSign, CheckCircle, Clock, LogOut, Loader2, 
-  User, Phone, Mail, ExternalLink, FileText, AlertCircle
+  User, Phone, Mail, ExternalLink, FileText, AlertCircle,
+  Eye, EyeOff
 } from "lucide-react";
 
 interface Demo {
@@ -112,6 +113,7 @@ export function SalesPortal() {
   const [agreementChecked, setAgreementChecked] = useState(false);
   const [isAccepting, setIsAccepting] = useState(false);
   const [acceptError, setAcceptError] = useState("");
+  const [showCode, setShowCode] = useState(false);
   
   const queryClient = useQueryClient();
 
@@ -257,15 +259,30 @@ export function SalesPortal() {
 
             <div>
               <Label htmlFor="loginCode">Login Code (6 digits)</Label>
-              <Input
-                id="loginCode"
-                value={loginCode}
-                onChange={(e) => setLoginCode(e.target.value)}
-                placeholder="123456"
-                maxLength={6}
-                required
-                data-testid="input-portal-code"
-              />
+              <div className="relative">
+                <Input
+                  id="loginCode"
+                  type={showCode ? "text" : "password"}
+                  value={loginCode}
+                  onChange={(e) => setLoginCode(e.target.value)}
+                  placeholder="123456"
+                  maxLength={6}
+                  required
+                  className="pr-10"
+                  data-testid="input-portal-code"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowCode(!showCode)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none"
+                >
+                  {showCode ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                </button>
+              </div>
             </div>
 
             <Button 
