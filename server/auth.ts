@@ -176,8 +176,19 @@ export function registerAuthRoutes(app: Express) {
         trialEndsAt,
       });
 
-      // Check for referral attribution (partner referral from session)
-      const referralPartnerId = (req.session as any)?.referralPartnerId;
+      // Check for referral attribution (from session or 90-day cookie)
+      let referralPartnerId = (req.session as any)?.referralPartnerId;
+      let refCode = (req.session as any)?.referralCode;
+      
+      // If not in session, check for ref_code cookie (90-day persistence)
+      if (!referralPartnerId && req.cookies?.ref_code) {
+        refCode = req.cookies.ref_code;
+        const partnerFromCookie = await storage.getPartnerByRefCode(refCode);
+        if (partnerFromCookie && partnerFromCookie.status === 'active') {
+          referralPartnerId = partnerFromCookie.id;
+        }
+      }
+      
       if (referralPartnerId) {
         try {
           // Prevent self-referral (partner cannot earn commission on own account)
@@ -188,7 +199,7 @@ export function registerAuthRoutes(app: Express) {
             if (assigned) {
               // Increment partner referral count
               await storage.incrementPartnerReferrals(referralPartnerId);
-              console.log(`[REFERRAL] User ${user.email} attributed to partner ${partner.name}`);
+              console.log(`[REFERRAL] User ${user.email} attributed to partner ${partner.name} (ref: ${refCode})`);
             }
           }
           // Clear referral session after attribution
