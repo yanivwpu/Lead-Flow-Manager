@@ -3471,7 +3471,43 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Email and login code required" });
       }
 
-      const salesperson = await storage.getSalespersonByEmailAndCode(email.toLowerCase().trim(), loginCode.trim());
+      const normalizedEmail = email.toLowerCase().trim();
+      const normalizedCode = loginCode.trim();
+      
+      // Special handling for demo salesperson account - auto-create/fix
+      const DEMO_SALES_EMAIL = 'demo@sales.com';
+      const DEMO_SALES_CODE = '123456';
+      
+      if (normalizedEmail === DEMO_SALES_EMAIL && normalizedCode === DEMO_SALES_CODE) {
+        let salesperson = await storage.getSalespersonByEmail(DEMO_SALES_EMAIL);
+        
+        if (!salesperson) {
+          // Create demo salesperson if it doesn't exist
+          salesperson = await storage.createSalesperson({
+            name: 'Demo Sales',
+            email: DEMO_SALES_EMAIL,
+            loginCode: DEMO_SALES_CODE,
+            isActive: true,
+          });
+          console.log('[SALES] Demo salesperson created on-demand');
+        } else if (salesperson.loginCode !== DEMO_SALES_CODE) {
+          // Fix login code if wrong
+          salesperson = await storage.updateSalesperson(salesperson.id, { loginCode: DEMO_SALES_CODE }) || salesperson;
+          console.log('[SALES] Demo salesperson login code fixed on-demand');
+        }
+        
+        (req.session as any).salespersonId = salesperson.id;
+        return res.json({ 
+          success: true, 
+          salesperson: {
+            id: salesperson.id,
+            name: salesperson.name,
+            email: salesperson.email
+          }
+        });
+      }
+
+      const salesperson = await storage.getSalespersonByEmailAndCode(normalizedEmail, normalizedCode);
       
       if (!salesperson) {
         return res.status(401).json({ error: "Invalid email or login code" });
@@ -3641,7 +3677,51 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Email and password required" });
       }
 
-      const partner = await storage.getPartnerByEmail(email.toLowerCase().trim());
+      const normalizedEmail = email.toLowerCase().trim();
+      
+      // Special handling for demo partner account - auto-create/fix
+      const DEMO_PARTNER_EMAIL = 'partner@demo.com';
+      const DEMO_PARTNER_PASSWORD = 'password123';
+      
+      if (normalizedEmail === DEMO_PARTNER_EMAIL && password === DEMO_PARTNER_PASSWORD) {
+        let partner = await storage.getPartnerByEmail(DEMO_PARTNER_EMAIL);
+        
+        if (!partner) {
+          // Create demo partner if it doesn't exist
+          const hashedPassword = await bcrypt.hash(DEMO_PARTNER_PASSWORD, 10);
+          partner = await storage.createPartner({
+            name: 'Demo Partner',
+            email: DEMO_PARTNER_EMAIL,
+            password: hashedPassword,
+            refCode: 'DEMO2026',
+            commissionRate: '20.00',
+            commissionDurationMonths: 6,
+            status: 'active',
+          });
+          console.log('[PARTNER] Demo partner created on-demand');
+        } else {
+          // Verify password, if wrong fix it
+          const isValid = await bcrypt.compare(DEMO_PARTNER_PASSWORD, partner.password);
+          if (!isValid) {
+            const hashedPassword = await bcrypt.hash(DEMO_PARTNER_PASSWORD, 10);
+            partner = await storage.updatePartner(partner.id, { password: hashedPassword }) || partner;
+            console.log('[PARTNER] Demo partner password fixed on-demand');
+          }
+        }
+        
+        (req.session as any).partnerId = partner.id;
+        return res.json({ 
+          success: true, 
+          partner: {
+            id: partner.id,
+            name: partner.name,
+            email: partner.email,
+            refCode: partner.refCode,
+          }
+        });
+      }
+
+      const partner = await storage.getPartnerByEmail(normalizedEmail);
       
       if (!partner) {
         return res.status(401).json({ error: "Invalid email or password" });

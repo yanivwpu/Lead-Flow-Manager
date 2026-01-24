@@ -936,6 +936,11 @@ export class DbStorage implements IStorage {
     return result[0];
   }
 
+  async getSalespersonByEmail(email: string): Promise<Salesperson | undefined> {
+    const result = await db.select().from(salespeople).where(eq(salespeople.email, email));
+    return result[0];
+  }
+
   async generateUniqueLoginCode(): Promise<string> {
     let code: string;
     let exists = true;
