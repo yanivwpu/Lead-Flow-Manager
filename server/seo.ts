@@ -80,8 +80,13 @@ export function injectSeoMeta(html: string, url: string): string {
       html = html.replace(/<meta property="og:description"[^>]*>/gi, '');
       html = html.replace(/<meta property="og:type"[^>]*>/gi, '');
       html = html.replace(/<meta property="og:url"[^>]*>/gi, '');
+      html = html.replace(/<meta property="og:image"[^>]*>/gi, '');
+      html = html.replace(/<meta property="og:image:width"[^>]*>/gi, '');
+      html = html.replace(/<meta property="og:image:height"[^>]*>/gi, '');
+      html = html.replace(/<meta name="twitter:card"[^>]*>/gi, '');
       html = html.replace(/<meta name="twitter:title"[^>]*>/gi, '');
       html = html.replace(/<meta name="twitter:description"[^>]*>/gi, '');
+      html = html.replace(/<meta name="twitter:image"[^>]*>/gi, '');
       html = html.replace(/<meta name="description"[^>]*>/gi, '');
       html = html.replace(/<link rel="canonical"[^>]*>/gi, '');
       
@@ -121,8 +126,13 @@ export function injectSeoMeta(html: string, url: string): string {
     html = html.replace(/<meta property="og:description"[^>]*>/gi, '');
     html = html.replace(/<meta property="og:type"[^>]*>/gi, '');
     html = html.replace(/<meta property="og:url"[^>]*>/gi, '');
+    html = html.replace(/<meta property="og:image"[^>]*>/gi, '');
+    html = html.replace(/<meta property="og:image:width"[^>]*>/gi, '');
+    html = html.replace(/<meta property="og:image:height"[^>]*>/gi, '');
+    html = html.replace(/<meta name="twitter:card"[^>]*>/gi, '');
     html = html.replace(/<meta name="twitter:title"[^>]*>/gi, '');
     html = html.replace(/<meta name="twitter:description"[^>]*>/gi, '');
+    html = html.replace(/<meta name="twitter:image"[^>]*>/gi, '');
     html = html.replace(/<meta name="description"[^>]*>/gi, '');
     html = html.replace(/<link rel="canonical"[^>]*>/gi, '');
     
