@@ -29,7 +29,9 @@ export function serveStatic(app: Express) {
   // fall through to index.html with SEO meta injection for blog pages
   app.use("*", (req, res) => {
     const indexPath = path.resolve(distPath, "index.html");
-    const url = req.originalUrl;
+    const fullUrl = req.originalUrl;
+    // Strip query parameters for SEO matching
+    const url = fullUrl.split("?")[0];
     
     // For blog pages, inject proper SEO meta tags
     if (url.startsWith("/blog")) {
