@@ -50,7 +50,7 @@ export function setupAuth(app: Express) {
         try {
           // Special handling for demo account - auto-create/fix in any environment
           const DEMO_EMAIL = 'demo@whachat.com';
-          const DEMO_PASSWORD = 'demo_password_123';
+          const DEMO_PASSWORD = 'password123';
           
           if (email.toLowerCase() === DEMO_EMAIL && password === DEMO_PASSWORD) {
             let user = await storage.getUserByEmail(DEMO_EMAIL);
