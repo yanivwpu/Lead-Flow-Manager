@@ -562,6 +562,8 @@ export const salespeople = pgTable("salespeople", {
   totalBookings: integer("total_bookings").default(0),
   totalConversions: integer("total_conversions").default(0),
   totalEarnings: numeric("total_earnings", { precision: 10, scale: 2 }).default("0"),
+  agreementAcceptedAt: timestamp("agreement_accepted_at"), // null = not accepted yet
+  agreementVersion: text("agreement_version"), // version they accepted, e.g. "2026-01-03"
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -611,6 +613,8 @@ export const partners = pgTable("partners", {
   status: text("status").notNull().default("active"), // active, paused
   totalReferrals: integer("total_referrals").default(0),
   totalEarnings: numeric("total_earnings", { precision: 10, scale: 2 }).default("0"),
+  agreementAcceptedAt: timestamp("agreement_accepted_at"), // null = not accepted yet
+  agreementVersion: text("agreement_version"), // version they accepted, e.g. "2026-01-03"
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -673,6 +677,26 @@ export type InsertDemoBooking = z.infer<typeof insertDemoBookingSchema>;
 export type DemoBooking = typeof demoBookings.$inferSelect;
 export type InsertSalesConversion = z.infer<typeof insertSalesConversionSchema>;
 export type SalesConversion = typeof salesConversions.$inferSelect;
+
+// Agreement acceptances - legal audit trail
+export const agreementAcceptances = pgTable("agreement_acceptances", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  agreementType: text("agreement_type").notNull(), // 'partner_referral' or 'salesperson_commission'
+  agreementVersion: text("agreement_version").notNull(), // e.g., "2026-01-03"
+  partnerId: varchar("partner_id").references(() => partners.id, { onDelete: "set null" }),
+  salespersonId: varchar("salesperson_id").references(() => salespeople.id, { onDelete: "set null" }),
+  ipAddress: text("ip_address").notNull(),
+  userAgent: text("user_agent"),
+  acceptedAt: timestamp("accepted_at").defaultNow(),
+});
+
+export const insertAgreementAcceptanceSchema = createInsertSchema(agreementAcceptances).omit({
+  id: true,
+  acceptedAt: true,
+});
+
+export type InsertAgreementAcceptance = z.infer<typeof insertAgreementAcceptanceSchema>;
+export type AgreementAcceptance = typeof agreementAcceptances.$inferSelect;
 
 // ============= MULTI-CHANNEL CRM SCHEMA =============
 
