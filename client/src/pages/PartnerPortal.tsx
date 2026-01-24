@@ -13,8 +13,20 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { 
   DollarSign, LogOut, Loader2, User, Mail, Link2, Copy, 
   CheckCircle, Users, TrendingUp, Calendar, FileText, AlertCircle,
-  Eye, EyeOff
+  Eye, EyeOff, Facebook, Instagram, Twitter, Share2
 } from "lucide-react";
+
+// Social Media Icons component for consistency
+const XIcon = ({ className }: { className?: string }) => (
+  <svg 
+    viewBox="0 0 24 24" 
+    aria-hidden="true" 
+    className={className}
+    fill="currentColor"
+  >
+    <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+  </svg>
+);
 
 interface ReferredUser {
   id: string;
@@ -461,6 +473,58 @@ export function PartnerPortal() {
               )}
             </Button>
           </div>
+          
+          <div className="mt-6 pt-6 border-t border-green-400/30">
+            <p className="text-green-100 text-sm mb-4 font-medium flex items-center gap-2">
+              <Share2 className="h-4 w-4" />
+              Quick Share to Social Media
+            </p>
+            <div className="flex flex-wrap gap-3">
+              <Button
+                variant="secondary"
+                size="sm"
+                className="bg-[#1877F2] hover:bg-[#166fe5] text-white border-none gap-2"
+                onClick={() => {
+                  const url = stats?.refLink || `https://whachatcrm.com/?ref=${partner?.refCode}`;
+                  const text = "I'm using WhaChatCRM to manage my WhatsApp sales and it's a game changer! Check it out:";
+                  window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}&quote=${encodeURIComponent(text)}`, '_blank');
+                }}
+                data-testid="button-share-facebook"
+              >
+                <Facebook className="h-4 w-4" />
+                Facebook
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                className="bg-[#000000] hover:bg-[#333333] text-white border-none gap-2"
+                onClick={() => {
+                  const url = stats?.refLink || `https://whachatcrm.com/?ref=${partner?.refCode}`;
+                  const text = "Stop losing WhatsApp leads! WhaChatCRM is the best way to organize your sales. Try it here:";
+                  window.open(`https://twitter.com/intent/tweet?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`, '_blank');
+                }}
+                data-testid="button-share-x"
+              >
+                <XIcon className="h-4 w-4" />
+                Share on X
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                className="bg-[#E4405F] hover:bg-[#d62e4c] text-white border-none gap-2"
+                onClick={() => {
+                  const url = stats?.refLink || `https://whachatcrm.com/?ref=${partner?.refCode}`;
+                  navigator.clipboard.writeText(`Check out WhaChatCRM! The best WhatsApp CRM for sales teams: ${url}`);
+                  alert("Link and message copied for Instagram! Since Instagram doesn't support direct link sharing in posts, you can now paste this into your Bio or Story.");
+                }}
+                data-testid="button-share-instagram"
+              >
+                <Instagram className="h-4 w-4" />
+                Instagram
+              </Button>
+            </div>
+          </div>
+
           <p className="text-green-100 text-sm mt-4">
             Earn {stats?.commissionRate || '20'}% commission for {stats?.commissionDurationMonths || 6} months on every paid subscription
           </p>
