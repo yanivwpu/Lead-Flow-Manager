@@ -275,6 +275,7 @@ export function PartnerPortal() {
                   data-testid="input-email"
                 />
               </div>
+              <p className="text-[10px] text-gray-400 mt-1">Demo: partner@demo.com / password123</p>
             </div>
 
             <div>

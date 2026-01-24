@@ -186,6 +186,9 @@ export function AuthPage() {
                 onChange={(e) => setEmail(e.target.value)}
                 className="bg-gray-50 border-gray-200"
               />
+              {isLogin && (
+                <p className="text-[10px] text-gray-400 mt-1">Demo: demo@whachat.com / password123</p>
+              )}
             </div>
 
             <div className="space-y-2">

@@ -255,6 +255,7 @@ export function SalesPortal() {
                 required
                 data-testid="input-portal-email"
               />
+              <p className="text-[10px] text-gray-400 mt-1">Demo: demo@sales.com / 123456</p>
             </div>
 
             <div>
