@@ -1,0 +1,173 @@
+erms of Use
+
+Last updated: January 3, 2026
+
+1. Acceptance of Terms
+
+By accessing or using WhachatCRM (“Service”), you agree to be bound by these Terms of Use (“Terms”). If you do not agree, do not use the Service.
+
+2. Description of Service
+
+WhachatCRM is a customer relationship management (CRM) platform that enables businesses to manage WhatsApp conversations, organize leads, set follow-up reminders, and track sales pipelines.
+
+The Service connects to your own WhatsApp Business API provider (such as Twilio or Meta WhatsApp Business API) for message delivery. WhachatCRM does not provide WhatsApp access directly.
+
+3. Account Registration
+
+To use the Service, you must:
+
+Provide accurate and complete registration information
+
+Be at least 18 years old and legally able to enter into agreements
+
+Maintain the confidentiality of your login credentials
+
+Have a valid WhatsApp Business API provider account (Twilio or Meta)
+
+Notify us immediately of unauthorized account access
+
+You are responsible for all activity that occurs under your account.
+
+4. Pricing and Payment
+Subscription Plans
+
+Free – $0/month: 50 active conversations, 1 user, 1 WhatsApp number
+
+Starter – $19/month: 500 active conversations, 3 users, 1 WhatsApp number
+
+Pro – $49/month: 2,000 active conversations, 10 users, 3 WhatsApp numbers
+
+Important – Separate Costs
+
+WhachatCRM subscription fees cover CRM functionality only.
+WhatsApp message delivery fees are billed separately by your provider (Twilio or Meta). WhachatCRM does not charge per message.
+
+Payment Terms
+
+Subscription fees are billed monthly via Stripe
+
+An “active conversation” is one unique WhatsApp contact within a rolling 30-day window
+
+Unlimited messages may be sent within an active conversation
+
+When limits are reached, outbound messaging is paused until upgrade
+
+Plans may be upgraded or downgraded at any time
+
+Prices may change with at least 30 days’ notice
+
+Fees are non-refundable except where required by law
+
+5. WhatsApp Provider Integration
+
+WhachatCRM supports Twilio and Meta WhatsApp Business API. You are responsible for:
+
+Maintaining a valid provider account
+
+Keeping provider credentials secure
+
+Complying with provider terms and policies
+
+All messaging costs charged by your provider
+
+Provider credentials are stored encrypted and used solely to operate the Service.
+
+6. Acceptable Use
+
+You agree not to:
+
+Use the Service for spam, harassment, or illegal activity
+
+Violate WhatsApp Business Policies
+
+Send unsolicited bulk messages
+
+Misrepresent your identity
+
+Access other users’ data
+
+Abuse or overload the platform
+
+7. WhatsApp Compliance
+
+You are solely responsible for compliance with WhatsApp policies and all applicable messaging, privacy, and consumer-protection laws, including consent requirements.
+
+8. Partner & Referral Program
+8.1 Participation
+
+WhachatCRM may offer a Partner or Referral Program that allows approved partners, freelancers, or agencies (“Partners”) to earn commissions for referring customers. Participation is subject to approval and may be revoked at any time.
+
+8.2 Referral Tracking
+
+Partners receive a unique referral link or identifier. Attribution is determined solely by WhachatCRM’s tracking systems.
+
+8.3 Qualified Referral
+
+A “Qualified Referral” occurs when a user:
+
+Visits WhachatCRM via a valid referral link, and
+
+Becomes a paying subscriber, and
+
+Remains in good standing (payment successfully collected)
+
+Free accounts that never upgrade do not generate commissions.
+
+8.4 Commission Terms
+
+Commission rates and durations are defined in the Partner dashboard or written agreement
+
+Commissions are calculated as a percentage of subscription revenue actually received
+
+Commissions are paid only while the referred customer remains an active paying subscriber
+
+If a subscription is refunded or charged back, related commissions may be reversed
+
+8.5 Restrictions
+
+Partners may not:
+
+Self-refer
+
+Use misleading, deceptive, or spam marketing
+
+Impersonate WhachatCRM or offer unauthorized discounts
+
+Violation may result in immediate termination and forfeiture of unpaid commissions.
+
+8.6 No Employment Relationship
+
+Partners are independent contractors. Nothing in these Terms creates an agency, partnership, employment, or joint venture relationship.
+
+9. Intellectual Property
+
+The Service, including software, design, and content, is owned by WhachatCRM. You retain ownership of your data but grant WhachatCRM a limited license to process it to provide the Service.
+
+10. Limitation of Liability
+
+To the maximum extent permitted by law, WhachatCRM is not liable for indirect, incidental, consequential, or punitive damages, including lost profits, data loss, or provider outages.
+
+WhachatCRM is not responsible for message delivery failures, provider downtime, or charges incurred through your WhatsApp provider.
+
+11. Service Availability
+
+The Service is provided on an “as-is” and “as-available” basis. Availability is not guaranteed.
+
+12. Termination
+
+We may suspend or terminate access for violations of these Terms. You may close your account at any time. Upon termination, provider credentials will be removed.
+
+13. Changes to Terms
+
+We may update these Terms at any time. Continued use constitutes acceptance of updated Terms.
+
+14. Governing Law & Venue
+
+These Terms are governed by the laws of the State of Florida, USA, without regard to conflict-of-law principles. Any disputes shall be resolved exclusively in state or federal courts located in Florida.
+
+15. Contact
+
+For questions, contact support@whachatcrm.com
+
+WhachatCRM is not affiliated with Meta or WhatsApp.
+WhatsApp Business API access is provided by approved third-party providers.
