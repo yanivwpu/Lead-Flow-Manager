@@ -17,6 +17,7 @@ export function setupAuth(app: Express) {
   app.set('trust proxy', 1);
 
   // Session configuration with PostgreSQL store for production persistence
+  const isProduction = process.env.NODE_ENV === 'production';
   app.use(
     session({
       secret: process.env.SESSION_SECRET || 'whatsapp-crm-secret-key-change-in-production',
@@ -30,7 +31,7 @@ export function setupAuth(app: Express) {
       cookie: {
         maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
         httpOnly: true,
-        secure: false, // Set to false for Replit development to ensure cookies are sent
+        secure: isProduction, // true for production HTTPS, false for development
         sameSite: 'lax',
       },
     })
