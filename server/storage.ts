@@ -28,10 +28,11 @@ import {
   type Channel, type InboxItem,
   type SupportTicket, type InsertSupportTicket,
   type Partner, type InsertPartner,
-  type Commission, type InsertCommission
+  type Commission, type InsertCommission,
+  type AgreementAcceptance, type InsertAgreementAcceptance
 } from "@shared/schema";
 import { db } from "../drizzle/db";
-import { users, chats, registeredPhones, messageUsage, conversationWindows, teamMembers, workflows, workflowExecutions, recurringReminders, webhooks, webhookDeliveries, integrations, messageTemplates, templateSends, dripCampaigns, dripSteps, dripEnrollments, dripSends, chatbotFlows, chatbotSessions, salespeople, demoBookings, salesConversions, adminSettings, contacts, conversations, messages, activityEvents, channelSettings, supportTickets, partners, commissions, type InsertConversationWindow, type ConversationWindow } from "@shared/schema";
+import { users, chats, registeredPhones, messageUsage, conversationWindows, teamMembers, workflows, workflowExecutions, recurringReminders, webhooks, webhookDeliveries, integrations, messageTemplates, templateSends, dripCampaigns, dripSteps, dripEnrollments, dripSends, chatbotFlows, chatbotSessions, salespeople, demoBookings, salesConversions, adminSettings, contacts, conversations, messages, activityEvents, channelSettings, supportTickets, partners, commissions, agreementAcceptances, type InsertConversationWindow, type ConversationWindow } from "@shared/schema";
 import { eq, and, lte, sql, isNotNull, asc, desc, gte, sum, gt, or, like, ilike } from "drizzle-orm";
 
 export interface IStorage {
@@ -1678,6 +1679,29 @@ export class DbStorage implements IStorage {
     }
     
     return result;
+  }
+
+  // Agreement acceptance methods
+  async recordAgreementAcceptance(acceptance: InsertAgreementAcceptance): Promise<AgreementAcceptance> {
+    const result = await db.insert(agreementAcceptances).values(acceptance).returning();
+    return result[0];
+  }
+
+  async getAgreementAcceptances(filters?: { partnerId?: string; salespersonId?: string }): Promise<AgreementAcceptance[]> {
+    const conditions = [];
+    if (filters?.partnerId) {
+      conditions.push(eq(agreementAcceptances.partnerId, filters.partnerId));
+    }
+    if (filters?.salespersonId) {
+      conditions.push(eq(agreementAcceptances.salespersonId, filters.salespersonId));
+    }
+    
+    if (conditions.length > 0) {
+      return await db.select().from(agreementAcceptances)
+        .where(and(...conditions))
+        .orderBy(desc(agreementAcceptances.acceptedAt));
+    }
+    return await db.select().from(agreementAcceptances).orderBy(desc(agreementAcceptances.acceptedAt));
   }
 }
 
