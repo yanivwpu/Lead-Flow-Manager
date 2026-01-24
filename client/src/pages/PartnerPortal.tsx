@@ -131,6 +131,7 @@ export function PartnerPortal() {
   const [agreementRequired, setAgreementRequired] = useState(false);
   const [agreementChecked, setAgreementChecked] = useState(false);
   const [isAccepting, setIsAccepting] = useState(false);
+  const [acceptError, setAcceptError] = useState("");
   
   const queryClient = useQueryClient();
 
@@ -183,6 +184,7 @@ export function PartnerPortal() {
 
   const handleAcceptAgreement = async () => {
     setIsAccepting(true);
+    setAcceptError("");
     try {
       const res = await fetch('/api/partner-portal/accept-agreement', {
         method: 'POST',
@@ -190,13 +192,15 @@ export function PartnerPortal() {
       });
       
       if (!res.ok) {
-        throw new Error('Failed to accept agreement');
+        const data = await res.json();
+        throw new Error(data.error || 'Failed to accept agreement');
       }
       
       setAgreementRequired(false);
       setAgreementChecked(false);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error accepting agreement:', err);
+      setAcceptError(err.message || 'Failed to accept agreement. Please try again.');
     } finally {
       setIsAccepting(false);
     }
@@ -332,6 +336,12 @@ export function PartnerPortal() {
           </div>
 
           <div className="space-y-4">
+            {acceptError && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                {acceptError}
+              </div>
+            )}
+
             <div className="flex items-start gap-3">
               <Checkbox 
                 id="agreement-check"
