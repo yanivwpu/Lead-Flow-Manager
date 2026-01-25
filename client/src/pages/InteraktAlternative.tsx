@@ -14,6 +14,7 @@ export function InteraktAlternative() {
         <meta name="description" content="Looking for an Interakt alternative with simpler pricing? WhachatCRM offers WhatsApp CRM from $19/month with visual chatbot builder and unlimited team members." />
         <meta name="keywords" content="Interakt alternative, WhatsApp CRM, Interakt competitor, WhatsApp business tool, affordable WhatsApp CRM" />
         <link rel="canonical" href="https://whachatcrm.com/interakt-alternative" />
+        <meta name="twitter:card" content="summary" />
         <meta property="og:title" content="Best Interakt Alternative for Small Teams – WhachatCRM" />
         <meta property="og:description" content="Looking for an Interakt alternative with simpler pricing? WhachatCRM offers WhatsApp CRM from $19/month." />
         <meta property="og:url" content="https://whachatcrm.com/interakt-alternative" />

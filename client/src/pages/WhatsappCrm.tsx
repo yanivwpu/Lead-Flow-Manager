@@ -14,6 +14,7 @@ export function WhatsappCrm() {
         <meta name="description" content="Learn what WhatsApp CRM is and how it helps businesses manage customer conversations. Discover WhachatCRM - the simple WhatsApp CRM for small teams." />
         <meta name="keywords" content="WhatsApp CRM, what is WhatsApp CRM, WhatsApp business CRM, WhatsApp customer management, WhatsApp lead management" />
         <link rel="canonical" href="https://whachatcrm.com/whatsapp-crm" />
+        <meta name="twitter:card" content="summary" />
       </Helmet>
 
       {/* Navigation */}

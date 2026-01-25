@@ -14,6 +14,7 @@ export function RespondIoAlternative() {
         <meta name="description" content="Looking for a Respond.io alternative without enterprise pricing? WhachatCRM offers WhatsApp CRM from $19/month. Visual chatbot builder included." />
         <meta name="keywords" content="Respond.io alternative, WhatsApp CRM, Respond.io competitor, affordable WhatsApp CRM, WhatsApp business tool" />
         <link rel="canonical" href="https://whachatcrm.com/respond-io-alternative" />
+        <meta name="twitter:card" content="summary" />
         <meta property="og:title" content="Best Respond.io Alternative for SMBs – WhachatCRM" />
         <meta property="og:description" content="Looking for a Respond.io alternative without enterprise pricing? WhachatCRM offers WhatsApp CRM from $19/month." />
         <meta property="og:url" content="https://whachatcrm.com/respond-io-alternative" />

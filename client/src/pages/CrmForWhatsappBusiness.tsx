@@ -14,6 +14,7 @@ export function CrmForWhatsappBusiness() {
         <meta name="description" content="Unified inbox for WhatsApp, SMS, Telegram, Instagram, Facebook & Web Chat. Manage all conversations in one place. Free plan available." />
         <meta name="keywords" content="CRM for WhatsApp Business, multi-channel CRM, unified inbox, WhatsApp lead management, small business CRM, SMS, Telegram" />
         <link rel="canonical" href="https://whachatcrm.com/crm-for-whatsapp-business" />
+        <meta name="twitter:card" content="summary" />
       </Helmet>
 
       {/* Navigation */}

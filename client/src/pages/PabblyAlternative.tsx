@@ -14,6 +14,7 @@ export function PabblyAlternative() {
         <meta name="description" content="Looking for a Pabbly Chatflow alternative without the upfront cost? WhachatCRM offers WhatsApp CRM starting at $19/month with no credit limits. Try free." />
         <meta name="keywords" content="Pabbly alternative, Pabbly Chatflow alternative, WhatsApp CRM, WhatsApp automation, Pabbly competitor" />
         <link rel="canonical" href="https://whachatcrm.com/pabbly-alternative" />
+        <meta name="twitter:card" content="summary" />
         <meta property="og:title" content="Best Pabbly Chatflow Alternative for SMBs – WhachatCRM" />
         <meta property="og:description" content="Looking for a Pabbly Chatflow alternative without the upfront cost? WhachatCRM offers WhatsApp CRM starting at $19/month with no credit limits." />
         <meta property="og:url" content="https://whachatcrm.com/pabbly-alternative" />

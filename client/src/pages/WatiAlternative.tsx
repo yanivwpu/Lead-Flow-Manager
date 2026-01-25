@@ -14,6 +14,7 @@ export function WatiAlternative() {
         <meta name="description" content="Looking for a simpler, more affordable WATI alternative? WhachatCRM offers WhatsApp CRM features without the complexity. Free plan available." />
         <meta name="keywords" content="WATI alternative, WhatsApp CRM, WATI competitor, simple WhatsApp CRM, affordable WhatsApp business tool" />
         <link rel="canonical" href="https://whachatcrm.com/wati-alternative" />
+        <meta name="twitter:card" content="summary" />
       </Helmet>
 
       {/* Navigation */}

@@ -14,6 +14,7 @@ export function Waba360Alternative() {
         <meta name="description" content="Looking for a 360dialog/WABA360 alternative with built-in CRM? WhachatCRM offers WhatsApp CRM from $19/month with visual chatbot builder and team inbox." />
         <meta name="keywords" content="360dialog alternative, WABA360 alternative, WhatsApp CRM, WhatsApp business tool, affordable WhatsApp CRM" />
         <link rel="canonical" href="https://whachatcrm.com/waba360-alternative" />
+        <meta name="twitter:card" content="summary" />
         <meta property="og:title" content="Best 360dialog Alternative for SMBs – WhachatCRM" />
         <meta property="og:description" content="Looking for a 360dialog/WABA360 alternative with built-in CRM? WhachatCRM offers WhatsApp CRM from $19/month." />
         <meta property="og:url" content="https://whachatcrm.com/waba360-alternative" />
