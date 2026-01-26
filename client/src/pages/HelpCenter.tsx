@@ -599,6 +599,104 @@ Create custom automations:
     `
   },
   {
+    id: "website-widget",
+    title: "Website Widget Setup",
+    category: "Integrations",
+    icon: Globe,
+    keywords: ["widget", "website", "embed", "chat", "install", "wordpress", "shopify", "wix", "squarespace", "webflow", "html", "bubble"],
+    content: `
+# Website Widget
+
+Add a chat widget to your website so visitors can start WhatsApp conversations directly from your site.
+
+## Finding the Widget Settings
+
+1. Go to **Website Widget** in the sidebar (Globe icon)
+2. Toggle the widget **ON** to enable it
+3. Copy your unique embed code
+
+## Installing the Widget
+
+### Quick Install (Any Website)
+
+Copy the embed code and paste it just before the closing \`</body>\` tag on your website:
+
+\`\`\`html
+<script src="https://your-app.replit.app/widget.js?id=YOUR_ID"></script>
+\`\`\`
+
+### Platform-Specific Instructions
+
+**WordPress:**
+1. Go to Appearance > Theme File Editor
+2. Open footer.php or use a plugin like "Insert Headers and Footers"
+3. Paste the embed code before \`</body>\`
+4. Save changes
+
+**Shopify:**
+1. Go to Online Store > Themes
+2. Click Actions > Edit code
+3. Open theme.liquid
+4. Paste the code before \`</body>\`
+5. Save
+
+**Wix:**
+1. Go to Settings > Custom Code
+2. Click + Add Custom Code
+3. Paste the embed code
+4. Set placement to "Body - end"
+5. Apply to All Pages
+
+**Squarespace:**
+1. Go to Settings > Advanced > Code Injection
+2. Paste the code in the Footer section
+3. Save
+
+**Webflow:**
+1. Go to Project Settings > Custom Code
+2. Paste in the Footer Code section
+3. Save and publish
+
+## Customizing Your Widget
+
+### Colors
+Choose from preset colors (WhatsApp green, blue, purple, black, orange) or pick a custom color to match your brand.
+
+### Welcome Message
+Set the greeting customers see when they open the widget. Keep it friendly and helpful, like "Hi there! How can we help you today?"
+
+### Position
+Place the widget on the left or right side of the screen. Right side is more common.
+
+### Mobile Visibility
+Toggle whether the widget shows on mobile devices. Consider your mobile site layout when deciding.
+
+## How It Works
+
+1. Visitor clicks the chat bubble on your website
+2. They type their message in the widget
+3. Clicking "Send" opens WhatsApp with your business number
+4. The conversation continues in WhatsApp
+5. You receive and respond to messages in your WhachatCRM inbox
+
+## Troubleshooting
+
+**Widget not appearing:**
+- Check that the widget is toggled ON in settings
+- Verify the embed code is placed correctly (before \`</body>\`)
+- Clear your browser cache and refresh
+- Check for JavaScript errors in browser console
+
+**Widget appears but doesn't work:**
+- Ensure your WhatsApp number is connected in Settings
+- Verify the widget ID in your embed code matches your account
+
+**Style conflicts:**
+- The widget uses isolated CSS to prevent conflicts
+- If issues occur, check for CSS overrides on your site
+    `
+  },
+  {
     id: "templates",
     title: "Message Templates",
     category: "Messaging",
