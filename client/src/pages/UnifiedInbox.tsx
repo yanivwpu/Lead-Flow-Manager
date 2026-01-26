@@ -554,6 +554,24 @@ export function UnifiedInbox() {
                   disabled={windowStatus?.hasRestriction && !windowStatus?.isActive}
                   data-testid="input-message"
                 />
+                
+                {contactData.contact.primaryChannel !== 'whatsapp' && contactData.contact.phone && (
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="shrink-0 text-emerald-600 border-emerald-200 hover:bg-emerald-50 hover:border-emerald-300"
+                    title="Move to WhatsApp"
+                    onClick={() => {
+                      const text = encodeURIComponent(messageInput || "Hi, I'm reaching out from your website.");
+                      const phone = contactData.contact.phone!.replace(/\D/g, '');
+                      window.open(`https://wa.me/${phone}?text=${text}`, '_blank');
+                    }}
+                    data-testid="button-move-to-whatsapp"
+                  >
+                    <MessageCircle className="w-5 h-5" />
+                  </Button>
+                )}
+
                 <Button
                   onClick={handleSendMessage}
                   disabled={!messageInput.trim() || sendMessageMutation.isPending || (windowStatus?.hasRestriction && !windowStatus?.isActive)}
