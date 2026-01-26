@@ -4695,27 +4695,79 @@ export async function registerRoutes(
     return { hasAccess: true };
   };
 
-  // Helper: Check and alert on usage limits
-  const checkUsageLimits = async (userId: string): Promise<{ canProceed: boolean; usagePercent: number }> => {
+  // Behavioral fair-use controls (internal only - no numbers exposed to users)
+  interface FairUseCheck {
+    canProceed: boolean;
+    status: "healthy" | "limited" | "paused";
+    message?: string;
+    shouldDowngradeToSuggestOnly?: boolean;
+  }
+
+  const checkFairUseBehavior = async (userId: string, chatId?: string): Promise<FairUseCheck> => {
     const usage = await storage.getCurrentAiUsage(userId);
-    if (!usage) return { canProceed: true, usagePercent: 0 };
+    if (!usage) return { canProceed: true, status: "healthy" };
     
-    const monthlyLimit = 5000; // Fair use limit
+    // Internal thresholds (not exposed to users)
+    const internalThreshold = 5000;
+    const warningThreshold = internalThreshold * 0.7;
+    const criticalThreshold = internalThreshold * 0.9;
+    
     const totalUsage = (usage.messagesGenerated || 0) + (usage.repliesSuggested || 0);
-    const usagePercent = (totalUsage / monthlyLimit) * 100;
     
-    // Check if usage limit reached
+    // Paused state - soft pause with generic message
     if (usage.usageLimitReached) {
-      return { canProceed: false, usagePercent };
+      return { 
+        canProceed: false, 
+        status: "paused",
+        message: "AI assistance is temporarily limited to protect deliverability."
+      };
     }
     
-    // Auto-pause at 100%
-    if (usagePercent >= 100) {
+    // Auto-pause at internal threshold
+    if (totalUsage >= internalThreshold) {
       await storage.upsertAiUsage(userId, { usageLimitReached: true });
-      return { canProceed: false, usagePercent };
+      return { 
+        canProceed: false, 
+        status: "paused",
+        message: "AI assistance is temporarily limited to protect deliverability."
+      };
     }
     
-    return { canProceed: true, usagePercent };
+    // Critical threshold - auto-downgrade to suggest-only mode
+    if (totalUsage >= criticalThreshold) {
+      return { 
+        canProceed: true, 
+        status: "limited",
+        shouldDowngradeToSuggestOnly: true,
+        message: "AI assistance is temporarily limited to protect deliverability."
+      };
+    }
+    
+    // Warning threshold - still allow but flag as limited
+    if (totalUsage >= warningThreshold) {
+      return { 
+        canProceed: true, 
+        status: "limited"
+      };
+    }
+    
+    return { canProceed: true, status: "healthy" };
+  };
+  
+  // Rate limiting per conversation (cooldown between rapid AI messages)
+  const conversationCooldowns = new Map<string, number>();
+  const COOLDOWN_MS = 3000; // 3 second cooldown between AI messages per chat
+  
+  const checkConversationRateLimit = (chatId: string): boolean => {
+    const now = Date.now();
+    const lastCall = conversationCooldowns.get(chatId);
+    
+    if (lastCall && (now - lastCall) < COOLDOWN_MS) {
+      return false;
+    }
+    
+    conversationCooldowns.set(chatId, now);
+    return true;
   };
 
   // Get AI settings
@@ -4841,6 +4893,31 @@ export async function registerRoutes(
     }
   });
 
+  // Get AI health status (no numeric details exposed)
+  app.get("/api/ai/health", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const userId = req.user.id;
+      
+      const access = await checkAiBrainAccess(userId);
+      if (!access.hasAccess) {
+        return res.status(403).json({ error: access.reason, needsUpgrade: true });
+      }
+      
+      const fairUse = await checkFairUseBehavior(userId);
+      
+      res.json({
+        status: fairUse.status,
+        message: fairUse.message || undefined
+      });
+    } catch (error) {
+      console.error("AI health fetch error:", error);
+      res.status(500).json({ error: "Failed to fetch AI health" });
+    }
+  });
+
   // Generate automation from plain English
   app.post("/api/ai/generate-automation", async (req, res) => {
     try {
@@ -4855,11 +4932,11 @@ export async function registerRoutes(
         return res.status(403).json({ error: access.reason, needsUpgrade: true });
       }
       
-      const usageLimits = await checkUsageLimits(userId);
-      if (!usageLimits.canProceed) {
+      const fairUse = await checkFairUseBehavior(userId);
+      if (!fairUse.canProceed) {
         return res.status(429).json({ 
-          error: "Monthly AI usage limit reached.",
-          usagePercent: usageLimits.usagePercent
+          error: fairUse.message || "AI assistance is temporarily limited to protect deliverability.",
+          status: fairUse.status
         });
       }
       
@@ -4897,15 +4974,23 @@ export async function registerRoutes(
         return res.status(403).json({ error: access.reason, needsUpgrade: true });
       }
       
-      const usageLimits = await checkUsageLimits(userId);
-      if (!usageLimits.canProceed) {
+      const fairUse = await checkFairUseBehavior(userId);
+      if (!fairUse.canProceed) {
         return res.status(429).json({ 
-          error: "Monthly AI usage limit reached. Usage resets on your next billing date.",
-          usagePercent: usageLimits.usagePercent
+          error: fairUse.message || "AI assistance is temporarily limited to protect deliverability.",
+          status: fairUse.status
         });
       }
       
       const { chatId, conversationHistory } = req.body;
+      
+      // Rate limiting per conversation
+      if (chatId && !checkConversationRateLimit(chatId)) {
+        return res.status(429).json({ 
+          error: "Please wait a moment before requesting another suggestion.",
+          status: "rate_limited"
+        });
+      }
       
       if (!conversationHistory || !Array.isArray(conversationHistory)) {
         return res.status(400).json({ error: "Conversation history required" });
@@ -4926,7 +5011,11 @@ export async function registerRoutes(
       // Track usage
       await storage.incrementAiUsage(userId, 'repliesSuggested');
       
-      res.json({ ...suggestion, usagePercent: usageLimits.usagePercent });
+      res.json({ 
+        ...suggestion, 
+        status: fairUse.status,
+        shouldDowngradeToSuggestOnly: fairUse.shouldDowngradeToSuggestOnly
+      });
     } catch (error) {
       console.error("Reply suggestion error:", error);
       res.status(500).json({ error: "Failed to generate suggestion" });

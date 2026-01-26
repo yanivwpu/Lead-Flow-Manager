@@ -31,7 +31,6 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Progress } from "@/components/ui/progress";
 import { toast } from "@/hooks/use-toast";
 import { Link } from "wouter";
 import { cn } from "@/lib/utils";
@@ -59,12 +58,9 @@ interface BusinessKnowledge {
   qualifyingQuestions: Array<{ question: string; required: boolean }>;
 }
 
-interface AIUsage {
-  messagesGenerated: number;
-  repliesSuggested: number;
-  leadsQualified: number;
-  periodStart: string;
-  periodEnd: string;
+interface AIHealth {
+  status: "healthy" | "limited" | "paused";
+  message?: string;
 }
 
 interface SubscriptionData {
@@ -131,12 +127,9 @@ function AIBrainContent() {
     qualifyingQuestions: [],
   });
   
-  const [usage, setUsage] = useState<AIUsage>({
-    messagesGenerated: 0,
-    repliesSuggested: 0,
-    leadsQualified: 0,
-    periodStart: "",
-    periodEnd: "",
+  const [aiHealth, setAiHealth] = useState<AIHealth>({
+    status: "healthy",
+    message: undefined,
   });
   
   const [newFaq, setNewFaq] = useState({ question: "", answer: "" });
@@ -157,8 +150,8 @@ function AIBrainContent() {
     retry: false,
   });
   
-  const { data: aiUsage, isLoading: usageLoading } = useQuery({
-    queryKey: ["/api/ai/usage"],
+  const { data: aiHealthData, isLoading: healthLoading } = useQuery({
+    queryKey: ["/api/ai/health"],
     enabled: !subscriptionLoading && isPro,
     retry: false,
   });
@@ -197,10 +190,10 @@ function AIBrainContent() {
   }, [businessKnowledge]);
   
   useEffect(() => {
-    if (aiUsage && typeof aiUsage === 'object') {
-      setUsage(aiUsage as AIUsage);
+    if (aiHealthData && typeof aiHealthData === 'object') {
+      setAiHealth(aiHealthData as AIHealth);
     }
-  }, [aiUsage]);
+  }, [aiHealthData]);
   
   const saveSettingsMutation = useMutation({
     mutationFn: async (data: Partial<AISettings>) => {
@@ -296,9 +289,6 @@ function AIBrainContent() {
     }));
   };
   
-  const usagePercentage = 0;
-  const showUsageWarning = usagePercentage >= 70;
-  const showUsageCritical = usagePercentage >= 90;
   
   if (subscriptionLoading) {
     return (
@@ -387,18 +377,18 @@ function AIBrainContent() {
           </div>
         </div>
         
-        {showUsageWarning && (
+        {aiHealth.status !== "healthy" && (
           <div className={cn(
             "mb-6 p-4 rounded-xl border flex items-center gap-3",
-            showUsageCritical ? "bg-red-50 border-red-200" : "bg-yellow-50 border-yellow-200"
+            aiHealth.status === "paused" ? "bg-red-50 border-red-200" : "bg-yellow-50 border-yellow-200"
           )}>
-            <AlertTriangle className={cn("w-5 h-5", showUsageCritical ? "text-red-500" : "text-yellow-500")} />
+            <AlertTriangle className={cn("w-5 h-5", aiHealth.status === "paused" ? "text-red-500" : "text-yellow-500")} />
             <div className="flex-1">
-              <p className={cn("font-medium", showUsageCritical ? "text-red-700" : "text-yellow-700")}>
-                {showUsageCritical ? "Usage limit almost reached" : "High usage this month"}
+              <p className={cn("font-medium", aiHealth.status === "paused" ? "text-red-700" : "text-yellow-700")}>
+                {aiHealth.status === "paused" ? "AI is Paused" : "AI is Limited"}
               </p>
-              <p className={cn("text-sm", showUsageCritical ? "text-red-600" : "text-yellow-600")}>
-                You've used {usagePercentage.toFixed(0)}% of your monthly AI usage
+              <p className={cn("text-sm", aiHealth.status === "paused" ? "text-red-600" : "text-yellow-600")}>
+                {aiHealth.message || "AI assistance is temporarily limited to protect deliverability."}
               </p>
             </div>
           </div>
@@ -418,9 +408,9 @@ function AIBrainContent() {
               <Zap className="w-4 h-4 mr-2" />
               Automation Builder
             </TabsTrigger>
-            <TabsTrigger value="usage" className="rounded-lg data-[state=active]:bg-white">
+            <TabsTrigger value="health" className="rounded-lg data-[state=active]:bg-white">
               <TrendingUp className="w-4 h-4 mr-2" />
-              Usage
+              AI Health
             </TabsTrigger>
           </TabsList>
           
@@ -826,44 +816,100 @@ function AIBrainContent() {
             </div>
           </TabsContent>
           
-          <TabsContent value="usage" className="space-y-6">
+          <TabsContent value="health" className="space-y-6">
             <div className="bg-white rounded-xl border border-gray-200 p-6">
               <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
                 <TrendingUp className="w-5 h-5 text-green-500" />
-                This Month's Usage
+                AI Health
               </h2>
               
-              {usageLoading ? (
+              {healthLoading ? (
                 <div className="flex justify-center py-8">
                   <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="p-4 bg-purple-50 rounded-xl">
-                    <p className="text-sm text-purple-600 font-medium mb-1">AI Replies Suggested</p>
-                    <p className="text-3xl font-bold text-purple-700">{usage.repliesSuggested || 0}</p>
+                <div className="space-y-6">
+                  <div className={cn(
+                    "p-6 rounded-xl flex items-center gap-4",
+                    aiHealth.status === "healthy" && "bg-green-50 border border-green-200",
+                    aiHealth.status === "limited" && "bg-yellow-50 border border-yellow-200",
+                    aiHealth.status === "paused" && "bg-red-50 border border-red-200"
+                  )}>
+                    <div className={cn(
+                      "w-12 h-12 rounded-full flex items-center justify-center",
+                      aiHealth.status === "healthy" && "bg-green-100",
+                      aiHealth.status === "limited" && "bg-yellow-100",
+                      aiHealth.status === "paused" && "bg-red-100"
+                    )}>
+                      {aiHealth.status === "healthy" && <CheckCircle2 className="w-6 h-6 text-green-600" />}
+                      {aiHealth.status === "limited" && <AlertTriangle className="w-6 h-6 text-yellow-600" />}
+                      {aiHealth.status === "paused" && <Hand className="w-6 h-6 text-red-600" />}
+                    </div>
+                    <div>
+                      <h3 className={cn(
+                        "text-lg font-semibold",
+                        aiHealth.status === "healthy" && "text-green-800",
+                        aiHealth.status === "limited" && "text-yellow-800",
+                        aiHealth.status === "paused" && "text-red-800"
+                      )}>
+                        {aiHealth.status === "healthy" && "AI is Healthy"}
+                        {aiHealth.status === "limited" && "AI is Limited"}
+                        {aiHealth.status === "paused" && "AI is Paused"}
+                      </h3>
+                      <p className={cn(
+                        "text-sm",
+                        aiHealth.status === "healthy" && "text-green-600",
+                        aiHealth.status === "limited" && "text-yellow-600",
+                        aiHealth.status === "paused" && "text-red-600"
+                      )}>
+                        {aiHealth.status === "healthy" && "All AI features are working normally."}
+                        {aiHealth.status === "limited" && (aiHealth.message || "AI assistance is temporarily limited to protect deliverability.")}
+                        {aiHealth.status === "paused" && (aiHealth.message || "AI assistance is temporarily limited to protect deliverability.")}
+                      </p>
+                    </div>
                   </div>
-                  <div className="p-4 bg-green-50 rounded-xl">
-                    <p className="text-sm text-green-600 font-medium mb-1">Leads Qualified</p>
-                    <p className="text-3xl font-bold text-green-700">{usage.leadsQualified || 0}</p>
-                  </div>
-                  <div className="p-4 bg-blue-50 rounded-xl">
-                    <p className="text-sm text-blue-600 font-medium mb-1">Messages Generated</p>
-                    <p className="text-3xl font-bold text-blue-700">{usage.messagesGenerated || 0}</p>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="p-4 bg-gray-50 rounded-xl">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Sparkles className="w-4 h-4 text-purple-500" />
+                        <span className="font-medium text-gray-900">Reply Suggestions</span>
+                      </div>
+                      <p className="text-sm text-gray-600">
+                        {settings.aiMode === "full_auto" ? "Auto-sending enabled" : 
+                         settings.aiMode === "suggest_only" ? "Suggestions enabled" : "Disabled"}
+                      </p>
+                    </div>
+                    <div className="p-4 bg-gray-50 rounded-xl">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Target className="w-4 h-4 text-green-500" />
+                        <span className="font-medium text-gray-900">Lead Qualification</span>
+                      </div>
+                      <p className="text-sm text-gray-600">
+                        {settings.leadQualificationEnabled ? "Active" : "Disabled"}
+                      </p>
+                    </div>
+                    <div className="p-4 bg-gray-50 rounded-xl">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Hand className="w-4 h-4 text-orange-500" />
+                        <span className="font-medium text-gray-900">Human Handoff</span>
+                      </div>
+                      <p className="text-sm text-gray-600">
+                        {settings.handoffKeywords.length} trigger keywords configured
+                      </p>
+                    </div>
+                    <div className="p-4 bg-gray-50 rounded-xl">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Clock className="w-4 h-4 text-blue-500" />
+                        <span className="font-medium text-gray-900">Business Hours</span>
+                      </div>
+                      <p className="text-sm text-gray-600">
+                        {settings.businessHoursOnly ? "Active only during business hours" : "Active 24/7"}
+                      </p>
+                    </div>
                   </div>
                 </div>
               )}
-              
-              <div className="mt-6 p-4 bg-gray-50 rounded-xl">
-                <div className="flex justify-between text-sm mb-2">
-                  <span className="text-gray-600">Fair Use Progress</span>
-                  <span className="text-gray-900 font-medium">{usagePercentage.toFixed(0)}%</span>
-                </div>
-                <Progress value={usagePercentage} className="h-2" />
-                <p className="text-xs text-gray-500 mt-2">
-                  Usage resets on {usage.periodEnd ? new Date(usage.periodEnd).toLocaleDateString() : "your next billing date"}
-                </p>
-              </div>
             </div>
           </TabsContent>
         </Tabs>

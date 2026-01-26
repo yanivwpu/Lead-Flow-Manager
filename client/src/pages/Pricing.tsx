@@ -269,6 +269,7 @@ export function Pricing() {
             <div className="flex items-baseline gap-1 mb-4">
               <span className="text-3xl font-bold text-gray-900">$29</span>
               <span className="text-gray-600">/month</span>
+              <span className="text-xs text-gray-500 ml-2">(Fair Use)</span>
             </div>
             
             <div className="grid gap-3 mb-6">
@@ -295,7 +296,7 @@ export function Pricing() {
             </div>
             
             <p className="text-xs text-gray-500 mb-4">
-              Available exclusively for Pro plan subscribers. Fair use policy applies.
+              Available exclusively for Pro plan subscribers.
             </p>
             
             {currentPlan === 'pro' ? (

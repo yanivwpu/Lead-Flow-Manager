@@ -1,23 +1,14 @@
-import OpenAI from "openai";
+import { aiProvider } from "./aiProvider";
 import { storage } from "./storage";
 import { 
   LEAD_INTENT_KEYWORDS, 
   LEAD_SCORE_THRESHOLDS,
-  AI_USAGE_LIMITS,
   type AiBusinessKnowledge,
   type AiSettings,
-  type Chat
 } from "@shared/schema";
 
-const openai = new OpenAI({
-  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
-  baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
-});
-
-// AI Service for WhachatCRM AI Brain
 export class AIService {
   
-  // Generate a reply suggestion based on conversation context
   async suggestReply(
     userId: string,
     chatId: string,
@@ -28,20 +19,16 @@ export class AIService {
     const systemPrompt = this.buildSystemPrompt(businessKnowledge, settings);
     
     try {
-      const response = await openai.chat.completions.create({
-        model: "gpt-5",
-        messages: [
-          { role: "system", content: systemPrompt },
-          ...conversationHistory.map(m => ({
-            role: m.role as "user" | "assistant",
-            content: m.content
-          }))
-        ],
-        max_completion_tokens: 500,
-        response_format: { type: "json_object" }
-      });
+      const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
+        { role: "system", content: systemPrompt },
+        ...conversationHistory.map(m => ({
+          role: m.role as "user" | "assistant",
+          content: m.content
+        }))
+      ];
 
-      const result = JSON.parse(response.choices[0]?.message?.content || "{}");
+      const response = await aiProvider.complete("reply", messages, { jsonMode: true });
+      const result = JSON.parse(response || "{}");
       
       return {
         suggestion: result.reply || "I'll be happy to help you with that.",
@@ -53,7 +40,6 @@ export class AIService {
     }
   }
 
-  // Extract lead data from conversation
   async extractLeadData(
     conversationHistory: Array<{ role: string; content: string }>,
     businessKnowledge?: AiBusinessKnowledge
@@ -89,14 +75,11 @@ Extract and return a JSON object with these fields (use null for unknown):
 Return only valid JSON.`;
 
     try {
-      const response = await openai.chat.completions.create({
-        model: "gpt-5",
-        messages: [{ role: "user", content: extractionPrompt }],
-        max_completion_tokens: 500,
-        response_format: { type: "json_object" }
-      });
+      const response = await aiProvider.complete("extraction", [
+        { role: "user", content: extractionPrompt }
+      ], { jsonMode: true });
 
-      const result = JSON.parse(response.choices[0]?.message?.content || "{}");
+      const result = JSON.parse(response || "{}");
       return {
         name: result.name || undefined,
         email: result.email || undefined,
@@ -114,7 +97,6 @@ Return only valid JSON.`;
     }
   }
 
-  // Generate qualifying questions based on industry and collected data
   async generateQualifyingQuestion(
     industry: string,
     collectedData: Record<string, any>,
@@ -134,14 +116,11 @@ If enough information is collected, return null.
 Return JSON: { "question": "your question" } or { "question": null }`;
 
     try {
-      const response = await openai.chat.completions.create({
-        model: "gpt-5",
-        messages: [{ role: "user", content: questionPrompt }],
-        max_completion_tokens: 200,
-        response_format: { type: "json_object" }
-      });
+      const response = await aiProvider.complete("extraction", [
+        { role: "user", content: questionPrompt }
+      ], { jsonMode: true });
 
-      const result = JSON.parse(response.choices[0]?.message?.content || "{}");
+      const result = JSON.parse(response || "{}");
       return result.question || null;
     } catch (error) {
       console.error("[AI] Error generating qualifying question:", error);
@@ -149,7 +128,6 @@ Return JSON: { "question": "your question" } or { "question": null }`;
     }
   }
 
-  // Convert plain English to workflow automation
   async generateAutomation(
     plainEnglishInput: string,
     businessKnowledge?: AiBusinessKnowledge
@@ -184,14 +162,11 @@ Return JSON with:
 - description: Human-readable description of the workflow`;
 
     try {
-      const response = await openai.chat.completions.create({
-        model: "gpt-5",
-        messages: [{ role: "user", content: automationPrompt }],
-        max_completion_tokens: 1000,
-        response_format: { type: "json_object" }
-      });
+      const response = await aiProvider.complete("automation", [
+        { role: "user", content: automationPrompt }
+      ], { jsonMode: true });
 
-      const result = JSON.parse(response.choices[0]?.message?.content || "{}");
+      const result = JSON.parse(response || "{}");
       return {
         triggers: result.triggers || [],
         actions: result.actions || [],
@@ -199,109 +174,92 @@ Return JSON with:
       };
     } catch (error) {
       console.error("[AI] Error generating automation:", error);
-      return { triggers: [], actions: [], description: plainEnglishInput };
+      return {
+        triggers: [],
+        actions: [],
+        description: plainEnglishInput
+      };
     }
   }
 
-  // Summarize conversation
   async summarizeConversation(
-    conversationHistory: Array<{ role: string; content: string }>
+    conversationHistory: Array<{ role: string; content: string }>,
+    businessKnowledge?: AiBusinessKnowledge
   ): Promise<string> {
-    try {
-      const response = await openai.chat.completions.create({
-        model: "gpt-5",
-        messages: [
-          { 
-            role: "system", 
-            content: "Summarize this customer conversation in 2-3 sentences. Focus on: customer intent, key information shared, and current status." 
-          },
-          { 
-            role: "user", 
-            content: conversationHistory.map(m => `${m.role}: ${m.content}`).join("\n") 
-          }
-        ],
-        max_completion_tokens: 200
-      });
+    const summaryPrompt = `Summarize this customer conversation in 2-3 sentences. Focus on:
+- What the customer wants
+- Key information shared
+- Current status/next steps
 
-      return response.choices[0]?.message?.content || "No summary available.";
+Business: ${businessKnowledge?.businessName || "Unknown"}
+
+Conversation:
+${conversationHistory.map(m => `${m.role}: ${m.content}`).join("\n")}
+
+Return JSON: { "summary": "your summary" }`;
+
+    try {
+      const response = await aiProvider.complete("summarization", [
+        { role: "user", content: summaryPrompt }
+      ], { jsonMode: true });
+
+      const result = JSON.parse(response || "{}");
+      return result.summary || "Unable to generate summary.";
     } catch (error) {
       console.error("[AI] Error summarizing conversation:", error);
       return "Unable to generate summary.";
     }
   }
 
-  // Check if handoff is needed
-  checkForHandoff(
+  async checkHandoffNeeded(
     message: string,
-    handoffKeywords: string[] = ["call me", "human", "agent", "speak to someone"]
-  ): boolean {
-    const lowerMessage = message.toLowerCase();
-    return handoffKeywords.some(keyword => lowerMessage.includes(keyword.toLowerCase()));
-  }
-
-  // Detect lead intent from message
-  detectIntent(message: string): string | null {
+    settings?: AiSettings
+  ): Promise<{ shouldHandoff: boolean; reason?: string }> {
+    const keywords = settings?.handoffKeywords || ["call me", "human", "agent", "speak to someone"];
     const lowerMessage = message.toLowerCase();
     
-    for (const [intent, keywords] of Object.entries(LEAD_INTENT_KEYWORDS)) {
-      if (keywords.some(keyword => lowerMessage.includes(keyword))) {
-        return intent;
+    for (const keyword of keywords) {
+      if (lowerMessage.includes(keyword.toLowerCase())) {
+        return { shouldHandoff: true, reason: `Customer requested: "${keyword}"` };
       }
     }
-    return null;
+    
+    return { shouldHandoff: false };
   }
 
-  // Build system prompt with business knowledge
-  private buildSystemPrompt(
-    businessKnowledge?: AiBusinessKnowledge,
-    settings?: AiSettings
-  ): string {
+  private buildSystemPrompt(businessKnowledge?: AiBusinessKnowledge, settings?: AiSettings): string {
     const persona = settings?.aiPersona || "professional";
-    const personaInstructions = {
-      professional: "Be professional, helpful, and concise.",
-      friendly: "Be warm, friendly, and conversational.",
-      casual: "Be casual and relaxed while still being helpful."
-    };
+    const personaDesc = {
+      professional: "professional and courteous",
+      friendly: "warm and friendly",
+      casual: "casual and approachable",
+      formal: "formal and business-like"
+    }[persona] || "professional and courteous";
+    
+    let prompt = `You are an AI assistant for ${businessKnowledge?.businessName || "a business"}. 
+Be ${personaDesc} in your responses.
 
-    let prompt = `You are an AI assistant for ${businessKnowledge?.businessName || "a business"}.
+Your goal: ${businessKnowledge?.salesGoals || "Help customers with their inquiries"}
 
-Persona: ${personaInstructions[persona as keyof typeof personaInstructions] || personaInstructions.professional}
+Business details:
+- Industry: ${businessKnowledge?.industry || "General"}
+- Products/Services: ${businessKnowledge?.servicesProducts || "Various products and services"}
+- Business Hours: ${businessKnowledge?.businessHours || "Standard business hours"}
+- Location: ${businessKnowledge?.locations || "Available online"}`;
 
-`;
-
-    if (businessKnowledge) {
-      if (businessKnowledge.industry) {
-        prompt += `Industry: ${businessKnowledge.industry}\n`;
-      }
-      if (businessKnowledge.servicesProducts) {
-        prompt += `Services/Products: ${businessKnowledge.servicesProducts}\n`;
-      }
-      if (businessKnowledge.businessHours) {
-        prompt += `Business Hours: ${businessKnowledge.businessHours}\n`;
-      }
-      if (businessKnowledge.bookingLink) {
-        prompt += `Booking Link: ${businessKnowledge.bookingLink}\n`;
-      }
-      if (businessKnowledge.salesGoals) {
-        prompt += `Goal: ${businessKnowledge.salesGoals}\n`;
-      }
-      if (businessKnowledge.customInstructions) {
-        prompt += `\nSpecial Instructions: ${businessKnowledge.customInstructions}\n`;
-      }
+    if (businessKnowledge?.bookingLink) {
+      prompt += `\n- Booking Link: ${businessKnowledge.bookingLink}`;
     }
 
-    prompt += `
-IMPORTANT RULES:
-- Never give medical, legal, or financial advice
-- Never make misleading offers
-- If customer asks to speak to a human, acknowledge and inform them someone will be in touch
-- Focus on the business goal: ${businessKnowledge?.salesGoals || "help the customer"}
+    if (businessKnowledge?.customInstructions) {
+      prompt += `\n\nSpecial instructions: ${businessKnowledge.customInstructions}`;
+    }
 
-Return JSON with: { "reply": "your response", "confidence": 0.0-1.0 }`;
+    prompt += `\n\nRespond with JSON: { "reply": "your response", "confidence": 0.0-1.0 }
+Keep responses concise (under 200 words). Be helpful but don't make promises you can't keep.`;
 
     return prompt;
   }
 }
 
-// Export singleton instance
 export const aiService = new AIService();
