@@ -4676,5 +4676,315 @@ export async function registerRoutes(
     }
   });
 
+  // ==========================================
+  // AI BRAIN API ROUTES (PRO ADD-ON)
+  // ==========================================
+
+  // Helper: Check if user has AI Brain access (Pro plan with add-on)
+  const checkAiBrainAccess = async (userId: string): Promise<{ hasAccess: boolean; reason?: string }> => {
+    const user = await storage.getUser(userId);
+    if (!user) return { hasAccess: false, reason: "User not found" };
+    
+    // Check if user is on Pro or Enterprise plan
+    const proPlans = ['pro', 'enterprise'];
+    if (!proPlans.includes(user.subscriptionPlan || 'free')) {
+      return { hasAccess: false, reason: "AI Brain requires Pro plan" };
+    }
+    
+    // For now, all Pro users have access (in production, check for $29/mo add-on)
+    return { hasAccess: true };
+  };
+
+  // Helper: Check and alert on usage limits
+  const checkUsageLimits = async (userId: string): Promise<{ canProceed: boolean; usagePercent: number }> => {
+    const usage = await storage.getCurrentAiUsage(userId);
+    if (!usage) return { canProceed: true, usagePercent: 0 };
+    
+    const monthlyLimit = 5000; // Fair use limit
+    const totalUsage = (usage.messagesGenerated || 0) + (usage.repliesSuggested || 0);
+    const usagePercent = (totalUsage / monthlyLimit) * 100;
+    
+    // Check if usage limit reached
+    if (usage.usageLimitReached) {
+      return { canProceed: false, usagePercent };
+    }
+    
+    // Auto-pause at 100%
+    if (usagePercent >= 100) {
+      await storage.upsertAiUsage(userId, { usageLimitReached: true });
+      return { canProceed: false, usagePercent };
+    }
+    
+    return { canProceed: true, usagePercent };
+  };
+
+  // Get AI settings
+  app.get("/api/ai/settings", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const userId = req.user.id;
+      
+      // Check access
+      const access = await checkAiBrainAccess(userId);
+      if (!access.hasAccess) {
+        return res.status(403).json({ error: access.reason, needsUpgrade: true });
+      }
+      
+      const settings = await storage.getAiSettings(userId);
+      res.json(settings || {
+        aiMode: "suggest_only",
+        businessHoursOnly: false,
+        confidenceLevel: "balanced",
+        leadQualificationEnabled: true,
+        autoTaggingEnabled: true,
+        handoffKeywords: ["call me", "human", "agent", "speak to someone"],
+        aiPersona: "professional",
+      });
+    } catch (error) {
+      console.error("AI settings fetch error:", error);
+      res.status(500).json({ error: "Failed to fetch AI settings" });
+    }
+  });
+
+  // Update AI settings
+  app.patch("/api/ai/settings", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const userId = req.user.id;
+      
+      // Check access
+      const access = await checkAiBrainAccess(userId);
+      if (!access.hasAccess) {
+        return res.status(403).json({ error: access.reason, needsUpgrade: true });
+      }
+      
+      // Validate allowed fields
+      const allowedFields = ['aiMode', 'businessHoursOnly', 'confidenceLevel', 'leadQualificationEnabled', 'autoTaggingEnabled', 'handoffKeywords', 'aiPersona'];
+      const updates: Record<string, any> = {};
+      for (const field of allowedFields) {
+        if (req.body[field] !== undefined) {
+          updates[field] = req.body[field];
+        }
+      }
+      
+      const settings = await storage.upsertAiSettings(userId, updates);
+      res.json(settings);
+    } catch (error) {
+      console.error("AI settings update error:", error);
+      res.status(500).json({ error: "Failed to update AI settings" });
+    }
+  });
+
+  // Get business knowledge
+  app.get("/api/ai/business-knowledge", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const userId = req.user.id;
+      const knowledge = await storage.getAiBusinessKnowledge(userId);
+      res.json(knowledge || {
+        businessName: "",
+        industry: "",
+        servicesProducts: "",
+        businessHours: "",
+        locations: "",
+        bookingLink: "",
+        faqs: [],
+        salesGoals: "",
+        customInstructions: "",
+        qualifyingQuestions: [],
+      });
+    } catch (error) {
+      console.error("Business knowledge fetch error:", error);
+      res.status(500).json({ error: "Failed to fetch business knowledge" });
+    }
+  });
+
+  // Update business knowledge
+  app.patch("/api/ai/business-knowledge", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const userId = req.user.id;
+      const knowledge = await storage.upsertAiBusinessKnowledge(userId, req.body);
+      res.json(knowledge);
+    } catch (error) {
+      console.error("Business knowledge update error:", error);
+      res.status(500).json({ error: "Failed to update business knowledge" });
+    }
+  });
+
+  // Get AI usage
+  app.get("/api/ai/usage", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const userId = req.user.id;
+      const usage = await storage.getCurrentAiUsage(userId);
+      res.json(usage || {
+        messagesGenerated: 0,
+        repliesSuggested: 0,
+        leadsQualified: 0,
+        periodStart: new Date().toISOString(),
+        periodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+      });
+    } catch (error) {
+      console.error("AI usage fetch error:", error);
+      res.status(500).json({ error: "Failed to fetch AI usage" });
+    }
+  });
+
+  // Generate automation from plain English
+  app.post("/api/ai/generate-automation", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const userId = req.user.id;
+      
+      // Check access and usage limits
+      const access = await checkAiBrainAccess(userId);
+      if (!access.hasAccess) {
+        return res.status(403).json({ error: access.reason, needsUpgrade: true });
+      }
+      
+      const usageLimits = await checkUsageLimits(userId);
+      if (!usageLimits.canProceed) {
+        return res.status(429).json({ 
+          error: "Monthly AI usage limit reached.",
+          usagePercent: usageLimits.usagePercent
+        });
+      }
+      
+      const { prompt } = req.body;
+      
+      if (!prompt) {
+        return res.status(400).json({ error: "Prompt required" });
+      }
+
+      const { aiService } = await import("./aiService");
+      const knowledge = await storage.getAiBusinessKnowledge(userId);
+      const workflow = await aiService.generateAutomation(prompt, knowledge || undefined);
+      
+      // Track usage
+      await storage.incrementAiUsage(userId, 'automationsGenerated');
+      
+      res.json(workflow);
+    } catch (error) {
+      console.error("Automation generation error:", error);
+      res.status(500).json({ error: "Failed to generate automation" });
+    }
+  });
+
+  // Get AI reply suggestions for a conversation
+  app.post("/api/ai/suggest-reply", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const userId = req.user.id;
+      
+      // Check access and usage limits
+      const access = await checkAiBrainAccess(userId);
+      if (!access.hasAccess) {
+        return res.status(403).json({ error: access.reason, needsUpgrade: true });
+      }
+      
+      const usageLimits = await checkUsageLimits(userId);
+      if (!usageLimits.canProceed) {
+        return res.status(429).json({ 
+          error: "Monthly AI usage limit reached. Usage resets on your next billing date.",
+          usagePercent: usageLimits.usagePercent
+        });
+      }
+      
+      const { chatId, conversationHistory } = req.body;
+      
+      if (!conversationHistory || !Array.isArray(conversationHistory)) {
+        return res.status(400).json({ error: "Conversation history required" });
+      }
+
+      const { aiService } = await import("./aiService");
+      const knowledge = await storage.getAiBusinessKnowledge(userId);
+      const settings = await storage.getAiSettings(userId);
+      
+      const suggestion = await aiService.suggestReply(
+        userId,
+        chatId,
+        conversationHistory,
+        knowledge || undefined,
+        settings || undefined
+      );
+      
+      // Track usage
+      await storage.incrementAiUsage(userId, 'repliesSuggested');
+      
+      res.json({ ...suggestion, usagePercent: usageLimits.usagePercent });
+    } catch (error) {
+      console.error("Reply suggestion error:", error);
+      res.status(500).json({ error: "Failed to generate suggestion" });
+    }
+  });
+
+  // Extract lead data from conversation
+  app.post("/api/ai/extract-lead", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const userId = req.user.id;
+      const { chatId, conversationHistory } = req.body;
+      
+      if (!conversationHistory || !Array.isArray(conversationHistory)) {
+        return res.status(400).json({ error: "Conversation history required" });
+      }
+
+      const { aiService } = await import("./aiService");
+      const knowledge = await storage.getAiBusinessKnowledge(userId);
+      
+      const leadData = await aiService.extractLeadData(conversationHistory, knowledge || undefined);
+      
+      // Save lead score if chatId provided
+      if (chatId) {
+        await storage.upsertAiLeadScore(chatId, userId, leadData);
+        await storage.incrementAiUsage(userId, 'leadsQualified');
+      }
+      
+      res.json(leadData);
+    } catch (error) {
+      console.error("Lead extraction error:", error);
+      res.status(500).json({ error: "Failed to extract lead data" });
+    }
+  });
+
+  // Summarize conversation
+  app.post("/api/ai/summarize", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const { conversationHistory } = req.body;
+      
+      if (!conversationHistory || !Array.isArray(conversationHistory)) {
+        return res.status(400).json({ error: "Conversation history required" });
+      }
+
+      const { aiService } = await import("./aiService");
+      const summary = await aiService.summarizeConversation(conversationHistory);
+      
+      res.json({ summary });
+    } catch (error) {
+      console.error("Summarization error:", error);
+      res.status(500).json({ error: "Failed to summarize conversation" });
+    }
+  });
+
   return httpServer;
 }

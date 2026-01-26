@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { MessageSquare, ListTodo, Search, LogOut, Settings, Zap, Plug, FileText, HelpCircle, Bot, Inbox, Globe } from "lucide-react";
+import { MessageSquare, ListTodo, Search, LogOut, Settings, Zap, Plug, FileText, HelpCircle, Bot, Inbox, Globe, Brain } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 
@@ -16,6 +16,7 @@ export function Sidebar() {
     { icon: FileText, label: "Templates", href: "/app/templates", testId: "sidebar-templates" },
     { icon: Globe, label: "Website Widget", href: "/app/widget", testId: "sidebar-widget" },
     { icon: Plug, label: "Integrations", href: "/app/integrations", testId: "sidebar-integrations" },
+    { icon: Brain, label: "AI Brain", href: "/app/ai-brain", testId: "sidebar-ai-brain" },
     { icon: Search, label: "Search", href: "/app/search", testId: "sidebar-search" },
     { icon: Settings, label: "Settings", href: "/app/settings", testId: "sidebar-settings" },
     { icon: HelpCircle, label: "Help", href: "/app/help", testId: "sidebar-help" },

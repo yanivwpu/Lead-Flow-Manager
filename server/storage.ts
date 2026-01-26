@@ -29,7 +29,9 @@ import {
   type SupportTicket, type InsertSupportTicket,
   type Partner, type InsertPartner,
   type Commission, type InsertCommission,
-  type AgreementAcceptance, type InsertAgreementAcceptance
+  type AgreementAcceptance, type InsertAgreementAcceptance,
+  type AiSettings, type AiBusinessKnowledge, type AiUsage, type AiLeadScore,
+  aiSettings, aiBusinessKnowledge, aiUsage, aiLeadScores
 } from "@shared/schema";
 import { db } from "../drizzle/db";
 import { users, chats, registeredPhones, messageUsage, conversationWindows, teamMembers, workflows, workflowExecutions, recurringReminders, webhooks, webhookDeliveries, integrations, messageTemplates, templateSends, dripCampaigns, dripSteps, dripEnrollments, dripSends, chatbotFlows, chatbotSessions, salespeople, demoBookings, salesConversions, adminSettings, contacts, conversations, messages, activityEvents, channelSettings, supportTickets, partners, commissions, agreementAcceptances, type InsertConversationWindow, type ConversationWindow } from "@shared/schema";
@@ -193,6 +195,16 @@ export interface IStorage {
   getChannelSettings(userId: string): Promise<ChannelSetting[]>;
   getChannelSetting(userId: string, channel: Channel): Promise<ChannelSetting | undefined>;
   upsertChannelSetting(userId: string, channel: Channel, updates: Partial<ChannelSetting>): Promise<ChannelSetting>;
+  
+  // AI Brain methods
+  getAiSettings(userId: string): Promise<AiSettings | undefined>;
+  upsertAiSettings(userId: string, updates: Partial<AiSettings>): Promise<AiSettings>;
+  getAiBusinessKnowledge(userId: string): Promise<AiBusinessKnowledge | undefined>;
+  upsertAiBusinessKnowledge(userId: string, updates: Partial<AiBusinessKnowledge>): Promise<AiBusinessKnowledge>;
+  getCurrentAiUsage(userId: string): Promise<AiUsage | undefined>;
+  upsertAiUsage(userId: string, updates: Partial<AiUsage>): Promise<void>;
+  incrementAiUsage(userId: string, field: 'messagesGenerated' | 'repliesSuggested' | 'leadsQualified' | 'automationsGenerated'): Promise<void>;
+  upsertAiLeadScore(chatId: string, userId: string, data: Partial<AiLeadScore>): Promise<AiLeadScore>;
 }
 
 export class DbStorage implements IStorage {
@@ -1707,6 +1719,108 @@ export class DbStorage implements IStorage {
         .orderBy(desc(agreementAcceptances.acceptedAt));
     }
     return await db.select().from(agreementAcceptances).orderBy(desc(agreementAcceptances.acceptedAt));
+  }
+
+  // ==========================================
+  // AI BRAIN STORAGE METHODS
+  // ==========================================
+
+  async getAiSettings(userId: string): Promise<AiSettings | undefined> {
+    const result = await db.select().from(aiSettings).where(eq(aiSettings.userId, userId));
+    return result[0];
+  }
+
+  async upsertAiSettings(userId: string, updates: Partial<AiSettings>): Promise<AiSettings> {
+    const existing = await this.getAiSettings(userId);
+    if (existing) {
+      const result = await db.update(aiSettings)
+        .set({ ...updates, updatedAt: new Date() })
+        .where(eq(aiSettings.userId, userId))
+        .returning();
+      return result[0];
+    }
+    const result = await db.insert(aiSettings).values({ ...updates, userId }).returning();
+    return result[0];
+  }
+
+  async getAiBusinessKnowledge(userId: string): Promise<AiBusinessKnowledge | undefined> {
+    const result = await db.select().from(aiBusinessKnowledge).where(eq(aiBusinessKnowledge.userId, userId));
+    return result[0];
+  }
+
+  async upsertAiBusinessKnowledge(userId: string, updates: Partial<AiBusinessKnowledge>): Promise<AiBusinessKnowledge> {
+    const existing = await this.getAiBusinessKnowledge(userId);
+    if (existing) {
+      const result = await db.update(aiBusinessKnowledge)
+        .set({ ...updates, updatedAt: new Date() })
+        .where(eq(aiBusinessKnowledge.userId, userId))
+        .returning();
+      return result[0];
+    }
+    const result = await db.insert(aiBusinessKnowledge).values({ ...updates, userId }).returning();
+    return result[0];
+  }
+
+  async getCurrentAiUsage(userId: string): Promise<AiUsage | undefined> {
+    const now = new Date();
+    const result = await db.select().from(aiUsage)
+      .where(and(
+        eq(aiUsage.userId, userId),
+        lte(aiUsage.periodStart, now),
+        gte(aiUsage.periodEnd, now)
+      ))
+      .orderBy(desc(aiUsage.periodStart))
+      .limit(1);
+    
+    if (result.length === 0) {
+      const periodStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      const periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+      const newUsage = await db.insert(aiUsage).values({
+        userId,
+        periodStart,
+        periodEnd,
+      }).returning();
+      return newUsage[0];
+    }
+    return result[0];
+  }
+
+  async upsertAiUsage(userId: string, updates: Partial<AiUsage>): Promise<void> {
+    const current = await this.getCurrentAiUsage(userId);
+    if (!current) return;
+    
+    await db.update(aiUsage)
+      .set(updates)
+      .where(eq(aiUsage.id, current.id));
+  }
+
+  async incrementAiUsage(userId: string, field: 'messagesGenerated' | 'repliesSuggested' | 'leadsQualified' | 'automationsGenerated'): Promise<void> {
+    const current = await this.getCurrentAiUsage(userId);
+    if (!current) return;
+    
+    const fieldColumn = {
+      messagesGenerated: aiUsage.messagesGenerated,
+      repliesSuggested: aiUsage.repliesSuggested,
+      leadsQualified: aiUsage.leadsQualified,
+      automationsGenerated: aiUsage.automationsGenerated,
+    }[field];
+    
+    await db.update(aiUsage)
+      .set({ [field]: sql`${fieldColumn} + 1` })
+      .where(eq(aiUsage.id, current.id));
+  }
+
+  async upsertAiLeadScore(chatId: string, userId: string, data: Partial<AiLeadScore>): Promise<AiLeadScore> {
+    const existing = await db.select().from(aiLeadScores).where(eq(aiLeadScores.chatId, chatId));
+    if (existing.length > 0) {
+      const result = await db.update(aiLeadScores)
+        .set({ ...data, lastUpdatedAt: new Date() })
+        .where(eq(aiLeadScores.chatId, chatId))
+        .returning();
+      return result[0];
+    }
+    const result = await db.insert(aiLeadScores).values({ ...data, chatId, userId }).returning();
+    return result[0];
   }
 }
 

@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Check, Zap, Users, MessageSquare, Phone, Loader2, Shield, AlertTriangle, HelpCircle, XCircle } from "lucide-react";
+import { ArrowLeft, Check, Zap, Users, MessageSquare, Phone, Loader2, Shield, AlertTriangle, HelpCircle, XCircle, Brain, Sparkles, Target } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { useAuth } from "@/lib/auth-context";
 import { useToast } from "@/hooks/use-toast";
@@ -248,6 +248,75 @@ export function Pricing() {
               </div>
             );
           })}
+        </div>
+
+        {/* AI Assist Add-on */}
+        <div className="mt-12 max-w-2xl mx-auto">
+          <div className="bg-gradient-to-br from-purple-50 to-blue-50 border-2 border-purple-200 rounded-2xl p-6 sm:p-8 relative overflow-hidden">
+            <div className="absolute top-4 right-4 bg-purple-600 text-white text-xs font-bold px-3 py-1 rounded-full">
+              PRO ADD-ON
+            </div>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-blue-500 rounded-xl flex items-center justify-center">
+                <Brain className="w-6 h-6 text-white" />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-gray-900">AI Brain</h3>
+                <p className="text-sm text-gray-600">Supercharge your conversations with AI</p>
+              </div>
+            </div>
+            
+            <div className="flex items-baseline gap-1 mb-4">
+              <span className="text-3xl font-bold text-gray-900">$29</span>
+              <span className="text-gray-600">/month</span>
+            </div>
+            
+            <div className="grid gap-3 mb-6">
+              <div className="flex items-start gap-2">
+                <Sparkles className="w-4 h-4 text-purple-500 mt-0.5 shrink-0" />
+                <span className="text-sm text-gray-700">AI-powered reply suggestions based on your business context</span>
+              </div>
+              <div className="flex items-start gap-2">
+                <Target className="w-4 h-4 text-green-500 mt-0.5 shrink-0" />
+                <span className="text-sm text-gray-700">Automatic lead qualification & scoring (0-100)</span>
+              </div>
+              <div className="flex items-start gap-2">
+                <Zap className="w-4 h-4 text-yellow-500 mt-0.5 shrink-0" />
+                <span className="text-sm text-gray-700">Plain English automation builder - describe workflows naturally</span>
+              </div>
+              <div className="flex items-start gap-2">
+                <MessageSquare className="w-4 h-4 text-blue-500 mt-0.5 shrink-0" />
+                <span className="text-sm text-gray-700">Conversation summaries & smart data extraction</span>
+              </div>
+              <div className="flex items-start gap-2">
+                <Users className="w-4 h-4 text-orange-500 mt-0.5 shrink-0" />
+                <span className="text-sm text-gray-700">Human handoff controls & abuse prevention</span>
+              </div>
+            </div>
+            
+            <p className="text-xs text-gray-500 mb-4">
+              Available exclusively for Pro plan subscribers. Fair use policy applies.
+            </p>
+            
+            {currentPlan === 'pro' ? (
+              <Link href="/app/ai-brain">
+                <Button className="w-full bg-purple-600 hover:bg-purple-700 text-white" data-testid="button-ai-brain-setup">
+                  <Brain className="w-4 h-4 mr-2" />
+                  Set Up AI Brain
+                </Button>
+              </Link>
+            ) : (
+              <Button 
+                className="w-full bg-gray-900 hover:bg-gray-800 text-white"
+                onClick={() => handleUpgrade('pro')}
+                disabled={loadingPlan === 'pro'}
+                data-testid="button-upgrade-for-ai"
+              >
+                {loadingPlan === 'pro' ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                Upgrade to Pro to Unlock
+              </Button>
+            )}
+          </div>
         </div>
 
         {/* Important Notice */}
