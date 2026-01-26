@@ -89,8 +89,8 @@ export class WebhookHandlers {
         commissionEndDate.setMonth(commissionEndDate.getMonth() + (partner.commissionDurationMonths || 6));
         
         if (new Date() <= commissionEndDate) {
-          // Create partner commission
-          const commissionRate = parseFloat(partner.commissionRate || '20') / 100;
+          // Create partner commission (50% rate)
+          const commissionRate = 0.50;
           const partnerCommission = (amountPaid * commissionRate).toFixed(2);
           
           await storage.createCommission({
