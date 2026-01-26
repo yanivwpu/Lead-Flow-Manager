@@ -12,6 +12,7 @@ import { Templates } from "./Templates";
 import { HelpCenter } from "./HelpCenter";
 import { ChatbotBuilder } from "./ChatbotBuilder";
 import { UnifiedInbox } from "./UnifiedInbox";
+import { WebsiteWidget } from "./WebsiteWidget";
 import { UsageWarningBanner } from "@/components/UsageWarningBanner";
 import { TrialBanner } from "@/components/TrialBanner";
 import { OnboardingTour } from "@/components/OnboardingTour";
@@ -67,6 +68,7 @@ function AppContent() {
             <Route path="/app/workflows" component={Workflows} />
             <Route path="/app/chatbot" component={ChatbotBuilder} />
             <Route path="/app/templates" component={Templates} />
+            <Route path="/app/widget" component={WebsiteWidget} />
             <Route path="/app/integrations" component={Integrations} />
             <Route path="/app/search" component={Search} />
             <Route path="/app/settings" component={Settings} />

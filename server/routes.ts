@@ -576,6 +576,74 @@ export async function registerRoutes(
     }
   });
 
+  // ============= Website Widget Settings Endpoints =============
+  
+  // Get widget settings
+  app.get("/api/widget-settings", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const user = await storage.getUser(req.user.id);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      const defaultSettings = {
+        enabled: true,
+        color: "#25D366",
+        welcomeMessage: "Hi there! How can we help you today?",
+        position: "right",
+        showOnMobile: true,
+      };
+      res.json(user.widgetSettings || defaultSettings);
+    } catch (error) {
+      console.error("Error fetching widget settings:", error);
+      res.status(500).json({ error: "Failed to fetch widget settings" });
+    }
+  });
+
+  // Update widget settings
+  const widgetSettingsSchema = z.object({
+    enabled: z.boolean().optional(),
+    color: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
+    welcomeMessage: z.string().max(500).optional(),
+    position: z.enum(["left", "right"]).optional(),
+    showOnMobile: z.boolean().optional(),
+  });
+  
+  app.patch("/api/widget-settings", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      
+      const validation = widgetSettingsSchema.safeParse(req.body);
+      if (!validation.success) {
+        return res.status(400).json({ error: "Invalid widget settings", details: validation.error.errors });
+      }
+      
+      const { enabled, color, welcomeMessage, position, showOnMobile } = validation.data;
+      
+      const user = await storage.getUser(req.user.id);
+      const currentSettings = (user?.widgetSettings as any) || {};
+      
+      const newSettings = {
+        ...currentSettings,
+        ...(enabled !== undefined && { enabled }),
+        ...(color !== undefined && { color }),
+        ...(welcomeMessage !== undefined && { welcomeMessage }),
+        ...(position !== undefined && { position }),
+        ...(showOnMobile !== undefined && { showOnMobile }),
+      };
+
+      await storage.updateUser(req.user.id, { widgetSettings: newSettings });
+      res.json(newSettings);
+    } catch (error) {
+      console.error("Error updating widget settings:", error);
+      res.status(500).json({ error: "Failed to update widget settings" });
+    }
+  });
+
   // ============= Phone Registration Endpoints =============
   
   // Get registered phones for current user

@@ -119,6 +119,8 @@ export const users = pgTable("users", {
   autoReplyDelay: integer("auto_reply_delay").default(0), // seconds to wait before sending
   // Onboarding
   onboardingCompleted: boolean("onboarding_completed").default(false),
+  // Website widget settings
+  widgetSettings: jsonb("widget_settings").default(sql`'{"enabled":true,"color":"#25D366","welcomeMessage":"Hi there! How can we help you today?","position":"right","showOnMobile":true}'::jsonb`),
   // Partner referral tracking - locked after first assignment (first-touch wins)
   partnerId: varchar("partner_id"),
   partnerAssignedAt: timestamp("partner_assigned_at"), // when partner was assigned (for commission duration)
