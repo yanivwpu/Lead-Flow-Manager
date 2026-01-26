@@ -177,8 +177,9 @@ Only the first valid referral recorded for a customer is eligible
 WhachatCRM's decision on attribution is final
 
 5. Commission Payout Schedule
-Partners earn 20% of subscription revenue collected from Qualified Referrals.
+Partners earn 50% of subscription revenue collected from Qualified Referrals.
 Commission duration: up to six (6) months from the customer's first paid invoice.
+Commissions apply to subscription fees only and exclude AI add-ons, messaging fees, and third-party costs.
 Commissions are calculated monthly based on payments successfully collected during the previous calendar month and are paid on the first business day of each month.
 A minimum payout threshold of $50 USD applies. Commission balances below the threshold will roll over to the next payout cycle.
 Payments are made via Stripe, ACH, PayPal, or another payment method supported by WhachatCRM. Partners are responsible for any applicable taxes.

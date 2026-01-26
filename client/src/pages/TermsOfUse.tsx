@@ -13,7 +13,7 @@ export function TermsOfUse() {
         </Link>
 
         <h1 className="text-3xl font-display font-bold text-gray-900 mb-2">Terms of Use</h1>
-        <p className="text-sm text-gray-500 mb-8">Last updated: January 3, 2026</p>
+        <p className="text-sm text-gray-500 mb-8">Last updated: January 26, 2026</p>
 
         <div className="prose prose-gray max-w-none">
           <h2 className="text-xl font-bold text-gray-900 mt-8 mb-4">1. Acceptance of Terms</h2>

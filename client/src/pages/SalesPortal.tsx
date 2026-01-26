@@ -71,7 +71,8 @@ Management decisions on disputes are final
 
 4. Commission Structure & Payout Schedule
 Internal sales earn 30% of subscription revenue collected.
-Commission duration: up to six (6) months from first payment.
+Commission duration: up to twelve (12) months from first payment.
+Commissions apply to subscription fees only and exclude AI add-ons, messaging fees, and third-party costs.
 Commission applies only while the customer remains active and paying.
 Upgrades increase commission proportionally. Downgrades reduce commission.
 Commissions are calculated monthly based on payments collected during the previous calendar month and are paid on the first business day of each month.
