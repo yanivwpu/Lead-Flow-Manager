@@ -260,7 +260,7 @@ export function WebsiteWidget() {
   };
   
   return (
-    <div className="h-full bg-gray-50/30">
+    <div className="h-full overflow-y-auto bg-gray-50/30">
       <div className="p-4 md:p-8 max-w-5xl mx-auto pb-24">
         <div className="mb-8">
           <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight" data-testid="text-page-title">Website Widget</h1>
