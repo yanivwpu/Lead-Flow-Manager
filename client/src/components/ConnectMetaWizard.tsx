@@ -88,7 +88,9 @@ export function ConnectMetaWizard({ open, onOpenChange, onSuccess }: ConnectMeta
             ) : "Connect Meta WhatsApp API"}
           </DialogTitle>
           <DialogDescription>
-            {step === "credentials" && "Enter your Meta App credentials to enable official WhatsApp API."}
+            {step === "credentials" && (
+              <span className="text-gray-500">Direct Meta connection · No message markup · You pay Meta directly</span>
+            )}
             {step === "webhook" && "Configure the webhook in your Meta Developer Dashboard."}
           </DialogDescription>
         </DialogHeader>
