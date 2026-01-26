@@ -3,7 +3,8 @@ import { Helmet } from "react-helmet";
 import { 
   Search, ChevronRight, MessageSquare, Settings, Zap, Plug, 
   Phone, Bell, Users, FileText, Tag, Clock, Mail, Shield,
-  CreditCard, HelpCircle, BookOpen, Smartphone, Globe, Heart, X
+  CreditCard, HelpCircle, BookOpen, Smartphone, Globe, Heart, X,
+  Brain
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
@@ -72,6 +73,129 @@ Save time with automated features:
 - **Smart Fallback**: Auto-route to backup channel if primary fails
 - **Drip Sequences**: Send scheduled message series (Pro plan)
 - **Workflows**: Automate tagging and assignments (Pro plan)
+    `
+  },
+  {
+    id: "ai-brain",
+    title: "AI Brain - Your Business Assistant",
+    category: "AI Features",
+    icon: Brain,
+    keywords: ["ai", "brain", "assistant", "smart", "reply", "suggestion", "lead", "capture", "automation", "fair use"],
+    content: `
+# AI Brain - Your Intelligent Business Assistant
+
+AI Brain is a powerful add-on that turns WhachatCRM into your tireless business assistant. It learns about your business and helps you respond faster, capture leads automatically, and never miss an opportunity.
+
+## What is AI Brain?
+
+Think of AI Brain as a smart assistant that:
+- **Knows your business** - understands your products, services, hours, and sales goals
+- **Suggests replies** - drafts contextual responses you can use with one click
+- **Captures leads** - automatically extracts customer information from conversations
+- **Adapts to your style** - choose from Neutral, Friendly, Professional, or Sales-focused tones
+
+Available exclusively for **Pro plan** users at **$29/month** under Fair Use.
+
+---
+
+## Key Features
+
+### Reply Suggestions
+
+When chatting with customers, click the brain icon to get an AI-suggested response:
+- The AI reads the conversation context
+- Drafts a relevant, on-brand reply
+- You review, edit if needed, and send
+
+**Tone Control:**
+Choose how AI sounds:
+- **Neutral** - Balanced and helpful
+- **Friendly** - Warm and conversational
+- **Professional** - Formal and business-like
+- **Sales-focused** - Persuasive and value-driven
+
+### Lead Capture
+
+AI Brain automatically extracts customer information:
+- Names, emails, phone numbers
+- Budget and timeline mentions
+- Location and intent signals
+
+You'll see a subtle "Lead details updated" hint when info is captured - no forms, no interruptions.
+
+### Business Knowledge
+
+Teach AI about your business in Settings > AI Brain:
+- Business name and industry
+- Products and services
+- Business hours and locations
+- Booking links
+- Sales goals and FAQs
+
+The more you teach it, the better the suggestions become.
+
+---
+
+## How Fair Use Works
+
+AI Brain uses a **Fair Use** model designed to protect your messaging reputation and ensure everyone gets a great experience.
+
+### Designed to Protect Your Number
+
+WhatsApp and other platforms monitor message quality. Sending too many automated messages too quickly can trigger spam flags. Our Fair Use approach ensures:
+- **Natural pacing** - Brief cooldowns between AI requests
+- **Quality over quantity** - Encourages thoughtful, personalized replies
+- **Account protection** - Keeps your number in good standing
+
+### No Hard Limits
+
+We don't show you "X messages remaining" or cut you off at arbitrary numbers. Instead:
+- AI adapts to real usage patterns
+- High-volume periods are supported naturally
+- System optimizes for genuine business conversations
+
+### Optimized for Real Conversations
+
+AI Brain is built for actual customer service, not mass automation:
+- Cooldowns reset per conversation (not global)
+- Manual typing is never blocked
+- Human judgment always takes priority
+
+---
+
+## Best Practices
+
+### When to Use AI
+
+AI Brain shines when:
+- **First response** - Get a quick, professional opening reply
+- **Common questions** - Let AI handle FAQs you've taught it
+- **Busy periods** - Speed up response times during rushes
+- **Unfamiliar topics** - Get suggestions when unsure how to reply
+- **Tone adjustment** - Switch to Sales mode for closing conversations
+
+### When to Jump In Manually
+
+Take over personally when:
+- **Complex issues** - Multi-step problems need human judgment
+- **Emotional situations** - Upset customers need genuine empathy
+- **Negotiations** - Pricing and deals require careful handling
+- **Personal relationships** - VIP clients deserve personal attention
+- **Handoff requests** - When someone asks for a human
+
+**Pro Tip:** Use AI for the first draft, then personalize it. The best responses combine AI speed with your personal touch.
+
+---
+
+## Getting Started
+
+1. **Upgrade to Pro** - AI Brain requires a Pro subscription
+2. **Enable AI Brain** - Go to Settings > AI Brain and subscribe
+3. **Add Business Knowledge** - Teach AI about your business
+4. **Set AI Mode** - Choose Suggest Only, Auto Draft, or Hybrid
+5. **Start Using** - Click the brain icon in any chat
+
+The more you use it, the more natural it feels. AI Brain is designed to augment your abilities, not replace your judgment.
     `
   },
   {
