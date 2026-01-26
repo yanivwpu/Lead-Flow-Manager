@@ -469,6 +469,59 @@ export async function sendSalespersonWelcomeEmail(
   });
 }
 
+export async function sendPartnerWelcomeEmail(
+  name: string, 
+  email: string, 
+  refCode: string
+): Promise<boolean> {
+  const partnerPortalUrl = `${APP_URL}/partner-portal`;
+  
+  return sendEmail({
+    to: email,
+    subject: 'Welcome to the WhaChatCRM Partner Program!',
+    html: `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      </head>
+      <body style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #334155; margin: 0; padding: 0; background-color: #f1f5f9;">
+        <div style="padding: 40px 20px;">
+          <div style="max-width: 600px; margin: 0 auto; background: white; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+            <div style="background: linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%); color: white; padding: 40px 30px; text-align: center;">
+              <div style="width: 50px; height: 50px; background: white; border-radius: 12px; display: inline-block; margin-bottom: 16px; font-size: 24px; font-weight: bold; color: #7c3aed; line-height: 50px;">W</div>
+              <h1 style="margin: 0; font-size: 24px; font-weight: 600;">Welcome, Partner!</h1>
+            </div>
+            <div style="padding: 40px 30px;">
+              <h2 style="color: #1e293b; margin-top: 0; font-size: 20px;">Hi ${name}!</h2>
+              <p style="color: #475569; font-size: 15px;">Welcome to the WhaChatCRM Partner Program! We're excited to have you on board.</p>
+              
+              <div style="background: #f5f3ff; border: 1px solid #c4b5fd; padding: 20px; border-radius: 8px; margin: 24px 0;">
+                <p style="margin: 0 0 8px 0; color: #5b21b6; font-size: 15px;"><strong>Your Referral Code:</strong></p>
+                <div style="background: white; border: 2px dashed #7c3aed; padding: 16px; border-radius: 8px; text-align: center;">
+                  <code style="font-size: 24px; color: #7c3aed; font-weight: bold; letter-spacing: 2px;">${refCode}</code>
+                </div>
+              </div>
+              
+              <p style="color: #475569; font-size: 15px;">Share your referral code with potential customers. When they sign up and upgrade, you'll earn commission on their subscription!</p>
+              
+              <div style="text-align: center;">
+                <a href="${partnerPortalUrl}" style="display: inline-block; background: #7c3aed; color: white; padding: 14px 32px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px; margin: 24px 0;">Access Partner Portal</a>
+              </div>
+            </div>
+            <div style="text-align: center; padding: 24px 30px; background: #f8fafc; border-top: 1px solid #e2e8f0;">
+              <p style="margin: 0; color: #94a3b8; font-size: 12px;">Need help? Contact us at <a href="mailto:partners@whachatcrm.com" style="color: #7c3aed; text-decoration: none;">partners@whachatcrm.com</a></p>
+              <p style="margin: 12px 0 0 0; color: #94a3b8; font-size: 12px;">&copy; ${new Date().getFullYear()} WhaChatCRM. All rights reserved.</p>
+            </div>
+          </div>
+        </div>
+      </body>
+      </html>
+    `
+  });
+}
+
 export async function sendFollowUpReminderEmail(email: string, chatName: string, followUp: string, notes: string, chatId: string): Promise<boolean> {
   return sendEmail({
     to: email,

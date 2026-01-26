@@ -4024,12 +4024,12 @@ export async function registerRoutes(
       // Send welcome email to new partner
       const { sendPartnerWelcomeEmail } = await import("./email");
       sendPartnerWelcomeEmail(partner.name, partner.email, partner.refCode)
-        .then(sent => {
+        .then((sent: boolean) => {
           if (sent) {
             console.log(`[Admin] Welcome email sent to partner: ${partner.email}`);
           }
         })
-        .catch(err => console.error('[Admin] Failed to send partner welcome email:', err));
+        .catch((err: Error) => console.error('[Admin] Failed to send partner welcome email:', err));
       
       res.status(201).json(partner);
     } catch (error) {
