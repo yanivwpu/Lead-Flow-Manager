@@ -176,20 +176,20 @@ Attribution is determined solely by WhachatCRM's tracking systems
 Only the first valid referral recorded for a customer is eligible
 WhachatCRM's decision on attribution is final
 
-4. Commission Structure
-Partners earn 20% of subscription revenue collected from Qualified Referrals
-Commission duration: up to six (6) months from the customer's first paid invoice
-Commission applies only to net revenue actually received
-Free users generate no commission unless they upgrade
-If a referred customer upgrades plans, commission adjusts automatically based on the new subscription price.
+5. Commission Payout Schedule
+Partners earn 20% of subscription revenue collected from Qualified Referrals.
+Commission duration: up to six (6) months from the customer's first paid invoice.
+Commissions are calculated monthly based on payments successfully collected during the previous calendar month and are paid on the first business day of each month.
+A minimum payout threshold of $50 USD applies. Commission balances below the threshold will roll over to the next payout cycle.
+Payments are made via Stripe, ACH, PayPal, or another payment method supported by WhachatCRM. Partners are responsible for any applicable taxes.
+If a customer payment is refunded, disputed, reversed, or fails, the related commission is not payable and may be reversed or deducted from future payouts.
 
-5. Payment Terms
-Commissions are calculated monthly
-Payouts are made after payment is successfully collected
-Refunds, failed payments, or chargebacks may result in commission reversal
-Minimum payout thresholds and payment methods are defined in the Partner Portal
+6. No Lifetime Commission Guarantee
+Commissions are not guaranteed for the lifetime of any customer.
+Partner commissions are limited to the commission duration defined by WhachatCRM at the time the commission is earned (currently up to six (6) months).
+WhachatCRM reserves the right to modify, limit, or discontinue commission rates, durations, eligibility requirements, or payout terms at any time, provided such changes do not retroactively reduce commissions already earned.
 
-6. Partner Responsibilities
+7. Partner Responsibilities
 Partners must:
 Market WhachatCRM honestly and accurately
 Avoid misleading claims, spam, or unauthorized discounts

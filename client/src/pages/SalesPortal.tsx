@@ -69,13 +69,20 @@ Leads are assigned via WhachatCRM's internal systems
 Commission credit is based on recorded assignment at time of demo
 Management decisions on disputes are final
 
-4. Commission Structure
-Internal sales earn 30% of subscription revenue collected
-Commission duration: up to six (6) months from first payment
-Commission applies only while the customer remains active and paying
+4. Commission Structure & Payout Schedule
+Internal sales earn 30% of subscription revenue collected.
+Commission duration: up to six (6) months from first payment.
+Commission applies only while the customer remains active and paying.
 Upgrades increase commission proportionally. Downgrades reduce commission.
+Commissions are calculated monthly based on payments collected during the previous calendar month and are paid on the first business day of each month.
+Commissions related to refunded, disputed, or failed payments are not payable and may be reversed.
 
-5. Exclusions
+5. No Lifetime Commission Guarantee
+Sales commissions are not guaranteed for the lifetime of any customer.
+Commission eligibility is limited to the duration defined by WhachatCRM (currently up to six (6) months from the customer’s first paid invoice).
+WhachatCRM may modify, suspend, or terminate commission plans, rates, payout schedules, or eligibility criteria at any time. Commission plans do not create a vested or guaranteed right to future commissions.
+
+6. Exclusions
 No commission is paid for:
 Organic signups with no demo involvement
 Partner-referred customers (unless explicitly approved)
