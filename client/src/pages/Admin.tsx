@@ -107,7 +107,7 @@ export function Admin() {
   const [addError, setAddError] = useState("");
   const [editingPartner, setEditingPartner] = useState<Partner | null>(null);
   const [isAddingPartner, setIsAddingPartner] = useState(false);
-  const [newPartner, setNewPartner] = useState({ name: "", email: "", password: "", commissionRate: "20.00", commissionDurationMonths: 6 });
+  const [newPartner, setNewPartner] = useState({ name: "", email: "", password: "", commissionRate: "50.00", commissionDurationMonths: 6 });
   const [addPartnerError, setAddPartnerError] = useState("");
   
   const queryClient = useQueryClient();
@@ -199,7 +199,7 @@ export function Admin() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/admin/partners'] });
       setIsAddingPartner(false);
-      setNewPartner({ name: "", email: "", password: "", commissionRate: "20.00", commissionDurationMonths: 6 });
+      setNewPartner({ name: "", email: "", password: "", commissionRate: "50.00", commissionDurationMonths: 6 });
       setAddPartnerError("");
     },
     onError: (error: Error) => {

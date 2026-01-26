@@ -3762,7 +3762,7 @@ export async function registerRoutes(
             email: DEMO_PARTNER_EMAIL,
             password: hashedPassword,
             refCode: 'DEMO2026',
-            commissionRate: '20.00',
+            commissionRate: '50.00',
             commissionDurationMonths: 6,
             status: 'active',
           });
@@ -4016,7 +4016,7 @@ export async function registerRoutes(
         email,
         password: hashedPassword,
         refCode,
-        commissionRate: commissionRate || '20.00',
+        commissionRate: commissionRate || '50.00',
         commissionDurationMonths: commissionDurationMonths || 6,
         status: 'active',
       });

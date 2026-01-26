@@ -610,7 +610,7 @@ export const partners = pgTable("partners", {
   email: text("email").notNull().unique(),
   password: text("password").notNull(), // hashed password
   refCode: varchar("ref_code", { length: 12 }).notNull().unique(), // unique, immutable referral code
-  commissionRate: numeric("commission_rate", { precision: 5, scale: 2 }).default("20.00"), // default 20%
+  commissionRate: numeric("commission_rate", { precision: 5, scale: 2 }).default("50.00"), // default 50%
   commissionDurationMonths: integer("commission_duration_months").default(6), // default 6 months
   status: text("status").notNull().default("active"), // active, paused
   totalReferrals: integer("total_referrals").default(0),

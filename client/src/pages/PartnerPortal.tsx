@@ -612,7 +612,7 @@ export function PartnerPortal() {
           </div>
 
           <p className="text-green-100 text-sm mt-4">
-            Earn {stats?.commissionRate || '20'}% commission for {stats?.commissionDurationMonths || 6} months on every paid subscription
+            Earn {stats?.commissionRate || '50'}% commission for {stats?.commissionDurationMonths || 6} months on every paid subscription
           </p>
         </div>
 
