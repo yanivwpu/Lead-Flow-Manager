@@ -80,7 +80,7 @@ Commissions related to refunded, disputed, or failed payments are not payable an
 
 5. No Lifetime Commission Guarantee
 Sales commissions are not guaranteed for the lifetime of any customer.
-Commission eligibility is limited to the duration defined by WhachatCRM (currently up to six (6) months from the customer’s first paid invoice).
+Commission eligibility is limited to the duration defined by WhachatCRM (currently up to twelve (12) months from the customer’s first paid invoice).
 WhachatCRM may modify, suspend, or terminate commission plans, rates, payout schedules, or eligibility criteria at any time. Commission plans do not create a vested or guaranteed right to future commissions.
 
 6. Exclusions
