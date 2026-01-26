@@ -433,7 +433,8 @@ export function ChannelSettings() {
                     </div>
                     <div>
                       <h4 className="font-medium text-gray-900">Meta Business API</h4>
-                      <p className="text-xs text-gray-500">WhatsApp only (no SMS)</p>
+                      <p className="text-xs text-gray-500">Direct connection to Meta (requires existing Meta App & WABA)</p>
+                      <p className="text-[10px] text-gray-400 mt-0.5">WhatsApp only · No SMS · No message markup</p>
                     </div>
                   </div>
                   {user?.metaConnected ? (

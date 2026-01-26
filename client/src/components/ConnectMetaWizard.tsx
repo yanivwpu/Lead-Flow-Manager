@@ -95,18 +95,60 @@ export function ConnectMetaWizard({ open, onOpenChange, onSuccess }: ConnectMeta
 
         {step === "credentials" && (
           <div className="space-y-4 py-4">
+            <div className="bg-blue-50 border border-blue-100 rounded-lg p-3">
+              <p className="text-xs font-semibold text-blue-900 mb-1.5">Before you connect</p>
+              <p className="text-[11px] text-blue-800 mb-2">This option is for businesses that already have:</p>
+              <ul className="text-[11px] text-blue-700 space-y-0.5 ml-1">
+                <li>• A Meta Business Manager</li>
+                <li>• A WhatsApp Business Account (WABA)</li>
+                <li>• A Meta App with WhatsApp enabled</li>
+                <li>• A Permanent Access Token</li>
+              </ul>
+              <a 
+                href="https://developers.facebook.com/docs/whatsapp/cloud-api/get-started" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-[11px] text-blue-600 hover:text-blue-700 mt-2 font-medium"
+              >
+                Don't have these yet? View step-by-step guide <ExternalLink className="h-3 w-3" />
+              </a>
+            </div>
+
             <div className="space-y-2">
-              <Label>Permanent Access Token</Label>
+              <div className="flex items-center justify-between">
+                <Label>Permanent Access Token</Label>
+                <a 
+                  href="https://developers.facebook.com/docs/whatsapp/business-management-api/get-started#system-user-access-tokens" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-[10px] text-blue-600 hover:underline"
+                >
+                  How to generate
+                </a>
+              </div>
               <Input
                 type="password"
                 placeholder="EAAG..."
                 value={credentials.accessToken}
                 onChange={(e) => setCredentials({ ...credentials, accessToken: e.target.value })}
               />
+              <p className="text-[10px] text-gray-500">
+                Generated in Meta Business Manager → System Users. Must include WhatsApp Business permissions.
+              </p>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Phone Number ID</Label>
+                <div className="flex items-center justify-between">
+                  <Label>Phone Number ID</Label>
+                  <a 
+                    href="https://developers.facebook.com/docs/whatsapp/cloud-api/get-started#phone-number" 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="text-[10px] text-blue-600 hover:underline"
+                  >
+                    Where to find
+                  </a>
+                </div>
                 <Input
                   placeholder="123456789..."
                   value={credentials.phoneNumberId}
@@ -114,7 +156,17 @@ export function ConnectMetaWizard({ open, onOpenChange, onSuccess }: ConnectMeta
                 />
               </div>
               <div className="space-y-2">
-                <Label>Business Account ID</Label>
+                <div className="flex items-center justify-between">
+                  <Label>Business Account ID</Label>
+                  <a 
+                    href="https://developers.facebook.com/docs/whatsapp/cloud-api/get-started#business-account-id" 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="text-[10px] text-blue-600 hover:underline"
+                  >
+                    Where to find
+                  </a>
+                </div>
                 <Input
                   placeholder="123456789..."
                   value={credentials.businessAccountId}
