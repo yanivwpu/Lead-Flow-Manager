@@ -259,130 +259,138 @@ export function WebsiteWidget() {
   };
   
   return (
-    <div className="h-full overflow-y-auto">
-      <div className="p-4 md:p-6 max-w-6xl mx-auto pb-20">
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-900" data-testid="text-page-title">Website Widget</h1>
-          <p className="text-gray-500 mt-1">
-            Add a chat widget to your website so visitors can message you directly on WhatsApp
+    <div className="h-full bg-gray-50/30">
+      <div className="p-4 md:p-8 max-w-5xl mx-auto pb-24">
+        <div className="mb-8">
+          <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight" data-testid="text-page-title">Website Widget</h1>
+          <p className="text-gray-500 mt-2 text-lg">
+            Connect with your website visitors directly on WhatsApp
           </p>
         </div>
         
-        <div className="bg-gradient-to-r from-emerald-50 to-green-50 border border-emerald-200 rounded-xl p-4 mb-6">
-          <div className="flex items-start gap-3">
-            <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0">
-              <MessageCircle className="w-4 h-4 text-emerald-600" />
+        <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-5 mb-8 shadow-sm">
+          <div className="flex items-start gap-4">
+            <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center flex-shrink-0">
+              <MessageCircle className="w-5 h-5 text-emerald-600" />
             </div>
             <div>
-              <p className="text-sm text-emerald-900 font-medium">How it works</p>
-              <p className="text-sm text-emerald-700 mt-1">
-                This widget lets website visitors chat with you on WhatsApp. Messages appear instantly 
-                in your WhachatCRM inbox and can be handled automatically by your chatbot or your team.
+              <p className="text-base text-emerald-900 font-semibold leading-none mb-1">How it works</p>
+              <p className="text-sm text-emerald-700/90 leading-relaxed">
+                Add this widget to your site to capture leads. When visitors click it, they'll be taken straight to a WhatsApp chat with you. 
+                All conversations are automatically tracked in your Unified Inbox.
               </p>
             </div>
           </div>
         </div>
 
-        <div className="grid lg:grid-cols-2 gap-6">
-          <div className="space-y-6">
-            <Card>
-              <CardHeader className="pb-4">
+        <div className="grid lg:grid-cols-12 gap-8 items-start">
+          <div className="lg:col-span-7 space-y-8">
+            <Card className="border-none shadow-sm ring-1 ring-gray-200 overflow-hidden">
+              <CardHeader className="pb-4 bg-white">
                 <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle className="text-lg">Widget Status</CardTitle>
-                    <CardDescription>Enable or disable the chat widget on your website</CardDescription>
+                  <div className="space-y-1">
+                    <CardTitle className="text-xl font-bold">Widget Status</CardTitle>
+                    <CardDescription>Control visibility on your live site</CardDescription>
                   </div>
                   <Switch
                     checked={settings.enabled}
                     onCheckedChange={(enabled) => updateSettings({ enabled })}
                     data-testid="switch-widget-enabled"
+                    className="data-[state=checked]:bg-emerald-500"
                   />
                 </div>
               </CardHeader>
-              <CardContent>
-                <div className="flex items-center gap-2">
+              <CardContent className="pt-0 pb-6">
+                <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-50 border border-gray-100 w-fit">
                   {settings.enabled ? (
                     <>
-                      <CheckCircle2 className="w-4 h-4 text-green-500" />
-                      <span className="text-sm text-green-700 font-medium">Widget is active</span>
+                      <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                      <span className="text-sm text-emerald-700 font-semibold">Active & Live</span>
                     </>
                   ) : (
                     <>
-                      <AlertCircle className="w-4 h-4 text-gray-400" />
-                      <span className="text-sm text-gray-500">Widget is disabled</span>
+                      <div className="w-2 h-2 rounded-full bg-gray-400" />
+                      <span className="text-sm text-gray-600 font-medium">Currently Disabled</span>
                     </>
                   )}
                 </div>
               </CardContent>
             </Card>
             
-            <Card>
+            <Card className="border-none shadow-sm ring-1 ring-gray-200">
               <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <Code2 className="w-5 h-5" />
-                  Embed Code
+                <CardTitle className="text-xl font-bold flex items-center gap-2">
+                  <Code2 className="w-6 h-6 text-gray-700" />
+                  Installation Code
                 </CardTitle>
-                <CardDescription>Copy and paste this code into your website</CardDescription>
+                <CardDescription>Copy this snippet and add it to your website header or footer</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="relative">
-                  <pre className="bg-gray-900 text-gray-100 p-4 rounded-lg text-xs overflow-x-auto font-mono">
-                    {embedCode || 'Loading...'}
-                  </pre>
-                  <Button
-                    size="sm"
-                    className="absolute top-2 right-2"
-                    onClick={copyEmbedCode}
-                    disabled={!embedCode}
-                    data-testid="button-copy-embed"
-                  >
-                    {copied ? (
-                      <>
-                        <Check className="w-4 h-4 mr-1" />
-                        Copied!
-                      </>
-                    ) : (
-                      <>
-                        <Copy className="w-4 h-4 mr-1" />
-                        Copy Code
-                      </>
-                    )}
-                  </Button>
+              <CardContent className="space-y-5">
+                <div className="group relative">
+                  <div className="absolute -inset-1 bg-gradient-to-r from-emerald-100 to-teal-100 rounded-xl blur opacity-25 group-hover:opacity-50 transition duration-1000"></div>
+                  <div className="relative">
+                    <pre className="bg-gray-900 text-gray-100 p-5 rounded-xl text-[13px] overflow-x-auto font-mono leading-relaxed ring-1 ring-white/10 shadow-lg">
+                      {embedCode || 'Loading installation script...'}
+                    </pre>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      className="absolute top-3 right-3 shadow-md hover:bg-white"
+                      onClick={copyEmbedCode}
+                      disabled={!embedCode}
+                      data-testid="button-copy-embed"
+                    >
+                      {copied ? (
+                        <>
+                          <Check className="w-4 h-4 mr-2 text-emerald-600" />
+                          Copied
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-4 h-4 mr-2" />
+                          Copy Code
+                        </>
+                      )}
+                    </Button>
+                  </div>
                 </div>
                 
-                <p className="text-sm text-gray-600">
-                  Paste this code just before the closing <code className="bg-gray-100 px-1.5 py-0.5 rounded text-xs font-mono">&lt;/body&gt;</code> tag of your website.
-                </p>
+                <div className="flex items-center gap-2 p-3 bg-blue-50/50 border border-blue-100 rounded-lg text-blue-800">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <p className="text-xs font-medium">
+                    Best practice: Paste just before the closing <code className="bg-blue-100/50 px-1 rounded">&lt;/body&gt;</code> tag.
+                  </p>
+                </div>
               </CardContent>
             </Card>
             
-            <Card>
+            <Card className="border-none shadow-sm ring-1 ring-gray-200">
               <CardHeader>
-                <CardTitle className="text-lg">Customization</CardTitle>
-                <CardDescription>Personalize how the widget looks on your site</CardDescription>
+                <CardTitle className="text-xl font-bold">Appearance Settings</CardTitle>
+                <CardDescription>Match the widget to your brand identity</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="space-y-3">
-                  <Label className="text-sm font-medium">Widget Color</Label>
-                  <div className="flex flex-wrap gap-2">
+              <CardContent className="space-y-8">
+                <div className="space-y-4">
+                  <Label className="text-sm font-bold text-gray-700 uppercase tracking-wider">Brand Color</Label>
+                  <div className="grid grid-cols-4 sm:flex sm:flex-wrap gap-3">
                     {COLOR_PRESETS.map((color) => (
                       <button
                         key={color.value}
                         onClick={() => updateSettings({ color: color.value })}
-                        className={`w-8 h-8 rounded-full border-2 transition-all ${
-                          settings.color === color.value ? 'border-gray-900 scale-110' : 'border-transparent hover:scale-105'
+                        className={`w-10 h-10 rounded-xl border-2 transition-all duration-200 shadow-sm ${
+                          settings.color === color.value ? 'ring-2 ring-emerald-500 ring-offset-2 scale-105 border-transparent' : 'border-gray-100 hover:border-gray-300'
                         }`}
                         style={{ backgroundColor: color.value }}
                         title={color.name}
                         data-testid={`color-${color.value}`}
                       />
                     ))}
-                    <div className="relative">
+                    <div className="relative group">
                       <input
                         type="color"
                         value={settings.color}
                         onChange={(e) => updateSettings({ color: e.target.value })}
-                        className="w-8 h-8 rounded-full cursor-pointer border-2 border-dashed border-gray-300"
+                        className="w-10 h-10 rounded-xl cursor-pointer border-2 border-dashed border-gray-300 bg-white p-1 hover:border-gray-400 transition-colors"
                         title="Custom color"
                         data-testid="input-custom-color"
                       />
@@ -390,130 +398,140 @@ export function WebsiteWidget() {
                   </div>
                 </div>
                 
-                <div className="space-y-2">
-                  <Label htmlFor="welcome-message" className="text-sm font-medium">Welcome Message</Label>
+                <div className="space-y-3">
+                  <Label htmlFor="welcome-message" className="text-sm font-bold text-gray-700 uppercase tracking-wider">Default Greeting</Label>
                   <Input
                     id="welcome-message"
                     value={settings.welcomeMessage}
                     onChange={(e) => updateSettings({ welcomeMessage: e.target.value })}
-                    placeholder="Hi there! How can we help you today?"
+                    className="h-12 border-gray-200 focus:ring-emerald-500 rounded-lg"
+                    placeholder="e.g. Hi! How can we help you today?"
                     data-testid="input-welcome-message"
                   />
-                  <p className="text-xs text-gray-500">This message appears when visitors open the chat</p>
+                  <p className="text-xs text-gray-500">This will be the first thing your customers see.</p>
                 </div>
                 
-                <div className="space-y-3">
-                  <Label className="text-sm font-medium">Widget Position</Label>
-                  <div className="flex gap-2">
-                    <Button
-                      variant={settings.position === "left" ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => updateSettings({ position: "left" })}
-                      className="flex-1"
-                      data-testid="button-position-left"
-                    >
-                      Bottom Left
-                    </Button>
-                    <Button
-                      variant={settings.position === "right" ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => updateSettings({ position: "right" })}
-                      className="flex-1"
-                      data-testid="button-position-right"
-                    >
-                      Bottom Right
-                    </Button>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-3">
+                    <Label className="text-sm font-bold text-gray-700 uppercase tracking-wider">Desktop Position</Label>
+                    <div className="flex p-1 bg-gray-100 rounded-xl">
+                      <button
+                        onClick={() => updateSettings({ position: "left" })}
+                        className={cn(
+                          "flex-1 py-2 px-3 text-xs font-bold rounded-lg transition-all",
+                          settings.position === "left" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
+                        )}
+                        data-testid="button-position-left"
+                      >
+                        Left
+                      </button>
+                      <button
+                        onClick={() => updateSettings({ position: "right" })}
+                        className={cn(
+                          "flex-1 py-2 px-3 text-xs font-bold rounded-lg transition-all",
+                          settings.position === "right" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
+                        )}
+                        data-testid="button-position-right"
+                      >
+                        Right
+                      </button>
+                    </div>
                   </div>
-                </div>
-                
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label className="text-sm font-medium flex items-center gap-2">
-                      <Smartphone className="w-4 h-4" />
-                      Show on Mobile
-                    </Label>
-                    <p className="text-xs text-gray-500">Display widget on mobile devices</p>
+
+                  <div className="space-y-3">
+                    <Label className="text-sm font-bold text-gray-700 uppercase tracking-wider">Mobile View</Label>
+                    <div className="flex items-center justify-between h-[44px] px-3 bg-gray-50 border border-gray-100 rounded-xl">
+                      <div className="flex items-center gap-2">
+                        <Smartphone className="w-4 h-4 text-gray-400" />
+                        <span className="text-xs font-medium text-gray-600">Show</span>
+                      </div>
+                      <Switch
+                        checked={settings.showOnMobile}
+                        onCheckedChange={(showOnMobile) => updateSettings({ showOnMobile })}
+                        data-testid="switch-show-mobile"
+                        className="scale-75 data-[state=checked]:bg-emerald-500"
+                      />
+                    </div>
                   </div>
-                  <Switch
-                    checked={settings.showOnMobile}
-                    onCheckedChange={(showOnMobile) => updateSettings({ showOnMobile })}
-                    data-testid="switch-show-mobile"
-                  />
                 </div>
               </CardContent>
             </Card>
           </div>
           
-          <div className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <Monitor className="w-5 h-5" />
-                  Live Preview
-                </CardTitle>
-                <CardDescription>See how your widget will look on your website</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <WidgetPreview settings={settings} />
-              </CardContent>
-            </Card>
-            
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Installation Guides</CardTitle>
-                <CardDescription>Step-by-step instructions for popular platforms</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                {PLATFORM_INSTRUCTIONS.map((platform) => (
-                  <div
-                    key={platform.id}
-                    className="border rounded-lg overflow-hidden"
-                    data-testid={`platform-${platform.id}`}
-                  >
-                    <button
-                      onClick={() => setExpandedPlatform(
-                        expandedPlatform === platform.id ? null : platform.id
+          <div className="lg:col-span-5 space-y-8">
+            <div className="sticky top-6 space-y-8">
+              <Card className="border-none shadow-xl ring-1 ring-gray-200 overflow-hidden bg-white">
+                <CardHeader className="border-b bg-gray-50/50">
+                  <CardTitle className="text-lg font-bold flex items-center gap-2">
+                    <Monitor className="w-5 h-5 text-gray-600" />
+                    Preview
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <WidgetPreview settings={settings} />
+                </CardContent>
+              </Card>
+              
+              <Card className="border-none shadow-sm ring-1 ring-gray-200">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-lg font-bold">Installation Guides</CardTitle>
+                  <CardDescription>Select your platform for instructions</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3 pt-0">
+                  {PLATFORM_INSTRUCTIONS.map((platform) => (
+                    <div
+                      key={platform.id}
+                      className={cn(
+                        "rounded-xl transition-all duration-200 border",
+                        expandedPlatform === platform.id ? "border-emerald-200 ring-4 ring-emerald-50 shadow-sm" : "border-gray-100"
                       )}
-                      className="w-full flex items-center gap-3 p-3 hover:bg-gray-50 transition-colors"
-                      data-testid={`button-expand-${platform.id}`}
+                      data-testid={`platform-${platform.id}`}
                     >
-                      <div className={`w-8 h-8 rounded-lg ${platform.color} flex items-center justify-center text-white text-xs font-bold`}>
-                        {platform.icon}
-                      </div>
-                      <span className="font-medium text-sm flex-1 text-left">{platform.name}</span>
-                      <ChevronRight className={`w-4 h-4 text-gray-400 transition-transform ${
-                        expandedPlatform === platform.id ? 'rotate-90' : ''
-                      }`} />
-                    </button>
-                    {expandedPlatform === platform.id && (
-                      <div className="px-3 pb-3 pt-1 border-t bg-gray-50">
-                        <ol className="text-sm text-gray-600 space-y-2 list-decimal list-inside">
-                          {platform.steps.map((step, i) => (
-                            <li key={i} className="leading-relaxed">{step}</li>
-                          ))}
-                        </ol>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-            
-            <Card className="border-amber-200 bg-amber-50">
-              <CardContent className="pt-4">
-                <div className="flex items-start gap-3">
-                  <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
-                  <div className="space-y-2">
-                    <p className="text-sm font-medium text-amber-900">Troubleshooting</p>
-                    <ul className="text-sm text-amber-800 space-y-1">
-                      <li>• If the widget doesn't appear, make sure you published your site</li>
-                      <li>• Ad blockers may hide chat widgets - try disabling them</li>
-                      <li>• Clear your browser cache if changes don't appear</li>
-                    </ul>
-                  </div>
+                      <button
+                        onClick={() => setExpandedPlatform(
+                          expandedPlatform === platform.id ? null : platform.id
+                        )}
+                        className="w-full flex items-center gap-4 p-4 hover:bg-gray-50 transition-colors rounded-xl"
+                        data-testid={`button-expand-${platform.id}`}
+                      >
+                        <div className={`w-10 h-10 rounded-xl ${platform.color} flex items-center justify-center text-white text-lg font-bold shadow-sm`}>
+                          {platform.icon}
+                        </div>
+                        <span className="font-bold text-gray-800 flex-1 text-left">{platform.name}</span>
+                        <ChevronRight className={cn(
+                          "w-5 h-5 text-gray-400 transition-transform duration-300",
+                          expandedPlatform === platform.id && "rotate-90 text-emerald-500"
+                        )} />
+                      </button>
+                      {expandedPlatform === platform.id && (
+                        <div className="px-5 pb-5 pt-2 border-t border-emerald-50 bg-emerald-50/20">
+                          <ol className="space-y-3">
+                            {platform.steps.map((step, i) => (
+                              <li key={i} className="flex gap-3 text-sm text-gray-700">
+                                <span className="flex-shrink-0 w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-[10px] font-bold mt-0.5">
+                                  {i + 1}
+                                </span>
+                                <span className="leading-relaxed">{step}</span>
+                              </li>
+                            ))}
+                          </ol>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+
+              <div className="p-5 bg-amber-50 rounded-2xl border border-amber-100 flex gap-4">
+                <AlertCircle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <p className="text-sm font-bold text-amber-900">Pro Tip</p>
+                  <p className="text-xs text-amber-800/80 leading-relaxed">
+                    Test the widget in an incognito window after installation to ensure cached versions aren't interfering with your changes.
+                  </p>
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
           </div>
         </div>
       </div>
