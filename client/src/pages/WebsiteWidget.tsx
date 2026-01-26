@@ -121,66 +121,58 @@ function WidgetPreview({ settings }: { settings: WidgetSettings }) {
   const [isOpen, setIsOpen] = useState(false);
   
   return (
-    <div className="relative w-full h-[400px] bg-gradient-to-br from-gray-100 to-gray-200 rounded-xl overflow-hidden border-2 border-gray-300">
-      <div className="absolute inset-4 bg-white rounded-lg shadow-sm border flex flex-col">
-        <div className="h-12 bg-gray-50 border-b flex items-center px-4 gap-2">
-          <div className="flex gap-1.5">
-            <div className="w-3 h-3 rounded-full bg-red-400" />
-            <div className="w-3 h-3 rounded-full bg-yellow-400" />
-            <div className="w-3 h-3 rounded-full bg-green-400" />
+    <div className="relative w-full h-[200px] sm:h-[280px] md:h-[320px] bg-gradient-to-br from-gray-100 to-gray-200 rounded-lg overflow-hidden border border-gray-200">
+      <div className="absolute inset-2 sm:inset-3 bg-white rounded-md shadow-sm border flex flex-col">
+        <div className="h-6 sm:h-8 bg-gray-50 border-b flex items-center px-2 gap-1">
+          <div className="flex gap-1">
+            <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-red-400" />
+            <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-yellow-400" />
+            <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-green-400" />
           </div>
-          <div className="flex-1 mx-4">
-            <div className="w-48 h-5 bg-gray-200 rounded-full mx-auto" />
+          <div className="flex-1 mx-2">
+            <div className="w-16 sm:w-24 h-2 sm:h-3 bg-gray-200 rounded-full mx-auto" />
           </div>
         </div>
-        <div className="flex-1 p-4 space-y-3">
-          <div className="w-3/4 h-4 bg-gray-100 rounded" />
-          <div className="w-1/2 h-4 bg-gray-100 rounded" />
-          <div className="w-2/3 h-4 bg-gray-100 rounded" />
-          <div className="w-1/3 h-4 bg-gray-100 rounded" />
+        <div className="flex-1 p-2 space-y-1.5">
+          <div className="w-3/4 h-2 bg-gray-100 rounded" />
+          <div className="w-1/2 h-2 bg-gray-100 rounded" />
+          <div className="w-2/3 h-2 bg-gray-100 rounded" />
         </div>
       </div>
       
       <div 
-        className={`absolute bottom-6 ${settings.position === 'right' ? 'right-6' : 'left-6'} transition-all duration-300`}
+        className={`absolute bottom-3 sm:bottom-4 ${settings.position === 'right' ? 'right-3 sm:right-4' : 'left-3 sm:left-4'} transition-all duration-300`}
       >
         {isOpen ? (
           <div 
-            className="w-72 bg-white rounded-2xl shadow-2xl overflow-hidden border animate-in slide-in-from-bottom-4"
+            className="w-36 sm:w-48 bg-white rounded-xl shadow-xl overflow-hidden border animate-in slide-in-from-bottom-4"
             style={{ borderColor: settings.color }}
           >
             <div 
-              className="p-4 text-white"
+              className="p-2 sm:p-3 text-white"
               style={{ backgroundColor: settings.color }}
             >
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
-                  <MessageCircle className="w-5 h-5" />
+              <div className="flex items-center gap-2">
+                <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-white/20 flex items-center justify-center">
+                  <MessageCircle className="w-3 h-3 sm:w-4 sm:h-4" />
                 </div>
                 <div>
-                  <div className="font-semibold text-sm">WhachatCRM</div>
-                  <div className="text-xs opacity-80">Usually replies instantly</div>
+                  <div className="font-semibold text-[10px] sm:text-xs">WhachatCRM</div>
+                  <div className="text-[8px] sm:text-[10px] opacity-80">Replies instantly</div>
                 </div>
               </div>
             </div>
-            <div className="p-4">
+            <div className="p-2">
               <div 
-                className="p-3 rounded-lg text-sm text-white max-w-[80%]"
+                className="p-1.5 sm:p-2 rounded text-[9px] sm:text-[11px] text-white max-w-[90%] leading-tight"
                 style={{ backgroundColor: settings.color }}
               >
-                {settings.welcomeMessage}
-              </div>
-            </div>
-            <div className="p-3 border-t">
-              <div className="flex items-center gap-2">
-                <div className="flex-1 h-9 bg-gray-100 rounded-full px-4 flex items-center text-gray-400 text-sm">
-                  Type a message...
-                </div>
+                {settings.welcomeMessage.slice(0, 30)}...
               </div>
             </div>
             <button 
               onClick={() => setIsOpen(false)}
-              className="absolute top-2 right-2 w-6 h-6 rounded-full bg-white/20 flex items-center justify-center text-white hover:bg-white/30"
+              className="absolute top-1 right-1 w-4 h-4 rounded-full bg-white/20 flex items-center justify-center text-white text-[10px] hover:bg-white/30"
               data-testid="button-close-preview"
             >
               ×
@@ -189,18 +181,18 @@ function WidgetPreview({ settings }: { settings: WidgetSettings }) {
         ) : (
           <button
             onClick={() => setIsOpen(true)}
-            className="w-14 h-14 rounded-full shadow-lg flex items-center justify-center text-white transition-transform hover:scale-110"
+            className="w-8 h-8 sm:w-10 sm:h-10 rounded-full shadow-lg flex items-center justify-center text-white transition-transform hover:scale-110"
             style={{ backgroundColor: settings.color }}
             data-testid="button-open-preview"
           >
-            <MessageCircle className="w-6 h-6" />
+            <MessageCircle className="w-4 h-4 sm:w-5 sm:h-5" />
           </button>
         )}
       </div>
       
-      <div className="absolute top-2 right-2">
-        <Badge variant="secondary" className="text-xs">
-          Live Preview
+      <div className="absolute top-1 right-1 sm:top-2 sm:right-2">
+        <Badge variant="secondary" className="text-[8px] sm:text-[10px] px-1.5 py-0.5">
+          Preview
         </Badge>
       </div>
     </div>
@@ -260,278 +252,266 @@ export function WebsiteWidget() {
   };
   
   return (
-    <div className="h-full overflow-y-auto bg-gray-50/30">
-      <div className="p-4 md:p-8 max-w-5xl mx-auto pb-24">
-        <div className="mb-8">
-          <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight" data-testid="text-page-title">Website Widget</h1>
-          <p className="text-gray-500 mt-2 text-lg">
-            Connect with your website visitors directly on WhatsApp
+    <div className="h-full overflow-y-auto overflow-x-hidden bg-gray-50/50">
+      <div className="p-3 sm:p-4 md:p-6 max-w-4xl mx-auto pb-20">
+        <div className="mb-4 sm:mb-6">
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900" data-testid="text-page-title">Website Widget</h1>
+          <p className="text-gray-500 mt-1 text-xs sm:text-sm">
+            Let visitors message you on WhatsApp from your site
           </p>
         </div>
         
-        <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-5 mb-8 shadow-sm">
-          <div className="flex items-start gap-4">
-            <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center flex-shrink-0">
-              <MessageCircle className="w-5 h-5 text-emerald-600" />
+        <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-3 sm:p-4 mb-4 sm:mb-6">
+          <div className="flex items-start gap-3">
+            <div className="w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center flex-shrink-0">
+              <MessageCircle className="w-4 h-4 text-emerald-600" />
             </div>
-            <div>
-              <p className="text-base text-emerald-900 font-semibold leading-none mb-1">How it works</p>
-              <p className="text-sm text-emerald-700/90 leading-relaxed">
-                Add this widget to your site to capture leads. When visitors click it, they'll be taken straight to a WhatsApp chat with you. 
-                All conversations are automatically tracked in your Unified Inbox.
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-emerald-900">How it works</p>
+              <p className="text-xs text-emerald-700 mt-0.5">
+                Add this widget to capture leads. Visitors click it and go straight to WhatsApp.
               </p>
             </div>
           </div>
         </div>
 
-        <div className="grid lg:grid-cols-12 gap-8 items-start">
-          <div className="lg:col-span-7 space-y-8">
-            <Card className="border-none shadow-sm ring-1 ring-gray-200 overflow-hidden">
-              <CardHeader className="pb-4 bg-white">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-1">
-                    <CardTitle className="text-xl font-bold">Widget Status</CardTitle>
-                    <CardDescription>Control visibility on your live site</CardDescription>
-                  </div>
-                  <Switch
-                    checked={settings.enabled}
-                    onCheckedChange={(enabled) => updateSettings({ enabled })}
-                    data-testid="switch-widget-enabled"
-                    className="data-[state=checked]:bg-emerald-500"
-                  />
+        <div className="space-y-4 sm:space-y-5">
+          <Card className="border border-gray-200 shadow-sm overflow-hidden">
+            <CardHeader className="p-3 sm:p-4 pb-2 sm:pb-3 bg-white">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <CardTitle className="text-base sm:text-lg font-bold">Status</CardTitle>
+                  <CardDescription className="text-xs">Widget visibility</CardDescription>
                 </div>
-              </CardHeader>
-              <CardContent className="pt-0 pb-6">
-                <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-50 border border-gray-100 w-fit">
-                  {settings.enabled ? (
+                <Switch
+                  checked={settings.enabled}
+                  onCheckedChange={(enabled) => updateSettings({ enabled })}
+                  data-testid="switch-widget-enabled"
+                  className="data-[state=checked]:bg-emerald-500 shrink-0"
+                />
+              </div>
+            </CardHeader>
+            <CardContent className="p-3 sm:p-4 pt-0">
+              <div className="flex items-center gap-2 px-2 py-1.5 rounded-md bg-gray-50 border border-gray-100 w-fit">
+                {settings.enabled ? (
+                  <>
+                    <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                    <span className="text-xs text-emerald-700 font-medium">Active</span>
+                  </>
+                ) : (
+                  <>
+                    <div className="w-2 h-2 rounded-full bg-gray-400" />
+                    <span className="text-xs text-gray-600">Disabled</span>
+                  </>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border border-gray-200 shadow-sm overflow-hidden">
+            <CardHeader className="p-3 sm:p-4 pb-2">
+              <CardTitle className="text-base sm:text-lg font-bold flex items-center gap-2">
+                <Monitor className="w-4 h-4 text-gray-600" />
+                Preview
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-3 sm:p-4 pt-0">
+              <WidgetPreview settings={settings} />
+            </CardContent>
+          </Card>
+          
+          <Card className="border border-gray-200 shadow-sm">
+            <CardHeader className="p-3 sm:p-4 pb-2">
+              <CardTitle className="text-base sm:text-lg font-bold flex items-center gap-2">
+                <Code2 className="w-4 h-4 text-gray-700" />
+                Installation Code
+              </CardTitle>
+              <CardDescription className="text-xs">Copy and paste into your website</CardDescription>
+            </CardHeader>
+            <CardContent className="p-3 sm:p-4 pt-0 space-y-3">
+              <div className="relative">
+                <pre className="bg-gray-900 text-gray-100 p-3 rounded-lg text-[10px] sm:text-xs overflow-x-auto font-mono leading-relaxed max-h-32 overflow-y-auto">
+                  {embedCode || 'Loading...'}
+                </pre>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  className="absolute top-2 right-2 h-7 px-2 text-xs"
+                  onClick={copyEmbedCode}
+                  disabled={!embedCode}
+                  data-testid="button-copy-embed"
+                >
+                  {copied ? (
                     <>
-                      <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                      <span className="text-sm text-emerald-700 font-semibold">Active & Live</span>
+                      <Check className="w-3 h-3 mr-1 text-emerald-600" />
+                      Done
                     </>
                   ) : (
                     <>
-                      <div className="w-2 h-2 rounded-full bg-gray-400" />
-                      <span className="text-sm text-gray-600 font-medium">Currently Disabled</span>
+                      <Copy className="w-3 h-3 mr-1" />
+                      Copy
                     </>
                   )}
-                </div>
-              </CardContent>
-            </Card>
-            
-            <Card className="border-none shadow-sm ring-1 ring-gray-200">
-              <CardHeader>
-                <CardTitle className="text-xl font-bold flex items-center gap-2">
-                  <Code2 className="w-6 h-6 text-gray-700" />
-                  Installation Code
-                </CardTitle>
-                <CardDescription>Copy this snippet and add it to your website header or footer</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-5">
-                <div className="group relative">
-                  <div className="absolute -inset-1 bg-gradient-to-r from-emerald-100 to-teal-100 rounded-xl blur opacity-25 group-hover:opacity-50 transition duration-1000"></div>
-                  <div className="relative">
-                    <pre className="bg-gray-900 text-gray-100 p-5 rounded-xl text-[13px] overflow-x-auto font-mono leading-relaxed ring-1 ring-white/10 shadow-lg">
-                      {embedCode || 'Loading installation script...'}
-                    </pre>
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      className="absolute top-3 right-3 shadow-md hover:bg-white"
-                      onClick={copyEmbedCode}
-                      disabled={!embedCode}
-                      data-testid="button-copy-embed"
-                    >
-                      {copied ? (
-                        <>
-                          <Check className="w-4 h-4 mr-2 text-emerald-600" />
-                          Copied
-                        </>
-                      ) : (
-                        <>
-                          <Copy className="w-4 h-4 mr-2" />
-                          Copy Code
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                </div>
-                
-                <div className="flex items-center gap-2 p-3 bg-blue-50/50 border border-blue-100 rounded-lg text-blue-800">
-                  <AlertCircle className="w-4 h-4 shrink-0" />
-                  <p className="text-xs font-medium">
-                    Best practice: Paste just before the closing <code className="bg-blue-100/50 px-1 rounded">&lt;/body&gt;</code> tag.
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-            
-            <Card className="border-none shadow-sm ring-1 ring-gray-200">
-              <CardHeader>
-                <CardTitle className="text-xl font-bold">Appearance Settings</CardTitle>
-                <CardDescription>Match the widget to your brand identity</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-8">
-                <div className="space-y-4">
-                  <Label className="text-sm font-bold text-gray-700 uppercase tracking-wider">Brand Color</Label>
-                  <div className="grid grid-cols-4 sm:flex sm:flex-wrap gap-3">
-                    {COLOR_PRESETS.map((color) => (
-                      <button
-                        key={color.value}
-                        onClick={() => updateSettings({ color: color.value })}
-                        className={`w-10 h-10 rounded-xl border-2 transition-all duration-200 shadow-sm ${
-                          settings.color === color.value ? 'ring-2 ring-emerald-500 ring-offset-2 scale-105 border-transparent' : 'border-gray-100 hover:border-gray-300'
-                        }`}
-                        style={{ backgroundColor: color.value }}
-                        title={color.name}
-                        data-testid={`color-${color.value}`}
-                      />
-                    ))}
-                    <div className="relative group">
-                      <input
-                        type="color"
-                        value={settings.color}
-                        onChange={(e) => updateSettings({ color: e.target.value })}
-                        className="w-10 h-10 rounded-xl cursor-pointer border-2 border-dashed border-gray-300 bg-white p-1 hover:border-gray-400 transition-colors"
-                        title="Custom color"
-                        data-testid="input-custom-color"
-                      />
-                    </div>
-                  </div>
-                </div>
-                
-                <div className="space-y-3">
-                  <Label htmlFor="welcome-message" className="text-sm font-bold text-gray-700 uppercase tracking-wider">Default Greeting</Label>
-                  <Input
-                    id="welcome-message"
-                    value={settings.welcomeMessage}
-                    onChange={(e) => updateSettings({ welcomeMessage: e.target.value })}
-                    className="h-12 border-gray-200 focus:ring-emerald-500 rounded-lg"
-                    placeholder="e.g. Hi! How can we help you today?"
-                    data-testid="input-welcome-message"
-                  />
-                  <p className="text-xs text-gray-500">This will be the first thing your customers see.</p>
-                </div>
-                
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-3">
-                    <Label className="text-sm font-bold text-gray-700 uppercase tracking-wider">Desktop Position</Label>
-                    <div className="flex p-1 bg-gray-100 rounded-xl">
-                      <button
-                        onClick={() => updateSettings({ position: "left" })}
-                        className={cn(
-                          "flex-1 py-2 px-3 text-xs font-bold rounded-lg transition-all",
-                          settings.position === "left" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
-                        )}
-                        data-testid="button-position-left"
-                      >
-                        Left
-                      </button>
-                      <button
-                        onClick={() => updateSettings({ position: "right" })}
-                        className={cn(
-                          "flex-1 py-2 px-3 text-xs font-bold rounded-lg transition-all",
-                          settings.position === "right" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
-                        )}
-                        data-testid="button-position-right"
-                      >
-                        Right
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="space-y-3">
-                    <Label className="text-sm font-bold text-gray-700 uppercase tracking-wider">Mobile View</Label>
-                    <div className="flex items-center justify-between h-[44px] px-3 bg-gray-50 border border-gray-100 rounded-xl">
-                      <div className="flex items-center gap-2">
-                        <Smartphone className="w-4 h-4 text-gray-400" />
-                        <span className="text-xs font-medium text-gray-600">Show</span>
-                      </div>
-                      <Switch
-                        checked={settings.showOnMobile}
-                        onCheckedChange={(showOnMobile) => updateSettings({ showOnMobile })}
-                        data-testid="switch-show-mobile"
-                        className="scale-75 data-[state=checked]:bg-emerald-500"
-                      />
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-          
-          <div className="lg:col-span-5 space-y-8">
-            <div className="sticky top-6 space-y-8">
-              <Card className="border-none shadow-xl ring-1 ring-gray-200 overflow-hidden bg-white">
-                <CardHeader className="border-b bg-gray-50/50">
-                  <CardTitle className="text-lg font-bold flex items-center gap-2">
-                    <Monitor className="w-5 h-5 text-gray-600" />
-                    Preview
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="p-0">
-                  <WidgetPreview settings={settings} />
-                </CardContent>
-              </Card>
+                </Button>
+              </div>
               
-              <Card className="border-none shadow-sm ring-1 ring-gray-200">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-lg font-bold">Installation Guides</CardTitle>
-                  <CardDescription>Select your platform for instructions</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3 pt-0">
-                  {PLATFORM_INSTRUCTIONS.map((platform) => (
-                    <div
-                      key={platform.id}
+              <div className="flex items-center gap-2 p-2 bg-blue-50 border border-blue-100 rounded-md text-blue-800">
+                <AlertCircle className="w-3 h-3 shrink-0" />
+                <p className="text-[10px] sm:text-xs">
+                  Paste before <code className="bg-blue-100 px-1 rounded">&lt;/body&gt;</code> tag
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+          
+          <Card className="border border-gray-200 shadow-sm">
+            <CardHeader className="p-3 sm:p-4 pb-2">
+              <CardTitle className="text-base sm:text-lg font-bold">Appearance</CardTitle>
+              <CardDescription className="text-xs">Customize widget look</CardDescription>
+            </CardHeader>
+            <CardContent className="p-3 sm:p-4 pt-0 space-y-4">
+              <div className="space-y-2">
+                <Label className="text-xs font-semibold text-gray-600">Color</Label>
+                <div className="flex flex-wrap gap-2">
+                  {COLOR_PRESETS.map((color) => (
+                    <button
+                      key={color.value}
+                      onClick={() => updateSettings({ color: color.value })}
                       className={cn(
-                        "rounded-xl transition-all duration-200 border",
-                        expandedPlatform === platform.id ? "border-emerald-200 ring-4 ring-emerald-50 shadow-sm" : "border-gray-100"
+                        "w-8 h-8 rounded-lg border-2 transition-all",
+                        settings.color === color.value ? 'ring-2 ring-emerald-500 ring-offset-1 border-transparent' : 'border-gray-200'
                       )}
-                      data-testid={`platform-${platform.id}`}
-                    >
-                      <button
-                        onClick={() => setExpandedPlatform(
-                          expandedPlatform === platform.id ? null : platform.id
-                        )}
-                        className="w-full flex items-center gap-4 p-4 hover:bg-gray-50 transition-colors rounded-xl"
-                        data-testid={`button-expand-${platform.id}`}
-                      >
-                        <div className={`w-10 h-10 rounded-xl ${platform.color} flex items-center justify-center text-white text-lg font-bold shadow-sm`}>
-                          {platform.icon}
-                        </div>
-                        <span className="font-bold text-gray-800 flex-1 text-left">{platform.name}</span>
-                        <ChevronRight className={cn(
-                          "w-5 h-5 text-gray-400 transition-transform duration-300",
-                          expandedPlatform === platform.id && "rotate-90 text-emerald-500"
-                        )} />
-                      </button>
-                      {expandedPlatform === platform.id && (
-                        <div className="px-5 pb-5 pt-2 border-t border-emerald-50 bg-emerald-50/20">
-                          <ol className="space-y-3">
-                            {platform.steps.map((step, i) => (
-                              <li key={i} className="flex gap-3 text-sm text-gray-700">
-                                <span className="flex-shrink-0 w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-[10px] font-bold mt-0.5">
-                                  {i + 1}
-                                </span>
-                                <span className="leading-relaxed">{step}</span>
-                              </li>
-                            ))}
-                          </ol>
-                        </div>
-                      )}
-                    </div>
+                      style={{ backgroundColor: color.value }}
+                      title={color.name}
+                      data-testid={`color-${color.value}`}
+                    />
                   ))}
-                </CardContent>
-              </Card>
-
-              <div className="p-5 bg-amber-50 rounded-2xl border border-amber-100 flex gap-4">
-                <AlertCircle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
-                <div className="space-y-1">
-                  <p className="text-sm font-bold text-amber-900">Pro Tip</p>
-                  <p className="text-xs text-amber-800/80 leading-relaxed">
-                    Test the widget in an incognito window after installation to ensure cached versions aren't interfering with your changes.
-                  </p>
+                  <input
+                    type="color"
+                    value={settings.color}
+                    onChange={(e) => updateSettings({ color: e.target.value })}
+                    className="w-8 h-8 rounded-lg cursor-pointer border-2 border-dashed border-gray-300 bg-white"
+                    title="Custom"
+                    data-testid="input-custom-color"
+                  />
                 </div>
               </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="welcome-message" className="text-xs font-semibold text-gray-600">Greeting</Label>
+                <Input
+                  id="welcome-message"
+                  value={settings.welcomeMessage}
+                  onChange={(e) => updateSettings({ welcomeMessage: e.target.value })}
+                  className="h-10 text-sm border-gray-200 rounded-lg"
+                  placeholder="Hi! How can we help?"
+                  data-testid="input-welcome-message"
+                />
+              </div>
+              
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label className="text-xs font-semibold text-gray-600">Position</Label>
+                  <div className="flex p-0.5 bg-gray-100 rounded-lg">
+                    <button
+                      onClick={() => updateSettings({ position: "left" })}
+                      className={cn(
+                        "flex-1 py-1.5 text-xs font-medium rounded-md transition-all",
+                        settings.position === "left" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500"
+                      )}
+                      data-testid="button-position-left"
+                    >
+                      Left
+                    </button>
+                    <button
+                      onClick={() => updateSettings({ position: "right" })}
+                      className={cn(
+                        "flex-1 py-1.5 text-xs font-medium rounded-md transition-all",
+                        settings.position === "right" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500"
+                      )}
+                      data-testid="button-position-right"
+                    >
+                      Right
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-xs font-semibold text-gray-600">Mobile</Label>
+                  <div className="flex items-center justify-between h-[34px] px-2.5 bg-gray-50 border border-gray-100 rounded-lg">
+                    <div className="flex items-center gap-1.5">
+                      <Smartphone className="w-3 h-3 text-gray-400" />
+                      <span className="text-xs text-gray-600">Show</span>
+                    </div>
+                    <Switch
+                      checked={settings.showOnMobile}
+                      onCheckedChange={(showOnMobile) => updateSettings({ showOnMobile })}
+                      data-testid="switch-show-mobile"
+                      className="scale-75 data-[state=checked]:bg-emerald-500"
+                    />
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+              
+          <Card className="border border-gray-200 shadow-sm">
+            <CardHeader className="p-3 sm:p-4 pb-2">
+              <CardTitle className="text-base sm:text-lg font-bold">Install Guide</CardTitle>
+              <CardDescription className="text-xs">Platform instructions</CardDescription>
+            </CardHeader>
+            <CardContent className="p-3 sm:p-4 pt-0 space-y-2">
+              {PLATFORM_INSTRUCTIONS.map((platform) => (
+                <div
+                  key={platform.id}
+                  className={cn(
+                    "rounded-lg transition-all border",
+                    expandedPlatform === platform.id ? "border-emerald-200 bg-emerald-50/30" : "border-gray-100"
+                  )}
+                  data-testid={`platform-${platform.id}`}
+                >
+                  <button
+                    onClick={() => setExpandedPlatform(
+                      expandedPlatform === platform.id ? null : platform.id
+                    )}
+                    className="w-full flex items-center gap-3 p-2.5 hover:bg-gray-50 transition-colors rounded-lg"
+                    data-testid={`button-expand-${platform.id}`}
+                  >
+                    <div className={`w-7 h-7 rounded-lg ${platform.color} flex items-center justify-center text-white text-xs font-bold`}>
+                      {platform.icon}
+                    </div>
+                    <span className="font-medium text-sm text-gray-800 flex-1 text-left">{platform.name}</span>
+                    <ChevronRight className={cn(
+                      "w-4 h-4 text-gray-400 transition-transform",
+                      expandedPlatform === platform.id && "rotate-90 text-emerald-500"
+                    )} />
+                  </button>
+                  {expandedPlatform === platform.id && (
+                    <div className="px-3 pb-3 pt-1 border-t border-emerald-100">
+                      <ol className="space-y-1.5">
+                        {platform.steps.map((step, i) => (
+                          <li key={i} className="flex gap-2 text-xs text-gray-600">
+                            <span className="flex-shrink-0 w-4 h-4 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-[9px] font-bold">
+                              {i + 1}
+                            </span>
+                            <span className="leading-relaxed">{step}</span>
+                          </li>
+                        ))}
+                      </ol>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+
+          <div className="p-3 bg-amber-50 rounded-xl border border-amber-100 flex gap-3">
+            <AlertCircle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-xs font-semibold text-amber-900">Tip</p>
+              <p className="text-[10px] sm:text-xs text-amber-800/80">
+                Test in incognito mode after installing.
+              </p>
             </div>
           </div>
         </div>
