@@ -27,7 +27,10 @@ import {
   Image as ImageIcon,
   FileText,
   Download,
-  Loader2
+  Loader2,
+  Sparkles,
+  Brain,
+  RefreshCw
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -110,6 +113,11 @@ export function Chats() {
   const [conversationSearch, setConversationSearch] = useState("");
   const [showConversationSearch, setShowConversationSearch] = useState(false);
   
+  // AI Suggestion state
+  const [aiSuggestion, setAiSuggestion] = useState<string | null>(null);
+  const [aiSuggestionLoading, setAiSuggestionLoading] = useState(false);
+  const [showAiSuggestion, setShowAiSuggestion] = useState(false);
+  
   const selectedChatId = match ? params?.id : null;
   const { viewers, setTyping } = usePresence(selectedChatId);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -147,6 +155,16 @@ export function Chats() {
     queryKey: ["/api/team"],
     enabled: !!user && hasAssignment,
   });
+
+  // Check if user has AI Brain access (Pro plan)
+  const isPro = subscription?.limits?.plan === "pro" || subscription?.limits?.plan === "enterprise";
+  
+  const { data: aiSettings } = useQuery({
+    queryKey: ["/api/ai/settings"],
+    enabled: !!user && isPro,
+  });
+  
+  const aiEnabled = isPro && aiSettings && (aiSettings as any).aiMode !== "off";
 
   const updateChatMutation = useMutation({
     mutationFn: async ({ chatId, updates }: { chatId: string; updates: Partial<Chat> }) => {
@@ -241,6 +259,67 @@ export function Chats() {
   const selectedChat = demoMode 
     ? demoChats.find(c => c.id === selectedChatId)
     : activeChats.find(c => c.id === selectedChatId);
+
+  // Client-side cooldown for AI suggestions (3 seconds)
+  const [aiCooldown, setAiCooldown] = useState(false);
+  
+  // Get AI suggestion for current conversation
+  const fetchAiSuggestion = useCallback(async () => {
+    if (!selectedChat || !aiEnabled || demoMode || aiCooldown) return;
+    
+    setAiSuggestionLoading(true);
+    setShowAiSuggestion(true);
+    setAiCooldown(true);
+    
+    // Reset cooldown after 3 seconds
+    setTimeout(() => setAiCooldown(false), 3000);
+    
+    try {
+      const conversationHistory = selectedChat.messages.slice(-10).map((msg: any) => ({
+        role: msg.direction === 'incoming' ? 'user' : 'assistant',
+        content: msg.text || ''
+      }));
+      
+      const response = await fetch('/api/ai/suggest-reply', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          chatId: selectedChat.id,
+          conversationHistory
+        })
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setAiSuggestion(data.suggestion || null);
+      } else {
+        setAiSuggestion(null);
+        const errorData = await response.json();
+        if (errorData.status === "paused" || errorData.status === "limited") {
+          toast({
+            title: "AI Limited",
+            description: errorData.error || "AI assistance is temporarily limited.",
+            variant: "destructive"
+          });
+        }
+      }
+    } catch (error) {
+      console.error("AI suggestion error:", error);
+      setAiSuggestion(null);
+    } finally {
+      setAiSuggestionLoading(false);
+    }
+  }, [selectedChat, aiEnabled, demoMode, toast, aiCooldown]);
+
+  // Use AI suggestion
+  const useAiSuggestion = useCallback(() => {
+    if (aiSuggestion) {
+      setNewMessage(aiSuggestion);
+      setShowAiSuggestion(false);
+      setAiSuggestion(null);
+    }
+  }, [aiSuggestion]);
 
   const sortedChats = useMemo(() => {
     const chatsToSort = demoMode ? demoChats : activeChats;
@@ -927,9 +1006,77 @@ export function Chats() {
                 </div>
               )}
 
+              {/* AI Suggestion Panel */}
+              {aiEnabled && showAiSuggestion && (
+                <div className="bg-gradient-to-r from-purple-50 to-blue-50 px-4 py-3 border-t border-purple-100">
+                  <div className="flex items-start gap-3">
+                    <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center shrink-0">
+                      <Sparkles className="w-4 h-4 text-purple-600" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-xs font-semibold text-purple-700">AI Suggestion</span>
+                        <button
+                          onClick={() => setShowAiSuggestion(false)}
+                          className="text-gray-400 hover:text-gray-600"
+                          data-testid="button-dismiss-ai"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                      {aiSuggestionLoading ? (
+                        <div className="flex items-center gap-2 text-sm text-gray-500">
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <span>Generating suggestion...</span>
+                        </div>
+                      ) : aiSuggestion ? (
+                        <div>
+                          <p className="text-sm text-gray-700 mb-2">{aiSuggestion}</p>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={useAiSuggestion}
+                              className="text-xs px-3 py-1 bg-purple-600 text-white rounded-full hover:bg-purple-700 transition-colors"
+                              data-testid="button-use-ai-suggestion"
+                            >
+                              Use this reply
+                            </button>
+                            <button
+                              onClick={fetchAiSuggestion}
+                              disabled={aiCooldown}
+                              className="text-xs px-3 py-1 bg-white text-purple-600 border border-purple-200 rounded-full hover:bg-purple-50 transition-colors flex items-center gap-1 disabled:opacity-50"
+                              data-testid="button-regenerate-ai"
+                            >
+                              <RefreshCw className={cn("w-3 h-3", aiCooldown && "animate-spin")} />
+                              {aiCooldown ? "Wait..." : "Regenerate"}
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-sm text-gray-500">No suggestion available. Try again later.</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Input Area */}
               <div className="bg-gray-50 px-2 sm:px-4 py-2 sm:py-3 border-t border-gray-200 flex items-center gap-2 sm:gap-3 shrink-0">
                  <div className="hidden sm:flex gap-4 text-gray-500">
+                    {/* AI Suggestion Button */}
+                    {aiEnabled && !showAiSuggestion && (
+                      <button
+                        onClick={fetchAiSuggestion}
+                        disabled={aiCooldown}
+                        className={cn(
+                          "text-purple-500 hover:text-purple-600 disabled:opacity-50",
+                          aiCooldown && "cursor-not-allowed"
+                        )}
+                        title={aiCooldown ? "Please wait..." : "Get AI suggestion"}
+                        data-testid="button-ai-suggest"
+                      >
+                        <Brain className={cn("h-6 w-6", aiCooldown && "animate-pulse")} />
+                      </button>
+                    )}
                     <Popover open={emojiPickerOpen} onOpenChange={setEmojiPickerOpen}>
                       <PopoverTrigger asChild>
                         <button className="hover:text-gray-700" data-testid="button-emoji">
