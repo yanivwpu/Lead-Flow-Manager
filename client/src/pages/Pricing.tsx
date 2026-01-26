@@ -71,6 +71,7 @@ const PLANS = [
       "Template messaging & retargeting",
       "10 webhook + native integrations",
       "Priority support",
+      "AI Brain add-on available (+$29/mo)",
     ],
     note: "Built for serious multi-channel operations",
   },

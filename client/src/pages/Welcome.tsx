@@ -20,7 +20,8 @@ import {
   CreditCard,
   Home,
   Calendar,
-  Mail
+  Mail,
+  Brain
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { BookDemoModal } from "@/components/BookDemoModal";
@@ -313,7 +314,7 @@ export function Welcome() {
               { icon: MessageSquare, color: "bg-emerald-100", iconColor: "text-brand-green", title: "Organized Conversations", desc: "Every WhatsApp chat becomes a customer record — no more searching or guessing." },
               { icon: Tag, color: "bg-blue-100", iconColor: "text-blue-600", title: "Notes & Tags", desc: "Add internal notes and tags so your team always knows the full context." },
               { icon: Bell, color: "bg-amber-100", iconColor: "text-amber-600", title: "Follow-Ups & Tasks", desc: "Set reminders and tasks to make sure every lead is followed up on time." },
-              { icon: Users, color: "bg-purple-100", iconColor: "text-purple-600", title: "Unlimited Team Members", desc: "Add your entire team with no per-seat fees. Assign conversations and stay aligned." },
+              { icon: Brain, color: "bg-purple-100", iconColor: "text-purple-600", title: "AI Brain", desc: "Smart reply suggestions, lead capture & tone control. Your AI-powered business assistant." },
               { icon: Phone, color: "bg-cyan-100", iconColor: "text-cyan-600", title: "Visual Chatbot Builder", desc: "Build automated flows with our drag-and-drop chatbot builder. No coding required." },
               { icon: Zap, color: "bg-pink-100", iconColor: "text-pink-600", title: "Multi-Channel Integrations", desc: "Connect with Shopify, HubSpot, Salesforce, Stripe & more to sync leads across all your tools." },
             ].map((benefit, i) => {
