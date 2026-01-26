@@ -12,6 +12,7 @@ import {
   ChevronRight, ExternalLink, AlertCircle, CheckCircle2
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
+import { cn } from "@/lib/utils";
 
 interface WidgetSettings {
   enabled: boolean;
