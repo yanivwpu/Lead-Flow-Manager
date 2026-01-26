@@ -1,0 +1,121 @@
+What to improve (high-impact, low friction)
+1. Create a Dedicated “Website Widget” section
+
+Instead of hiding it under Integrations:
+
+Dashboard → Website Widget (or Chat Widget)
+
+Inside:
+
+✅ Toggle: Enable / Disable widget
+
+✅ Copy button: “Copy Embed Code”
+
+✅ One-line explanation:
+
+“Paste this code before the closing </body> tag of your website.”
+
+This alone removes confusion.
+
+2. Stop calling it “Webhook” for websites
+
+🚨 This is a big UX issue.
+
+Non-technical users hear Webhook and panic.
+
+Rename:
+
+❌ Webhook URL
+
+✅ Chat Widget Script or Website Embed Code
+
+Save “webhook” for API docs only.
+
+3. Auto-generated widget with zero configuration
+
+Make it plug & play:
+
+One script
+
+No parameters
+
+No setup required
+
+Example mental model:
+
+“Copy → Paste → Chat appears”
+
+Anything more = drop-off.
+
+4. Visual preview (this is huge)
+
+Add a live preview on the right side:
+
+Chat bubble
+
+Open state
+
+Brand color
+
+Position (bottom right / left)
+
+Users LOVE seeing before installing.
+
+Bonus: “Preview on your site” iframe.
+
+5. Basic customization (no code)
+
+Keep it simple:
+
+Widget color
+
+Welcome message
+
+Position (left/right)
+
+Show / hide on mobile
+
+All via toggles or inputs.
+
+No CSS. No JS editing.
+
+6. Platform-specific copy buttons
+
+This reduces support tickets massively:
+
+WordPress → “Paste into theme footer or use a plugin”
+
+Shopify → “Online Store → Themes → Edit code → theme.liquid”
+
+Wix / Webflow / Squarespace → short steps
+
+Custom HTML → paste before </body>
+
+Even better:
+
+Buttons like “Install on Shopify” (just instructions, not an app yet).
+
+7. Clear value explanation (1 sentence)
+
+Right above the code:
+
+“This widget lets website visitors chat with you on WhatsApp. Messages appear instantly in your WhachatCRM inbox and can be handled automatically by your chatbot or your team.”
+
+Users need to understand why before how.
+
+8. Fallback safety messaging
+
+Add:
+
+“If the widget doesn’t appear, make sure you published your site”
+
+“Ad blockers may hide chat widgets”
+
+This prevents panic.
+
+What I would NOT do (yet)
+
+❌ No SDK
+❌ No complex configuration
+❌ No multiple scripts
+❌ No developer jargon
