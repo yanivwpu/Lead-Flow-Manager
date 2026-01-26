@@ -253,7 +253,9 @@ export function ChannelSettings() {
       </div>
 
       <div className="space-y-3">
-        {(Object.keys(CHANNEL_CONFIG) as Channel[]).map((channel) => {
+        {(Object.keys(CHANNEL_CONFIG) as Channel[])
+          .filter(channel => channel !== 'webchat')
+          .map((channel) => {
           const config = CHANNEL_CONFIG[channel];
           const Icon = config.icon;
           const status = getChannelStatus(channel);
