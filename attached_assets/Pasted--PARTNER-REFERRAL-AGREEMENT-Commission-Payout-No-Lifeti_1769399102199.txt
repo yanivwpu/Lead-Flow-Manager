@@ -1,0 +1,47 @@
+✅ PARTNER REFERRAL AGREEMENT
+(Commission + Payout + No Lifetime Guarantee)
+
+👉 Place this under “Commission Structure” or “Payment Terms”
+
+Commission Structure & Payout Schedule
+
+Partners earn a commission equal to 20% of subscription revenue actually collected from Qualified Referrals.
+
+Commissions are earned for a period of up to six (6) months from the referred customer’s first successful paid invoice and apply only while the customer remains an active, paying subscriber.
+
+Commissions are calculated monthly based on payments successfully collected during the previous calendar month and are paid on the first business day of each month.
+
+A minimum payout threshold of $50 USD applies. Commission balances below the threshold will roll over to the next payout cycle.
+
+Payments are made via Stripe, ACH, PayPal, or another payment method supported by WhachatCRM. Partners are responsible for any applicable taxes.
+
+If a customer payment is refunded, disputed, reversed, or fails, the related commission is not payable and may be reversed or deducted from future payouts.
+
+No Lifetime Commission Guarantee
+
+Commissions are not guaranteed for the lifetime of any customer.
+Partner commissions are limited to the commission duration defined by WhachatCRM at the time the commission is earned (currently up to six (6) months).
+
+WhachatCRM reserves the right to modify, limit, or discontinue commission rates, durations, eligibility requirements, or payout terms at any time, provided such changes do not retroactively reduce commissions already earned.
+
+✅ INTERNAL SALES COMMISSION POLICY
+(Commission + Payout + No Lifetime Guarantee)
+
+👉 Place this under “Commission Structure”
+
+Commission Structure & Payment Schedule
+
+Internal sales representatives earn a commission equal to 30% of subscription revenue actually collected from customers they directly close or materially assist in closing.
+
+Commissions apply for a period of up to six (6) months from the customer’s first successful paid invoice and are payable only while the customer remains active and in good standing.
+
+Commissions are calculated monthly based on payments collected during the previous calendar month and are paid on the first business day of each month.
+
+Commissions related to refunded, disputed, or failed payments are not payable and may be reversed.
+
+No Lifetime Commission Guarantee
+
+Sales commissions are not guaranteed for the lifetime of any customer.
+Commission eligibility is limited to the duration defined by WhachatCRM (currently up to six (6) months from the customer’s first paid invoice).
+
+WhachatCRM may modify, suspend, or terminate commission plans, rates, payout schedules, or eligibility criteria at any time. Commission plans do not create a vested or guaranteed right to future commissions.
