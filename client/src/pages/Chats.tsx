@@ -117,6 +117,8 @@ export function Chats() {
   const [aiSuggestion, setAiSuggestion] = useState<string | null>(null);
   const [aiSuggestionLoading, setAiSuggestionLoading] = useState(false);
   const [showAiSuggestion, setShowAiSuggestion] = useState(false);
+  const [aiTone, setAiTone] = useState<"neutral" | "friendly" | "professional" | "sales">("neutral");
+  const [leadUpdateHint, setLeadUpdateHint] = useState(false);
   
   const selectedChatId = match ? params?.id : null;
   const { viewers, setTyping } = usePresence(selectedChatId);
@@ -286,13 +288,17 @@ export function Chats() {
         credentials: 'include',
         body: JSON.stringify({
           chatId: selectedChat.id,
-          conversationHistory
+          conversationHistory,
+          tone: aiTone
         })
       });
       
       if (response.ok) {
         const data = await response.json();
         setAiSuggestion(data.suggestion || null);
+        
+        // Silently extract lead data in background
+        extractLeadData(selectedChat.id, conversationHistory);
       } else {
         setAiSuggestion(null);
         const errorData = await response.json();
@@ -310,7 +316,31 @@ export function Chats() {
     } finally {
       setAiSuggestionLoading(false);
     }
-  }, [selectedChat, aiEnabled, demoMode, toast, aiCooldown]);
+  }, [selectedChat, aiEnabled, demoMode, toast, aiCooldown, aiTone]);
+  
+  // Silent lead extraction (no popup, just tiny hint)
+  const extractLeadData = useCallback(async (chatId: string, conversationHistory: any[]) => {
+    try {
+      const response = await fetch('/api/ai/extract-lead', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ chatId, conversationHistory })
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        // Only show hint if we actually extracted meaningful data
+        if (data.name || data.email || data.phone || data.budget) {
+          setLeadUpdateHint(true);
+          setTimeout(() => setLeadUpdateHint(false), 3000);
+        }
+      }
+    } catch (error) {
+      // Silently fail - lead extraction is secondary
+      console.error("Lead extraction error:", error);
+    }
+  }, []);
 
   // Use AI suggestion
   const useAiSuggestion = useCallback(() => {
@@ -1014,15 +1044,34 @@ export function Chats() {
                       <Sparkles className="w-4 h-4 text-purple-600" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="text-xs font-semibold text-purple-700">AI Suggestion</span>
-                        <button
-                          onClick={() => setShowAiSuggestion(false)}
-                          className="text-gray-400 hover:text-gray-600"
-                          data-testid="button-dismiss-ai"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
+                      <div className="flex items-center justify-between gap-2 mb-2">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-semibold text-purple-700">AI Suggestion</span>
+                          {leadUpdateHint && (
+                            <span className="text-xs text-emerald-600 animate-pulse">Lead details updated</span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {/* Tone selector */}
+                          <select
+                            value={aiTone}
+                            onChange={(e) => setAiTone(e.target.value as typeof aiTone)}
+                            className="text-xs px-2 py-1 rounded border border-purple-200 bg-white text-purple-700 focus:outline-none focus:ring-1 focus:ring-purple-300"
+                            data-testid="select-ai-tone"
+                          >
+                            <option value="neutral">Neutral</option>
+                            <option value="friendly">Friendly</option>
+                            <option value="professional">Professional</option>
+                            <option value="sales">Sales-focused</option>
+                          </select>
+                          <button
+                            onClick={() => setShowAiSuggestion(false)}
+                            className="text-gray-400 hover:text-gray-600"
+                            data-testid="button-dismiss-ai"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
                       </div>
                       {aiSuggestionLoading ? (
                         <div className="flex items-center gap-2 text-sm text-gray-500">

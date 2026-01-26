@@ -4982,7 +4982,7 @@ export async function registerRoutes(
         });
       }
       
-      const { chatId, conversationHistory } = req.body;
+      const { chatId, conversationHistory, tone } = req.body;
       
       // Rate limiting per conversation
       if (chatId && !checkConversationRateLimit(chatId)) {
@@ -5000,12 +5000,17 @@ export async function registerRoutes(
       const knowledge = await storage.getAiBusinessKnowledge(userId);
       const settings = await storage.getAiSettings(userId);
       
+      // Validate tone parameter
+      const validTones = ["neutral", "friendly", "professional", "sales"];
+      const selectedTone = validTones.includes(tone) ? tone : undefined;
+      
       const suggestion = await aiService.suggestReply(
         userId,
         chatId,
         conversationHistory,
         knowledge || undefined,
-        settings || undefined
+        settings || undefined,
+        selectedTone
       );
       
       // Track usage

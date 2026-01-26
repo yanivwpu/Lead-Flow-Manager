@@ -14,9 +14,10 @@ export class AIService {
     chatId: string,
     conversationHistory: Array<{ role: string; content: string }>,
     businessKnowledge?: AiBusinessKnowledge,
-    settings?: AiSettings
+    settings?: AiSettings,
+    tone?: "neutral" | "friendly" | "professional" | "sales"
   ): Promise<{ suggestion: string; confidence: number }> {
-    const systemPrompt = this.buildSystemPrompt(businessKnowledge, settings);
+    const systemPrompt = this.buildSystemPrompt(businessKnowledge, settings, tone);
     
     try {
       const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
@@ -227,7 +228,20 @@ Return JSON: { "summary": "your summary" }`;
     return { shouldHandoff: false };
   }
 
-  private buildSystemPrompt(businessKnowledge?: AiBusinessKnowledge, settings?: AiSettings): string {
+  private buildSystemPrompt(
+    businessKnowledge?: AiBusinessKnowledge, 
+    settings?: AiSettings,
+    tone?: "neutral" | "friendly" | "professional" | "sales"
+  ): string {
+    const toneGuide = {
+      neutral: "balanced and helpful, neither too formal nor too casual",
+      friendly: "warm, personable, and conversational with a touch of enthusiasm",
+      professional: "formal, courteous, and business-like with clear communication",
+      sales: "persuasive and solution-focused, highlighting value and benefits while being consultative"
+    };
+    
+    const toneDesc = tone ? toneGuide[tone] : null;
+    
     const persona = settings?.aiPersona || "professional";
     const personaDesc = {
       professional: "professional and courteous",
@@ -237,7 +251,7 @@ Return JSON: { "summary": "your summary" }`;
     }[persona] || "professional and courteous";
     
     let prompt = `You are an AI assistant for ${businessKnowledge?.businessName || "a business"}. 
-Be ${personaDesc} in your responses.
+Be ${toneDesc || personaDesc} in your responses.
 
 Your goal: ${businessKnowledge?.salesGoals || "Help customers with their inquiries"}
 
