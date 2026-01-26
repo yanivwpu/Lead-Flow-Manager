@@ -956,3 +956,198 @@ export type InboxItem = {
   lastMessageAt: Date | null;
   unreadCount: number;
 };
+
+// ==========================================
+// AI BRAIN TABLES (PRO FEATURE)
+// ==========================================
+
+// AI Business Knowledge - per-account business context for AI
+export const aiBusinessKnowledge = pgTable("ai_business_knowledge", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  businessName: text("business_name"),
+  industry: text("industry"), // real_estate, travel, contractor, ecommerce, service, etc.
+  servicesProducts: text("services_products"), // JSON string of services/products
+  businessHours: text("business_hours"), // Business hours description
+  locations: text("locations"), // Comma-separated locations
+  bookingLink: text("booking_link"),
+  faqs: jsonb("faqs").default(sql`'[]'::jsonb`), // Array of {question, answer}
+  salesGoals: text("sales_goals"), // book_call, get_phone, collect_deposit, etc.
+  customInstructions: text("custom_instructions"), // Additional AI instructions
+  qualifyingQuestions: jsonb("qualifying_questions").default(sql`'[]'::jsonb`), // Industry-specific questions
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// AI Settings - per-user AI behavior configuration
+export const aiSettings = pgTable("ai_settings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  // AI Mode: off, suggest_only, full_auto
+  aiMode: text("ai_mode").notNull().default("suggest_only"),
+  // Business hours only mode
+  businessHoursOnly: boolean("business_hours_only").default(false),
+  // Confidence level: conservative, balanced, aggressive
+  confidenceLevel: text("confidence_level").default("balanced"),
+  // Lead qualification enabled
+  leadQualificationEnabled: boolean("lead_qualification_enabled").default(true),
+  // Auto-tagging enabled
+  autoTaggingEnabled: boolean("auto_tagging_enabled").default(true),
+  // Human handoff keywords
+  handoffKeywords: text("handoff_keywords").array().default(sql`'{"call me","human","agent","speak to someone"}'::text[]`),
+  // AI voice/persona
+  aiPersona: text("ai_persona").default("professional"), // professional, friendly, casual
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// AI Usage Tracking - per-account usage metering
+export const aiUsage = pgTable("ai_usage", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  periodStart: timestamp("period_start").notNull(),
+  periodEnd: timestamp("period_end").notNull(),
+  messagesGenerated: integer("messages_generated").default(0),
+  repliesSuggested: integer("replies_suggested").default(0),
+  leadsQualified: integer("leads_qualified").default(0),
+  automationsGenerated: integer("automations_generated").default(0),
+  tokensUsed: integer("tokens_used").default(0), // Internal tracking only
+  usageLimitReached: boolean("usage_limit_reached").default(false),
+  alertSent70: boolean("alert_sent_70").default(false),
+  alertSent90: boolean("alert_sent_90").default(false),
+  pausedAt: timestamp("paused_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// AI Lead Scores - lead qualification results
+export const aiLeadScores = pgTable("ai_lead_scores", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  chatId: varchar("chat_id").notNull().references(() => chats.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  score: integer("score").default(0), // 0-100
+  status: text("status").default("new"), // new, warm, hot, unqualified
+  intent: text("intent"), // Detected intent (price, availability, quote, book, etc.)
+  extractedData: jsonb("extracted_data").default(sql`'{}'::jsonb`), // {name, email, budget, timeline, location, etc.}
+  qualifyingAnswers: jsonb("qualifying_answers").default(sql`'[]'::jsonb`), // Array of Q&A pairs
+  conversationSummary: text("conversation_summary"),
+  lastUpdatedAt: timestamp("last_updated_at").defaultNow(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// AI Generated Automations - plain English to workflow
+export const aiAutomations = pgTable("ai_automations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  plainEnglishInput: text("plain_english_input").notNull(),
+  generatedWorkflow: jsonb("generated_workflow").notNull(), // The workflow structure
+  workflowId: varchar("workflow_id").references(() => workflows.id, { onDelete: "set null" }), // If converted to actual workflow
+  status: text("status").default("draft"), // draft, active, archived
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// AI Message Log - for abuse prevention and auditing
+export const aiMessageLog = pgTable("ai_message_log", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  chatId: varchar("chat_id").references(() => chats.id, { onDelete: "set null" }),
+  messageType: text("message_type").notNull(), // reply, suggestion, qualification, automation
+  inputTokens: integer("input_tokens").default(0),
+  outputTokens: integer("output_tokens").default(0),
+  model: text("model").default("gpt-5"),
+  responseTime: integer("response_time"), // milliseconds
+  wasAccepted: boolean("was_accepted"), // For suggestions - did user accept?
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// AI Subscription Add-on - tracks AI Assist subscription
+export const aiSubscriptions = pgTable("ai_subscriptions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  stripeSubscriptionId: text("stripe_subscription_id"),
+  status: text("status").notNull().default("active"), // active, paused, canceled
+  monthlyLimit: integer("monthly_limit").default(5000), // Fair use limit (internal)
+  currentPeriodStart: timestamp("current_period_start"),
+  currentPeriodEnd: timestamp("current_period_end"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Insert schemas for AI tables
+export const insertAiBusinessKnowledgeSchema = createInsertSchema(aiBusinessKnowledge).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertAiSettingsSchema = createInsertSchema(aiSettings).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertAiUsageSchema = createInsertSchema(aiUsage).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertAiLeadScoreSchema = createInsertSchema(aiLeadScores).omit({
+  id: true,
+  createdAt: true,
+  lastUpdatedAt: true,
+});
+
+export const insertAiAutomationSchema = createInsertSchema(aiAutomations).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertAiMessageLogSchema = createInsertSchema(aiMessageLog).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertAiSubscriptionSchema = createInsertSchema(aiSubscriptions).omit({
+  id: true,
+  createdAt: true,
+});
+
+// Types for AI tables
+export type InsertAiBusinessKnowledge = z.infer<typeof insertAiBusinessKnowledgeSchema>;
+export type AiBusinessKnowledge = typeof aiBusinessKnowledge.$inferSelect;
+export type InsertAiSettings = z.infer<typeof insertAiSettingsSchema>;
+export type AiSettings = typeof aiSettings.$inferSelect;
+export type InsertAiUsage = z.infer<typeof insertAiUsageSchema>;
+export type AiUsage = typeof aiUsage.$inferSelect;
+export type InsertAiLeadScore = z.infer<typeof insertAiLeadScoreSchema>;
+export type AiLeadScore = typeof aiLeadScores.$inferSelect;
+export type InsertAiAutomation = z.infer<typeof insertAiAutomationSchema>;
+export type AiAutomation = typeof aiAutomations.$inferSelect;
+export type InsertAiMessageLog = z.infer<typeof insertAiMessageLogSchema>;
+export type AiMessageLog = typeof aiMessageLog.$inferSelect;
+export type InsertAiSubscription = z.infer<typeof insertAiSubscriptionSchema>;
+export type AiSubscription = typeof aiSubscriptions.$inferSelect;
+
+// AI Usage Limits (internal - not shown to users)
+export const AI_USAGE_LIMITS = {
+  monthlyMessageLimit: 5000, // Fair use policy
+  warningThreshold70: 0.7,
+  warningThreshold90: 0.9,
+  maxMessagesPerHour: 100, // Abuse prevention
+  maxMessagesPerContact: 10, // Per contact per day
+} as const;
+
+// Lead Intent Keywords
+export const LEAD_INTENT_KEYWORDS = {
+  price: ["price", "cost", "how much", "rate", "fee", "pricing", "quote"],
+  availability: ["available", "availability", "when", "schedule", "open", "free"],
+  quote: ["quote", "estimate", "proposal", "bid"],
+  book: ["book", "appointment", "schedule", "reserve", "meeting"],
+  interested: ["interested", "want", "need", "looking for", "inquiry"],
+} as const;
+
+// Lead Status Thresholds
+export const LEAD_SCORE_THRESHOLDS = {
+  unqualified: 0,
+  new: 25,
+  warm: 50,
+  hot: 75,
+} as const;
