@@ -698,14 +698,35 @@ function AIBrainContent() {
               {knowledge.faqs.length > 0 && (
                 <div className="space-y-3 mb-4">
                   {knowledge.faqs.map((faq, index) => (
-                    <div key={index} className="p-3 bg-gray-50 rounded-lg relative group">
-                      <button
-                        onClick={() => handleRemoveFaq(index)}
-                        className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-red-500"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                      <p className="font-medium text-gray-900 text-sm mb-1">Q: {faq.question}</p>
+                    <div key={index} className="p-3 bg-gray-50 rounded-lg group border border-transparent hover:border-purple-100 transition-colors">
+                      <div className="flex justify-between items-start mb-1">
+                        <p className="font-medium text-gray-900 text-sm flex-1">Q: {faq.question}</p>
+                        <div className="flex gap-1 ml-2">
+                          <button
+                            onClick={() => {
+                              const q = prompt("Edit Question", faq.question);
+                              const a = prompt("Edit Answer", faq.answer);
+                              if (q !== null && a !== null) {
+                                setKnowledge(prev => ({
+                                  ...prev,
+                                  faqs: prev.faqs.map((f, i) => i === index ? { question: q, answer: a } : f)
+                                }));
+                              }
+                            }}
+                            className="p-1 text-gray-400 hover:text-blue-600 transition-colors"
+                            title="Edit FAQ"
+                          >
+                            <Settings2 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => handleRemoveFaq(index)}
+                            className="p-1 text-gray-400 hover:text-red-500 transition-colors"
+                            title="Delete FAQ"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
                       <p className="text-gray-600 text-sm">A: {faq.answer}</p>
                     </div>
                   ))}
