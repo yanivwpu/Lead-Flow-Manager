@@ -178,7 +178,7 @@ WhachatCRM's decision on attribution is final
 
 5. Commission Payout Schedule
 Partners earn 50% of subscription revenue collected from Qualified Referrals.
-Commission duration: up to twelve (12) months from the customer's first paid invoice.
+Commission duration: up to six (6) months from the customer's first paid invoice.
 Commissions apply to subscription fees only and exclude AI add-ons, messaging fees, and third-party costs.
 Commissions are calculated monthly based on payments successfully collected during the previous calendar month and are paid on the first business day of each month.
 A minimum payout threshold of $50 USD applies. Commission balances below the threshold will roll over to the next payout cycle.
@@ -187,7 +187,7 @@ If a customer payment is refunded, disputed, reversed, or fails, the related com
 
 6. No Lifetime Commission Guarantee
 Commissions are not guaranteed for the lifetime of any customer.
-Partner commissions are limited to the commission duration defined by WhachatCRM at the time the commission is earned (currently up to twelve (12) months).
+Partner commissions are limited to the commission duration defined by WhachatCRM at the time the commission is earned (currently up to six (6) months).
 WhachatCRM reserves the right to modify, limit, or discontinue commission rates, durations, eligibility requirements, or payout terms at any time, provided such changes do not retroactively reduce commissions already earned.
 
 7. Partner Responsibilities
@@ -612,7 +612,7 @@ export function PartnerPortal() {
           </div>
 
           <p className="text-green-100 text-sm mt-4">
-            Earn {stats?.commissionRate || '50'}% commission for {stats?.commissionDurationMonths || 12} months on every paid subscription
+            Earn {stats?.commissionRate || '50'}% commission for {stats?.commissionDurationMonths || 6} months on every paid subscription
           </p>
         </div>
 
