@@ -402,15 +402,22 @@ export function Templates() {
                             if (template) handleSendTemplate(template, chat);
                           }}
                         >
-                          <SelectTrigger className="w-[160px]" data-testid={`select-template-${chat.id}`}>
+                          <SelectTrigger className="w-[160px] min-h-[40px]" data-testid={`select-template-${chat.id}`}>
                             <SelectValue placeholder="Send template" />
                           </SelectTrigger>
-                          <SelectContent>
-                            {templates.filter(t => t.status === "approved").map((template) => (
-                              <SelectItem key={template.id} value={template.id}>
-                                {template.name}
-                              </SelectItem>
-                            ))}
+                          <SelectContent position="popper" side="bottom" align="end" className="z-[100] w-[200px] max-h-[300px] overflow-y-auto bg-white border border-gray-200 shadow-lg">
+                            {templates.filter(t => t.status === "approved").length > 0 ? (
+                              templates.filter(t => t.status === "approved").map((template) => (
+                                <SelectItem key={template.id} value={template.id} className="cursor-pointer hover:bg-gray-100">
+                                  {template.name}
+                                </SelectItem>
+                              ))
+                            ) : (
+                              <div className="p-2 text-xs text-gray-500 text-center">
+                                No approved templates found.<br/>
+                                Please sync or approve templates first.
+                              </div>
+                            )}
                           </SelectContent>
                         </Select>
                       </div>
