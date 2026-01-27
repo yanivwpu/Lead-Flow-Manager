@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WhachatCRM - Complete User Guide & Feature Documentation</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.7; color: #1e293b; max-width: 900px; margin: 0 auto; padding: 40px 20px; }
+    h1 { font-size: 2.5rem; color: #059669; margin-bottom: 10px; }
+    h2 { font-size: 1.8rem; color: #1e293b; margin: 50px 0 20px; padding-bottom: 10px; border-bottom: 3px solid #059669; }
+    h3 { font-size: 1.3rem; color: #059669; margin: 30px 0 15px; }
+    h4 { font-size: 1.1rem; color: #475569; margin: 20px 0 10px; }
+    p { margin-bottom: 15px; color: #475569; }
+    .subtitle { font-size: 1.2rem; color: #64748b; margin-bottom: 30px; }
+    .feature-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 25px; margin: 25px 0; }
+    .feature-box h3 { margin-top: 0; }
+    .benefit { background: #ecfdf5; border-left: 4px solid #059669; padding: 15px 20px; margin: 15px 0; border-radius: 0 8px 8px 0; }
+    .benefit strong { color: #059669; }
+    .how-it-works { background: #f0f9ff; border-left: 4px solid #0ea5e9; padding: 15px 20px; margin: 15px 0; border-radius: 0 8px 8px 0; }
+    .how-it-works strong { color: #0ea5e9; }
+    .scenario { background: #fefce8; border-left: 4px solid #eab308; padding: 15px 20px; margin: 15px 0; border-radius: 0 8px 8px 0; }
+    .scenario strong { color: #ca8a04; }
+    ul { margin: 15px 0 15px 25px; }
+    li { margin-bottom: 8px; color: #475569; }
+    .toc { background: #f1f5f9; padding: 25px; border-radius: 12px; margin: 30px 0; }
+    .toc h3 { margin-top: 0; color: #1e293b; }
+    .toc ul { list-style: none; margin-left: 0; }
+    .toc li { margin-bottom: 5px; }
+    .toc a { color: #059669; text-decoration: none; }
+    .toc a:hover { text-decoration: underline; }
+    .pro-badge { background: #7c3aed; color: white; font-size: 0.75rem; padding: 2px 8px; border-radius: 4px; margin-left: 8px; vertical-align: middle; }
+    .header-meta { color: #64748b; font-size: 0.9rem; margin-bottom: 30px; }
+    hr { border: none; border-top: 1px solid #e2e8f0; margin: 40px 0; }
+  </style>
+</head>
+<body>
+
+<h1>WhachatCRM User Guide</h1>
+<p class="subtitle">Complete Feature Documentation & Instructions</p>
+<p class="header-meta">Version 2.0 | Last Updated: January 2026</p>
+
+<div class="toc">
+  <h3>Table of Contents</h3>
+  <ul>
+    <li><a href="#overview">1. Product Overview</a></li>
+    <li><a href="#unified-inbox">2. Unified Inbox</a></li>
+    <li><a href="#chats">3. Chats & Conversations</a></li>
+    <li><a href="#followups">4. Follow-ups & Task Management</a></li>
+    <li><a href="#chatbot">5. Chatbot Builder</a></li>
+    <li><a href="#automation">6. Workflows & Automation</a></li>
+    <li><a href="#templates">7. Message Templates</a></li>
+    <li><a href="#website-widget">8. Website Widget</a></li>
+    <li><a href="#integrations">9. Integrations</a></li>
+    <li><a href="#ai-brain">10. AI Brain (Pro)</a></li>
+    <li><a href="#team">11. Team Management</a></li>
+    <li><a href="#settings">12. Settings & Configuration</a></li>
+    <li><a href="#billing">13. Billing & Plans</a></li>
+  </ul>
+</div>
+
+<hr>
+
+<h2 id="overview">1. Product Overview</h2>
+
+<p>WhachatCRM is a comprehensive WhatsApp-first Customer Relationship Management (CRM) platform designed for small businesses, sales teams, and customer support departments. It transforms your WhatsApp Business conversations into an organized, trackable, and automated sales pipeline.</p>
+
+<div class="benefit">
+  <strong>Core Value Proposition:</strong> Turn chaotic WhatsApp conversations into organized sales opportunities with CRM features, automation, and AI assistance.
+</div>
+
+<h3>Who Is WhachatCRM For?</h3>
+<ul>
+  <li><strong>Sales Teams:</strong> Managing inbound leads from WhatsApp</li>
+  <li><strong>Customer Support Teams:</strong> Handling customer inquiries efficiently</li>
+  <li><strong>Small Business Owners:</strong> Running operations via WhatsApp</li>
+  <li><strong>Real Estate Agents:</strong> Following up with property inquiries</li>
+  <li><strong>E-commerce Stores:</strong> Managing orders and customer questions</li>
+  <li><strong>Service Providers:</strong> Booking appointments and consultations</li>
+</ul>
+
+<hr>
+
+<h2 id="unified-inbox">2. Unified Inbox</h2>
+
+<div class="feature-box">
+  <h3>What It Does</h3>
+  <p>The Unified Inbox consolidates all your customer conversations from multiple channels into a single, organized dashboard. Instead of switching between apps, you manage everything in one place.</p>
+</div>
+
+<div class="benefit">
+  <strong>Key Benefits:</strong>
+  <ul>
+    <li>Never miss a message across any channel</li>
+    <li>See all conversations at a glance with priority indicators</li>
+    <li>Reduce response time by eliminating app-switching</li>
+    <li>Team members can see and manage shared conversations</li>
+  </ul>
+</div>
+
+<div class="how-it-works">
+  <strong>How It Works:</strong>
+  <ul>
+    <li>Connect your WhatsApp Business account via Twilio or Meta Cloud API</li>
+    <li>All incoming messages appear in real-time in your Inbox</li>
+    <li>Conversations are sorted by most recent activity</li>
+    <li>Unread messages show a green badge with count</li>
+    <li>Click any conversation to open the full chat view</li>
+  </ul>
+</div>
+
+<div class="scenario">
+  <strong>Scenario:</strong> A customer messages you on WhatsApp asking about product availability. The message appears instantly in your Unified Inbox with an unread badge. You click to open, respond, and the conversation is now tracked in your CRM with full history.
+</div>
+
+<h4>Supported Channels</h4>
+<ul>
+  <li>WhatsApp Business (Primary)</li>
+  <li>SMS / Text Messages</li>
+  <li>Telegram</li>
+  <li>Instagram DMs</li>
+  <li>Facebook Messenger</li>
+  <li>Website Live Chat</li>
+</ul>
+
+<hr>
+
+<h2 id="chats">3. Chats & Conversations</h2>
+
+<div class="feature-box">
+  <h3>What It Does</h3>
+  <p>The Chats section is your main workspace for managing individual customer conversations. Each chat includes the full message history, customer notes, tags, pipeline stage, and follow-up reminders.</p>
+</div>
+
+<div class="benefit">
+  <strong>Key Benefits:</strong>
+  <ul>
+    <li>Full conversation history preserved forever</li>
+    <li>Add private notes visible only to your team</li>
+    <li>Tag conversations for easy filtering (Hot, New, Quoted, etc.)</li>
+    <li>Track deals through your sales pipeline</li>
+    <li>Set follow-up reminders so no lead falls through the cracks</li>
+  </ul>
+</div>
+
+<div class="how-it-works">
+  <strong>How It Works:</strong>
+  <ul>
+    <li>Select a conversation from the left sidebar</li>
+    <li>View the full message history in the center panel</li>
+    <li>Type and send messages directly from the interface</li>
+    <li>Use the right panel to add notes, change tags, or set follow-ups</li>
+    <li>Move customers through pipeline stages (Lead → Contacted → Proposal → Negotiation → Closed)</li>
+  </ul>
+</div>
+
+<div class="scenario">
+  <strong>Scenario:</strong> A potential customer inquires about your services. You tag them as "Hot Lead," add a note "Interested in premium package, budget $5,000," set a follow-up for tomorrow, and move them to "Proposal" stage. When you follow up the next day, all context is right there.
+</div>
+
+<h4>Available Tags</h4>
+<ul>
+  <li><strong>New:</strong> Fresh lead, not yet contacted</li>
+  <li><strong>Hot:</strong> High-interest, priority follow-up</li>
+  <li><strong>Quoted:</strong> Sent pricing or proposal</li>
+  <li><strong>Paid:</strong> Customer has made payment</li>
+  <li><strong>Waiting:</strong> Awaiting customer response</li>
+  <li><strong>Lost:</strong> Did not convert</li>
+</ul>
+
+<h4>Pipeline Stages</h4>
+<ul>
+  <li><strong>Lead:</strong> Initial inquiry received</li>
+  <li><strong>Contacted:</strong> First response sent</li>
+  <li><strong>Proposal:</strong> Pricing/quote provided</li>
+  <li><strong>Negotiation:</strong> Discussing terms</li>
+  <li><strong>Closed:</strong> Deal won or lost</li>
+</ul>
+
+<hr>
+
+<h2 id="followups">4. Follow-ups & Task Management</h2>
+
+<div class="feature-box">
+  <h3>What It Does</h3>
+  <p>The Follow-ups feature helps you never forget to reach out to a customer. Set reminders for specific dates, and the system shows you all pending follow-ups in one organized view.</p>
+</div>
+
+<div class="benefit">
+  <strong>Key Benefits:</strong>
+  <ul>
+    <li>Automated reminders prevent leads from going cold</li>
+    <li>Visual calendar view of all scheduled follow-ups</li>
+    <li>One-click access to the conversation</li>
+    <li>Reduce lost revenue from forgotten leads</li>
+  </ul>
+</div>
+
+<div class="how-it-works">
+  <strong>How It Works:</strong>
+  <ul>
+    <li>In any chat, click the calendar icon or select a quick option (Tomorrow, 3 Days, 1 Week)</li>
+    <li>Or pick a specific date from the date picker</li>
+    <li>Follow-ups appear in the Follow-ups page sorted by due date</li>
+    <li>Overdue follow-ups are highlighted in red</li>
+    <li>Click any follow-up to jump directly to that conversation</li>
+  </ul>
+</div>
+
+<div class="scenario">
+  <strong>Scenario:</strong> A customer says "Let me discuss with my partner and get back to you." You set a follow-up for 3 days. Three days later, you see the reminder, open the conversation, and send a friendly check-in message.
+</div>
+
+<hr>
+
+<h2 id="chatbot">5. Chatbot Builder</h2>
+
+<div class="feature-box">
+  <h3>What It Does</h3>
+  <p>The Chatbot Builder is a visual, drag-and-drop tool for creating automated conversation flows. Build bots that handle FAQs, qualify leads, collect information, and route conversations to the right team members.</p>
+</div>
+
+<div class="benefit">
+  <strong>Key Benefits:</strong>
+  <ul>
+    <li>24/7 automated responses even when you're offline</li>
+    <li>Qualify leads before they reach your team</li>
+    <li>Collect customer information (name, email, requirements)</li>
+    <li>Reduce repetitive questions with automated FAQs</li>
+    <li>No coding required - visual drag-and-drop interface</li>
+  </ul>
+</div>
+
+<div class="how-it-works">
+  <strong>How It Works:</strong>
+  <ul>
+    <li>Navigate to Chatbot in the sidebar</li>
+    <li>Create a new flow or edit an existing one</li>
+    <li>Add nodes: Welcome Message, Questions, Delays, Actions</li>
+    <li>Connect nodes to create conversation paths</li>
+    <li>Set triggers (keywords, first message, button clicks)</li>
+    <li>Activate the bot when ready</li>
+  </ul>
+</div>
+
+<div class="scenario">
+  <strong>Scenario:</strong> A new customer messages "Hi" at 2 AM. Your chatbot responds with a welcome message, asks what they're interested in, collects their email, and says "Our team will contact you within 24 hours." When you wake up, you have a qualified lead with all their details ready.
+</div>
+
+<h4>Node Types</h4>
+<ul>
+  <li><strong>Send Message:</strong> Send text, images, or documents</li>
+  <li><strong>Ask Question:</strong> Present options and branch based on answers</li>
+  <li><strong>Wait/Delay:</strong> Pause before the next message</li>
+  <li><strong>Action:</strong> Tag conversation, assign to team member, update pipeline</li>
+</ul>
+
+<hr>
+
+<h2 id="automation">6. Workflows & Automation</h2>
+
+<div class="feature-box">
+  <h3>What It Does</h3>
+  <p>Workflows automate repetitive tasks based on triggers and conditions. When something happens (trigger), the system automatically performs actions without your intervention.</p>
+</div>
+
+<div class="benefit">
+  <strong>Key Benefits:</strong>
+  <ul>
+    <li>Save hours of manual work each week</li>
+    <li>Ensure consistent processes for every customer</li>
+    <li>Respond instantly even when you're busy</li>
+    <li>Automatically organize and route conversations</li>
+  </ul>
+</div>
+
+<div class="how-it-works">
+  <strong>How It Works:</strong>
+  <ul>
+    <li>Go to Automation in the sidebar</li>
+    <li>Create a new workflow</li>
+    <li>Choose a trigger (new message, keyword, tag change, etc.)</li>
+    <li>Add actions (send message, assign, tag, move pipeline)</li>
+    <li>Set conditions if needed (business hours only, specific tags)</li>
+    <li>Activate the workflow</li>
+  </ul>
+</div>
+
+<div class="scenario">
+  <strong>Scenario:</strong> You create a workflow: "When a message contains 'pricing', automatically tag as 'Hot Lead' and send a message with your price list PDF." Now every pricing inquiry gets an instant response with the information they need.
+</div>
+
+<h4>Available Triggers</h4>
+<ul>
+  <li>New message received</li>
+  <li>Message contains keyword</li>
+  <li>Tag is added/removed</li>
+  <li>Pipeline stage changes</li>
+  <li>Follow-up is due</li>
+</ul>
+
+<h4>Available Actions</h4>
+<ul>
+  <li>Send a message or template</li>
+  <li>Add or remove a tag</li>
+  <li>Assign to team member</li>
+  <li>Move to pipeline stage</li>
+  <li>Set a follow-up reminder</li>
+  <li>Send webhook to external system</li>
+</ul>
+
+<hr>
+
+<h2 id="templates">7. Message Templates</h2>
+
+<div class="feature-box">
+  <h3>What It Does</h3>
+  <p>Message Templates are pre-approved messages you can send to customers outside the 24-hour WhatsApp messaging window. Perfect for re-engaging cold leads, sending promotions, or appointment reminders.</p>
+</div>
+
+<div class="benefit">
+  <strong>Key Benefits:</strong>
+  <ul>
+    <li>Re-engage customers after the 24-hour window expires</li>
+    <li>Send consistent, professional messages</li>
+    <li>Comply with WhatsApp Business policies</li>
+    <li>Smart Retargeting shows contacts ready for templates</li>
+  </ul>
+</div>
+
+<div class="how-it-works">
+  <strong>How It Works:</strong>
+  <ul>
+    <li>Templates must be created and approved in your WhatsApp provider (Meta or Twilio)</li>
+    <li>Click "Sync Templates" in WhachatCRM to import approved templates</li>
+    <li>Go to "Smart Retargeting" tab to see contacts outside the 24-hour window</li>
+    <li>Select a template and send to re-engage</li>
+    <li>Fill in any variable fields (customer name, appointment time, etc.)</li>
+  </ul>
+</div>
+
+<div class="scenario">
+  <strong>Scenario:</strong> A customer inquired 3 days ago but never responded to your quote. They're now outside the 24-hour window. You go to Smart Retargeting, see their name, select "Follow Up - Quote Reminder" template, and send. They receive your message and respond, reopening the conversation.
+</div>
+
+<h4>Template Categories</h4>
+<ul>
+  <li><strong>Marketing:</strong> Promotions, offers, announcements</li>
+  <li><strong>Utility:</strong> Order updates, appointment reminders</li>
+  <li><strong>Authentication:</strong> OTP codes, verification</li>
+</ul>
+
+<hr>
+
+<h2 id="website-widget">8. Website Widget</h2>
+
+<div class="feature-box">
+  <h3>What It Does</h3>
+  <p>The Website Widget adds a WhatsApp chat button to your website. Visitors click it to start a conversation on WhatsApp, which then appears in your WhachatCRM inbox.</p>
+</div>
+
+<div class="benefit">
+  <strong>Key Benefits:</strong>
+  <ul>
+    <li>Convert website visitors into WhatsApp leads</li>
+    <li>Capture leads 24/7 from your website</li>
+    <li>Pre-filled messages help qualify leads instantly</li>
+    <li>Customizable design to match your brand</li>
+  </ul>
+</div>
+
+<div class="how-it-works">
+  <strong>How It Works:</strong>
+  <ul>
+    <li>Go to Website Widget in the sidebar</li>
+    <li>Customize the button appearance (color, position, icon)</li>
+    <li>Set a welcome message or pre-filled text</li>
+    <li>Copy the embed code</li>
+    <li>Paste the code into your website's HTML (before &lt;/body&gt;)</li>
+    <li>Widget appears on your site, clicking opens WhatsApp</li>
+  </ul>
+</div>
+
+<div class="scenario">
+  <strong>Scenario:</strong> A visitor browses your website and sees the green WhatsApp button in the corner. They click it, WhatsApp opens with a pre-filled message "Hi! I'm interested in your services." They send it, and the conversation appears in your inbox tagged as a website lead.
+</div>
+
+<hr>
+
+<h2 id="integrations">9. Integrations</h2>
+
+<div class="feature-box">
+  <h3>What It Does</h3>
+  <p>Integrations connect WhachatCRM to your other business tools. Sync leads with your CRM, receive notifications in Slack, update spreadsheets automatically, and more.</p>
+</div>
+
+<div class="benefit">
+  <strong>Key Benefits:</strong>
+  <ul>
+    <li>Eliminate manual data entry between systems</li>
+    <li>Keep all your tools in sync automatically</li>
+    <li>Trigger actions in other apps when events happen</li>
+    <li>Build custom workflows with webhooks</li>
+  </ul>
+</div>
+
+<div class="how-it-works">
+  <strong>How It Works:</strong>
+  <ul>
+    <li>Go to Integrations in the sidebar</li>
+    <li>Browse available integrations</li>
+    <li>Click Connect and follow the setup instructions</li>
+    <li>Configure what data to sync and when</li>
+    <li>Test the integration to ensure it works</li>
+  </ul>
+</div>
+
+<h4>Available Integrations</h4>
+<ul>
+  <li><strong>Shopify:</strong> Sync orders and customer data</li>
+  <li><strong>HubSpot:</strong> Two-way CRM sync</li>
+  <li><strong>Salesforce:</strong> Lead and contact sync</li>
+  <li><strong>Stripe:</strong> Payment notifications and invoicing</li>
+  <li><strong>Calendly:</strong> Appointment booking confirmations</li>
+  <li><strong>Google Sheets:</strong> Export leads to spreadsheets</li>
+  <li><strong>Slack:</strong> New message notifications</li>
+  <li><strong>Webhooks:</strong> Connect to any custom system</li>
+</ul>
+
+<div class="scenario">
+  <strong>Scenario:</strong> You connect Shopify. When a customer places an order, WhachatCRM automatically sends them a WhatsApp message with order confirmation and tracking link. No manual work required.
+</div>
+
+<hr>
+
+<h2 id="ai-brain">10. AI Brain <span class="pro-badge">PRO</span></h2>
+
+<div class="feature-box">
+  <h3>What It Does</h3>
+  <p>AI Brain is your intelligent assistant that helps you respond faster, qualify leads automatically, and create automations using plain English. It learns your business context to provide relevant suggestions.</p>
+</div>
+
+<div class="benefit">
+  <strong>Key Benefits:</strong>
+  <ul>
+    <li>Get AI-suggested replies tailored to your business</li>
+    <li>Automatically extract lead information from conversations</li>
+    <li>Create workflows by describing them in plain English</li>
+    <li>Summarize long conversations instantly</li>
+    <li>Reduce response time significantly</li>
+  </ul>
+</div>
+
+<div class="how-it-works">
+  <strong>How It Works:</strong>
+  <ul>
+    <li>Go to AI Brain in the sidebar to configure</li>
+    <li>Add your business knowledge (services, FAQs, booking links)</li>
+    <li>Choose AI mode: Suggest Only or Full Auto</li>
+    <li>Set your AI persona (Professional, Friendly, Casual)</li>
+    <li>In chats, click the AI button to get reply suggestions</li>
+    <li>Click to use the suggestion or edit before sending</li>
+  </ul>
+</div>
+
+<div class="scenario">
+  <strong>Scenario:</strong> A customer asks about your return policy. You click the AI Suggest button. AI Brain reads the conversation, checks your business knowledge for return policy info, and generates a perfect response. You review it, click "Use," and send in seconds.
+</div>
+
+<h4>AI Features</h4>
+<ul>
+  <li><strong>Reply Suggestions:</strong> Context-aware response recommendations</li>
+  <li><strong>Lead Qualification:</strong> Automatic extraction of name, email, phone, budget</li>
+  <li><strong>Tone Selection:</strong> Neutral, Friendly, Professional, or Sales-focused responses</li>
+  <li><strong>Automation Builder:</strong> Describe workflows in plain English</li>
+  <li><strong>Conversation Summaries:</strong> Quick overview of long chats</li>
+</ul>
+
+<h4>AI Modes</h4>
+<ul>
+  <li><strong>Off:</strong> AI features disabled</li>
+  <li><strong>Suggest Only:</strong> AI suggests, you review and send</li>
+  <li><strong>Full Auto:</strong> AI responds automatically with guardrails</li>
+</ul>
+
+<hr>
+
+<h2 id="team">11. Team Management</h2>
+
+<div class="feature-box">
+  <h3>What It Does</h3>
+  <p>Team Management allows you to add team members, assign roles, and distribute conversations. Multiple people can manage your WhatsApp communications together.</p>
+</div>
+
+<div class="benefit">
+  <strong>Key Benefits:</strong>
+  <ul>
+    <li>Scale your support with multiple team members</li>
+    <li>Assign conversations to the right person</li>
+    <li>See who's working on what in real-time</li>
+    <li>Role-based permissions for security</li>
+  </ul>
+</div>
+
+<div class="how-it-works">
+  <strong>How It Works:</strong>
+  <ul>
+    <li>Go to Settings → Team</li>
+    <li>Invite team members by email</li>
+    <li>Assign roles (Admin, Member)</li>
+    <li>In conversations, use the Assign dropdown to assign to team members</li>
+    <li>Team members see their assigned conversations</li>
+    <li>Use Team Inbox view to see all team conversations</li>
+  </ul>
+</div>
+
+<div class="scenario">
+  <strong>Scenario:</strong> You have a sales team of 3 people. A new lead comes in and is automatically assigned to the team member with the fewest open conversations. They respond and work the lead through the pipeline. If they're out, another team member can see and take over.
+</div>
+
+<h4>Roles</h4>
+<ul>
+  <li><strong>Admin:</strong> Full access, can manage team and billing</li>
+  <li><strong>Member:</strong> Can view and manage assigned conversations</li>
+</ul>
+
+<hr>
+
+<h2 id="settings">12. Settings & Configuration</h2>
+
+<div class="feature-box">
+  <h3>What It Does</h3>
+  <p>Settings is your control center for configuring your WhachatCRM account, connecting WhatsApp providers, setting business hours, and managing notifications.</p>
+</div>
+
+<h4>Key Settings Sections</h4>
+
+<h4>WhatsApp Connection</h4>
+<ul>
+  <li>Connect via Twilio or Meta Cloud API</li>
+  <li>Enter your credentials (SID, Auth Token, Phone Number)</li>
+  <li>Test connection to verify</li>
+  <li>View connection status</li>
+</ul>
+
+<h4>Business Hours</h4>
+<ul>
+  <li>Set your operating hours for each day</li>
+  <li>Configure away messages for after-hours</li>
+  <li>Auto-replies can respect business hours</li>
+</ul>
+
+<h4>Auto-Reply</h4>
+<ul>
+  <li>Enable automatic responses to new messages</li>
+  <li>Customize the welcome message</li>
+  <li>Set different messages for business hours vs after-hours</li>
+</ul>
+
+<h4>Notifications</h4>
+<ul>
+  <li>Email notifications for new messages</li>
+  <li>Browser push notifications</li>
+  <li>Slack integration for team alerts</li>
+</ul>
+
+<div class="scenario">
+  <strong>Scenario:</strong> You set business hours as 9 AM - 6 PM, Monday to Friday. A customer messages at 8 PM. They receive an auto-reply: "Thanks for reaching out! We're currently closed but will respond first thing tomorrow morning."
+</div>
+
+<hr>
+
+<h2 id="billing">13. Billing & Plans</h2>
+
+<div class="feature-box">
+  <h3>What It Does</h3>
+  <p>Manage your subscription, view usage, and upgrade or downgrade your plan. All billing is handled securely through Stripe.</p>
+</div>
+
+<h4>Available Plans</h4>
+
+<h4>Free Plan</h4>
+<ul>
+  <li>50 conversations (lifetime)</li>
+  <li>1 user</li>
+  <li>Basic features</li>
+  <li>Community support</li>
+</ul>
+
+<h4>Starter Plan - $29/month</h4>
+<ul>
+  <li>500 conversations/month</li>
+  <li>3 users</li>
+  <li>All basic features</li>
+  <li>Email support</li>
+</ul>
+
+<h4>Pro Plan - $79/month</h4>
+<ul>
+  <li>Unlimited conversations</li>
+  <li>10 users</li>
+  <li>All features including Templates</li>
+  <li>AI Brain access ($29/mo add-on)</li>
+  <li>Priority support</li>
+  <li>Team Inbox</li>
+</ul>
+
+<div class="how-it-works">
+  <strong>Managing Your Subscription:</strong>
+  <ul>
+    <li>Go to Settings → Billing</li>
+    <li>View current plan and usage</li>
+    <li>Click Upgrade to see available plans</li>
+    <li>Payment is processed securely via Stripe</li>
+    <li>Cancel anytime with no long-term commitment</li>
+  </ul>
+</div>
+
+<hr>
+
+<h2>Getting Started Checklist</h2>
+
+<ol style="margin-left: 25px; color: #475569;">
+  <li><strong>Create Account:</strong> Sign up at whachatcrm.com</li>
+  <li><strong>Connect WhatsApp:</strong> Go to Settings → Connect your Twilio or Meta account</li>
+  <li><strong>Test Connection:</strong> Send a test message to verify</li>
+  <li><strong>Set Business Hours:</strong> Configure when you're available</li>
+  <li><strong>Create Auto-Reply:</strong> Set up welcome messages</li>
+  <li><strong>Add Team Members:</strong> Invite your team (if applicable)</li>
+  <li><strong>Build First Chatbot:</strong> Create a simple FAQ bot</li>
+  <li><strong>Add Website Widget:</strong> Install on your website</li>
+  <li><strong>Configure AI Brain:</strong> Add business knowledge (Pro only)</li>
+</ol>
+
+<hr>
+
+<h2>Need Help?</h2>
+
+<p>Visit our Help Center at <strong>whachatcrm.com/help</strong> for detailed guides, video tutorials, and FAQs.</p>
+
+<p>Contact Support: <strong>support@whachatcrm.com</strong></p>
+
+<hr>
+
+<p style="text-align: center; color: #94a3b8; font-size: 0.9rem; margin-top: 40px;">
+  &copy; 2026 WhachatCRM. All rights reserved.<br>
+  This document is for WordPress import. Copy the content as needed.
+</p>
+
+</body>
+</html>
