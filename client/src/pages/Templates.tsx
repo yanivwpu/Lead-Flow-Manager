@@ -371,7 +371,7 @@ export function Templates() {
                     <p className="text-sm">All your contacts are within the 24-hour messaging window</p>
                   </div>
                 ) : (
-                  <div className="space-y-3">
+                  <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
                     {retargetableChats.map((chat) => (
                       <div 
                         key={chat.id} 
