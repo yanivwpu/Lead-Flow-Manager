@@ -567,7 +567,7 @@ export function SalesPortal() {
             <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
               <div className="p-4 border-b border-gray-200">
                 <h2 className="font-semibold text-gray-900">Commission History</h2>
-                <p className="text-sm text-gray-500">30% of subscription revenue for 6 months</p>
+                <p className="text-sm text-gray-500">30% of subscription revenue for 12 months</p>
               </div>
               {conversions.length === 0 ? (
                 <div className="p-8 text-center text-gray-500">
