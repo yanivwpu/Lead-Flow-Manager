@@ -363,8 +363,8 @@ function AIBrainContent() {
   }
   
   return (
-    <div className="h-full overflow-y-auto">
-      <div className="p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto">
+    <div className="h-full overflow-y-auto overflow-x-hidden">
+      <div className="p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto w-full">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 bg-gradient-to-br from-purple-100 to-blue-100 rounded-xl flex items-center justify-center">
@@ -469,13 +469,13 @@ function AIBrainContent() {
               </Button>
             </div>
             
-            <div className="bg-white rounded-xl border border-gray-200 p-6">
+            <div className="bg-white rounded-xl border border-gray-200 p-4 sm:p-6">
               <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
                 <MessageSquare className="w-5 h-5 text-blue-500" />
                 AI Persona
               </h2>
               
-              <div className="grid grid-cols-3 gap-3">
+              <div className="flex flex-wrap gap-2 sm:gap-3">
                 {[
                   { value: "professional", label: "Professional" },
                   { value: "friendly", label: "Friendly" },
@@ -485,7 +485,7 @@ function AIBrainContent() {
                     key={persona.value}
                     onClick={() => setSettings(prev => ({ ...prev, aiPersona: persona.value }))}
                     className={cn(
-                      "p-3 rounded-lg border-2 text-center transition-all",
+                      "px-4 py-2 sm:px-6 sm:py-3 rounded-lg border-2 text-center transition-all text-sm sm:text-base whitespace-nowrap",
                       settings.aiPersona === persona.value
                         ? "border-blue-500 bg-blue-50 text-blue-700"
                         : "border-gray-200 hover:border-gray-300 text-gray-700"
