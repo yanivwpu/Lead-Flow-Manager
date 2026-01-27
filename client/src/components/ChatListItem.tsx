@@ -3,6 +3,7 @@ import { cn } from "@/lib/utils";
 import { TAG_COLORS } from "@/lib/data";
 import { CheckCheck } from "lucide-react";
 import { ChatAvatar } from "@/components/ChatAvatar";
+import { format } from "date-fns";
 
 interface Chat {
   id: string;
@@ -54,7 +55,7 @@ export function ChatListItem({ chat, isActive }: ChatListItemProps) {
                 chat.unread > 0 ? "text-brand-green font-medium" : "text-gray-400"
               )}
             >
-              {chat.time}
+              {chat.time && !chat.time.includes('T') ? chat.time : (chat.time ? format(new Date(chat.time), 'HH:mm') : '')}
             </span>
           </div>
 
