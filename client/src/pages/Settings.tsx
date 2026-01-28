@@ -439,6 +439,41 @@ export function Settings() {
     queryKey: ["/api/subscription"],
   });
 
+  const isInShopify = typeof window !== 'undefined' && (
+    window.location.search.includes('shop=') || 
+    window.top !== window.self ||
+    document.referrer.includes('shopify')
+  );
+
+  const shopifyBillingMutation = useMutation({
+    mutationFn: async () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const shop = urlParams.get('shop') || localStorage.getItem('shopify_shop');
+      if (!shop) throw new Error('No Shopify shop found');
+      localStorage.setItem('shopify_shop', shop);
+      const res = await fetch(`/api/shopify/billing/change-plan`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ plan: "Pro" }),
+      });
+      if (!res.ok) {
+        const redirectUrl = `/api/shopify/install?shop=${shop}`;
+        window.location.href = redirectUrl;
+        return;
+      }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      if (data?.confirmationUrl) {
+        window.location.href = data.confirmationUrl;
+      }
+    },
+    onError: () => {
+      toast({ title: "Starting Pro Trial", description: "Redirecting to Shopify billing..." });
+    },
+  });
+
   const { data: teamMembers = [], isLoading: teamLoading } = useQuery<TeamMember[]>({
     queryKey: ["/api/team"],
   });
@@ -741,8 +776,23 @@ export function Settings() {
                       Next billing: {new Date(subscriptionData.subscription.currentPeriodEnd).toLocaleDateString()}
                     </p>
                   )}
-                  <div className="mt-auto pt-6">
-                    <Link href="/pricing" className="w-full">
+                  <div className="mt-auto pt-6 space-y-2">
+                    {isInShopify && subscriptionData?.subscription?.plan === "free" && (
+                      <Button 
+                        className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold"
+                        onClick={() => shopifyBillingMutation.mutate()}
+                        disabled={shopifyBillingMutation.isPending}
+                        data-testid="button-shopify-pro-trial"
+                      >
+                        {shopifyBillingMutation.isPending ? (
+                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        ) : (
+                          <Zap className="h-4 w-4 mr-2" />
+                        )}
+                        Start 14-Day Pro Trial
+                      </Button>
+                    )}
+                    <Link href="/pricing" className="w-full block">
                       <Button className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold">
                         <Zap className="h-4 w-4 mr-2" />
                         {subscriptionData?.subscription?.plan === "free" ? "Upgrade Plan" : "View Plans"}
