@@ -124,6 +124,12 @@ export const users = pgTable("users", {
   // Partner referral tracking - locked after first assignment (first-touch wins)
   partnerId: varchar("partner_id"),
   partnerAssignedAt: timestamp("partner_assigned_at"), // when partner was assigned (for commission duration)
+  // Shopify integration fields
+  shopifyShop: text("shopify_shop"), // e.g., mystore.myshopify.com
+  shopifyAccessToken: text("shopify_access_token"), // Shopify API access token
+  shopifyChargeId: text("shopify_charge_id"), // Active Shopify billing charge ID
+  shopifySubscriptionStatus: text("shopify_subscription_status"), // active, cancelled, pending
+  shopifyInstalledAt: timestamp("shopify_installed_at"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

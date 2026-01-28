@@ -42,6 +42,7 @@ export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
   getUserByStripeCustomerId(customerId: string): Promise<User | undefined>;
+  getUserByShopifyShop(shop: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
   updateUser(id: string, updates: Partial<User>): Promise<User | undefined>;
   deleteUser(id: string): Promise<void>;
@@ -220,6 +221,11 @@ export class DbStorage implements IStorage {
 
   async getUserByStripeCustomerId(customerId: string): Promise<User | undefined> {
     const result = await db.select().from(users).where(eq(users.stripeCustomerId, customerId));
+    return result[0];
+  }
+
+  async getUserByShopifyShop(shop: string): Promise<User | undefined> {
+    const result = await db.select().from(users).where(eq(users.shopifyShop, shop));
     return result[0];
   }
 
