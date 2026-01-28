@@ -5,7 +5,7 @@ import * as jose from 'jose';
 import crypto from 'crypto';
 import { storage } from './storage';
 
-const API_VERSION = ApiVersion.October24;
+const API_VERSION = ApiVersion.October24; // Maps to 2025-10 in Shopify dashboard
 
 const SHOPIFY_API_KEY = process.env.SHOPIFY_API_KEY || '';
 const SHOPIFY_API_SECRET = process.env.SHOPIFY_API_SECRET || '';
