@@ -32,14 +32,14 @@ export function PrivacyPolicy() {
           </ul>
 
           <h2 className="text-xl font-bold text-gray-900 mt-8 mb-4">3. How We Use Your Information</h2>
-          <p className="text-gray-600 mb-4">We use your information to:</p>
+          <p className="text-gray-600 mb-4">We use your information for the following specific purposes:</p>
           <ul className="list-disc list-inside text-gray-600 mb-4 space-y-2">
-            <li>Provide and maintain our CRM services</li>
-            <li>Connect to your WhatsApp provider (Twilio or Meta) for message delivery</li>
-            <li>Track conversation usage against your plan limits</li>
-            <li>Send you service notifications and updates</li>
-            <li>Improve our platform and user experience</li>
-            <li>Comply with legal obligations</li>
+            <li><strong>Service Provision:</strong> To provide and maintain our CRM services, including message syncing and lead organization.</li>
+            <li><strong>Integration Management:</strong> To connect and maintain the link to your chosen WhatsApp provider (Twilio or Meta) for message delivery.</li>
+            <li><strong>Subscription Tracking:</strong> To track conversation usage and ensure compliance with your chosen subscription plan limits.</li>
+            <li><strong>Account Communication:</strong> To send you service notifications, security alerts, and platform updates.</li>
+            <li><strong>Support & Improvement:</strong> To provide technical support, troubleshoot issues, and improve our platform's user experience.</li>
+            <li><strong>Legal Compliance:</strong> To comply with applicable laws, regulations, and legal processes.</li>
           </ul>
 
           <h2 className="text-xl font-bold text-gray-900 mt-8 mb-4">4. Data Security</h2>
