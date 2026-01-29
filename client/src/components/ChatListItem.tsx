@@ -13,6 +13,7 @@ interface Chat {
   time: string;
   unread: number;
   tag: string;
+  pipelineStage: string;
   followUp: string | null;
   messages: any[];
 }
@@ -70,9 +71,12 @@ export function ChatListItem({ chat, isActive }: ChatListItemProps) {
             </div>
           </div>
           
-          <div className="flex gap-1.5 mt-1">
+          <div className="flex flex-wrap gap-1 mt-1">
             <span className={cn("text-[9px] px-1.5 py-0.5 rounded border font-medium", TAG_COLORS[chat.tag as keyof typeof TAG_COLORS] || "bg-gray-50 text-gray-600 border-gray-200")}>
               {chat.tag}
+            </span>
+            <span className="text-[9px] px-1.5 py-0.5 rounded border bg-blue-50 text-blue-600 border-blue-100 font-medium">
+              {chat.pipelineStage}
             </span>
             {chat.followUp && (
               <span className="text-[9px] px-1.5 py-0.5 rounded border bg-red-50 text-red-600 border-red-100 font-medium flex items-center">
