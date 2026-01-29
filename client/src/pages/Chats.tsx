@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useRoute, useLocation } from "wouter";
 import { ChatListItem } from "@/components/ChatListItem";
 import { TAG_COLORS, PIPELINE_STAGES } from "@/lib/data";
@@ -944,7 +944,7 @@ export function Chats() {
                         const msgText = msg.text || msg.content || '';
                         const isFromMe = msg.sender === 'me' || msg.role === 'assistant';
                         
-                        const highlightText = (text: string) => {
+                        const highlightText = (text: string): React.ReactNode => {
                           if (!conversationSearch || !text) return text;
                           const parts = text.split(new RegExp(`(${conversationSearch})`, 'gi'));
                           return parts.map((part, i) => 
@@ -1182,7 +1182,7 @@ export function Chats() {
            </div>
 
            {/* Mobile Lead Details Panel - Compact version for mobile */}
-           <div className="hidden md:hidden bg-white border-t border-gray-200 overflow-y-auto max-h-[120px] shrink-0 flex-col">
+           <div className="flex md:hidden bg-white border-t border-gray-200 overflow-y-auto max-h-[180px] shrink-0 flex-col">
               <div className="p-3 space-y-3">
                  <div className="flex items-center justify-between">
                    <h3 className="font-display font-bold text-gray-900 text-sm">Lead Details</h3>
