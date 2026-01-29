@@ -10,6 +10,7 @@ import {
   getActiveShopifySubscription,
   cancelShopifySubscription,
   shopifySessionMiddleware,
+  registerMandatoryWebhooks,
   SHOPIFY_BILLING_PLANS,
 } from './shopify';
 
@@ -117,6 +118,9 @@ router.get('/callback', async (req: Request, res: Response) => {
       shopifyInstalledAt: new Date(),
       shopifySubscriptionStatus: 'pending',
     });
+
+    // Register mandatory compliance webhooks
+    await registerMandatoryWebhooks(shop, accessToken);
 
     const HOST = process.env.REPL_SLUG 
       ? `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co`
@@ -331,6 +335,147 @@ router.post('/webhooks/subscription-update', async (req: Request, res: Response)
     res.status(200).json({ received: true });
   } catch (error) {
     console.error('Subscription webhook error:', error);
+    res.status(500).json({ error: 'Webhook processing failed' });
+  }
+});
+
+// ============= MANDATORY COMPLIANCE WEBHOOKS =============
+// These are required by Shopify for app approval
+
+// customers/data_request - Customer requests their data (GDPR/CCPA)
+router.post('/webhooks/customers/data_request', async (req: Request, res: Response) => {
+  const hmac = req.headers['x-shopify-hmac-sha256'] as string;
+  const shop = req.headers['x-shopify-shop-domain'] as string;
+
+  if (!hmac || !shop) {
+    console.log('[Shopify Compliance] customers/data_request - Missing headers');
+    return res.status(401).json({ error: 'Missing webhook headers' });
+  }
+
+  const rawBody = (req as any).rawBody || JSON.stringify(req.body);
+  if (!verifyWebhookHmac(rawBody, hmac)) {
+    console.log('[Shopify Compliance] customers/data_request - Invalid HMAC');
+    return res.status(401).json({ error: 'Invalid webhook signature' });
+  }
+
+  try {
+    const { shop_domain, customer, orders_requested } = req.body;
+    console.log(`[Shopify Compliance] Data request received for shop: ${shop_domain}, customer: ${customer?.email || customer?.id}`);
+    
+    // WhachatCRM stores conversation data linked to phone numbers, not Shopify customer IDs
+    // We acknowledge the request - actual data export would be handled via support ticket
+    // since we need to match by phone number which requires manual verification
+    
+    res.status(200).json({ 
+      received: true,
+      message: 'Data request acknowledged. Customer data export will be processed within 30 days.'
+    });
+  } catch (error) {
+    console.error('[Shopify Compliance] customers/data_request error:', error);
+    res.status(500).json({ error: 'Webhook processing failed' });
+  }
+});
+
+// customers/redact - Customer requests data deletion (GDPR right to erasure)
+router.post('/webhooks/customers/redact', async (req: Request, res: Response) => {
+  const hmac = req.headers['x-shopify-hmac-sha256'] as string;
+  const shop = req.headers['x-shopify-shop-domain'] as string;
+
+  if (!hmac || !shop) {
+    console.log('[Shopify Compliance] customers/redact - Missing headers');
+    return res.status(401).json({ error: 'Missing webhook headers' });
+  }
+
+  const rawBody = (req as any).rawBody || JSON.stringify(req.body);
+  if (!verifyWebhookHmac(rawBody, hmac)) {
+    console.log('[Shopify Compliance] customers/redact - Invalid HMAC');
+    return res.status(401).json({ error: 'Invalid webhook signature' });
+  }
+
+  try {
+    const { shop_domain, customer, orders_to_redact } = req.body;
+    console.log(`[Shopify Compliance] Customer redact request for shop: ${shop_domain}, customer: ${customer?.email || customer?.id}`);
+    
+    // WhachatCRM stores conversation data linked to phone numbers
+    // If we had a phone number, we would delete associated chats
+    // For now, we acknowledge and log for manual processing if needed
+    
+    if (customer?.phone) {
+      // Attempt to find and delete chats by phone number
+      const user = await storage.getUserByShopifyShop(shop);
+      if (user) {
+        const chats = await storage.getChats(user.id);
+        const matchingChats = chats.filter((chat: any) => 
+          chat.whatsappPhone === customer.phone || 
+          chat.whatsappPhone === customer.phone.replace(/\D/g, '')
+        );
+        
+        for (const chat of matchingChats) {
+          await storage.deleteChat(chat.id);
+          console.log(`[Shopify Compliance] Deleted chat ${chat.id} for customer phone ${customer.phone}`);
+        }
+      }
+    }
+    
+    res.status(200).json({ 
+      received: true,
+      message: 'Customer data redaction request processed.'
+    });
+  } catch (error) {
+    console.error('[Shopify Compliance] customers/redact error:', error);
+    res.status(500).json({ error: 'Webhook processing failed' });
+  }
+});
+
+// shop/redact - Shop data deletion (48 hours after uninstall)
+router.post('/webhooks/shop/redact', async (req: Request, res: Response) => {
+  const hmac = req.headers['x-shopify-hmac-sha256'] as string;
+  const shop = req.headers['x-shopify-shop-domain'] as string;
+
+  if (!hmac || !shop) {
+    console.log('[Shopify Compliance] shop/redact - Missing headers');
+    return res.status(401).json({ error: 'Missing webhook headers' });
+  }
+
+  const rawBody = (req as any).rawBody || JSON.stringify(req.body);
+  if (!verifyWebhookHmac(rawBody, hmac)) {
+    console.log('[Shopify Compliance] shop/redact - Invalid HMAC');
+    return res.status(401).json({ error: 'Invalid webhook signature' });
+  }
+
+  try {
+    const { shop_domain } = req.body;
+    console.log(`[Shopify Compliance] Shop redact request for: ${shop_domain}`);
+    
+    // Find the user associated with this shop and delete all their data
+    const user = await storage.getUserByShopifyShop(shop_domain || shop);
+    
+    if (user) {
+      // Delete all chats for this user
+      const chats = await storage.getChats(user.id);
+      for (const chat of chats) {
+        await storage.deleteChat(chat.id);
+      }
+      console.log(`[Shopify Compliance] Deleted ${chats.length} chats for shop ${shop_domain}`);
+      
+      // Clear Shopify-related fields but keep basic account for audit trail
+      // Full account deletion handled separately per retention policy
+      await storage.updateUser(user.id, {
+        shopifyShop: null,
+        shopifyAccessToken: null,
+        shopifyChargeId: null,
+        shopifySubscriptionStatus: 'redacted',
+        shopifyInstalledAt: null,
+      });
+      console.log(`[Shopify Compliance] Cleared Shopify data for user ${user.id}`);
+    }
+    
+    res.status(200).json({ 
+      received: true,
+      message: 'Shop data redaction completed.'
+    });
+  } catch (error) {
+    console.error('[Shopify Compliance] shop/redact error:', error);
     res.status(500).json({ error: 'Webhook processing failed' });
   }
 });

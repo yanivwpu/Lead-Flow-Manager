@@ -352,3 +352,70 @@ export async function exchangeShopifyCode(
     return null;
   }
 }
+
+export async function registerMandatoryWebhooks(
+  shop: string,
+  accessToken: string
+): Promise<boolean> {
+  const shopify = getShopifyApi();
+  if (!shopify) return false;
+
+  const webhookEndpoints = [
+    { topic: 'CUSTOMERS_DATA_REQUEST', address: `${HOST}/api/shopify/webhooks/customers/data_request` },
+    { topic: 'CUSTOMERS_REDACT', address: `${HOST}/api/shopify/webhooks/customers/redact` },
+    { topic: 'SHOP_REDACT', address: `${HOST}/api/shopify/webhooks/shop/redact` },
+    { topic: 'APP_UNINSTALLED', address: `${HOST}/api/shopify/webhooks/app-uninstalled` },
+  ];
+
+  try {
+    const client = new shopify.clients.Graphql({
+      session: { shop, accessToken } as Session,
+    });
+
+    for (const webhook of webhookEndpoints) {
+      try {
+        const response = await client.request(`
+          mutation webhookSubscriptionCreate($topic: WebhookSubscriptionTopic!, $webhookSubscription: WebhookSubscriptionInput!) {
+            webhookSubscriptionCreate(topic: $topic, webhookSubscription: $webhookSubscription) {
+              webhookSubscription {
+                id
+                topic
+                endpoint {
+                  ... on WebhookHttpEndpoint {
+                    callbackUrl
+                  }
+                }
+              }
+              userErrors {
+                field
+                message
+              }
+            }
+          }
+        `, {
+          variables: {
+            topic: webhook.topic,
+            webhookSubscription: {
+              callbackUrl: webhook.address,
+              format: 'JSON',
+            },
+          },
+        });
+
+        const data = response.data as any;
+        if (data?.webhookSubscriptionCreate?.userErrors?.length > 0) {
+          console.warn(`[Shopify Webhooks] Warning for ${webhook.topic}:`, data.webhookSubscriptionCreate.userErrors);
+        } else {
+          console.log(`[Shopify Webhooks] Registered ${webhook.topic} webhook`);
+        }
+      } catch (webhookError) {
+        console.error(`[Shopify Webhooks] Failed to register ${webhook.topic}:`, webhookError);
+      }
+    }
+
+    return true;
+  } catch (error) {
+    console.error('[Shopify Webhooks] Failed to register webhooks:', error);
+    return false;
+  }
+}
