@@ -67,9 +67,12 @@ export function PrivacyPolicy() {
             <li><strong>WhatsApp:</strong> Message delivery through the official WhatsApp Business API via your chosen provider (Twilio or Meta).</li>
           </ul>
 
-          <h2 className="text-xl font-bold text-gray-900 mt-8 mb-4">6. Data Sharing</h2>
+          <h2 className="text-xl font-bold text-gray-900 mt-8 mb-4">6. Data Sharing & Sales</h2>
           <p className="text-gray-600 mb-4">
-            We do not sell your personal information. We may share data with:
+            <strong>We do not sell your personal information.</strong> We respect and apply our customers' decisions to opt-out of any potential data selling. As of our current operations, we do not engage in the sale of personal data as defined by applicable privacy laws.
+          </p>
+          <p className="text-gray-600 mb-4">
+            We may share data with the following categories of recipients:
           </p>
           <ul className="list-disc list-inside text-gray-600 mb-4 space-y-2">
             <li><strong>Your WhatsApp Provider:</strong> To facilitate message delivery using your Twilio or Meta credentials</li>
