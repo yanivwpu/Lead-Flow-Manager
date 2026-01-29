@@ -92,8 +92,14 @@ export function PrivacyPolicy() {
 
           <h2 className="text-xl font-bold text-gray-900 mt-8 mb-4">8. Data Retention</h2>
           <p className="text-gray-600 mb-4">
-            We retain your data for as long as your account is active or as needed to provide services. Upon account deletion, we will delete your data within 30 days, except where retention is required by law.
+            We have established clear retention periods to ensure personal data is not kept longer than necessary for the purposes for which it was collected:
           </p>
+          <ul className="list-disc list-inside text-gray-600 mb-4 space-y-2">
+            <li><strong>Active Accounts:</strong> We retain your data for as long as your account remains active to provide you with continuous CRM services.</li>
+            <li><strong>Account Deletion:</strong> Upon your request to delete your account, all associated personal data, including contact information and synced messages, is permanently deleted from our active databases within 30 days.</li>
+            <li><strong>Provider Credentials:</strong> Encrypted credentials (Twilio/Meta) are immediately purged upon account deletion or when you disconnect the integration.</li>
+            <li><strong>Legal Requirements:</strong> We may retain certain minimal information (such as transaction records) for longer periods only when strictly required by law or for legitimate financial auditing purposes.</li>
+          </ul>
 
           <h2 className="text-xl font-bold text-gray-900 mt-8 mb-4">9. Cookies</h2>
           <p className="text-gray-600 mb-4">
