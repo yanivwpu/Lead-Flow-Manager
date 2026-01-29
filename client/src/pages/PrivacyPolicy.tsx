@@ -52,6 +52,8 @@ export function PrivacyPolicy() {
             <li><strong>Backups:</strong> We perform regular automated backups of our databases. All backup files are encrypted at rest and stored in geographically redundant locations to prevent data loss.</li>
             <li><strong>Access Logging:</strong> We maintain detailed audit logs of all access to personal data. This includes logging who accessed the data, when, and what actions were performed, allowing for complete transparency and accountability.</li>
             <li><strong>Incident Response:</strong> We have a documented Security Incident Response Policy. In the event of a suspected data breach, our team follows a structured process to identify, contain, and remediate the issue, including notifying affected users and relevant authorities as required by law.</li>
+            <li><strong>Compliance Webhooks:</strong> In accordance with Shopify's requirements, we provide mandatory privacy webhooks (customers/redact, customers/data_request, shop/redact) to ensure merchant and customer data rights are respected.</li>
+            <li><strong>Webhook Verification:</strong> All incoming webhooks from Shopify are verified using HMAC SHA256 signatures to ensure authenticity and integrity.</li>
             <li><strong>Data Loss Prevention:</strong> We employ multi-layered security including password hashing (bcrypt), secure session management, and automated monitoring to detect and prevent unauthorized data access or exfiltration.</li>
             <li><strong>Access Control:</strong> Strict internal access controls ensure that only authorized systems and personnel can interact with data processing environments.</li>
           </ul>
