@@ -935,23 +935,27 @@ export function Chats() {
                       <p>No messages yet. Start the conversation!</p>
                     </div>
                   ) : (
-                    (selectedChat.messages || [])
-                      .filter((msg: any) => {
+                    ((selectedChat.messages || []) as any[])
+                      .filter((msg) => {
                         const msgText = msg.text || msg.content || '';
                         return !conversationSearch || 
                           msgText.toLowerCase().includes(conversationSearch.toLowerCase());
                       })
-                      .map((msg: any, index: number) => {
+                      .map((msg, index: number) => {
                         const msgText = msg.text || msg.content || '';
                         const isFromMe = msg.sender === 'me' || msg.role === 'assistant';
                         
                         const highlightText = (text: string): React.ReactNode => {
                           if (!conversationSearch || !text) return text;
                           const parts = text.split(new RegExp(`(${conversationSearch})`, 'gi'));
-                          return parts.map((part, i) => 
-                            part.toLowerCase() === conversationSearch.toLowerCase() 
-                              ? <mark key={i} className="bg-yellow-300 text-gray-900 px-0.5 rounded">{part}</mark>
-                              : part
+                          return (
+                            <>
+                              {parts.map((part, i) => 
+                                part.toLowerCase() === conversationSearch.toLowerCase() 
+                                  ? <mark key={i} className="bg-yellow-300 text-gray-900 px-0.5 rounded">{part}</mark>
+                                  : <span key={i}>{part}</span>
+                              )}
+                            </>
                           );
                         };
                         
