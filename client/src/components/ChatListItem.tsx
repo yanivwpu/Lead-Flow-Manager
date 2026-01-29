@@ -72,7 +72,10 @@ export function ChatListItem({ chat, isActive }: ChatListItemProps) {
           </div>
           
           <div className="flex flex-wrap gap-1 mt-1">
-            <span className={cn("text-[9px] px-1.5 py-0.5 rounded border font-medium", TAG_COLORS[chat.tag] || "bg-gray-50 text-gray-600 border-gray-200")}>
+            <span className={cn(
+              "text-[9px] px-1.5 py-0.5 rounded border font-medium", 
+              TAG_COLORS[chat.tag] || "bg-blue-100 text-blue-700 border-blue-200"
+            )}>
               {chat.tag}
             </span>
             <span className="text-[9px] px-1.5 py-0.5 rounded border bg-blue-50 text-blue-600 border-blue-100 font-medium">
