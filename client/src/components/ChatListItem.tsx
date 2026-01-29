@@ -29,6 +29,9 @@ export function ChatListItem({ chat, isActive }: ChatListItemProps) {
     : null;
   const isLastMessageFromMe = lastMessage?.sender === 'me';
 
+  // Debug: Log the avatar source
+  // console.log(`Avatar for ${chat.name}:`, chat.avatar);
+
   return (
     <Link href={`/app/chats/${chat.id}`}>
       <div
