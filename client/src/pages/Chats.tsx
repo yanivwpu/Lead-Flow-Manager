@@ -796,6 +796,7 @@ export function Chats() {
       {selectedChat ? (
         <div className={cn(
           "flex-1 flex flex-col md:flex-row h-full min-w-0 bg-[#efeae2] overflow-hidden",
+          selectedChatId ? "flex" : "hidden md:flex",
           demoMode && "pt-10"
         )}>
            {/* Chat Conversation Area */}

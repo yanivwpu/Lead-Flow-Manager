@@ -256,7 +256,11 @@ export function UnifiedInbox() {
 
   return (
     <div className="flex h-full bg-white" data-testid="unified-inbox">
-      <div className="w-80 border-r flex flex-col">
+      {/* Contact List - Hidden on mobile when a contact is selected */}
+      <div className={cn(
+        "w-full md:w-80 border-r flex flex-col",
+        selectedContactId ? "hidden md:flex" : "flex"
+      )}>
         <div className="p-4 border-b">
           <div className="flex items-center gap-2 mb-3">
             <h2 className="text-lg font-semibold flex-1">Inbox</h2>
@@ -385,10 +389,22 @@ export function UnifiedInbox() {
         </div>
       </div>
 
-      <div className="flex-1 flex flex-col">
+      {/* Conversation Panel - Full width on mobile */}
+      <div className={cn(
+        "flex-1 flex flex-col",
+        selectedContactId ? "flex" : "hidden md:flex"
+      )}>
         {selectedContactId && contactData?.contact ? (
           <>
-            <div className="p-4 border-b flex items-center gap-3">
+            <div className="p-3 md:p-4 border-b flex items-center gap-2 md:gap-3">
+              {/* Back button for mobile */}
+              <button
+                onClick={() => setLocation('/app/inbox')}
+                className="md:hidden p-1 -ml-1 text-gray-600"
+                data-testid="button-back-inbox"
+              >
+                <ChevronDown className="w-5 h-5 rotate-90" />
+              </button>
               <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary/20 to-primary/40 flex items-center justify-center">
                 <span className="text-sm font-medium text-primary">
                   {contactData.contact.name.charAt(0).toUpperCase()}

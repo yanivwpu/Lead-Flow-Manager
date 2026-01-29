@@ -23,17 +23,17 @@ export function Sidebar() {
   ];
 
   return (
-    <div className="h-full w-[60px] md:w-[200px] bg-white border-r flex flex-col items-center md:items-stretch py-3 z-20">
-      <div className="mb-4 px-0 md:px-6 flex items-center justify-center md:justify-start">
+    <div className="hidden md:flex h-full w-[200px] bg-white border-r flex-col items-stretch py-3 z-20">
+      <div className="mb-4 px-6 flex items-center justify-start">
         <div className="h-8 w-8 rounded-full bg-brand-green flex items-center justify-center text-white font-bold shrink-0">
           C
         </div>
-        <span className="ml-3 font-display font-bold text-xl hidden md:block text-brand-teal">
+        <span className="ml-3 font-display font-bold text-xl text-brand-teal">
           ChatCRM
         </span>
       </div>
 
-      <nav className="flex-1 flex flex-col gap-1 px-2 md:px-4 overflow-y-auto">
+      <nav className="flex-1 flex flex-col gap-1 px-4 overflow-y-auto">
         {navItems.map((item) => {
           const isActive = location.startsWith(item.href);
           return (
@@ -41,7 +41,7 @@ export function Sidebar() {
               <a
                 data-testid={item.testId}
                 className={cn(
-                  "flex items-center p-2 rounded-lg transition-colors group relative md:w-full justify-center md:justify-start",
+                  "flex items-center p-2 rounded-lg transition-colors group relative w-full justify-start",
                   isActive
                     ? "bg-emerald-50 text-brand-green"
                     : "text-gray-500 hover:bg-gray-50 hover:text-gray-900"
@@ -53,19 +53,16 @@ export function Sidebar() {
                     isActive ? "text-brand-green" : "text-gray-400 group-hover:text-gray-600"
                   )}
                 />
-                <span className="ml-3 font-medium hidden md:block">{item.label}</span>
-                {isActive && (
-                  <div className="absolute left-0 top-1.5 bottom-1.5 w-1 bg-brand-green rounded-r-full md:hidden" />
-                )}
+                <span className="ml-3 font-medium">{item.label}</span>
               </a>
             </Link>
           );
         })}
       </nav>
 
-      <div className="mt-auto pt-3 px-2 md:px-4 border-t">
+      <div className="mt-auto pt-3 px-4 border-t">
         {user && (
-          <div className="mb-1 px-2 hidden md:block">
+          <div className="mb-1 px-2">
             <div className="text-[10px] font-medium text-gray-400">Signed in as</div>
             <div className="text-xs font-medium text-gray-700 truncate">{user.name}</div>
           </div>
@@ -73,10 +70,10 @@ export function Sidebar() {
         <button 
           onClick={logout}
           data-testid="button-logout"
-          className="w-full flex items-center p-2 rounded-lg text-gray-500 hover:bg-red-50 hover:text-red-600 transition-colors justify-center md:justify-start"
+          className="w-full flex items-center p-2 rounded-lg text-gray-500 hover:bg-red-50 hover:text-red-600 transition-colors justify-start"
         >
           <LogOut className="h-5 w-5 shrink-0" />
-          <span className="ml-3 font-medium hidden md:block">Logout</span>
+          <span className="ml-3 font-medium">Logout</span>
         </button>
       </div>
     </div>

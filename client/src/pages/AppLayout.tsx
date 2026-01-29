@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Switch, Route } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Sidebar } from "@/components/Sidebar";
+import { MobileNav } from "@/components/MobileNav";
 import { Chats } from "./Chats";
 import { FollowUps } from "./FollowUps";
 import { Search } from "./Search";
@@ -45,7 +46,7 @@ function AppContent() {
   return (
     <div className="fixed inset-0 flex bg-gray-50 overflow-hidden">
       <Sidebar />
-      <main className="flex-1 flex flex-col min-w-0 bg-white md:mx-3 md:rounded-2xl md:shadow-sm border-gray-200 md:border overflow-hidden relative">
+      <main className="flex-1 flex flex-col min-w-0 bg-white md:mx-3 md:rounded-2xl md:shadow-sm border-gray-200 md:border overflow-hidden relative pb-14 md:pb-0">
         {showTrialBanner && subscription?.limits && (
           <TrialBanner
             daysRemaining={subscription.limits.trialDaysRemaining}
@@ -83,6 +84,7 @@ function AppContent() {
         isOpen={showOnboarding} 
         onComplete={() => setShowOnboarding(false)} 
       />
+      <MobileNav />
     </div>
   );
 }
