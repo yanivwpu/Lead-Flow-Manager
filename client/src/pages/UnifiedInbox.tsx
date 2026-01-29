@@ -44,6 +44,7 @@ import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { format, formatDistanceToNow } from "date-fns";
 import { ChatAvatar } from "@/components/ChatAvatar";
+import { TAG_COLORS } from "@/lib/data";
 
 type Channel = 'whatsapp' | 'instagram' | 'facebook' | 'sms' | 'webchat' | 'telegram' | 'tiktok';
 
@@ -102,14 +103,6 @@ const CHANNEL_CONFIG: Record<Channel, { icon: any; color: string; label: string 
   tiktok: { icon: Video, color: '#000000', label: 'TikTok' },
 };
 
-const TAG_COLORS: Record<string, string> = {
-  'New': 'bg-blue-100 text-blue-700',
-  'Hot': 'bg-red-100 text-red-700',
-  'Warm': 'bg-orange-100 text-orange-700',
-  'Cold': 'bg-slate-100 text-slate-700',
-  'VIP': 'bg-purple-100 text-purple-700',
-  'Closed': 'bg-gray-100 text-gray-700',
-};
 
 export function UnifiedInbox() {
   const [match, params] = useRoute("/app/inbox/:contactId");
