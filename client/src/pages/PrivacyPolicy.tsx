@@ -44,13 +44,14 @@ export function PrivacyPolicy() {
 
           <h2 className="text-xl font-bold text-gray-900 mt-8 mb-4">4. Data Security</h2>
           <p className="text-gray-600 mb-4">
-            We implement industry-standard security measures to protect your data, including:
+            We implement industry-standard security measures and a robust data loss prevention strategy to protect your information:
           </p>
           <ul className="list-disc list-inside text-gray-600 mb-4 space-y-2">
-            <li>Encryption of provider credentials (Twilio and Meta) at rest using AES-256-GCM</li>
-            <li>Secure HTTPS connections for all data transmission</li>
-            <li>Password hashing using bcrypt</li>
-            <li>Regular security audits</li>
+            <li><strong>Data in Transit:</strong> All data transmitted between your browser, our servers, and third-party providers is encrypted using modern TLS (HTTPS) protocols.</li>
+            <li><strong>Data at Rest:</strong> Sensitive information, including your WhatsApp provider credentials, is encrypted at rest using AES-256-GCM. Our primary databases also utilize full-disk encryption.</li>
+            <li><strong>Backups:</strong> We perform regular automated backups of our databases. All backup files are encrypted at rest and stored in geographically redundant locations to prevent data loss.</li>
+            <li><strong>Data Loss Prevention:</strong> We employ multi-layered security including password hashing (bcrypt), secure session management, and automated monitoring to detect and prevent unauthorized data access or exfiltration.</li>
+            <li><strong>Access Control:</strong> Strict internal access controls ensure that only authorized systems and personnel can interact with data processing environments.</li>
           </ul>
           <p className="text-gray-600 mb-4">
             However, no method of transmission over the Internet is 100% secure.
