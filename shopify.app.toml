@@ -1,0 +1,21 @@
+# WhachatCRM Shopify App Configuration
+# Deploy this configuration using: shopify app deploy
+
+name = "WhachatCRM"
+client_id = "a458fd4da143c4e0c3e49a22de971a876"
+application_url = "https://whachatcrm.com"
+embedded = true
+
+[access_scopes]
+scopes = "read_products,read_orders,read_customers"
+
+[auth]
+redirect_urls = ["https://whachatcrm.com/api/shopify/callback"]
+
+[webhooks]
+api_version = "2026-01"
+
+[webhooks.privacy_compliance]
+customer_deletion_url = "https://whachatcrm.com/api/shopify/webhooks/customers/redact"
+customer_data_request_url = "https://whachatcrm.com/api/shopify/webhooks/customers/data_request"
+shop_deletion_url = "https://whachatcrm.com/api/shopify/webhooks/shop/redact"
