@@ -50,6 +50,8 @@ export function PrivacyPolicy() {
             <li><strong>Data in Transit:</strong> All data transmitted between your browser, our servers, and third-party providers is encrypted using modern TLS (HTTPS) protocols.</li>
             <li><strong>Data at Rest:</strong> Sensitive information, including your WhatsApp provider credentials, is encrypted at rest using AES-256-GCM. Our primary databases also utilize full-disk encryption.</li>
             <li><strong>Backups:</strong> We perform regular automated backups of our databases. All backup files are encrypted at rest and stored in geographically redundant locations to prevent data loss.</li>
+            <li><strong>Access Logging:</strong> We maintain detailed audit logs of all access to personal data. This includes logging who accessed the data, when, and what actions were performed, allowing for complete transparency and accountability.</li>
+            <li><strong>Incident Response:</strong> We have a documented Security Incident Response Policy. In the event of a suspected data breach, our team follows a structured process to identify, contain, and remediate the issue, including notifying affected users and relevant authorities as required by law.</li>
             <li><strong>Data Loss Prevention:</strong> We employ multi-layered security including password hashing (bcrypt), secure session management, and automated monitoring to detect and prevent unauthorized data access or exfiltration.</li>
             <li><strong>Access Control:</strong> Strict internal access controls ensure that only authorized systems and personnel can interact with data processing environments.</li>
           </ul>
