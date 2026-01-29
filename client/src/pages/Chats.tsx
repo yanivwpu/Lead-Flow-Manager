@@ -1183,10 +1183,16 @@ export function Chats() {
            </div>
 
            {/* Mobile Lead Details Panel - Compact version for mobile */}
-           <div className="flex md:hidden bg-white border-t border-gray-200 overflow-y-auto max-h-[180px] shrink-0 flex-col">
-              <div className="p-3 space-y-3">
+           <div 
+             className="flex md:hidden bg-white border-t border-gray-200 overflow-y-auto max-h-[180px] shrink-0 flex-col"
+             data-testid="panel-lead-details-mobile"
+           >
+              <div className="p-3 space-y-3 bg-brand-green/5">
                  <div className="flex items-center justify-between">
-                   <h3 className="font-display font-bold text-gray-900 text-sm">Lead Details</h3>
+                   <div className="flex items-center gap-2">
+                     <UserCheck className="h-4 w-4 text-brand-green" />
+                     <h3 className="font-display font-bold text-gray-900 text-sm">Lead Details</h3>
+                   </div>
                    <span className={cn("text-xs px-2 py-0.5 rounded-full", TAG_COLORS[selectedChat.tag as keyof typeof TAG_COLORS] || "bg-gray-100 text-gray-600")}>
                      {selectedChat.tag || 'New'}
                    </span>
@@ -1284,9 +1290,15 @@ export function Chats() {
            </div>
 
            {/* Desktop CRM Sidebar Panel */}
-           <div className="hidden md:flex w-[320px] bg-white border-l border-gray-200 overflow-y-auto shrink-0 flex-col shadow-xl md:shadow-none z-10">
-              <div className="p-5 border-b border-gray-100">
-                 <h3 className="font-display font-bold text-gray-900 mb-4">Lead Details</h3>
+           <div 
+             className="hidden md:flex w-[320px] bg-white border-l border-gray-200 overflow-y-auto shrink-0 flex-col shadow-xl md:shadow-none z-10"
+             data-testid="panel-lead-details"
+           >
+              <div className="p-5 border-b border-gray-100 bg-brand-green/5">
+                 <div className="flex items-center gap-2 mb-4">
+                   <UserCheck className="h-5 w-5 text-brand-green" />
+                   <h3 className="font-display font-bold text-gray-900">Lead Details</h3>
+                 </div>
                  
                  <div className="mb-6">
                    <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 block">Pipeline Stage</label>
