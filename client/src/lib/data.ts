@@ -124,10 +124,12 @@ export const TAG_COLORS: Record<string, string> = {
   'Warm': 'bg-purple-100 text-purple-700 border-purple-200',
   'Warm Lead': 'bg-purple-100 text-purple-700 border-purple-200',
   'Quoted': 'bg-amber-100 text-amber-700 border-amber-200',
-  'Paid': 'bg-emerald-100 text-emerald-700 border-green-200',
+  'Paid': 'bg-emerald-100 text-emerald-700 border-emerald-200',
   'Waiting': 'bg-slate-100 text-slate-700 border-slate-200',
   'Lost': 'bg-gray-100 text-gray-700 border-gray-200',
   'Investor': 'bg-cyan-100 text-cyan-700 border-cyan-200',
+  'Customer': 'bg-green-100 text-green-700 border-green-200',
+  'VIP': 'bg-amber-100 text-amber-700 border-amber-200',
 };
 
 export const PIPELINE_STAGES = ['Lead', 'Contacted', 'Proposal', 'Negotiation', 'Closed'];

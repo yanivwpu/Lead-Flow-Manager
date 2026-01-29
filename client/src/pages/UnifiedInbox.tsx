@@ -370,18 +370,17 @@ export function UnifiedInbox() {
                       {item.lastMessage || "No messages yet"}
                     </p>
                     <div className="flex flex-wrap items-center gap-1.5 mt-1">
-                      <Badge 
-                        variant="secondary" 
-                        className={cn("text-xs", TAG_COLORS[item.contact.tag] || TAG_COLORS['New'])}
+                      <span 
+                        className={cn(
+                          "text-xs px-2 py-0.5 rounded-full font-medium border",
+                          TAG_COLORS[item.contact.tag] || 'bg-blue-100 text-blue-700 border-blue-200'
+                        )}
                       >
                         {item.contact.tag}
-                      </Badge>
-                      <Badge 
-                        variant="outline" 
-                        className="text-xs bg-blue-50 text-blue-600 border-blue-200"
-                      >
+                      </span>
+                      <span className="text-xs px-2 py-0.5 rounded-full font-medium border bg-slate-100 text-slate-600 border-slate-200">
                         {item.contact.pipelineStage}
-                      </Badge>
+                      </span>
                       <span className="text-xs text-muted-foreground ml-auto">
                         {formatTime(item.lastMessageAt)}
                       </span>
