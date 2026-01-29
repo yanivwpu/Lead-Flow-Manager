@@ -43,6 +43,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { format, formatDistanceToNow } from "date-fns";
+import { ChatAvatar } from "@/components/ChatAvatar";
 
 type Channel = 'whatsapp' | 'instagram' | 'facebook' | 'sms' | 'webchat' | 'telegram' | 'tiktok';
 
@@ -352,10 +353,8 @@ export function UnifiedInbox() {
                 data-testid={`inbox-item-${item.contact.id}`}
               >
                 <div className="flex items-start gap-3">
-                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary/20 to-primary/40 flex items-center justify-center flex-shrink-0">
-                    <span className="text-sm font-medium text-primary">
-                      {item.contact.name.charAt(0).toUpperCase()}
-                    </span>
+                  <div className="relative flex-shrink-0">
+                    <ChatAvatar src={item.contact.avatar} name={item.contact.name} size="md" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
@@ -370,14 +369,20 @@ export function UnifiedInbox() {
                     <p className="text-sm text-muted-foreground truncate">
                       {item.lastMessage || "No messages yet"}
                     </p>
-                    <div className="flex items-center gap-2 mt-1">
+                    <div className="flex flex-wrap items-center gap-1.5 mt-1">
                       <Badge 
                         variant="secondary" 
                         className={cn("text-xs", TAG_COLORS[item.contact.tag] || TAG_COLORS['New'])}
                       >
                         {item.contact.tag}
                       </Badge>
-                      <span className="text-xs text-muted-foreground">
+                      <Badge 
+                        variant="outline" 
+                        className="text-xs bg-blue-50 text-blue-600 border-blue-200"
+                      >
+                        {item.contact.pipelineStage}
+                      </Badge>
+                      <span className="text-xs text-muted-foreground ml-auto">
                         {formatTime(item.lastMessageAt)}
                       </span>
                     </div>
@@ -405,11 +410,7 @@ export function UnifiedInbox() {
               >
                 <ChevronDown className="w-5 h-5 rotate-90" />
               </button>
-              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary/20 to-primary/40 flex items-center justify-center">
-                <span className="text-sm font-medium text-primary">
-                  {contactData.contact.name.charAt(0).toUpperCase()}
-                </span>
-              </div>
+              <ChatAvatar src={contactData.contact.avatar} name={contactData.contact.name} size="md" />
               <div className="flex-1">
                 <div className="flex items-center gap-2">
                   <h3 className="font-semibold">{contactData.contact.name}</h3>
