@@ -597,8 +597,9 @@ export function UnifiedInbox() {
             </div>
 
             <div className="p-4 border-t bg-white">
-              {/* Meta 24-hour window warning */}
-              {windowStatus?.hasRestriction && !windowStatus?.isActive && (
+              {/* Meta 24-hour window warning - only show if the current channel matches the restricted channel */}
+              {windowStatus?.hasRestriction && !windowStatus?.isActive && 
+               windowStatus.channel === (contactData?.contact?.primaryChannelOverride || contactData?.contact?.primaryChannel) && (
                 <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2">
                   <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
                   <div>
@@ -610,7 +611,8 @@ export function UnifiedInbox() {
                   </div>
                 </div>
               )}
-              {windowStatus?.hasRestriction && windowStatus?.isExpiringSoon && windowStatus?.isActive && (
+              {windowStatus?.hasRestriction && windowStatus?.isExpiringSoon && windowStatus?.isActive && 
+               windowStatus.channel === (contactData?.contact?.primaryChannelOverride || contactData?.contact?.primaryChannel) && (
                 <div className="mb-3 p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-2">
                   <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
                   <div>
@@ -624,7 +626,8 @@ export function UnifiedInbox() {
               )}
               <div className="flex items-center gap-2">
                 <Textarea
-                  placeholder={windowStatus?.hasRestriction && !windowStatus?.isActive 
+                  placeholder={(windowStatus?.hasRestriction && !windowStatus?.isActive && 
+                    windowStatus.channel === (contactData?.contact?.primaryChannelOverride || contactData?.contact?.primaryChannel))
                     ? "Cannot send - messaging window expired" 
                     : "Type a message..."}
                   className="min-h-[44px] max-h-32 resize-none"
@@ -636,7 +639,8 @@ export function UnifiedInbox() {
                       handleSendMessage();
                     }
                   }}
-                  disabled={windowStatus?.hasRestriction && !windowStatus?.isActive}
+                  disabled={windowStatus?.hasRestriction && !windowStatus?.isActive && 
+                    windowStatus.channel === (contactData?.contact?.primaryChannelOverride || contactData?.contact?.primaryChannel)}
                   data-testid="input-message"
                 />
                 
@@ -659,7 +663,9 @@ export function UnifiedInbox() {
 
                 <Button
                   onClick={handleSendMessage}
-                  disabled={!messageInput.trim() || sendMessageMutation.isPending || (windowStatus?.hasRestriction && !windowStatus?.isActive)}
+                  disabled={!messageInput.trim() || sendMessageMutation.isPending || 
+                    (windowStatus?.hasRestriction && !windowStatus?.isActive && 
+                     windowStatus.channel === (contactData?.contact?.primaryChannelOverride || contactData?.contact?.primaryChannel))}
                   data-testid="button-send-message"
                 >
                   {sendMessageMutation.isPending ? (
@@ -672,7 +678,8 @@ export function UnifiedInbox() {
               <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
                 {getChannelIcon(contactData.contact.primaryChannelOverride as Channel || contactData.contact.primaryChannel)}
                 Sending via {CHANNEL_CONFIG[contactData.contact.primaryChannelOverride as Channel || contactData.contact.primaryChannel]?.label}
-                {windowStatus?.hasRestriction && windowStatus?.isActive && windowStatus?.hoursRemaining && (
+                {windowStatus?.hasRestriction && windowStatus?.isActive && windowStatus?.hoursRemaining && 
+                 windowStatus.channel === (contactData?.contact?.primaryChannelOverride || contactData?.contact?.primaryChannel) && (
                   <span className="ml-2 text-amber-600">
                     ({Math.round(windowStatus.hoursRemaining)}h window remaining)
                   </span>
