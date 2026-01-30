@@ -1,8 +1,9 @@
 # WhachatCRM Shopify App Configuration
 # Deploy this configuration using: shopify app deploy
+# Note: client_id should be set via SHOPIFY_API_KEY environment variable
 
 name = "WhachatCRM"
-client_id = "a458fd4da143c4e0c3e49a22de971a876"
+# client_id is managed by Shopify CLI from environment
 application_url = "https://whachatcrm.com"
 embedded = false
 

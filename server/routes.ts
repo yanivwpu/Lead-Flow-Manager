@@ -4818,14 +4818,16 @@ export async function registerRoutes(
         return res.status(403).json({ error: access.reason, needsUpgrade: true });
       }
       
-      // Validate allowed fields
-      const allowedFields = ['aiMode', 'businessHoursOnly', 'confidenceLevel', 'leadQualificationEnabled', 'autoTaggingEnabled', 'handoffKeywords', 'aiPersona'];
+      // Validate and extract allowed fields explicitly (no bracket notation)
+      const { aiMode, businessHoursOnly, confidenceLevel, leadQualificationEnabled, autoTaggingEnabled, handoffKeywords, aiPersona } = req.body;
       const updates: Record<string, any> = {};
-      for (const field of allowedFields) {
-        if (req.body[field] !== undefined) {
-          updates[field] = req.body[field];
-        }
-      }
+      if (aiMode !== undefined) updates.aiMode = aiMode;
+      if (businessHoursOnly !== undefined) updates.businessHoursOnly = businessHoursOnly;
+      if (confidenceLevel !== undefined) updates.confidenceLevel = confidenceLevel;
+      if (leadQualificationEnabled !== undefined) updates.leadQualificationEnabled = leadQualificationEnabled;
+      if (autoTaggingEnabled !== undefined) updates.autoTaggingEnabled = autoTaggingEnabled;
+      if (handoffKeywords !== undefined) updates.handoffKeywords = handoffKeywords;
+      if (aiPersona !== undefined) updates.aiPersona = aiPersona;
       
       const settings = await storage.upsertAiSettings(userId, updates);
       res.json(settings);
