@@ -247,9 +247,10 @@ export function UnifiedInbox() {
 
   interface TimelineEvent {
     id: string;
-    type: string;
-    description: string;
-    metadata?: Record<string, unknown>;
+    eventType: string;
+    eventData: Record<string, unknown>;
+    actorType?: string;
+    actorId?: string;
     createdAt: string;
   }
 
@@ -773,8 +774,10 @@ export function UnifiedInbox() {
                   <div key={event.id} className="flex gap-3 p-3 bg-slate-50 rounded-lg" data-testid={`timeline-event-${event.id}`}>
                     <div className="w-2 h-2 mt-2 rounded-full bg-primary flex-shrink-0" />
                     <div className="flex-1">
-                      <p className="text-sm font-medium">{event.type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</p>
-                      <p className="text-sm text-muted-foreground">{event.description}</p>
+                      <p className="text-sm font-medium">{event.eventType.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {(event.eventData as any)?.description || (event.eventData as any)?.message || JSON.stringify(event.eventData)}
+                      </p>
                       <p className="text-xs text-muted-foreground mt-1">
                         {format(new Date(event.createdAt), "MMM d, yyyy 'at' h:mm a")}
                       </p>
