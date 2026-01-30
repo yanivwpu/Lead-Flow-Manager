@@ -6,7 +6,7 @@ import {
   Play, Save, ArrowRight, MessageSquare, GitBranch, 
   Clock, Tag, User, Loader2, AlertCircle, Crown,
   GripVertical, X, ChevronDown, ChevronUp, Keyboard,
-  Send, MousePointer, CheckCircle2
+  Send, MousePointer, CheckCircle2, ChevronLeft
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -342,7 +342,11 @@ export function ChatbotBuilder() {
       </div>
 
       <div className="flex-1 flex overflow-hidden">
-        <div className="w-64 border-r bg-gray-50 overflow-y-auto">
+        {/* Flows List - Hidden on mobile when a flow is selected */}
+        <div className={cn(
+          "w-full md:w-64 border-r bg-gray-50 overflow-y-auto",
+          selectedFlow ? "hidden md:block" : "block"
+        )}>
           <div className="p-3">
             <div className="text-xs font-medium text-gray-500 uppercase mb-2">Your Flows</div>
             {flows.length === 0 ? (
@@ -402,28 +406,33 @@ export function ChatbotBuilder() {
           </div>
         </div>
 
+        {/* Flow Editor - Full width on mobile */}
         {selectedFlow ? (
-          <div className="flex-1 flex flex-col overflow-hidden">
-            <div className="p-3 border-b bg-white flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <div>
-                  <h2 className="font-semibold text-gray-900">{selectedFlow.name}</h2>
-                  {selectedFlow.description && (
-                    <p className="text-xs text-gray-500">{selectedFlow.description}</p>
-                  )}
-                </div>
+          <div className={cn(
+            "flex-1 flex flex-col overflow-hidden min-w-0",
+            selectedFlow ? "flex" : "hidden md:flex"
+          )}>
+            <div className="p-3 border-b bg-white flex items-center gap-2">
+              {/* Back button for mobile */}
+              <button
+                onClick={() => setSelectedFlow(null)}
+                className="md:hidden p-1.5 -ml-1 text-gray-600 hover:bg-gray-100 rounded"
+                data-testid="button-back-flows"
+              >
+                <ChevronLeft className="w-5 h-5" />
+              </button>
+              <div className="flex-1 min-w-0">
+                <h2 className="font-semibold text-gray-900 truncate">{selectedFlow.name}</h2>
                 {unsavedChanges && (
-                  <Badge variant="outline" className="text-amber-600 border-amber-300 bg-amber-50">
-                    Unsaved changes
-                  </Badge>
+                  <span className="text-xs text-amber-600">Unsaved changes</span>
                 )}
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5 flex-shrink-0">
                 <Button
                   variant="outline"
-                  size="sm"
+                  size="icon"
                   onClick={() => deleteFlowMutation.mutate(selectedFlow.id)}
-                  className="text-red-600 hover:bg-red-50"
+                  className="text-red-600 hover:bg-red-50 h-8 w-8"
                   data-testid="button-delete-flow"
                 >
                   <Trash2 className="h-4 w-4" />
@@ -432,48 +441,51 @@ export function ChatbotBuilder() {
                   size="sm"
                   onClick={handleSaveFlow}
                   disabled={!unsavedChanges || updateFlowMutation.isPending}
-                  className="bg-brand-green hover:bg-brand-green/90"
+                  className="bg-brand-green hover:bg-brand-green/90 h-8"
                   data-testid="button-save-flow"
                 >
                   {updateFlowMutation.isPending ? (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    <Loader2 className="h-4 w-4 animate-spin" />
                   ) : (
-                    <Save className="h-4 w-4 mr-2" />
+                    <>
+                      <Save className="h-4 w-4 md:mr-1" />
+                      <span className="hidden md:inline">Save</span>
+                    </>
                   )}
-                  Save
                 </Button>
               </div>
             </div>
 
-            <div className="p-3 border-b bg-gray-50">
-              <div className="text-xs font-medium text-gray-500 mb-2">Add Node</div>
-              <div className="flex flex-wrap gap-2">
+            <div className="p-2 md:p-3 border-b bg-gray-50 overflow-x-auto">
+              <div className="text-xs font-medium text-gray-500 mb-1.5 md:mb-2">Add Node</div>
+              <div className="flex gap-1.5 md:gap-2 md:flex-wrap">
                 {NODE_TYPES.map((nodeType) => (
                   <Button
                     key={nodeType.type}
                     variant="outline"
                     size="sm"
                     onClick={() => addNode(nodeType.type as ChatbotNode['type'])}
-                    className="text-xs"
+                    className="text-xs whitespace-nowrap flex-shrink-0 h-8"
                     data-testid={`add-node-${nodeType.type}`}
                   >
                     <nodeType.icon className="h-3 w-3 mr-1" />
-                    {nodeType.label}
+                    <span className="hidden sm:inline">{nodeType.label}</span>
+                    <span className="sm:hidden">{nodeType.label.split(' ')[0]}</span>
                   </Button>
                 ))}
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-4 bg-gray-100" ref={canvasRef}>
-              <div className="space-y-3 max-w-2xl mx-auto">
+            <div className="flex-1 overflow-y-auto overflow-x-hidden p-3 md:p-4 bg-gray-100" ref={canvasRef}>
+              <div className="space-y-3 max-w-2xl mx-auto w-full">
                 {selectedFlow.nodes.map((node, index) => (
                   <div
                     key={node.id}
                     className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden"
                     data-testid={`node-${node.id}`}
                   >
-                    <div className="flex items-center gap-2 px-4 py-2 bg-gray-50 border-b">
-                      <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1.5 px-2 md:px-4 py-2 bg-gray-50 border-b">
+                      <div className="flex items-center">
                         <button
                           onClick={() => moveNode(node.id, 'up')}
                           disabled={index === 0}
@@ -490,25 +502,25 @@ export function ChatbotBuilder() {
                         </button>
                       </div>
                       
-                      {node.type === 'message' && <MessageSquare className="h-4 w-4 text-blue-500" />}
-                      {node.type === 'question' && <GitBranch className="h-4 w-4 text-purple-500" />}
-                      {node.type === 'delay' && <Clock className="h-4 w-4 text-orange-500" />}
-                      {node.type === 'action' && <Tag className="h-4 w-4 text-green-500" />}
+                      {node.type === 'message' && <MessageSquare className="h-4 w-4 text-blue-500 flex-shrink-0" />}
+                      {node.type === 'question' && <GitBranch className="h-4 w-4 text-purple-500 flex-shrink-0" />}
+                      {node.type === 'delay' && <Clock className="h-4 w-4 text-orange-500 flex-shrink-0" />}
+                      {node.type === 'action' && <Tag className="h-4 w-4 text-green-500 flex-shrink-0" />}
                       
-                      <span className="text-sm font-medium text-gray-700 flex-1">
+                      <span className="text-sm font-medium text-gray-700 flex-1 truncate min-w-0">
                         {node.data.label}
                       </span>
                       
                       <button
                         onClick={() => deleteNode(node.id)}
-                        className="p-1 rounded hover:bg-red-100 text-gray-400 hover:text-red-600"
+                        className="p-1 rounded hover:bg-red-100 text-gray-400 hover:text-red-600 flex-shrink-0"
                         data-testid={`delete-node-${node.id}`}
                       >
                         <X className="h-4 w-4" />
                       </button>
                     </div>
 
-                    <div className="p-4">
+                    <div className="p-3 md:p-4">
                       {node.type === 'message' && (
                         <div>
                           <Label className="text-xs text-gray-500 mb-1 block">Message</Label>
@@ -660,8 +672,8 @@ export function ChatbotBuilder() {
             </div>
 
             <div className="p-3 border-t bg-white">
-              <div className="flex items-center gap-4">
-                <div className="flex-1">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+                <div className="flex-1 min-w-0">
                   <Label className="text-xs text-gray-500 mb-1 block">Trigger Keywords (comma-separated)</Label>
                   <Input
                     value={selectedFlow.triggerKeywords?.join(', ') || ''}
@@ -672,7 +684,7 @@ export function ChatbotBuilder() {
                       });
                       setUnsavedChanges(true);
                     }}
-                    placeholder="e.g., help, info, pricing"
+                    placeholder="e.g., help, info"
                     className="text-sm"
                     data-testid="input-trigger-keywords"
                   />
@@ -692,8 +704,8 @@ export function ChatbotBuilder() {
             </div>
           </div>
         ) : (
-          <div className="flex-1 flex items-center justify-center bg-gray-50">
-            <div className="text-center max-w-sm">
+          <div className="hidden md:flex flex-1 items-center justify-center bg-gray-50">
+            <div className="text-center max-w-sm p-4">
               <Bot className="h-16 w-16 mx-auto text-gray-300 mb-4" />
               <h3 className="font-semibold text-gray-900 mb-2">Select or Create a Flow</h3>
               <p className="text-sm text-gray-500 mb-4">
