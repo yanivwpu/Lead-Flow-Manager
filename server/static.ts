@@ -1,7 +1,7 @@
 import express, { type Express } from "express";
 import fs from "fs";
 import path from "path";
-import { injectSeoMeta } from "./seo";
+import { injectSeoMeta, generateBlogListHtml, generateBlogPostHtml } from "./seo";
 
 export function serveStatic(app: Express) {
   const distPath = path.resolve(__dirname, "public");
@@ -26,21 +26,46 @@ export function serveStatic(app: Express) {
 
   app.use(express.static(distPath));
 
-  // fall through to index.html with SEO meta injection for blog pages
+  // fall through to index.html with SEO meta and content injection for blog pages
   app.use("*", (req, res) => {
     const indexPath = path.resolve(distPath, "index.html");
     const fullUrl = req.originalUrl;
-    // Strip query parameters for SEO matching
     const url = fullUrl.split("?")[0];
     
-    // For blog pages, inject proper SEO meta tags
+    // For blog pages, inject SEO meta tags AND pre-rendered content
     if (url.startsWith("/blog")) {
       fs.readFile(indexPath, "utf-8", (err, html) => {
         if (err) {
           return res.sendFile(indexPath);
         }
-        const enhancedHtml = injectSeoMeta(html, url);
+        
+        // Inject SEO meta tags
+        let enhancedHtml = injectSeoMeta(html, url);
+        
+        // Generate and inject SSR content for blog pages
+        let ssrContent = "";
+        if (url === "/blog" || url === "/blog/") {
+          ssrContent = generateBlogListHtml();
+        } else if (url.startsWith("/blog/")) {
+          const slug = url.replace("/blog/", "").replace(/\/$/, "");
+          const postHtml = generateBlogPostHtml(slug);
+          if (postHtml) {
+            ssrContent = postHtml;
+          }
+        }
+        
+        // Inject SSR content as initial content inside #root
+        // React will replace this when it hydrates, but crawlers will see the content
+        if (ssrContent) {
+          enhancedHtml = enhancedHtml.replace(
+            '<div id="root"></div>',
+            `<div id="root">${ssrContent}</div>`
+          );
+        }
+        
+        // Set cache headers for blog pages
         res.set("Content-Type", "text/html");
+        res.set("Cache-Control", "public, max-age=3600"); // 1 hour cache
         res.send(enhancedHtml);
       });
     } else {

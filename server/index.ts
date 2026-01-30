@@ -1,5 +1,6 @@
 import express, { type Request, Response, NextFunction } from "express";
 import cookieParser from "cookie-parser";
+import compression from "compression";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
@@ -13,6 +14,19 @@ import { registerChannelAdapters } from "./channelAdapters";
 
 const app = express();
 const httpServer = createServer(app);
+
+// Enable gzip compression for all responses
+app.use(compression({
+  filter: (req, res) => {
+    // Don't compress responses for webhooks
+    if (req.path.includes('/webhook')) {
+      return false;
+    }
+    // Use compression for everything else
+    return compression.filter(req, res);
+  },
+  level: 6 // Balanced compression level
+}));
 
 // HTTP to HTTPS redirect for production (required for Google indexing)
 app.use((req, res, next) => {

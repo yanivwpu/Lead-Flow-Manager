@@ -1,4 +1,4 @@
-const CACHE_NAME = 'chatcrm-v3';
+const CACHE_NAME = 'chatcrm-v4';
 const urlsToCache = [
   '/favicon.png',
   '/pwa-icon.png'
@@ -27,8 +27,22 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
+  const url = new URL(event.request.url);
+  
   // Never cache API requests
-  if (event.request.url.includes('/api/')) {
+  if (url.pathname.startsWith('/api/')) {
+    event.respondWith(fetch(event.request));
+    return;
+  }
+  
+  // Never cache blog pages - always fetch fresh for SEO
+  if (url.pathname.startsWith('/blog')) {
+    event.respondWith(fetch(event.request));
+    return;
+  }
+  
+  // Never cache auth routes
+  if (url.pathname.startsWith('/auth')) {
     event.respondWith(fetch(event.request));
     return;
   }

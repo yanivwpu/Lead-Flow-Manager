@@ -1,0 +1,67 @@
+We need to improve SEO and performance for /blog without changing any backend routes, OAuth URLs, webhooks, or Shopify-related endpoints.
+
+IMPORTANT:
+Do NOT modify:
+- /api routes
+- /auth routes
+- /webhooks
+- Shopify install URL
+- OAuth callback URLs
+- Domain configuration
+
+Scope is ONLY the marketing/blog rendering and performance.
+
+Current issue:
+The blog is fully client-side rendered (React SPA). The HTML contains only <div id="root"></div> and loads content via JS. This hurts SEO and causes slow loading and refresh issues.
+
+GOAL:
+Make /blog and /blog/:slug pages pre-rendered so that blog content exists in the initial HTML response (visible in "View Page Source"), without breaking the existing app.
+
+SAFE IMPLEMENTATION PLAN:
+
+1) Add server-side rendering for blog routes only.
+
+If using Express backend:
+- Detect requests to /blog and /blog/:slug
+- Fetch blog data server-side
+- Inject blog HTML into template before sending response
+- Return fully rendered HTML instead of empty root div
+
+If easier:
+- Use a simple server-side template engine (like EJS)
+- Render blog list and blog posts as static HTML
+- Keep React app for all other routes
+
+2) Remove client-side fetch for blog content on initial load.
+Blog data should already exist in HTML.
+
+3) Keep React hydration if needed, but content must already exist in HTML.
+
+4) Disable service worker caching for /blog routes.
+Service worker may be causing stale or blank loads.
+Exclude /blog paths from service worker caching.
+
+5) Optimize JS bundle:
+- Ensure blog does not load full SaaS dashboard bundle.
+- Code-split so blog loads minimal JS.
+- Lazy-load heavy dashboard components.
+
+6) Improve performance basics:
+- Enable gzip or compression middleware.
+- Add proper cache headers for static assets.
+- Ensure TTFB under 500ms.
+
+Validation checklist after implementation:
+
+- Open /blog
+- Right click → View Page Source
+- Confirm blog titles and excerpts exist in raw HTML
+- Confirm page loads without needing refresh
+- Confirm no changes to Shopify app routes
+- Confirm OAuth flow still works
+- Confirm webhooks still respond correctly
+
+Do not restructure the entire app.
+Do not change domain.
+Do not move to subdomain.
+Only improve rendering for marketing/blog routes.
