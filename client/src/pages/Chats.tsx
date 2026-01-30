@@ -30,8 +30,18 @@ import {
   Loader2,
   Sparkles,
   Brain,
-  RefreshCw
+  RefreshCw,
+  Edit,
+  History
 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -120,6 +130,12 @@ export function Chats() {
   const [aiTone, setAiTone] = useState<"neutral" | "friendly" | "professional" | "sales">("neutral");
   const [leadUpdateHint, setLeadUpdateHint] = useState(false);
   
+  // Contact menu state (Edit, Timeline, Delete)
+  const [showEditChat, setShowEditChat] = useState(false);
+  const [showTimeline, setShowTimeline] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [editChatForm, setEditChatForm] = useState({ name: "", whatsappPhone: "" });
+  
   const selectedChatId = match ? params?.id : null;
   const { viewers, setTyping } = usePresence(selectedChatId);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -167,6 +183,21 @@ export function Chats() {
   });
   
   const aiEnabled = isPro && aiSettings && (aiSettings as any).aiMode !== "off";
+  
+  // Timeline interface and query
+  interface TimelineEvent {
+    id: string;
+    eventType: string;
+    eventData: Record<string, unknown>;
+    actorType?: string;
+    actorId?: string;
+    createdAt: string;
+  }
+  
+  const { data: timeline = [] } = useQuery<TimelineEvent[]>({
+    queryKey: ["/api/chats", selectedChatId, "timeline"],
+    enabled: !!selectedChatId && showTimeline,
+  });
 
   const updateChatMutation = useMutation({
     mutationFn: async ({ chatId, updates }: { chatId: string; updates: Partial<Chat> }) => {
@@ -840,7 +871,42 @@ export function Chats() {
                         }}
                         data-testid="button-conversation-search"
                       />
-                      <MoreVertical className="h-5 w-5 cursor-pointer hover:text-gray-700" />
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <button className="p-1 hover:bg-gray-100 rounded" data-testid="button-contact-menu">
+                            <MoreVertical className="h-5 w-5 cursor-pointer hover:text-gray-700" />
+                          </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem 
+                            onClick={() => {
+                              if (selectedChat) {
+                                setEditChatForm({ 
+                                  name: selectedChat.name || "", 
+                                  whatsappPhone: (selectedChat as Chat).whatsappPhone || "" 
+                                });
+                                setShowEditChat(true);
+                              }
+                            }} 
+                            data-testid="menu-edit-contact"
+                          >
+                            <Edit className="h-4 w-4 mr-2" />
+                            Edit Contact
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => setShowTimeline(true)} data-testid="menu-view-timeline">
+                            <History className="h-4 w-4 mr-2" />
+                            View Timeline
+                          </DropdownMenuItem>
+                          <DropdownMenuItem 
+                            onClick={() => setShowDeleteConfirm(true)} 
+                            className="text-red-600" 
+                            data-testid="menu-delete-contact"
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Delete Contact
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                    </div>
                  </div>
                  
@@ -1475,6 +1541,124 @@ export function Chats() {
         reason={upgradeReason}
         currentPlan={subscription?.limits?.plan}
       />
+      
+      {/* Edit Chat Dialog */}
+      <Dialog open={showEditChat} onOpenChange={setShowEditChat}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Contact</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="edit-name">Name</Label>
+              <Input
+                id="edit-name"
+                value={editChatForm.name}
+                onChange={(e) => setEditChatForm({ ...editChatForm, name: e.target.value })}
+                data-testid="input-edit-name"
+              />
+            </div>
+            <div>
+              <Label htmlFor="edit-phone">WhatsApp Phone</Label>
+              <Input
+                id="edit-phone"
+                value={editChatForm.whatsappPhone}
+                onChange={(e) => setEditChatForm({ ...editChatForm, whatsappPhone: e.target.value })}
+                data-testid="input-edit-phone"
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setShowEditChat(false)}>
+                Cancel
+              </Button>
+              <Button 
+                onClick={() => {
+                  if (selectedChat) {
+                    updateChatMutation.mutate({
+                      chatId: selectedChat.id,
+                      updates: { 
+                        name: editChatForm.name,
+                        whatsappPhone: editChatForm.whatsappPhone
+                      }
+                    });
+                    setShowEditChat(false);
+                    toast({ title: "Contact updated", description: "Contact details have been saved." });
+                  }
+                }}
+                disabled={updateChatMutation.isPending}
+                data-testid="button-save-contact"
+              >
+                {updateChatMutation.isPending ? "Saving..." : "Save"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+      
+      {/* Timeline Dialog */}
+      <Dialog open={showTimeline} onOpenChange={setShowTimeline}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Clock className="w-5 h-5" />
+              Activity Timeline
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            {timeline.length === 0 ? (
+              <p className="text-muted-foreground text-center py-8">No activity recorded yet</p>
+            ) : (
+              <div className="space-y-3">
+                {timeline.map((event) => (
+                  <div key={event.id} className="flex gap-3 p-3 bg-slate-50 rounded-lg" data-testid={`timeline-event-${event.id}`}>
+                    <div className="w-2 h-2 mt-2 rounded-full bg-primary flex-shrink-0" />
+                    <div className="flex-1">
+                      <p className="text-sm font-medium">{event.eventType.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {(event.eventData as any)?.message || JSON.stringify(event.eventData)}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {format(new Date(event.createdAt), "MMM d, yyyy 'at' h:mm a")}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+      
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="text-red-600">Delete Contact</DialogTitle>
+          </DialogHeader>
+          <p className="text-muted-foreground">
+            Are you sure you want to delete <strong>{selectedChat?.name}</strong>? 
+            This will remove all conversations and messages. This action cannot be undone.
+          </p>
+          <div className="flex justify-end gap-2 mt-4">
+            <Button variant="outline" onClick={() => setShowDeleteConfirm(false)} data-testid="button-cancel-delete">
+              Cancel
+            </Button>
+            <Button 
+              variant="destructive" 
+              onClick={() => {
+                if (selectedChat) {
+                  deleteChatMutation.mutate(selectedChat.id);
+                  setShowDeleteConfirm(false);
+                }
+              }} 
+              disabled={deleteChatMutation.isPending}
+              data-testid="button-confirm-delete"
+            >
+              {deleteChatMutation.isPending ? "Deleting..." : "Delete"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -410,6 +410,40 @@ export async function registerRoutes(
       res.status(500).json({ error: "Failed to delete chat" });
     }
   });
+  
+  // Get activity timeline for a chat
+  app.get("/api/chats/:id/timeline", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const chat = await storage.getChat(req.params.id);
+      if (!chat) {
+        return res.status(404).json({ error: "Chat not found" });
+      }
+      if (chat.userId !== req.user.id) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+      
+      // Build timeline from chat messages
+      const messages = Array.isArray(chat.messages) ? chat.messages : [];
+      const timeline = messages.map((msg: any, index: number) => ({
+        id: `msg-${index}`,
+        eventType: msg.sender === "user" ? "message_sent" : "message_received",
+        eventData: { 
+          message: msg.content || msg.text,
+          sender: msg.sender
+        },
+        actorType: msg.sender === "user" ? "user" : "contact",
+        createdAt: msg.time || new Date().toISOString()
+      }));
+      
+      res.json(timeline.reverse());
+    } catch (error) {
+      console.error("Error fetching chat timeline:", error);
+      res.status(500).json({ error: "Failed to fetch timeline" });
+    }
+  });
 
   // Update notification preferences
   app.patch("/api/users/preferences", async (req, res) => {
