@@ -395,24 +395,30 @@ function AIBrainContent() {
         )}
         
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="bg-gray-100 p-1 rounded-xl">
-            <TabsTrigger value="settings" className="rounded-lg data-[state=active]:bg-white">
-              <Settings2 className="w-4 h-4 mr-2" />
-              Settings
-            </TabsTrigger>
-            <TabsTrigger value="knowledge" className="rounded-lg data-[state=active]:bg-white">
-              <Building2 className="w-4 h-4 mr-2" />
-              Business Knowledge
-            </TabsTrigger>
-            <TabsTrigger value="automation" className="rounded-lg data-[state=active]:bg-white">
-              <Zap className="w-4 h-4 mr-2" />
-              Automation Builder
-            </TabsTrigger>
-            <TabsTrigger value="health" className="rounded-lg data-[state=active]:bg-white">
-              <TrendingUp className="w-4 h-4 mr-2" />
-              AI Health
-            </TabsTrigger>
-          </TabsList>
+          <div className="overflow-x-auto -mx-4 px-4 md:mx-0 md:px-0">
+            <TabsList className="bg-gray-100 p-1 rounded-xl inline-flex min-w-max">
+              <TabsTrigger value="settings" className="rounded-lg data-[state=active]:bg-white whitespace-nowrap">
+                <Settings2 className="w-4 h-4 mr-1 md:mr-2" />
+                <span className="hidden sm:inline">Settings</span>
+                <span className="sm:hidden">Setup</span>
+              </TabsTrigger>
+              <TabsTrigger value="knowledge" className="rounded-lg data-[state=active]:bg-white whitespace-nowrap">
+                <Building2 className="w-4 h-4 mr-1 md:mr-2" />
+                <span className="hidden sm:inline">Business Knowledge</span>
+                <span className="sm:hidden">Knowledge</span>
+              </TabsTrigger>
+              <TabsTrigger value="automation" className="rounded-lg data-[state=active]:bg-white whitespace-nowrap">
+                <Zap className="w-4 h-4 mr-1 md:mr-2" />
+                <span className="hidden sm:inline">Automation Builder</span>
+                <span className="sm:hidden">Automation</span>
+              </TabsTrigger>
+              <TabsTrigger value="health" className="rounded-lg data-[state=active]:bg-white whitespace-nowrap">
+                <TrendingUp className="w-4 h-4 mr-1 md:mr-2" />
+                <span className="hidden sm:inline">AI Health</span>
+                <span className="sm:hidden">Health</span>
+              </TabsTrigger>
+            </TabsList>
+          </div>
           
           <TabsContent value="settings" className="space-y-6">
             <div className="bg-white rounded-xl border border-gray-200 p-6">
