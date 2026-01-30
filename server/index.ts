@@ -14,6 +14,16 @@ import { registerChannelAdapters } from "./channelAdapters";
 const app = express();
 const httpServer = createServer(app);
 
+// HTTP to HTTPS redirect for production (required for Google indexing)
+app.use((req, res, next) => {
+  const proto = req.headers['x-forwarded-proto'];
+  if (proto === 'http' && process.env.NODE_ENV === 'production') {
+    const host = req.headers.host || '';
+    return res.redirect(301, `https://${host}${req.url}`);
+  }
+  next();
+});
+
 setupPresenceServer(httpServer);
 
 async function initStripe() {
