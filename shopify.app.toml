@@ -4,7 +4,7 @@
 name = "WhachatCRM"
 client_id = "a458fd4da143c4e0c3e49a22de971a876"
 application_url = "https://whachatcrm.com"
-embedded = true
+embedded = false
 
 [access_scopes]
 scopes = "read_products,read_orders,read_customers"

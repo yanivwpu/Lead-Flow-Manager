@@ -48,7 +48,7 @@ export function getShopifyApi() {
       scopes: SHOPIFY_SCOPES,
       hostName: HOST.replace(/^https?:\/\//, ''),
       apiVersion: API_VERSION,
-      isEmbeddedApp: true,
+      isEmbeddedApp: false,
     });
   }
   
