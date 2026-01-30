@@ -114,6 +114,10 @@ export function UnifiedInbox() {
   const [messageInput, setMessageInput] = useState("");
   const [showNewContact, setShowNewContact] = useState(false);
   const [newContactForm, setNewContactForm] = useState({ name: "", phone: "", email: "" });
+  const [showEditContact, setShowEditContact] = useState(false);
+  const [showTimeline, setShowTimeline] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [editContactForm, setEditContactForm] = useState({ name: "", phone: "", email: "", notes: "" });
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const selectedContactId = match ? params?.contactId : null;
@@ -206,6 +210,78 @@ export function UnifiedInbox() {
       queryClient.invalidateQueries({ queryKey: ["/api/inbox"] });
     },
   });
+
+  const updateContactMutation = useMutation({
+    mutationFn: async (data: { contactId: string; name: string; phone?: string; email?: string; notes?: string }) => {
+      const res = await fetch(`/api/contacts/${data.contactId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ name: data.name, phone: data.phone, email: data.email, notes: data.notes }),
+      });
+      if (!res.ok) throw new Error("Failed to update contact");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/contacts"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/inbox"] });
+      setShowEditContact(false);
+    },
+  });
+
+  const deleteContactMutation = useMutation({
+    mutationFn: async (contactId: string) => {
+      const res = await fetch(`/api/contacts/${contactId}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to delete contact");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/contacts"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/inbox"] });
+      setShowDeleteConfirm(false);
+      setLocation("/app/inbox");
+    },
+  });
+
+  interface TimelineEvent {
+    id: string;
+    type: string;
+    description: string;
+    metadata?: Record<string, unknown>;
+    createdAt: string;
+  }
+
+  const { data: timeline = [] } = useQuery<TimelineEvent[]>({
+    queryKey: ["/api/contacts", selectedContactId, "timeline"],
+    enabled: !!selectedContactId && showTimeline,
+  });
+
+  const handleEditContact = () => {
+    if (contactData?.contact) {
+      setEditContactForm({
+        name: contactData.contact.name || "",
+        phone: contactData.contact.phone || "",
+        email: contactData.contact.email || "",
+        notes: contactData.contact.notes || "",
+      });
+      setShowEditContact(true);
+    }
+  };
+
+  const handleSaveContact = () => {
+    if (!selectedContactId) return;
+    updateContactMutation.mutate({
+      contactId: selectedContactId,
+      ...editContactForm,
+    });
+  };
+
+  const handleDeleteContact = () => {
+    if (!selectedContactId) return;
+    deleteContactMutation.mutate(selectedContactId);
+  };
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -463,9 +539,9 @@ export function UnifiedInbox() {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuItem>Edit Contact</DropdownMenuItem>
-                  <DropdownMenuItem>View Timeline</DropdownMenuItem>
-                  <DropdownMenuItem className="text-red-600">Delete Contact</DropdownMenuItem>
+                  <DropdownMenuItem onClick={handleEditContact} data-testid="menu-edit-contact">Edit Contact</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setShowTimeline(true)} data-testid="menu-view-timeline">View Timeline</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setShowDeleteConfirm(true)} className="text-red-600" data-testid="menu-delete-contact">Delete Contact</DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
@@ -614,6 +690,122 @@ export function UnifiedInbox() {
           </div>
         )}
       </div>
+
+      {/* Edit Contact Dialog */}
+      <Dialog open={showEditContact} onOpenChange={setShowEditContact}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Contact</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="edit-name">Name</Label>
+              <Input
+                id="edit-name"
+                value={editContactForm.name}
+                onChange={(e) => setEditContactForm({ ...editContactForm, name: e.target.value })}
+                data-testid="input-edit-name"
+              />
+            </div>
+            <div>
+              <Label htmlFor="edit-phone">Phone</Label>
+              <Input
+                id="edit-phone"
+                value={editContactForm.phone}
+                onChange={(e) => setEditContactForm({ ...editContactForm, phone: e.target.value })}
+                data-testid="input-edit-phone"
+              />
+            </div>
+            <div>
+              <Label htmlFor="edit-email">Email</Label>
+              <Input
+                id="edit-email"
+                type="email"
+                value={editContactForm.email}
+                onChange={(e) => setEditContactForm({ ...editContactForm, email: e.target.value })}
+                data-testid="input-edit-email"
+              />
+            </div>
+            <div>
+              <Label htmlFor="edit-notes">Notes</Label>
+              <Textarea
+                id="edit-notes"
+                value={editContactForm.notes}
+                onChange={(e) => setEditContactForm({ ...editContactForm, notes: e.target.value })}
+                data-testid="input-edit-notes"
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setShowEditContact(false)} data-testid="button-cancel-edit">
+                Cancel
+              </Button>
+              <Button onClick={handleSaveContact} disabled={updateContactMutation.isPending} data-testid="button-save-contact">
+                {updateContactMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                Save Changes
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* View Timeline Dialog */}
+      <Dialog open={showTimeline} onOpenChange={setShowTimeline}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Clock className="w-5 h-5" />
+              Activity Timeline
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            {timeline.length === 0 ? (
+              <p className="text-muted-foreground text-center py-8">No activity recorded yet</p>
+            ) : (
+              <div className="space-y-3">
+                {timeline.map((event) => (
+                  <div key={event.id} className="flex gap-3 p-3 bg-slate-50 rounded-lg" data-testid={`timeline-event-${event.id}`}>
+                    <div className="w-2 h-2 mt-2 rounded-full bg-primary flex-shrink-0" />
+                    <div className="flex-1">
+                      <p className="text-sm font-medium">{event.type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</p>
+                      <p className="text-sm text-muted-foreground">{event.description}</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {format(new Date(event.createdAt), "MMM d, yyyy 'at' h:mm a")}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="text-red-600">Delete Contact</DialogTitle>
+          </DialogHeader>
+          <p className="text-muted-foreground">
+            Are you sure you want to delete <strong>{contactData?.contact?.name}</strong>? 
+            This will remove all conversations and messages. This action cannot be undone.
+          </p>
+          <div className="flex justify-end gap-2 mt-4">
+            <Button variant="outline" onClick={() => setShowDeleteConfirm(false)} data-testid="button-cancel-delete">
+              Cancel
+            </Button>
+            <Button 
+              variant="destructive" 
+              onClick={handleDeleteContact} 
+              disabled={deleteContactMutation.isPending}
+              data-testid="button-confirm-delete"
+            >
+              {deleteContactMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+              Delete Contact
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
