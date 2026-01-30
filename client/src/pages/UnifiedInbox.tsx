@@ -547,7 +547,7 @@ export function UnifiedInbox() {
               </DropdownMenu>
             </div>
 
-            <div className="flex-1 overflow-y-auto px-4 py-2 sm:p-4 space-y-2 sm:space-y-4 bg-slate-50">
+            <div className="flex-1 overflow-y-auto px-4 py-2 sm:p-4 space-y-2 sm:space-y-4 bg-slate-50 overflow-x-hidden">
               {messages.length === 0 ? (
                 <div className="text-center text-muted-foreground py-8">
                   <MessageCircle className="w-12 h-12 mx-auto mb-2 opacity-50" />
@@ -565,7 +565,7 @@ export function UnifiedInbox() {
                   >
                     <div
                       className={cn(
-                        "max-w-[80%] sm:max-w-[70%] rounded-lg px-3 py-2",
+                        "max-w-[85%] sm:max-w-[70%] rounded-lg px-3 py-2 break-words",
                         message.direction === 'outbound'
                           ? "bg-primary text-primary-foreground"
                           : "bg-white border"
@@ -601,13 +601,13 @@ export function UnifiedInbox() {
               {/* Meta 24-hour window warning - only show if the current channel matches the restricted channel */}
               {windowStatus?.hasRestriction && !windowStatus?.isActive && 
                windowStatus.channel === (contactData?.contact?.primaryChannelOverride || contactData?.contact?.primaryChannel) && (
-                <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2">
+                <div className="mb-3 mx-1 p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2 shadow-sm">
                   <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
-                  <div>
-                    <p className="text-sm font-medium text-red-700">Messaging window expired</p>
-                    <p className="text-xs text-red-600 mt-0.5">
-                      The 24-hour {windowStatus.channel === 'instagram' ? 'Instagram' : 'Facebook Messenger'} messaging window has closed. 
-                      You can only respond after {contactData?.contact?.name || 'the customer'} messages you first.
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-red-900 truncate">Messaging window expired</p>
+                    <p className="text-xs text-red-600 mt-0.5 leading-normal">
+                      The 24-hour {windowStatus.channel === 'instagram' ? 'Instagram' : 'Facebook Messenger'} window closed. 
+                      Wait for {contactData?.contact?.name || 'the customer'} to message first.
                     </p>
                   </div>
                 </div>
