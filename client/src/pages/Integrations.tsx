@@ -743,14 +743,14 @@ export function Integrations() {
 
         {/* Webhook Dialog */}
         <Dialog open={isWebhookDialogOpen} onOpenChange={setIsWebhookDialogOpen}>
-          <DialogContent className="max-w-md">
-            <DialogHeader>
+          <DialogContent className="max-w-md max-h-[85vh] flex flex-col">
+            <DialogHeader className="flex-shrink-0">
               <DialogTitle>Create Webhook</DialogTitle>
               <DialogDescription>
                 Configure a webhook endpoint to receive events
               </DialogDescription>
             </DialogHeader>
-            <div className="space-y-4 py-4">
+            <div className="flex-1 overflow-y-auto space-y-4 py-4">
               <div className="space-y-2">
                 <Label htmlFor="webhook-name">Name</Label>
                 <Input
@@ -793,7 +793,7 @@ export function Integrations() {
                 </div>
               </div>
             </div>
-            <DialogFooter>
+            <DialogFooter className="flex-shrink-0 border-t pt-4">
               <Button variant="outline" onClick={() => setIsWebhookDialogOpen(false)}>Cancel</Button>
               <Button 
                 onClick={() => createWebhookMutation.mutate(newWebhook)}
@@ -809,10 +809,10 @@ export function Integrations() {
 
         {/* Integration Connection Dialog */}
         <Dialog open={!!connectingIntegration} onOpenChange={(open) => !open && setConnectingIntegration(null)}>
-          <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogContent className="max-w-lg max-h-[85vh] flex flex-col">
             {connectingIntegration && (
               <>
-                <DialogHeader>
+                <DialogHeader className="flex-shrink-0">
                   <div className="flex items-center gap-3">
                     <div className={`w-10 h-10 rounded-lg ${connectingIntegration.color} flex items-center justify-center`}>
                       <connectingIntegration.icon className="h-5 w-5 text-white" />
@@ -823,7 +823,7 @@ export function Integrations() {
                     </div>
                   </div>
                 </DialogHeader>
-                <div className="space-y-4 py-4">
+                <div className="flex-1 overflow-y-auto space-y-4 py-4">
                   {connectingIntegration.fields.map((field) => (
                     <div key={field.key} className="space-y-2">
                       <Label htmlFor={`field-${field.key}`}>{field.label}</Label>
@@ -865,7 +865,7 @@ export function Integrations() {
                     </div>
                   )}
                 </div>
-                <DialogFooter>
+                <DialogFooter className="flex-shrink-0 border-t pt-4">
                   <Button variant="outline" onClick={() => setConnectingIntegration(null)}>Cancel</Button>
                   <Button 
                     onClick={handleConnectIntegration}
