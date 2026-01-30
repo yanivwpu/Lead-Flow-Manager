@@ -1609,20 +1609,31 @@ export function Chats() {
               <p className="text-muted-foreground text-center py-8">No activity recorded yet</p>
             ) : (
               <div className="space-y-3">
-                {timeline.map((event) => (
-                  <div key={event.id} className="flex gap-3 p-3 bg-slate-50 rounded-lg" data-testid={`timeline-event-${event.id}`}>
-                    <div className="w-2 h-2 mt-2 rounded-full bg-primary flex-shrink-0" />
-                    <div className="flex-1">
-                      <p className="text-sm font-medium">{event.eventType.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {(event.eventData as any)?.message || JSON.stringify(event.eventData)}
-                      </p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {format(new Date(event.createdAt), "MMM d, yyyy 'at' h:mm a")}
-                      </p>
+                {timeline.map((event) => {
+                  let formattedDate = (event.eventData as any)?.time || "";
+                  try {
+                    const date = new Date(event.createdAt);
+                    if (!isNaN(date.getTime())) {
+                      formattedDate = format(date, "MMM d, yyyy 'at' h:mm a");
+                    }
+                  } catch {
+                    // Keep the raw time if date parsing fails
+                  }
+                  return (
+                    <div key={event.id} className="flex gap-3 p-3 bg-slate-50 rounded-lg" data-testid={`timeline-event-${event.id}`}>
+                      <div className="w-2 h-2 mt-2 rounded-full bg-primary flex-shrink-0" />
+                      <div className="flex-1">
+                        <p className="text-sm font-medium">{event.eventType.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {(event.eventData as any)?.message || JSON.stringify(event.eventData)}
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {formattedDate}
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>

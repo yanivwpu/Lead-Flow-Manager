@@ -427,16 +427,28 @@ export async function registerRoutes(
       
       // Build timeline from chat messages
       const messages = Array.isArray(chat.messages) ? chat.messages : [];
-      const timeline = messages.map((msg: any, index: number) => ({
-        id: `msg-${index}`,
-        eventType: msg.sender === "user" ? "message_sent" : "message_received",
-        eventData: { 
-          message: msg.content || msg.text,
-          sender: msg.sender
-        },
-        actorType: msg.sender === "user" ? "user" : "contact",
-        createdAt: msg.time || new Date().toISOString()
-      }));
+      const timeline = messages.map((msg: any, index: number) => {
+        // Try to parse the time, fallback to current time if invalid
+        let createdAt = new Date().toISOString();
+        if (msg.timestamp) {
+          createdAt = new Date(msg.timestamp).toISOString();
+        } else if (msg.createdAt) {
+          createdAt = new Date(msg.createdAt).toISOString();
+        }
+        // msg.time is usually just "10:45 AM" format, not a full date
+        
+        return {
+          id: `msg-${index}`,
+          eventType: msg.sender === "user" ? "message_sent" : "message_received",
+          eventData: { 
+            message: msg.content || msg.text,
+            sender: msg.sender,
+            time: msg.time || ""
+          },
+          actorType: msg.sender === "user" ? "user" : "contact",
+          createdAt
+        };
+      });
       
       res.json(timeline.reverse());
     } catch (error) {
