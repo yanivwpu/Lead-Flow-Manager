@@ -770,20 +770,50 @@ export function UnifiedInbox() {
               <p className="text-muted-foreground text-center py-8">No activity recorded yet</p>
             ) : (
               <div className="space-y-3">
-                {timeline.map((event) => (
-                  <div key={event.id} className="flex gap-3 p-3 bg-slate-50 rounded-lg" data-testid={`timeline-event-${event.id}`}>
-                    <div className="w-2 h-2 mt-2 rounded-full bg-primary flex-shrink-0" />
-                    <div className="flex-1">
-                      <p className="text-sm font-medium">{event.eventType.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {(event.eventData as any)?.description || (event.eventData as any)?.message || JSON.stringify(event.eventData)}
-                      </p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {format(new Date(event.createdAt), "MMM d, yyyy 'at' h:mm a")}
-                      </p>
+                {timeline.map((event) => {
+                  const data = event.eventData as any;
+                  let description = "";
+                  
+                  // Format description based on event type
+                  if (data?.description) {
+                    description = data.description;
+                  } else if (data?.message) {
+                    description = data.message;
+                  } else if (event.eventType === "channel_switch") {
+                    description = `Switched from ${data?.from || "unknown"} to ${data?.to || "unknown"}`;
+                  } else if (event.eventType === "tag_change") {
+                    description = `Tag changed to "${data?.tag || data?.to || "none"}"`;
+                  } else if (event.eventType === "stage_change") {
+                    description = `Pipeline stage changed to "${data?.stage || data?.to || "none"}"`;
+                  } else if (event.eventType === "message_sent" || event.eventType === "message_received") {
+                    description = data?.content || data?.text || "Message";
+                  } else if (event.eventType === "contact_created") {
+                    description = "Contact was created";
+                  } else if (event.eventType === "assignment") {
+                    description = `Assigned to ${data?.assignee || data?.to || "team member"}`;
+                  } else {
+                    // Fallback: try to make JSON more readable
+                    const keys = Object.keys(data || {});
+                    if (keys.length > 0) {
+                      description = keys.map(k => `${k}: ${data[k]}`).join(", ");
+                    } else {
+                      description = "Activity recorded";
+                    }
+                  }
+                  
+                  return (
+                    <div key={event.id} className="flex gap-3 p-3 bg-slate-50 rounded-lg" data-testid={`timeline-event-${event.id}`}>
+                      <div className="w-2 h-2 mt-2 rounded-full bg-primary flex-shrink-0" />
+                      <div className="flex-1">
+                        <p className="text-sm font-medium">{event.eventType.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</p>
+                        <p className="text-sm text-muted-foreground">{description}</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {format(new Date(event.createdAt), "MMM d, yyyy 'at' h:mm a")}
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>

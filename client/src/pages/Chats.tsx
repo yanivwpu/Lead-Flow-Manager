@@ -1610,7 +1610,8 @@ export function Chats() {
             ) : (
               <div className="space-y-3">
                 {timeline.map((event) => {
-                  let formattedDate = (event.eventData as any)?.time || "";
+                  const data = event.eventData as any;
+                  let formattedDate = data?.time || "";
                   try {
                     const date = new Date(event.createdAt);
                     if (!isNaN(date.getTime())) {
@@ -1619,14 +1620,25 @@ export function Chats() {
                   } catch {
                     // Keep the raw time if date parsing fails
                   }
+                  
+                  // Format description based on event type
+                  let description = "";
+                  if (data?.message) {
+                    description = data.message;
+                  } else if (event.eventType === "message_sent") {
+                    description = "You sent a message";
+                  } else if (event.eventType === "message_received") {
+                    description = "Message received";
+                  } else {
+                    description = "Activity recorded";
+                  }
+                  
                   return (
                     <div key={event.id} className="flex gap-3 p-3 bg-slate-50 rounded-lg" data-testid={`timeline-event-${event.id}`}>
                       <div className="w-2 h-2 mt-2 rounded-full bg-primary flex-shrink-0" />
                       <div className="flex-1">
                         <p className="text-sm font-medium">{event.eventType.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {(event.eventData as any)?.message || JSON.stringify(event.eventData)}
-                        </p>
+                        <p className="text-sm text-muted-foreground">{description}</p>
                         <p className="text-xs text-muted-foreground mt-1">
                           {formattedDate}
                         </p>
