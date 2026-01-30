@@ -326,7 +326,7 @@ export function UnifiedInbox() {
   }
 
   return (
-    <div className="flex h-full bg-white" data-testid="unified-inbox">
+    <div className="flex h-full bg-white overflow-hidden w-full max-w-full" data-testid="unified-inbox">
       {/* Contact List - Hidden on mobile when a contact is selected */}
       <div className={cn(
         "w-full md:w-80 border-r flex flex-col",
@@ -465,7 +465,7 @@ export function UnifiedInbox() {
 
       {/* Conversation Panel - Full width on mobile */}
       <div className={cn(
-        "flex-1 flex flex-col",
+        "flex-1 flex flex-col min-w-0 overflow-hidden",
         selectedContactId ? "flex" : "hidden md:flex"
       )}>
         {selectedContactId && contactData?.contact ? (
@@ -547,7 +547,7 @@ export function UnifiedInbox() {
               </DropdownMenu>
             </div>
 
-            <div className="flex-1 overflow-y-auto px-4 py-2 sm:p-4 space-y-2 sm:space-y-4 bg-slate-50 overflow-x-hidden">
+            <div className="flex-1 overflow-y-auto overflow-x-hidden px-3 py-2 sm:p-4 space-y-2 sm:space-y-4 bg-slate-50">
               {messages.length === 0 ? (
                 <div className="text-center text-muted-foreground py-8">
                   <MessageCircle className="w-12 h-12 mx-auto mb-2 opacity-50" />
@@ -565,14 +565,14 @@ export function UnifiedInbox() {
                   >
                     <div
                       className={cn(
-                        "max-w-[85%] sm:max-w-[70%] rounded-lg px-3 py-2 break-words",
+                        "max-w-[75%] sm:max-w-[70%] rounded-lg px-3 py-2 break-words overflow-hidden",
                         message.direction === 'outbound'
                           ? "bg-primary text-primary-foreground"
                           : "bg-white border"
                       )}
                       data-testid={`message-${message.id}`}
                     >
-                      <p className="whitespace-pre-wrap">{message.content}</p>
+                      <p className="whitespace-pre-wrap break-words overflow-wrap-anywhere">{message.content}</p>
                       <div className={cn(
                         "text-xs mt-1 flex items-center gap-1",
                         message.direction === 'outbound' ? "text-primary-foreground/70" : "text-muted-foreground"
