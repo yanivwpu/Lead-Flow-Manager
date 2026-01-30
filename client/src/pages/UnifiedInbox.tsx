@@ -470,25 +470,22 @@ export function UnifiedInbox() {
       )}>
         {selectedContactId && contactData?.contact ? (
           <>
-            <div className="p-3 md:p-4 border-b flex items-center gap-2 md:gap-3">
+            <div className="p-2 md:p-4 border-b flex items-center gap-2">
               {/* Back button for mobile */}
               <button
                 onClick={() => setLocation('/app/inbox')}
-                className="md:hidden p-1 -ml-1 text-gray-600"
+                className="md:hidden p-1 text-gray-600 flex-shrink-0"
                 data-testid="button-back-inbox"
               >
                 <ChevronDown className="w-5 h-5 rotate-90" />
               </button>
               <ChatAvatar src={contactData.contact.avatar} name={contactData.contact.name} size="md" />
-              <div className="flex-1">
-                <div className="flex items-center gap-2">
-                  <h3 className="font-semibold">{contactData.contact.name}</h3>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <h3 className="font-semibold truncate">{contactData.contact.name}</h3>
                   {getChannelIcon(contactData.contact.primaryChannelOverride as Channel || contactData.contact.primaryChannel)}
-                  <span className="text-xs text-muted-foreground">
-                    {CHANNEL_CONFIG[contactData.contact.primaryChannelOverride as Channel || contactData.contact.primaryChannel]?.label}
-                  </span>
                 </div>
-                <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                <div className="hidden md:flex items-center gap-3 text-sm text-muted-foreground">
                   {contactData.contact.phone && (
                     <span className="flex items-center gap-1">
                       <Phone className="w-3 h-3" /> {contactData.contact.phone}
@@ -501,50 +498,52 @@ export function UnifiedInbox() {
                   )}
                 </div>
               </div>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="sm" className="gap-2" data-testid="button-switch-channel">
-                    {getChannelIcon(contactData.contact.primaryChannelOverride as Channel || contactData.contact.primaryChannel)}
-                    <span className="text-xs">
-                      {CHANNEL_CONFIG[contactData.contact.primaryChannelOverride as Channel || contactData.contact.primaryChannel]?.label}
-                    </span>
-                    <ChevronDown className="w-3 h-3" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  {Object.entries(CHANNEL_CONFIG)
-                    .filter(([key, config]) => config.label !== 'TikTok')
-                    .map(([key, config]) => {
-                      const Icon = config.icon;
-                      const isActive = (contactData.contact.primaryChannelOverride || contactData.contact.primaryChannel) === key;
-                      return (
-                        <DropdownMenuItem
-                          key={key}
-                          onClick={() => switchChannelMutation.mutate({ contactId: selectedContactId!, channel: key as Channel })}
-                          className={cn("gap-2", isActive && "bg-slate-100")}
-                          data-testid={`channel-option-${key}`}
-                        >
-                          <Icon className="w-4 h-4" style={{ color: config.color }} />
-                          {config.label}
-                          {isActive && <span className="ml-auto text-xs text-muted-foreground">Active</span>}
-                        </DropdownMenuItem>
-                      );
-                    })}
-                </DropdownMenuContent>
-              </DropdownMenu>
+              <div className="flex items-center gap-1 flex-shrink-0">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm" className="gap-1 h-8 px-2" data-testid="button-switch-channel">
+                      {getChannelIcon(contactData.contact.primaryChannelOverride as Channel || contactData.contact.primaryChannel)}
+                      <span className="text-xs hidden sm:inline">
+                        {CHANNEL_CONFIG[contactData.contact.primaryChannelOverride as Channel || contactData.contact.primaryChannel]?.label}
+                      </span>
+                      <ChevronDown className="w-3 h-3" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    {Object.entries(CHANNEL_CONFIG)
+                      .filter(([key, config]) => config.label !== 'TikTok')
+                      .map(([key, config]) => {
+                        const Icon = config.icon;
+                        const isActive = (contactData.contact.primaryChannelOverride || contactData.contact.primaryChannel) === key;
+                        return (
+                          <DropdownMenuItem
+                            key={key}
+                            onClick={() => switchChannelMutation.mutate({ contactId: selectedContactId!, channel: key as Channel })}
+                            className={cn("gap-2", isActive && "bg-slate-100")}
+                            data-testid={`channel-option-${key}`}
+                          >
+                            <Icon className="w-4 h-4" style={{ color: config.color }} />
+                            {config.label}
+                            {isActive && <span className="ml-auto text-xs text-muted-foreground">Active</span>}
+                          </DropdownMenuItem>
+                        );
+                      })}
+                  </DropdownMenuContent>
+                </DropdownMenu>
 
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" data-testid="button-contact-menu">
-                    <MoreVertical className="w-4 h-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={handleEditContact} data-testid="menu-edit-contact">Edit Contact</DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setShowTimeline(true)} data-testid="menu-view-timeline">View Timeline</DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setShowDeleteConfirm(true)} className="text-red-600" data-testid="menu-delete-contact">Delete Contact</DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-8 w-8" data-testid="button-contact-menu">
+                      <MoreVertical className="w-4 h-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={handleEditContact} data-testid="menu-edit-contact">Edit Contact</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setShowTimeline(true)} data-testid="menu-view-timeline">View Timeline</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setShowDeleteConfirm(true)} className="text-red-600" data-testid="menu-delete-contact">Delete Contact</DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
             </div>
 
             <div className="flex-1 overflow-y-auto overflow-x-hidden px-3 py-2 sm:p-4 space-y-2 sm:space-y-4 bg-slate-50">
