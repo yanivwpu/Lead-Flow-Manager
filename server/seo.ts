@@ -109,6 +109,8 @@ export function injectSeoMeta(html: string, url: string): string {
     <meta property="og:type" content="article" />
     <meta property="og:url" content="${canonicalUrl}" />
     <meta property="og:image" content="${BASE_URL}/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="${post.title}" />
     <meta name="twitter:description" content="${post.excerpt}" />
@@ -155,6 +157,8 @@ export function injectSeoMeta(html: string, url: string): string {
     <meta property="og:type" content="website" />
     <meta property="og:url" content="${canonicalUrl}" />
     <meta property="og:image" content="${BASE_URL}/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="WhatsApp CRM Blog | Tips, Guides & Best Practices" />
     <meta name="twitter:description" content="Learn how to grow your business with WhatsApp. Expert guides on WhatsApp CRM, automation, lead management, and customer service." />
