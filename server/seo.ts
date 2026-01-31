@@ -196,6 +196,115 @@ export function isCrawler(userAgent: string): boolean {
   return crawlerPatterns.some(pattern => pattern.test(userAgent));
 }
 
+interface PageMeta {
+  title: string;
+  description: string;
+  canonical: string;
+}
+
+const PAGE_META: Record<string, PageMeta> = {
+  "/pricing": {
+    title: "WhachatCRM Pricing: Free Plan Forever, Starter from $19/mo | WhatsApp CRM",
+    description: "Simple, transparent pricing for WhatsApp CRM. Free plan forever, Starter at $19/mo, Pro at $49/mo. No hidden fees, no message markup. Start free today.",
+    canonical: `${BASE_URL}/pricing`
+  },
+  "/whatsapp-crm": {
+    title: "WhatsApp CRM: Manage Customer Chats with Notes, Tags & Follow-Ups | WhachatCRM",
+    description: "Turn WhatsApp into a full CRM. Organize conversations, set reminders, collaborate with teams. Free plan available – no credit card needed.",
+    canonical: `${BASE_URL}/whatsapp-crm`
+  },
+  "/respond-io-alternative": {
+    title: "Best Respond.io Alternative for SMBs | Affordable WhatsApp CRM – WhachatCRM",
+    description: "Switch from Respond.io to WhachatCRM: Starts at $19/mo, free plan, unlimited users, simple setup. Better for small teams managing WhatsApp leads.",
+    canonical: `${BASE_URL}/respond-io-alternative`
+  },
+  "/wati-alternative": {
+    title: "Best WATI Alternative for SMBs | Affordable WhatsApp CRM – WhachatCRM",
+    description: "Switch from WATI to WhachatCRM: $19/mo vs $30+, free plan, zero message markup, unlimited users, simple setup. Better for small teams.",
+    canonical: `${BASE_URL}/wati-alternative`
+  },
+  "/pabbly-alternative": {
+    title: "Best Pabbly Chatflow Alternative for SMBs | Affordable WhatsApp CRM – WhachatCRM",
+    description: "Switch from Pabbly Chatflow to WhachatCRM: $19/mo, no credit limits, free plan available. Visual chatbot builder & unified inbox for small teams.",
+    canonical: `${BASE_URL}/pabbly-alternative`
+  },
+  "/interakt-alternative": {
+    title: "Best Interakt Alternative for SMBs | Affordable WhatsApp CRM – WhachatCRM",
+    description: "Switch from Interakt to WhachatCRM: $19/mo, simpler pricing, unlimited team members. Visual chatbot builder & unified inbox for small teams.",
+    canonical: `${BASE_URL}/interakt-alternative`
+  },
+  "/waba360-alternative": {
+    title: "Best 360dialog Alternative for SMBs | WhatsApp CRM with Built-in Inbox – WhachatCRM",
+    description: "Switch from 360dialog to WhachatCRM: $19/mo, built-in CRM features, visual chatbot builder, team inbox. No separate inbox tool needed.",
+    canonical: `${BASE_URL}/waba360-alternative`
+  },
+  "/crm-for-whatsapp-business": {
+    title: "Multi-Channel CRM for WhatsApp Business | Unified Inbox – WhachatCRM",
+    description: "Unified inbox for WhatsApp, SMS, Telegram, Instagram, Facebook & Web Chat. Manage all customer conversations in one place. Free plan available.",
+    canonical: `${BASE_URL}/crm-for-whatsapp-business`
+  },
+  "/contact": {
+    title: "Contact WhachatCRM | Get Support & Sales Help",
+    description: "Contact WhachatCRM for sales questions, support, or partnership inquiries. We're here to help you get the most out of your WhatsApp CRM.",
+    canonical: `${BASE_URL}/contact`
+  },
+  "/privacy-policy": {
+    title: "Privacy Policy | WhachatCRM",
+    description: "WhachatCRM privacy policy. Learn how we collect, use, and protect your data when using our WhatsApp CRM platform.",
+    canonical: `${BASE_URL}/privacy-policy`
+  },
+  "/terms-of-use": {
+    title: "Terms of Use | WhachatCRM",
+    description: "WhachatCRM terms of use. Read our service terms, user responsibilities, and platform guidelines.",
+    canonical: `${BASE_URL}/terms-of-use`
+  }
+};
+
+export function injectPageMeta(html: string, url: string): string {
+  const pageMeta = PAGE_META[url];
+  if (!pageMeta) {
+    return html;
+  }
+
+  // Remove existing meta tags to prevent duplicates
+  html = html.replace(/<meta property="og:title"[^>]*>/gi, '');
+  html = html.replace(/<meta property="og:description"[^>]*>/gi, '');
+  html = html.replace(/<meta property="og:type"[^>]*>/gi, '');
+  html = html.replace(/<meta property="og:url"[^>]*>/gi, '');
+  html = html.replace(/<meta property="og:image"[^>]*>/gi, '');
+  html = html.replace(/<meta property="og:image:width"[^>]*>/gi, '');
+  html = html.replace(/<meta property="og:image:height"[^>]*>/gi, '');
+  html = html.replace(/<meta name="twitter:card"[^>]*>/gi, '');
+  html = html.replace(/<meta name="twitter:title"[^>]*>/gi, '');
+  html = html.replace(/<meta name="twitter:description"[^>]*>/gi, '');
+  html = html.replace(/<meta name="twitter:image"[^>]*>/gi, '');
+  html = html.replace(/<meta name="description"[^>]*>/gi, '');
+  html = html.replace(/<link rel="canonical"[^>]*>/gi, '');
+
+  const metaTags = `
+    <title>${pageMeta.title}</title>
+    <meta name="description" content="${pageMeta.description}" />
+    <meta property="og:title" content="${pageMeta.title}" />
+    <meta property="og:description" content="${pageMeta.description}" />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="${pageMeta.canonical}" />
+    <meta property="og:image" content="${BASE_URL}/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="${pageMeta.title}" />
+    <meta name="twitter:description" content="${pageMeta.description}" />
+    <meta name="twitter:image" content="${BASE_URL}/og-image.png" />
+    <link rel="canonical" href="${pageMeta.canonical}" />`;
+
+  html = html.replace(/<title>.*?<\/title>/, metaTags);
+  return html;
+}
+
+export function getMarketingRoutes(): string[] {
+  return Object.keys(PAGE_META);
+}
+
 export function generateHomepageHtml(): string {
   // SSR content for SEO - visually hidden but accessible to crawlers
   return `

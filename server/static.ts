@@ -1,7 +1,7 @@
 import express, { type Express } from "express";
 import fs from "fs";
 import path from "path";
-import { injectSeoMeta, generateBlogListHtml, generateBlogPostHtml, generateHomepageHtml, injectHomepageSeoMeta } from "./seo";
+import { injectSeoMeta, generateBlogListHtml, generateBlogPostHtml, generateHomepageHtml, injectHomepageSeoMeta, injectPageMeta, getMarketingRoutes } from "./seo";
 
 export function serveStatic(app: Express) {
   const distPath = path.resolve(__dirname, "public");
@@ -91,6 +91,23 @@ export function serveStatic(app: Express) {
     });
   });
 
+  // Marketing pages with SSR meta injection - MUST be before express.static
+  const marketingRoutes = getMarketingRoutes();
+  marketingRoutes.forEach(route => {
+    app.get(route, (req, res) => {
+      fs.readFile(indexPath, "utf-8", (err, html) => {
+        if (err) {
+          return res.sendFile(indexPath);
+        }
+        
+        const enhancedHtml = injectPageMeta(html, route);
+        res.set("Content-Type", "text/html");
+        res.set("Cache-Control", "public, max-age=3600");
+        res.send(enhancedHtml);
+      });
+    });
+  });
+
   // Serve static assets (JS, CSS, images, etc.)
   app.use(express.static(distPath, {
     index: false // Disable automatic index.html serving for /
@@ -101,7 +118,7 @@ export function serveStatic(app: Express) {
     const url = req.originalUrl.split("?")[0];
     
     // Routes that should NOT have SSR or caching (Shopify, auth, API, webhooks)
-    const skipSsrRoutes = ['/auth', '/api', '/webhooks', '/shopify'];
+    const skipSsrRoutes = ['/auth', '/api', '/webhooks', '/shopify', '/app'];
     const shouldSkipSsr = skipSsrRoutes.some(route => url.startsWith(route));
     
     if (shouldSkipSsr) {
