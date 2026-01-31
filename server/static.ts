@@ -11,6 +11,8 @@ export function serveStatic(app: Express) {
     );
   }
 
+  const indexPath = path.resolve(distPath, "index.html");
+
   // Serve uploaded files for Twilio media messages
   const uploadsPath = path.resolve(process.cwd(), "uploads");
   if (!fs.existsSync(uploadsPath)) {
@@ -24,13 +26,79 @@ export function serveStatic(app: Express) {
     app.use("/attached_assets", express.static(attachedAssetsPath));
   }
 
-  app.use(express.static(distPath));
+  // Homepage SSR - MUST be before express.static to intercept /
+  app.get("/", (req, res) => {
+    fs.readFile(indexPath, "utf-8", (err, html) => {
+      if (err) {
+        return res.sendFile(indexPath);
+      }
+      
+      // Inject WebPage schema (keeps existing Organization + SoftwareApplication schemas)
+      let enhancedHtml = injectHomepageSeoMeta(html);
+      
+      // Generate and inject SSR content for homepage
+      const ssrContent = generateHomepageHtml();
+      enhancedHtml = enhancedHtml.replace(
+        '<div id="root"></div>',
+        `<div id="root">${ssrContent}</div>`
+      );
+      
+      res.set("Content-Type", "text/html");
+      res.set("Cache-Control", "public, max-age=3600"); // 1 hour cache
+      res.send(enhancedHtml);
+    });
+  });
 
-  // fall through to index.html with SEO meta and content injection
+  // Blog pages SSR - MUST be before express.static
+  app.get("/blog", (req, res) => {
+    fs.readFile(indexPath, "utf-8", (err, html) => {
+      if (err) {
+        return res.sendFile(indexPath);
+      }
+      
+      let enhancedHtml = injectSeoMeta(html, "/blog");
+      const ssrContent = generateBlogListHtml();
+      enhancedHtml = enhancedHtml.replace(
+        '<div id="root"></div>',
+        `<div id="root">${ssrContent}</div>`
+      );
+      
+      res.set("Content-Type", "text/html");
+      res.set("Cache-Control", "public, max-age=3600");
+      res.send(enhancedHtml);
+    });
+  });
+
+  app.get("/blog/:slug", (req, res) => {
+    const slug = req.params.slug;
+    fs.readFile(indexPath, "utf-8", (err, html) => {
+      if (err) {
+        return res.sendFile(indexPath);
+      }
+      
+      let enhancedHtml = injectSeoMeta(html, `/blog/${slug}`);
+      const ssrContent = generateBlogPostHtml(slug);
+      if (ssrContent) {
+        enhancedHtml = enhancedHtml.replace(
+          '<div id="root"></div>',
+          `<div id="root">${ssrContent}</div>`
+        );
+      }
+      
+      res.set("Content-Type", "text/html");
+      res.set("Cache-Control", "public, max-age=3600");
+      res.send(enhancedHtml);
+    });
+  });
+
+  // Serve static assets (JS, CSS, images, etc.)
+  app.use(express.static(distPath, {
+    index: false // Disable automatic index.html serving for /
+  }));
+
+  // Catch-all for SPA routes (excluding protected routes)
   app.use("*", (req, res) => {
-    const indexPath = path.resolve(distPath, "index.html");
-    const fullUrl = req.originalUrl;
-    const url = fullUrl.split("?")[0];
+    const url = req.originalUrl.split("?")[0];
     
     // Routes that should NOT have SSR or caching (Shopify, auth, API, webhooks)
     const skipSsrRoutes = ['/auth', '/api', '/webhooks', '/shopify'];
@@ -38,67 +106,6 @@ export function serveStatic(app: Express) {
     
     if (shouldSkipSsr) {
       return res.sendFile(indexPath);
-    }
-    
-    // Homepage SSR
-    if (url === "/" || url === "") {
-      fs.readFile(indexPath, "utf-8", (err, html) => {
-        if (err) {
-          return res.sendFile(indexPath);
-        }
-        
-        // Inject WebPage schema (keeps existing Organization + SoftwareApplication schemas)
-        let enhancedHtml = injectHomepageSeoMeta(html);
-        
-        // Generate and inject SSR content for homepage
-        const ssrContent = generateHomepageHtml();
-        enhancedHtml = enhancedHtml.replace(
-          '<div id="root"></div>',
-          `<div id="root">${ssrContent}</div>`
-        );
-        
-        res.set("Content-Type", "text/html");
-        res.set("Cache-Control", "public, max-age=3600"); // 1 hour cache
-        res.send(enhancedHtml);
-      });
-      return;
-    }
-    
-    // Blog pages SSR
-    if (url.startsWith("/blog")) {
-      fs.readFile(indexPath, "utf-8", (err, html) => {
-        if (err) {
-          return res.sendFile(indexPath);
-        }
-        
-        // Inject SEO meta tags
-        let enhancedHtml = injectSeoMeta(html, url);
-        
-        // Generate and inject SSR content for blog pages
-        let ssrContent = "";
-        if (url === "/blog" || url === "/blog/") {
-          ssrContent = generateBlogListHtml();
-        } else if (url.startsWith("/blog/")) {
-          const slug = url.replace("/blog/", "").replace(/\/$/, "");
-          const postHtml = generateBlogPostHtml(slug);
-          if (postHtml) {
-            ssrContent = postHtml;
-          }
-        }
-        
-        // Inject SSR content as initial content inside #root
-        if (ssrContent) {
-          enhancedHtml = enhancedHtml.replace(
-            '<div id="root"></div>',
-            `<div id="root">${ssrContent}</div>`
-          );
-        }
-        
-        res.set("Content-Type", "text/html");
-        res.set("Cache-Control", "public, max-age=3600"); // 1 hour cache
-        res.send(enhancedHtml);
-      });
-      return;
     }
     
     // All other routes - serve index.html without SSR
