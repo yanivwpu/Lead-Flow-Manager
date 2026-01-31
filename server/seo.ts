@@ -196,6 +196,197 @@ export function isCrawler(userAgent: string): boolean {
   return crawlerPatterns.some(pattern => pattern.test(userAgent));
 }
 
+export function generateHomepageHtml(): string {
+  return `
+    <div style="font-family: system-ui, -apple-system, sans-serif; max-width: 1280px; margin: 0 auto;">
+      <nav style="padding: 16px 24px; display: flex; justify-content: space-between; align-items: center;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <div style="height: 32px; width: 32px; background: #22c55e; border-radius: 8px; display: flex; align-items: center; justify-content: center;">
+            <span style="color: white; font-weight: bold; font-size: 18px;">W</span>
+          </div>
+          <span style="font-weight: bold; font-size: 20px; color: #111;">WhachatCRM</span>
+        </div>
+        <div style="display: flex; gap: 16px; align-items: center;">
+          <a href="/pricing" style="color: #666; text-decoration: none; font-size: 14px;">Pricing</a>
+          <a href="/blog" style="color: #666; text-decoration: none; font-size: 14px;">Blog</a>
+          <a href="/auth" style="background: #22c55e; color: white; padding: 8px 16px; border-radius: 9999px; text-decoration: none; font-size: 14px; font-weight: 500;">Start Free</a>
+        </div>
+      </nav>
+
+      <section style="padding: 32px 24px 80px; max-width: 1200px; margin: 0 auto;">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: start;">
+          <div>
+            <h1 style="font-size: 3rem; font-weight: bold; color: #111; line-height: 1.1; margin-bottom: 24px;">
+              One Inbox. Every Channel. Zero Complexity.
+            </h1>
+            <p style="font-size: 1.25rem; color: #666; margin-bottom: 32px; line-height: 1.6;">
+              WhatsApp, SMS, Telegram, Instagram, Facebook, Web Chat — all in one unified inbox. Stop juggling apps. Respond faster, never lose a lead.
+            </p>
+            <div style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 24px;">
+              <a href="/auth" style="display: inline-flex; align-items: center; justify-content: center; gap: 8px; background: #22c55e; color: white; padding: 16px 32px; border-radius: 9999px; text-decoration: none; font-weight: 600; font-size: 16px;">
+                Start Your 14-Day Pro Trial →
+              </a>
+              <a href="/pricing" style="display: inline-flex; align-items: center; justify-content: center; gap: 8px; background: white; border: 1px solid #e5e7eb; color: #374151; padding: 12px 24px; border-radius: 9999px; text-decoration: none; font-weight: 500; font-size: 14px;">
+                Compare Plans →
+              </a>
+            </div>
+            <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 24px;">
+              <span style="color: #888; font-size: 14px;">No credit card required</span>
+              <span style="color: #ddd;">|</span>
+              <span style="color: #22c55e; font-size: 14px; font-weight: 500;">Free plan available forever</span>
+            </div>
+            <div style="display: flex; flex-wrap: wrap; gap: 16px; font-size: 14px; color: #666;">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="color: #22c55e;">✓</span>
+                <span>Built on the official WhatsApp Business API</span>
+              </div>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="color: #22c55e;">✓</span>
+                <span>Secure & compliant — no scraping</span>
+              </div>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="color: #22c55e;">✓</span>
+                <span>Designed for founders, sales teams & support teams</span>
+              </div>
+            </div>
+          </div>
+          <div>
+            <img src="/assets/generated_images/whatsapp_crm_dashboard_mockup_resized.png" alt="WhachatCRM Dashboard - WhatsApp CRM Interface" style="width: 100%; border-radius: 16px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25); border: 1px solid #e5e7eb;" width="704" height="384" />
+          </div>
+        </div>
+      </section>
+
+      <section style="background: #111827; color: white; padding: 64px 24px;">
+        <div style="max-width: 1000px; margin: 0 auto;">
+          <h2 style="font-size: 2rem; font-weight: bold; text-align: center; margin-bottom: 48px;">
+            WhatsApp Wasn't Built for Managing Customers — Until Now
+          </h2>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 48px;">
+            <div>
+              <h3 style="color: #9ca3af; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 24px;">The Problem</h3>
+              <ul style="list-style: none; padding: 0; margin: 0;">
+                <li style="display: flex; gap: 12px; margin-bottom: 16px; color: #d1d5db;">
+                  <span style="color: #ef4444;">✕</span> Important chats get buried
+                </li>
+                <li style="display: flex; gap: 12px; margin-bottom: 16px; color: #d1d5db;">
+                  <span style="color: #ef4444;">✕</span> No context about customers
+                </li>
+                <li style="display: flex; gap: 12px; margin-bottom: 16px; color: #d1d5db;">
+                  <span style="color: #ef4444;">✕</span> Follow-ups are forgotten
+                </li>
+                <li style="display: flex; gap: 12px; color: #d1d5db;">
+                  <span style="color: #ef4444;">✕</span> Teams lose visibility
+                </li>
+              </ul>
+            </div>
+            <div>
+              <h3 style="color: #22c55e; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 24px;">WhachatCRM Solution</h3>
+              <ul style="list-style: none; padding: 0; margin: 0;">
+                <li style="display: flex; gap: 12px; margin-bottom: 16px; color: white;">
+                  <span style="color: #22c55e;">✓</span> One conversation per customer
+                </li>
+                <li style="display: flex; gap: 12px; margin-bottom: 16px; color: white;">
+                  <span style="color: #22c55e;">✓</span> Notes, tags & tasks inside each chat
+                </li>
+                <li style="display: flex; gap: 12px; margin-bottom: 16px; color: white;">
+                  <span style="color: #22c55e;">✓</span> Clear follow-ups so nothing slips through
+                </li>
+                <li style="display: flex; gap: 12px; color: white;">
+                  <span style="color: #22c55e;">✓</span> Multi-channel integrations with your favorite tools
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section style="background: #f9fafb; padding: 64px 24px;">
+        <div style="max-width: 1200px; margin: 0 auto;">
+          <h2 style="font-size: 2rem; font-weight: bold; text-align: center; margin-bottom: 48px; color: #111;">
+            Everything You Need to Manage WhatsApp Like a CRM
+          </h2>
+          <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px;">
+            <div style="background: white; padding: 24px; border-radius: 16px; border: 1px solid #f3f4f6;">
+              <h3 style="font-size: 18px; font-weight: bold; margin-bottom: 8px; color: #111;">Organized Conversations</h3>
+              <p style="color: #666; font-size: 14px;">Every WhatsApp chat becomes a customer record — no more searching or guessing.</p>
+            </div>
+            <div style="background: white; padding: 24px; border-radius: 16px; border: 1px solid #f3f4f6;">
+              <h3 style="font-size: 18px; font-weight: bold; margin-bottom: 8px; color: #111;">Notes & Tags</h3>
+              <p style="color: #666; font-size: 14px;">Add internal notes and tags so your team always knows the full context.</p>
+            </div>
+            <div style="background: white; padding: 24px; border-radius: 16px; border: 1px solid #f3f4f6;">
+              <h3 style="font-size: 18px; font-weight: bold; margin-bottom: 8px; color: #111;">Follow-Ups & Tasks</h3>
+              <p style="color: #666; font-size: 14px;">Set reminders and tasks to make sure every lead is followed up on time.</p>
+            </div>
+            <div style="background: white; padding: 24px; border-radius: 16px; border: 1px solid #f3f4f6;">
+              <h3 style="font-size: 18px; font-weight: bold; margin-bottom: 8px; color: #111;">AI Brain</h3>
+              <p style="color: #666; font-size: 14px;">Smart reply suggestions, lead capture & tone control. Your AI-powered business assistant.</p>
+            </div>
+            <div style="background: white; padding: 24px; border-radius: 16px; border: 1px solid #f3f4f6;">
+              <h3 style="font-size: 18px; font-weight: bold; margin-bottom: 8px; color: #111;">Visual Chatbot Builder</h3>
+              <p style="color: #666; font-size: 14px;">Build automated flows with our drag-and-drop chatbot builder. No coding required.</p>
+            </div>
+            <div style="background: white; padding: 24px; border-radius: 16px; border: 1px solid #f3f4f6;">
+              <h3 style="font-size: 18px; font-weight: bold; margin-bottom: 8px; color: #111;">Multi-Channel Integrations</h3>
+              <p style="color: #666; font-size: 14px;">Connect with Shopify, HubSpot, Salesforce, Stripe & more to sync leads across all your tools.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section style="background: #f9fafb; padding: 64px 24px;">
+        <div style="max-width: 900px; margin: 0 auto; text-align: center;">
+          <h2 style="font-size: 2rem; font-weight: bold; margin-bottom: 16px; color: #111;">Up and running in minutes</h2>
+          <p style="color: #666; margin-bottom: 48px;">No complex setup. No training required.</p>
+          <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 48px;">
+            <div>
+              <div style="width: 56px; height: 56px; background: #22c55e; color: white; border-radius: 16px; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px; font-size: 20px; font-weight: bold;">1</div>
+              <h3 style="font-weight: bold; margin-bottom: 8px; color: #111;">Connect your number</h3>
+              <p style="color: #666; font-size: 14px;">Link your WhatsApp Business number in just a few clicks.</p>
+            </div>
+            <div>
+              <div style="width: 56px; height: 56px; background: #22c55e; color: white; border-radius: 16px; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px; font-size: 20px; font-weight: bold;">2</div>
+              <h3 style="font-weight: bold; margin-bottom: 8px; color: #111;">Organize your chats</h3>
+              <p style="color: #666; font-size: 14px;">Add notes, tags, and set follow-up reminders for each conversation.</p>
+            </div>
+            <div>
+              <div style="width: 56px; height: 56px; background: #22c55e; color: white; border-radius: 16px; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px; font-size: 20px; font-weight: bold;">3</div>
+              <h3 style="font-weight: bold; margin-bottom: 8px; color: #111;">Close more deals</h3>
+              <p style="color: #666; font-size: 14px;">Get reminders, follow up on time, and convert more leads into customers.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <footer style="border-top: 1px solid #e5e7eb; padding: 32px 24px; text-align: center;">
+        <p style="color: #666; font-size: 14px;">© 2025 WhachatCRM. All rights reserved.</p>
+        <div style="display: flex; justify-content: center; gap: 24px; margin-top: 16px;">
+          <a href="/privacy-policy" style="color: #666; text-decoration: none; font-size: 14px;">Privacy</a>
+          <a href="/terms-of-use" style="color: #666; text-decoration: none; font-size: 14px;">Terms</a>
+          <a href="/contact" style="color: #666; text-decoration: none; font-size: 14px;">Contact</a>
+          <a href="/blog" style="color: #666; text-decoration: none; font-size: 14px;">Blog</a>
+        </div>
+      </footer>
+    </div>`;
+}
+
+export function injectHomepageSeoMeta(html: string): string {
+  const webPageSchema = `
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebPage",
+      "name": "Official WhatsApp API, Instagram & SMS - One Unified Inbox",
+      "url": "https://whachatcrm.com/",
+      "description": "Manage WhatsApp Business API, Instagram, Facebook and SMS conversations in one unified inbox."
+    }
+    </script>`;
+  
+  html = html.replace('</head>', webPageSchema + '\n  </head>');
+  
+  return html;
+}
+
 function formatDate(dateStr: string): string {
   const date = new Date(dateStr);
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });

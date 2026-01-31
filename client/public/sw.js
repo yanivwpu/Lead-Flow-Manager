@@ -1,4 +1,4 @@
-const CACHE_NAME = 'chatcrm-v4';
+const CACHE_NAME = 'chatcrm-v5';
 const urlsToCache = [
   '/favicon.png',
   '/pwa-icon.png'
@@ -35,8 +35,8 @@ self.addEventListener('fetch', (event) => {
     return;
   }
   
-  // Never cache blog pages - always fetch fresh for SEO
-  if (url.pathname.startsWith('/blog')) {
+  // Never cache webhooks
+  if (url.pathname.startsWith('/webhooks/') || url.pathname.includes('/webhook')) {
     event.respondWith(fetch(event.request));
     return;
   }
@@ -44,6 +44,30 @@ self.addEventListener('fetch', (event) => {
   // Never cache auth routes
   if (url.pathname.startsWith('/auth')) {
     event.respondWith(fetch(event.request));
+    return;
+  }
+  
+  // Never cache Shopify routes
+  if (url.pathname.startsWith('/shopify')) {
+    event.respondWith(fetch(event.request));
+    return;
+  }
+  
+  // Homepage - network-first for fresh SSR content
+  if (url.pathname === '/' || url.pathname === '') {
+    event.respondWith(
+      fetch(event.request)
+        .catch(() => caches.match(event.request))
+    );
+    return;
+  }
+  
+  // Blog pages - network-first for fresh SSR content
+  if (url.pathname.startsWith('/blog')) {
+    event.respondWith(
+      fetch(event.request)
+        .catch(() => caches.match(event.request))
+    );
     return;
   }
   
