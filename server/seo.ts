@@ -197,52 +197,62 @@ export function isCrawler(userAgent: string): boolean {
 }
 
 export function generateHomepageHtml(): string {
-  // Minimal SSR content for SEO - hidden with opacity:0, React will replace
-  // This provides content for crawlers while avoiding visual flash
+  // SSR content for SEO - semantic HTML that React will replace
   return `
-    <div data-ssr-content="true" style="opacity: 0; position: absolute; pointer-events: none;">
-      <h1>One Inbox. Every Channel. Zero Complexity.</h1>
-      <p>WhatsApp, SMS, Telegram, Instagram, Facebook, Web Chat — all in one unified inbox. Stop juggling apps. Respond faster, never lose a lead.</p>
-      <p>WhachatCRM - Official WhatsApp API, Instagram & SMS - One Unified Inbox</p>
-      <p>Manage all your customer conversations from WhatsApp Business API, Instagram, Facebook, SMS and more in one unified inbox. Built for SMBs and solo founders.</p>
-      
-      <h2>WhatsApp Wasn't Built for Managing Customers — Until Now</h2>
-      <p>Important chats get buried. No context about customers. Follow-ups are forgotten. Teams lose visibility.</p>
-      <p>WhachatCRM Solution: One conversation per customer. Notes, tags & tasks inside each chat. Clear follow-ups so nothing slips through. Multi-channel integrations with your favorite tools.</p>
-      
-      <h2>Everything You Need to Manage WhatsApp Like a CRM</h2>
-      <h3>Organized Conversations</h3>
-      <p>Every WhatsApp chat becomes a customer record — no more searching or guessing.</p>
-      <h3>Notes & Tags</h3>
-      <p>Add internal notes and tags so your team always knows the full context.</p>
-      <h3>Follow-Ups & Tasks</h3>
-      <p>Set reminders and tasks to make sure every lead is followed up on time.</p>
-      <h3>AI Brain</h3>
-      <p>Smart reply suggestions, lead capture & tone control. Your AI-powered business assistant.</p>
-      <h3>Visual Chatbot Builder</h3>
-      <p>Build automated flows with our drag-and-drop chatbot builder. No coding required.</p>
-      <h3>Multi-Channel Integrations</h3>
-      <p>Connect with Shopify, HubSpot, Salesforce, Stripe & more to sync leads across all your tools.</p>
-      
-      <h2>Up and running in minutes</h2>
-      <p>No complex setup. No training required.</p>
-      <p>1. Connect your number - Link your WhatsApp Business number in just a few clicks.</p>
-      <p>2. Organize your chats - Add notes, tags, and set follow-up reminders for each conversation.</p>
-      <p>3. Close more deals - Get reminders, follow up on time, and convert more leads into customers.</p>
-      
-      <a href="/auth">Start Your 14-Day Pro Trial</a>
-      <a href="/pricing">Compare Plans</a>
-      <p>No credit card required. Free plan available forever.</p>
-      <p>Built on the official WhatsApp Business API. Secure & compliant — no scraping. Designed for founders, sales teams & support teams.</p>
-      
-      <footer>
-        <p>© 2025 WhachatCRM. All rights reserved.</p>
-        <a href="/privacy-policy">Privacy</a>
-        <a href="/terms-of-use">Terms</a>
-        <a href="/contact">Contact</a>
-        <a href="/blog">Blog</a>
-      </footer>
-    </div>`;
+      <div data-ssr-content="true">
+        <main>
+          <h1>One Inbox. Every Channel. Zero Complexity.</h1>
+          <p>WhatsApp, SMS, Telegram, Instagram, Facebook, Web Chat — all in one unified inbox. Stop juggling apps. Respond faster, never lose a lead.</p>
+          <p>WhachatCRM - Official WhatsApp API, Instagram & SMS - One Unified Inbox</p>
+          <p>Manage all your customer conversations from WhatsApp Business API, Instagram, Facebook, SMS and more in one unified inbox. Built for SMBs and solo founders.</p>
+
+          <section>
+            <h2>WhatsApp Wasn't Built for Managing Customers — Until Now</h2>
+            <p>Important chats get buried. No context about customers. Follow-ups are forgotten. Teams lose visibility.</p>
+            <p>WhachatCRM Solution: One conversation per customer. Notes, tags & tasks inside each chat. Clear follow-ups so nothing slips through. Multi-channel integrations with your favorite tools.</p>
+          </section>
+
+          <section>
+            <h2>Everything You Need to Manage WhatsApp Like a CRM</h2>
+            <h3>Organized Conversations</h3>
+            <p>Every WhatsApp chat becomes a customer record — no more searching or guessing.</p>
+            <h3>Notes & Tags</h3>
+            <p>Add internal notes and tags so your team always knows the full context.</p>
+            <h3>Follow-Ups & Tasks</h3>
+            <p>Set reminders and tasks to make sure every lead is followed up on time.</p>
+            <h3>AI Brain</h3>
+            <p>Smart reply suggestions, lead capture & tone control. Your AI-powered business assistant.</p>
+            <h3>Visual Chatbot Builder</h3>
+            <p>Build automated flows with our drag-and-drop chatbot builder. No coding required.</p>
+            <h3>Multi-Channel Integrations</h3>
+            <p>Connect with Shopify, HubSpot, Salesforce, Stripe & more to sync leads across all your tools.</p>
+          </section>
+
+          <section>
+            <h2>Up and running in minutes</h2>
+            <p>No complex setup. No training required.</p>
+            <ol>
+              <li>Connect your number - Link your WhatsApp Business number in just a few clicks.</li>
+              <li>Organize your chats - Add notes, tags, and set follow-up reminders for each conversation.</li>
+              <li>Close more deals - Get reminders, follow up on time, and convert more leads into customers.</li>
+            </ol>
+            <a href="/auth" rel="prefetch">Start Your 14-Day Pro Trial</a>
+            <a href="/pricing" rel="prefetch">Compare Plans</a>
+            <p>No credit card required. Free plan available forever.</p>
+            <p>Built on the official WhatsApp Business API. Secure & compliant — no scraping. Designed for founders, sales teams & support teams.</p>
+          </section>
+
+          <footer>
+            <p>© 2025 WhachatCRM. All rights reserved.</p>
+            <nav>
+              <a href="/privacy-policy">Privacy</a>
+              <a href="/terms-of-use">Terms</a>
+              <a href="/contact">Contact</a>
+              <a href="/blog">Blog</a>
+            </nav>
+          </footer>
+        </main>
+      </div>`;
 }
 
 export function injectHomepageSeoMeta(html: string): string {
