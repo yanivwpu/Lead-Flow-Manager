@@ -45,7 +45,17 @@
       <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Plus+Jakarta+Sans:wght@500;600;700&display=swap" rel="stylesheet" />
     </noscript>
 
-    <!-- PWA Manifest -->
+    <!-- Critical CSS -->
+    <style>
+      body { margin: 0; font-family: 'Inter', sans-serif; color: #111; background: #fff; }
+      main { max-width: 1200px; margin: 0 auto; padding: 2rem; }
+      h1,h2,h3 { margin: 1rem 0; line-height: 1.3; }
+      nav a { margin-right: 1rem; text-decoration: none; color: #22c55e; }
+      a.button-link { display: inline-block; padding: 0.75rem 1.5rem; background: #22c55e; color: #fff; border-radius: 0.5rem; text-decoration: none; margin-top: 1rem; }
+      footer { margin-top: 3rem; border-top: 1px solid #ddd; padding-top: 1rem; font-size: 0.9rem; color: #555; }
+    </style>
+
+    <!-- PWA -->
     <link rel="manifest" href="/manifest.json" />
     <meta name="theme-color" content="#22c55e" />
 
@@ -56,80 +66,62 @@
     <link rel="prefetch" href="/auth" />
     <link rel="prefetch" href="/pricing" />
 
-    <!-- Structured Data -->
+    <!-- Structured Data (Organization, Software, Website, WebPage) -->
     <script type="application/ld+json">
-    {
-      "@context": "https://schema.org",
-      "@type": "Organization",
-      "@id": "https://whachatcrm.com/#organization",
-      "name": "WhachatCRM",
-      "alternateName": "Whachat CRM",
-      "url": "https://whachatcrm.com",
-      "logo": {
-        "@type": "ImageObject",
-        "url": "https://whachatcrm.com/logo.png"
-      },
-      "description": "WhachatCRM is a CRM-first WhatsApp sales platform that helps small and medium businesses manage leads, conversations, follow-ups, and deals without per-message fees.",
-      "foundingDate": "2025",
-      "sameAs": [
-        "https://www.linkedin.com/company/whachatcrm",
-        "https://twitter.com/whachatcrm"
-      ]
-    }
-    </script>
-
-    <script type="application/ld+json">
-    {
-      "@context": "https://schema.org",
-      "@type": "SoftwareApplication",
-      "@id": "https://whachatcrm.com/#software",
-      "name": "WhachatCRM",
-      "applicationCategory": "BusinessApplication",
-      "applicationSubCategory": "CRM Software",
-      "operatingSystem": "Web",
-      "url": "https://whachatcrm.com",
-      "description": "WhachatCRM is a CRM-first WhatsApp platform that helps small and medium businesses manage leads, automate follow-ups, and close deals without WhatsApp message markups.",
-      "offers": {
-        "@type": "Offer",
-        "price": "0",
-        "priceCurrency": "USD",
-        "availability": "https://schema.org/OnlineOnly"
-      },
-      "publisher": {
-        "@id": "https://whachatcrm.com/#organization"
+      {
+        "@context":"https://schema.org",
+        "@type":"Organization",
+        "@id":"https://whachatcrm.com/#organization",
+        "name":"WhachatCRM",
+        "alternateName":"Whachat CRM",
+        "url":"https://whachatcrm.com",
+        "logo":{"@type":"ImageObject","url":"https://whachatcrm.com/logo.png"},
+        "description":"WhachatCRM is a CRM-first WhatsApp sales platform that helps small and medium businesses manage leads, conversations, follow-ups, and deals without per-message fees.",
+        "foundingDate":"2025",
+        "sameAs":["https://www.linkedin.com/company/whachatcrm","https://twitter.com/whachatcrm"]
       }
-    }
     </script>
-
     <script type="application/ld+json">
-    {
-      "@context": "https://schema.org",
-      "@type": "WebSite",
-      "@id": "https://whachatcrm.com/#website",
-      "url": "https://whachatcrm.com",
-      "name": "WhachatCRM",
-      "publisher": {
-        "@id": "https://whachatcrm.com/#organization"
+      {
+        "@context":"https://schema.org",
+        "@type":"SoftwareApplication",
+        "@id":"https://whachatcrm.com/#software",
+        "name":"WhachatCRM",
+        "applicationCategory":"BusinessApplication",
+        "applicationSubCategory":"CRM Software",
+        "operatingSystem":"Web",
+        "url":"https://whachatcrm.com",
+        "description":"WhachatCRM is a CRM-first WhatsApp platform that helps small and medium businesses manage leads, automate follow-ups, and close deals without WhatsApp message markups.",
+        "offers":{"@type":"Offer","price":"0","priceCurrency":"USD","availability":"https://schema.org/OnlineOnly"},
+        "publisher":{"@id":"https://whachatcrm.com/#organization"}
       }
-    }
     </script>
-
     <script type="application/ld+json">
-    {
-      "@context": "https://schema.org",
-      "@type": "WebPage",
-      "name": "Official WhatsApp API, Instagram & SMS - One Unified Inbox",
-      "url": "https://whachatcrm.com/",
-      "description": "Manage WhatsApp Business API, Instagram, Facebook and SMS conversations in one unified inbox."
-    }
+      {
+        "@context":"https://schema.org",
+        "@type":"WebSite",
+        "@id":"https://whachatcrm.com/#website",
+        "url":"https://whachatcrm.com",
+        "name":"WhachatCRM",
+        "publisher":{"@id":"https://whachatcrm.com/#organization"}
+      }
+    </script>
+    <script type="application/ld+json">
+      {
+        "@context":"https://schema.org",
+        "@type":"WebPage",
+        "name":"Official WhatsApp API, Instagram & SMS - One Unified Inbox",
+        "url":"https://whachatcrm.com/",
+        "description":"Manage WhatsApp Business API, Instagram, Facebook and SMS conversations in one unified inbox."
+      }
     </script>
 
-    <!-- Main App Entry Point -->
+    <!-- Main JS - Vite will inject the correct script in production -->
     <script type="module" src="/src/main.tsx"></script>
   </head>
   <body>
     <div id="root">
-      <div data-ssr-content="true" style="position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0;">
+      <div data-ssr-content="true">
         <main>
           <h1>One Inbox. Every Channel. Zero Complexity.</h1>
           <p>WhatsApp, SMS, Telegram, Instagram, Facebook, Web Chat — all in one unified inbox. Stop juggling apps. Respond faster, never lose a lead.</p>
@@ -166,8 +158,8 @@
               <li>Organize your chats - Add notes, tags, and set follow-up reminders for each conversation.</li>
               <li>Close more deals - Get reminders, follow up on time, and convert more leads into customers.</li>
             </ol>
-            <a href="/auth" rel="prefetch">Start Your 14-Day Pro Trial</a>
-            <a href="/pricing" rel="prefetch">Compare Plans</a>
+            <a href="/auth" class="button-link">Start Your 14-Day Pro Trial</a>
+            <a href="/pricing" class="button-link">Compare Plans</a>
             <p>No credit card required. Free plan available forever.</p>
             <p>Built on the official WhatsApp Business API. Secure & compliant — no scraping. Designed for founders, sales teams & support teams.</p>
           </section>
@@ -196,24 +188,12 @@
       }
     </script>
 
-    <!-- Smart Lazy Loading for Images with Hero Preload -->
+    <!-- Lazy Loading Images with Alt -->
     <script>
       document.addEventListener('DOMContentLoaded', () => {
-        const images = document.querySelectorAll('img');
-
-        images.forEach((img, index) => {
-          if (index === 0) {
-            // Hero image loads immediately
-            img.setAttribute('loading', 'eager');
-            const link = document.createElement('link');
-            link.rel = 'preload';
-            link.as = 'image';
-            link.href = img.src;
-            document.head.appendChild(link);
-          } else {
-            // All other images lazy-load
-            if (!img.hasAttribute('loading')) img.setAttribute('loading', 'lazy');
-          }
+        document.querySelectorAll('img').forEach((img, i) => {
+          if (!img.hasAttribute('alt')) img.setAttribute('alt', 'WhachatCRM image');
+          img.setAttribute('loading', i === 0 ? 'eager' : 'lazy');
         });
       });
     </script>
