@@ -10,15 +10,17 @@ export function PabblyAlternative() {
   return (
     <div className="min-h-screen bg-white">
       <Helmet>
-        <title>Best Pabbly Chatflow Alternative for SMBs – WhachatCRM</title>
-        <meta name="description" content="Looking for a Pabbly Chatflow alternative without the upfront cost? WhachatCRM offers WhatsApp CRM starting at $19/month with no credit limits. Try free." />
+        <title>Best Pabbly Chatflow Alternative for SMBs | Affordable WhatsApp CRM – WhachatCRM</title>
+        <meta name="description" content="Switch from Pabbly Chatflow to WhachatCRM: $19/mo, no credit limits, free plan available. Visual chatbot builder & unified inbox for small teams." />
         <meta name="keywords" content="Pabbly alternative, Pabbly Chatflow alternative, WhatsApp CRM, WhatsApp automation, Pabbly competitor" />
         <link rel="canonical" href="https://whachatcrm.com/pabbly-alternative" />
-        <meta name="twitter:card" content="summary" />
-        <meta property="og:title" content="Best Pabbly Chatflow Alternative for SMBs – WhachatCRM" />
-        <meta property="og:description" content="Looking for a Pabbly Chatflow alternative without the upfront cost? WhachatCRM offers WhatsApp CRM starting at $19/month with no credit limits." />
+        <meta property="og:title" content="Best Pabbly Chatflow Alternative for SMBs | Affordable WhatsApp CRM – WhachatCRM" />
+        <meta property="og:description" content="Switch from Pabbly Chatflow to WhachatCRM: $19/mo, no credit limits, free plan available." />
         <meta property="og:url" content="https://whachatcrm.com/pabbly-alternative" />
         <meta property="og:type" content="website" />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content="Best Pabbly Chatflow Alternative for SMBs" />
+        <meta name="twitter:description" content="Switch from Pabbly Chatflow: $19/mo, no credit limits, free plan available." />
       </Helmet>
 
       <nav className="p-4 md:p-6 flex justify-between items-center max-w-7xl mx-auto">

@@ -1,9 +1,20 @@
 import { Link } from "wouter";
+import { Helmet } from "react-helmet";
 import { ArrowLeft } from "lucide-react";
 
 export function TermsOfUse() {
   return (
     <div className="min-h-screen bg-gray-50 py-12 px-4">
+      <Helmet>
+        <title>Terms of Use | WhachatCRM</title>
+        <meta name="description" content="WhachatCRM terms of use. Read our service terms, user responsibilities, and platform guidelines." />
+        <link rel="canonical" href="https://whachatcrm.com/terms-of-use" />
+        <meta property="og:title" content="Terms of Use | WhachatCRM" />
+        <meta property="og:description" content="WhachatCRM terms of use. Read our service terms and guidelines." />
+        <meta property="og:url" content="https://whachatcrm.com/terms-of-use" />
+        <meta property="og:type" content="website" />
+        <meta name="twitter:card" content="summary" />
+      </Helmet>
       <div className="max-w-3xl mx-auto bg-white rounded-2xl shadow-sm border border-gray-100 p-8 md:p-12">
         <Link href="/">
           <a className="inline-flex items-center text-sm text-gray-500 hover:text-brand-green mb-6">

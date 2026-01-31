@@ -104,17 +104,20 @@ export function Welcome() {
   return (
     <div className="min-h-screen bg-white overflow-x-hidden">
       <Helmet>
-        <title>Official WhatsApp API, Instagram & SMS - One Unified Inbox | WhachatCRM</title>
-        <meta name="description" content="Manage all your customer conversations from WhatsApp Business API, Instagram, Facebook, SMS and more in one unified inbox. Built for SMBs and solo founders." />
-        <meta property="og:title" content="Official WhatsApp API, Instagram & SMS - One Unified Inbox | WhachatCRM" />
-        <meta property="og:description" content="Manage all your customer conversations from WhatsApp Business API, Instagram, Facebook, SMS and more in one unified inbox. Built for SMBs and solo founders." />
+        <title>Official WhatsApp API CRM: Unified Inbox for WhatsApp, Instagram & SMS | WhachatCRM</title>
+        <meta name="description" content="Manage WhatsApp customer chats like a CRM. Unified inbox, notes, tags, follow-ups, AI replies & chatbot builder. Free plan forever – start in minutes." />
+        <link rel="canonical" href="https://whachatcrm.com/" />
+        <meta property="og:title" content="Official WhatsApp API CRM: Unified Inbox for WhatsApp, Instagram & SMS | WhachatCRM" />
+        <meta property="og:description" content="Manage WhatsApp customer chats like a CRM. Unified inbox, notes, tags, follow-ups, AI replies & chatbot builder. Free plan forever – start in minutes." />
+        <meta property="og:url" content="https://whachatcrm.com/" />
+        <meta property="og:type" content="website" />
         <meta property="og:image" content="https://whachatcrm.com/og-image.png" />
         <meta property="og:image:width" content="1200" />
-        <meta property="og:image:height" content="627" />
+        <meta property="og:image:height" content="630" />
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:image" content="https://whachatcrm.com/og-image.png" />
-        <meta name="twitter:title" content="Official WhatsApp API, Instagram & SMS - One Unified Inbox | WhachatCRM" />
-        <meta name="twitter:description" content="Manage all your customer conversations from WhatsApp Business API, Instagram, Facebook, SMS and more in one unified inbox. Built for SMBs and solo founders." />
+        <meta name="twitter:title" content="Official WhatsApp API CRM: Unified Inbox for WhatsApp, Instagram & SMS | WhachatCRM" />
+        <meta name="twitter:description" content="Manage WhatsApp customer chats like a CRM. Unified inbox, notes, tags, follow-ups, AI replies & chatbot builder. Free plan forever." />
       </Helmet>
       <BookDemoModal isOpen={showDemoModal} onClose={() => setShowDemoModal(false)} />
       {/* Navigation */}

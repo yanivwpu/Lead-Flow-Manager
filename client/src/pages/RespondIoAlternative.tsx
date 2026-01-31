@@ -10,15 +10,17 @@ export function RespondIoAlternative() {
   return (
     <div className="min-h-screen bg-white">
       <Helmet>
-        <title>Best Respond.io Alternative for SMBs – WhachatCRM</title>
-        <meta name="description" content="Looking for a Respond.io alternative without enterprise pricing? WhachatCRM offers WhatsApp CRM from $19/month. Visual chatbot builder included." />
+        <title>Best Respond.io Alternative for SMBs | Affordable WhatsApp CRM – WhachatCRM</title>
+        <meta name="description" content="Switch from Respond.io to WhachatCRM: Starts at $19/mo, free plan, unlimited users, simple setup. Better for small teams managing WhatsApp leads." />
         <meta name="keywords" content="Respond.io alternative, WhatsApp CRM, Respond.io competitor, affordable WhatsApp CRM, WhatsApp business tool" />
         <link rel="canonical" href="https://whachatcrm.com/respond-io-alternative" />
-        <meta name="twitter:card" content="summary" />
-        <meta property="og:title" content="Best Respond.io Alternative for SMBs – WhachatCRM" />
-        <meta property="og:description" content="Looking for a Respond.io alternative without enterprise pricing? WhachatCRM offers WhatsApp CRM from $19/month." />
+        <meta property="og:title" content="Best Respond.io Alternative for SMBs | Affordable WhatsApp CRM – WhachatCRM" />
+        <meta property="og:description" content="Switch from Respond.io to WhachatCRM: Starts at $19/mo, free plan, unlimited users, simple setup." />
         <meta property="og:url" content="https://whachatcrm.com/respond-io-alternative" />
         <meta property="og:type" content="website" />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content="Best Respond.io Alternative for SMBs | Affordable WhatsApp CRM" />
+        <meta name="twitter:description" content="Switch from Respond.io to WhachatCRM: Starts at $19/mo, free plan, unlimited users." />
       </Helmet>
 
       <nav className="p-4 md:p-6 flex justify-between items-center max-w-7xl mx-auto">

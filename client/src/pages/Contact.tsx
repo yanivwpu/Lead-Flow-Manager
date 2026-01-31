@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Link } from "wouter";
+import { Helmet } from "react-helmet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -63,6 +64,16 @@ export function Contact() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white">
+      <Helmet>
+        <title>Contact WhachatCRM | Get Support & Sales Help</title>
+        <meta name="description" content="Contact WhachatCRM for sales questions, support, or partnership inquiries. We're here to help you get the most out of your WhatsApp CRM." />
+        <link rel="canonical" href="https://whachatcrm.com/contact" />
+        <meta property="og:title" content="Contact WhachatCRM | Get Support & Sales Help" />
+        <meta property="og:description" content="Contact WhachatCRM for sales questions, support, or partnership inquiries." />
+        <meta property="og:url" content="https://whachatcrm.com/contact" />
+        <meta property="og:type" content="website" />
+        <meta name="twitter:card" content="summary" />
+      </Helmet>
       <div className="max-w-4xl mx-auto px-4 py-12">
         <Link href="/">
           <Button variant="ghost" className="mb-8" data-testid="link-back-home">

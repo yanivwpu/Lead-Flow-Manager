@@ -10,15 +10,17 @@ export function Waba360Alternative() {
   return (
     <div className="min-h-screen bg-white">
       <Helmet>
-        <title>Best 360dialog Alternative for SMBs – WhachatCRM</title>
-        <meta name="description" content="Looking for a 360dialog/WABA360 alternative with built-in CRM? WhachatCRM offers WhatsApp CRM from $19/month with visual chatbot builder and team inbox." />
+        <title>Best 360dialog Alternative for SMBs | WhatsApp CRM with Built-in Inbox – WhachatCRM</title>
+        <meta name="description" content="Switch from 360dialog to WhachatCRM: $19/mo, built-in CRM features, visual chatbot builder, team inbox. No separate inbox tool needed." />
         <meta name="keywords" content="360dialog alternative, WABA360 alternative, WhatsApp CRM, WhatsApp business tool, affordable WhatsApp CRM" />
         <link rel="canonical" href="https://whachatcrm.com/waba360-alternative" />
-        <meta name="twitter:card" content="summary" />
-        <meta property="og:title" content="Best 360dialog Alternative for SMBs – WhachatCRM" />
-        <meta property="og:description" content="Looking for a 360dialog/WABA360 alternative with built-in CRM? WhachatCRM offers WhatsApp CRM from $19/month." />
+        <meta property="og:title" content="Best 360dialog Alternative for SMBs | WhatsApp CRM with Built-in Inbox – WhachatCRM" />
+        <meta property="og:description" content="Switch from 360dialog to WhachatCRM: $19/mo, built-in CRM features, visual chatbot builder." />
         <meta property="og:url" content="https://whachatcrm.com/waba360-alternative" />
         <meta property="og:type" content="website" />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content="Best 360dialog Alternative for SMBs" />
+        <meta name="twitter:description" content="Switch from 360dialog: $19/mo, built-in CRM, visual chatbot builder." />
       </Helmet>
 
       <nav className="p-4 md:p-6 flex justify-between items-center max-w-7xl mx-auto">

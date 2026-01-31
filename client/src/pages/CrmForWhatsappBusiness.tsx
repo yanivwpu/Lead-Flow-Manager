@@ -10,11 +10,17 @@ export function CrmForWhatsappBusiness() {
   return (
     <div className="min-h-screen bg-white">
       <Helmet>
-        <title>Multi-Channel CRM for WhatsApp Business | WhachatCRM</title>
-        <meta name="description" content="Unified inbox for WhatsApp, SMS, Telegram, Instagram, Facebook & Web Chat. Manage all conversations in one place. Free plan available." />
+        <title>Multi-Channel CRM for WhatsApp Business | Unified Inbox – WhachatCRM</title>
+        <meta name="description" content="Unified inbox for WhatsApp, SMS, Telegram, Instagram, Facebook & Web Chat. Manage all customer conversations in one place. Free plan available." />
         <meta name="keywords" content="CRM for WhatsApp Business, multi-channel CRM, unified inbox, WhatsApp lead management, small business CRM, SMS, Telegram" />
         <link rel="canonical" href="https://whachatcrm.com/crm-for-whatsapp-business" />
-        <meta name="twitter:card" content="summary" />
+        <meta property="og:title" content="Multi-Channel CRM for WhatsApp Business | Unified Inbox – WhachatCRM" />
+        <meta property="og:description" content="Unified inbox for WhatsApp, SMS, Telegram, Instagram, Facebook & Web Chat. Manage all conversations in one place." />
+        <meta property="og:url" content="https://whachatcrm.com/crm-for-whatsapp-business" />
+        <meta property="og:type" content="website" />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content="Multi-Channel CRM for WhatsApp Business" />
+        <meta name="twitter:description" content="Unified inbox for WhatsApp, SMS, Telegram, Instagram, Facebook & Web Chat." />
       </Helmet>
 
       {/* Navigation */}

@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
+import { Helmet } from "react-helmet";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Check, Zap, Users, MessageSquare, Phone, Loader2, Shield, AlertTriangle, HelpCircle, XCircle, Brain, Sparkles, Target } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
@@ -138,6 +139,18 @@ export function Pricing() {
 
   return (
     <div className="min-h-screen bg-gray-50 py-12 px-4">
+      <Helmet>
+        <title>WhachatCRM Pricing: Free Plan Forever, Starter from $19/mo | WhatsApp CRM</title>
+        <meta name="description" content="Simple, transparent pricing for WhatsApp CRM. Free plan forever, Starter at $19/mo, Pro at $49/mo. No hidden fees, no message markup. Start free today." />
+        <link rel="canonical" href="https://whachatcrm.com/pricing" />
+        <meta property="og:title" content="WhachatCRM Pricing: Free Plan Forever, Starter from $19/mo" />
+        <meta property="og:description" content="Simple, transparent pricing for WhatsApp CRM. Free plan forever, Starter at $19/mo. No hidden fees." />
+        <meta property="og:url" content="https://whachatcrm.com/pricing" />
+        <meta property="og:type" content="website" />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content="WhachatCRM Pricing: Free Plan Forever" />
+        <meta name="twitter:description" content="Simple pricing for WhatsApp CRM. Free plan forever, Starter at $19/mo." />
+      </Helmet>
       <div className="max-w-5xl mx-auto">
         <Link href={user ? "/app/settings" : "/"}>
           <a className="inline-flex items-center text-sm text-gray-500 hover:text-brand-green mb-6">
