@@ -531,15 +531,21 @@ export function Welcome() {
             <span className="font-display font-bold text-gray-900">WhachatCRM</span>
           </div>
           
-          <div className="flex items-center gap-4 md:gap-6 text-sm text-gray-500">
+          <div className="flex flex-wrap justify-center gap-4 md:gap-6 text-sm text-gray-500">
             <Link href="/pricing">
               <span className="hover:text-gray-900 cursor-pointer">Pricing</span>
+            </Link>
+            <Link href="/whatsapp-crm">
+              <span className="hover:text-gray-900 cursor-pointer">WhatsApp CRM</span>
             </Link>
             <Link href="/blog">
               <span className="hover:text-gray-900 cursor-pointer">Blog</span>
             </Link>
-            <Link href="/best-whatsapp-crm-2026">
-              <span className="text-brand-green hover:text-emerald-700 cursor-pointer font-medium">Comparison Guide</span>
+            <Link href="/respond-io-alternative">
+              <span className="hover:text-gray-900 cursor-pointer">Respond.io Alternative</span>
+            </Link>
+            <Link href="/wati-alternative">
+              <span className="hover:text-gray-900 cursor-pointer">WATI Alternative</span>
             </Link>
             <Link href="/contact">
               <span className="hover:text-gray-900 cursor-pointer">Contact</span>

@@ -250,7 +250,39 @@ export function Blog() {
           </div>
         )}
 
-        <div className="mt-16 bg-gray-50 rounded-2xl p-8 sm:p-12 text-center">
+        <div className="mt-16 bg-white border border-gray-200 rounded-2xl p-8 sm:p-12">
+          <h2 className="text-xl sm:text-2xl font-display font-bold text-gray-900 mb-6">
+            Related Resources
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <Link href="/whatsapp-crm">
+              <a className="block p-4 bg-gray-50 rounded-xl hover:bg-brand-green/5 transition-colors group">
+                <h3 className="font-semibold text-gray-900 group-hover:text-brand-green mb-1">What is WhatsApp CRM?</h3>
+                <p className="text-sm text-gray-500">Complete guide to WhatsApp CRM features</p>
+              </a>
+            </Link>
+            <Link href="/pricing">
+              <a className="block p-4 bg-gray-50 rounded-xl hover:bg-brand-green/5 transition-colors group">
+                <h3 className="font-semibold text-gray-900 group-hover:text-brand-green mb-1">Pricing Plans</h3>
+                <p className="text-sm text-gray-500">Free plan forever, Starter from $19/mo</p>
+              </a>
+            </Link>
+            <Link href="/respond-io-alternative">
+              <a className="block p-4 bg-gray-50 rounded-xl hover:bg-brand-green/5 transition-colors group">
+                <h3 className="font-semibold text-gray-900 group-hover:text-brand-green mb-1">Respond.io Alternative</h3>
+                <p className="text-sm text-gray-500">Compare features & pricing</p>
+              </a>
+            </Link>
+            <Link href="/wati-alternative">
+              <a className="block p-4 bg-gray-50 rounded-xl hover:bg-brand-green/5 transition-colors group">
+                <h3 className="font-semibold text-gray-900 group-hover:text-brand-green mb-1">WATI Alternative</h3>
+                <p className="text-sm text-gray-500">Why teams switch from WATI</p>
+              </a>
+            </Link>
+          </div>
+        </div>
+
+        <div className="mt-12 bg-gray-50 rounded-2xl p-8 sm:p-12 text-center">
           <h2 className="text-2xl sm:text-3xl font-display font-bold text-gray-900 mb-4">
             Ready to grow with WhatsApp?
           </h2>
@@ -269,7 +301,19 @@ export function Blog() {
       <footer className="border-t border-gray-200 py-8 mt-12">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-4">
           <p className="text-sm text-gray-500">© 2025 WhachatCRM. All rights reserved.</p>
-          <div className="flex gap-6">
+          <div className="flex flex-wrap justify-center gap-4 md:gap-6">
+            <Link href="/pricing">
+              <a className="text-sm text-gray-500 hover:text-gray-900">Pricing</a>
+            </Link>
+            <Link href="/whatsapp-crm">
+              <a className="text-sm text-gray-500 hover:text-gray-900">WhatsApp CRM</a>
+            </Link>
+            <Link href="/respond-io-alternative">
+              <a className="text-sm text-gray-500 hover:text-gray-900">Respond.io Alternative</a>
+            </Link>
+            <Link href="/wati-alternative">
+              <a className="text-sm text-gray-500 hover:text-gray-900">WATI Alternative</a>
+            </Link>
             <Link href="/privacy-policy">
               <a className="text-sm text-gray-500 hover:text-gray-900">Privacy</a>
             </Link>
