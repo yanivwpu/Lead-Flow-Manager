@@ -197,9 +197,9 @@ export function isCrawler(userAgent: string): boolean {
 }
 
 export function generateHomepageHtml(): string {
-  // SSR content for SEO - semantic HTML that React will replace
+  // SSR content for SEO - visually hidden but accessible to crawlers
   return `
-      <div data-ssr-content="true">
+      <div data-ssr-content="true" style="position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0;">
         <main>
           <h1>One Inbox. Every Channel. Zero Complexity.</h1>
           <p>WhatsApp, SMS, Telegram, Instagram, Facebook, Web Chat — all in one unified inbox. Stop juggling apps. Respond faster, never lose a lead.</p>
