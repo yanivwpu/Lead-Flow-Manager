@@ -1,7 +1,7 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Link, useParams, Redirect } from "wouter";
 import { Helmet } from "react-helmet";
-import { Calendar, Clock, ArrowLeft, ArrowRight, Share2, Twitter, Linkedin, Facebook } from "lucide-react";
+import { Calendar, Clock, ArrowLeft, ArrowRight, Share2, Linkedin, MessageCircle, Copy, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { BLOG_POSTS } from "./Blog";
 
@@ -1285,6 +1285,7 @@ Copy these templates, customize them for your business, and watch your engagemen
 export function BlogPost() {
   const params = useParams<{ slug: string }>();
   const slug = params.slug;
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -1516,32 +1517,54 @@ export function BlogPost() {
           </p>
         </div>
 
-        <div className="flex items-center gap-3 mb-12 pb-8 border-b border-gray-200">
-          <span className="text-sm text-gray-500">Share:</span>
-          <a
-            href={`https://twitter.com/intent/tweet?text=${shareText}&url=${shareUrl}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="p-2 rounded-full bg-gray-100 hover:bg-gray-200 transition-colors"
-          >
-            <Twitter className="h-4 w-4 text-gray-600" />
-          </a>
-          <a
-            href={`https://www.linkedin.com/shareArticle?mini=true&url=${shareUrl}&title=${shareText}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="p-2 rounded-full bg-gray-100 hover:bg-gray-200 transition-colors"
-          >
-            <Linkedin className="h-4 w-4 text-gray-600" />
-          </a>
-          <a
-            href={`https://www.facebook.com/sharer/sharer.php?u=${shareUrl}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="p-2 rounded-full bg-gray-100 hover:bg-gray-200 transition-colors"
-          >
-            <Facebook className="h-4 w-4 text-gray-600" />
-          </a>
+        <div className="p-4 mb-12 bg-gray-50 rounded-xl">
+          <p className="text-sm font-semibold text-gray-700 mb-3 text-center">Share this post:</p>
+          <div className="flex items-center justify-center gap-3 flex-wrap">
+            <a
+              href={`https://x.com/intent/post?text=${encodeURIComponent(post.title + ' @whachatcrm')}&url=${shareUrl}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors text-sm font-medium"
+              data-testid="share-x"
+            >
+              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+              </svg>
+              X
+            </a>
+            <a
+              href={`https://www.linkedin.com/sharing/share-offsite/?url=${shareUrl}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-[#0077B5] text-white rounded-lg hover:bg-[#006699] transition-colors text-sm font-medium"
+              data-testid="share-linkedin"
+            >
+              <Linkedin className="h-4 w-4" />
+              LinkedIn
+            </a>
+            <a
+              href={`https://api.whatsapp.com/send?text=${encodeURIComponent(post.title + ' @whachatcrm ' + shareUrl)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-[#25D366] text-white rounded-lg hover:bg-[#1da851] transition-colors text-sm font-medium"
+              data-testid="share-whatsapp"
+            >
+              <MessageCircle className="h-4 w-4" />
+              WhatsApp
+            </a>
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(shareUrl);
+                setCopied(true);
+                setTimeout(() => setCopied(false), 2000);
+              }}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-brand-green text-white rounded-lg hover:bg-emerald-700 transition-colors text-sm font-medium"
+              data-testid="share-copy"
+            >
+              {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+              {copied ? 'Copied!' : 'Copy Link'}
+            </button>
+          </div>
         </div>
 
         <div className="prose prose-lg max-w-none">
