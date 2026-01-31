@@ -49,10 +49,10 @@
     <link rel="manifest" href="/manifest.json" />
     <meta name="theme-color" content="#22c55e" />
 
-    <!-- Preload Important Assets -->
+    <!-- Preload OG Image -->
     <link rel="preload" as="image" href="https://whachatcrm.com/og-image.png" />
 
-    <!-- Prefetch Key Internal Pages -->
+    <!-- Prefetch Key Pages -->
     <link rel="prefetch" href="/auth" />
     <link rel="prefetch" href="/pricing" />
 
@@ -193,13 +193,23 @@
       }
     </script>
 
-    <!-- Automatically add loading="lazy" to all images -->
+    <!-- Smart Lazy Loading for Images with Hero Preload -->
     <script>
       document.addEventListener('DOMContentLoaded', () => {
         const images = document.querySelectorAll('img');
-        images.forEach(img => {
-          if (!img.hasAttribute('loading')) {
-            img.setAttribute('loading', 'lazy');
+
+        images.forEach((img, index) => {
+          if (index === 0) {
+            // Hero image loads immediately
+            img.setAttribute('loading', 'eager');
+            const link = document.createElement('link');
+            link.rel = 'preload';
+            link.as = 'image';
+            link.href = img.src;
+            document.head.appendChild(link);
+          } else {
+            // All other images lazy-load
+            if (!img.hasAttribute('loading')) img.setAttribute('loading', 'lazy');
           }
         });
       });
