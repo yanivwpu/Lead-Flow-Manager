@@ -145,16 +145,17 @@ export function Chats() {
   const hasTeamInbox = subscription?.limits?.teamInbox ?? false;
   const hasAssignment = subscription?.limits?.assignmentEnabled ?? false;
 
-  const { data: twilioStatus } = useQuery<{ connected: boolean; whatsappNumber: string | null }>({
+  const { data: twilioStatus, isLoading: isTwilioLoading } = useQuery<{ connected: boolean; whatsappNumber: string | null }>({
     queryKey: ["/api/twilio/status"],
     enabled: !!user,
   });
 
-  const { data: metaStatus } = useQuery<{ connected: boolean; phoneNumber: string | null }>({
+  const { data: metaStatus, isLoading: isMetaLoading } = useQuery<{ connected: boolean; phoneNumber: string | null }>({
     queryKey: ["/api/meta/status"],
     enabled: !!user,
   });
 
+  const isProviderStatusLoading = isTwilioLoading || isMetaLoading;
   const isTwilioConnected = twilioStatus?.connected ?? false;
   const isMetaConnected = metaStatus?.connected ?? false;
   const isAnyProviderConnected = isTwilioConnected || isMetaConnected;
@@ -654,7 +655,7 @@ export function Chats() {
     }
   };
 
-  if (isLoading) {
+  if (isLoading || isProviderStatusLoading) {
     return (
       <div className="flex h-full w-full items-center justify-center bg-white">
         <div className="text-gray-400">Loading chats...</div>
