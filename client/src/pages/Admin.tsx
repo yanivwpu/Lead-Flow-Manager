@@ -181,6 +181,12 @@ export function Admin() {
   });
 
   const [userSort, setUserSort] = useState<'date' | 'support' | 'plan'>('support');
+  const [showSupportOnly, setShowSupportOnly] = useState(false);
+  
+  const openSupportCount = adminUsers.filter(u => u.openTicketCount > 0).length;
+  const filteredUsers = showSupportOnly 
+    ? adminUsers.filter(u => u.openTicketCount > 0 || u.totalTicketCount > 0)
+    : adminUsers;
 
   const createPartner = useMutation({
     mutationFn: async (data: { name: string; email: string; password: string; commissionRate?: string; commissionDurationMonths?: number }) => {
@@ -721,10 +727,32 @@ export function Admin() {
               <div className="p-3 sm:p-4 border-b border-gray-200 flex flex-col gap-3">
                 <div className="flex justify-between items-center">
                   <h2 className="font-semibold text-gray-900 text-sm sm:text-base">
-                    All Users ({adminUsers.length})
+                    {showSupportOnly ? 'Support Users' : 'All Users'} ({filteredUsers.length})
                   </h2>
                 </div>
                 <div className="flex gap-1.5 sm:gap-2 overflow-x-auto pb-1">
+                  <Button
+                    variant={showSupportOnly ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setShowSupportOnly(!showSupportOnly)}
+                    className={cn(
+                      "min-h-[36px] text-xs sm:text-sm px-2 sm:px-3 shrink-0 relative",
+                      showSupportOnly ? 'bg-red-500 hover:bg-red-600' : ''
+                    )}
+                  >
+                    <MessageCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1" />
+                    <span className="hidden sm:inline">Support Only</span>
+                    <span className="sm:hidden">Support</span>
+                    {openSupportCount > 0 && (
+                      <span className={cn(
+                        "ml-1.5 px-1.5 py-0.5 text-[10px] font-bold rounded-full",
+                        showSupportOnly ? "bg-white text-red-600" : "bg-red-500 text-white"
+                      )}>
+                        {openSupportCount}
+                      </span>
+                    )}
+                  </Button>
+                  <div className="w-px bg-gray-200 mx-1 shrink-0" />
                   <Button
                     variant={userSort === 'support' ? 'default' : 'outline'}
                     size="sm"
@@ -735,8 +763,8 @@ export function Admin() {
                     )}
                   >
                     <AlertCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1" />
-                    <span className="hidden sm:inline">Support First</span>
-                    <span className="sm:hidden">Support</span>
+                    <span className="hidden sm:inline">Urgent First</span>
+                    <span className="sm:hidden">Urgent</span>
                   </Button>
                   <Button
                     variant={userSort === 'date' ? 'default' : 'outline'}
@@ -767,10 +795,12 @@ export function Admin() {
               
               {/* Mobile Card View */}
               <div className="md:hidden divide-y divide-gray-100">
-                {adminUsers.length === 0 ? (
-                  <div className="text-center py-8 text-gray-500">No users yet.</div>
+                {filteredUsers.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500">
+                    {showSupportOnly ? 'No support tickets.' : 'No users yet.'}
+                  </div>
                 ) : (
-                  [...adminUsers]
+                  [...filteredUsers]
                     .sort((a, b) => {
                       if (userSort === 'support') {
                         if (a.openTicketCount > 0 && b.openTicketCount === 0) return -1;
@@ -897,14 +927,14 @@ export function Admin() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {adminUsers.length === 0 ? (
+                    {filteredUsers.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={8} className="text-center py-8 text-gray-500">
-                          No users yet.
+                          {showSupportOnly ? 'No support tickets.' : 'No users yet.'}
                         </TableCell>
                       </TableRow>
                     ) : (
-                      [...adminUsers]
+                      [...filteredUsers]
                         .sort((a, b) => {
                           if (userSort === 'support') {
                             if (a.openTicketCount > 0 && b.openTicketCount === 0) return -1;
