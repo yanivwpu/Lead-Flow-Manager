@@ -175,15 +175,19 @@ export function Chats() {
     enabled: !!user && hasAssignment,
   });
 
-  // Check if user has AI Brain access (Pro plan)
-  const isPro = subscription?.limits?.plan === "pro" || subscription?.limits?.plan === "enterprise";
+  // Check plan levels for AI access
+  const plan = subscription?.limits?.plan || "free";
+  const isPro = plan === "pro" || plan === "enterprise";
+  const isStarter = plan === "starter";
+  const hasAIAssist = isStarter || isPro;
+  const hasFullAIBrain = isPro;
   
   const { data: aiSettings } = useQuery({
     queryKey: ["/api/ai/settings"],
-    enabled: !!user && isPro,
+    enabled: !!user && hasAIAssist,
   });
   
-  const aiEnabled = isPro && aiSettings && (aiSettings as any).aiMode !== "off";
+  const aiEnabled = hasAIAssist && (isPro ? (aiSettings && (aiSettings as any).aiMode !== "off") : true);
   
   // Timeline interface and query
   interface TimelineEvent {
@@ -1176,7 +1180,7 @@ export function Chats() {
                               href="/pricing" 
                               className="text-[10px] text-purple-500 hover:text-purple-700 hover:underline"
                             >
-                              Powered by AI Assist
+                              {hasFullAIBrain ? "Full AI Brain" : "Powered by AI Assist – Upgrade for unlimited"}
                             </a>
                           </div>
                         </div>

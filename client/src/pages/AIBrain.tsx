@@ -104,7 +104,7 @@ function AIBrainContent() {
   const plan = subscription?.limits?.plan || "free";
   const isPro = plan === "pro" || plan === "enterprise";
   const isStarter = plan === "starter";
-  const hasAIAddon = isPro;
+  const hasFullAIBrain = isPro;
   const hasAIAssist = isStarter || isPro;
   
   const [settings, setSettings] = useState<AISettings>({
@@ -404,43 +404,32 @@ function AIBrainContent() {
         
         <div className={cn(
           "mb-6 p-4 rounded-xl border flex items-start gap-3",
-          hasAIAddon ? "bg-purple-50 border-purple-200" : "bg-blue-50 border-blue-200"
+          hasFullAIBrain ? "bg-purple-50 border-purple-200" : "bg-blue-50 border-blue-200"
         )}>
           <div className={cn(
             "w-8 h-8 rounded-lg flex items-center justify-center shrink-0",
-            hasAIAddon ? "bg-purple-100" : "bg-blue-100"
+            hasFullAIBrain ? "bg-purple-100" : "bg-blue-100"
           )}>
-            {hasAIAddon ? (
+            {hasFullAIBrain ? (
               <Crown className="w-4 h-4 text-purple-600" />
             ) : (
               <Sparkles className="w-4 h-4 text-blue-600" />
             )}
           </div>
           <div className="flex-1">
-            {hasAIAddon ? (
+            {hasFullAIBrain ? (
               <>
                 <p className="font-medium text-purple-800">Full AI Brain Active</p>
                 <p className="text-sm text-purple-600">All advanced features unlocked - unlimited suggestions, lead qualification, automation builder, and more.</p>
               </>
-            ) : isStarter ? (
-              <>
-                <p className="font-medium text-blue-800">AI Assist Active</p>
-                <p className="text-sm text-blue-600">Basic reply suggestions & sentiment detection included. Upgrade to Full AI Brain ($29/mo) for advanced features.</p>
-                <Link href="/pricing">
-                  <Button size="sm" className="mt-2 bg-purple-600 hover:bg-purple-700 text-white">
-                    <Crown className="w-3 h-3 mr-1" />
-                    Unlock Full AI Brain
-                  </Button>
-                </Link>
-              </>
             ) : (
               <>
                 <p className="font-medium text-blue-800">AI Assist Active</p>
-                <p className="text-sm text-blue-600">Higher daily limits included with Pro. Upgrade to Full AI Brain ($29/mo) for unlimited suggestions and advanced features.</p>
+                <p className="text-sm text-blue-600">Basic reply suggestions & sentiment detection included with your plan. Upgrade to Pro for Full AI Brain with unlimited features.</p>
                 <Link href="/pricing">
                   <Button size="sm" className="mt-2 bg-purple-600 hover:bg-purple-700 text-white">
                     <Crown className="w-3 h-3 mr-1" />
-                    Unlock Full AI Brain
+                    Upgrade to Pro
                   </Button>
                 </Link>
               </>
