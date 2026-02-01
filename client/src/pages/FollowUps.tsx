@@ -852,8 +852,8 @@ export function FollowUps() {
                     AI Recommended
                   </h2>
                 </div>
-                <p className="text-xs text-gray-500 mb-3">
-                  Prioritized based on unreplied messages, overdue status, and engagement
+                <p className="text-xs text-gray-500 mb-3" title="AI Recommended: Prioritized tasks based on engagement, overdue status, and unread messages.">
+                  Prioritized based on engagement, overdue status, and unread messages
                 </p>
                 <div className="space-y-3">
                   {aiRecommendedTasks.map(chat => (

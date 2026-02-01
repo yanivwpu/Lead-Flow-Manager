@@ -25,6 +25,7 @@ const PLANS = [
       "Auto channel routing",
       "Tags & internal notes",
       "Tasks & reminders",
+      "Smart task prioritization (AI Recommended)",
       "Away messages (business hours)",
       "Export conversations (CSV)",
       "Community support",
