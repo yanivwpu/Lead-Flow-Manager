@@ -675,14 +675,16 @@ export function FollowUps() {
   }, [chats, kpiFilter]);
 
   const followUps = useMemo(() => {
-    return filteredChats
-      .filter(c => c.followUp && c.followUpDate)
-      .sort((a, b) => {
-        const dateA = new Date(a.followUpDate!).getTime();
-        const dateB = new Date(b.followUpDate!).getTime();
-        return dateA - dateB;
-      });
-  }, [filteredChats]);
+    const baseList = kpiFilter 
+      ? filteredChats 
+      : filteredChats.filter(c => c.followUp && c.followUpDate);
+    
+    return baseList.sort((a, b) => {
+      const dateA = a.followUpDate ? new Date(a.followUpDate).getTime() : Infinity;
+      const dateB = b.followUpDate ? new Date(b.followUpDate).getTime() : Infinity;
+      return dateA - dateB;
+    });
+  }, [filteredChats, kpiFilter]);
 
   const aiRecommendedTasks = useMemo(() => {
     return [...followUps].sort((a, b) => {
