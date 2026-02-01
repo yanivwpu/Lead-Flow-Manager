@@ -3,11 +3,11 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import { Helmet } from "react-helmet";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Check, Zap, Users, MessageSquare, Phone, Loader2, Shield, AlertTriangle, HelpCircle, XCircle, Brain, Sparkles, Target, Download } from "lucide-react";
+import { ArrowLeft, Check, Zap, Users, MessageSquare, Phone, Loader2, Shield, AlertTriangle, HelpCircle, XCircle, Brain, Sparkles, Target, BarChart3, X } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { useAuth } from "@/lib/auth-context";
 import { useToast } from "@/hooks/use-toast";
-import { generateAIFeaturesPDF } from "@/lib/generate-ai-features-pdf";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 
 const PLANS = [
   {
@@ -341,15 +341,131 @@ export function Pricing() {
             )}
             
             <div className="mt-4 pt-4 border-t border-purple-200">
-              <Button 
-                variant="outline" 
-                className="w-full border-purple-300 text-purple-700 hover:bg-purple-50"
-                onClick={generateAIFeaturesPDF}
-                data-testid="button-download-ai-pdf"
-              >
-                <Download className="w-4 h-4 mr-2" />
-                Download AI Features Comparison (PDF)
-              </Button>
+              <Dialog>
+                <DialogTrigger asChild>
+                  <Button 
+                    variant="outline" 
+                    className="w-full border-purple-300 text-purple-700 hover:bg-purple-50"
+                    data-testid="button-view-ai-comparison"
+                  >
+                    <BarChart3 className="w-4 h-4 mr-2" />
+                    View AI Features Comparison
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+                  <DialogHeader>
+                    <DialogTitle className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                      <Brain className="w-6 h-6 text-purple-600" />
+                      AI Features Comparison
+                    </DialogTitle>
+                  </DialogHeader>
+                  
+                  <div className="mt-4">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="bg-gradient-to-r from-purple-600 to-blue-600 text-white">
+                            <th className="text-left py-3 px-4 rounded-tl-lg font-medium">Feature</th>
+                            <th className="text-center py-3 px-4 font-medium">Free</th>
+                            <th className="text-center py-3 px-4 font-medium">Starter</th>
+                            <th className="text-center py-3 px-4 font-medium">Pro</th>
+                            <th className="text-center py-3 px-4 rounded-tr-lg font-medium">AI Brain</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr className="bg-gray-50">
+                            <td className="py-3 px-4 font-medium text-gray-900">Smart Task Prioritization</td>
+                            <td className="text-center py-3 px-4"><Check className="w-5 h-5 text-emerald-500 mx-auto" /></td>
+                            <td className="text-center py-3 px-4"><Check className="w-5 h-5 text-emerald-500 mx-auto" /></td>
+                            <td className="text-center py-3 px-4"><Check className="w-5 h-5 text-emerald-500 mx-auto" /></td>
+                            <td className="text-center py-3 px-4"><Check className="w-5 h-5 text-emerald-500 mx-auto" /></td>
+                          </tr>
+                          <tr>
+                            <td className="py-3 px-4 font-medium text-gray-900">AI Reply Suggestions</td>
+                            <td className="text-center py-3 px-4 text-gray-400">—</td>
+                            <td className="text-center py-3 px-4 text-gray-700">50/mo</td>
+                            <td className="text-center py-3 px-4 text-gray-700">200/mo</td>
+                            <td className="text-center py-3 px-4 text-purple-600 font-medium">Unlimited</td>
+                          </tr>
+                          <tr className="bg-gray-50">
+                            <td className="py-3 px-4 font-medium text-gray-900">Sentiment Detection</td>
+                            <td className="text-center py-3 px-4 text-gray-400">—</td>
+                            <td className="text-center py-3 px-4 text-gray-700">50/mo</td>
+                            <td className="text-center py-3 px-4 text-gray-700">200/mo</td>
+                            <td className="text-center py-3 px-4 text-purple-600 font-medium">Unlimited</td>
+                          </tr>
+                          <tr>
+                            <td className="py-3 px-4 font-medium text-gray-900">Lead Qualification & Scoring</td>
+                            <td className="text-center py-3 px-4 text-gray-400">—</td>
+                            <td className="text-center py-3 px-4 text-gray-400">—</td>
+                            <td className="text-center py-3 px-4 text-gray-400">—</td>
+                            <td className="text-center py-3 px-4"><Check className="w-5 h-5 text-emerald-500 mx-auto" /></td>
+                          </tr>
+                          <tr className="bg-gray-50">
+                            <td className="py-3 px-4 font-medium text-gray-900">Human Handoff Keywords</td>
+                            <td className="text-center py-3 px-4 text-gray-400">—</td>
+                            <td className="text-center py-3 px-4 text-gray-400">—</td>
+                            <td className="text-center py-3 px-4 text-gray-400">—</td>
+                            <td className="text-center py-3 px-4"><Check className="w-5 h-5 text-emerald-500 mx-auto" /></td>
+                          </tr>
+                          <tr>
+                            <td className="py-3 px-4 font-medium text-gray-900">Business Knowledge Base</td>
+                            <td className="text-center py-3 px-4 text-gray-400">—</td>
+                            <td className="text-center py-3 px-4 text-gray-400">—</td>
+                            <td className="text-center py-3 px-4 text-gray-400">—</td>
+                            <td className="text-center py-3 px-4"><Check className="w-5 h-5 text-emerald-500 mx-auto" /></td>
+                          </tr>
+                          <tr className="bg-gray-50">
+                            <td className="py-3 px-4 font-medium text-gray-900">Plain English Automation</td>
+                            <td className="text-center py-3 px-4 text-gray-400">—</td>
+                            <td className="text-center py-3 px-4 text-gray-400">—</td>
+                            <td className="text-center py-3 px-4 text-gray-400">—</td>
+                            <td className="text-center py-3 px-4"><Check className="w-5 h-5 text-emerald-500 mx-auto" /></td>
+                          </tr>
+                          <tr>
+                            <td className="py-3 px-4 font-medium text-gray-900 rounded-bl-lg">AI Health Monitoring</td>
+                            <td className="text-center py-3 px-4 text-gray-400">—</td>
+                            <td className="text-center py-3 px-4 text-gray-700">Basic</td>
+                            <td className="text-center py-3 px-4 text-gray-700">Basic</td>
+                            <td className="text-center py-3 px-4 text-purple-600 font-medium rounded-br-lg">Full</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                    
+                    <div className="mt-6 grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      <div className="bg-gray-50 rounded-lg p-3 text-center">
+                        <p className="text-xs text-gray-500 mb-1">Free</p>
+                        <p className="font-bold text-gray-900">$0</p>
+                      </div>
+                      <div className="bg-blue-50 rounded-lg p-3 text-center border border-blue-200">
+                        <p className="text-xs text-blue-600 mb-1">Starter</p>
+                        <p className="font-bold text-gray-900">$19<span className="text-xs font-normal">/mo</span></p>
+                      </div>
+                      <div className="bg-emerald-50 rounded-lg p-3 text-center border border-emerald-200">
+                        <p className="text-xs text-emerald-600 mb-1">Pro</p>
+                        <p className="font-bold text-gray-900">$49<span className="text-xs font-normal">/mo</span></p>
+                      </div>
+                      <div className="bg-gradient-to-br from-purple-50 to-blue-50 rounded-lg p-3 text-center border border-purple-200">
+                        <p className="text-xs text-purple-600 mb-1">AI Brain Add-on</p>
+                        <p className="font-bold text-gray-900">+$29<span className="text-xs font-normal">/mo</span></p>
+                      </div>
+                    </div>
+                    
+                    <div className="mt-6 bg-purple-50 rounded-xl p-4 border border-purple-100">
+                      <h4 className="font-semibold text-purple-900 mb-2 flex items-center gap-2">
+                        <Sparkles className="w-4 h-4" />
+                        AI Tier Breakdown
+                      </h4>
+                      <ul className="text-sm text-purple-800 space-y-1">
+                        <li><strong>AI Recommended:</strong> Smart prioritization based on engagement & urgency (all plans)</li>
+                        <li><strong>AI Assist:</strong> Reply suggestions & sentiment detection with quotas (Starter/Pro)</li>
+                        <li><strong>Full AI Brain:</strong> Unlimited AI + lead qualification, automation & more (+$29/mo)</li>
+                      </ul>
+                    </div>
+                  </div>
+                </DialogContent>
+              </Dialog>
             </div>
           </div>
         </div>
