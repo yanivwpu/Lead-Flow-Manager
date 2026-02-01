@@ -1,0 +1,214 @@
+We are enhancing the Follow-Ups page with a new Pipeline View and KPI Header.
+
+CRITICAL SAFETY RULES:
+
+Modify ONLY this file: client/src/pages/FollowUps.tsx
+
+Do NOT modify any backend files
+
+Do NOT modify database schemas
+
+Do NOT modify webhook handlers
+
+Do NOT modify Shopify API logic
+
+Do NOT modify environment variables
+
+Do NOT create new API routes
+
+Use ONLY existing endpoints:
+
+GET /api/chats
+
+PATCH /api/chats/:id
+
+Do NOT add new dependencies or packages
+
+All calculations must be client-side only
+
+If any required backend change is needed, STOP and notify
+
+====================================
+PART 1 — ADD PIPELINE VIEW
+
+Add a third toggle button in the top-right view selector:
+
+[List View] [Calendar View] [Pipeline View]
+
+Default view must remain List View.
+
+Use React useState to control view.
+
+Do NOT persist view selection.
+
+Do NOT modify URL.
+
+Do NOT trigger additional API calls.
+
+Example:
+
+const [viewMode, setViewMode] = useState<'list' | 'calendar' | 'pipeline'>('list');
+
+Switch rendering conditionally based on viewMode.
+
+Pipeline View Layout
+
+Create a horizontal Kanban board.
+
+Use existing enum values ONLY:
+
+const stages = ['Lead', 'Contacted', 'Proposal', 'Negotiation', 'Closed'];
+
+DO NOT modify enum.
+DO NOT add new stages.
+
+For each stage:
+
+const stageItems = chats.filter(chat => chat.pipelineStage === stage);
+
+Render columns dynamically using the stages array.
+
+Layout requirements:
+
+Horizontal scroll if needed
+
+Equal width columns
+
+Column header shows:
+Stage name
+Count of items in that stage
+
+Example header:
+Lead (12)
+
+Card Design (Inside Each Column)
+
+Each card must display:
+
+Contact name (bold)
+
+Last message preview (truncate to 1 line)
+
+Follow-up date badge (if exists)
+
+Status tag (Overdue / Today / Upcoming)
+
+"Needs Reply" tag if:
+
+Last message is inbound AND not replied
+
+OR unreadCount > 0
+
+Use existing fields only.
+Do NOT fetch additional data.
+
+Status must be computed client-side:
+
+function getTaskStatus(followUpDate) {
+if (!followUpDate) return null;
+if (date < today) return 'Overdue';
+if (sameDay(date, today)) return 'Today';
+return 'Upcoming';
+}
+
+Do NOT store status in database.
+
+Drag & Drop Between Columns
+
+Enable drag & drop for cards between columns.
+
+On drop:
+
+Call existing endpoint:
+
+PATCH /api/chats/:id
+
+With payload:
+
+{
+pipelineStage: newStage
+}
+
+Rules:
+
+Do NOT create new endpoint.
+
+Do NOT change PATCH endpoint structure.
+
+Do NOT modify backend.
+
+Do NOT add new fields.
+
+If PATCH does not already support updating pipelineStage, STOP and notify.
+
+No webhook interactions allowed.
+
+====================================
+PART 2 — ADD KPI HEADER (CLIENT-SIDE ONLY)
+
+Add a full-width KPI bar ABOVE AI Recommended and all views.
+
+Each KPI must be computed from already-fetched chats array.
+
+DO NOT persist.
+DO NOT modify backend.
+
+Required KPI Cards:
+
+Overdue
+Count chats where:
+followUpDate exists AND followUpDate < today
+
+Today
+Count chats where:
+followUpDate is same calendar date as today
+
+Booking Requested
+Count chats where:
+pipelineStage === 'Negotiation'
+
+Booked
+Count chats where:
+pipelineStage === 'Closed'
+
+Needs Reply
+Count chats where:
+
+Last message is inbound AND unreplied
+OR
+
+unreadCount > 0
+
+All logic must be derived in-memory.
+
+Example:
+
+const overdueCount = chats.filter(...).length;
+
+Do NOT create new database columns.
+Do NOT add new booking fields.
+Do NOT change schema.
+
+====================================
+PART 3 — SAFETY CONSTRAINTS
+
+No database migrations
+
+No schema edits
+
+No backend file changes
+
+No webhook changes
+
+No Shopify API modifications
+
+No environment variable changes
+
+No new dependencies
+
+No new routes
+
+All logic inside FollowUps.tsx only
+
+If any requested feature requires backend modification:
+STOP and notify before proceeding.

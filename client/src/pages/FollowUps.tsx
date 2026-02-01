@@ -1,11 +1,11 @@
 import { useState, useMemo } from "react";
 import { useLocation } from "wouter";
-import { ArrowRight, CheckCircle2, Calendar as CalendarIcon, List, Sparkles, ChevronLeft, ChevronRight } from "lucide-react";
+import { ArrowRight, CheckCircle2, Calendar as CalendarIcon, List, Sparkles, ChevronLeft, ChevronRight, Kanban, AlertCircle, Clock, CalendarCheck, MessageSquare, CheckCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { format, isSameDay, startOfMonth, endOfMonth, eachDayOfInterval, addMonths, subMonths, isToday, isBefore, startOfWeek, endOfWeek, parseISO } from "date-fns";
+import { format, isSameDay, startOfMonth, endOfMonth, eachDayOfInterval, addMonths, subMonths, isToday, isBefore, startOfWeek, endOfWeek } from "date-fns";
 import { useIsMobile } from "@/hooks/use-mobile";
 
 interface Chat {
@@ -23,9 +23,12 @@ interface Chat {
   messages: any[];
 }
 
-type ViewMode = 'list' | 'calendar';
+type ViewMode = 'list' | 'calendar' | 'pipeline';
 
-function getTaskStatus(followUpDate: string): 'overdue' | 'today' | 'upcoming' {
+const PIPELINE_STAGES = ['Lead', 'Contacted', 'Proposal', 'Negotiation', 'Closed'] as const;
+
+function getTaskStatus(followUpDate: string | null): 'overdue' | 'today' | 'upcoming' | null {
+  if (!followUpDate) return null;
   const dueDate = new Date(followUpDate);
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -36,7 +39,71 @@ function getTaskStatus(followUpDate: string): 'overdue' | 'today' | 'upcoming' {
   return 'upcoming';
 }
 
-function StatusTag({ status }: { status: 'overdue' | 'today' | 'upcoming' }) {
+function hasNeedsReply(chat: Chat): boolean {
+  const hasUnrepliedInbound = chat.messages?.length > 0 && 
+    chat.messages[chat.messages.length - 1]?.sender !== 'me';
+  return hasUnrepliedInbound || (chat.unread > 0);
+}
+
+function KPIHeader({ chats }: { chats: Chat[] }) {
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+  const overdueCount = useMemo(() => 
+    chats.filter(c => {
+      if (!c.followUpDate) return false;
+      const dueDate = new Date(c.followUpDate);
+      const dueDateOnly = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate());
+      return dueDateOnly < today;
+    }).length, 
+  [chats, today]);
+
+  const todayCount = useMemo(() => 
+    chats.filter(c => c.followUpDate && isSameDay(new Date(c.followUpDate), now)).length,
+  [chats, now]);
+
+  const bookingRequestedCount = useMemo(() => 
+    chats.filter(c => c.pipelineStage === 'Negotiation').length,
+  [chats]);
+
+  const bookedCount = useMemo(() => 
+    chats.filter(c => c.pipelineStage === 'Closed').length,
+  [chats]);
+
+  const needsReplyCount = useMemo(() => 
+    chats.filter(c => hasNeedsReply(c)).length,
+  [chats]);
+
+  const kpis = [
+    { label: 'Overdue', value: overdueCount, icon: AlertCircle, color: 'text-red-600', bg: 'bg-red-50', border: 'border-red-100' },
+    { label: 'Today', value: todayCount, icon: Clock, color: 'text-amber-600', bg: 'bg-amber-50', border: 'border-amber-100' },
+    { label: 'Booking Requested', value: bookingRequestedCount, icon: CalendarCheck, color: 'text-purple-600', bg: 'bg-purple-50', border: 'border-purple-100' },
+    { label: 'Booked', value: bookedCount, icon: CheckCheck, color: 'text-green-600', bg: 'bg-green-50', border: 'border-green-100' },
+    { label: 'Needs Reply', value: needsReplyCount, icon: MessageSquare, color: 'text-blue-600', bg: 'bg-blue-50', border: 'border-blue-100' },
+  ];
+
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-5 gap-2 md:gap-4 mb-6" data-testid="kpi-header">
+      {kpis.map(kpi => (
+        <div 
+          key={kpi.label}
+          className={cn("rounded-xl border p-3 md:p-4", kpi.bg, kpi.border)}
+          data-testid={`kpi-${kpi.label.toLowerCase().replace(/\s+/g, '-')}`}
+        >
+          <div className="flex items-center gap-2 mb-1">
+            <kpi.icon className={cn("h-4 w-4", kpi.color)} />
+            <span className="text-xs md:text-sm font-medium text-gray-600">{kpi.label}</span>
+          </div>
+          <p className={cn("text-xl md:text-2xl font-bold", kpi.color)}>{kpi.value}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function StatusTag({ status }: { status: 'overdue' | 'today' | 'upcoming' | null }) {
+  if (!status) return null;
+  
   const styles = {
     overdue: 'bg-red-100 text-red-700 border-red-200',
     today: 'bg-amber-100 text-amber-700 border-amber-200',
@@ -69,9 +136,8 @@ function TaskListItem({
   pendingId: string | undefined;
   onClick: (chatId: string) => void;
 }) {
-  const status = getTaskStatus(chat.followUpDate!);
-  const hasUnrepliedInbound = chat.messages?.length > 0 && 
-    chat.messages[chat.messages.length - 1]?.sender !== 'me';
+  const status = chat.followUpDate ? getTaskStatus(chat.followUpDate) : null;
+  const needsReply = hasNeedsReply(chat);
   
   return (
     <div 
@@ -98,8 +164,8 @@ function TaskListItem({
           <span className="font-semibold text-gray-900" data-testid={`text-contact-${chat.id}`}>
             {chat.name}
           </span>
-          <StatusTag status={status} />
-          {hasUnrepliedInbound && (
+          {status && <StatusTag status={status} />}
+          {needsReply && (
             <span className="text-xs bg-green-100 text-green-700 border border-green-200 px-2 py-0.5 rounded-full font-medium" data-testid={`tag-unreplied-${chat.id}`}>
               Needs Reply
             </span>
@@ -124,6 +190,166 @@ function TaskListItem({
       </div>
 
       <ArrowRight className="h-5 w-5 text-gray-400 group-hover:text-brand-green transition-colors ml-4" data-testid={`icon-arrow-${chat.id}`} />
+    </div>
+  );
+}
+
+function PipelineCard({ 
+  chat, 
+  onClick,
+  onDragStart,
+  onDragEnd,
+  isDragging
+}: { 
+  chat: Chat; 
+  onClick: (chatId: string) => void;
+  onDragStart: (e: React.DragEvent, chat: Chat) => void;
+  onDragEnd: () => void;
+  isDragging: boolean;
+}) {
+  const status = getTaskStatus(chat.followUpDate);
+  const needsReply = hasNeedsReply(chat);
+
+  return (
+    <div
+      draggable
+      onDragStart={(e) => onDragStart(e, chat)}
+      onDragEnd={onDragEnd}
+      onClick={() => onClick(chat.id)}
+      className={cn(
+        "bg-white border border-gray-200 rounded-lg p-3 cursor-pointer hover:shadow-md transition-all hover:border-brand-green/30",
+        isDragging && "opacity-50"
+      )}
+      data-testid={`pipeline-card-${chat.id}`}
+    >
+      <div className="font-semibold text-gray-900 text-sm mb-1 truncate" data-testid={`pipeline-contact-${chat.id}`}>
+        {chat.name}
+      </div>
+      <p className="text-xs text-gray-500 truncate mb-2" data-testid={`pipeline-lastmessage-${chat.id}`}>
+        {chat.lastMessage}
+      </p>
+      <div className="flex flex-wrap gap-1">
+        {chat.followUpDate && (
+          <span className="text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded font-medium">
+            {format(new Date(chat.followUpDate), 'MMM d')}
+          </span>
+        )}
+        {status && <StatusTag status={status} />}
+        {needsReply && (
+          <span className="text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded font-medium">
+            Needs Reply
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function PipelineView({ 
+  chats, 
+  onCardClick,
+  onStageChange,
+  isMobile
+}: { 
+  chats: Chat[]; 
+  onCardClick: (chatId: string) => void;
+  onStageChange: (chatId: string, newStage: string) => void;
+  isMobile: boolean;
+}) {
+  const [draggedChat, setDraggedChat] = useState<Chat | null>(null);
+
+  const chatsByStage = useMemo(() => {
+    const map = new Map<string, Chat[]>();
+    PIPELINE_STAGES.forEach(stage => map.set(stage, []));
+    chats.forEach(chat => {
+      const stage = PIPELINE_STAGES.includes(chat.pipelineStage as any) 
+        ? chat.pipelineStage 
+        : 'Lead';
+      map.get(stage)?.push(chat);
+    });
+    return map;
+  }, [chats]);
+
+  const handleDragStart = (e: React.DragEvent, chat: Chat) => {
+    if (isMobile) return;
+    setDraggedChat(chat);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    if (isMobile) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDrop = (e: React.DragEvent, stage: string) => {
+    if (isMobile) return;
+    e.preventDefault();
+    if (draggedChat && draggedChat.pipelineStage !== stage) {
+      onStageChange(draggedChat.id, stage);
+    }
+    setDraggedChat(null);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedChat(null);
+  };
+
+  const stageColors: Record<string, { bg: string; border: string; header: string }> = {
+    'Lead': { bg: 'bg-gray-50', border: 'border-gray-200', header: 'bg-gray-100' },
+    'Contacted': { bg: 'bg-blue-50', border: 'border-blue-200', header: 'bg-blue-100' },
+    'Proposal': { bg: 'bg-purple-50', border: 'border-purple-200', header: 'bg-purple-100' },
+    'Negotiation': { bg: 'bg-amber-50', border: 'border-amber-200', header: 'bg-amber-100' },
+    'Closed': { bg: 'bg-green-50', border: 'border-green-200', header: 'bg-green-100' },
+  };
+
+  return (
+    <div className="flex gap-4 overflow-x-auto pb-4" data-testid="pipeline-view">
+      {PIPELINE_STAGES.map(stage => {
+        const stageChats = chatsByStage.get(stage) || [];
+        const colors = stageColors[stage] || stageColors['Lead'];
+        
+        return (
+          <div
+            key={stage}
+            className={cn(
+              "flex-shrink-0 w-[280px] md:w-[300px] rounded-xl border",
+              colors.bg,
+              colors.border,
+              draggedChat && draggedChat.pipelineStage !== stage && "ring-2 ring-brand-green/30"
+            )}
+            onDragOver={handleDragOver}
+            onDrop={(e) => handleDrop(e, stage)}
+            data-testid={`pipeline-column-${stage.toLowerCase()}`}
+          >
+            <div className={cn("p-3 rounded-t-xl border-b", colors.header, colors.border)}>
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold text-gray-900 text-sm">{stage}</h3>
+                <span className="text-xs bg-white/70 px-2 py-0.5 rounded-full font-medium text-gray-600">
+                  {stageChats.length}
+                </span>
+              </div>
+            </div>
+            <div className="p-2 space-y-2 max-h-[500px] overflow-y-auto">
+              {stageChats.map(chat => (
+                <PipelineCard
+                  key={chat.id}
+                  chat={chat}
+                  onClick={onCardClick}
+                  onDragStart={handleDragStart}
+                  onDragEnd={handleDragEnd}
+                  isDragging={draggedChat?.id === chat.id}
+                />
+              ))}
+              {stageChats.length === 0 && (
+                <div className="text-center py-8 text-gray-400 text-sm">
+                  No contacts
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -255,7 +481,7 @@ function TaskCalendarView({
               </div>
               <div className="space-y-0.5 md:space-y-1">
                 {dayTasks.slice(0, maxTasksToShow).map(task => {
-                  const status = getTaskStatus(task.followUpDate!);
+                  const status = getTaskStatus(task.followUpDate);
                   return (
                     <div
                       key={task.id}
@@ -271,6 +497,7 @@ function TaskCalendarView({
                         status === 'overdue' && "bg-red-100 text-red-700 hover:bg-red-200",
                         status === 'today' && "bg-amber-100 text-amber-700 hover:bg-amber-200",
                         status === 'upcoming' && "bg-blue-100 text-blue-700 hover:bg-blue-200",
+                        !status && "bg-gray-100 text-gray-700 hover:bg-gray-200",
                         draggedTask?.id === task.id && "opacity-50"
                       )}
                       data-testid={`calendar-task-${task.id}`}
@@ -364,6 +591,43 @@ export function FollowUps() {
     },
   });
 
+  const updatePipelineStageMutation = useMutation({
+    mutationFn: async ({ chatId, newStage }: { chatId: string; newStage: string }) => {
+      const response = await fetch(`/api/chats/${chatId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          pipelineStage: newStage,
+        }),
+      });
+      if (!response.ok) throw new Error('Failed to update pipeline stage');
+      return response.json();
+    },
+    onMutate: async ({ chatId, newStage }) => {
+      await queryClient.cancelQueries({ queryKey: ['/api/chats'] });
+      const previousChats = queryClient.getQueryData<Chat[]>(['/api/chats']);
+      queryClient.setQueryData<Chat[]>(['/api/chats'], (old) => 
+        old?.map(chat => 
+          chat.id === chatId 
+            ? { ...chat, pipelineStage: newStage }
+            : chat
+        ) ?? []
+      );
+      return { previousChats };
+    },
+    onError: (_err, _variables, context) => {
+      if (context?.previousChats) {
+        queryClient.setQueryData(['/api/chats'], context.previousChats);
+      }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/chats'] });
+    },
+  });
+
   const followUps = useMemo(() => {
     return chats
       .filter(c => c.followUp && c.followUpDate)
@@ -379,13 +643,11 @@ export function FollowUps() {
       let scoreA = 0;
       let scoreB = 0;
       
-      const hasUnrepliedA = a.messages?.length > 0 && a.messages[a.messages.length - 1]?.sender !== 'me';
-      const hasUnrepliedB = b.messages?.length > 0 && b.messages[b.messages.length - 1]?.sender !== 'me';
-      if (hasUnrepliedA) scoreA += 50;
-      if (hasUnrepliedB) scoreB += 50;
+      if (hasNeedsReply(a)) scoreA += 50;
+      if (hasNeedsReply(b)) scoreB += 50;
       
-      const statusA = getTaskStatus(a.followUpDate!);
-      const statusB = getTaskStatus(b.followUpDate!);
+      const statusA = getTaskStatus(a.followUpDate);
+      const statusB = getTaskStatus(b.followUpDate);
       if (statusA === 'overdue') scoreA += 40;
       if (statusB === 'overdue') scoreB += 40;
       if (statusA === 'today') scoreA += 20;
@@ -414,6 +676,10 @@ export function FollowUps() {
 
   const handleReschedule = (chatId: string, newDate: Date) => {
     updateFollowUpDateMutation.mutate({ chatId, newDate });
+  };
+
+  const handleStageChange = (chatId: string, newStage: string) => {
+    updatePipelineStageMutation.mutate({ chatId, newStage });
   };
 
   if (isLoading) {
@@ -460,11 +726,26 @@ export function FollowUps() {
               <CalendarIcon className="h-3.5 w-3.5 md:h-4 md:w-4" />
               {isMobile ? 'Calendar' : 'Calendar View'}
             </button>
+            <button
+              onClick={() => setViewMode('pipeline')}
+              className={cn(
+                "flex items-center gap-1.5 md:gap-2 px-2 md:px-3 py-1.5 rounded-md text-xs md:text-sm font-medium transition-colors",
+                viewMode === 'pipeline' 
+                  ? "bg-white text-gray-900 shadow-sm" 
+                  : "text-gray-600 hover:text-gray-900"
+              )}
+              data-testid="toggle-pipeline-view"
+            >
+              <Kanban className="h-3.5 w-3.5 md:h-4 md:w-4" />
+              {isMobile ? 'Pipeline' : 'Pipeline View'}
+            </button>
           </div>
         </div>
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 md:p-8">
+        <KPIHeader chats={chats} />
+        
         {viewMode === 'list' ? (
           <div className="max-w-3xl">
             {aiRecommendedTasks.length > 0 && (
@@ -528,11 +809,18 @@ export function FollowUps() {
               </div>
             </div>
           </div>
-        ) : (
+        ) : viewMode === 'calendar' ? (
           <TaskCalendarView
             tasks={followUps}
             onTaskClick={handleRowClick}
             onReschedule={handleReschedule}
+            isMobile={isMobile}
+          />
+        ) : (
+          <PipelineView
+            chats={chats}
+            onCardClick={handleRowClick}
+            onStageChange={handleStageChange}
             isMobile={isMobile}
           />
         )}
