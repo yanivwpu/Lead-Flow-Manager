@@ -1153,23 +1153,31 @@ export function Chats() {
                       ) : aiSuggestion ? (
                         <div>
                           <p className="text-sm text-gray-700 mb-2">{aiSuggestion}</p>
-                          <div className="flex gap-2">
-                            <button
-                              onClick={useAiSuggestion}
-                              className="text-xs px-3 py-1 bg-purple-600 text-white rounded-full hover:bg-purple-700 transition-colors"
-                              data-testid="button-use-ai-suggestion"
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex gap-2">
+                              <button
+                                onClick={useAiSuggestion}
+                                className="text-xs px-3 py-1 bg-purple-600 text-white rounded-full hover:bg-purple-700 transition-colors"
+                                data-testid="button-use-ai-suggestion"
+                              >
+                                Use this reply
+                              </button>
+                              <button
+                                onClick={fetchAiSuggestion}
+                                disabled={aiCooldown}
+                                className="text-xs px-3 py-1 bg-white text-purple-600 border border-purple-200 rounded-full hover:bg-purple-50 transition-colors flex items-center gap-1 disabled:opacity-50"
+                                data-testid="button-regenerate-ai"
+                              >
+                                <RefreshCw className={cn("w-3 h-3", aiCooldown && "animate-spin")} />
+                                {aiCooldown ? "Wait..." : "Regenerate"}
+                              </button>
+                            </div>
+                            <a 
+                              href="/pricing" 
+                              className="text-[10px] text-purple-500 hover:text-purple-700 hover:underline"
                             >
-                              Use this reply
-                            </button>
-                            <button
-                              onClick={fetchAiSuggestion}
-                              disabled={aiCooldown}
-                              className="text-xs px-3 py-1 bg-white text-purple-600 border border-purple-200 rounded-full hover:bg-purple-50 transition-colors flex items-center gap-1 disabled:opacity-50"
-                              data-testid="button-regenerate-ai"
-                            >
-                              <RefreshCw className={cn("w-3 h-3", aiCooldown && "animate-spin")} />
-                              {aiCooldown ? "Wait..." : "Regenerate"}
-                            </button>
+                              Powered by AI Assist
+                            </a>
                           </div>
                         </div>
                       ) : (

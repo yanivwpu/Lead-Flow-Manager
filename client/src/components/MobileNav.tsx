@@ -24,7 +24,7 @@ const moreNavItems = [
   { label: "Templates", href: "/app/templates" },
   { label: "Website Widget", href: "/app/widget" },
   { label: "Integrations", href: "/app/integrations" },
-  { label: "AI Brain", href: "/app/ai-brain" },
+  { label: "AI Features", href: "/app/ai-brain" },
   { label: "Search", href: "/app/search" },
   { label: "Help", href: "/app/help" },
 ];

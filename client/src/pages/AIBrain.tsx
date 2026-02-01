@@ -101,8 +101,11 @@ function AIBrainContent() {
     queryKey: ["/api/subscription"],
   });
   
-  const isPro = subscription?.limits?.plan === "pro" || subscription?.limits?.plan === "enterprise";
-  const hasAIAddon = isPro; // All Pro users get AI Brain access
+  const plan = subscription?.limits?.plan || "free";
+  const isPro = plan === "pro" || plan === "enterprise";
+  const isStarter = plan === "starter";
+  const hasAIAddon = isPro;
+  const hasAIAssist = isStarter || isPro;
   
   const [settings, setSettings] = useState<AISettings>({
     aiMode: "suggest_only",
@@ -306,10 +309,23 @@ function AIBrainContent() {
             <div className="w-20 h-20 bg-gradient-to-br from-purple-100 to-blue-100 rounded-2xl flex items-center justify-center mx-auto mb-6">
               <Brain className="w-10 h-10 text-purple-600" />
             </div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-3">AI Brain</h1>
-            <p className="text-lg text-gray-600 mb-8 max-w-md mx-auto">
-              Supercharge your customer conversations with AI-powered reply suggestions, lead qualification, and automation.
-            </p>
+            <h1 className="text-3xl font-bold text-gray-900 mb-3">AI Features</h1>
+            
+            {hasAIAssist ? (
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-8 max-w-md mx-auto">
+                <div className="flex items-center gap-2 justify-center mb-2">
+                  <Sparkles className="w-5 h-5 text-blue-600" />
+                  <span className="font-medium text-blue-800">AI Assist Active</span>
+                </div>
+                <p className="text-sm text-blue-700">
+                  Basic reply suggestions & sentiment detection included with your Starter plan.
+                </p>
+              </div>
+            ) : (
+              <p className="text-lg text-gray-600 mb-8 max-w-md mx-auto">
+                Supercharge your customer conversations with AI-powered reply suggestions, lead qualification, and automation.
+              </p>
+            )}
             
             <div className="grid gap-4 max-w-lg mx-auto text-left mb-8">
               <div className="flex items-start gap-3 p-4 bg-white rounded-xl border border-gray-200">
@@ -317,6 +333,7 @@ function AIBrainContent() {
                 <div>
                   <p className="font-medium text-gray-900">Smart Reply Suggestions</p>
                   <p className="text-sm text-gray-500">AI suggests responses based on your business context</p>
+                  {hasAIAssist && <span className="text-xs text-blue-600 font-medium">Included in AI Assist</span>}
                 </div>
               </div>
               <div className="flex items-start gap-3 p-4 bg-white rounded-xl border border-gray-200">
@@ -324,6 +341,7 @@ function AIBrainContent() {
                 <div>
                   <p className="font-medium text-gray-900">Lead Qualification</p>
                   <p className="text-sm text-gray-500">Automatically score and qualify leads</p>
+                  <span className="text-xs text-purple-600 font-medium">Full AI Brain only</span>
                 </div>
               </div>
               <div className="flex items-start gap-3 p-4 bg-white rounded-xl border border-gray-200">
@@ -331,6 +349,7 @@ function AIBrainContent() {
                 <div>
                   <p className="font-medium text-gray-900">Plain English Automations</p>
                   <p className="text-sm text-gray-500">Describe workflows in plain language</p>
+                  <span className="text-xs text-purple-600 font-medium">Full AI Brain only</span>
                 </div>
               </div>
             </div>
@@ -338,13 +357,19 @@ function AIBrainContent() {
             <div className="bg-gradient-to-r from-purple-50 to-blue-50 rounded-2xl p-6 border border-purple-100 mb-6">
               <div className="flex items-center justify-center gap-2 mb-3">
                 <Crown className="w-5 h-5 text-purple-600" />
-                <span className="text-sm font-bold text-purple-700 uppercase tracking-wide">Pro Add-on</span>
+                <span className="text-sm font-bold text-purple-700 uppercase tracking-wide">
+                  {hasAIAssist ? "Upgrade to Full AI Brain" : "Pro Add-on"}
+                </span>
               </div>
               <p className="text-2xl font-bold text-gray-900 mb-1">$29/month</p>
-              <p className="text-sm text-gray-600 mb-4">Available for Pro plan subscribers</p>
+              <p className="text-sm text-gray-600 mb-4">
+                {hasAIAssist 
+                  ? "Unlock unlimited suggestions, lead qualification, and automation builder" 
+                  : "Available for Pro plan subscribers"}
+              </p>
               <Link href="/pricing">
                 <Button className="bg-purple-600 hover:bg-purple-700 text-white">
-                  Upgrade to Pro
+                  {hasAIAssist ? "Upgrade to Pro + AI Brain" : "Upgrade to Pro"}
                 </Button>
               </Link>
             </div>
@@ -371,9 +396,55 @@ function AIBrainContent() {
               <Brain className="w-6 h-6 text-purple-600" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">AI Brain</h1>
+              <h1 className="text-2xl font-bold text-gray-900">AI Features</h1>
               <p className="text-sm text-gray-500">Configure AI-powered features for your business</p>
             </div>
+          </div>
+        </div>
+        
+        <div className={cn(
+          "mb-6 p-4 rounded-xl border flex items-start gap-3",
+          hasAIAddon ? "bg-purple-50 border-purple-200" : "bg-blue-50 border-blue-200"
+        )}>
+          <div className={cn(
+            "w-8 h-8 rounded-lg flex items-center justify-center shrink-0",
+            hasAIAddon ? "bg-purple-100" : "bg-blue-100"
+          )}>
+            {hasAIAddon ? (
+              <Crown className="w-4 h-4 text-purple-600" />
+            ) : (
+              <Sparkles className="w-4 h-4 text-blue-600" />
+            )}
+          </div>
+          <div className="flex-1">
+            {hasAIAddon ? (
+              <>
+                <p className="font-medium text-purple-800">Full AI Brain Active</p>
+                <p className="text-sm text-purple-600">All advanced features unlocked - unlimited suggestions, lead qualification, automation builder, and more.</p>
+              </>
+            ) : isStarter ? (
+              <>
+                <p className="font-medium text-blue-800">AI Assist Active</p>
+                <p className="text-sm text-blue-600">Basic reply suggestions & sentiment detection included. Upgrade to Full AI Brain ($29/mo) for advanced features.</p>
+                <Link href="/pricing">
+                  <Button size="sm" className="mt-2 bg-purple-600 hover:bg-purple-700 text-white">
+                    <Crown className="w-3 h-3 mr-1" />
+                    Unlock Full AI Brain
+                  </Button>
+                </Link>
+              </>
+            ) : (
+              <>
+                <p className="font-medium text-blue-800">AI Assist Active</p>
+                <p className="text-sm text-blue-600">Higher daily limits included with Pro. Upgrade to Full AI Brain ($29/mo) for unlimited suggestions and advanced features.</p>
+                <Link href="/pricing">
+                  <Button size="sm" className="mt-2 bg-purple-600 hover:bg-purple-700 text-white">
+                    <Crown className="w-3 h-3 mr-1" />
+                    Unlock Full AI Brain
+                  </Button>
+                </Link>
+              </>
+            )}
           </div>
         </div>
         

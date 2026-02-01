@@ -51,6 +51,7 @@ const PLANS = [
       "CSV import contacts",
       "Email & push notifications",
       "3 webhook integrations",
+      "AI Assist included (basic reply suggestions & sentiment detection)",
     ],
     note: "Best for multi-channel sales & support",
   },
@@ -72,7 +73,8 @@ const PLANS = [
       "Template messaging & retargeting",
       "10 webhook + native integrations",
       "Priority support",
-      "AI Brain add-on available (+$29/mo)",
+      "AI Assist included (higher daily limits)",
+      "Full AI Brain add-on available (+$29/mo)",
     ],
     note: "Built for serious multi-channel operations",
   },
@@ -264,7 +266,7 @@ export function Pricing() {
           })}
         </div>
 
-        {/* AI Assist Add-on */}
+        {/* Full AI Brain Add-on */}
         <div className="mt-12 max-w-2xl mx-auto">
           <div className="bg-gradient-to-br from-purple-50 to-blue-50 border-2 border-purple-200 rounded-2xl p-6 sm:p-8 relative overflow-hidden">
             <div className="absolute top-4 right-4 bg-purple-600 text-white text-xs font-bold px-3 py-1 rounded-full">
@@ -275,8 +277,8 @@ export function Pricing() {
                 <Brain className="w-6 h-6 text-white" />
               </div>
               <div>
-                <h3 className="text-xl font-bold text-gray-900">AI Brain</h3>
-                <p className="text-sm text-gray-600">Supercharge your conversations with AI</p>
+                <h3 className="text-xl font-bold text-gray-900">Full AI Brain Add-On</h3>
+                <p className="text-sm text-gray-600">Upgrade from AI Assist to unlock advanced features</p>
               </div>
             </div>
             
@@ -286,10 +288,14 @@ export function Pricing() {
               <span className="text-xs text-gray-500 ml-2">(Fair Use)</span>
             </div>
             
+            <p className="text-sm text-gray-700 mb-4 bg-purple-100/50 p-3 rounded-lg">
+              Upgrade from AI Assist to unlock unlimited suggestions, lead qualification, smart summarization, plain-English automation builder, and more.
+            </p>
+            
             <div className="grid gap-3 mb-6">
               <div className="flex items-start gap-2">
                 <Sparkles className="w-4 h-4 text-purple-500 mt-0.5 shrink-0" />
-                <span className="text-sm text-gray-700">AI-powered reply suggestions based on your business context</span>
+                <span className="text-sm text-gray-700"><strong>Unlimited</strong> AI-powered reply suggestions</span>
               </div>
               <div className="flex items-start gap-2">
                 <Target className="w-4 h-4 text-green-500 mt-0.5 shrink-0" />
@@ -317,7 +323,7 @@ export function Pricing() {
               <Link href="/app/ai-brain">
                 <Button className="w-full bg-purple-600 hover:bg-purple-700 text-white" data-testid="button-ai-brain-setup">
                   <Brain className="w-4 h-4 mr-2" />
-                  Set Up AI Brain
+                  Set Up Full AI Brain
                 </Button>
               </Link>
             ) : (

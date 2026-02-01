@@ -1,0 +1,33 @@
+The goal is to introduce a lightweight AI Assist mode in Starter (and optionally Pro) while keeping the full AI Brain as the $29 add-on. This adds value to Starter without changing prices or risking Shopify review issues.Important safety notes for the agent:Always work on a duplicate/forked Repl first or use a feature flag so nothing breaks in production.
+Do not change any pricing numbers or plan names.
+Only update text, bullets, and conditional UI (e.g., show "AI Assist" vs "Full AI Brain" based on user plan).
+Test thoroughly in preview mode after each step.
+
+Implementation StepsUpdate the Pricing Page (Frontend Only)Locate the pricing cards component/file (likely Pricing.js, Plans.js, or similar).
+On the Starter ($19) card:Add a new bullet under the existing list: "AI Assist included (basic reply suggestions & sentiment detection)"
+Optional: Add a small badge/icon next to it (e.g.,  AI Assist) for visual pop.
+On the Pro ($49) card:Add the same bullet: "AI Assist included (higher daily limits)"
+Keep existing bullets unchanged.
+On the AI Brain Add-On card:Update the title/description to: "Full AI Brain Add-On – $29/mo"
+Add clarifying text: "Upgrade from AI Assist to unlock unlimited suggestions, lead qualification, smart summarization, plain-English automation builder, and more."
+No other changes to buttons, prices, or layout.
+Rename/Refactor AI Brain Tab to "AI Features" (or Keep Name but Add Sub-Section)In the AI Brain page/component:Change the main header from "AI Brain" to "AI Features" (or add a sub-header "AI Assist Active" if on Starter).
+Add a prominent card/banner at the top:If user is on Starter: "AI Assist Active  – Basic reply suggestions & sentiment detection included. Upgrade to Full AI Brain ($29/mo) for advanced features."
+If user is on Pro without add-on: Same as above but mention "Higher daily limits included".
+If user has AI Brain add-on: "Full AI Brain Active  – All advanced features unlocked."
+Use existing plan detection logic (you already gate features) to show the correct message.
+Implement AI Assist Limits in Inbox (Light Gating)In the reply suggestion logic/component:For Starter users: Limit to 50 suggestions per month (or 5-10 per day – use existing throttle system).
+When limit reached: Show gentle popup/banner: "Daily AI Assist suggestions used up. Upgrade to Full AI Brain ($29/mo) for unlimited!"
+For Pro users (without add-on): Higher limit, e.g., 200/mo.
+Keep full unlimited for add-on users.
+Add sentiment emoji (//) to every suggestion popup (simple – pull from existing sentiment detection).
+Add "Upgrade to Full AI Brain" CTAsIn AI Features tab: Add a purple "Unlock Full AI Brain – $29/mo" button linking to billing/upgrade page.
+In inbox suggestion popup: When regenerating or using a suggestion, add small text: "Powered by AI Assist – Upgrade for unlimited + advanced features."
+In AI Health sub-tab: Add a new card showing current mode (AI Assist or Full AI Brain) with upgrade button if not full.
+Optional Polish (If Time)Add tooltip explanations on pricing page and in-app: Hover on "AI Assist" → "Basic reply suggestions with sentiment detection – perfect starter AI."
+Hover on "Full AI Brain" → List key extras (summarization, qualification, automation builder).
+Testing InstructionsTest with demo accounts on Free, Starter, Pro, and Pro + AI Add-On.
+Verify: No crashes, limits work, upgrade CTAs link correctly, text updates appear cleanly.
+Preview on mobile/desktop.
+If anything breaks, revert immediately.
+
