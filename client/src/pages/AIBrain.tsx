@@ -105,11 +105,8 @@ function AIBrainContent() {
   const isPro = plan === "pro" || plan === "enterprise";
   const isStarter = plan === "starter";
   const hasAIAssist = isStarter || isPro;
-  // TODO: Hook real add-on subscription flag here when backend supports it
-  // For demo/testing: add ?aiAddon=true to URL to simulate having the add-on
-  const urlParams = new URLSearchParams(window.location.search);
-  const demoAddonMode = urlParams.get('aiAddon') === 'true';
-  const hasAIBrainAddon = demoAddonMode; // Will be: subscription?.limits?.hasAIBrainAddon ?? false
+  // Get add-on status from subscription data (checked via Stripe)
+  const hasAIBrainAddon = (subscription?.limits as any)?.hasAIBrainAddon ?? false;
   const hasFullAIBrain = hasAIBrainAddon && hasAIAssist;
   
   const [settings, setSettings] = useState<AISettings>({
@@ -145,6 +142,34 @@ function AIBrainContent() {
   const [automationPrompt, setAutomationPrompt] = useState("");
   const [generatingAutomation, setGeneratingAutomation] = useState(false);
   const [generatedWorkflow, setGeneratedWorkflow] = useState<any>(null);
+  const [isCheckingOut, setIsCheckingOut] = useState(false);
+  
+  // AI Brain add-on checkout
+  const handleAddonCheckout = async () => {
+    setIsCheckingOut(true);
+    try {
+      const response = await fetch("/api/subscription/addon/ai-brain", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to start checkout");
+      }
+      if (data.url) {
+        window.location.href = data.url;
+      }
+    } catch (error: any) {
+      toast({
+        title: "Checkout Error",
+        description: error.message || "Failed to start checkout. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsCheckingOut(false);
+    }
+  };
   
   // AI settings query - enabled for anyone with AI access (AI Assist or Full AI Brain)
   const { data: aiSettings, isLoading: settingsLoading, error: settingsError } = useQuery({
@@ -377,11 +402,28 @@ function AIBrainContent() {
                   ? "Unlock unlimited suggestions, lead qualification, summarization, and automation builder" 
                   : "Available for Starter and Pro plan subscribers"}
               </p>
-              <Link href="/pricing">
-                <Button className="bg-purple-600 hover:bg-purple-700 text-white">
-                  {hasAIAssist ? "Unlock Full AI Brain – $29/mo" : "Get Starter Plan First"}
+              {hasAIAssist ? (
+                <Button 
+                  className="bg-purple-600 hover:bg-purple-700 text-white"
+                  onClick={handleAddonCheckout}
+                  disabled={isCheckingOut}
+                >
+                  {isCheckingOut ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Processing...
+                    </>
+                  ) : (
+                    "Unlock Full AI Brain – $29/mo"
+                  )}
                 </Button>
-              </Link>
+              ) : (
+                <Link href="/pricing">
+                  <Button className="bg-purple-600 hover:bg-purple-700 text-white">
+                    Get Starter Plan First
+                  </Button>
+                </Link>
+              )}
             </div>
           </div>
         </div>
@@ -439,12 +481,15 @@ function AIBrainContent() {
                   Basic reply suggestions with sentiment detection included in your {isPro ? "Pro" : "Starter"} plan.
                   {isPro ? " Higher daily limits included." : ""}
                 </p>
-                <Link href="/pricing">
-                  <Button size="sm" className="mt-2 bg-purple-600 hover:bg-purple-700 text-white">
-                    <Crown className="w-3 h-3 mr-1" />
-                    Unlock Full AI Brain – $29/mo
-                  </Button>
-                </Link>
+                <Button 
+                  size="sm" 
+                  className="mt-2 bg-purple-600 hover:bg-purple-700 text-white"
+                  onClick={handleAddonCheckout}
+                  disabled={isCheckingOut}
+                >
+                  <Crown className="w-3 h-3 mr-1" />
+                  {isCheckingOut ? "Processing..." : "Unlock Full AI Brain – $29/mo"}
+                </Button>
               </>
             )}
           </div>

@@ -180,11 +180,8 @@ export function Chats() {
   const isPro = plan === "pro" || plan === "enterprise";
   const isStarter = plan === "starter";
   const hasAIAssist = isStarter || isPro;
-  // TODO: Hook real add-on subscription flag here when backend supports it
-  // For demo/testing: add ?aiAddon=true to URL to simulate having the add-on
-  const urlParams = new URLSearchParams(window.location.search);
-  const demoAddonMode = urlParams.get('aiAddon') === 'true';
-  const hasAIBrainAddon = demoAddonMode; // Will be: subscription?.limits?.hasAIBrainAddon ?? false
+  // Get add-on status from subscription data (checked via Stripe)
+  const hasAIBrainAddon = (subscription?.limits as any)?.hasAIBrainAddon ?? false;
   const hasFullAIBrain = hasAIBrainAddon && hasAIAssist;
   
   const { data: aiSettings } = useQuery({

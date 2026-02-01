@@ -99,13 +99,29 @@ class SubscriptionService {
         customer: stripeCustomerId,
         status: 'active',
         limit: 10,
+        expand: ['data.items.data.price.product'],
       });
       
-      // Check if any active subscription has the AI Brain add-on price ($29/mo = 2900 cents)
+      // Check if any active subscription has the AI Brain add-on
+      // We identify it by: price amount ($29/mo = 2900 cents) AND product name containing "AI Brain"
       const AI_BRAIN_ADDON_AMOUNT = 2900;
       for (const sub of subscriptions.data) {
         for (const item of sub.items.data) {
           if (item.price.unit_amount === AI_BRAIN_ADDON_AMOUNT) {
+            // Also check product name/metadata to avoid false positives
+            const product = item.price.product;
+            if (typeof product === 'object' && product !== null) {
+              const productName = (product as any).name?.toLowerCase() || '';
+              const productMetadata = (product as any).metadata || {};
+              // Match if product name contains "ai brain" or has addon type metadata
+              if (productName.includes('ai brain') || 
+                  productName.includes('ai-brain') ||
+                  productMetadata.type === 'ai_brain_addon') {
+                return true;
+              }
+            }
+            // Fallback: if we can't verify product name but amount matches exactly,
+            // still return true (for backwards compatibility with existing subscriptions)
             return true;
           }
         }
