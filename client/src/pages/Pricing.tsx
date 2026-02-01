@@ -52,6 +52,7 @@ const PLANS = [
       "Email & push notifications",
       "3 webhook integrations",
       "AI Assist included (basic reply suggestions & sentiment detection – up to 50/month)",
+      "Full AI Brain add-on available (+$29/mo)",
     ],
     note: "Best for multi-channel sales & support",
   },
