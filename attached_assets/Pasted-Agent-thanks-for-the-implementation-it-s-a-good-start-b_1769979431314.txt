@@ -1,0 +1,22 @@
+Agent, thanks for the implementation—it's a good start, but it doesn't match the exact requirements. We need to preserve the $29 Full AI Brain add-on as a separate upgrade (not included automatically in Pro). The goal is a light "AI Assist" mode included in Starter/Pro bases (limited suggestions only), with clear upsell to the paid add-on for full power.Please revert the changes that assume Pro includes Full AI Brain, and implement these fixes without major backend changes (use existing plan detection; if no add-on flag exists yet, show teaser UI and manual upgrade links). Work on a fork/branch first, test thoroughly.Specific Fixes & AdjustmentsRevert Pro to Not Have Full AI Brain AutomaticallyPro users (without add-on) should get the same light AI Assist as Starter (limited suggestions, e.g., 50-200/mo).
+Do not show "Full AI Brain" label for base Pro users.
+Only show "Full AI Brain Active" if the user has the $29 add-on (use placeholder conditional for now if no flag—e.g., hardcode for demo, or add comment for future backend flag).
+Standardize "AI Assist" as the Entry-Level ModeFor all users on Starter or Pro (without add-on):Show header/banner: "AI Assist Active  – Basic reply suggestions with sentiment detection included in your plan."
+In suggestion popup: "Powered by AI Assist – Upgrade to Full AI Brain ($29/mo) for unlimited suggestions, lead qualification, summarization, and more."
+Limit suggestions (enforce your existing throttle, e.g., 50/mo Starter, 200/mo Pro).
+When limit hit: "AI Assist limit reached today. Unlock Full AI Brain ($29/mo) for unlimited!"
+For users with $29 add-on:Show: "Full AI Brain Active  – Unlimited access to all advanced features."
+No limits, full features (qualification, summarization, etc.).
+Update AI Features Tab (Formerly AI Brain Tab)Keep tab name "AI Brain" or rename to "AI Features" if easy.
+Top card/banner:Conditional text as above (AI Assist vs Full AI Brain).
+Add prominent purple button: "Unlock Full AI Brain – $29/mo" (link to billing/upgrade page) – show only if not subscribed to add-on.
+In AI Health: Update cards to reflect "AI Assist" mode (e.g., "Reply Suggestions: Limited" for base plans).
+Pricing Page Adjustments (Revert/Refine)Remove any implication that Pro includes Full AI Brain.
+Starter bullet: "AI Assist included (basic reply suggestions & sentiment detection)"
+Pro bullet: "Enhanced AI Assist included (higher limits) + priority support"
+AI Brain Add-On card: Emphasize "Upgrade your AI Assist to Full AI Brain ($29/mo) – Available on Starter or Pro plans."
+Testing & SafetyTest with simulated plans: Free (no AI), Starter (AI Assist limited), Pro (AI Assist higher limit), Pro + Add-On (full unlimited).
+Ensure no existing features break for current Pro users.
+If no backend add-on detection yet: Add visible comment in code "// TODO: Hook real add-on subscription flag here" and default to AI Assist for now.
+Preview changes before merging.
+

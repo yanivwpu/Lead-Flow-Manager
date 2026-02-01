@@ -180,14 +180,19 @@ export function Chats() {
   const isPro = plan === "pro" || plan === "enterprise";
   const isStarter = plan === "starter";
   const hasAIAssist = isStarter || isPro;
-  const hasFullAIBrain = isPro;
+  // TODO: Hook real add-on subscription flag here when backend supports it
+  // For demo/testing: add ?aiAddon=true to URL to simulate having the add-on
+  const urlParams = new URLSearchParams(window.location.search);
+  const demoAddonMode = urlParams.get('aiAddon') === 'true';
+  const hasAIBrainAddon = demoAddonMode; // Will be: subscription?.limits?.hasAIBrainAddon ?? false
+  const hasFullAIBrain = hasAIBrainAddon && hasAIAssist;
   
   const { data: aiSettings } = useQuery({
     queryKey: ["/api/ai/settings"],
-    enabled: !!user && hasAIAssist,
+    enabled: !!user && (hasAIAssist || hasFullAIBrain),
   });
   
-  const aiEnabled = hasAIAssist && (isPro ? (aiSettings && (aiSettings as any).aiMode !== "off") : true);
+  const aiEnabled = (hasAIAssist || hasFullAIBrain) && (hasFullAIBrain ? (aiSettings && (aiSettings as any).aiMode !== "off") : true);
   
   // Timeline interface and query
   interface TimelineEvent {
@@ -1180,7 +1185,7 @@ export function Chats() {
                               href="/pricing" 
                               className="text-[10px] text-purple-500 hover:text-purple-700 hover:underline"
                             >
-                              {hasFullAIBrain ? "Full AI Brain" : "Powered by AI Assist – Upgrade for unlimited"}
+                              {hasFullAIBrain ? "Full AI Brain Active" : "Powered by AI Assist – Upgrade to Full AI Brain ($29/mo)"}
                             </a>
                           </div>
                         </div>

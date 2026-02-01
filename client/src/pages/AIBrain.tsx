@@ -104,8 +104,13 @@ function AIBrainContent() {
   const plan = subscription?.limits?.plan || "free";
   const isPro = plan === "pro" || plan === "enterprise";
   const isStarter = plan === "starter";
-  const hasFullAIBrain = isPro;
   const hasAIAssist = isStarter || isPro;
+  // TODO: Hook real add-on subscription flag here when backend supports it
+  // For demo/testing: add ?aiAddon=true to URL to simulate having the add-on
+  const urlParams = new URLSearchParams(window.location.search);
+  const demoAddonMode = urlParams.get('aiAddon') === 'true';
+  const hasAIBrainAddon = demoAddonMode; // Will be: subscription?.limits?.hasAIBrainAddon ?? false
+  const hasFullAIBrain = hasAIBrainAddon && hasAIAssist;
   
   const [settings, setSettings] = useState<AISettings>({
     aiMode: "suggest_only",
@@ -141,21 +146,24 @@ function AIBrainContent() {
   const [generatingAutomation, setGeneratingAutomation] = useState(false);
   const [generatedWorkflow, setGeneratedWorkflow] = useState<any>(null);
   
+  // AI settings query - enabled for anyone with AI access (AI Assist or Full AI Brain)
   const { data: aiSettings, isLoading: settingsLoading, error: settingsError } = useQuery({
     queryKey: ["/api/ai/settings"],
-    enabled: !subscriptionLoading && isPro,
+    enabled: !subscriptionLoading && (hasAIAssist || hasFullAIBrain),
     retry: false,
   });
   
+  // Business knowledge - only for Full AI Brain users
   const { data: businessKnowledge, isLoading: knowledgeLoading } = useQuery({
     queryKey: ["/api/ai/business-knowledge"],
-    enabled: !subscriptionLoading && isPro,
+    enabled: !subscriptionLoading && hasFullAIBrain,
     retry: false,
   });
   
+  // AI health - for all AI users
   const { data: aiHealthData, isLoading: healthLoading } = useQuery({
     queryKey: ["/api/ai/health"],
-    enabled: !subscriptionLoading && isPro,
+    enabled: !subscriptionLoading && (hasAIAssist || hasFullAIBrain),
     retry: false,
   });
   
@@ -301,7 +309,8 @@ function AIBrainContent() {
     );
   }
 
-  if (!isPro) {
+  // Show upgrade screen for users without any AI access (Free plan)
+  if (!hasAIAssist && !hasFullAIBrain) {
     return (
       <div className="h-full overflow-y-auto p-4 sm:p-6 lg:p-8">
         <div className="max-w-3xl mx-auto">
@@ -318,7 +327,8 @@ function AIBrainContent() {
                   <span className="font-medium text-blue-800">AI Assist Active</span>
                 </div>
                 <p className="text-sm text-blue-700">
-                  Basic reply suggestions & sentiment detection included with your Starter plan.
+                  Basic reply suggestions & sentiment detection included with your {isStarter ? "Starter" : "Pro"} plan.
+                  {isPro && " Higher daily limits included."}
                 </p>
               </div>
             ) : (
@@ -333,7 +343,7 @@ function AIBrainContent() {
                 <div>
                   <p className="font-medium text-gray-900">Smart Reply Suggestions</p>
                   <p className="text-sm text-gray-500">AI suggests responses based on your business context</p>
-                  {hasAIAssist && <span className="text-xs text-blue-600 font-medium">Included in AI Assist</span>}
+                  {hasAIAssist && <span className="text-xs text-blue-600 font-medium">Included in AI Assist (limited)</span>}
                 </div>
               </div>
               <div className="flex items-start gap-3 p-4 bg-white rounded-xl border border-gray-200">
@@ -341,7 +351,7 @@ function AIBrainContent() {
                 <div>
                   <p className="font-medium text-gray-900">Lead Qualification</p>
                   <p className="text-sm text-gray-500">Automatically score and qualify leads</p>
-                  <span className="text-xs text-purple-600 font-medium">Full AI Brain only</span>
+                  <span className="text-xs text-purple-600 font-medium">Full AI Brain ($29/mo)</span>
                 </div>
               </div>
               <div className="flex items-start gap-3 p-4 bg-white rounded-xl border border-gray-200">
@@ -349,7 +359,7 @@ function AIBrainContent() {
                 <div>
                   <p className="font-medium text-gray-900">Plain English Automations</p>
                   <p className="text-sm text-gray-500">Describe workflows in plain language</p>
-                  <span className="text-xs text-purple-600 font-medium">Full AI Brain only</span>
+                  <span className="text-xs text-purple-600 font-medium">Full AI Brain ($29/mo)</span>
                 </div>
               </div>
             </div>
@@ -358,18 +368,18 @@ function AIBrainContent() {
               <div className="flex items-center justify-center gap-2 mb-3">
                 <Crown className="w-5 h-5 text-purple-600" />
                 <span className="text-sm font-bold text-purple-700 uppercase tracking-wide">
-                  {hasAIAssist ? "Upgrade to Full AI Brain" : "Pro Add-on"}
+                  {hasAIAssist ? "Unlock Full AI Brain" : "Get Started with AI"}
                 </span>
               </div>
               <p className="text-2xl font-bold text-gray-900 mb-1">$29/month</p>
               <p className="text-sm text-gray-600 mb-4">
                 {hasAIAssist 
-                  ? "Unlock unlimited suggestions, lead qualification, and automation builder" 
-                  : "Available for Pro plan subscribers"}
+                  ? "Unlock unlimited suggestions, lead qualification, summarization, and automation builder" 
+                  : "Available for Starter and Pro plan subscribers"}
               </p>
               <Link href="/pricing">
                 <Button className="bg-purple-600 hover:bg-purple-700 text-white">
-                  {hasAIAssist ? "Upgrade to Pro + AI Brain" : "Upgrade to Pro"}
+                  {hasAIAssist ? "Unlock Full AI Brain – $29/mo" : "Get Starter Plan First"}
                 </Button>
               </Link>
             </div>
@@ -420,16 +430,19 @@ function AIBrainContent() {
             {hasFullAIBrain ? (
               <>
                 <p className="font-medium text-purple-800">Full AI Brain Active</p>
-                <p className="text-sm text-purple-600">All advanced features unlocked - unlimited suggestions, lead qualification, automation builder, and more.</p>
+                <p className="text-sm text-purple-600">Unlimited access to all advanced features - reply suggestions, lead qualification, summarization, automation builder, and more.</p>
               </>
             ) : (
               <>
                 <p className="font-medium text-blue-800">AI Assist Active</p>
-                <p className="text-sm text-blue-600">Basic reply suggestions & sentiment detection included with your plan. Upgrade to Pro for Full AI Brain with unlimited features.</p>
+                <p className="text-sm text-blue-600">
+                  Basic reply suggestions with sentiment detection included in your {isPro ? "Pro" : "Starter"} plan.
+                  {isPro ? " Higher daily limits included." : ""}
+                </p>
                 <Link href="/pricing">
                   <Button size="sm" className="mt-2 bg-purple-600 hover:bg-purple-700 text-white">
                     <Crown className="w-3 h-3 mr-1" />
-                    Upgrade to Pro
+                    Unlock Full AI Brain – $29/mo
                   </Button>
                 </Link>
               </>

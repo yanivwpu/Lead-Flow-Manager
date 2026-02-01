@@ -73,7 +73,8 @@ const PLANS = [
       "Template messaging & retargeting",
       "10 webhook + native integrations",
       "Priority support",
-      "Full AI Brain included (unlimited AI features)",
+      "Enhanced AI Assist (higher daily limits)",
+      "Full AI Brain add-on available (+$29/mo)",
     ],
     note: "Built for serious multi-channel operations",
   },
@@ -265,11 +266,11 @@ export function Pricing() {
           })}
         </div>
 
-        {/* Full AI Brain - Included with Pro */}
+        {/* Full AI Brain Add-on */}
         <div className="mt-12 max-w-2xl mx-auto">
           <div className="bg-gradient-to-br from-purple-50 to-blue-50 border-2 border-purple-200 rounded-2xl p-6 sm:p-8 relative overflow-hidden">
             <div className="absolute top-4 right-4 bg-purple-600 text-white text-xs font-bold px-3 py-1 rounded-full">
-              INCLUDED WITH PRO
+              $29/mo ADD-ON
             </div>
             <div className="flex items-center gap-3 mb-4">
               <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-blue-500 rounded-xl flex items-center justify-center">
@@ -277,12 +278,17 @@ export function Pricing() {
               </div>
               <div>
                 <h3 className="text-xl font-bold text-gray-900">Full AI Brain</h3>
-                <p className="text-sm text-gray-600">Supercharge your conversations with unlimited AI</p>
+                <p className="text-sm text-gray-600">Upgrade your AI Assist to unlimited power</p>
               </div>
             </div>
             
+            <div className="flex items-baseline gap-1 mb-4">
+              <span className="text-3xl font-bold text-gray-900">$29</span>
+              <span className="text-gray-600">/month</span>
+            </div>
+            
             <p className="text-sm text-gray-700 mb-4 bg-purple-100/50 p-3 rounded-lg">
-              Pro plan includes Full AI Brain with unlimited suggestions, lead qualification, smart summarization, plain-English automation builder, and more.
+              Upgrade your AI Assist to Full AI Brain – unlock unlimited suggestions, lead qualification, smart summarization, plain-English automation builder, and more. Available on Starter or Pro plans.
             </p>
             
             <div className="grid gap-3 mb-6">
@@ -308,22 +314,26 @@ export function Pricing() {
               </div>
             </div>
             
-            {currentPlan === 'pro' ? (
+            <p className="text-xs text-gray-500 mb-4">
+              Available for Starter and Pro plan subscribers.
+            </p>
+            
+            {currentPlan === 'starter' || currentPlan === 'pro' ? (
               <Link href="/app/ai-brain">
                 <Button className="w-full bg-purple-600 hover:bg-purple-700 text-white" data-testid="button-ai-brain-setup">
                   <Brain className="w-4 h-4 mr-2" />
-                  Configure AI Brain
+                  Unlock Full AI Brain – $29/mo
                 </Button>
               </Link>
             ) : (
               <Button 
                 className="w-full bg-gray-900 hover:bg-gray-800 text-white"
-                onClick={() => handleUpgrade('pro')}
-                disabled={loadingPlan === 'pro'}
+                onClick={() => handleUpgrade('starter')}
+                disabled={loadingPlan === 'starter'}
                 data-testid="button-upgrade-for-ai"
               >
-                {loadingPlan === 'pro' ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-                Upgrade to Pro to Unlock
+                {loadingPlan === 'starter' ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                Get Starter to Access AI Features
               </Button>
             )}
           </div>
