@@ -1029,24 +1029,46 @@ function AIBrainContent() {
                          settings.aiMode === "suggest_only" ? "Suggestions enabled" : "Disabled"}
                       </p>
                     </div>
-                    <div className="p-4 bg-gray-50 rounded-xl">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Target className="w-4 h-4 text-green-500" />
-                        <span className="font-medium text-gray-900">Lead Qualification</span>
+                    {hasFullAIBrain ? (
+                      <div className="p-4 bg-gray-50 rounded-xl">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Target className="w-4 h-4 text-green-500" />
+                          <span className="font-medium text-gray-900">Lead Qualification</span>
+                        </div>
+                        <p className="text-sm text-gray-600">
+                          {settings.leadQualificationEnabled ? "Active" : "Disabled"}
+                        </p>
                       </div>
-                      <p className="text-sm text-gray-600">
-                        {settings.leadQualificationEnabled ? "Active" : "Disabled"}
-                      </p>
-                    </div>
-                    <div className="p-4 bg-gray-50 rounded-xl">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Hand className="w-4 h-4 text-orange-500" />
-                        <span className="font-medium text-gray-900">Human Handoff</span>
+                    ) : (
+                      <div className="p-4 bg-gray-50 rounded-xl opacity-60">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Target className="w-4 h-4 text-gray-400" />
+                          <span className="font-medium text-gray-500">Lead Qualification</span>
+                          <Crown className="w-3 h-3 text-purple-500" />
+                        </div>
+                        <p className="text-sm text-gray-400">Full AI Brain feature</p>
                       </div>
-                      <p className="text-sm text-gray-600">
-                        {settings.handoffKeywords.length} trigger keywords configured
-                      </p>
-                    </div>
+                    )}
+                    {hasFullAIBrain ? (
+                      <div className="p-4 bg-gray-50 rounded-xl">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Hand className="w-4 h-4 text-orange-500" />
+                          <span className="font-medium text-gray-900">Human Handoff</span>
+                        </div>
+                        <p className="text-sm text-gray-600">
+                          {settings.handoffKeywords.length} trigger keywords configured
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="p-4 bg-gray-50 rounded-xl opacity-60">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Hand className="w-4 h-4 text-gray-400" />
+                          <span className="font-medium text-gray-500">Human Handoff</span>
+                          <Crown className="w-3 h-3 text-purple-500" />
+                        </div>
+                        <p className="text-sm text-gray-400">Full AI Brain feature</p>
+                      </div>
+                    )}
                     <div className="p-4 bg-gray-50 rounded-xl">
                       <div className="flex items-center gap-2 mb-2">
                         <Clock className="w-4 h-4 text-blue-500" />
