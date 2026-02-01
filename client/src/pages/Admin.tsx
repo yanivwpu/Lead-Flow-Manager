@@ -402,95 +402,99 @@ export function Admin() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 mb-8">
-          <div className="bg-white rounded-xl p-6 border border-gray-200">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="h-10 w-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                <Calendar className="h-5 w-5 text-blue-600" />
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4 mb-6 sm:mb-8">
+          <div className="bg-white rounded-xl p-4 sm:p-6 border border-gray-200">
+            <div className="flex items-center gap-2 sm:gap-3 mb-1 sm:mb-2">
+              <div className="h-8 w-8 sm:h-10 sm:w-10 bg-blue-100 rounded-lg flex items-center justify-center shrink-0">
+                <Calendar className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600" />
               </div>
-              <span className="text-gray-600">Pending Demos</span>
+              <span className="text-xs sm:text-sm text-gray-600 leading-tight">Pending Demos</span>
             </div>
-            <p className="text-3xl font-bold text-gray-900">{pendingBookings}</p>
+            <p className="text-2xl sm:text-3xl font-bold text-gray-900">{pendingBookings}</p>
           </div>
-          <div className="bg-white rounded-xl p-6 border border-gray-200">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="h-10 w-10 bg-green-100 rounded-lg flex items-center justify-center">
-                <CheckCircle className="h-5 w-5 text-green-600" />
+          <div className="bg-white rounded-xl p-4 sm:p-6 border border-gray-200">
+            <div className="flex items-center gap-2 sm:gap-3 mb-1 sm:mb-2">
+              <div className="h-8 w-8 sm:h-10 sm:w-10 bg-green-100 rounded-lg flex items-center justify-center shrink-0">
+                <CheckCircle className="h-4 w-4 sm:h-5 sm:w-5 text-green-600" />
               </div>
-              <span className="text-gray-600">Total Conversions</span>
+              <span className="text-xs sm:text-sm text-gray-600 leading-tight">Conversions</span>
             </div>
-            <p className="text-3xl font-bold text-gray-900">{totalConversions}</p>
+            <p className="text-2xl sm:text-3xl font-bold text-gray-900">{totalConversions}</p>
           </div>
-          <div className="bg-white rounded-xl p-6 border border-gray-200">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="h-10 w-10 bg-red-100 rounded-lg flex items-center justify-center">
-                <DollarSign className="h-5 w-5 text-red-600" />
+          <div className="bg-white rounded-xl p-4 sm:p-6 border border-gray-200">
+            <div className="flex items-center gap-2 sm:gap-3 mb-1 sm:mb-2">
+              <div className="h-8 w-8 sm:h-10 sm:w-10 bg-red-100 rounded-lg flex items-center justify-center shrink-0">
+                <DollarSign className="h-4 w-4 sm:h-5 sm:w-5 text-red-600" />
               </div>
-              <span className="text-gray-600">Total Cost</span>
+              <span className="text-xs sm:text-sm text-gray-600 leading-tight">Total Cost</span>
             </div>
-            <p className="text-3xl font-bold text-gray-900">${totalCost.toFixed(2)}</p>
+            <p className="text-2xl sm:text-3xl font-bold text-gray-900">${totalCost.toFixed(2)}</p>
           </div>
-          <div className="bg-white rounded-xl p-6 border border-gray-200">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="h-10 w-10 bg-emerald-100 rounded-lg flex items-center justify-center">
-                <DollarSign className="h-5 w-5 text-emerald-600" />
+          <div className="bg-white rounded-xl p-4 sm:p-6 border border-gray-200">
+            <div className="flex items-center gap-2 sm:gap-3 mb-1 sm:mb-2">
+              <div className="h-8 w-8 sm:h-10 sm:w-10 bg-emerald-100 rounded-lg flex items-center justify-center shrink-0">
+                <DollarSign className="h-4 w-4 sm:h-5 sm:w-5 text-emerald-600" />
               </div>
-              <span className="text-gray-600">Total Revenue</span>
+              <span className="text-xs sm:text-sm text-gray-600 leading-tight">Revenue</span>
             </div>
-            <p className="text-3xl font-bold text-gray-900">${(roiStats?.totalRevenue || 0).toFixed(2)}</p>
-            <p className="text-xs text-gray-500 mt-1">From converted users</p>
+            <p className="text-2xl sm:text-3xl font-bold text-gray-900">${(roiStats?.totalRevenue || 0).toFixed(2)}</p>
           </div>
-          <div className="bg-white rounded-xl p-6 border border-gray-200">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="h-10 w-10 bg-purple-100 rounded-lg flex items-center justify-center">
-                <CheckCircle className="h-5 w-5 text-purple-600" />
+          <div className="bg-white rounded-xl p-4 sm:p-6 border border-gray-200">
+            <div className="flex items-center gap-2 sm:gap-3 mb-1 sm:mb-2">
+              <div className="h-8 w-8 sm:h-10 sm:w-10 bg-purple-100 rounded-lg flex items-center justify-center shrink-0">
+                <CheckCircle className="h-4 w-4 sm:h-5 sm:w-5 text-purple-600" />
               </div>
-              <span className="text-gray-600">Conversion Rate</span>
+              <span className="text-xs sm:text-sm text-gray-600 leading-tight">Conv. Rate</span>
             </div>
-            <p className="text-3xl font-bold text-gray-900">{conversionRate}%</p>
+            <p className="text-2xl sm:text-3xl font-bold text-gray-900">{conversionRate}%</p>
           </div>
-          <div className="bg-white rounded-xl p-6 border border-gray-200">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="h-10 w-10 bg-amber-100 rounded-lg flex items-center justify-center">
-                <DollarSign className="h-5 w-5 text-amber-600" />
+          <div className="bg-white rounded-xl p-4 sm:p-6 border border-gray-200">
+            <div className="flex items-center gap-2 sm:gap-3 mb-1 sm:mb-2">
+              <div className="h-8 w-8 sm:h-10 sm:w-10 bg-amber-100 rounded-lg flex items-center justify-center shrink-0">
+                <DollarSign className="h-4 w-4 sm:h-5 sm:w-5 text-amber-600" />
               </div>
-              <span className="text-gray-600">Revenue ROI</span>
+              <span className="text-xs sm:text-sm text-gray-600 leading-tight">ROI</span>
             </div>
-            <p className={`text-3xl font-bold ${(roiStats?.roi || 0) >= 100 ? 'text-green-600' : 'text-red-600'}`}>
+            <p className={`text-2xl sm:text-3xl font-bold ${(roiStats?.roi || 0) >= 100 ? 'text-green-600' : 'text-red-600'}`}>
               {(roiStats?.roi || 0).toFixed(0)}%
             </p>
-            <p className="text-xs text-gray-500 mt-1">Revenue vs Commission</p>
           </div>
         </div>
 
         <Tabs defaultValue="salespeople" className="space-y-6">
-          <TabsList>
-            <TabsTrigger value="salespeople" className="gap-2">
-              <Users className="h-4 w-4" />
-              Salespeople
-            </TabsTrigger>
-            <TabsTrigger value="bookings" className="gap-2">
-              <Calendar className="h-4 w-4" />
-              Bookings
-            </TabsTrigger>
-            <TabsTrigger value="conversions" className="gap-2">
-              <DollarSign className="h-4 w-4" />
-              Conversions
-            </TabsTrigger>
-            <TabsTrigger value="users" className="gap-2">
-              <UserCircle className="h-4 w-4" />
-              Users
-              {adminUsers.filter(u => u.openTicketCount > 0).length > 0 && (
-                <Badge variant="destructive" className="ml-1 px-1.5 py-0.5 text-xs">
-                  {adminUsers.filter(u => u.openTicketCount > 0).length}
-                </Badge>
-              )}
-            </TabsTrigger>
-            <TabsTrigger value="partners" className="gap-2" data-testid="tab-partners">
-              <Link2 className="h-4 w-4" />
-              Partners
-            </TabsTrigger>
-          </TabsList>
+          <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+            <TabsList className="inline-flex w-max sm:w-auto min-w-full sm:min-w-0">
+              <TabsTrigger value="salespeople" className="gap-1.5 text-xs sm:text-sm px-2.5 sm:px-4">
+                <Users className="h-4 w-4 shrink-0" />
+                <span className="hidden xs:inline">Salespeople</span>
+                <span className="xs:hidden">Sales</span>
+              </TabsTrigger>
+              <TabsTrigger value="bookings" className="gap-1.5 text-xs sm:text-sm px-2.5 sm:px-4">
+                <Calendar className="h-4 w-4 shrink-0" />
+                <span className="hidden sm:inline">Bookings</span>
+                <span className="sm:hidden">Book</span>
+              </TabsTrigger>
+              <TabsTrigger value="conversions" className="gap-1.5 text-xs sm:text-sm px-2.5 sm:px-4">
+                <DollarSign className="h-4 w-4 shrink-0" />
+                <span className="hidden sm:inline">Conversions</span>
+                <span className="sm:hidden">Conv</span>
+              </TabsTrigger>
+              <TabsTrigger value="users" className="gap-1.5 text-xs sm:text-sm px-2.5 sm:px-4">
+                <UserCircle className="h-4 w-4 shrink-0" />
+                Users
+                {adminUsers.filter(u => u.openTicketCount > 0).length > 0 && (
+                  <Badge variant="destructive" className="ml-1 px-1.5 py-0.5 text-[10px]">
+                    {adminUsers.filter(u => u.openTicketCount > 0).length}
+                  </Badge>
+                )}
+              </TabsTrigger>
+              <TabsTrigger value="partners" className="gap-1.5 text-xs sm:text-sm px-2.5 sm:px-4" data-testid="tab-partners">
+                <Link2 className="h-4 w-4 shrink-0" />
+                <span className="hidden sm:inline">Partners</span>
+                <span className="sm:hidden">Part</span>
+              </TabsTrigger>
+            </TabsList>
+          </div>
 
           <TabsContent value="salespeople">
             <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
@@ -714,41 +718,171 @@ export function Admin() {
 
           <TabsContent value="users">
             <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-              <div className="p-4 border-b border-gray-200 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-                <h2 className="font-semibold text-gray-900">
-                  All Users ({adminUsers.length})
-                </h2>
-                <div className="flex gap-2">
+              <div className="p-3 sm:p-4 border-b border-gray-200 flex flex-col gap-3">
+                <div className="flex justify-between items-center">
+                  <h2 className="font-semibold text-gray-900 text-sm sm:text-base">
+                    All Users ({adminUsers.length})
+                  </h2>
+                </div>
+                <div className="flex gap-1.5 sm:gap-2 overflow-x-auto pb-1">
                   <Button
                     variant={userSort === 'support' ? 'default' : 'outline'}
                     size="sm"
                     onClick={() => setUserSort('support')}
-                    className={userSort === 'support' ? 'bg-brand-green hover:bg-brand-dark' : ''}
+                    className={cn(
+                      "min-h-[36px] text-xs sm:text-sm px-2 sm:px-3 shrink-0",
+                      userSort === 'support' ? 'bg-brand-green hover:bg-brand-dark' : ''
+                    )}
                   >
-                    <AlertCircle className="h-4 w-4 mr-1" />
-                    Support First
+                    <AlertCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1" />
+                    <span className="hidden sm:inline">Support First</span>
+                    <span className="sm:hidden">Support</span>
                   </Button>
                   <Button
                     variant={userSort === 'date' ? 'default' : 'outline'}
                     size="sm"
                     onClick={() => setUserSort('date')}
-                    className={userSort === 'date' ? 'bg-brand-green hover:bg-brand-dark' : ''}
+                    className={cn(
+                      "min-h-[36px] text-xs sm:text-sm px-2 sm:px-3 shrink-0",
+                      userSort === 'date' ? 'bg-brand-green hover:bg-brand-dark' : ''
+                    )}
                   >
-                    <ArrowUpDown className="h-4 w-4 mr-1" />
+                    <ArrowUpDown className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1" />
                     Date
                   </Button>
                   <Button
                     variant={userSort === 'plan' ? 'default' : 'outline'}
                     size="sm"
                     onClick={() => setUserSort('plan')}
-                    className={userSort === 'plan' ? 'bg-brand-green hover:bg-brand-dark' : ''}
+                    className={cn(
+                      "min-h-[36px] text-xs sm:text-sm px-2 sm:px-3 shrink-0",
+                      userSort === 'plan' ? 'bg-brand-green hover:bg-brand-dark' : ''
+                    )}
                   >
-                    <DollarSign className="h-4 w-4 mr-1" />
+                    <DollarSign className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1" />
                     Plan
                   </Button>
                 </div>
               </div>
-              <div className="overflow-x-auto">
+              
+              {/* Mobile Card View */}
+              <div className="md:hidden divide-y divide-gray-100">
+                {adminUsers.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500">No users yet.</div>
+                ) : (
+                  [...adminUsers]
+                    .sort((a, b) => {
+                      if (userSort === 'support') {
+                        if (a.openTicketCount > 0 && b.openTicketCount === 0) return -1;
+                        if (b.openTicketCount > 0 && a.openTicketCount === 0) return 1;
+                        return new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime();
+                      } else if (userSort === 'plan') {
+                        const planOrder = { 'scale': 0, 'pro': 1, 'starter': 2, 'free': 3 };
+                        const aOrder = planOrder[a.subscriptionPlan as keyof typeof planOrder] ?? 4;
+                        const bOrder = planOrder[b.subscriptionPlan as keyof typeof planOrder] ?? 4;
+                        return aOrder - bOrder;
+                      }
+                      return new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime();
+                    })
+                    .map((user) => (
+                      <div 
+                        key={user.id}
+                        className={cn(
+                          "p-4 space-y-3",
+                          user.openTicketCount > 0 && 'bg-red-50'
+                        )}
+                      >
+                        {/* User Header */}
+                        <div className="flex items-start gap-3">
+                          {user.avatarUrl ? (
+                            <img src={user.avatarUrl} alt="" className="w-10 h-10 rounded-full shrink-0" />
+                          ) : (
+                            <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center shrink-0">
+                              <UserCircle className="h-6 w-6 text-gray-500" />
+                            </div>
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <div className="font-medium text-gray-900 truncate">{user.name || 'No name'}</div>
+                            <div className="text-sm text-gray-500 truncate">{user.email}</div>
+                          </div>
+                        </div>
+                        
+                        {/* Badges Row */}
+                        <div className="flex flex-wrap gap-1.5">
+                          {user.partnerName ? (
+                            <Badge className="bg-blue-100 text-blue-700 text-xs">Partner</Badge>
+                          ) : (
+                            <Badge variant="secondary" className="text-xs">Organic</Badge>
+                          )}
+                          <Badge 
+                            variant={
+                              user.subscriptionPlan === 'scale' ? 'default' :
+                              user.subscriptionPlan === 'pro' ? 'default' :
+                              user.subscriptionPlan === 'starter' ? 'secondary' : 'outline'
+                            }
+                            className={cn(
+                              "text-xs",
+                              user.subscriptionPlan === 'scale' && 'bg-purple-600',
+                              user.subscriptionPlan === 'pro' && 'bg-brand-green'
+                            )}
+                          >
+                            {user.subscriptionPlan || 'free'}
+                          </Badge>
+                          {user.subscriptionStatus && (
+                            <span className="text-xs text-gray-500 self-center">{user.subscriptionStatus}</span>
+                          )}
+                        </div>
+                        
+                        {/* Details Grid */}
+                        <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                          {user.trialEndsAt && (
+                            <div className="col-span-2">
+                              <span className="text-xs text-amber-600">
+                                Trial ends: {new Date(user.trialEndsAt).toLocaleDateString()}
+                              </span>
+                            </div>
+                          )}
+                          {user.openTicketCount > 0 && (
+                            <div className="col-span-2 flex items-center gap-1.5">
+                              <Badge 
+                                variant="destructive"
+                                className={cn(
+                                  "flex items-center gap-1 text-xs",
+                                  user.latestTicket?.priority === 'urgent' && 'bg-red-600',
+                                  user.latestTicket?.priority === 'high' && 'bg-orange-500',
+                                  user.latestTicket?.priority === 'normal' && 'bg-amber-500'
+                                )}
+                              >
+                                <MessageCircle className="h-3 w-3" />
+                                {user.openTicketCount} open
+                              </Badge>
+                              {user.latestTicket?.priority && (
+                                <span className="text-xs text-gray-500">{user.latestTicket.priority}</span>
+                              )}
+                            </div>
+                          )}
+                          <div>
+                            <span className="text-gray-500">Connected:</span>
+                            <div className="flex gap-1 mt-0.5">
+                              {user.twilioConnected && <Badge variant="outline" className="text-[10px] px-1.5">Twilio</Badge>}
+                              {user.metaConnected && <Badge variant="outline" className="text-[10px] px-1.5">Meta</Badge>}
+                              {!user.twilioConnected && !user.metaConnected && <span className="text-gray-400">-</span>}
+                            </div>
+                          </div>
+                          <div>
+                            <span className="text-gray-500">Signed up:</span>
+                            <div className="text-gray-900">
+                              {user.createdAt ? new Date(user.createdAt).toLocaleDateString() : '-'}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                )}
+              </div>
+              
+              {/* Desktop Table View */}
+              <div className="hidden md:block overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -765,7 +899,7 @@ export function Admin() {
                   <TableBody>
                     {adminUsers.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={7} className="text-center py-8 text-gray-500">
+                        <TableCell colSpan={8} className="text-center py-8 text-gray-500">
                           No users yet.
                         </TableCell>
                       </TableRow>
@@ -792,11 +926,7 @@ export function Admin() {
                             <TableCell>
                               <div className="flex items-center gap-2">
                                 {user.avatarUrl ? (
-                                  <img 
-                                    src={user.avatarUrl} 
-                                    alt="" 
-                                    className="w-8 h-8 rounded-full"
-                                  />
+                                  <img src={user.avatarUrl} alt="" className="w-8 h-8 rounded-full" />
                                 ) : (
                                   <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center">
                                     <UserCircle className="h-5 w-5 text-gray-500" />
@@ -848,9 +978,7 @@ export function Admin() {
                                   {user.subscriptionPlan || 'free'}
                                 </Badge>
                                 {user.subscriptionStatus && (
-                                  <span className="text-xs text-gray-500">
-                                    {user.subscriptionStatus}
-                                  </span>
+                                  <span className="text-xs text-gray-500">{user.subscriptionStatus}</span>
                                 )}
                                 {user.trialEndsAt && (
                                   <span className="text-xs text-amber-600">
@@ -914,24 +1042,16 @@ export function Admin() {
                                   )}
                                 </div>
                               ) : user.totalTicketCount > 0 ? (
-                                <span className="text-gray-500 text-sm">
-                                  {user.totalTicketCount} resolved
-                                </span>
+                                <span className="text-gray-500 text-sm">{user.totalTicketCount} resolved</span>
                               ) : (
                                 <span className="text-gray-400">-</span>
                               )}
                             </TableCell>
                             <TableCell>
                               <div className="flex gap-2">
-                                {user.twilioConnected && (
-                                  <Badge variant="outline" className="text-xs">Twilio</Badge>
-                                )}
-                                {user.metaConnected && (
-                                  <Badge variant="outline" className="text-xs">Meta</Badge>
-                                )}
-                                {!user.twilioConnected && !user.metaConnected && (
-                                  <span className="text-gray-400">-</span>
-                                )}
+                                {user.twilioConnected && <Badge variant="outline" className="text-xs">Twilio</Badge>}
+                                {user.metaConnected && <Badge variant="outline" className="text-xs">Meta</Badge>}
+                                {!user.twilioConnected && !user.metaConnected && <span className="text-gray-400">-</span>}
                               </div>
                             </TableCell>
                             <TableCell>
