@@ -24,6 +24,7 @@ interface Chat {
 }
 
 type ViewMode = 'list' | 'calendar' | 'pipeline';
+type KPIFilter = 'overdue' | 'today' | 'booking-requested' | 'booked' | 'needs-reply' | null;
 
 const PIPELINE_STAGES = ['Lead', 'Contacted', 'Proposal', 'Negotiation', 'Closed'] as const;
 
@@ -45,7 +46,11 @@ function hasNeedsReply(chat: Chat): boolean {
   return hasUnrepliedInbound || (chat.unread > 0);
 }
 
-function KPIHeader({ chats }: { chats: Chat[] }) {
+function KPIHeader({ chats, activeFilter, onFilterChange }: { 
+  chats: Chat[]; 
+  activeFilter: KPIFilter;
+  onFilterChange: (filter: KPIFilter) => void;
+}) {
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
@@ -74,20 +79,29 @@ function KPIHeader({ chats }: { chats: Chat[] }) {
     chats.filter(c => hasNeedsReply(c)).length,
   [chats]);
 
-  const kpis = [
-    { label: 'Overdue', value: overdueCount, icon: AlertCircle, color: 'text-red-600', bg: 'bg-red-50', border: 'border-red-100' },
-    { label: 'Today', value: todayCount, icon: Clock, color: 'text-amber-600', bg: 'bg-amber-50', border: 'border-amber-100' },
-    { label: 'Booking Requested', value: bookingRequestedCount, icon: CalendarCheck, color: 'text-purple-600', bg: 'bg-purple-50', border: 'border-purple-100' },
-    { label: 'Booked', value: bookedCount, icon: CheckCheck, color: 'text-green-600', bg: 'bg-green-50', border: 'border-green-100' },
-    { label: 'Needs Reply', value: needsReplyCount, icon: MessageSquare, color: 'text-blue-600', bg: 'bg-blue-50', border: 'border-blue-100' },
+  const kpis: { label: string; filterKey: KPIFilter; value: number; icon: any; color: string; bg: string; border: string; activeBorder: string }[] = [
+    { label: 'Overdue', filterKey: 'overdue', value: overdueCount, icon: AlertCircle, color: 'text-red-600', bg: 'bg-red-50', border: 'border-red-100', activeBorder: 'border-red-500 ring-2 ring-red-200' },
+    { label: 'Today', filterKey: 'today', value: todayCount, icon: Clock, color: 'text-amber-600', bg: 'bg-amber-50', border: 'border-amber-100', activeBorder: 'border-amber-500 ring-2 ring-amber-200' },
+    { label: 'Booking Requested', filterKey: 'booking-requested', value: bookingRequestedCount, icon: CalendarCheck, color: 'text-purple-600', bg: 'bg-purple-50', border: 'border-purple-100', activeBorder: 'border-purple-500 ring-2 ring-purple-200' },
+    { label: 'Booked', filterKey: 'booked', value: bookedCount, icon: CheckCheck, color: 'text-green-600', bg: 'bg-green-50', border: 'border-green-100', activeBorder: 'border-green-500 ring-2 ring-green-200' },
+    { label: 'Needs Reply', filterKey: 'needs-reply', value: needsReplyCount, icon: MessageSquare, color: 'text-blue-600', bg: 'bg-blue-50', border: 'border-blue-100', activeBorder: 'border-blue-500 ring-2 ring-blue-200' },
   ];
+
+  const handleClick = (filterKey: KPIFilter) => {
+    onFilterChange(activeFilter === filterKey ? null : filterKey);
+  };
 
   return (
     <div className="grid grid-cols-2 md:grid-cols-5 gap-2 md:gap-4 mb-6" data-testid="kpi-header">
       {kpis.map(kpi => (
-        <div 
+        <button 
           key={kpi.label}
-          className={cn("rounded-xl border p-3 md:p-4", kpi.bg, kpi.border)}
+          onClick={() => handleClick(kpi.filterKey)}
+          className={cn(
+            "rounded-xl border p-3 md:p-4 text-left transition-all cursor-pointer hover:shadow-md",
+            kpi.bg,
+            activeFilter === kpi.filterKey ? kpi.activeBorder : kpi.border
+          )}
           data-testid={`kpi-${kpi.label.toLowerCase().replace(/\s+/g, '-')}`}
         >
           <div className="flex items-center gap-2 mb-1">
@@ -95,7 +109,7 @@ function KPIHeader({ chats }: { chats: Chat[] }) {
             <span className="text-xs md:text-sm font-medium text-gray-600">{kpi.label}</span>
           </div>
           <p className={cn("text-xl md:text-2xl font-bold", kpi.color)}>{kpi.value}</p>
-        </div>
+        </button>
       ))}
     </div>
   );
@@ -521,11 +535,39 @@ function TaskCalendarView({
   );
 }
 
+function applyKPIFilter(chatList: Chat[], filter: KPIFilter): Chat[] {
+  if (!filter) return chatList;
+  
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  
+  switch (filter) {
+    case 'overdue':
+      return chatList.filter(c => {
+        if (!c.followUpDate) return false;
+        const dueDate = new Date(c.followUpDate);
+        const dueDateOnly = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate());
+        return dueDateOnly < today;
+      });
+    case 'today':
+      return chatList.filter(c => c.followUpDate && isSameDay(new Date(c.followUpDate), now));
+    case 'booking-requested':
+      return chatList.filter(c => c.pipelineStage === 'Negotiation');
+    case 'booked':
+      return chatList.filter(c => c.pipelineStage === 'Closed');
+    case 'needs-reply':
+      return chatList.filter(c => hasNeedsReply(c));
+    default:
+      return chatList;
+  }
+}
+
 export function FollowUps() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const [viewMode, setViewMode] = useState<ViewMode>('list');
+  const [kpiFilter, setKpiFilter] = useState<KPIFilter>(null);
   const isMobile = useIsMobile();
 
   const { data: chats = [], isLoading } = useQuery<Chat[]>({
@@ -628,15 +670,19 @@ export function FollowUps() {
     },
   });
 
+  const filteredChats = useMemo(() => {
+    return applyKPIFilter(chats, kpiFilter);
+  }, [chats, kpiFilter]);
+
   const followUps = useMemo(() => {
-    return chats
+    return filteredChats
       .filter(c => c.followUp && c.followUpDate)
       .sort((a, b) => {
         const dateA = new Date(a.followUpDate!).getTime();
         const dateB = new Date(b.followUpDate!).getTime();
         return dateA - dateB;
       });
-  }, [chats]);
+  }, [filteredChats]);
 
   const aiRecommendedTasks = useMemo(() => {
     return [...followUps].sort((a, b) => {
@@ -744,7 +790,22 @@ export function FollowUps() {
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 md:p-8">
-        <KPIHeader chats={chats} />
+        <KPIHeader chats={chats} activeFilter={kpiFilter} onFilterChange={setKpiFilter} />
+        
+        {kpiFilter && (
+          <div className="mb-4 flex items-center gap-2">
+            <span className="text-sm text-gray-600">
+              Filtering by: <span className="font-semibold capitalize">{kpiFilter.replace('-', ' ')}</span>
+            </span>
+            <button 
+              onClick={() => setKpiFilter(null)}
+              className="text-sm text-brand-green hover:underline"
+              data-testid="button-clear-filter"
+            >
+              Clear filter
+            </button>
+          </div>
+        )}
         
         {viewMode === 'list' ? (
           <div className="max-w-3xl">
@@ -818,7 +879,7 @@ export function FollowUps() {
           />
         ) : (
           <PipelineView
-            chats={chats}
+            chats={filteredChats}
             onCardClick={handleRowClick}
             onStageChange={handleStageChange}
             isMobile={isMobile}
