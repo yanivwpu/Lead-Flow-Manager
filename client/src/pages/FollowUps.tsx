@@ -6,6 +6,7 @@ import { useAuth } from "@/lib/auth-context";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { format, isSameDay, startOfMonth, endOfMonth, eachDayOfInterval, addMonths, subMonths, isToday, isBefore, startOfWeek, endOfWeek, parseISO } from "date-fns";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 interface Chat {
   id: string;
@@ -130,11 +131,13 @@ function TaskListItem({
 function TaskCalendarView({ 
   tasks, 
   onTaskClick,
-  onReschedule
+  onReschedule,
+  isMobile
 }: { 
   tasks: Chat[]; 
   onTaskClick: (chatId: string) => void;
   onReschedule: (chatId: string, newDate: Date) => void;
+  isMobile: boolean;
 }) {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [draggedTask, setDraggedTask] = useState<Chat | null>(null);
@@ -161,16 +164,19 @@ function TaskCalendarView({
   }, [tasks]);
   
   const handleDragStart = (e: React.DragEvent, task: Chat) => {
+    if (isMobile) return;
     setDraggedTask(task);
     e.dataTransfer.effectAllowed = 'move';
   };
   
   const handleDragOver = (e: React.DragEvent) => {
+    if (isMobile) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
   };
   
   const handleDrop = (e: React.DragEvent, date: Date) => {
+    if (isMobile) return;
     e.preventDefault();
     if (draggedTask) {
       onReschedule(draggedTask.id, date);
@@ -181,32 +187,38 @@ function TaskCalendarView({
   const handleDragEnd = () => {
     setDraggedTask(null);
   };
+
+  const dayNames = isMobile 
+    ? ['S', 'M', 'T', 'W', 'T', 'F', 'S'] 
+    : ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  
+  const maxTasksToShow = isMobile ? 2 : 3;
   
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden" data-testid="calendar-view">
-      <div className="flex items-center justify-between p-4 border-b border-gray-200">
+      <div className="flex items-center justify-between p-3 md:p-4 border-b border-gray-200">
         <button
           onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
-          className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+          className="p-1.5 md:p-2 hover:bg-gray-100 rounded-lg transition-colors"
           data-testid="button-prev-month"
         >
-          <ChevronLeft className="h-5 w-5 text-gray-600" />
+          <ChevronLeft className="h-4 w-4 md:h-5 md:w-5 text-gray-600" />
         </button>
-        <h3 className="text-lg font-semibold text-gray-900" data-testid="text-current-month">
-          {format(currentMonth, 'MMMM yyyy')}
+        <h3 className="text-base md:text-lg font-semibold text-gray-900" data-testid="text-current-month">
+          {format(currentMonth, isMobile ? 'MMM yyyy' : 'MMMM yyyy')}
         </h3>
         <button
           onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}
-          className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+          className="p-1.5 md:p-2 hover:bg-gray-100 rounded-lg transition-colors"
           data-testid="button-next-month"
         >
-          <ChevronRight className="h-5 w-5 text-gray-600" />
+          <ChevronRight className="h-4 w-4 md:h-5 md:w-5 text-gray-600" />
         </button>
       </div>
       
       <div className="grid grid-cols-7">
-        {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-          <div key={day} className="p-2 text-center text-xs font-semibold text-gray-500 border-b border-gray-200 bg-gray-50">
+        {dayNames.map((day, idx) => (
+          <div key={idx} className="p-1 md:p-2 text-center text-[10px] md:text-xs font-semibold text-gray-500 border-b border-gray-200 bg-gray-50">
             {day}
           </div>
         ))}
@@ -224,30 +236,30 @@ function TaskCalendarView({
             <div
               key={idx}
               className={cn(
-                "min-h-[100px] p-1 border-b border-r border-gray-100 transition-colors",
+                "min-h-[60px] md:min-h-[100px] p-0.5 md:p-1 border-b border-r border-gray-100 transition-colors",
                 !isCurrentMonth && "bg-gray-50",
                 isDayToday && "bg-amber-50",
-                draggedTask && "hover:bg-green-50"
+                !isMobile && draggedTask && "hover:bg-green-50"
               )}
               onDragOver={handleDragOver}
               onDrop={(e) => handleDrop(e, day)}
               data-testid={`calendar-day-${dateKey}`}
             >
               <div className={cn(
-                "text-xs font-medium mb-1 text-right pr-1",
+                "text-[10px] md:text-xs font-medium mb-0.5 md:mb-1 text-right pr-0.5 md:pr-1",
                 !isCurrentMonth && "text-gray-400",
                 isDayToday && "text-amber-600",
                 isPastDay && isCurrentMonth && "text-gray-500"
               )}>
                 {format(day, 'd')}
               </div>
-              <div className="space-y-1">
-                {dayTasks.slice(0, 3).map(task => {
+              <div className="space-y-0.5 md:space-y-1">
+                {dayTasks.slice(0, maxTasksToShow).map(task => {
                   const status = getTaskStatus(task.followUpDate!);
                   return (
                     <div
                       key={task.id}
-                      draggable
+                      draggable={!isMobile}
                       onDragStart={(e) => handleDragStart(e, task)}
                       onDragEnd={handleDragEnd}
                       onClick={(e) => {
@@ -255,7 +267,7 @@ function TaskCalendarView({
                         onTaskClick(task.id);
                       }}
                       className={cn(
-                        "text-xs p-1 rounded cursor-pointer truncate transition-all hover:shadow-sm",
+                        "text-[9px] md:text-xs p-0.5 md:p-1 rounded cursor-pointer truncate transition-all hover:shadow-sm",
                         status === 'overdue' && "bg-red-100 text-red-700 hover:bg-red-200",
                         status === 'today' && "bg-amber-100 text-amber-700 hover:bg-amber-200",
                         status === 'upcoming' && "bg-blue-100 text-blue-700 hover:bg-blue-200",
@@ -264,13 +276,13 @@ function TaskCalendarView({
                       data-testid={`calendar-task-${task.id}`}
                       title={task.name}
                     >
-                      {task.name}
+                      {isMobile ? task.name.split(' ')[0] : task.name}
                     </div>
                   );
                 })}
-                {dayTasks.length > 3 && (
-                  <div className="text-xs text-gray-500 pl-1">
-                    +{dayTasks.length - 3} more
+                {dayTasks.length > maxTasksToShow && (
+                  <div className="text-[9px] md:text-xs text-gray-500 pl-0.5 md:pl-1">
+                    +{dayTasks.length - maxTasksToShow}
                   </div>
                 )}
               </div>
@@ -287,6 +299,7 @@ export function FollowUps() {
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const [viewMode, setViewMode] = useState<ViewMode>('list');
+  const isMobile = useIsMobile();
 
   const { data: chats = [], isLoading } = useQuery<Chat[]>({
     queryKey: ['/api/chats'],
@@ -396,45 +409,45 @@ export function FollowUps() {
 
   return (
     <div className="flex-1 h-full bg-white flex flex-col">
-      <div className="p-8 pb-4 border-b border-gray-100">
-        <div className="flex items-center justify-between">
+      <div className="p-4 md:p-8 pb-4 border-b border-gray-100">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-display font-bold text-gray-900">Tasks</h1>
-            <p className="text-gray-500 mt-1">You have {followUps.length} follow-up{followUps.length !== 1 ? 's' : ''} scheduled.</p>
+            <h1 className="text-xl md:text-2xl font-display font-bold text-gray-900">Tasks</h1>
+            <p className="text-sm md:text-base text-gray-500 mt-1">You have {followUps.length} follow-up{followUps.length !== 1 ? 's' : ''} scheduled.</p>
           </div>
           
-          <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-lg" data-testid="view-toggle">
+          <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-lg self-start md:self-auto" data-testid="view-toggle">
             <button
               onClick={() => setViewMode('list')}
               className={cn(
-                "flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors",
+                "flex items-center gap-1.5 md:gap-2 px-2 md:px-3 py-1.5 rounded-md text-xs md:text-sm font-medium transition-colors",
                 viewMode === 'list' 
                   ? "bg-white text-gray-900 shadow-sm" 
                   : "text-gray-600 hover:text-gray-900"
               )}
               data-testid="toggle-list-view"
             >
-              <List className="h-4 w-4" />
-              List View
+              <List className="h-3.5 w-3.5 md:h-4 md:w-4" />
+              {isMobile ? 'List' : 'List View'}
             </button>
             <button
               onClick={() => setViewMode('calendar')}
               className={cn(
-                "flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors",
+                "flex items-center gap-1.5 md:gap-2 px-2 md:px-3 py-1.5 rounded-md text-xs md:text-sm font-medium transition-colors",
                 viewMode === 'calendar' 
                   ? "bg-white text-gray-900 shadow-sm" 
                   : "text-gray-600 hover:text-gray-900"
               )}
               data-testid="toggle-calendar-view"
             >
-              <CalendarIcon className="h-4 w-4" />
-              Calendar View
+              <CalendarIcon className="h-3.5 w-3.5 md:h-4 md:w-4" />
+              {isMobile ? 'Calendar' : 'Calendar View'}
             </button>
           </div>
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-8">
+      <div className="flex-1 overflow-y-auto p-4 md:p-8">
         {viewMode === 'list' ? (
           <div className="max-w-3xl">
             {aiRecommendedTasks.length > 0 && (
@@ -503,6 +516,7 @@ export function FollowUps() {
             tasks={followUps}
             onTaskClick={handleRowClick}
             onReschedule={handleReschedule}
+            isMobile={isMobile}
           />
         )}
       </div>
