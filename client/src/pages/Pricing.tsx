@@ -3,10 +3,11 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import { Helmet } from "react-helmet";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Check, Zap, Users, MessageSquare, Phone, Loader2, Shield, AlertTriangle, HelpCircle, XCircle, Brain, Sparkles, Target } from "lucide-react";
+import { ArrowLeft, Check, Zap, Users, MessageSquare, Phone, Loader2, Shield, AlertTriangle, HelpCircle, XCircle, Brain, Sparkles, Target, Download } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { useAuth } from "@/lib/auth-context";
 import { useToast } from "@/hooks/use-toast";
+import { generateAIFeaturesPDF } from "@/lib/generate-ai-features-pdf";
 
 const PLANS = [
   {
@@ -338,6 +339,18 @@ export function Pricing() {
                 Get Starter to Access AI Features
               </Button>
             )}
+            
+            <div className="mt-4 pt-4 border-t border-purple-200">
+              <Button 
+                variant="outline" 
+                className="w-full border-purple-300 text-purple-700 hover:bg-purple-50"
+                onClick={generateAIFeaturesPDF}
+                data-testid="button-download-ai-pdf"
+              >
+                <Download className="w-4 h-4 mr-2" />
+                Download AI Features Comparison (PDF)
+              </Button>
+            </div>
           </div>
         </div>
 
