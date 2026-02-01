@@ -520,16 +520,20 @@ function AIBrainContent() {
                 <span className="hidden sm:inline">Settings</span>
                 <span className="sm:hidden">Setup</span>
               </TabsTrigger>
-              <TabsTrigger value="knowledge" className="rounded-lg data-[state=active]:bg-white whitespace-nowrap">
-                <Building2 className="w-4 h-4 mr-1 md:mr-2" />
-                <span className="hidden sm:inline">Business Knowledge</span>
-                <span className="sm:hidden">Knowledge</span>
-              </TabsTrigger>
-              <TabsTrigger value="automation" className="rounded-lg data-[state=active]:bg-white whitespace-nowrap">
-                <Zap className="w-4 h-4 mr-1 md:mr-2" />
-                <span className="hidden sm:inline">Automation Builder</span>
-                <span className="sm:hidden">Automation</span>
-              </TabsTrigger>
+              {hasFullAIBrain && (
+                <TabsTrigger value="knowledge" className="rounded-lg data-[state=active]:bg-white whitespace-nowrap">
+                  <Building2 className="w-4 h-4 mr-1 md:mr-2" />
+                  <span className="hidden sm:inline">Business Knowledge</span>
+                  <span className="sm:hidden">Knowledge</span>
+                </TabsTrigger>
+              )}
+              {hasFullAIBrain && (
+                <TabsTrigger value="automation" className="rounded-lg data-[state=active]:bg-white whitespace-nowrap">
+                  <Zap className="w-4 h-4 mr-1 md:mr-2" />
+                  <span className="hidden sm:inline">Automation Builder</span>
+                  <span className="sm:hidden">Automation</span>
+                </TabsTrigger>
+              )}
               <TabsTrigger value="health" className="rounded-lg data-[state=active]:bg-white whitespace-nowrap">
                 <TrendingUp className="w-4 h-4 mr-1 md:mr-2" />
                 <span className="hidden sm:inline">AI Health</span>
