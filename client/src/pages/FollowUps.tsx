@@ -821,7 +821,16 @@ export function FollowUps() {
         {kpiFilter && (
           <div className="mb-4 flex items-center gap-2">
             <span className="text-sm text-gray-600">
-              Filtering by: <span className="font-semibold capitalize">{kpiFilter.replace('-', ' ')}</span>
+              Filtering by: <span className="font-semibold">
+                {{
+                  'overdue': 'Overdue',
+                  'today': 'Due Today',
+                  'booking-requested': 'High Intent',
+                  'booked': 'Closed',
+                  'needs-reply': 'Needs Reply',
+                  'active-deals': 'Active Deals',
+                }[kpiFilter]}
+              </span>
             </span>
             <button 
               onClick={() => setKpiFilter(null)}
