@@ -28,6 +28,7 @@ export interface UserLimits {
   isInTrial: boolean;
   trialEndsAt: Date | null;
   trialDaysRemaining: number;
+  hasAIBrainAddon: boolean;
 }
 
 class SubscriptionService {
@@ -56,6 +57,9 @@ class SubscriptionService {
     if (storedPlan === "free" && !isInTrial) suggestedUpgrade = "starter";
     else if (storedPlan === "starter") suggestedUpgrade = "pro";
 
+    // Check if user has the AI Brain add-on subscription from Stripe
+    const hasAIBrainAddon = await this.checkAIBrainAddonStatus(user.stripeCustomerId);
+
     return {
       plan: effectivePlan,
       planName: isInTrial ? "Pro Trial" : planLimits.name,
@@ -82,7 +86,35 @@ class SubscriptionService {
       isInTrial,
       trialEndsAt: user.trialEndsAt,
       trialDaysRemaining,
+      hasAIBrainAddon,
     };
+  }
+
+  private async checkAIBrainAddonStatus(stripeCustomerId: string | null | undefined): Promise<boolean> {
+    if (!stripeCustomerId) return false;
+    
+    try {
+      const stripe = await getUncachableStripeClient();
+      const subscriptions = await stripe.subscriptions.list({
+        customer: stripeCustomerId,
+        status: 'active',
+        limit: 10,
+      });
+      
+      // Check if any active subscription has the AI Brain add-on price ($29/mo = 2900 cents)
+      const AI_BRAIN_ADDON_AMOUNT = 2900;
+      for (const sub of subscriptions.data) {
+        for (const item of sub.items.data) {
+          if (item.price.unit_amount === AI_BRAIN_ADDON_AMOUNT) {
+            return true;
+          }
+        }
+      }
+      return false;
+    } catch (error) {
+      console.error("Error checking AI Brain addon status:", error);
+      return false;
+    }
   }
 
   async checkAndDecrementConversation(userId: string): Promise<{ allowed: boolean; remaining: number }> {
@@ -145,6 +177,64 @@ class SubscriptionService {
       mode: 'subscription',
       success_url: `${baseUrl}/app/settings?checkout=success`,
       cancel_url: `${baseUrl}/app/settings?checkout=cancel`,
+    });
+
+    if (!session.url) throw new Error("Failed to create checkout session");
+    return { url: session.url };
+  }
+
+  async createAddonCheckoutSession(userId: string, baseUrl: string): Promise<{ url: string }> {
+    const user = await storage.getUser(userId);
+    if (!user) throw new Error("User not found");
+
+    // Check if user has at least Starter plan (AI Assist) to be eligible for add-on
+    const storedPlan = (user.subscriptionPlan || "free") as SubscriptionPlan;
+    if (storedPlan === "free") {
+      throw new Error("You need a Starter or Pro plan to purchase the AI Brain add-on. Please upgrade your plan first.");
+    }
+
+    const stripe = await getUncachableStripeClient();
+
+    let customerId = user.stripeCustomerId;
+    if (!customerId) {
+      const customer = await stripe.customers.create({
+        email: user.email,
+        metadata: { userId },
+      });
+      await storage.updateUser(userId, { stripeCustomerId: customer.id });
+      customerId = customer.id;
+    }
+
+    // Check if user already has the add-on
+    const hasAddon = await this.checkAIBrainAddonStatus(customerId);
+    if (hasAddon) {
+      throw new Error("You already have the AI Brain add-on active.");
+    }
+
+    // AI Brain Add-on price: $29/mo = 2900 cents
+    const AI_BRAIN_ADDON_AMOUNT = 2900;
+    
+    console.log(`Looking for AI Brain add-on price with amount: ${AI_BRAIN_ADDON_AMOUNT} cents`);
+    const stripePrices = await stripe.prices.list({ active: true, limit: 20 });
+    const priceResult = stripePrices.data.find(p => p.unit_amount === AI_BRAIN_ADDON_AMOUNT);
+    
+    if (!priceResult) {
+      console.error(`No price found for AI Brain add-on. Available Stripe prices:`, stripePrices.data.map(p => ({ id: p.id, amount: p.unit_amount })));
+      throw new Error("AI Brain add-on price not found. Please create a $29/month product in your Stripe dashboard.");
+    }
+    console.log(`Found AI Brain add-on price: ${priceResult.id}`);
+
+    const session = await stripe.checkout.sessions.create({
+      customer: customerId,
+      payment_method_types: ['card'],
+      line_items: [{ price: priceResult.id, quantity: 1 }],
+      mode: 'subscription',
+      success_url: `${baseUrl}/app/ai-brain?checkout=success`,
+      cancel_url: `${baseUrl}/app/ai-brain?checkout=cancel`,
+      metadata: {
+        type: 'ai_brain_addon',
+        userId,
+      },
     });
 
     if (!session.url) throw new Error("Failed to create checkout session");

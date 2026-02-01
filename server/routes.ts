@@ -1936,6 +1936,22 @@ export async function registerRoutes(
     }
   });
 
+  // Create checkout session for AI Brain add-on ($29/mo)
+  app.post("/api/subscription/addon/ai-brain", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const baseUrl = `${req.protocol}://${req.get('host')}`;
+      const result = await subscriptionService.createAddonCheckoutSession(req.user.id, baseUrl);
+      res.json(result);
+    } catch (error: any) {
+      console.error("Error creating AI Brain add-on checkout:", error);
+      res.status(500).json({ error: error.message || "Failed to create checkout" });
+    }
+  });
+
   // Create customer portal session for managing subscription
   app.post("/api/subscription/portal", async (req, res) => {
     try {
