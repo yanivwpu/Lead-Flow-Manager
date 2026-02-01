@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { useLocation } from "wouter";
-import { ArrowRight, CheckCircle2, Calendar as CalendarIcon, List, Sparkles, ChevronLeft, ChevronRight, Kanban, AlertCircle, Clock, CalendarCheck, MessageSquare, CheckCheck } from "lucide-react";
+import { ArrowRight, CheckCircle2, Calendar as CalendarIcon, List, Sparkles, ChevronLeft, ChevronRight, Kanban, AlertCircle, Clock, CalendarCheck, MessageSquare, CheckCheck, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -24,7 +24,7 @@ interface Chat {
 }
 
 type ViewMode = 'list' | 'calendar' | 'pipeline';
-type KPIFilter = 'overdue' | 'today' | 'booking-requested' | 'booked' | 'needs-reply' | null;
+type KPIFilter = 'overdue' | 'today' | 'booking-requested' | 'booked' | 'needs-reply' | 'active-deals' | null;
 
 const PIPELINE_STAGES = ['Lead', 'Contacted', 'Proposal', 'Negotiation', 'Closed'] as const;
 
@@ -79,12 +79,17 @@ function KPIHeader({ chats, activeFilter, onFilterChange }: {
     chats.filter(c => hasNeedsReply(c)).length,
   [chats]);
 
+  const activeDealsCount = useMemo(() => 
+    chats.filter(c => c.pipelineStage !== 'Closed').length,
+  [chats]);
+
   const kpis: { label: string; filterKey: KPIFilter; value: number; icon: any; color: string; bg: string; border: string; activeBorder: string }[] = [
+    { label: 'Active Deals', filterKey: 'active-deals', value: activeDealsCount, icon: Users, color: 'text-indigo-600', bg: 'bg-indigo-50', border: 'border-indigo-100', activeBorder: 'border-indigo-500 ring-2 ring-indigo-200' },
     { label: 'Overdue', filterKey: 'overdue', value: overdueCount, icon: AlertCircle, color: 'text-red-600', bg: 'bg-red-50', border: 'border-red-100', activeBorder: 'border-red-500 ring-2 ring-red-200' },
-    { label: 'Today', filterKey: 'today', value: todayCount, icon: Clock, color: 'text-amber-600', bg: 'bg-amber-50', border: 'border-amber-100', activeBorder: 'border-amber-500 ring-2 ring-amber-200' },
-    { label: 'Booking Requested', filterKey: 'booking-requested', value: bookingRequestedCount, icon: CalendarCheck, color: 'text-purple-600', bg: 'bg-purple-50', border: 'border-purple-100', activeBorder: 'border-purple-500 ring-2 ring-purple-200' },
-    { label: 'Booked', filterKey: 'booked', value: bookedCount, icon: CheckCheck, color: 'text-green-600', bg: 'bg-green-50', border: 'border-green-100', activeBorder: 'border-green-500 ring-2 ring-green-200' },
+    { label: 'Due Today', filterKey: 'today', value: todayCount, icon: Clock, color: 'text-amber-600', bg: 'bg-amber-50', border: 'border-amber-100', activeBorder: 'border-amber-500 ring-2 ring-amber-200' },
     { label: 'Needs Reply', filterKey: 'needs-reply', value: needsReplyCount, icon: MessageSquare, color: 'text-blue-600', bg: 'bg-blue-50', border: 'border-blue-100', activeBorder: 'border-blue-500 ring-2 ring-blue-200' },
+    { label: 'High Intent', filterKey: 'booking-requested', value: bookingRequestedCount, icon: CalendarCheck, color: 'text-purple-600', bg: 'bg-purple-50', border: 'border-purple-100', activeBorder: 'border-purple-500 ring-2 ring-purple-200' },
+    { label: 'Closed', filterKey: 'booked', value: bookedCount, icon: CheckCheck, color: 'text-green-600', bg: 'bg-green-50', border: 'border-green-100', activeBorder: 'border-green-500 ring-2 ring-green-200' },
   ];
 
   const handleClick = (filterKey: KPIFilter) => {
@@ -92,7 +97,7 @@ function KPIHeader({ chats, activeFilter, onFilterChange }: {
   };
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-5 gap-2 md:gap-4 mb-6" data-testid="kpi-header">
+    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2 md:gap-3 mb-6" data-testid="kpi-header">
       {kpis.map(kpi => (
         <button 
           key={kpi.label}
@@ -243,15 +248,24 @@ function PipelineCard({
         {chat.lastMessage}
       </p>
       <div className="flex flex-wrap gap-1">
-        {chat.followUpDate && (
-          <span className="text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded font-medium">
-            {format(new Date(chat.followUpDate), 'MMM d')}
+        {needsReply && (
+          <span className="text-[10px] bg-green-600 text-white px-1.5 py-0.5 rounded font-bold shadow-sm">
+            Needs Reply
           </span>
         )}
-        {status && <StatusTag status={status} />}
-        {needsReply && (
-          <span className="text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded font-medium">
-            Needs Reply
+        {status === 'overdue' && (
+          <span className="text-[10px] bg-red-600 text-white px-1.5 py-0.5 rounded font-bold shadow-sm">
+            Overdue
+          </span>
+        )}
+        {status === 'today' && (
+          <span className="text-[10px] bg-amber-500 text-white px-1.5 py-0.5 rounded font-medium">
+            Today
+          </span>
+        )}
+        {chat.followUpDate && status === 'upcoming' && (
+          <span className="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">
+            {format(new Date(chat.followUpDate), 'MMM d')}
           </span>
         )}
       </div>
@@ -310,11 +324,19 @@ function PipelineView({
   };
 
   const stageColors: Record<string, { bg: string; border: string; header: string }> = {
-    'Lead': { bg: 'bg-gray-50', border: 'border-gray-200', header: 'bg-gray-100' },
-    'Contacted': { bg: 'bg-blue-50', border: 'border-blue-200', header: 'bg-blue-100' },
-    'Proposal': { bg: 'bg-purple-50', border: 'border-purple-200', header: 'bg-purple-100' },
-    'Negotiation': { bg: 'bg-amber-50', border: 'border-amber-200', header: 'bg-amber-100' },
-    'Closed': { bg: 'bg-green-50', border: 'border-green-200', header: 'bg-green-100' },
+    'Lead': { bg: 'bg-gray-50', border: 'border-gray-300', header: 'bg-gray-100' },
+    'Contacted': { bg: 'bg-blue-50', border: 'border-blue-300', header: 'bg-blue-100' },
+    'Proposal': { bg: 'bg-purple-50', border: 'border-purple-300', header: 'bg-purple-100' },
+    'Negotiation': { bg: 'bg-amber-50', border: 'border-amber-300', header: 'bg-amber-100' },
+    'Closed': { bg: 'bg-green-50', border: 'border-green-300', header: 'bg-green-100' },
+  };
+
+  const emptyStateMessages: Record<string, string> = {
+    'Lead': 'No new leads yet',
+    'Contacted': 'No leads contacted yet',
+    'Proposal': 'No proposals sent yet',
+    'Negotiation': 'No deals in negotiation',
+    'Closed': 'Drag here when deal is won',
   };
 
   return (
@@ -338,10 +360,10 @@ function PipelineView({
           >
             <div className={cn("p-3 rounded-t-xl border-b", colors.header, colors.border)}>
               <div className="flex items-center justify-between">
-                <h3 className="font-semibold text-gray-900 text-sm">{stage}</h3>
-                <span className="text-xs bg-white/70 px-2 py-0.5 rounded-full font-medium text-gray-600">
-                  {stageChats.length}
-                </span>
+                <div>
+                  <h3 className="font-semibold text-gray-900 text-sm">{stage}</h3>
+                  <p className="text-xs text-gray-500">{stageChats.length} contact{stageChats.length !== 1 ? 's' : ''}</p>
+                </div>
               </div>
             </div>
             <div className="p-2 space-y-2 max-h-[500px] overflow-y-auto">
@@ -356,8 +378,8 @@ function PipelineView({
                 />
               ))}
               {stageChats.length === 0 && (
-                <div className="text-center py-8 text-gray-400 text-sm">
-                  No contacts
+                <div className="text-center py-8 text-gray-400 text-sm italic">
+                  {emptyStateMessages[stage]}
                 </div>
               )}
             </div>
@@ -557,6 +579,8 @@ function applyKPIFilter(chatList: Chat[], filter: KPIFilter): Chat[] {
       return chatList.filter(c => c.pipelineStage === 'Closed');
     case 'needs-reply':
       return chatList.filter(c => hasNeedsReply(c));
+    case 'active-deals':
+      return chatList.filter(c => c.pipelineStage !== 'Closed');
     default:
       return chatList;
   }
