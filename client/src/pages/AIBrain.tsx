@@ -22,7 +22,8 @@ import {
   Bot,
   Hand,
   TrendingUp,
-  Crown
+  Crown,
+  Lock
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -626,76 +627,142 @@ function AIBrainContent() {
               </div>
             </div>
             
-            <div className="bg-white rounded-xl border border-gray-200 p-6">
-              <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-                <Target className="w-5 h-5 text-green-500" />
-                Lead Qualification
-              </h2>
-              
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label className="font-medium">Enable Lead Qualification</Label>
-                    <p className="text-sm text-gray-500">Automatically score and qualify incoming leads</p>
+            {hasFullAIBrain ? (
+              <div className="bg-white rounded-xl border border-gray-200 p-6">
+                <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+                  <Target className="w-5 h-5 text-green-500" />
+                  Lead Qualification
+                </h2>
+                
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label className="font-medium">Enable Lead Qualification</Label>
+                      <p className="text-sm text-gray-500">Automatically score and qualify incoming leads</p>
+                    </div>
+                    <Switch
+                      checked={settings.leadQualificationEnabled}
+                      onCheckedChange={(checked) => setSettings(prev => ({ ...prev, leadQualificationEnabled: checked }))}
+                      data-testid="switch-lead-qualification"
+                    />
                   </div>
-                  <Switch
-                    checked={settings.leadQualificationEnabled}
-                    onCheckedChange={(checked) => setSettings(prev => ({ ...prev, leadQualificationEnabled: checked }))}
-                    data-testid="switch-lead-qualification"
-                  />
+                  
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label className="font-medium">Auto-Tagging</Label>
+                      <p className="text-sm text-gray-500">Automatically tag conversations based on content</p>
+                    </div>
+                    <Switch
+                      checked={settings.autoTaggingEnabled}
+                      onCheckedChange={(checked) => setSettings(prev => ({ ...prev, autoTaggingEnabled: checked }))}
+                      data-testid="switch-auto-tagging"
+                    />
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="bg-gray-50 rounded-xl border border-gray-200 p-6 opacity-60 relative">
+                <div className="absolute inset-0 flex items-center justify-center bg-white/50 rounded-xl z-10">
+                  <div className="text-center">
+                    <Lock className="w-6 h-6 text-gray-400 mx-auto mb-2" />
+                    <p className="text-sm font-medium text-gray-600">Requires Full AI Brain</p>
+                    <Button 
+                      size="sm" 
+                      className="mt-2 bg-purple-600 hover:bg-purple-700"
+                      onClick={() => handleAddonCheckout()}
+                      data-testid="button-unlock-lead-qual-settings"
+                    >
+                      Upgrade to AI Brain
+                    </Button>
+                  </div>
+                </div>
+                <h2 className="text-lg font-bold text-gray-400 mb-4 flex items-center gap-2">
+                  <Target className="w-5 h-5 text-gray-400" />
+                  Lead Qualification
+                </h2>
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label className="font-medium text-gray-400">Enable Lead Qualification</Label>
+                      <p className="text-sm text-gray-400">Automatically score and qualify incoming leads</p>
+                    </div>
+                    <Switch disabled checked={false} />
+                  </div>
+                </div>
+              </div>
+            )}
+            
+            {hasFullAIBrain ? (
+              <div className="bg-white rounded-xl border border-gray-200 p-6">
+                <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+                  <Hand className="w-5 h-5 text-orange-500" />
+                  Human Handoff Keywords
+                </h2>
+                <p className="text-sm text-gray-500 mb-4">
+                  When a customer uses these phrases, AI will pause and notify you for a human takeover.
+                </p>
+                
+                <div className="flex flex-wrap gap-2 mb-4">
+                  {settings.handoffKeywords.map(keyword => (
+                    <span 
+                      key={keyword}
+                      className="inline-flex items-center gap-1 px-3 py-1 bg-orange-50 text-orange-700 rounded-full text-sm"
+                    >
+                      {keyword}
+                      <button onClick={() => handleRemoveKeyword(keyword)} className="hover:text-orange-900">
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  ))}
                 </div>
                 
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label className="font-medium">Auto-Tagging</Label>
-                    <p className="text-sm text-gray-500">Automatically tag conversations based on content</p>
-                  </div>
-                  <Switch
-                    checked={settings.autoTaggingEnabled}
-                    onCheckedChange={(checked) => setSettings(prev => ({ ...prev, autoTaggingEnabled: checked }))}
-                    data-testid="switch-auto-tagging"
+                <div className="flex gap-2">
+                  <Input
+                    value={newKeyword}
+                    onChange={(e) => setNewKeyword(e.target.value)}
+                    placeholder="Add keyword..."
+                    className="flex-1"
+                    onKeyDown={(e) => e.key === "Enter" && handleAddKeyword()}
+                    data-testid="input-handoff-keyword"
                   />
+                  <Button onClick={handleAddKeyword} variant="outline" data-testid="add-handoff-keyword">
+                    <Plus className="w-4 h-4" />
+                  </Button>
                 </div>
               </div>
-            </div>
-            
-            <div className="bg-white rounded-xl border border-gray-200 p-6">
-              <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-                <Hand className="w-5 h-5 text-orange-500" />
-                Human Handoff Keywords
-              </h2>
-              <p className="text-sm text-gray-500 mb-4">
-                When a customer uses these phrases, AI will pause and notify you for a human takeover.
-              </p>
-              
-              <div className="flex flex-wrap gap-2 mb-4">
-                {settings.handoffKeywords.map(keyword => (
-                  <span 
-                    key={keyword}
-                    className="inline-flex items-center gap-1 px-3 py-1 bg-orange-50 text-orange-700 rounded-full text-sm"
-                  >
-                    {keyword}
-                    <button onClick={() => handleRemoveKeyword(keyword)} className="hover:text-orange-900">
-                      <X className="w-3 h-3" />
-                    </button>
+            ) : (
+              <div className="bg-gray-50 rounded-xl border border-gray-200 p-6 opacity-60 relative">
+                <div className="absolute inset-0 flex items-center justify-center bg-white/50 rounded-xl z-10">
+                  <div className="text-center">
+                    <Lock className="w-6 h-6 text-gray-400 mx-auto mb-2" />
+                    <p className="text-sm font-medium text-gray-600">Requires Full AI Brain</p>
+                    <Button 
+                      size="sm" 
+                      className="mt-2 bg-purple-600 hover:bg-purple-700"
+                      onClick={() => handleAddonCheckout()}
+                      data-testid="button-unlock-handoff-settings"
+                    >
+                      Upgrade to AI Brain
+                    </Button>
+                  </div>
+                </div>
+                <h2 className="text-lg font-bold text-gray-400 mb-4 flex items-center gap-2">
+                  <Hand className="w-5 h-5 text-gray-400" />
+                  Human Handoff Keywords
+                </h2>
+                <p className="text-sm text-gray-400 mb-4">
+                  When a customer uses these phrases, AI will pause and notify you for a human takeover.
+                </p>
+                <div className="flex flex-wrap gap-2 mb-4">
+                  <span className="inline-flex items-center gap-1 px-3 py-1 bg-gray-100 text-gray-400 rounded-full text-sm">
+                    speak to human
                   </span>
-                ))}
+                  <span className="inline-flex items-center gap-1 px-3 py-1 bg-gray-100 text-gray-400 rounded-full text-sm">
+                    talk to agent
+                  </span>
+                </div>
               </div>
-              
-              <div className="flex gap-2">
-                <Input
-                  value={newKeyword}
-                  onChange={(e) => setNewKeyword(e.target.value)}
-                  placeholder="Add keyword..."
-                  className="flex-1"
-                  onKeyDown={(e) => e.key === "Enter" && handleAddKeyword()}
-                  data-testid="input-handoff-keyword"
-                />
-                <Button onClick={handleAddKeyword} variant="outline" data-testid="add-handoff-keyword">
-                  <Plus className="w-4 h-4" />
-                </Button>
-              </div>
-            </div>
+            )}
           </TabsContent>
           
           <TabsContent value="knowledge" className="space-y-6">
