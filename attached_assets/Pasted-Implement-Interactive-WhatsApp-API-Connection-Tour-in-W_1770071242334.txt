@@ -1,0 +1,146 @@
+Implement Interactive WhatsApp API Connection Tour in WhaChatCRMHi Replit Agent,Please implement an interactive guided tour for the WhatsApp API connection process using Driver.js. This is the highest-priority onboarding feature to reduce user drop-off during setup.Tech Requirements
+•	Library: Driver.js (https://driverjs.com) – lightweight, no dependencies.
+•	Install: npm install driver.js
+•	Import: import Driver from 'driver.js'; and import 'driver.js/dist/driver.css';
+•	Additional: npm install canvas-confetti for final celebration.
+•	Framework: Assume React (if not, adapt accordingly).
+•	Storage: Use localStorage for tour progress + optional backend sync later.
+•	Targeting: Use stable CSS selectors or data attributes (e.g., data-tour="phone-id-field").
+Core Driver.js Configuration (Reusable Base)Create a reusable tour component/service with these options:
+javascript
+import Driver from 'driver.js';
+import confetti from 'canvas-confetti';
+
+const driver = new Driver({
+  allowClose: false,              // Force progression
+  overlayColor: 'rgba(0,0,0,0.8)',
+  stageBackground: '#ffffff',
+  showProgress: true,             // Built-in progress bar
+  showButtons: ['next', 'previous', 'close'],
+  closeBtnText: 'Skip Tour',
+  nextBtnText: 'Next →',
+  prevBtnText: '← Back',
+  onReset: () => { /* clear highlights */ },
+  onNext: () => { /* optional validation before next */ },
+});
+Tour Flow: WhatsApp Connection (10 Steps)Define steps as an array and call driver.defineSteps(steps); driver.start();Add these data-tour attributes to relevant elements in the Connection page:
+•	Header: data-tour="connection-header"
+•	Guide button: data-tour="meta-guide-btn"
+•	Phone Number ID field: data-tour="phone-id-field"
+•	Access Token field: data-tour="access-token-field"
+•	Webhook section: data-tour="webhook-section"
+•	Test button: data-tour="test-connection-btn"
+•	Composer (after success): data-tour="test-message-composer"
+Steps Array:
+javascript
+const connectionSteps = [
+  // Step 1: Welcome Modal
+  {
+    element: '', // No element = full overlay
+    popover: {
+      title: '🚀 Let\'s Connect Your WhatsApp Number!',
+      description: 'This takes ~5 minutes and we\'ll guide you every step. Ready?',
+      side: 'top',
+      align: 'start',
+      showButtons: ['next', 'close'],
+      nextBtnText: 'Let\'s go!',
+    }
+  },
+
+  // Step 2: Why Business API
+  {
+    element: '[data-tour="connection-header"]',
+    popover: {
+      title: 'Why WhatsApp Business API?',
+      description: 'Personal WhatsApp gets banned fast. Business API is safe and scalable. Trust us!',
+    }
+  },
+
+  // Step 3: Open Meta Guide
+  {
+    element: '[data-tour="meta-guide-btn"]',
+    popover: {
+      title: 'Prep in Meta Business Manager',
+      description: 'Click to open Meta in new tab. You need: verified business + dedicated phone number.',
+    }
+  },
+
+  // Step 4: Phone Number ID
+  {
+    element: '[data-tour="phone-id-field"]',
+    popover: {
+      title: 'Paste Phone Number ID',
+      description: 'Copy the long number from Meta app settings and paste here. (Include screenshot thumbnail if possible)',
+      onNextClick: () => { if (fieldNotEmpty) driver.moveNext(); } // Gate on input
+    }
+  },
+
+  // Step 5: Access Token
+  {
+    element: '[data-tour="access-token-field"]',
+    popover: {
+      title: 'Paste Permanent Access Token',
+      description: 'Create a never-expiring system token in Meta and paste here.',
+      onNextClick: () => { if (fieldNotEmpty) driver.moveNext(); }
+    }
+  },
+
+  // Step 6: Webhook (auto-filled)
+  {
+    element: '[data-tour="webhook-section"]',
+    popover: {
+      title: 'Webhook Magic',
+      description: 'We auto-fill URL & token. Just copy Verify Token to Meta.',
+    }
+  },
+
+  // Step 7: Test Connection
+  {
+    element: '[data-tour="test-connection-btn"]',
+    popover: {
+      title: 'Test It!',
+      description: 'Click to verify. Green = success. Red = we\'ll show fixes.',
+      onNextClick: () => { if (connectionSuccess) driver.moveNext(); } // Gate on API response
+    }
+  },
+
+  // Step 8: Conditional Error Help (if test fails)
+  // Implement via onHighlighted hook checking connection status
+
+  // Step 9: Send Test Message
+  {
+    element: '[data-tour="test-message-composer"]',
+    popover: {
+      title: 'Send Your First Message!',
+      description: 'Type anything and send to your own number. Pre-fill: "Hey WhaChatCRM, you rock!"',
+    }
+  },
+
+  // Step 10: Victory
+  {
+    element: '',
+    popover: {
+      title: '🎉 You\'re Connected!',
+      description: 'Messages will now flow in. Go be awesome!',
+      onPopoverRender: (popover) => {
+        confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
+      },
+      showButtons: ['close'],
+      closeBtnText: 'Start Using WhaChatCRM',
+    }
+  },
+];
+Key Implementation Details
+1.	Action Gating: Use onNextClick hooks to check if required action completed (e.g., input filled, button clicked, API success).
+2.	Conditional Logic: After test button, check connection status. If failed → insert error help step.
+3.	Auto-Trigger: On mount of Connection page, if no connected number → start tour (check user state).
+4.	Manual Trigger: Add floating "?" button that calls driver.start().
+5.	Support Button: Add to every popover: custom button opening Email support link.
+6.	Resume: Save current step index in localStorage; on load check and resume if incomplete.
+7.	Testing: Use a test Meta account. Handle tab switches (user goes to Meta).
+Deliverables
+•	Working connection tour MVP.
+•	Clean, commented code.
+•	Test on desktop + mobile responsiveness.
+Start with this and let me know when demo ready. This will be a game-changer for user activation!
+
