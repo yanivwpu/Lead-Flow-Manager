@@ -72,6 +72,7 @@ export const createWhatsAppTour = (onComplete?: () => void) => {
           title: '🎉 You\'re Connected!',
           description: 'Messages will now flow in. Go be awesome!',
           onPopoverRender: () => {
+            // @ts-ignore - confetti is not typed correctly in the package
             confetti({ 
               particleCount: 150, 
               spread: 70, 
