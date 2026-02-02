@@ -1,7 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSubscription } from "@/lib/subscription-context";
 import { Button } from "@/components/ui/button";
+import { createWhatsAppTour } from "@/lib/tour";
+import { HelpCircle } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -332,6 +334,23 @@ export function Integrations() {
   const [integrationForm, setIntegrationForm] = useState<Record<string, string>>({});
   const [selectedSyncOptions, setSelectedSyncOptions] = useState<string[]>([]);
 
+  const startTour = () => {
+    const tour = createWhatsAppTour();
+    tour.drive();
+  };
+
+  useEffect(() => {
+    const hasSeenTour = localStorage.getItem("whatsapp_tour_seen");
+    if (!hasSeenTour) {
+      // Small delay to ensure components are rendered
+      const timer = setTimeout(() => {
+        startTour();
+        localStorage.setItem("whatsapp_tour_seen", "true");
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
+  }, []);
+
   const integrationsEnabled = subscription?.limits?.integrationsEnabled;
   const maxWebhooks = (subscription?.limits as any)?.maxWebhooks || 0;
 
@@ -471,9 +490,20 @@ export function Integrations() {
   return (
     <div className="h-full overflow-y-auto">
       <div className="p-4 md:p-6 max-w-4xl mx-auto pb-20">
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-900">Integrations</h1>
-          <p className="text-gray-500 mt-1">Connect WhachatCRM with your existing tools and workflows</p>
+        <div className="mb-6 flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Integrations</h1>
+            <p className="text-gray-500 mt-1">Connect WhachatCRM with your existing tools and workflows</p>
+          </div>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={startTour}
+            className="flex items-center gap-2 border-brand-green text-brand-green hover:bg-emerald-50"
+          >
+            <HelpCircle className="h-4 w-4" />
+            Guide Me
+          </Button>
         </div>
 
         <Tabs defaultValue="native" className="space-y-6">

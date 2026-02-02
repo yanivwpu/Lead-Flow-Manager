@@ -81,7 +81,7 @@ export function ConnectMetaWizard({ open, onOpenChange, onSuccess }: ConnectMeta
   return (
     <Dialog open={open} onOpenChange={(v) => !loading && onOpenChange(v)}>
       <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
+        <DialogHeader data-tour="connection-header">
           <DialogTitle className="flex items-center gap-2">
             {step === "success" ? (
               <><CheckCircle2 className="h-5 w-5 text-emerald-600" /> Meta WhatsApp Connected!</>
@@ -111,12 +111,13 @@ export function ConnectMetaWizard({ open, onOpenChange, onSuccess }: ConnectMeta
                 target="_blank" 
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1 text-[11px] text-blue-600 hover:text-blue-700 mt-2 font-medium"
+                data-tour="meta-guide-btn"
               >
                 Don't have these yet? View step-by-step guide <ExternalLink className="h-3 w-3" />
               </a>
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-2" data-tour="access-token-field">
               <div className="flex items-center justify-between">
                 <Label>Permanent Access Token</Label>
                 <a 
@@ -139,7 +140,7 @@ export function ConnectMetaWizard({ open, onOpenChange, onSuccess }: ConnectMeta
               </p>
             </div>
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
+              <div className="space-y-2" data-tour="phone-id-field">
                 <div className="flex items-center justify-between">
                   <Label>Phone Number ID</Label>
                   <a 
@@ -186,14 +187,14 @@ export function ConnectMetaWizard({ open, onOpenChange, onSuccess }: ConnectMeta
               />
             </div>
             {error && <Alert variant="destructive"><AlertCircle className="h-4 w-4" /><AlertDescription>{error}</AlertDescription></Alert>}
-            <Button className="w-full" onClick={handleConnect} disabled={loading || !credentials.accessToken || !credentials.phoneNumberId}>
+            <Button className="w-full" onClick={handleConnect} disabled={loading || !credentials.accessToken || !credentials.phoneNumberId} data-tour="test-connection-btn">
               {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Connect API
             </Button>
           </div>
         )}
 
         {step === "webhook" && (
-          <div className="space-y-4 py-4">
+          <div className="space-y-4 py-4" data-tour="webhook-section">
             <div className="space-y-2">
               <Label>Webhook URL</Label>
               <div className="flex gap-2">
