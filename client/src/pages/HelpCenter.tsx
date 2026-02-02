@@ -347,48 +347,49 @@ Track deal progress:
   },
   {
     id: "followups",
-    title: "Setting Follow-up Reminders",
+    title: "Setting Follow-up Reminders & AI Recommendations",
     category: "Chats",
     icon: Clock,
-    keywords: ["followup", "follow-up", "reminder", "schedule", "task", "todo"],
+    keywords: ["followup", "follow-up", "reminder", "schedule", "task", "todo", "ai recommended", "prioritization"],
     content: `
-# Follow-up Reminders
+# Follow-up Reminders & AI Recommendations
 
-Never forget to follow up with a lead again. WhachatCRM's reminder system keeps you on track.
+WhachatCRM's advanced follow-up system ensures you never forget a lead and always know who to talk to next.
+
+## AI Recommended Prioritization
+
+At the top of your Follow-ups page, you'll find the **AI Recommended** section. This is a smart prioritization engine available to all plans:
+- **Urgency Scoring**: Detects overdue tasks and unread messages.
+- **Engagement Analysis**: Prioritizes contacts who are most active.
+- **Smart Queue**: Automatically bubbles up the 3 most critical contacts needing your attention.
+
+## Follow-up Views
+
+Track your tasks the way you work best:
+- **List View**: A clean, actionable list of all pending tasks.
+- **Calendar View**: See your upcoming week or month at a glance to balance your workload.
+- **Pipeline View**: A drag-and-drop Kanban board to move leads through stages (Lead, Contacted, Proposal, Negotiation, Closed).
 
 ## Setting a Follow-up
 
 In any chat:
-1. Click the **Follow-up** dropdown in chat details
-2. Select a timeframe:
-   - Tomorrow
-   - In 3 days
-   - In 1 week
-   - Custom date
-3. The follow-up is set automatically
+1. Click the **Follow-up** dropdown in chat details.
+2. Select a timeframe (Tomorrow, 3 days, 1 week) or a **Custom Date**.
+3. The system creates a task and links it directly to that conversation.
 
-## Viewing Follow-ups
+## KPI Metrics
 
-Go to the **Follow-ups** page to see:
-- All upcoming reminders
-- Overdue follow-ups (highlighted)
-- Quick access to jump to the chat
+Track your team's performance with real-time stats:
+- **Overdue**: Tasks that missed their target date.
+- **Due Today**: Your immediate priority list.
+- **Upcoming**: Future follow-ups to help you plan.
+- **Completed**: Track your conversion and follow-up success rate.
 
-## Completing Follow-ups
+## Best Practices
 
-When you've followed up:
-1. Click the chat from the Follow-ups page
-2. Send your message
-3. Click "Mark as Done" to clear the reminder
-4. Or set a new follow-up date
-
-## Getting Notifications
-
-Don't miss a follow-up:
-- **Push notifications**: Get browser alerts (enable in Settings)
-- **Email reminders**: Receive email when follow-ups are due
-
-Configure these in **Settings** > **Notifications**.
+- **Mark as Done**: Always mark tasks as complete after responding to clear your dashboard.
+- **Use the Pipeline**: Drag contacts between stages to keep your sales funnel accurate.
+- **Check AI Recommended Daily**: Start your morning by clearing the top 3 AI-suggested tasks.
     `
   },
   {
