@@ -94,45 +94,34 @@ Think of AI Brain as a smart assistant that:
 - **Captures leads** - automatically extracts customer information from conversations
 - **Adapts to your style** - choose from Neutral, Friendly, Professional, or Sales-focused tones
 
-Available exclusively for **Pro plan** users at **$29/month** under Fair Use.
+Available for **Starter and Pro plan** users at **$29/month** under Fair Use.
 
 ---
 
-## Key Features
+## What can AI Brain do?
 
-### Reply Suggestions
+AI Brain is designed to be your comprehensive business assistant, handling everything from first contact to closing.
 
-When chatting with customers, click the brain icon to get an AI-suggested response:
-- The AI reads the conversation context
-- Drafts a relevant, on-brand reply
-- You review, edit if needed, and send
+### 🧠 Unlimited Intelligence
+Unlike the base AI Assist (which has monthly limits), AI Brain gives you **unlimited** access to all AI features. No quotas, no interruptions.
 
-**Tone Control:**
-Choose how AI sounds:
-- **Neutral** - Balanced and helpful
-- **Friendly** - Warm and conversational
-- **Professional** - Formal and business-like
-- **Sales-focused** - Persuasive and value-driven
+### 📝 Smart Reply Suggestions
+The AI reads the full conversation context and suggests professional, on-brand replies. You can review, edit, or send them with one click.
 
-### Lead Capture
+### 📊 Lead Qualification & Scoring
+AI Brain automatically identifies and scores leads from 0-100 based on their intent, budget, and readiness to buy. It extracts names, emails, and requirements without you lifting a finger.
 
-AI Brain automatically extracts customer information:
-- Names, emails, phone numbers
-- Budget and timeline mentions
-- Location and intent signals
+### 🤝 Human Handoff
+Set custom keywords (like "speak to human" or "urgent") that automatically trigger a human takeover, pausing the AI and notifying your team.
 
-You'll see a subtle "Lead details updated" hint when info is captured - no forms, no interruptions.
+### 📚 Business Knowledge Base
+Upload your company's unique information—products, pricing, policies, and FAQs. The AI uses this specific knowledge to provide accurate answers tailored to your business.
 
-### Business Knowledge
+### ⚡ Plain English Automation
+Describe workflows in simple English (e.g., "When a customer asks about pricing, tag them as 'Hot' and set a follow-up for tomorrow"). AI Brain builds the logic for you.
 
-Teach AI about your business in Settings > AI Brain:
-- Business name and industry
-- Products and services
-- Business hours and locations
-- Booking links
-- Sales goals and FAQs
-
-The more you teach it, the better the suggestions become.
+### 🔍 Conversation Summarization
+Get instant summaries of long message histories so you can catch up on a lead's status in seconds.
 
 ---
 
@@ -189,7 +178,7 @@ Take over personally when:
 
 ## Getting Started
 
-1. **Upgrade to Pro** - AI Brain requires a Pro subscription
+1. **Upgrade to Starter or Pro** - AI Brain requires a paid subscription
 2. **Enable AI Brain** - Go to Settings > AI Brain and subscribe
 3. **Add Business Knowledge** - Teach AI about your business
 4. **Set AI Mode** - Choose Suggest Only, Auto Draft, or Hybrid
