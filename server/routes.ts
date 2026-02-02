@@ -4186,6 +4186,22 @@ export async function registerRoutes(
     }
   });
 
+  // Admin: Manually trigger trial check-in emails (for testing)
+  app.post("/api/admin/trigger-checkin-emails", requireAdmin, async (req, res) => {
+    try {
+      const { runTrialCheckinEmails } = await import("./cron");
+      const result = await runTrialCheckinEmails();
+      res.json({ 
+        success: true, 
+        message: `Check-in emails processed: ${result.sent} sent, ${result.errors} errors`,
+        ...result 
+      });
+    } catch (error) {
+      console.error("Error running check-in emails:", error);
+      res.status(500).json({ error: "Failed to run check-in emails" });
+    }
+  });
+
   // Public: Track referral on page visit (store in session)
   app.post("/api/referral/track", async (req, res) => {
     try {

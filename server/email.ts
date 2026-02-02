@@ -522,6 +522,84 @@ export async function sendPartnerWelcomeEmail(
   });
 }
 
+export async function sendTrialCheckinEmail(firstName: string, email: string): Promise<boolean> {
+  const CALENDLY_LINK = 'https://calendly.com/whachatcrm/15min';
+  const WHATSAPP_SUPPORT = 'https://wa.me/19545138408?text=Hi!%20I%20need%20help%20connecting%20my%20WhatsApp%20number.';
+  
+  return sendEmail({
+    to: email,
+    subject: 'Quick check-in: How\'s your WhaChatCRM trial going?',
+    html: `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      </head>
+      <body style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #334155; margin: 0; padding: 0; background-color: #f1f5f9;">
+        <div style="padding: 40px 20px;">
+          <div style="max-width: 600px; margin: 0 auto; background: white; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+            <div style="background: linear-gradient(135deg, #059669 0%, #047857 100%); color: white; padding: 40px 30px; text-align: center;">
+              <div style="width: 50px; height: 50px; background: white; border-radius: 12px; display: inline-block; margin-bottom: 16px; font-size: 24px; font-weight: bold; color: #059669; line-height: 50px;">W</div>
+              <h1 style="margin: 0; font-size: 24px; font-weight: 600;">Quick Check-In</h1>
+            </div>
+            <div style="padding: 40px 30px;">
+              <h2 style="color: #1e293b; margin-top: 0; font-size: 20px;">Hi ${firstName || 'there'}!</h2>
+              <p style="color: #475569; font-size: 15px;">Hope you're enjoying your Pro trial of WhaChatCRM! 🚀</p>
+              
+              <p style="color: #475569; font-size: 15px;">We noticed you haven't connected your WhatsApp number yet — totally understandable, the Meta API setup can feel tricky the first time.</p>
+              
+              <p style="color: #475569; font-size: 15px;"><strong>No stress — we're here to help make it easy.</strong> Would you like:</p>
+              
+              <ul style="color: #475569; font-size: 15px; padding-left: 20px;">
+                <li style="margin-bottom: 8px;">A <strong>free 15-minute demo</strong> where we connect it together (screen share)?</li>
+                <li style="margin-bottom: 8px;">Quick help via chat or email?</li>
+                <li style="margin-bottom: 8px;">Or just some troubleshooting tips?</li>
+              </ul>
+              
+              <p style="color: #475569; font-size: 15px;">Just reply to this email or book a quick slot:</p>
+              
+              <div style="text-align: center; margin: 24px 0;">
+                <a href="${CALENDLY_LINK}" style="display: inline-block; background: #059669; color: white; padding: 14px 32px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px; margin-right: 8px;">📅 Book Free Demo</a>
+              </div>
+              
+              <div style="text-align: center; margin: 16px 0;">
+                <a href="${WHATSAPP_SUPPORT}" style="display: inline-block; background: #25D366; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 14px;">💬 Chat with us on WhatsApp</a>
+              </div>
+              
+              <p style="color: #475569; font-size: 15px;">Once connected, you'll see messages flowing in right away — and we can extend your trial a bit if needed. 😊</p>
+              
+              <p style="color: #475569; font-size: 15px;">How's everything going so far? Any questions or feedback?</p>
+              
+              <div style="margin-top: 32px; border-top: 1px solid #e2e8f0; padding-top: 24px;">
+                <p style="color: #475569; font-size: 15px; margin-bottom: 4px;">Best,</p>
+                <p style="color: #1e293b; font-size: 15px; font-weight: 600; margin: 0;">Yaniv Haramaty</p>
+                <p style="color: #64748b; font-size: 14px; margin: 0;">Founder / Customer Success</p>
+                <p style="color: #64748b; font-size: 14px; margin: 0;">WhaChatCRM</p>
+                <p style="color: #64748b; font-size: 14px; margin: 0;"><a href="mailto:support@whachatcrm.com" style="color: #059669; text-decoration: none;">support@whachatcrm.com</a></p>
+              </div>
+              
+              <div style="background: #fef3c7; border: 1px solid #fcd34d; padding: 16px; border-radius: 8px; margin-top: 24px;">
+                <p style="margin: 0; color: #92400e; font-size: 13px;"><strong>P.S.</strong> Most users get stuck on the access token or webhook — we fix those in under 5 minutes on a call!</p>
+              </div>
+            </div>
+            <div style="text-align: center; padding: 24px 30px; background: #f8fafc; border-top: 1px solid #e2e8f0;">
+              <p style="margin: 0; color: #94a3b8; font-size: 11px;">You're receiving this because you started a Pro trial on WhaChatCRM.</p>
+              <p style="margin: 8px 0 0 0; color: #94a3b8; font-size: 11px;">WhaChatCRM · 1234 Main Street, Suite 100 · Miami, FL 33130</p>
+              <p style="margin: 8px 0 0 0; color: #94a3b8; font-size: 11px;">
+                <a href="${APP_URL}/unsubscribe" style="color: #94a3b8; text-decoration: underline;">Unsubscribe</a> · 
+                <a href="${APP_URL}/privacy" style="color: #94a3b8; text-decoration: underline;">Privacy Policy</a>
+              </p>
+              <p style="margin: 12px 0 0 0; color: #94a3b8; font-size: 11px;">&copy; ${new Date().getFullYear()} WhaChatCRM. All rights reserved.</p>
+            </div>
+          </div>
+        </div>
+      </body>
+      </html>
+    `
+  });
+}
+
 export async function sendFollowUpReminderEmail(email: string, chatName: string, followUp: string, notes: string, chatId: string): Promise<boolean> {
   return sendEmail({
     to: email,

@@ -131,6 +131,8 @@ export const users = pgTable("users", {
   shopifySubscriptionStatus: text("shopify_subscription_status"), // active, cancelled, pending
   shopifyInstalledAt: timestamp("shopify_installed_at"),
   createdAt: timestamp("created_at").defaultNow(),
+  // Trial re-engagement email tracking
+  checkinEmailSent: boolean("checkin_email_sent").default(false),
 });
 
 export const chats = pgTable("chats", {

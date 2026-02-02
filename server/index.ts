@@ -6,6 +6,7 @@ import { serveStatic } from "./static";
 import { createServer } from "http";
 import { startNotificationScheduler } from "./notifications";
 import { setupAuth, registerAuthRoutes } from "./auth";
+import { startCronJobs } from "./cron";
 import { runMigrations } from "stripe-replit-sync";
 import { getStripeSync } from "./stripeClient";
 import { WebhookHandlers } from "./webhookHandlers";
@@ -167,6 +168,9 @@ app.use((req, res, next) => {
 
   // Start notification scheduler
   startNotificationScheduler();
+  
+  // Start cron jobs (trial check-in emails, etc.)
+  startCronJobs();
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;

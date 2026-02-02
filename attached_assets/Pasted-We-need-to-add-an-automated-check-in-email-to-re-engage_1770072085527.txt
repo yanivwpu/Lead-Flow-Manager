@@ -1,0 +1,69 @@
+We need to add an automated "check-in" email to re-engage users who start the 14-day Pro trial but haven't connected their WhatsApp number yet. This targets the biggest activation blocker and should recover some churning users with genuine help (demo offer, support).Goal: Send a friendly, non-salesy email on day 10–12 of the trial if WhatsApp is still not connected.Tech RequirementsUse our existing email service (e.g., Postmark, SendGrid, Resend, or whatever we're on — confirm current provider).
+Backend: Node.js/Express (or whatever our auth/billing is in) + database query.
+User data needed: trial_start_date (or signup date if trial starts on signup)
+whatsapp_connected boolean (or check if phone_number_id exists)
+email, first_name
+Optional: Last activity date
+Scheduling: Use a daily cron job (e.g., via Vercel Cron, Heroku Scheduler, or node-cron) that runs once per day.
+No new dependencies unless needed (keep it simple).
+
+Implementation StepsCreate Email TemplateSave as HTML or use provider's template system.
+Make it mobile-friendly, with our branding (logo, colors).
+Exact content (copy-paste this):
+html
+Subject: Quick check-in: How's your WhaChatCRM trial going?
+
+Hi {{first_name|default:'there'}},
+
+Hope you're enjoying your Pro trial of WhaChatCRM! 🚀
+
+We noticed you haven't connected your WhatsApp number yet — totally understandable, the Meta API setup can feel tricky the first time.
+
+No stress — we're here to help make it easy. Would you like:
+• A free 15-minute demo where we connect it together (screen share)?
+• Quick help via chat or email?
+• Or just some troubleshooting tips?
+
+Just reply to this email or book a quick slot here: [INSERT CALENDLY LINK]
+
+Once connected, you'll see messages flowing in right away — and we can extend your trial a bit if needed. 😊
+
+How's everything going so far? Any questions or feedback?
+
+Best,  
+[Your Name]  
+Founder / Customer Success  
+WhaChatCRM  
+support@whachatcrm.com  
+P.S. Most users get stuck on the access token or webhook — we fix those in under 5 minutes on a call!
+
+[Optional: Add small GIF of successful connection or screenshot]
+
+Variables: {{first_name}}, Calendly link (make it a button: "Book Free Demo").
+Add WhatsApp support link button: "Chat with us on WhatsApp".
+
+Daily Cron Job ScriptRun every day at e.g., 10 AM UTC.
+Query users where:sql
+trial_active = true
+AND days_since_trial_start >= 10
+AND days_since_trial_start <= 12
+AND whatsapp_connected = false
+AND checkin_email_sent = false  -- add this flag column if needed
+For each matching user:Send email using template + personalized data.
+Mark checkin_email_sent = true (to avoid duplicates).
+Optional: Log to analytics (e.g., "checkin_email_sent" event).
+Edge Cases & SafeguardsDon't send if user has already connected (even if after day 12).
+Don't send to users who cancelled or downgraded.
+Don't send more than once per user.
+Test mode: First run in staging with your/test emails only.
+Unsubscribe/footer: Include standard unsubscribe link + "Why am I getting this?" explanation.
+Optional Enhancements (Phase 2 if time)Second email at trial expiry +1 day: Softer "Trial ended — want help getting started?"
+Incentive: Auto-extend trial by 7 days if they book a demo (track Calendly webhook).
+Track metrics: Opens, clicks, replies, bookings, subsequent connections (huge for ROI).
+DeliverablesWorking cron job that queries and sends emails.
+Email template in provider dashboard.
+Test with 2–3 fake users (create test accounts that hit the criteria).
+No spam: Confirm we're CAN-SPAM compliant (physical address, unsubscribe).
+
+This + the interactive tour will crush activation issues. Start simple — get the day 10–12 email out first
+
