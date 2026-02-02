@@ -310,6 +310,7 @@ export function Chats() {
     setAiSuggestionLoading(true);
     setShowAiSuggestion(true);
     setAiCooldown(true);
+    setAiSuggestion(null); // Clear previous suggestion immediately
     
     // Reset cooldown after 3 seconds
     setTimeout(() => setAiCooldown(false), 3000);
@@ -1152,9 +1153,15 @@ export function Chats() {
                         </div>
                       </div>
                       {aiSuggestionLoading ? (
-                        <div className="flex items-center gap-2 text-sm text-gray-500">
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                          <span>Generating suggestion...</span>
+                        <div className="space-y-3">
+                          <div className="flex items-center gap-2 text-sm text-purple-600 font-medium">
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            <span>Thinking...</span>
+                          </div>
+                          <div className="space-y-2">
+                            <div className="h-2 bg-purple-100 rounded animate-pulse w-3/4" />
+                            <div className="h-2 bg-purple-100 rounded animate-pulse w-1/2" />
+                          </div>
                         </div>
                       ) : aiSuggestion ? (
                         <div>

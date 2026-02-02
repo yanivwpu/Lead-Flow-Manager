@@ -471,10 +471,13 @@ function AIBrainContent() {
           </div>
           <div className="flex-1">
             {hasFullAIBrain ? (
-              <>
-                <p className="font-medium text-purple-800">Full AI Brain Active</p>
-                <p className="text-sm text-purple-600">Unlimited access to all advanced features - reply suggestions, lead qualification, summarization, automation builder, and more.</p>
-              </>
+              <details className="group">
+                <summary className="flex items-center justify-between cursor-pointer list-none">
+                  <p className="font-medium text-purple-800">Full AI Brain Active</p>
+                  <ChevronDown className="w-4 h-4 text-purple-400 group-open:rotate-180 transition-transform" />
+                </summary>
+                <p className="text-sm text-purple-600 mt-2">Unlimited access to all advanced features - reply suggestions, lead qualification, summarization, automation builder, and more.</p>
+              </details>
             ) : (
               <>
                 <p className="font-medium text-blue-800">AI Assist Active</p>

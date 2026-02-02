@@ -1,25 +1,55 @@
 import { Link, useLocation } from "wouter";
-import { MessageSquare, ListTodo, Search, LogOut, Settings, Zap, Plug, FileText, HelpCircle, Bot, Inbox, Globe, Brain } from "lucide-react";
+import { MessageSquare, ListTodo, Search, LogOut, Settings, Zap, Plug, FileText, HelpCircle, Bot, Inbox, Globe, Brain, ChevronDown, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
+import { useState } from "react";
 
 export function Sidebar() {
   const [location] = useLocation();
   const { logout, user } = useAuth();
+  const [collapsedCategories, setCollapsedCategories] = useState<string[]>([]);
 
-  const navItems = [
-    { icon: Inbox, label: "Inbox", href: "/app/inbox", testId: "sidebar-inbox" },
-    { icon: MessageSquare, label: "Chats", href: "/app/chats", testId: "sidebar-chats" },
-    { icon: ListTodo, label: "Follow-ups", href: "/app/followups", testId: "sidebar-followups" },
-    { icon: Bot, label: "Chatbot", href: "/app/chatbot", testId: "sidebar-chatbot" },
-    { icon: Zap, label: "Automation", href: "/app/workflows", testId: "sidebar-automation" },
-    { icon: FileText, label: "Templates", href: "/app/templates", testId: "sidebar-templates" },
-    { icon: Globe, label: "Website Widget", href: "/app/widget", testId: "sidebar-widget" },
-    { icon: Plug, label: "Integrations", href: "/app/integrations", testId: "sidebar-integrations" },
-    { icon: Brain, label: "AI Features", href: "/app/ai-brain", testId: "sidebar-ai-brain" },
-    { icon: Search, label: "Search", href: "/app/search", testId: "sidebar-search" },
-    { icon: Settings, label: "Settings", href: "/app/settings", testId: "sidebar-settings" },
-    { icon: HelpCircle, label: "Help", href: "/app/help", testId: "sidebar-help" },
+  const toggleCategory = (category: string) => {
+    setCollapsedCategories(prev => 
+      prev.includes(category) 
+        ? prev.filter(c => c !== category) 
+        : [...prev, category]
+    );
+  };
+
+  const navCategories = [
+    {
+      label: "Main",
+      items: [
+        { icon: Inbox, label: "Inbox", href: "/app/inbox", testId: "sidebar-inbox" },
+        { icon: MessageSquare, label: "Chats", href: "/app/chats", testId: "sidebar-chats" },
+        { icon: ListTodo, label: "Follow-ups", href: "/app/followups", testId: "sidebar-followups" },
+      ]
+    },
+    {
+      label: "Automation & AI",
+      items: [
+        { icon: Bot, label: "Chatbot", href: "/app/chatbot", testId: "sidebar-chatbot" },
+        { icon: Zap, label: "Automation", href: "/app/workflows", testId: "sidebar-automation" },
+        { icon: Brain, label: "AI Features", href: "/app/ai-brain", testId: "sidebar-ai-brain" },
+      ]
+    },
+    {
+      label: "Tools & Setup",
+      items: [
+        { icon: FileText, label: "Templates", href: "/app/templates", testId: "sidebar-templates" },
+        { icon: Globe, label: "Website Widget", href: "/app/widget", testId: "sidebar-widget" },
+        { icon: Plug, label: "Integrations", href: "/app/integrations", testId: "sidebar-integrations" },
+        { icon: Search, label: "Search", href: "/app/search", testId: "sidebar-search" },
+      ]
+    },
+    {
+      label: "Support",
+      items: [
+        { icon: Settings, label: "Settings", href: "/app/settings", testId: "sidebar-settings" },
+        { icon: HelpCircle, label: "Help", href: "/app/help", testId: "sidebar-help" },
+      ]
+    }
   ];
 
   return (
@@ -33,29 +63,48 @@ export function Sidebar() {
         </span>
       </div>
 
-      <nav className="flex-1 flex flex-col gap-1 px-4 overflow-y-auto">
-        {navItems.map((item) => {
-          const isActive = location.startsWith(item.href);
+      <nav className="flex-1 flex flex-col gap-4 px-4 overflow-y-auto">
+        {navCategories.map((category) => {
+          const isCollapsed = collapsedCategories.includes(category.label);
           return (
-            <Link key={item.href} href={item.href}>
-              <a
-                data-testid={item.testId}
-                className={cn(
-                  "flex items-center p-2 rounded-lg transition-colors group relative w-full justify-start",
-                  isActive
-                    ? "bg-emerald-50 text-brand-green"
-                    : "text-gray-500 hover:bg-gray-50 hover:text-gray-900"
-                )}
+            <div key={category.label} className="flex flex-col gap-1">
+              <button 
+                onClick={() => toggleCategory(category.label)}
+                className="flex items-center justify-between px-2 py-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider hover:text-gray-600 transition-colors"
               >
-                <item.icon
-                  className={cn(
-                    "h-5 w-5 shrink-0",
-                    isActive ? "text-brand-green" : "text-gray-400 group-hover:text-gray-600"
-                  )}
-                />
-                <span className="ml-3 font-medium">{item.label}</span>
-              </a>
-            </Link>
+                {category.label}
+                {isCollapsed ? <ChevronRight className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+              </button>
+              
+              {!isCollapsed && (
+                <div className="flex flex-col gap-1">
+                  {category.items.map((item) => {
+                    const isActive = location.startsWith(item.href);
+                    return (
+                      <Link key={item.href} href={item.href}>
+                        <a
+                          data-testid={item.testId}
+                          className={cn(
+                            "flex items-center p-2 rounded-lg transition-colors group relative w-full justify-start",
+                            isActive
+                              ? "bg-emerald-50 text-brand-green"
+                              : "text-gray-500 hover:bg-gray-50 hover:text-gray-900"
+                          )}
+                        >
+                          <item.icon
+                            className={cn(
+                              "h-5 w-5 shrink-0",
+                              isActive ? "text-brand-green" : "text-gray-400 group-hover:text-gray-600"
+                            )}
+                          />
+                          <span className="ml-3 font-medium text-sm">{item.label}</span>
+                        </a>
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           );
         })}
       </nav>
