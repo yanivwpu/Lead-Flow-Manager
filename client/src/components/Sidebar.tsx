@@ -9,6 +9,7 @@ import { LanguageSelector } from "./LanguageSelector";
 export function Sidebar() {
   const [location] = useLocation();
   const { logout, user } = useAuth();
+  const { t } = useTranslation();
   const [collapsedCategories, setCollapsedCategories] = useState<string[]>([]);
 
   const toggleCategory = (category: string) => {
@@ -21,35 +22,35 @@ export function Sidebar() {
 
   const navCategories = [
     {
-      label: "Main",
+      label: t('nav.main', 'Main'),
       items: [
-        { icon: Inbox, label: "Inbox", href: "/app/inbox", testId: "sidebar-inbox" },
-        { icon: MessageSquare, label: "Chats", href: "/app/chats", testId: "sidebar-chats" },
-        { icon: ListTodo, label: "Follow-ups", href: "/app/followups", testId: "sidebar-followups" },
+        { icon: Inbox, label: t('nav.inbox', 'Inbox'), href: "/app/inbox", testId: "sidebar-inbox" },
+        { icon: MessageSquare, label: t('nav.chats', 'Chats'), href: "/app/chats", testId: "sidebar-chats" },
+        { icon: ListTodo, label: t('nav.followups', 'Follow-ups'), href: "/app/followups", testId: "sidebar-followups" },
       ]
     },
     {
-      label: "Automation & AI",
+      label: t('nav.automationAi', 'Automation & AI'),
       items: [
-        { icon: Bot, label: "Chatbot", href: "/app/chatbot", testId: "sidebar-chatbot" },
-        { icon: Zap, label: "Automation", href: "/app/workflows", testId: "sidebar-automation" },
-        { icon: Brain, label: "AI Features", href: "/app/ai-brain", testId: "sidebar-ai-brain" },
+        { icon: Bot, label: t('nav.chatbot', 'Chatbot'), href: "/app/chatbot", testId: "sidebar-chatbot" },
+        { icon: Zap, label: t('nav.automations', 'Automation'), href: "/app/workflows", testId: "sidebar-automation" },
+        { icon: Brain, label: t('nav.aiBrain', 'AI Features'), href: "/app/ai-brain", testId: "sidebar-ai-brain" },
       ]
     },
     {
-      label: "Tools & Setup",
+      label: t('nav.toolsSetup', 'Tools & Setup'),
       items: [
-        { icon: FileText, label: "Templates", href: "/app/templates", testId: "sidebar-templates" },
-        { icon: Globe, label: "Website Widget", href: "/app/widget", testId: "sidebar-widget" },
-        { icon: Plug, label: "Integrations", href: "/app/integrations", testId: "sidebar-integrations" },
-        { icon: Search, label: "Search", href: "/app/search", testId: "sidebar-search" },
+        { icon: FileText, label: t('nav.templates', 'Templates'), href: "/app/templates", testId: "sidebar-templates" },
+        { icon: Globe, label: t('nav.widget', 'Website Widget'), href: "/app/widget", testId: "sidebar-widget" },
+        { icon: Plug, label: t('nav.integrations', 'Integrations'), href: "/app/integrations", testId: "sidebar-integrations" },
+        { icon: Search, label: t('common.search', 'Search'), href: "/app/search", testId: "sidebar-search" },
       ]
     },
     {
-      label: "Support",
+      label: t('nav.support', 'Support'),
       items: [
-        { icon: Settings, label: "Settings", href: "/app/settings", testId: "sidebar-settings" },
-        { icon: HelpCircle, label: "Help", href: "/app/help", testId: "sidebar-help" },
+        { icon: Settings, label: t('nav.settings', 'Settings'), href: "/app/settings", testId: "sidebar-settings" },
+        { icon: HelpCircle, label: t('nav.help', 'Help'), href: "/app/help", testId: "sidebar-help" },
       ]
     }
   ];
@@ -127,7 +128,7 @@ export function Sidebar() {
           className="w-full flex items-center p-2 rounded-lg text-gray-500 hover:bg-red-50 hover:text-red-600 transition-colors justify-start"
         >
           <LogOut className="h-5 w-5 shrink-0" />
-          <span className="ml-3 font-medium">Logout</span>
+          <span className="ml-3 font-medium">{t('common.logout', 'Logout')}</span>
         </button>
       </div>
     </div>

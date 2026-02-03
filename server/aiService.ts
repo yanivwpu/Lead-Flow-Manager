@@ -7,7 +7,28 @@ import {
   type AiSettings,
 } from "@shared/schema";
 
+export type SupportedAiLanguage = "en" | "he" | "es" | "ar";
+
+const LANGUAGE_PROMPTS: Record<SupportedAiLanguage, { instruction: string; name: string }> = {
+  en: { instruction: "Respond in English.", name: "English" },
+  he: { instruction: "השב בעברית. Respond in Hebrew using natural, conversational Hebrew.", name: "Hebrew" },
+  es: { instruction: "Responde en español. Respond in Spanish using neutral, Latin American Spanish.", name: "Spanish" },
+  ar: { instruction: "الرد باللغة العربية. Respond in Arabic using Modern Standard Arabic.", name: "Arabic" },
+};
+
 export class AIService {
+  
+  async detectMessageLanguage(message: string): Promise<SupportedAiLanguage> {
+    const hebrewPattern = /[\u0590-\u05FF]/;
+    const arabicPattern = /[\u0600-\u06FF]/;
+    const spanishPattern = /[áéíóúüñ¿¡]/i;
+    
+    if (hebrewPattern.test(message)) return "he";
+    if (arabicPattern.test(message)) return "ar";
+    if (spanishPattern.test(message)) return "es";
+    
+    return "en";
+  }
   
   async suggestReply(
     userId: string,
@@ -15,9 +36,12 @@ export class AIService {
     conversationHistory: Array<{ role: string; content: string }>,
     businessKnowledge?: AiBusinessKnowledge,
     settings?: AiSettings,
-    tone?: "neutral" | "friendly" | "professional" | "sales"
+    tone?: "neutral" | "friendly" | "professional" | "sales",
+    language?: SupportedAiLanguage
   ): Promise<{ suggestion: string; confidence: number }> {
-    const systemPrompt = this.buildSystemPrompt(businessKnowledge, settings, tone);
+    const lastMessage = conversationHistory[conversationHistory.length - 1]?.content || "";
+    const detectedLanguage = language || await this.detectMessageLanguage(lastMessage);
+    const systemPrompt = this.buildSystemPrompt(businessKnowledge, settings, tone, detectedLanguage);
     
     try {
       const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
@@ -231,7 +255,8 @@ Return JSON: { "summary": "your summary" }`;
   private buildSystemPrompt(
     businessKnowledge?: AiBusinessKnowledge, 
     settings?: AiSettings,
-    tone?: "neutral" | "friendly" | "professional" | "sales"
+    tone?: "neutral" | "friendly" | "professional" | "sales",
+    language?: SupportedAiLanguage
   ): string {
     const toneGuide = {
       neutral: "balanced and helpful, neither too formal nor too casual",
@@ -250,8 +275,12 @@ Return JSON: { "summary": "your summary" }`;
       formal: "formal and business-like"
     }[persona] || "professional and courteous";
     
+    const langInstruction = language ? LANGUAGE_PROMPTS[language].instruction : LANGUAGE_PROMPTS.en.instruction;
+    
     let prompt = `You are an AI assistant for ${businessKnowledge?.businessName || "a business"}. 
 Be ${toneDesc || personaDesc} in your responses.
+
+IMPORTANT: ${langInstruction}
 
 Your goal: ${businessKnowledge?.salesGoals || "Help customers with their inquiries"}
 
@@ -269,7 +298,7 @@ Business details:
       prompt += `\n\nSpecial instructions: ${businessKnowledge.customInstructions}`;
     }
 
-    prompt += `\n\nRespond with JSON: { "reply": "your response", "confidence": 0.0-1.0 }
+    prompt += `\n\nRespond with JSON: { "reply": "your response in the specified language", "confidence": 0.0-1.0 }
 Keep responses concise (under 200 words). Be helpful but don't make promises you can't keep.`;
 
     return prompt;
