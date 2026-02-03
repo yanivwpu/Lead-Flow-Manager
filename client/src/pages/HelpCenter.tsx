@@ -1,4 +1,4 @@
-import { useState, useRef, ReactNode } from "react";
+import { useState, useRef, ReactNode, useMemo } from "react";
 import { Helmet } from "react-helmet";
 import { 
   Search, ChevronRight, MessageSquare, Settings, Zap, Plug, 
@@ -9,6 +9,14 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { getCurrentLanguage } from "@/lib/i18n";
+import { 
+  getHelpArticles, 
+  getHelpCategories, 
+  getHelpUITranslations,
+  type HelpLanguage,
+  type HelpArticle
+} from "@/lib/helpCenterTranslations";
 
 interface Article {
   id: string;
@@ -1266,9 +1274,18 @@ function FeedbackSection({ articleId, articleTitle }: { articleId: string; artic
 
 export function HelpCenter() {
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
+  const [selectedArticle, setSelectedArticle] = useState<HelpArticle | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+  
+  // Get current language for translations
+  const currentLang = (getCurrentLanguage() || "en") as HelpLanguage;
+  const isRTL = currentLang === "he";
+  
+  // Get translated content
+  const HELP_ARTICLES = useMemo(() => getHelpArticles(currentLang), [currentLang]);
+  const CATEGORIES = useMemo(() => getHelpCategories(currentLang), [currentLang]);
+  const UI = useMemo(() => getHelpUITranslations(currentLang), [currentLang]);
 
   const scrollToTop = () => {
     if (contentRef.current) {
@@ -1364,14 +1381,14 @@ export function HelpCenter() {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-white overflow-hidden">
+    <div className="flex flex-col h-screen bg-white overflow-hidden" dir={isRTL ? "rtl" : "ltr"}>
       <Helmet>
-        <title>Help Center | WhachatCRM</title>
+        <title>{UI.title} | WhachatCRM</title>
       </Helmet>
 
       <div className="p-4 sm:p-6 border-b border-gray-200 bg-gray-50 shrink-0">
-        <h1 className="text-xl sm:text-2xl font-display font-bold text-gray-900">Help Center</h1>
-        <p className="text-sm text-gray-500 mt-1">Find answers and learn how to use WhachatCRM</p>
+        <h1 className="text-xl sm:text-2xl font-display font-bold text-gray-900">{UI.title}</h1>
+        <p className="text-sm text-gray-500 mt-1">{UI.subtitle}</p>
       </div>
 
       <div className="flex-1 overflow-y-auto min-h-0 relative" ref={contentRef}>
@@ -1379,12 +1396,12 @@ export function HelpCenter() {
           {!selectedArticle ? (
             <div>
               <div className="relative mb-6">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                <Search className={cn("absolute top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400", isRTL ? "right-3" : "left-3")} />
                 <Input
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search for help articles..."
-                  className="pl-10 h-12 text-base"
+                  placeholder={UI.searchPlaceholder}
+                  className={cn("h-12 text-base", isRTL ? "pr-10" : "pl-10")}
                   data-testid="input-search-help"
                 />
               </div>
@@ -1408,14 +1425,14 @@ export function HelpCenter() {
               )}
 
               {selectedCategory && (
-                <div className="mb-4 flex items-center gap-2">
+                <div className={cn("mb-4 flex items-center gap-2", isRTL && "flex-row-reverse")}>
                   <button
                     onClick={() => { setSelectedCategory(null); scrollToTop(); }}
                     className="text-sm text-brand-green hover:underline"
                   >
-                    All Categories
+                    {UI.allCategories}
                   </button>
-                  <ChevronRight className="h-4 w-4 text-gray-400" />
+                  <ChevronRight className={cn("h-4 w-4 text-gray-400", isRTL && "rotate-180")} />
                   <span className="text-sm font-medium text-gray-700">{selectedCategory}</span>
                 </div>
               )}
@@ -1442,8 +1459,8 @@ export function HelpCenter() {
                 {filteredArticles.length === 0 && (
                   <div className="text-center py-12">
                     <HelpCircle className="h-12 w-12 text-gray-300 mx-auto mb-4" />
-                    <h3 className="text-lg font-medium text-gray-900 mb-2">No articles found</h3>
-                    <p className="text-gray-500">Try a different search term or browse categories</p>
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">{UI.noArticlesFound}</h3>
+                    <p className="text-gray-500">{UI.noArticlesHint}</p>
                   </div>
                 )}
               </div>
@@ -1452,11 +1469,11 @@ export function HelpCenter() {
             <div>
               <button
                 onClick={() => { setSelectedArticle(null); scrollToTop(); }}
-                className="flex items-center gap-1 text-sm text-brand-green hover:underline mb-6"
+                className={cn("flex items-center gap-1 text-sm text-brand-green hover:underline mb-6", isRTL && "flex-row-reverse")}
                 data-testid="button-back-to-articles"
               >
-                <ChevronRight className="h-4 w-4 rotate-180" />
-                Back to Help Center
+                <ChevronRight className={cn("h-4 w-4", isRTL ? "" : "rotate-180")} />
+                {UI.backToHelpCenter}
               </button>
 
               <div className="flex items-center gap-2 text-sm text-gray-500 mb-4">
