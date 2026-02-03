@@ -58,7 +58,8 @@ class SubscriptionService {
     else if (storedPlan === "starter") suggestedUpgrade = "pro";
 
     // Check if user has the AI Brain add-on subscription from Stripe
-    const hasAIBrainAddon = await this.checkAIBrainAddonStatus(user.stripeCustomerId);
+    // Trial users get full AI Brain access as part of the Pro trial experience
+    const hasAIBrainAddon = isInTrial ? true : await this.checkAIBrainAddonStatus(user.stripeCustomerId);
 
     return {
       plan: effectivePlan,
