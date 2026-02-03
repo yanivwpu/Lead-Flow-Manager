@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { motion } from "framer-motion";
 import { Loader2, ArrowRight, AlertCircle, CheckCircle2, X, Eye, EyeOff } from "lucide-react";
+import { LanguageSelector } from "@/components/LanguageSelector";
 import {
   Dialog,
   DialogContent,
@@ -96,11 +97,14 @@ export function AuthPage() {
       {/* Left Panel - Branding */}
       <div className="md:flex-1 bg-brand-dark relative overflow-hidden flex flex-col justify-between p-6 md:p-12 text-white">
         <div className="relative z-10">
-          <div className="flex items-center gap-3 mb-4 md:mb-6">
-            <div className="h-10 w-10 bg-brand-green rounded-xl flex items-center justify-center">
-               <span className="text-white font-bold text-xl">W</span>
+          <div className="flex items-center justify-between mb-4 md:mb-6">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 bg-brand-green rounded-xl flex items-center justify-center">
+                 <span className="text-white font-bold text-xl">W</span>
+              </div>
+              <span className="font-display font-bold text-xl md:hidden">WhachatCRM</span>
             </div>
-            <span className="font-display font-bold text-xl md:hidden">WhachatCRM</span>
+            <LanguageSelector variant="compact" className="text-white/80 hover:text-white hover:bg-white/10" />
           </div>
           <h1 className="text-2xl md:text-5xl font-display font-bold mb-2 md:mb-4 leading-tight">
             Manage your <span className="text-brand-green">WhatsApp</span> business.

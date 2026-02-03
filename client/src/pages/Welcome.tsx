@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { BookDemoModal } from "@/components/BookDemoModal";
+import { LanguageSelector } from "@/components/LanguageSelector";
 import heroImage from "@assets/generated_images/whatsapp_crm_dashboard_mockup_resized.png";
 import heroImageWebp from "@assets/generated_images/whatsapp_crm_dashboard_mockup.webp";
 
@@ -135,6 +136,7 @@ export function Welcome() {
           <Link href="/blog">
             <button className="text-sm font-medium text-gray-600 hover:text-gray-900 hidden sm:block">Blog</button>
           </Link>
+          <LanguageSelector variant="compact" className="text-gray-600 hover:text-gray-900 hover:bg-gray-100" />
           {user ? (
             <Link href="/app/chats">
               <button className="text-sm font-medium px-4 py-2 bg-brand-green text-white rounded-full hover:bg-emerald-700">
