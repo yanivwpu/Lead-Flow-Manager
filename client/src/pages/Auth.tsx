@@ -6,7 +6,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { motion } from "framer-motion";
 import { Loader2, ArrowRight, AlertCircle, CheckCircle2, X, Eye, EyeOff } from "lucide-react";
-import { LanguageSelector } from "@/components/LanguageSelector";
 import {
   Dialog,
   DialogContent,
@@ -138,9 +137,6 @@ export function AuthPage() {
           animate={{ opacity: 1, y: 0 }}
           className="w-full max-w-md bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-gray-100 my-4"
         >
-          <div className="flex justify-end mb-4">
-            <LanguageSelector variant="compact" className="text-gray-500 hover:text-gray-700 hover:bg-gray-100" />
-          </div>
           <div className="mb-6 md:mb-8 text-center">
             <h2 className="text-xl md:text-2xl font-bold text-gray-900 font-display">
               {isLogin ? "Welcome back" : "Create your account"}
