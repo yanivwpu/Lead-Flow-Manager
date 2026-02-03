@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 import { ConnectMetaWizard } from "@/components/ConnectMetaWizard";
 import { ConnectTwilioWizard } from "@/components/ConnectTwilioWizard";
-import { createMetaWizardTour } from "@/lib/tour";
+import { createMetaWizardTour, createTwilioWizardTour } from "@/lib/tour";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -114,14 +114,21 @@ export function ChannelSettings() {
 
   const startMetaTour = () => {
     const tour = createMetaWizardTour(() => {
-      localStorage.setItem("whatsapp_tour_seen", "true");
+      localStorage.setItem("meta_tour_seen", "true");
+    });
+    tour.drive();
+  };
+
+  const startTwilioTour = () => {
+    const tour = createTwilioWizardTour(() => {
+      localStorage.setItem("twilio_tour_seen", "true");
     });
     tour.drive();
   };
 
   useEffect(() => {
     if (connectMetaOpen) {
-      const hasSeenTour = localStorage.getItem("whatsapp_tour_seen");
+      const hasSeenTour = localStorage.getItem("meta_tour_seen");
       if (!hasSeenTour) {
         const timer = setTimeout(() => {
           startMetaTour();
@@ -130,6 +137,18 @@ export function ChannelSettings() {
       }
     }
   }, [connectMetaOpen]);
+
+  useEffect(() => {
+    if (connectTwilioOpen) {
+      const hasSeenTour = localStorage.getItem("twilio_tour_seen");
+      if (!hasSeenTour) {
+        const timer = setTimeout(() => {
+          startTwilioTour();
+        }, 600);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [connectTwilioOpen]);
 
   const { data: channels = [], isLoading } = useQuery<ChannelSetting[]>({
     queryKey: ["/api/channels"],
@@ -511,7 +530,11 @@ export function ChannelSettings() {
         onOpenChange={setConnectMetaOpen}
         onStartTour={startMetaTour}
       />
-      <ConnectTwilioWizard open={connectTwilioOpen} onOpenChange={setConnectTwilioOpen} />
+      <ConnectTwilioWizard 
+        open={connectTwilioOpen} 
+        onOpenChange={setConnectTwilioOpen}
+        onStartTour={startTwilioTour}
+      />
 
       <Dialog open={configChannel === 'telegram'} onOpenChange={() => setConfigChannel(null)}>
         <DialogContent>

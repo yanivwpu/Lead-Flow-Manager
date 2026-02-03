@@ -5,17 +5,18 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { CheckCircle2, AlertCircle, Loader2, ExternalLink, Copy, Check } from "lucide-react";
+import { CheckCircle2, AlertCircle, Loader2, ExternalLink, Copy, Check, HelpCircle } from "lucide-react";
 
 interface ConnectTwilioWizardProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess?: () => void;
+  onStartTour?: () => void;
 }
 
 type Step = "credentials" | "webhook" | "success";
 
-export function ConnectTwilioWizard({ open, onOpenChange, onSuccess }: ConnectTwilioWizardProps) {
+export function ConnectTwilioWizard({ open, onOpenChange, onSuccess, onStartTour }: ConnectTwilioWizardProps) {
   const queryClient = useQueryClient();
   const [step, setStep] = useState<Step>("credentials");
   const [loading, setLoading] = useState(false);
@@ -102,17 +103,30 @@ export function ConnectTwilioWizard({ open, onOpenChange, onSuccess }: ConnectTw
   return (
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-lg" data-testid="connect-twilio-dialog">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            {step === "success" ? (
-              <>
-                <CheckCircle2 className="h-5 w-5 text-emerald-600" />
-                WhatsApp Connected!
-              </>
-            ) : (
-              "Connect Your WhatsApp"
+        <DialogHeader data-tour="twilio-header">
+          <div className="flex items-center justify-between">
+            <DialogTitle className="flex items-center gap-2">
+              {step === "success" ? (
+                <>
+                  <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+                  WhatsApp Connected!
+                </>
+              ) : (
+                "Connect Your WhatsApp"
+              )}
+            </DialogTitle>
+            {step !== "success" && onStartTour && (
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={onStartTour}
+                className="text-red-600 hover:text-red-700 hover:bg-red-50 gap-1"
+              >
+                <HelpCircle className="h-4 w-4" />
+                Guide Me
+              </Button>
             )}
-          </DialogTitle>
+          </div>
           <DialogDescription>
             {step === "credentials" && "Enter your Twilio credentials to enable WhatsApp messaging."}
             {step === "webhook" && "Configure your Twilio webhook to receive incoming messages."}
@@ -122,7 +136,7 @@ export function ConnectTwilioWizard({ open, onOpenChange, onSuccess }: ConnectTw
 
         {step === "credentials" && (
           <div className="space-y-4 py-4">
-            <div className="space-y-2">
+            <div className="space-y-2" data-tour="account-sid-field">
               <Label htmlFor="accountSid">Twilio Account SID</Label>
               <Input
                 id="accountSid"
@@ -133,7 +147,7 @@ export function ConnectTwilioWizard({ open, onOpenChange, onSuccess }: ConnectTw
               />
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-2" data-tour="auth-token-field">
               <Label htmlFor="authToken">Twilio Auth Token</Label>
               <Input
                 id="authToken"
@@ -145,7 +159,7 @@ export function ConnectTwilioWizard({ open, onOpenChange, onSuccess }: ConnectTw
               />
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-2" data-tour="whatsapp-number-field">
               <Label htmlFor="whatsappNumber">WhatsApp Business Number</Label>
               <Input
                 id="whatsappNumber"
@@ -166,7 +180,7 @@ export function ConnectTwilioWizard({ open, onOpenChange, onSuccess }: ConnectTw
               </Alert>
             )}
 
-            <div className="flex items-center gap-2 pt-2">
+            <div className="flex items-center gap-2 pt-2" data-tour="twilio-console-btn">
               <a
                 href="https://console.twilio.com"
                 target="_blank"
@@ -185,6 +199,7 @@ export function ConnectTwilioWizard({ open, onOpenChange, onSuccess }: ConnectTw
                 onClick={handleValidateAndConnect} 
                 disabled={loading || !credentials.accountSid || !credentials.authToken || !credentials.whatsappNumber}
                 data-testid="button-connect"
+                data-tour="twilio-connect-btn"
               >
                 {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Connect

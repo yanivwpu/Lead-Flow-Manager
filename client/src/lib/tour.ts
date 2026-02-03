@@ -119,5 +119,86 @@ export const createMetaWizardTour = (onComplete?: () => void) => {
   return driverObj;
 };
 
+// Tour for Twilio connection wizard dialog
+export const createTwilioWizardTour = (onComplete?: () => void) => {
+  const driverObj = driver({
+    showProgress: true,
+    animate: true,
+    allowClose: true,
+    overlayColor: 'rgba(0,0,0,0.75)',
+    stagePadding: 6,
+    steps: [
+      {
+        element: '[data-tour="twilio-header"]',
+        popover: {
+          title: '📱 Connect via Twilio',
+          description: 'Twilio lets you use both WhatsApp AND SMS messaging. You\'ll need a Twilio account with WhatsApp enabled.',
+          side: 'bottom'
+        }
+      },
+      {
+        element: '[data-tour="twilio-console-btn"]',
+        popover: {
+          title: '🔗 Open Twilio Console',
+          description: 'Click here to open Twilio Console in a new tab. You\'ll find your credentials under Account Info on the dashboard.',
+          side: 'bottom'
+        }
+      },
+      {
+        element: '[data-tour="account-sid-field"]',
+        popover: {
+          title: '🔑 Account SID',
+          description: 'Copy your Account SID from the Twilio Console dashboard. It starts with "AC" followed by letters and numbers.',
+          side: 'bottom'
+        }
+      },
+      {
+        element: '[data-tour="auth-token-field"]',
+        popover: {
+          title: '🔒 Auth Token',
+          description: 'Your Auth Token is also on the dashboard. Click "Show" to reveal it, then copy and paste here.',
+          side: 'bottom'
+        }
+      },
+      {
+        element: '[data-tour="whatsapp-number-field"]',
+        popover: {
+          title: '📞 WhatsApp Number',
+          description: 'Enter the phone number you\'ve registered for WhatsApp in Twilio. Include the country code (e.g., +1234567890).',
+          side: 'bottom'
+        }
+      },
+      {
+        element: '[data-tour="twilio-connect-btn"]',
+        popover: {
+          title: '✅ Connect',
+          description: 'Once you\'ve entered all credentials, click Connect. We\'ll verify everything works before proceeding.',
+          side: 'top'
+        }
+      },
+      {
+        popover: {
+          title: '🎉 Almost There!',
+          description: 'After connecting, you\'ll configure webhooks so we can receive your messages. Let\'s do this!',
+          doneBtnText: 'Got it!',
+          onPopoverRender: () => {
+            confetti({ 
+              particleCount: 100, 
+              spread: 60, 
+              origin: { y: 0.6 },
+              colors: ['#F22F46', '#0D122B', '#E1E3E8', '#FFD43B']
+            });
+          },
+        }
+      },
+    ],
+    onDestroyed: () => {
+      if (onComplete) onComplete();
+    }
+  });
+
+  return driverObj;
+};
+
 // Legacy export for backward compatibility
 export const createWhatsAppTour = createMetaWizardTour;
