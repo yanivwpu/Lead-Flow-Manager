@@ -97,14 +97,11 @@ export function AuthPage() {
       {/* Left Panel - Branding */}
       <div className="md:flex-1 bg-brand-dark relative overflow-hidden flex flex-col justify-between p-6 md:p-12 text-white">
         <div className="relative z-10">
-          <div className="flex items-center justify-between mb-4 md:mb-6">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 bg-brand-green rounded-xl flex items-center justify-center">
-                 <span className="text-white font-bold text-xl">W</span>
-              </div>
-              <span className="font-display font-bold text-xl md:hidden">WhachatCRM</span>
+          <div className="flex items-center gap-3 mb-4 md:mb-6">
+            <div className="h-10 w-10 bg-brand-green rounded-xl flex items-center justify-center">
+               <span className="text-white font-bold text-xl">W</span>
             </div>
-            <LanguageSelector variant="compact" className="text-white/80 hover:text-white hover:bg-white/10" />
+            <span className="font-display font-bold text-xl md:hidden">WhachatCRM</span>
           </div>
           <h1 className="text-2xl md:text-5xl font-display font-bold mb-2 md:mb-4 leading-tight">
             Manage your <span className="text-brand-green">WhatsApp</span> business.
@@ -141,6 +138,9 @@ export function AuthPage() {
           animate={{ opacity: 1, y: 0 }}
           className="w-full max-w-md bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-gray-100 my-4"
         >
+          <div className="flex justify-end mb-4">
+            <LanguageSelector variant="compact" className="text-gray-500 hover:text-gray-700 hover:bg-gray-100" />
+          </div>
           <div className="mb-6 md:mb-8 text-center">
             <h2 className="text-xl md:text-2xl font-bold text-gray-900 font-display">
               {isLogin ? "Welcome back" : "Create your account"}
