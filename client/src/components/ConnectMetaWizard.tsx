@@ -5,18 +5,19 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { CheckCircle2, AlertCircle, Loader2, ExternalLink, Copy, Check } from "lucide-react";
+import { CheckCircle2, AlertCircle, Loader2, ExternalLink, Copy, Check, HelpCircle } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 
 interface ConnectMetaWizardProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess?: () => void;
+  onStartTour?: () => void;
 }
 
 type Step = "credentials" | "webhook" | "success";
 
-export function ConnectMetaWizard({ open, onOpenChange, onSuccess }: ConnectMetaWizardProps) {
+export function ConnectMetaWizard({ open, onOpenChange, onSuccess, onStartTour }: ConnectMetaWizardProps) {
   const queryClient = useQueryClient();
   const [step, setStep] = useState<Step>("credentials");
   const [loading, setLoading] = useState(false);
@@ -82,11 +83,24 @@ export function ConnectMetaWizard({ open, onOpenChange, onSuccess }: ConnectMeta
     <Dialog open={open} onOpenChange={(v) => !loading && onOpenChange(v)}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader data-tour="connection-header">
-          <DialogTitle className="flex items-center gap-2">
-            {step === "success" ? (
-              <><CheckCircle2 className="h-5 w-5 text-emerald-600" /> Meta WhatsApp Connected!</>
-            ) : "Connect Meta WhatsApp API"}
-          </DialogTitle>
+          <div className="flex items-center justify-between">
+            <DialogTitle className="flex items-center gap-2">
+              {step === "success" ? (
+                <><CheckCircle2 className="h-5 w-5 text-emerald-600" /> Meta WhatsApp Connected!</>
+              ) : "Connect Meta WhatsApp API"}
+            </DialogTitle>
+            {step !== "success" && onStartTour && (
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={onStartTour}
+                className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 gap-1"
+              >
+                <HelpCircle className="h-4 w-4" />
+                Guide Me
+              </Button>
+            )}
+          </div>
           <DialogDescription>
             {step === "credentials" && (
               <span className="text-gray-500">Direct Meta connection · No message markup · You pay Meta directly</span>

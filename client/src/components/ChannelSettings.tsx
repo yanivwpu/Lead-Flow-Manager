@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   MessageCircle,
@@ -16,9 +16,11 @@ import {
   Settings2,
   ChevronRight,
   ArrowRightLeft,
+  HelpCircle,
 } from "lucide-react";
 import { ConnectMetaWizard } from "@/components/ConnectMetaWizard";
 import { ConnectTwilioWizard } from "@/components/ConnectTwilioWizard";
+import { createMetaWizardTour } from "@/lib/tour";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -109,6 +111,25 @@ export function ChannelSettings() {
   const [copied, setCopied] = useState(false);
   const [connectMetaOpen, setConnectMetaOpen] = useState(false);
   const [connectTwilioOpen, setConnectTwilioOpen] = useState(false);
+
+  const startMetaTour = () => {
+    const tour = createMetaWizardTour(() => {
+      localStorage.setItem("whatsapp_tour_seen", "true");
+    });
+    tour.drive();
+  };
+
+  useEffect(() => {
+    if (connectMetaOpen) {
+      const hasSeenTour = localStorage.getItem("whatsapp_tour_seen");
+      if (!hasSeenTour) {
+        const timer = setTimeout(() => {
+          startMetaTour();
+        }, 600);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [connectMetaOpen]);
 
   const { data: channels = [], isLoading } = useQuery<ChannelSetting[]>({
     queryKey: ["/api/channels"],
@@ -421,6 +442,7 @@ export function ChannelSettings() {
                   }
                 }}
                 data-testid="option-meta-whatsapp"
+                data-tour="meta-connect-card"
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
@@ -484,7 +506,11 @@ export function ChannelSettings() {
         </DialogContent>
       </Dialog>
 
-      <ConnectMetaWizard open={connectMetaOpen} onOpenChange={setConnectMetaOpen} />
+      <ConnectMetaWizard 
+        open={connectMetaOpen} 
+        onOpenChange={setConnectMetaOpen}
+        onStartTour={startMetaTour}
+      />
       <ConnectTwilioWizard open={connectTwilioOpen} onOpenChange={setConnectTwilioOpen} />
 
       <Dialog open={configChannel === 'telegram'} onOpenChange={() => setConfigChannel(null)}>
