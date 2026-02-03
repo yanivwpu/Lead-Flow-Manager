@@ -13,8 +13,9 @@ import { Link } from "wouter";
 import { 
   FileText, RefreshCw, Lock, Zap, Send, Clock, CheckCircle2, XCircle, 
   AlertCircle, Image, Video, FileIcon, LayoutGrid, ChevronLeft, ChevronRight,
-  Users, Target
+  Users, Target, Sparkles
 } from "lucide-react";
+import { LocalizedTemplateSelector } from "@/components/LocalizedTemplateSelector";
 import { apiRequest } from "@/lib/queryClient";
 
 interface MessageTemplate {
@@ -236,17 +237,43 @@ export function Templates() {
           </Button>
         </div>
 
-        <Tabs defaultValue="templates" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-2">
+        <Tabs defaultValue="presets" className="space-y-6">
+          <TabsList className="grid w-full grid-cols-3">
+            <TabsTrigger value="presets" data-testid="tab-presets">
+              <Sparkles className="h-4 w-4 mr-2" />
+              Preset Templates
+            </TabsTrigger>
             <TabsTrigger value="templates" data-testid="tab-templates">
               <FileText className="h-4 w-4 mr-2" />
               Template Library ({templates.length})
             </TabsTrigger>
             <TabsTrigger value="retargeting" data-testid="tab-retargeting">
               <Target className="h-4 w-4 mr-2" />
-              Smart Retargeting ({retargetableChats.length})
+              Retargeting ({retargetableChats.length})
             </TabsTrigger>
           </TabsList>
+
+          <TabsContent value="presets" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Sparkles className="h-5 w-5 text-purple-500" />
+                  Preset Automation Templates
+                </CardTitle>
+                <CardDescription>
+                  Pre-built message sequences for different industries. Available in English, Spanish, and Hebrew.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <LocalizedTemplateSelector 
+                  showPreviewOnly={false}
+                  onSelectTemplate={(template, values) => {
+                    console.log("Selected template:", template, values);
+                  }}
+                />
+              </CardContent>
+            </Card>
+          </TabsContent>
 
           <TabsContent value="templates" className="space-y-4">
             {templatesLoading ? (
