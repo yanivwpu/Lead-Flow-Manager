@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useLocation, Link } from "wouter";
+import { useTranslation } from "react-i18next";
 import { useAuth } from "@/lib/auth-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,6 +15,7 @@ import {
 } from "@/components/ui/dialog";
 
 export function AuthPage() {
+  const { t } = useTranslation();
   const params = new URLSearchParams(window.location.search);
   const defaultToLogin = params.get('mode') === 'login';
   const [isLogin, setIsLogin] = useState(defaultToLogin);
@@ -103,25 +105,25 @@ export function AuthPage() {
             <span className="font-display font-bold text-xl md:hidden">WhachatCRM</span>
           </div>
           <h1 className="text-2xl md:text-5xl font-display font-bold mb-2 md:mb-4 leading-tight">
-            Manage your <span className="text-brand-green">WhatsApp</span> business.
+            {t('auth.manageWhatsApp')}
           </h1>
           <p className="text-brand-teal/80 text-sm md:text-lg max-w-md leading-relaxed hidden md:block">
-            The all-in-one CRM for WhatsApp-first teams. Organize leads, automate follow-ups, and close more deals.
+            {t('auth.crmDescription')}
           </p>
         </div>
 
         <div className="relative z-10 space-y-4 hidden md:block">
            <div className="flex items-center gap-3">
              <CheckCircle2 className="text-brand-green h-5 w-5" />
-             <span className="font-medium">Sync unlimited chats</span>
+             <span className="font-medium">{t('auth.syncChats')}</span>
            </div>
            <div className="flex items-center gap-3">
              <CheckCircle2 className="text-brand-green h-5 w-5" />
-             <span className="font-medium">Track deal pipeline</span>
+             <span className="font-medium">{t('auth.trackPipeline')}</span>
            </div>
            <div className="flex items-center gap-3">
              <CheckCircle2 className="text-brand-green h-5 w-5" />
-             <span className="font-medium">Automated reminders</span>
+             <span className="font-medium">{t('auth.automatedReminders')}</span>
            </div>
         </div>
 
@@ -139,10 +141,10 @@ export function AuthPage() {
         >
           <div className="mb-6 md:mb-8 text-center">
             <h2 className="text-xl md:text-2xl font-bold text-gray-900 font-display">
-              {isLogin ? "Welcome back" : "Create your account"}
+              {isLogin ? t('auth.welcomeBack') : t('auth.createAccount')}
             </h2>
             <p className="text-gray-500 mt-2 text-sm">
-              {isLogin ? "Enter your details to access your account" : "Start your 14-day free trial, no credit card required"}
+              {isLogin ? t('auth.loginSubtitle') : t('auth.signupSubtitle')}
             </p>
           </div>
 
@@ -150,7 +152,7 @@ export function AuthPage() {
             {!isLogin && (
               <>
                 <div className="space-y-2">
-                  <Label htmlFor="name">Full Name</Label>
+                  <Label htmlFor="name">{t('auth.fullName')}</Label>
                   <Input 
                     id="name" 
                     placeholder="John Doe" 
@@ -162,7 +164,7 @@ export function AuthPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="businessName">Business Name</Label>
+                  <Label htmlFor="businessName">{t('auth.businessName')}</Label>
                   <Input 
                     id="businessName" 
                     placeholder="My Company" 
@@ -176,7 +178,7 @@ export function AuthPage() {
             )}
             
             <div className="space-y-2">
-              <Label htmlFor="email">Email address</Label>
+              <Label htmlFor="email">{t('auth.email')}</Label>
               <Input 
                 id="email" 
                 type="email" 
@@ -192,7 +194,7 @@ export function AuthPage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
+              <Label htmlFor="password">{t('auth.password')}</Label>
               <div className="relative">
                 <Input 
                   id="password" 
@@ -233,7 +235,7 @@ export function AuthPage() {
                   htmlFor="remember" 
                   className="text-sm font-normal cursor-pointer text-gray-700"
                 >
-                  Remember me for 30 days
+                  {t('auth.rememberMe')}
                 </Label>
               </div>
             )}
@@ -252,13 +254,13 @@ export function AuthPage() {
                   htmlFor="terms" 
                   className="text-sm font-normal cursor-pointer text-gray-600 leading-tight"
                 >
-                  I agree to the{" "}
+                  {t('auth.agreeTerms')}{" "}
                   <Link href="/privacy-policy">
-                    <a className="text-brand-green hover:underline" target="_blank">Privacy Policy</a>
+                    <a className="text-brand-green hover:underline" target="_blank">{t('auth.privacyPolicy')}</a>
                   </Link>
-                  {" "}and{" "}
+                  {" "}{t('common.and')}{" "}
                   <Link href="/terms-of-use">
-                    <a className="text-brand-green hover:underline" target="_blank">Terms of Use</a>
+                    <a className="text-brand-green hover:underline" target="_blank">{t('auth.termsOfUse')}</a>
                   </Link>
                 </Label>
               </div>
@@ -280,7 +282,7 @@ export function AuthPage() {
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
                 <>
-                  {isLogin ? "Sign In" : "Get Started"}
+                  {isLogin ? t('auth.loginButton') : t('auth.signupButton')}
                   <ArrowRight className="ml-2 h-4 w-4" />
                 </>
               )}
@@ -288,7 +290,7 @@ export function AuthPage() {
           </form>
 
           <div className="mt-6 text-center text-sm text-gray-500">
-            {isLogin ? "Don't have an account? " : "Already have an account? "}
+            {isLogin ? t('auth.noAccount') + " " : t('auth.haveAccount') + " "}
             <button 
               onClick={() => {
                 setIsLogin(!isLogin);
@@ -296,7 +298,7 @@ export function AuthPage() {
               }}
               className="font-semibold text-brand-green hover:underline"
             >
-              {isLogin ? "Sign up" : "Log in"}
+              {isLogin ? t('common.signup') : t('common.login')}
             </button>
           </div>
 
@@ -307,7 +309,7 @@ export function AuthPage() {
               className="text-sm text-gray-400 hover:text-brand-green hover:underline"
               data-testid="link-forgot-password"
             >
-              Forgot your password?
+              {t('auth.forgotPassword')}
             </button>
           </div>
         </motion.div>
@@ -316,16 +318,16 @@ export function AuthPage() {
       <Dialog open={forgotPasswordOpen} onOpenChange={closeForgotPassword}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="text-xl font-display">Reset your password</DialogTitle>
+            <DialogTitle className="text-xl font-display">{t('auth.resetPassword')}</DialogTitle>
           </DialogHeader>
           
           {!resetSubmitted ? (
             <form onSubmit={handleForgotPassword} className="space-y-4 mt-4">
               <p className="text-sm text-gray-500">
-                Enter your email address and we'll send you a link to reset your password.
+                {t('auth.resetInstructions')}
               </p>
               <div className="space-y-2">
-                <Label htmlFor="reset-email">Email address</Label>
+                <Label htmlFor="reset-email">{t('auth.email')}</Label>
                 <Input
                   id="reset-email"
                   type="email"
@@ -344,7 +346,7 @@ export function AuthPage() {
                   onClick={closeForgotPassword}
                   className="flex-1"
                 >
-                  Cancel
+                  {t('common.cancel')}
                 </Button>
                 <Button
                   type="submit"
@@ -355,7 +357,7 @@ export function AuthPage() {
                   {resetSubmitting ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : (
-                    "Send Reset Link"
+                    t('auth.sendResetLink')
                   )}
                 </Button>
               </div>
@@ -365,16 +367,16 @@ export function AuthPage() {
               <div className="h-12 w-12 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
                 <CheckCircle2 className="h-6 w-6 text-brand-green" />
               </div>
-              <h3 className="font-semibold text-gray-900 mb-2">Check your email</h3>
+              <h3 className="font-semibold text-gray-900 mb-2">{t('auth.checkEmail')}</h3>
               <p className="text-sm text-gray-500 mb-4">
-                If an account exists for {resetEmail}, you'll receive a password reset link shortly.
+                {t('auth.resetEmailSent')}
               </p>
               <Button
                 onClick={closeForgotPassword}
                 className="bg-brand-green hover:bg-emerald-700"
                 data-testid="button-close-reset"
               >
-                Back to Login
+                {t('common.login')}
               </Button>
             </div>
           )}

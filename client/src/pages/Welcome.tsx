@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link } from "wouter";
 import { Helmet } from "react-helmet";
+import { useTranslation } from "react-i18next";
 import { 
   ArrowRight, 
   CheckCircle2, 
@@ -100,6 +101,7 @@ function IntegrationsHub() {
 
 export function Welcome() {
   const { user } = useAuth();
+  const { t } = useTranslation();
   const [showDemoModal, setShowDemoModal] = useState(false);
 
   return (
@@ -131,26 +133,26 @@ export function Welcome() {
         </div>
         <div className="flex items-center gap-2 md:gap-4">
           <Link href="/pricing">
-            <button className="text-sm font-medium text-gray-600 hover:text-gray-900 hidden sm:block">Pricing</button>
+            <button className="text-sm font-medium text-gray-600 hover:text-gray-900 hidden sm:block">{t('landing.pricing')}</button>
           </Link>
           <Link href="/blog">
-            <button className="text-sm font-medium text-gray-600 hover:text-gray-900 hidden sm:block">Blog</button>
+            <button className="text-sm font-medium text-gray-600 hover:text-gray-900 hidden sm:block">{t('landing.blog')}</button>
           </Link>
           <LanguageSelector variant="compact" className="text-gray-600 hover:text-gray-900 hover:bg-gray-100" />
           {user ? (
             <Link href="/app/chats">
               <button className="text-sm font-medium px-4 py-2 bg-brand-green text-white rounded-full hover:bg-emerald-700">
-                Dashboard
+                {t('landing.dashboard')}
               </button>
             </Link>
           ) : (
             <>
               <Link href="/auth?mode=login">
-                <button className="text-sm font-medium text-gray-600 hover:text-gray-900 hidden sm:block">Login</button>
+                <button className="text-sm font-medium text-gray-600 hover:text-gray-900 hidden sm:block">{t('landing.login')}</button>
               </Link>
               <Link href="/auth">
                 <button className="text-sm font-medium px-4 py-2 bg-brand-green text-white rounded-full hover:bg-emerald-700">
-                  Start Free
+                  {t('landing.startFree')}
                 </button>
               </Link>
             </>
@@ -163,10 +165,10 @@ export function Welcome() {
         <div className="grid md:grid-cols-2 gap-8 md:gap-12 items-start">
           <div className="animate-hero-text">
             <h1 className="text-3xl md:text-5xl lg:text-6xl font-display font-bold text-gray-900 leading-[1.1] mb-4 md:mb-6">
-              One Inbox. Every Channel. Zero Complexity.
+              {t('landing.heroTitle')}
             </h1>
             <p className="text-lg md:text-xl text-gray-600 mb-6 md:mb-8 leading-relaxed">
-              WhatsApp, SMS, Telegram, Instagram, Facebook, Web Chat — all in one unified inbox. Stop juggling apps. Respond faster, never lose a lead.
+              {t('landing.heroSubtitle')}
             </p>
             
             {/* Stacked CTAs for mobile */}
@@ -174,7 +176,7 @@ export function Welcome() {
               <div className="w-full sm:w-auto">
                 <Link href={user ? "/app/chats" : "/auth"}>
                   <button className="w-full sm:w-auto h-14 px-8 bg-brand-green hover:bg-emerald-700 text-white font-semibold rounded-full flex items-center justify-center gap-2 transition-all shadow-lg hover:shadow-xl" data-testid="button-hero-cta">
-                    Start Your 14-Day Pro Trial
+                    {t('landing.startTrial')}
                     <ArrowRight className="h-5 w-5" />
                   </button>
                 </Link>
@@ -182,7 +184,7 @@ export function Welcome() {
               <div className="w-full sm:w-auto">
                 <Link href="/pricing">
                   <button className="w-full sm:w-auto h-12 px-6 bg-white border border-gray-200 text-gray-700 font-medium rounded-full flex items-center justify-center gap-2 hover:bg-gray-50 transition-colors" data-testid="button-hero-pricing">
-                    Compare Plans
+                    {t('landing.pricing')}
                     <ChevronRight className="h-4 w-4" />
                   </button>
                 </Link>
@@ -194,16 +196,13 @@ export function Welcome() {
                   data-testid="button-book-demo"
                 >
                   <Calendar className="h-4 w-4" />
-                  Book a Demo
+                  {t('landing.bookDemo')}
                 </button>
-                <span className="text-xs text-amber-600 mt-1 font-medium">We're sure you'll love it!</span>
               </div>
             </div>
             
             <div className="flex items-center gap-2 mb-6">
-              <span className="text-sm text-gray-500">No credit card required</span>
-              <span className="text-gray-300">|</span>
-              <span className="text-sm text-brand-green font-medium">Free plan available forever</span>
+              <span className="text-sm text-gray-500">{t('landing.noCreditCard')}</span>
             </div>
             
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-gray-600">
