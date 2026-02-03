@@ -479,6 +479,24 @@ export async function registerRoutes(
     }
   });
 
+  // Update user language preference
+  app.patch("/api/user/language", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const { language } = req.body;
+      if (!language || !['en', 'he', 'es', 'ar'].includes(language)) {
+        return res.status(400).json({ error: "Invalid language" });
+      }
+      const updated = await storage.updateUser(req.user.id, { language });
+      res.json({ success: true, language: updated?.language });
+    } catch (error) {
+      console.error("Error updating language:", error);
+      res.status(500).json({ error: "Failed to update language" });
+    }
+  });
+
   // Complete onboarding tour
   app.post("/api/user/complete-onboarding", async (req, res) => {
     try {

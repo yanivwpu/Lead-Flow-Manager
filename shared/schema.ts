@@ -112,6 +112,7 @@ export const users = pgTable("users", {
   businessHoursEnd: text("business_hours_end").default("17:00"),
   businessDays: jsonb("business_days").default(sql`'[1,2,3,4,5]'::jsonb`), // 0=Sun, 1=Mon, etc.
   timezone: text("timezone").default("America/New_York"),
+  language: text("language").default("en"), // User preferred language: en, he, es
   awayMessageEnabled: boolean("away_message_enabled").default(false),
   awayMessage: text("away_message").default("Thanks for reaching out! We're currently away but will respond as soon as we're back."),
   autoReplyEnabled: boolean("auto_reply_enabled").default(false),

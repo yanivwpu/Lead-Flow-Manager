@@ -3,6 +3,8 @@ import { MessageSquare, ListTodo, Search, LogOut, Settings, Zap, Plug, FileText,
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
+import { LanguageSelector } from "./LanguageSelector";
 
 export function Sidebar() {
   const [location] = useLocation();
@@ -116,6 +118,9 @@ export function Sidebar() {
             <div className="text-xs font-medium text-gray-700 truncate">{user.name}</div>
           </div>
         )}
+        <div className="mb-2 px-2">
+          <LanguageSelector variant="default" className="w-full justify-start" />
+        </div>
         <button 
           onClick={logout}
           data-testid="button-logout"

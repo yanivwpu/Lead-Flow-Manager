@@ -1,0 +1,52 @@
+WhachatCRM Multilingual Rollout Plan
+Objective: Make WhachatCRM usable and appealing in Israel, Latin America, and UAE, prioritizing partners and SMB adoption without overspending.
+________________________________________
+Phase 1 — Core Multilingual Setup (Lean & Fast)
+1️⃣ Language Support
+Language	Scope
+Hebrew	Full UI + AI
+Neutral Spanish	Full UI + AI
+Arabic	AI only (UI remains English)
+Instruction for Replit agent:
+•	Implement a language selector in the dashboard (top-right corner).
+•	Users can choose Hebrew, Spanish, or English (Arabic AI works automatically for Arabic messages).
+•	Store language preference per user in database.
+________________________________________
+2️⃣ Dashboard & Core Features Translation
+Translate UI for Hebrew & Neutral Spanish only:
+•	Onboarding screens
+•	Dashboard main page
+•	Unified inbox
+•	Automation builder
+•	Pricing & subscription page
+•	Settings (basic)
+Do not translate billing/notifications/email templates at this stage — save for Phase 2.
+Instruction for Replit agent:
+•	Use resource files for translations (.json or .yml) keyed by language.
+•	Wrap all visible strings in the app with a translation function (t('key')).
+•	Ensure Hebrew uses RTL layout; Spanish remains LTR.
+________________________________________
+3️⃣ AI Brain Multilingual Setup
+•	Hebrew AI: fully functional, handles conversations, automations, follow-ups.
+•	Neutral Spanish AI: same as above.
+•	Arabic AI: responds in Arabic, but dashboard stays English.
+Instruction for Replit agent:
+•	Detect user language preference automatically for AI messages.
+•	If incoming message language differs from user default, auto-translate to preferred AI language.
+•	Keep AI prompt templates separate per language for easy future updates.
+________________________________________
+4️⃣ RTL & Layout Adjustments
+•	Hebrew requires right-to-left adjustments: navigation, text alignment, icons.
+•	Arabic AI messages may be RTL — ensure they display properly in chat.
+•	Spanish remains standard LTR.
+Instruction for Replit agent:
+•	Implement conditional CSS based on language.
+•	Test all screens for overflow and alignment issues.
+________________________________________
+Phase 2 — Partner-Friendly Enhancements
+________________________________________
+1 Minor Feature Translation 
+•	Billing emails & receipts
+•	System notifications
+•	Dashboard analytics labels
+
