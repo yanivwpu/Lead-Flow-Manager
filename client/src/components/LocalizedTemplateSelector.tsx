@@ -1,0 +1,388 @@
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { 
+  ShoppingCart, 
+  Users, 
+  Bell, 
+  Tag, 
+  Building2, 
+  Stethoscope, 
+  Home, 
+  Plane, 
+  Store,
+  Clock,
+  Send,
+  Eye,
+  Check
+} from "lucide-react";
+import { getCurrentLanguage, type SupportedLanguage } from "@/lib/i18n";
+
+interface AutomationTemplate {
+  id: string;
+  language: string;
+  category: string;
+  industry: string;
+  name: string;
+  description: string;
+  messages: Array<{
+    delay: string;
+    content: string;
+    type: string;
+  }>;
+  placeholders: string[];
+  aiEnabled: boolean;
+}
+
+interface TemplateResponse {
+  templates: AutomationTemplate[];
+  categoryLabels: Record<string, Record<string, string>>;
+  industryLabels: Record<string, Record<string, string>>;
+}
+
+const CATEGORY_ICONS: Record<string, any> = {
+  abandoned_cart: ShoppingCart,
+  lead_nurture: Users,
+  service_reminder: Bell,
+  promotions: Tag,
+};
+
+const INDUSTRY_ICONS: Record<string, any> = {
+  general: Building2,
+  clinic: Stethoscope,
+  real_estate: Home,
+  travel: Plane,
+  ecommerce: Store,
+};
+
+interface LocalizedTemplateSelectorProps {
+  onSelectTemplate?: (template: AutomationTemplate, placeholderValues: Record<string, string>) => void;
+  showPreviewOnly?: boolean;
+}
+
+export function LocalizedTemplateSelector({ 
+  onSelectTemplate,
+  showPreviewOnly = false 
+}: LocalizedTemplateSelectorProps) {
+  const { t, i18n } = useTranslation();
+  const currentLang = (getCurrentLanguage() || "en") as "en" | "he" | "es";
+  
+  const [selectedLanguage, setSelectedLanguage] = useState<string>(currentLang);
+  const [selectedCategory, setSelectedCategory] = useState<string>("all");
+  const [selectedIndustry, setSelectedIndustry] = useState<string>("all");
+  const [previewTemplate, setPreviewTemplate] = useState<AutomationTemplate | null>(null);
+  const [placeholderValues, setPlaceholderValues] = useState<Record<string, string>>({});
+  const [previewDialogOpen, setPreviewDialogOpen] = useState(false);
+
+  const { data, isLoading } = useQuery<TemplateResponse>({
+    queryKey: ["/api/automation-templates", selectedLanguage, selectedCategory, selectedIndustry],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (selectedLanguage !== "all") params.set("language", selectedLanguage);
+      if (selectedCategory !== "all") params.set("category", selectedCategory);
+      if (selectedIndustry !== "all") params.set("industry", selectedIndustry);
+      
+      const res = await fetch(`/api/automation-templates?${params.toString()}`, {
+        credentials: "include"
+      });
+      if (!res.ok) throw new Error("Failed to fetch templates");
+      return res.json();
+    }
+  });
+
+  const templates = data?.templates || [];
+  const categoryLabels = data?.categoryLabels?.[selectedLanguage as keyof typeof data.categoryLabels] || {};
+  const industryLabels = data?.industryLabels?.[selectedLanguage as keyof typeof data.industryLabels] || {};
+
+  const handlePreview = (template: AutomationTemplate) => {
+    setPreviewTemplate(template);
+    const initialValues: Record<string, string> = {};
+    template.placeholders.forEach(p => {
+      initialValues[p] = `{{${p}}}`;
+    });
+    setPlaceholderValues(initialValues);
+    setPreviewDialogOpen(true);
+  };
+
+  const handleUseTemplate = () => {
+    if (previewTemplate && onSelectTemplate) {
+      onSelectTemplate(previewTemplate, placeholderValues);
+    }
+    setPreviewDialogOpen(false);
+  };
+
+  const replacePlaceholders = (content: string): string => {
+    let result = content;
+    for (const [key, value] of Object.entries(placeholderValues)) {
+      result = result.replace(new RegExp(`\\{\\{${key}\\}\\}`, 'g'), value || `{{${key}}}`);
+    }
+    return result;
+  };
+
+  const getCategoryIcon = (category: string) => {
+    const IconComponent = CATEGORY_ICONS[category] || Tag;
+    return <IconComponent className="h-4 w-4" />;
+  };
+
+  const getIndustryIcon = (industry: string) => {
+    const IconComponent = INDUSTRY_ICONS[industry] || Building2;
+    return <IconComponent className="h-4 w-4" />;
+  };
+
+  const getMessageTypeColor = (type: string) => {
+    switch (type) {
+      case "initial": return "bg-emerald-100 text-emerald-700";
+      case "followup": return "bg-blue-100 text-blue-700";
+      case "reminder": return "bg-amber-100 text-amber-700";
+      case "feedback": return "bg-purple-100 text-purple-700";
+      default: return "bg-gray-100 text-gray-700";
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap gap-4">
+        <div className="flex-1 min-w-[150px]">
+          <Label className="text-sm font-medium mb-1 block">
+            {t("language.select", "Language")}
+          </Label>
+          <Select value={selectedLanguage} onValueChange={setSelectedLanguage}>
+            <SelectTrigger data-testid="template-language-select">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{t("common.all", "All Languages")}</SelectItem>
+              <SelectItem value="en">English</SelectItem>
+              <SelectItem value="he">עברית (Hebrew)</SelectItem>
+              <SelectItem value="es">Español (Spanish)</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        
+        <div className="flex-1 min-w-[150px]">
+          <Label className="text-sm font-medium mb-1 block">
+            {t("templates.category", "Category")}
+          </Label>
+          <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+            <SelectTrigger data-testid="template-category-select">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{t("common.all", "All Categories")}</SelectItem>
+              <SelectItem value="abandoned_cart">{categoryLabels.abandoned_cart || "Abandoned Cart"}</SelectItem>
+              <SelectItem value="lead_nurture">{categoryLabels.lead_nurture || "Lead Nurture"}</SelectItem>
+              <SelectItem value="service_reminder">{categoryLabels.service_reminder || "Service Reminder"}</SelectItem>
+              <SelectItem value="promotions">{categoryLabels.promotions || "Promotions"}</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        
+        <div className="flex-1 min-w-[150px]">
+          <Label className="text-sm font-medium mb-1 block">
+            {t("templates.industry", "Industry")}
+          </Label>
+          <Select value={selectedIndustry} onValueChange={setSelectedIndustry}>
+            <SelectTrigger data-testid="template-industry-select">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{t("common.all", "All Industries")}</SelectItem>
+              <SelectItem value="general">{industryLabels.general || "General"}</SelectItem>
+              <SelectItem value="clinic">{industryLabels.clinic || "Healthcare"}</SelectItem>
+              <SelectItem value="real_estate">{industryLabels.real_estate || "Real Estate"}</SelectItem>
+              <SelectItem value="travel">{industryLabels.travel || "Travel"}</SelectItem>
+              <SelectItem value="ecommerce">{industryLabels.ecommerce || "E-commerce"}</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      {isLoading ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {[1, 2, 3].map(i => (
+            <Card key={i} className="animate-pulse">
+              <CardHeader>
+                <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+                <div className="h-3 bg-gray-200 rounded w-1/2 mt-2"></div>
+              </CardHeader>
+              <CardContent>
+                <div className="h-20 bg-gray-200 rounded"></div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      ) : templates.length === 0 ? (
+        <Card className="p-8 text-center">
+          <p className="text-gray-500">{t("templates.noTemplates", "No templates found for the selected filters")}</p>
+        </Card>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {templates.map((template) => (
+            <Card key={template.id} className="hover:shadow-md transition-shadow">
+              <CardHeader className="pb-2">
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-2">
+                    {getCategoryIcon(template.category)}
+                    <CardTitle className="text-base">{template.name}</CardTitle>
+                  </div>
+                  <Badge variant="outline" className="text-xs">
+                    {template.language.toUpperCase()}
+                  </Badge>
+                </div>
+                <CardDescription className="text-sm">
+                  {template.description}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex flex-wrap gap-1 mb-3">
+                  <Badge className={getMessageTypeColor(template.category)} variant="secondary">
+                    {getIndustryIcon(template.industry)}
+                    <span className="ml-1">{industryLabels[template.industry] || template.industry}</span>
+                  </Badge>
+                  <Badge variant="outline" className="text-xs">
+                    <Clock className="h-3 w-3 mr-1" />
+                    {template.messages.length} {t("templates.messages", "messages")}
+                  </Badge>
+                  {template.aiEnabled && (
+                    <Badge className="bg-purple-100 text-purple-700">AI</Badge>
+                  )}
+                </div>
+                
+                <div className="flex gap-2">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="flex-1"
+                    onClick={() => handlePreview(template)}
+                    data-testid={`template-preview-${template.id}`}
+                  >
+                    <Eye className="h-3 w-3 mr-1" />
+                    {t("common.view", "Preview")}
+                  </Button>
+                  {!showPreviewOnly && (
+                    <Button 
+                      size="sm" 
+                      className="flex-1 bg-emerald-600 hover:bg-emerald-700"
+                      onClick={() => handlePreview(template)}
+                      data-testid={`template-use-${template.id}`}
+                    >
+                      <Check className="h-3 w-3 mr-1" />
+                      {t("common.select", "Use")}
+                    </Button>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      <Dialog open={previewDialogOpen} onOpenChange={setPreviewDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {previewTemplate && getCategoryIcon(previewTemplate.category)}
+              {previewTemplate?.name}
+            </DialogTitle>
+            <DialogDescription>
+              {previewTemplate?.description}
+            </DialogDescription>
+          </DialogHeader>
+          
+          <ScrollArea className="max-h-[60vh]">
+            <Tabs defaultValue="preview" className="w-full">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="preview">{t("templates.preview", "Preview")}</TabsTrigger>
+                <TabsTrigger value="placeholders">{t("templates.customize", "Customize")}</TabsTrigger>
+              </TabsList>
+              
+              <TabsContent value="preview" className="space-y-4 mt-4">
+                {previewTemplate?.messages.map((msg, idx) => (
+                  <div key={idx} className="border rounded-lg p-4 bg-gray-50">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Badge className={getMessageTypeColor(msg.type)}>
+                        {msg.type}
+                      </Badge>
+                      <span className="text-xs text-gray-500 flex items-center">
+                        <Clock className="h-3 w-3 mr-1" />
+                        {msg.delay === "0" ? t("templates.immediate", "Immediate") : msg.delay}
+                      </span>
+                    </div>
+                    <div 
+                      className="whitespace-pre-wrap text-sm bg-white p-3 rounded border"
+                      dir={previewTemplate.language === "he" ? "rtl" : "ltr"}
+                    >
+                      {replacePlaceholders(msg.content)}
+                    </div>
+                  </div>
+                ))}
+              </TabsContent>
+              
+              <TabsContent value="placeholders" className="space-y-4 mt-4">
+                <p className="text-sm text-gray-500 mb-4">
+                  {t("templates.customizeDesc", "Customize the placeholders with your actual values:")}
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {previewTemplate?.placeholders.map((placeholder) => (
+                    <div key={placeholder}>
+                      <Label className="text-sm font-medium capitalize">
+                        {placeholder.replace(/_/g, " ")}
+                      </Label>
+                      <Input
+                        value={placeholderValues[placeholder] || ""}
+                        onChange={(e) => setPlaceholderValues(prev => ({
+                          ...prev,
+                          [placeholder]: e.target.value
+                        }))}
+                        placeholder={`{{${placeholder}}}`}
+                        className="mt-1"
+                        data-testid={`placeholder-${placeholder}`}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </TabsContent>
+            </Tabs>
+          </ScrollArea>
+          
+          <DialogFooter className="flex gap-2">
+            <Button variant="outline" onClick={() => setPreviewDialogOpen(false)}>
+              {t("common.close", "Close")}
+            </Button>
+            {!showPreviewOnly && (
+              <Button 
+                className="bg-emerald-600 hover:bg-emerald-700" 
+                onClick={handleUseTemplate}
+              >
+                <Send className="h-4 w-4 mr-2" />
+                {t("templates.useTemplate", "Use This Template")}
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

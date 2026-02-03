@@ -253,5 +253,27 @@
     "hebrew": "עברית",
     "spanish": "Español",
     "arabic": "العربية"
+  },
+  "templates": {
+    "title": "תבניות אוטומציה",
+    "subtitle": "רצפי הודעות מובנים לתעשייה שלך",
+    "category": "קטגוריה",
+    "industry": "תעשייה",
+    "messages": "הודעות",
+    "preview": "תצוגה מקדימה",
+    "customize": "התאמה אישית",
+    "customizeDesc": "התאם את המשתנים עם הערכים האמיתיים שלך:",
+    "useTemplate": "השתמש בתבנית זו",
+    "noTemplates": "לא נמצאו תבניות למסננים שנבחרו",
+    "immediate": "מיידי",
+    "abandonedCart": "עגלה נטושה",
+    "leadNurture": "טיפוח לידים",
+    "serviceReminder": "תזכורת שירות",
+    "promotions": "מבצעים",
+    "general": "כללי",
+    "clinic": "בריאות וקליניקות",
+    "realEstate": "נדל״ן",
+    "travel": "תיירות ונסיעות",
+    "ecommerce": "מסחר אלקטרוני"
   }
 }

@@ -2901,6 +2901,35 @@ export async function registerRoutes(
     }
   });
 
+  // ============= Localized Automation Templates =============
+  
+  // Get localized automation templates
+  app.get("/api/automation-templates", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      
+      const { language, category, industry } = req.query;
+      const { getFilteredTemplates, CATEGORY_LABELS, INDUSTRY_LABELS } = await import("@shared/localizedTemplates");
+      
+      const templates = getFilteredTemplates(
+        language as any,
+        category as any,
+        industry as any
+      );
+      
+      res.json({
+        templates,
+        categoryLabels: CATEGORY_LABELS,
+        industryLabels: INDUSTRY_LABELS
+      });
+    } catch (error) {
+      console.error("Error fetching automation templates:", error);
+      res.status(500).json({ error: "Failed to fetch automation templates" });
+    }
+  });
+
   // ============= Template Messaging Endpoints (Pro Feature) =============
 
   // Get user's message templates

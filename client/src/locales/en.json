@@ -253,5 +253,27 @@
     "hebrew": "עברית",
     "spanish": "Español",
     "arabic": "العربية"
+  },
+  "templates": {
+    "title": "Automation Templates",
+    "subtitle": "Pre-built message sequences for your industry",
+    "category": "Category",
+    "industry": "Industry",
+    "messages": "messages",
+    "preview": "Preview",
+    "customize": "Customize",
+    "customizeDesc": "Customize the placeholders with your actual values:",
+    "useTemplate": "Use This Template",
+    "noTemplates": "No templates found for the selected filters",
+    "immediate": "Immediate",
+    "abandonedCart": "Abandoned Cart",
+    "leadNurture": "Lead Nurture",
+    "serviceReminder": "Service Reminder",
+    "promotions": "Promotions",
+    "general": "General",
+    "clinic": "Healthcare & Clinics",
+    "realEstate": "Real Estate",
+    "travel": "Travel & Tourism",
+    "ecommerce": "E-commerce"
   }
 }

@@ -253,5 +253,27 @@
     "hebrew": "עברית",
     "spanish": "Español",
     "arabic": "العربية"
+  },
+  "templates": {
+    "title": "Plantillas de Automatización",
+    "subtitle": "Secuencias de mensajes prediseñadas para tu industria",
+    "category": "Categoría",
+    "industry": "Industria",
+    "messages": "mensajes",
+    "preview": "Vista Previa",
+    "customize": "Personalizar",
+    "customizeDesc": "Personaliza los marcadores con tus valores reales:",
+    "useTemplate": "Usar Esta Plantilla",
+    "noTemplates": "No se encontraron plantillas para los filtros seleccionados",
+    "immediate": "Inmediato",
+    "abandonedCart": "Carrito Abandonado",
+    "leadNurture": "Nutrición de Leads",
+    "serviceReminder": "Recordatorio de Servicio",
+    "promotions": "Promociones",
+    "general": "General",
+    "clinic": "Salud y Clínicas",
+    "realEstate": "Bienes Raíces",
+    "travel": "Viajes y Turismo",
+    "ecommerce": "Comercio Electrónico"
   }
 }
