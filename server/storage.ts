@@ -31,7 +31,10 @@ import {
   type Commission, type InsertCommission,
   type AgreementAcceptance, type InsertAgreementAcceptance,
   type AiSettings, type AiBusinessKnowledge, type AiUsage, type AiLeadScore,
-  aiSettings, aiBusinessKnowledge, aiUsage, aiLeadScores
+  type UserAutomationTemplate, type InsertUserAutomationTemplate,
+  type TemplateUsageAnalytics, type InsertTemplateUsageAnalytics,
+  aiSettings, aiBusinessKnowledge, aiUsage, aiLeadScores,
+  userAutomationTemplates, templateUsageAnalytics
 } from "@shared/schema";
 import { db } from "../drizzle/db";
 import { users, chats, registeredPhones, messageUsage, conversationWindows, teamMembers, workflows, workflowExecutions, recurringReminders, webhooks, webhookDeliveries, integrations, messageTemplates, templateSends, dripCampaigns, dripSteps, dripEnrollments, dripSends, chatbotFlows, chatbotSessions, salespeople, demoBookings, salesConversions, adminSettings, contacts, conversations, messages, activityEvents, channelSettings, supportTickets, partners, commissions, agreementAcceptances, type InsertConversationWindow, type ConversationWindow } from "@shared/schema";
@@ -206,6 +209,17 @@ export interface IStorage {
   upsertAiUsage(userId: string, updates: Partial<AiUsage>): Promise<void>;
   incrementAiUsage(userId: string, field: 'messagesGenerated' | 'repliesSuggested' | 'leadsQualified' | 'automationsGenerated'): Promise<void>;
   upsertAiLeadScore(chatId: string, userId: string, data: Partial<AiLeadScore>): Promise<AiLeadScore>;
+  
+  // User Automation Templates methods
+  getUserAutomationTemplates(userId: string, filters?: { language?: string; category?: string; industry?: string; isActive?: boolean }): Promise<UserAutomationTemplate[]>;
+  getUserAutomationTemplate(id: string): Promise<UserAutomationTemplate | undefined>;
+  createUserAutomationTemplate(template: InsertUserAutomationTemplate): Promise<UserAutomationTemplate>;
+  updateUserAutomationTemplate(id: string, updates: Partial<UserAutomationTemplate>): Promise<UserAutomationTemplate | undefined>;
+  deleteUserAutomationTemplate(id: string): Promise<void>;
+  
+  // Template usage analytics methods
+  recordTemplateUsage(usage: InsertTemplateUsageAnalytics): Promise<TemplateUsageAnalytics>;
+  getTemplateUsageStats(userId: string, templateId?: string): Promise<{ sent: number; delivered: number; read: number; replied: number; aiResponses: number }>;
 }
 
 export class DbStorage implements IStorage {
@@ -1827,6 +1841,88 @@ export class DbStorage implements IStorage {
     }
     const result = await db.insert(aiLeadScores).values({ ...data, chatId, userId }).returning();
     return result[0];
+  }
+
+  // ============= User Automation Templates =============
+  
+  async getUserAutomationTemplates(
+    userId: string, 
+    filters?: { language?: string; category?: string; industry?: string; isActive?: boolean }
+  ): Promise<UserAutomationTemplate[]> {
+    const conditions = [eq(userAutomationTemplates.userId, userId)];
+    
+    if (filters?.language) {
+      conditions.push(eq(userAutomationTemplates.language, filters.language));
+    }
+    if (filters?.category) {
+      conditions.push(eq(userAutomationTemplates.category, filters.category));
+    }
+    if (filters?.industry) {
+      conditions.push(eq(userAutomationTemplates.industry, filters.industry));
+    }
+    if (filters?.isActive !== undefined) {
+      conditions.push(eq(userAutomationTemplates.isActive, filters.isActive));
+    }
+    
+    return db.select()
+      .from(userAutomationTemplates)
+      .where(and(...conditions))
+      .orderBy(desc(userAutomationTemplates.createdAt));
+  }
+
+  async getUserAutomationTemplate(id: string): Promise<UserAutomationTemplate | undefined> {
+    const result = await db.select()
+      .from(userAutomationTemplates)
+      .where(eq(userAutomationTemplates.id, id));
+    return result[0];
+  }
+
+  async createUserAutomationTemplate(template: InsertUserAutomationTemplate): Promise<UserAutomationTemplate> {
+    const result = await db.insert(userAutomationTemplates)
+      .values(template)
+      .returning();
+    return result[0];
+  }
+
+  async updateUserAutomationTemplate(id: string, updates: Partial<UserAutomationTemplate>): Promise<UserAutomationTemplate | undefined> {
+    const result = await db.update(userAutomationTemplates)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(userAutomationTemplates.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async deleteUserAutomationTemplate(id: string): Promise<void> {
+    await db.delete(userAutomationTemplates)
+      .where(eq(userAutomationTemplates.id, id));
+  }
+
+  // ============= Template Usage Analytics =============
+
+  async recordTemplateUsage(usage: InsertTemplateUsageAnalytics): Promise<TemplateUsageAnalytics> {
+    const result = await db.insert(templateUsageAnalytics)
+      .values(usage)
+      .returning();
+    return result[0];
+  }
+
+  async getTemplateUsageStats(userId: string, templateId?: string): Promise<{ sent: number; delivered: number; read: number; replied: number; aiResponses: number }> {
+    const conditions = [eq(templateUsageAnalytics.userId, userId)];
+    if (templateId) {
+      conditions.push(eq(templateUsageAnalytics.templateId, templateId));
+    }
+    
+    const result = await db.select({
+      sent: sql<number>`COUNT(*)::int`,
+      delivered: sql<number>`COUNT(CASE WHEN ${templateUsageAnalytics.deliveredAt} IS NOT NULL THEN 1 END)::int`,
+      read: sql<number>`COUNT(CASE WHEN ${templateUsageAnalytics.readAt} IS NOT NULL THEN 1 END)::int`,
+      replied: sql<number>`COUNT(CASE WHEN ${templateUsageAnalytics.repliedAt} IS NOT NULL THEN 1 END)::int`,
+      aiResponses: sql<number>`COUNT(CASE WHEN ${templateUsageAnalytics.aiResponseGenerated} = true THEN 1 END)::int`,
+    })
+    .from(templateUsageAnalytics)
+    .where(and(...conditions));
+    
+    return result[0] || { sent: 0, delivered: 0, read: 0, replied: 0, aiResponses: 0 };
   }
 }
 

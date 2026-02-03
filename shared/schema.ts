@@ -396,6 +396,57 @@ export const insertIntegrationSchema = createInsertSchema(integrations).omit({
   lastSyncAt: true,
 });
 
+// User Automation Templates (saved from preset library)
+export const userAutomationTemplates = pgTable("user_automation_templates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  presetTemplateId: text("preset_template_id").notNull(), // Reference to preset template ID
+  name: text("name").notNull(),
+  language: text("language").notNull().default("en"), // en, he, es
+  category: text("category").notNull(), // abandoned_cart, lead_nurture, service_reminder, promotions
+  industry: text("industry").notNull().default("general"), // general, clinic, real_estate, travel, ecommerce
+  messages: jsonb("messages").notNull().default(sql`'[]'::jsonb`), // Array of message objects with delay, content, type
+  placeholders: jsonb("placeholders").notNull().default(sql`'[]'::jsonb`), // Placeholder names
+  placeholderDefaults: jsonb("placeholder_defaults").default(sql`'{}'::jsonb`), // Default values for placeholders
+  aiEnabled: boolean("ai_enabled").default(false),
+  isActive: boolean("is_active").default(false),
+  triggerType: text("trigger_type").default("manual"), // manual, new_chat, tag_applied, webhook
+  triggerConfig: jsonb("trigger_config").default(sql`'{}'::jsonb`),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Template usage analytics
+export const templateUsageAnalytics = pgTable("template_usage_analytics", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  templateId: varchar("template_id").notNull().references(() => userAutomationTemplates.id, { onDelete: "cascade" }),
+  chatId: varchar("chat_id").references(() => chats.id, { onDelete: "set null" }),
+  messageIndex: integer("message_index").notNull().default(0), // Which message in sequence
+  status: text("status").default("sent"), // sent, delivered, read, replied, failed
+  sentAt: timestamp("sent_at").defaultNow(),
+  deliveredAt: timestamp("delivered_at"),
+  readAt: timestamp("read_at"),
+  repliedAt: timestamp("replied_at"),
+  aiResponseGenerated: boolean("ai_response_generated").default(false),
+});
+
+export const insertUserAutomationTemplateSchema = createInsertSchema(userAutomationTemplates).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertTemplateUsageAnalyticsSchema = createInsertSchema(templateUsageAnalytics).omit({
+  id: true,
+  sentAt: true,
+});
+
+export type InsertUserAutomationTemplate = z.infer<typeof insertUserAutomationTemplateSchema>;
+export type UserAutomationTemplate = typeof userAutomationTemplates.$inferSelect;
+export type InsertTemplateUsageAnalytics = z.infer<typeof insertTemplateUsageAnalyticsSchema>;
+export type TemplateUsageAnalytics = typeof templateUsageAnalytics.$inferSelect;
+
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 export type InsertChat = z.infer<typeof insertChatSchema>;

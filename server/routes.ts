@@ -2930,6 +2930,184 @@ export async function registerRoutes(
     }
   });
 
+  // ============= User Automation Templates (Saved from Presets) =============
+  
+  // Get user's saved automation templates
+  app.get("/api/user-automation-templates", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      
+      const { language, category, industry, isActive } = req.query;
+      const templates = await storage.getUserAutomationTemplates(req.user.id, {
+        language: language as string,
+        category: category as string,
+        industry: industry as string,
+        isActive: isActive === "true" ? true : isActive === "false" ? false : undefined,
+      });
+      
+      res.json(templates);
+    } catch (error) {
+      console.error("Error fetching user automation templates:", error);
+      res.status(500).json({ error: "Failed to fetch templates" });
+    }
+  });
+  
+  // Get single user automation template
+  app.get("/api/user-automation-templates/:id", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      
+      const template = await storage.getUserAutomationTemplate(req.params.id);
+      if (!template || template.userId !== req.user.id) {
+        return res.status(404).json({ error: "Template not found" });
+      }
+      
+      res.json(template);
+    } catch (error) {
+      console.error("Error fetching template:", error);
+      res.status(500).json({ error: "Failed to fetch template" });
+    }
+  });
+  
+  // Save a preset template to user's library
+  app.post("/api/user-automation-templates", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      
+      const { presetTemplateId, name, language, category, industry, messages, placeholders, placeholderDefaults, aiEnabled, triggerType, triggerConfig } = req.body;
+      
+      if (!presetTemplateId || !name || !category) {
+        return res.status(400).json({ error: "Missing required fields: presetTemplateId, name, category" });
+      }
+      
+      const template = await storage.createUserAutomationTemplate({
+        userId: req.user.id,
+        presetTemplateId,
+        name,
+        language: language || "en",
+        category,
+        industry: industry || "general",
+        messages: messages || [],
+        placeholders: placeholders || [],
+        placeholderDefaults: placeholderDefaults || {},
+        aiEnabled: aiEnabled || false,
+        triggerType: triggerType || "manual",
+        triggerConfig: triggerConfig || {},
+      });
+      
+      res.json(template);
+    } catch (error) {
+      console.error("Error creating user automation template:", error);
+      res.status(500).json({ error: "Failed to create template" });
+    }
+  });
+  
+  // Update user automation template
+  app.patch("/api/user-automation-templates/:id", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      
+      const existing = await storage.getUserAutomationTemplate(req.params.id);
+      if (!existing || existing.userId !== req.user.id) {
+        return res.status(404).json({ error: "Template not found" });
+      }
+      
+      const updated = await storage.updateUserAutomationTemplate(req.params.id, req.body);
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating template:", error);
+      res.status(500).json({ error: "Failed to update template" });
+    }
+  });
+  
+  // Delete user automation template
+  app.delete("/api/user-automation-templates/:id", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      
+      const existing = await storage.getUserAutomationTemplate(req.params.id);
+      if (!existing || existing.userId !== req.user.id) {
+        return res.status(404).json({ error: "Template not found" });
+      }
+      
+      await storage.deleteUserAutomationTemplate(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting template:", error);
+      res.status(500).json({ error: "Failed to delete template" });
+    }
+  });
+  
+  // Activate/Launch automation template
+  app.post("/api/user-automation-templates/:id/activate", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      
+      const existing = await storage.getUserAutomationTemplate(req.params.id);
+      if (!existing || existing.userId !== req.user.id) {
+        return res.status(404).json({ error: "Template not found" });
+      }
+      
+      const updated = await storage.updateUserAutomationTemplate(req.params.id, { isActive: true });
+      res.json({ success: true, template: updated });
+    } catch (error) {
+      console.error("Error activating template:", error);
+      res.status(500).json({ error: "Failed to activate template" });
+    }
+  });
+  
+  // Deactivate automation template
+  app.post("/api/user-automation-templates/:id/deactivate", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      
+      const existing = await storage.getUserAutomationTemplate(req.params.id);
+      if (!existing || existing.userId !== req.user.id) {
+        return res.status(404).json({ error: "Template not found" });
+      }
+      
+      const updated = await storage.updateUserAutomationTemplate(req.params.id, { isActive: false });
+      res.json({ success: true, template: updated });
+    } catch (error) {
+      console.error("Error deactivating template:", error);
+      res.status(500).json({ error: "Failed to deactivate template" });
+    }
+  });
+  
+  // Get template usage analytics
+  app.get("/api/user-automation-templates/:id/analytics", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      
+      const existing = await storage.getUserAutomationTemplate(req.params.id);
+      if (!existing || existing.userId !== req.user.id) {
+        return res.status(404).json({ error: "Template not found" });
+      }
+      
+      const stats = await storage.getTemplateUsageStats(req.user.id, req.params.id);
+      res.json(stats);
+    } catch (error) {
+      console.error("Error fetching template analytics:", error);
+      res.status(500).json({ error: "Failed to fetch analytics" });
+    }
+  });
+
   // ============= Template Messaging Endpoints (Pro Feature) =============
 
   // Get user's message templates

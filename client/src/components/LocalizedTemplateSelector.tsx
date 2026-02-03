@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -7,6 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Switch } from "@/components/ui/switch";
+import { useToast } from "@/hooks/use-toast";
 import {
   Select,
   SelectContent,
@@ -36,9 +38,12 @@ import {
   Clock,
   Send,
   Eye,
-  Check
+  Check,
+  Rocket,
+  Loader2
 } from "lucide-react";
 import { getCurrentLanguage, type SupportedLanguage } from "@/lib/i18n";
+import { apiRequest } from "@/lib/queryClient";
 
 interface AutomationTemplate {
   id: string;
@@ -87,6 +92,8 @@ export function LocalizedTemplateSelector({
   showPreviewOnly = false 
 }: LocalizedTemplateSelectorProps) {
   const { t, i18n } = useTranslation();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
   const currentLang = (getCurrentLanguage() || "en") as "en" | "he" | "es";
   
   const [selectedLanguage, setSelectedLanguage] = useState<string>(currentLang);
@@ -95,6 +102,7 @@ export function LocalizedTemplateSelector({
   const [previewTemplate, setPreviewTemplate] = useState<AutomationTemplate | null>(null);
   const [placeholderValues, setPlaceholderValues] = useState<Record<string, string>>({});
   const [previewDialogOpen, setPreviewDialogOpen] = useState(false);
+  const [launchImmediately, setLaunchImmediately] = useState(false);
 
   const { data, isLoading } = useQuery<TemplateResponse>({
     queryKey: ["/api/automation-templates", selectedLanguage, selectedCategory, selectedIndustry],
@@ -111,6 +119,43 @@ export function LocalizedTemplateSelector({
       return res.json();
     }
   });
+  
+  const saveTemplateMutation = useMutation({
+    mutationFn: async (data: { template: AutomationTemplate; placeholderDefaults: Record<string, string>; activate: boolean }) => {
+      const response = await apiRequest("POST", "/api/user-automation-templates", {
+        presetTemplateId: data.template.id,
+        name: data.template.name,
+        language: data.template.language,
+        category: data.template.category,
+        industry: data.template.industry,
+        messages: data.template.messages,
+        placeholders: data.template.placeholders,
+        placeholderDefaults: data.placeholderDefaults,
+        aiEnabled: data.template.aiEnabled,
+        isActive: data.activate,
+      });
+      return response;
+    },
+    onSuccess: (savedTemplate, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/user-automation-templates"] });
+      toast({
+        title: variables.activate 
+          ? t("templates.launchedSuccess", "Automation Launched!") 
+          : t("templates.savedSuccess", "Template Saved!"),
+        description: variables.activate 
+          ? t("templates.launchedDesc", "Your automation flow is now active.")
+          : t("templates.savedDesc", "Template saved to your library."),
+      });
+      setPreviewDialogOpen(false);
+    },
+    onError: (error) => {
+      toast({
+        title: t("errors.somethingWentWrong", "Something went wrong"),
+        description: t("templates.saveFailed", "Failed to save template"),
+        variant: "destructive",
+      });
+    }
+  });
 
   const templates = data?.templates || [];
   const categoryLabels = data?.categoryLabels?.[selectedLanguage as keyof typeof data.categoryLabels] || {};
@@ -123,14 +168,21 @@ export function LocalizedTemplateSelector({
       initialValues[p] = `{{${p}}}`;
     });
     setPlaceholderValues(initialValues);
+    setLaunchImmediately(false);
     setPreviewDialogOpen(true);
   };
 
   const handleUseTemplate = () => {
-    if (previewTemplate && onSelectTemplate) {
-      onSelectTemplate(previewTemplate, placeholderValues);
+    if (previewTemplate) {
+      if (onSelectTemplate) {
+        onSelectTemplate(previewTemplate, placeholderValues);
+      }
+      saveTemplateMutation.mutate({
+        template: previewTemplate,
+        placeholderDefaults: placeholderValues,
+        activate: launchImmediately,
+      });
     }
-    setPreviewDialogOpen(false);
   };
 
   const replacePlaceholders = (content: string): string => {
@@ -367,19 +419,42 @@ export function LocalizedTemplateSelector({
             </Tabs>
           </ScrollArea>
           
-          <DialogFooter className="flex gap-2">
-            <Button variant="outline" onClick={() => setPreviewDialogOpen(false)}>
-              {t("common.close", "Close")}
-            </Button>
+          <DialogFooter className="flex flex-col sm:flex-row gap-4 items-center">
             {!showPreviewOnly && (
-              <Button 
-                className="bg-emerald-600 hover:bg-emerald-700" 
-                onClick={handleUseTemplate}
-              >
-                <Send className="h-4 w-4 mr-2" />
-                {t("templates.useTemplate", "Use This Template")}
-              </Button>
+              <div className="flex items-center gap-2 mr-auto">
+                <Switch 
+                  id="launch-immediately" 
+                  checked={launchImmediately}
+                  onCheckedChange={setLaunchImmediately}
+                />
+                <Label htmlFor="launch-immediately" className="text-sm cursor-pointer">
+                  {t("templates.launchImmediately", "Launch immediately")}
+                </Label>
+              </div>
             )}
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setPreviewDialogOpen(false)}>
+                {t("common.close", "Close")}
+              </Button>
+              {!showPreviewOnly && (
+                <Button 
+                  className={launchImmediately ? "bg-purple-600 hover:bg-purple-700" : "bg-emerald-600 hover:bg-emerald-700"}
+                  onClick={handleUseTemplate}
+                  disabled={saveTemplateMutation.isPending}
+                >
+                  {saveTemplateMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : launchImmediately ? (
+                    <Rocket className="h-4 w-4 mr-2" />
+                  ) : (
+                    <Send className="h-4 w-4 mr-2" />
+                  )}
+                  {launchImmediately 
+                    ? t("templates.launchNow", "Launch Now")
+                    : t("templates.saveTemplate", "Save Template")}
+                </Button>
+              )}
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>
