@@ -436,7 +436,7 @@ export async function sendSalespersonWelcomeEmail(
               </ul>
               
               <h3 style="color: #1e293b; font-size: 16px; margin-bottom: 8px;">How Conversions Are Tracked</h3>
-              <p style="color: #475569; font-size: 15px;">When a prospect you've demoed signs up and becomes a paying customer, our system automatically matches their information to your demo booking. We have a <strong>365-day tracking window</strong>, so you'll get credit for conversions that happen within 12 months of your demo. You'll earn <strong>30% commission</strong> on their subscription plan for 12 months - it's that simple!</p>
+              <p style="color: #475569; font-size: 15px;">When a prospect you've demoed signs up and becomes a paying customer, our system automatically matches their information to your demo booking. We have a <strong>180-day tracking window</strong>, so you'll get credit for conversions that happen within 6 months of your demo. You'll earn <strong>30% commission</strong> on their subscription plan for 12 months - it's that simple!</p>
               
               <div style="background: #f0f9ff; border: 1px solid #bae6fd; padding: 16px; border-radius: 8px; margin: 24px 0;">
                 <p style="margin: 0; color: #0369a1; font-size: 14px;"><strong>Pro Tip:</strong> Take some time to explore WhaChatCRM and its features. The more familiar you are with the product, the better you can showcase its value to prospects. Visit our <a href="${APP_URL}/help" style="color: #059669; text-decoration: none; font-weight: 500;">Help Center</a> for detailed guides on all features.</p>
