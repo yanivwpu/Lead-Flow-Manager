@@ -291,9 +291,9 @@ export function LocalizedTemplateSelector({
           <p className="text-gray-500">{t("templates.noTemplates", "No templates found for the selected filters")}</p>
         </Card>
       ) : (
-        <div className={`overflow-y-auto max-h-[60vh] md:max-h-[500px] pr-2 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pb-4 ${isRTL ? 'text-right' : ''}`} dir={isRTL ? 'rtl' : 'ltr'}>
+        <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pb-4 ${isRTL ? 'text-right' : ''}`} dir={isRTL ? 'rtl' : 'ltr'}>
             {templates.map((template) => (
-            <Card key={template.id} className="hover:shadow-md transition-shadow">
+            <Card key={template.id} className="hover:shadow-md transition-shadow touch-manipulation">
               <CardHeader className="pb-2">
                 <div className={`flex items-start justify-between ${isRTL ? 'flex-row-reverse' : ''}`}>
                   <div className={`flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
