@@ -556,6 +556,7 @@ ul, ol {
 [dir="rtl"] .text-center,
 [dir="rtl"] section .text-center,
 [dir="rtl"] section header,
+[dir="rtl"] .pricing-header,
 [dir="rtl"] .max-w-6xl.mx-auto.text-center,
 [dir="rtl"] .max-w-5xl.mx-auto.text-center,
 [dir="rtl"] .max-w-3xl.mx-auto.text-center,
@@ -563,9 +564,13 @@ ul, ol {
   text-align: center !important;
 }
 
+[dir="rtl"] .text-center h1,
 [dir="rtl"] .text-center h2,
 [dir="rtl"] .text-center p,
 [dir="rtl"] .text-center h3,
+[dir="rtl"] .pricing-header h1,
+[dir="rtl"] .pricing-header p,
+[dir="rtl"] .max-w-6xl.mx-auto.text-center h1,
 [dir="rtl"] .max-w-6xl.mx-auto.text-center h2,
 [dir="rtl"] .max-w-6xl.mx-auto.text-center p,
 [dir="rtl"] .max-w-5xl.mx-auto.text-center h2,
