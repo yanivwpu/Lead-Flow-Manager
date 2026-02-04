@@ -215,9 +215,9 @@ export function LocalizedTemplateSelector({
   };
 
   return (
-    <div className="flex flex-col h-full gap-4" dir={isRTL ? 'rtl' : 'ltr'}>
+    <div className="flex flex-col gap-4" dir={isRTL ? 'rtl' : 'ltr'}>
       {/* Filters - stay fixed at top */}
-      <div className={`shrink-0 grid grid-cols-1 sm:grid-cols-3 gap-3 bg-white py-2 ${isRTL ? 'text-right' : ''}`}>
+      <div className={`grid grid-cols-1 sm:grid-cols-3 gap-3 bg-white py-2 ${isRTL ? 'text-right' : ''}`}>
         <div>
           <Label className={`text-sm font-medium mb-2 block ${isRTL ? 'text-right' : ''}`}>
             {t("language.select", "Language")}
@@ -273,10 +273,10 @@ export function LocalizedTemplateSelector({
         </div>
       </div>
 
-      {/* Templates grid - this scrolls independently */}
+      {/* Templates grid - scrollable container with explicit height */}
       {isLoading ? (
-        <div className="flex-1 min-h-0 overflow-y-auto">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-1">
+        <div className="max-h-[50vh] md:max-h-[400px] overflow-y-auto">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {[1, 2, 3, 4, 5, 6].map(i => (
               <Card key={i} className="animate-pulse">
                 <CardHeader>
@@ -291,14 +291,12 @@ export function LocalizedTemplateSelector({
           </div>
         </div>
       ) : templates.length === 0 ? (
-        <div className="flex-1 min-h-0 overflow-y-auto">
-          <Card className="p-8 text-center">
-            <p className="text-gray-500">{t("templates.noTemplates", "No templates found for the selected filters")}</p>
-          </Card>
-        </div>
+        <Card className="p-8 text-center">
+          <p className="text-gray-500">{t("templates.noTemplates", "No templates found for the selected filters")}</p>
+        </Card>
       ) : (
-        <div className="flex-1 min-h-0 overflow-y-auto pr-1">
-          <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-1 pb-20 ${isRTL ? 'text-right' : ''}`} dir={isRTL ? 'rtl' : 'ltr'}>
+        <div className="max-h-[50vh] md:max-h-[400px] overflow-y-auto pr-1" style={{ WebkitOverflowScrolling: 'touch' }}>
+          <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pb-4 ${isRTL ? 'text-right' : ''}`} dir={isRTL ? 'rtl' : 'ltr'}>
             {templates.map((template) => (
             <Card key={template.id} className="hover:shadow-md transition-shadow touch-manipulation">
               <CardHeader className="pb-2">
@@ -364,7 +362,7 @@ export function LocalizedTemplateSelector({
               </CardContent>
             </Card>
           ))}
-          </div>
+        </div>
         </div>
       )}
 

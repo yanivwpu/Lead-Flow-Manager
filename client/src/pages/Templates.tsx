@@ -267,7 +267,7 @@ export function Templates() {
                   Pre-built message sequences for different industries. Available in English, Spanish, and Hebrew.
                 </CardDescription>
               </CardHeader>
-              <CardContent className="px-3 md:px-6 flex flex-col h-[60vh] md:h-[500px] min-h-0">
+              <CardContent className="px-3 md:px-6">
                 <LocalizedTemplateSelector 
                   showPreviewOnly={false}
                   onSelectTemplate={(template, values) => {
