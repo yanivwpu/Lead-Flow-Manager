@@ -1,0 +1,41 @@
+CRITICAL FIX: Restore scrolling and visibility of Preset Automation Templates on mobile AND desktop.
+
+The templates are invisible on mobile (and possibly desktop broken) because content is being clipped, and previous flex/h-full changes collapsed the layout.
+
+REVERT ALL RECENT CHANGES TO FLEX LAYOUTS — go back to the original structure to restore desktop first.
+
+In Templates.tsx:
+
+1. Change the Card for Preset Automation Templates back to:
+   <Card>  // NO className at all, or if needed only "border shadow-sm" or similar — COMPLETELY REMOVE "overflow-hidden"
+
+2. CardContent back to original:
+   <CardContent className="px-3 md:px-6">
+     // Remove any "flex flex-col h-full min-h-0 pb-20" or similar additions
+
+3. Ensure the TabsContent has no restricting classes — keep "space-y-4" or original.
+
+In LocalizedTemplateSelector.tsx:
+
+1. Revert the outer div to EXACT original:
+   <div className="space-y-4" dir={isRTL ? 'rtl' : 'ltr'}>
+
+2. Remove ANY added flex-col, h-full, flex-1, min-h-0, overflow-y-auto wrappers around filters or grid.
+
+3. Keep the grid as:
+   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pb-4">
+
+The page already has correct scrolling from the main container:
+<div className="flex-1 overflow-auto pb-20 md:pb-6">
+
+Removing overflow-hidden from the Card will allow content to expand naturally, making the whole page scrollable (including on mobile with pb-20 for bottom nav).
+
+This is the safest fix — it restores the original working desktop layout while fixing mobile clipping/visibility.
+
+After applying:
+- On mobile: templates should appear in single column, page scrolls to show all, last cards not hidden under nav.
+- On desktop: multi-column grid visible, normal height.
+
+Test immediately on small screen. If templates still not visible, it means data is not loading — add a temporary <div className="p-8 text-center text-gray-500">No templates found or loading...</div> after the grid for debugging.
+
+Do this now and reply with "Fixed" when done.
