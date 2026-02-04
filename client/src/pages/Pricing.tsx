@@ -11,77 +11,71 @@ import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { getDirection } from "@/lib/i18n";
 
+const PLAN_FEATURE_KEYS = {
+  free: [
+    "unifiedInbox",
+    "whatsappWebchat",
+    "oneUser",
+    "activeConversations50",
+    "autoRouting",
+    "tagsNotes",
+    "tasksReminders",
+    "smartPrioritization",
+    "awayMessages",
+    "exportConversations",
+    "communitySupport",
+  ],
+  starter: [
+    "everythingFree",
+    "allChannels",
+    "tiktokIntake",
+    "threeUsers",
+    "activeConversations500",
+    "chatbotBuilder",
+    "autoReply",
+    "smartFallback",
+    "csvImport",
+    "notifications",
+    "webhooks3",
+    "aiAssistBasic",
+    "aiBrainAddon",
+  ],
+  pro: [
+    "everythingStarter",
+    "fiveNumbers",
+    "unlimitedTeam",
+    "activeConversations2000",
+    "dripSequences",
+    "workflowAutomation",
+    "templateMessaging",
+    "webhooks10",
+    "prioritySupport",
+    "aiAssistEnhanced",
+    "aiBrainAddon",
+  ],
+};
+
 const PLANS = [
   {
     id: "free",
     name: "Free",
     badge: "Forever Free",
     price: 0,
-    description: "Try unified inbox with real workflows",
-    cta: "Start Free",
     popular: false,
-    features: [
-      "Unified inbox (all channels)",
-      "WhatsApp + Web Chat",
-      "1 user",
-      "50 active conversations / month",
-      "Auto channel routing",
-      "Tags & internal notes",
-      "Tasks & reminders",
-      "Smart task prioritization (AI Recommended)",
-      "Away messages (business hours)",
-      "Export conversations (CSV)",
-      "Community support",
-    ],
-    note: "No credit card required",
   },
   {
     id: "starter",
     name: "Starter",
     badge: null,
     price: 19,
-    description: "For small businesses & solo teams",
-    cta: "Start Starter",
     popular: true,
-    features: [
-      "Everything in Free, plus:",
-      "All channels: WhatsApp, SMS, Telegram, Instagram, Facebook, Web Chat",
-      "TikTok lead intake",
-      "Up to 3 team members",
-      "500 active conversations / month",
-      "Visual chatbot builder",
-      "Auto-reply messages",
-      "Smart fallback routing",
-      "CSV import contacts",
-      "Email & push notifications",
-      "3 webhook integrations",
-      "AI Assist included (basic reply suggestions & sentiment detection – up to 50/month)",
-      "Full AI Brain add-on available (+$29/mo)",
-    ],
-    note: "Best for multi-channel sales & support",
   },
   {
     id: "pro",
     name: "Pro",
     badge: null,
     price: 49,
-    description: "For growing teams handling high volume",
-    cta: "Upgrade to Pro",
     popular: false,
-    features: [
-      "Everything in Starter, plus:",
-      "Up to 5 WhatsApp Business numbers",
-      "Unlimited team members",
-      "2,000 active conversations / month",
-      "Drip sequences & campaigns",
-      "Workflow automation",
-      "Template messaging & retargeting",
-      "10 webhook + native integrations",
-      "Priority support",
-      "Enhanced AI Assist included (higher limits – up to 200/month)",
-      "Full AI Brain add-on available (+$29/mo)",
-    ],
-    note: "Built for serious multi-channel operations",
   },
 ];
 
@@ -232,21 +226,19 @@ export function Pricing() {
                     <span className="text-4xl font-bold text-gray-900">${plan.price}</span>
                     {plan.price > 0 && <span className="text-gray-500">{t('pricing.perMonth')}</span>}
                   </div>
-                  <p className="text-sm text-gray-600">{t(`pricing.plans.${plan.id}.description`, plan.description)}</p>
+                  <p className="text-sm text-gray-600">{t(`pricing.plans.${plan.id}.description`)}</p>
                 </div>
 
                 <ul className="space-y-3 flex-1 mb-4">
-                  {plan.features.map((feature, i) => (
+                  {PLAN_FEATURE_KEYS[plan.id as keyof typeof PLAN_FEATURE_KEYS].map((featureKey, i) => (
                     <li key={i} className={`flex items-start gap-2 text-sm ${isRTL ? 'flex-row-reverse text-right' : ''}`}>
                       <Check className="h-4 w-4 text-brand-green shrink-0 mt-0.5" />
-                      <span className="text-gray-700">{feature}</span>
+                      <span className="text-gray-700">{t(`pricing.features.${featureKey}`)}</span>
                     </li>
                   ))}
                 </ul>
 
-                {plan.note && (
-                  <p className="text-xs text-gray-500 mb-4 italic">{t(`pricing.plans.${plan.id}.note`, plan.note)}</p>
-                )}
+                <p className="text-xs text-gray-500 mb-4 italic">{t(`pricing.plans.${plan.id}.note`)}</p>
 
                 <Button
                   className={`w-full ${
@@ -265,7 +257,7 @@ export function Pricing() {
                   ) : isCurrentPlan ? (
                     t('pricing.currentPlan')
                   ) : (
-                    t(`pricing.plans.${plan.id}.cta`, plan.cta)
+                    t(`pricing.plans.${plan.id}.cta`)
                   )}
                 </Button>
               </div>
