@@ -214,7 +214,7 @@ export function Pricing() {
                 )}
 
                 {plan.id === 'starter' && (
-                  <span className={`absolute top-4 px-4 py-2 rounded-lg text-sm font-medium text-white bg-black z-10 ${
+                  <span className={`absolute top-4 px-4 py-2 rounded-lg text-sm font-medium text-white bg-black z-10 whitespace-nowrap ${
                     isRTL ? '-left-4 rounded-r-lg' : '-right-4 rounded-l-lg'
                   }`}>
                     {t('pricing.perMonth')}
