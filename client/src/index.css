@@ -581,3 +581,28 @@ ul, ol {
 [dir="rtl"] h2 {
   unicode-bidi: plaintext;
 }
+
+/* Precise Homepage Hero RTL Fix */
+[dir="rtl"] .hero-container,
+[dir="rtl"] .hero-section,
+[dir="rtl"] .homepage-hero {
+  text-align: start !important;
+}
+
+[dir="rtl"] .hero-headline,
+[dir="rtl"] .hero-title {
+  text-align: center !important;
+}
+
+[dir="rtl"] .hero-subtext,
+[dir="rtl"] .hero-description,
+[dir="rtl"] p {
+  text-align: start !important;
+  margin-inline: auto;
+  max-width: 800px;
+}
+
+[dir="rtl"] .homepage p,
+[dir="rtl"] .section-text {
+  text-align: start !important;
+}
