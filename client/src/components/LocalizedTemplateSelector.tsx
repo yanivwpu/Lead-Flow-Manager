@@ -328,7 +328,7 @@ export function LocalizedTemplateSelector({
                   )}
                 </div>
                 
-                <div className={`flex flex-col xs:flex-row gap-2 ${isRTL ? 'xs:flex-row-reverse' : ''}`}>
+                <div className={`flex flex-row gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
                   <Button 
                     variant="outline" 
                     size="sm" 
