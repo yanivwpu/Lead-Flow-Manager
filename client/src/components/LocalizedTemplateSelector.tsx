@@ -273,31 +273,28 @@ export function LocalizedTemplateSelector({
         </div>
       </div>
 
-      {/* Templates grid - scrollable container with explicit height */}
+      {/* Templates grid - no max-height, let page scroll naturally */}
       {isLoading ? (
-        <div className="max-h-[50vh] md:max-h-[400px] overflow-y-auto">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {[1, 2, 3, 4, 5, 6].map(i => (
-              <Card key={i} className="animate-pulse">
-                <CardHeader>
-                  <div className="h-4 bg-gray-200 rounded w-3/4"></div>
-                  <div className="h-3 bg-gray-200 rounded w-1/2 mt-2"></div>
-                </CardHeader>
-                <CardContent>
-                  <div className="h-20 bg-gray-200 rounded"></div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {[1, 2, 3, 4, 5, 6].map(i => (
+            <Card key={i} className="animate-pulse">
+              <CardHeader>
+                <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+                <div className="h-3 bg-gray-200 rounded w-1/2 mt-2"></div>
+              </CardHeader>
+              <CardContent>
+                <div className="h-20 bg-gray-200 rounded"></div>
+              </CardContent>
+            </Card>
+          ))}
         </div>
       ) : templates.length === 0 ? (
         <Card className="p-8 text-center">
           <p className="text-gray-500">{t("templates.noTemplates", "No templates found for the selected filters")}</p>
         </Card>
       ) : (
-        <div className="max-h-[50vh] md:max-h-[400px] overflow-y-auto pr-1" style={{ WebkitOverflowScrolling: 'touch' }}>
-          <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pb-4 ${isRTL ? 'text-right' : ''}`} dir={isRTL ? 'rtl' : 'ltr'}>
-            {templates.map((template) => (
+        <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pb-20 ${isRTL ? 'text-right' : ''}`} dir={isRTL ? 'rtl' : 'ltr'}>
+          {templates.map((template) => (
             <Card key={template.id} className="hover:shadow-md transition-shadow touch-manipulation">
               <CardHeader className="pb-2">
                 <div className={`flex items-start justify-between ${isRTL ? 'flex-row-reverse' : ''}`}>
@@ -362,7 +359,6 @@ export function LocalizedTemplateSelector({
               </CardContent>
             </Card>
           ))}
-        </div>
         </div>
       )}
 
