@@ -6,7 +6,8 @@ import { Welcome } from "@/pages/Welcome";
 import { AuthPage } from "@/pages/Auth";
 import { AuthProvider, useAuth } from "@/lib/auth-context";
 import { Loader2 } from "lucide-react";
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 
 const AppLayout = lazy(() => import("@/pages/AppLayout").then(m => ({ default: m.AppLayout })));
 const ResetPassword = lazy(() => import("@/pages/ResetPassword").then(m => ({ default: m.ResetPassword })));
@@ -90,6 +91,22 @@ const PageLoader = () => (
 );
 
 function App() {
+  const { i18n } = useTranslation();
+
+  useEffect(() => {
+    const rtlLanguages = ['he', 'ar', 'fa', 'ur'];
+    const isRtl = rtlLanguages.includes(i18n.language);
+
+    document.documentElement.dir = isRtl ? 'rtl' : 'ltr';
+    document.documentElement.lang = i18n.language;
+
+    if (isRtl) {
+      document.body.classList.add('rtl');
+    } else {
+      document.body.classList.remove('rtl');
+    }
+  }, [i18n.language]);
+
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
