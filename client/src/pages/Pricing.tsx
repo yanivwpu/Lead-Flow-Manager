@@ -189,7 +189,7 @@ export function Pricing() {
           </div>
         </div>
 
-        <div className="grid md:grid-cols-3 gap-6">
+        <div className={`grid md:grid-cols-3 gap-6 ${isRTL ? 'md:grid-flow-col-dense' : ''}`}>
           {PLANS.map((plan) => {
             const isCurrentPlan = plan.id === currentPlan;
             const currentPlanIndex = getPlanIndex(currentPlan);
@@ -200,20 +200,28 @@ export function Pricing() {
             return (
               <div
                 key={plan.id}
-                className={`bg-white rounded-2xl border-2 p-6 flex flex-col ${
+                className={`bg-white rounded-2xl border-2 p-6 flex flex-col relative ${
                   plan.popular
-                    ? "border-brand-green shadow-lg relative"
+                    ? "border-brand-green shadow-lg"
                     : "border-gray-200"
                 }`}
                 data-testid={`plan-card-${plan.id}`}
               >
                 {plan.popular && (
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-brand-green text-white text-xs font-semibold px-3 py-1 rounded-full">
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-brand-green text-white text-xs font-semibold px-3 py-1 rounded-full z-10">
                     {t('pricing.mostPopular')}
                   </div>
                 )}
 
-                <div className="mb-6">
+                {plan.id === 'starter' && (
+                  <span className={`absolute top-4 px-4 py-2 rounded-lg text-sm font-medium text-white bg-black z-10 ${
+                    isRTL ? '-left-4 rounded-r-lg' : '-right-4 rounded-l-lg'
+                  }`}>
+                    {t('pricing.perMonth')}
+                  </span>
+                )}
+
+                <div className="mb-6 mt-4">
                   <div className={`flex items-center gap-2 mb-1 ${isRTL ? 'flex-row-reverse justify-end' : ''}`}>
                     <h3 className="text-xl font-bold text-gray-900">{t(`pricing.plans.${plan.id}.name`, plan.name)}</h3>
                     {plan.badge && (
@@ -266,7 +274,7 @@ export function Pricing() {
         </div>
 
         {/* Full AI Brain Add-on */}
-        <div className="mt-12 max-w-2xl mx-auto">
+        <div className="mt-16 md:mt-20 max-w-2xl mx-auto">
           <div className="bg-gradient-to-br from-purple-50 to-blue-50 border-2 border-purple-200 rounded-2xl p-6 sm:p-8 relative overflow-hidden">
             <div className={`absolute top-4 ${isRTL ? 'left-4' : 'right-4'} bg-purple-600 text-white text-xs font-bold px-3 py-1 rounded-full`}>
               {t('pricing.aiBrain.addon')}
