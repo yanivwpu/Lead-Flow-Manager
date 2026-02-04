@@ -219,9 +219,9 @@ export function Templates() {
   }
 
   return (
-    <div className="flex-1 overflow-auto pb-20 md:pb-6">
-      <div className="p-4 md:p-6 max-w-5xl mx-auto w-full">
-        <div className="flex items-center justify-between mb-6">
+    <div className="flex-1 h-full bg-white flex flex-col overflow-hidden">
+      <div className="px-4 md:px-6 py-4 md:py-6 border-b border-gray-100 flex-shrink-0">
+        <div className="flex items-center justify-between max-w-5xl mx-auto">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Message Templates</h1>
             <p className="text-gray-500 mt-1">Send pre-approved templates for smart retargeting</p>
@@ -236,8 +236,11 @@ export function Templates() {
             Sync Templates
           </Button>
         </div>
+      </div>
 
-        <Tabs defaultValue="presets" className="space-y-6">
+      <div className="flex-1 overflow-y-auto px-4 md:px-6 py-4 pb-24 md:pb-6">
+        <div className="max-w-5xl mx-auto">
+          <Tabs defaultValue="presets" className="space-y-6">
           <TabsList className="grid w-full grid-cols-3 h-auto p-1">
             <TabsTrigger value="presets" data-testid="tab-presets" className="text-xs sm:text-sm py-2 px-1 sm:px-3 flex flex-col sm:flex-row items-center gap-1">
               <Sparkles className="h-4 w-4 sm:mr-1" />
@@ -514,6 +517,7 @@ export function Templates() {
             )}
           </DialogContent>
         </Dialog>
+        </div>
       </div>
     </div>
   );
