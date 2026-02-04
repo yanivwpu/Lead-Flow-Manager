@@ -237,10 +237,10 @@ export function Pricing() {
                   <p className="text-sm text-gray-600">{t(`pricing.plans.${plan.id}.description`)}</p>
                 </div>
 
-                <ul className="space-y-3 flex-1 mb-4">
+                <ul className={`space-y-4 mt-6 ${isRTL ? 'text-right' : 'text-left'}`}>
                   {PLAN_FEATURE_KEYS[plan.id as keyof typeof PLAN_FEATURE_KEYS].map((featureKey, i) => (
-                    <li key={i} className={`flex items-start gap-2 text-sm ${isRTL ? 'flex-row-reverse text-right' : ''}`}>
-                      <Check className="h-4 w-4 text-brand-green shrink-0 mt-0.5" />
+                    <li key={i} className="flex items-center gap-4">
+                      <Check className="h-5 w-5 text-brand-green shrink-0" />
                       <span className="text-gray-700">{t(`pricing.features.${featureKey}`)}</span>
                     </li>
                   ))}
