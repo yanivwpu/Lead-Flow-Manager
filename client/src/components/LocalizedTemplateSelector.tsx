@@ -365,7 +365,7 @@ export function LocalizedTemplateSelector({
       )}
 
       <Dialog open={previewDialogOpen} onOpenChange={setPreviewDialogOpen}>
-        <DialogContent className="w-[95vw] max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">
+        <DialogContent className="w-[95vw] max-w-2xl max-h-[75vh] sm:max-h-[85vh] overflow-hidden flex flex-col pb-safe">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               {previewTemplate && getCategoryIcon(previewTemplate.category)}
