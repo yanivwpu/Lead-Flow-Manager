@@ -10,6 +10,8 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { useAuth } from "@/lib/auth-context";
+import { useTranslation } from "react-i18next";
+import { getDirection } from "@/lib/i18n";
 
 const mainNavItems = [
   { icon: Inbox, label: "Inbox", href: "/app/inbox", testId: "mobile-nav-inbox" },
@@ -33,9 +35,11 @@ export function MobileNav() {
   const [location] = useLocation();
   const [open, setOpen] = useState(false);
   const { logout, user } = useAuth();
+  const { t } = useTranslation();
+  const isRTL = getDirection() === 'rtl';
 
   return (
-    <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-50 safe-area-bottom">
+    <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-50 safe-area-bottom" dir={isRTL ? 'rtl' : 'ltr'}>
       <nav className="flex items-center justify-around h-14 px-2">
         {mainNavItems.slice(0, 3).map((item) => {
           const isActive = location.startsWith(item.href);

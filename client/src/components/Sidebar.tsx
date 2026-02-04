@@ -5,12 +5,14 @@ import { useAuth } from "@/lib/auth-context";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { LanguageSelector } from "./LanguageSelector";
+import { getDirection } from "@/lib/i18n";
 
 export function Sidebar() {
   const [location] = useLocation();
   const { logout, user } = useAuth();
   const { t } = useTranslation();
   const [collapsedCategories, setCollapsedCategories] = useState<string[]>([]);
+  const isRTL = getDirection() === 'rtl';
 
   const toggleCategory = (category: string) => {
     setCollapsedCategories(prev => 
@@ -56,12 +58,12 @@ export function Sidebar() {
   ];
 
   return (
-    <div className="hidden md:flex h-full w-[200px] bg-white border-r flex-col items-stretch py-3 z-20">
-      <div className="mb-4 px-6 flex items-center justify-start">
+    <div className={cn("hidden md:flex h-full w-[200px] bg-white flex-col items-stretch py-3 z-20", isRTL ? "border-l" : "border-r")}>
+      <div className={cn("mb-4 px-6 flex items-center", isRTL ? "flex-row-reverse justify-end" : "justify-start")}>
         <div className="h-8 w-8 rounded-full bg-brand-green flex items-center justify-center text-white font-bold shrink-0">
           C
         </div>
-        <span className="ml-3 font-display font-bold text-xl text-brand-teal">
+        <span className={cn("font-display font-bold text-xl text-brand-teal", isRTL ? "mr-3" : "ml-3")}>
           ChatCRM
         </span>
       </div>
@@ -88,7 +90,8 @@ export function Sidebar() {
                         <a
                           data-testid={item.testId}
                           className={cn(
-                            "flex items-center p-2 rounded-lg transition-colors group relative w-full justify-start",
+                            "flex items-center p-2 rounded-lg transition-colors group relative w-full",
+                            isRTL ? "flex-row-reverse justify-end" : "justify-start",
                             isActive
                               ? "bg-emerald-50 text-brand-green"
                               : "text-gray-500 hover:bg-gray-50 hover:text-gray-900"
@@ -100,7 +103,7 @@ export function Sidebar() {
                               isActive ? "text-brand-green" : "text-gray-400 group-hover:text-gray-600"
                             )}
                           />
-                          <span className="ml-3 font-medium text-sm">{item.label}</span>
+                          <span className={cn("font-medium text-sm", isRTL ? "mr-3" : "ml-3")}>{item.label}</span>
                         </a>
                       </Link>
                     );
@@ -125,10 +128,10 @@ export function Sidebar() {
         <button 
           onClick={logout}
           data-testid="button-logout"
-          className="w-full flex items-center p-2 rounded-lg text-gray-500 hover:bg-red-50 hover:text-red-600 transition-colors justify-start"
+          className={cn("w-full flex items-center p-2 rounded-lg text-gray-500 hover:bg-red-50 hover:text-red-600 transition-colors", isRTL ? "flex-row-reverse justify-end" : "justify-start")}
         >
           <LogOut className="h-5 w-5 shrink-0" />
-          <span className="ml-3 font-medium">{t('common.logout', 'Logout')}</span>
+          <span className={cn("font-medium", isRTL ? "mr-3" : "ml-3")}>{t('common.logout', 'Logout')}</span>
         </button>
       </div>
     </div>

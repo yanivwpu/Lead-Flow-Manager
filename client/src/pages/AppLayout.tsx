@@ -10,6 +10,7 @@ import { TrialBanner } from "@/components/TrialBanner";
 import { OnboardingTour } from "@/components/OnboardingTour";
 import { SubscriptionProvider, useSubscription } from "@/lib/subscription-context";
 import { Loader2 } from "lucide-react";
+import { getDirection } from "@/lib/i18n";
 
 const Search = lazy(() => import("./Search").then(m => ({ default: m.Search })));
 const Settings = lazy(() => import("./Settings").then(m => ({ default: m.Settings })));
@@ -51,8 +52,10 @@ function AppContent() {
   const showTrialBanner = !isLoading && subscription?.limits?.isInTrial && 
     subscription.limits.trialDaysRemaining > 0;
 
+  const isRTL = getDirection() === 'rtl';
+
   return (
-    <div className="fixed inset-0 flex bg-gray-50 overflow-hidden">
+    <div className={`fixed inset-0 flex bg-gray-50 overflow-hidden ${isRTL ? 'flex-row-reverse' : ''}`} dir={isRTL ? 'rtl' : 'ltr'}>
       <Sidebar />
       <main className="flex-1 flex flex-col min-w-0 bg-white md:mx-3 md:rounded-2xl md:shadow-sm border-gray-200 md:border overflow-hidden relative pb-14 md:pb-0">
         {showTrialBanner && subscription?.limits && (
