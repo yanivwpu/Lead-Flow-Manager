@@ -1,0 +1,36 @@
+Improve the scrolling behavior in the "Preset Automation Templates" section on the Message Templates page.
+
+The previous fix made the cards visible (no longer cut off), which is good, but now the container expands to fit all content, pushing the page down if there are many cards. This means there is no independent scrollbar for the templates grid — the whole page scrolls instead, and the filters/language selectors move out of view when scrolling.
+
+We want the filters row (Language, Category, Industry selects) to stay fixed at the top of the section, and only the template cards grid to scroll independently when there are many cards.
+
+Find the component rendering the Preset Automation Templates section.
+
+Wrap the entire section in a flex column that takes full available height:
+
+<div className="flex flex-col h-full gap-6">  {/* or whatever gap fits */}
+
+  {/* Filters row - this stays fixed */}
+  <div className="flex flex-col sm:flex-row gap-4 shrink-0">
+    {/* the Select Language, Category, Industry row */}
+  </div>
+
+  {/* Cards grid - this grows and scrolls internally */}
+  <div className="flex-1 overflow-y-auto min-h-0 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pr-2">
+    {/* all the individual template cards */}
+  </div>
+
+</div>
+
+Key classes:
+- Outer div: flex flex-col h-full (ensure the parent/main content area allows this by having height set, e.g., if the main page layout uses flex, the content area should be flex-1)
+- Filters: shrink-0 so they don't shrink
+- Grid container: flex-1 min-h-0 overflow-y-auto — this is crucial for internal scrolling in flex layouts
+- Keep existing responsive grid: grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6
+- pr-2 for scrollbar padding
+
+If the overall page layout (sidebar + main) already uses flex and h-screen or similar, this will make the templates grid fill the remaining space below the page header and filters, with its own scrollbar when content overflows.
+
+Test with many templates (or temporarily add dummy cards): the filters should stay visible, and only the cards area should scroll. On small content (like current 3 cards), no scrollbar appears, but space is used properly.
+
+This is the standard Tailwind pattern for scrollable content areas in dashboards.
