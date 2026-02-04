@@ -106,6 +106,17 @@
       }
     </script>
 
+    <!-- Persist RTL direction on initial load (before React hydrates) -->
+    <script>
+      (function() {
+        var storedLang = localStorage.getItem('i18nextLng') || 'en';
+        var rtlLanguages = ['he', 'ar', 'fa', 'ur'];
+        var isRtl = rtlLanguages.includes(storedLang);
+        document.documentElement.lang = storedLang;
+        document.documentElement.dir = isRtl ? 'rtl' : 'ltr';
+      })();
+    </script>
+
     <!-- Main JS - Vite will inject the correct script in production -->
     <script type="module" src="/src/main.tsx"></script>
   </head>
