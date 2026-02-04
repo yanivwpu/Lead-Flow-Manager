@@ -213,13 +213,6 @@ export function Pricing() {
                   </div>
                 )}
 
-                {plan.id === 'starter' && (
-                  <span className={`absolute top-4 px-4 py-2 rounded-lg text-sm font-medium text-white bg-black z-10 whitespace-nowrap ${
-                    isRTL ? '-left-4 rounded-r-lg' : '-right-4 rounded-l-lg'
-                  }`}>
-                    {t('pricing.perMonth')}
-                  </span>
-                )}
 
                 <div className="mb-6 mt-4">
                   <div className={`flex items-center gap-2 mb-1 ${isRTL ? 'flex-row-reverse justify-end' : ''}`}>
