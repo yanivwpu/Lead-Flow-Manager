@@ -475,14 +475,14 @@ export function Pricing() {
 
         {/* Important Notice */}
         <div className="mt-12 bg-amber-50 border border-amber-200 rounded-xl p-6">
-          <div className={`flex items-start gap-3 ${isRTL ? 'flex-row-reverse' : ''}`}>
+          <div className="flex items-start gap-3">
             <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
-            <div className={isRTL ? 'text-right' : ''}>
+            <div>
               <h3 className="font-semibold text-amber-900 mb-2">{t('pricing.notices.messageCosts.title')}</h3>
               <p className="text-amber-800 text-sm mb-3">
                 {t('pricing.notices.messageCosts.description')}
               </p>
-              <ul className={`text-sm text-amber-800 space-y-1 mb-3 ${isRTL ? 'text-right' : ''}`}>
+              <ul dir={isRTL ? 'rtl' : 'ltr'} className={`text-sm text-amber-800 space-y-1 mb-3 list-disc ${isRTL ? 'pr-6' : 'pl-6'}`}>
                 <li><strong>{t('pricing.notices.messageCosts.noCharge')}</strong></li>
                 <li>{t('pricing.notices.messageCosts.planControls')}</li>
                 <li>{t('pricing.notices.messageCosts.transparent')}</li>
@@ -490,7 +490,7 @@ export function Pricing() {
               <p className="text-sm text-amber-800 mb-2">
                 <strong>{t('pricing.notices.messageCosts.viewCosts')}</strong>
               </p>
-              <ul className="text-sm text-amber-800 space-y-1">
+              <ul dir={isRTL ? 'rtl' : 'ltr'} className={`text-sm text-amber-800 space-y-1 list-disc ${isRTL ? 'pr-6' : 'pl-6'}`}>
                 <li>
                   <a 
                     href="https://www.twilio.com/en-us/whatsapp/pricing" 
@@ -518,14 +518,14 @@ export function Pricing() {
 
         {/* What is an Active Conversation */}
         <div className="mt-8 bg-blue-50 border border-blue-200 rounded-xl p-6">
-          <div className={`flex items-start gap-3 ${isRTL ? 'flex-row-reverse' : ''}`}>
+          <div className="flex items-start gap-3">
             <HelpCircle className="h-5 w-5 text-blue-600 shrink-0 mt-0.5" />
-            <div className={isRTL ? 'text-right' : ''}>
+            <div>
               <h3 className="font-semibold text-blue-900 mb-2">{t('pricing.notices.activeConversation.title')}</h3>
               <p className="text-blue-800 text-sm mb-2">{t('pricing.notices.activeConversation.description')}</p>
-              <ul className={`text-sm text-blue-800 space-y-1 ${isRTL ? 'list-none' : 'list-disc list-inside'}`}>
-                <li className={isRTL ? 'before:content-["•"] before:ml-2' : ''}>{t('pricing.notices.activeConversation.point1')}</li>
-                <li className={isRTL ? 'before:content-["•"] before:ml-2' : ''}>{t('pricing.notices.activeConversation.point2')}</li>
+              <ul dir={isRTL ? 'rtl' : 'ltr'} className={`text-sm text-blue-800 space-y-1 list-disc ${isRTL ? 'pr-6' : 'pl-6'}`}>
+                <li>{t('pricing.notices.activeConversation.point1')}</li>
+                <li>{t('pricing.notices.activeConversation.point2')}</li>
               </ul>
             </div>
           </div>
@@ -533,26 +533,26 @@ export function Pricing() {
 
         {/* What Happens at Limit */}
         <div className="mt-8 bg-gray-100 border border-gray-200 rounded-xl p-6">
-          <h3 className={`font-semibold text-gray-900 mb-3 ${isRTL ? 'text-right' : ''}`}>{t('pricing.notices.reachLimit.title')}</h3>
+          <h3 className="font-semibold text-gray-900 mb-3">{t('pricing.notices.reachLimit.title')}</h3>
           <div className="grid sm:grid-cols-2 gap-4 text-sm">
-            <div className={`flex items-start gap-2 ${isRTL ? 'flex-row-reverse text-right' : ''}`}>
+            <div className="flex items-start gap-2">
               <Check className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
               <span className="text-gray-700">{t('pricing.notices.reachLimit.inboundContinue')}</span>
             </div>
-            <div className={`flex items-start gap-2 ${isRTL ? 'flex-row-reverse text-right' : ''}`}>
+            <div className="flex items-start gap-2">
               <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
               <span className="text-gray-700">{t('pricing.notices.reachLimit.outboundPaused')}</span>
             </div>
-            <div className={`flex items-start gap-2 ${isRTL ? 'flex-row-reverse text-right' : ''}`}>
+            <div className="flex items-start gap-2">
               <Check className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
               <span className="text-gray-700">{t('pricing.notices.reachLimit.upgradePrompt')}</span>
             </div>
-            <div className={`flex items-start gap-2 ${isRTL ? 'flex-row-reverse text-right' : ''}`}>
+            <div className="flex items-start gap-2">
               <Zap className="h-4 w-4 text-brand-green shrink-0 mt-0.5" />
               <span className="text-gray-700">{t('pricing.notices.reachLimit.instantUpgrade')}</span>
             </div>
           </div>
-          <p className={`text-sm text-gray-600 mt-4 font-medium ${isRTL ? 'text-right' : ''}`}>{t('pricing.notices.reachLimit.inControl')}</p>
+          <p className="text-sm text-gray-600 mt-4 font-medium">{t('pricing.notices.reachLimit.inControl')}</p>
         </div>
 
         {/* FAQ Section */}
