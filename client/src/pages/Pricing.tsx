@@ -141,7 +141,7 @@ export function Pricing() {
   };
 
   return (
-    <div className={`min-h-screen bg-gray-50 py-12 px-4 ${isRTL ? 'rtl' : 'ltr'}`} dir={isRTL ? 'rtl' : 'ltr'}>
+    <div dir={isRTL ? 'rtl' : 'ltr'} className={`min-h-screen bg-gray-50 py-12 px-4 ${isRTL ? 'text-right' : 'text-left'}`}>
       <Helmet>
         <title>WhachatCRM Pricing: Free Plan Forever, Starter from $19/mo | WhatsApp CRM</title>
         <meta name="description" content="Simple, transparent pricing for WhatsApp CRM. Free plan forever, Starter at $19/mo, Pro at $49/mo. No hidden fees, no message markup. Start free today." />
