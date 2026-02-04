@@ -237,7 +237,10 @@ export function Pricing() {
                   <p className="text-sm text-gray-600">{t(`pricing.plans.${plan.id}.description`)}</p>
                 </div>
 
-                <ul className={`space-y-4 mt-6 ${isRTL ? 'text-right' : 'text-left'}`}>
+                <ul 
+                  dir={isRTL ? 'rtl' : 'ltr'} 
+                  className={`space-y-4 mt-6 ${isRTL ? 'text-right' : 'text-left'}`}
+                >
                   {PLAN_FEATURE_KEYS[plan.id as keyof typeof PLAN_FEATURE_KEYS].map((featureKey, i) => (
                     <li key={i} className="flex items-center gap-4">
                       <Check className="h-5 w-5 text-brand-green shrink-0" />
