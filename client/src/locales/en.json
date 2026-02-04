@@ -441,18 +441,69 @@
     },
     "faq": {
       "title": "Frequently Asked Questions",
-      "q1": "What is an 'active conversation'?",
-      "a1": "An active conversation is any chat that had at least one message (inbound or outbound) in the last 30 days. Archived or closed conversations don't count.",
-      "q2": "Do you charge per WhatsApp message?",
-      "a2": "No. We never markup Meta's WhatsApp API pricing. You pay Meta's rates directly. Our subscription only covers the CRM features.",
-      "q3": "Can I upgrade or downgrade later?",
-      "a3": "Yes! Upgrade anytime, prorated. Downgrade at the end of your billing cycle. No penalties or hidden fees.",
-      "q4": "Is there a free trial for paid plans?",
-      "a4": "Yes. Every paid plan comes with a 14-day free trial. No credit card required to start.",
-      "q5": "How does AI Assist work?",
-      "a5": "AI Assist uses GPT-4 to analyze incoming messages and suggest contextual replies. On Free, you get read-only previews. On Starter+, you get real suggestions up to your plan limit.",
-      "q6": "What's the difference between AI Assist and AI Brain?",
-      "a6": "AI Assist is included in paid plans with usage limits. AI Brain is an add-on that removes limits and adds advanced features like lead scoring and automation building."
+      "payTwice": {
+        "q": "Do I pay twice — once to my provider and once to WhachatCRM?",
+        "a1": "No. You're paying for two different things:",
+        "provider": "Your provider (Twilio or Meta):",
+        "providerDesc": "WhatsApp message delivery",
+        "whachat": "WhachatCRM:",
+        "whachatDesc": "Managing conversations, teams, notes, tasks & workflows",
+        "analogy": "Think of it like email: Gmail sends emails, CRM manages customers."
+      },
+      "noMessageFees": {
+        "q": "Why don't your plans include WhatsApp message fees?",
+        "a1": "Because WhatsApp pricing varies by:",
+        "country": "Country",
+        "type": "Message type",
+        "volume": "Volume",
+        "a2": "By letting customers connect their own provider:",
+        "noHidden": "You avoid hidden fees",
+        "transparent": "Costs stay transparent",
+        "control": "You keep full control",
+        "standard": "This is the standard SaaS model."
+      },
+      "channels": {
+        "q": "Which channels do you support?",
+        "a1": "WhachatCRM supports 7 messaging channels in one unified inbox:",
+        "whatsapp": "Via Twilio or Meta Business API (your choice)",
+        "sms": "Via Twilio",
+        "telegram": "Connect your bot",
+        "instagram": "Via Meta integration",
+        "facebook": "Via Meta integration",
+        "webchat": "Embeddable widget for your website",
+        "tiktok": "Lead intake only (capture leads from TikTok ads)",
+        "note": "Note: SMS requires Twilio. Meta only supports WhatsApp, not SMS."
+      },
+      "providers": {
+        "q": "Which WhatsApp providers do you support?",
+        "a1": "WhachatCRM supports two official WhatsApp Business API providers:",
+        "twilio": "Fast approval, reliable infrastructure, includes SMS support",
+        "meta": "Direct integration, green checkmark verification, WhatsApp-only",
+        "a2": "Choose the provider that best fits your needs — we guide you step-by-step during setup.",
+        "note": "The WhatsApp Business mobile app is not supported."
+      },
+      "twilioVsMeta": {
+        "q": "Twilio vs Meta — which should I choose?",
+        "chooseTwilio": "Choose Twilio if:",
+        "twilio1": "You want the easiest setup experience",
+        "twilio2": "You need Twilio's other communication tools (SMS, voice)",
+        "twilio3": "You prefer an intermediary handling WhatsApp compliance",
+        "chooseMeta": "Choose Meta WhatsApp Business API if:",
+        "meta1": "You already have a WhatsApp Business account",
+        "meta2": "You want the official green checkmark verification",
+        "meta3": "You need lower messaging costs for high-volume usage",
+        "meta4": "You want access to native WhatsApp features (catalogs, interactive buttons)"
+      },
+      "otherProviders": {
+        "q": "Do you support other WhatsApp providers?",
+        "a1": "Currently we support Twilio and Meta WhatsApp Business API.",
+        "a2": "We're collecting demand for additional providers like:",
+        "contact": "Contact us to help shape future integrations."
+      },
+      "upgradeDowngrade": {
+        "q": "Can I upgrade or downgrade anytime?",
+        "a": "Yes. Plans are monthly, flexible, and update instantly."
+      }
     }
   }
 }
