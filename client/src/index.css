@@ -516,6 +516,16 @@ ul, ol {
   text-align: center !important;
 }
 
+/* Fix comparison list alignment and flex direction */
+[dir="rtl"] section div.grid.md\:grid-cols-2.gap-8.md\:gap-12 > div {
+  text-align: right !important;
+}
+
+[dir="rtl"] section div.grid.md\:grid-cols-2.gap-8.md\:gap-12 .flex.items-start.gap-3 {
+  flex-direction: row;
+  text-align: right !important;
+}
+
 [dir="rtl"] .comparison-list,
 [dir="rtl"] .feature-comparison {
   padding-inline-end: 1.5rem;
