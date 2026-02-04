@@ -215,9 +215,9 @@ export function LocalizedTemplateSelector({
   };
 
   return (
-    <div className="flex flex-col gap-4" dir={isRTL ? 'rtl' : 'ltr'}>
+    <div className="flex flex-col h-full min-h-0" dir={isRTL ? 'rtl' : 'ltr'}>
       {/* Filters - stay fixed at top */}
-      <div className={`grid grid-cols-1 sm:grid-cols-3 gap-3 bg-white py-2 ${isRTL ? 'text-right' : ''}`}>
+      <div className={`shrink-0 grid grid-cols-1 sm:grid-cols-3 gap-3 bg-white py-2 mb-2 ${isRTL ? 'text-right' : ''}`}>
         <div>
           <Label className={`text-sm font-medium mb-2 block ${isRTL ? 'text-right' : ''}`}>
             {t("language.select", "Language")}
@@ -273,92 +273,98 @@ export function LocalizedTemplateSelector({
         </div>
       </div>
 
-      {/* Templates grid - no max-height, let page scroll naturally */}
+      {/* Templates grid - scrollable area */}
       {isLoading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {[1, 2, 3, 4, 5, 6].map(i => (
-            <Card key={i} className="animate-pulse">
-              <CardHeader>
-                <div className="h-4 bg-gray-200 rounded w-3/4"></div>
-                <div className="h-3 bg-gray-200 rounded w-1/2 mt-2"></div>
-              </CardHeader>
-              <CardContent>
-                <div className="h-20 bg-gray-200 rounded"></div>
-              </CardContent>
-            </Card>
-          ))}
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {[1, 2, 3, 4, 5, 6].map(i => (
+              <Card key={i} className="animate-pulse">
+                <CardHeader>
+                  <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+                  <div className="h-3 bg-gray-200 rounded w-1/2 mt-2"></div>
+                </CardHeader>
+                <CardContent>
+                  <div className="h-20 bg-gray-200 rounded"></div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
         </div>
       ) : templates.length === 0 ? (
-        <Card className="p-8 text-center">
-          <p className="text-gray-500">{t("templates.noTemplates", "No templates found for the selected filters")}</p>
-        </Card>
+        <div className="flex-1 flex items-center justify-center">
+          <Card className="p-8 text-center w-full max-w-sm">
+            <p className="text-gray-500">{t("templates.noTemplates", "No templates found for the selected filters")}</p>
+          </Card>
+        </div>
       ) : (
-        <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pb-20 ${isRTL ? 'text-right' : ''}`} dir={isRTL ? 'rtl' : 'ltr'}>
-          {templates.map((template) => (
-            <Card key={template.id} className="hover:shadow-md transition-shadow touch-manipulation">
-              <CardHeader className="pb-2">
-                <div className={`flex items-start justify-between ${isRTL ? 'flex-row-reverse' : ''}`}>
-                  <div className={`flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
-                    {getCategoryIcon(template.category)}
-                    <CardTitle className="text-base">{template.name}</CardTitle>
+        <div className="flex-1 min-h-0 overflow-y-auto pr-1" style={{ WebkitOverflowScrolling: 'touch' }}>
+          <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pb-10 ${isRTL ? 'text-right' : ''}`} dir={isRTL ? 'rtl' : 'ltr'}>
+            {templates.map((template) => (
+              <Card key={template.id} className="hover:shadow-md transition-shadow touch-manipulation">
+                <CardHeader className="pb-2">
+                  <div className={`flex items-start justify-between ${isRTL ? 'flex-row-reverse' : ''}`}>
+                    <div className={`flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                      {getCategoryIcon(template.category)}
+                      <CardTitle className="text-base">{template.name}</CardTitle>
+                    </div>
+                    <Badge variant="outline" className="text-xs">
+                      {template.language.toUpperCase()}
+                    </Badge>
                   </div>
-                  <Badge variant="outline" className="text-xs">
-                    {template.language.toUpperCase()}
-                  </Badge>
-                </div>
-                <CardDescription className="text-sm">
-                  {template.description}
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className={`flex flex-wrap gap-1 mb-3 ${isRTL ? 'flex-row-reverse justify-end' : ''}`}>
-                  <Badge className={getMessageTypeColor(template.category)} variant="secondary">
-                    <span className={`flex items-center gap-1 ${isRTL ? 'flex-row-reverse' : ''}`}>
-                      {getIndustryIcon(template.industry)}
-                      <span>{industryLabels[template.industry] || template.industry}</span>
-                    </span>
-                  </Badge>
-                  <Badge variant="outline" className="text-xs">
-                    <span className={`flex items-center gap-1 ${isRTL ? 'flex-row-reverse' : ''}`}>
-                      <Clock className="h-3 w-3" />
-                      <span>{template.messages.length} {t("templates.messages", "messages")}</span>
-                    </span>
-                  </Badge>
-                  {template.aiEnabled && (
-                    <Badge className="bg-purple-100 text-purple-700">AI</Badge>
-                  )}
-                </div>
-                
-                <div className={`flex flex-row gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    className="flex-1 min-h-[44px]"
-                    onClick={() => handlePreview(template)}
-                    data-testid={`template-preview-${template.id}`}
-                  >
-                    <span className={`flex items-center justify-center gap-1 ${isRTL ? 'flex-row-reverse' : ''}`}>
-                      <Eye className="h-4 w-4" />
-                      <span>{t("common.view", "Preview")}</span>
-                    </span>
-                  </Button>
-                  {!showPreviewOnly && (
+                  <CardDescription className="text-sm">
+                    {template.description}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className={`flex flex-wrap gap-1 mb-3 ${isRTL ? 'flex-row-reverse justify-end' : ''}`}>
+                    <Badge className={getMessageTypeColor(template.category)} variant="secondary">
+                      <span className={`flex items-center gap-1 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                        {getIndustryIcon(template.industry)}
+                        <span>{industryLabels[template.industry] || template.industry}</span>
+                      </span>
+                    </Badge>
+                    <Badge variant="outline" className="text-xs">
+                      <span className={`flex items-center gap-1 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                        <Clock className="h-3 w-3" />
+                        <span>{template.messages.length} {t("templates.messages", "messages")}</span>
+                      </span>
+                    </Badge>
+                    {template.aiEnabled && (
+                      <Badge className="bg-purple-100 text-purple-700">AI</Badge>
+                    )}
+                  </div>
+                  
+                  <div className={`flex flex-row gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
                     <Button 
+                      variant="outline" 
                       size="sm" 
-                      className="flex-1 min-h-[44px] bg-emerald-600 hover:bg-emerald-700"
+                      className="flex-1 min-h-[44px]"
                       onClick={() => handlePreview(template)}
-                      data-testid={`template-use-${template.id}`}
+                      data-testid={`template-preview-${template.id}`}
                     >
                       <span className={`flex items-center justify-center gap-1 ${isRTL ? 'flex-row-reverse' : ''}`}>
-                        <Check className="h-4 w-4" />
-                        <span>{t("common.select", "Use")}</span>
+                        <Eye className="h-4 w-4" />
+                        <span>{t("common.view", "Preview")}</span>
                       </span>
                     </Button>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                    {!showPreviewOnly && (
+                      <Button 
+                        size="sm" 
+                        className="flex-1 min-h-[44px] bg-emerald-600 hover:bg-emerald-700"
+                        onClick={() => handlePreview(template)}
+                        data-testid={`template-use-${template.id}`}
+                      >
+                        <span className={`flex items-center justify-center gap-1 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                          <Check className="h-4 w-4" />
+                          <span>{t("common.select", "Use")}</span>
+                        </span>
+                      </Button>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
         </div>
       )}
 
