@@ -603,45 +603,22 @@ ul, ol {
   line-height: 1.2;
 }
 
-/* Prevent orphan words on their own line */
+/* Prevent orphan words on their own line and handle bidi text wrapping */
 [dir="rtl"] .auth-title span,
 [dir="rtl"] h1 span,
 [dir="rtl"] h2 span {
-  white-space: nowrap;
+  white-space: normal; /* Changed from nowrap to allow folding */
 }
 
-/* Responsive font size for RTL - smaller on mobile */
-@media (max-width: 768px) {
-  [dir="rtl"] .auth-title,
-  [dir="rtl"] h1,
-  [dir="rtl"] h2 {
-    font-size: 2.5rem !important;
-  }
-}
-
-@media (max-width: 480px) {
-  [dir="rtl"] .auth-title,
-  [dir="rtl"] h1,
-  [dir="rtl"] h2 {
-    font-size: 2rem !important;
-  }
-}
-
-/* Wider container on mobile for better wrapping */
-@media (max-width: 640px) {
-  .auth-card,
-  .login-container,
-  .auth-wrapper {
-    padding-inline: 1.5rem !important;
-    max-width: 95% !important;
-  }
-}
-
-/* Ensure mixed LTR/RTL text flows correctly */
 [dir="rtl"] .auth-title,
 [dir="rtl"] h1,
 [dir="rtl"] h2 {
+  overflow-wrap: break-word;
+  word-wrap: break-word;
+  hyphens: none;
+  line-height: 1.2;
   unicode-bidi: plaintext;
+  padding-inline: 1rem; /* Add padding to prevent touching edges */
 }
 
 /* Precise Homepage Hero RTL Fix */
