@@ -58,12 +58,12 @@ export function Sidebar() {
   ];
 
   return (
-    <div className={cn("hidden md:flex h-full w-[200px] bg-white flex-col items-stretch py-3 z-20", isRTL ? "border-l" : "border-r")}>
-      <div className={cn("mb-4 px-6 flex items-center", isRTL ? "flex-row-reverse justify-end" : "justify-start")}>
+    <div className={cn("hidden md:flex h-full w-[200px] bg-white flex-col items-stretch py-3 z-20", isRTL ? "border-is" : "border-ie")}>
+      <div className="mb-4 px-6 flex items-center">
         <div className="h-8 w-8 rounded-full bg-brand-green flex items-center justify-center text-white font-bold shrink-0">
           C
         </div>
-        <span className={cn("font-display font-bold text-xl text-brand-teal", isRTL ? "mr-3" : "ml-3")}>
+        <span className="font-display font-bold text-xl text-brand-teal ms-3">
           ChatCRM
         </span>
       </div>
@@ -75,7 +75,7 @@ export function Sidebar() {
             <div key={category.label} className="flex flex-col gap-1">
               <button 
                 onClick={() => toggleCategory(category.label)}
-                className="flex items-center justify-between px-2 py-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider hover:text-gray-600 transition-colors"
+                className="flex items-center justify-between px-2 py-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider hover:text-gray-600 transition-colors w-full"
               >
                 {category.label}
                 {isCollapsed ? <ChevronRight className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
@@ -91,7 +91,6 @@ export function Sidebar() {
                           data-testid={item.testId}
                           className={cn(
                             "flex items-center p-2 rounded-lg transition-colors group relative w-full",
-                            isRTL ? "flex-row-reverse justify-end" : "justify-start",
                             isActive
                               ? "bg-emerald-50 text-brand-green"
                               : "text-gray-500 hover:bg-gray-50 hover:text-gray-900"
@@ -103,7 +102,7 @@ export function Sidebar() {
                               isActive ? "text-brand-green" : "text-gray-400 group-hover:text-gray-600"
                             )}
                           />
-                          <span className={cn("font-medium text-sm", isRTL ? "mr-3" : "ml-3")}>{item.label}</span>
+                          <span className="font-medium text-sm ms-3">{item.label}</span>
                         </a>
                       </Link>
                     );
@@ -128,10 +127,10 @@ export function Sidebar() {
         <button 
           onClick={logout}
           data-testid="button-logout"
-          className={cn("w-full flex items-center p-2 rounded-lg text-gray-500 hover:bg-red-50 hover:text-red-600 transition-colors", isRTL ? "flex-row-reverse justify-end" : "justify-start")}
+          className="w-full flex items-center p-2 rounded-lg text-gray-500 hover:bg-red-50 hover:text-red-600 transition-colors"
         >
           <LogOut className="h-5 w-5 shrink-0" />
-          <span className={cn("font-medium", isRTL ? "mr-3" : "ml-3")}>{t('common.logout', 'Logout')}</span>
+          <span className="font-medium ms-3">{t('common.logout', 'Logout')}</span>
         </button>
       </div>
     </div>
