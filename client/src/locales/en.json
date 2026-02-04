@@ -413,6 +413,32 @@
       "feature3": "Conversation summarization",
       "feature4": "Real-time analytics & insights"
     },
+    "notices": {
+      "messageCosts": {
+        "title": "Important: WhatsApp Message Costs",
+        "description": "WhatsApp message delivery is billed separately by your provider (Twilio or Meta WhatsApp Business API).",
+        "noCharge": "WhachatCRM does not charge per message.",
+        "planControls": "Your plan only controls how many conversations you manage inside the CRM.",
+        "transparent": "This keeps pricing transparent and predictable.",
+        "viewCosts": "View message costs:",
+        "twilioLink": "Twilio WhatsApp Pricing",
+        "metaLink": "Meta WhatsApp Business API Pricing"
+      },
+      "activeConversation": {
+        "title": "What Is an \"Active Conversation\"?",
+        "description": "An active conversation is:",
+        "point1": "One unique WhatsApp contact within a rolling 30-day window",
+        "point2": "Unlimited messages can happen inside that conversation — the count stays the same"
+      },
+      "reachLimit": {
+        "title": "What Happens When I Reach My Limit?",
+        "inboundContinue": "Inbound messages continue normally",
+        "outboundPaused": "Outbound replies are paused",
+        "upgradePrompt": "You'll see a clear upgrade prompt",
+        "instantUpgrade": "Upgrade instantly — no downtime",
+        "inControl": "You're always in control."
+      }
+    },
     "faq": {
       "title": "Frequently Asked Questions",
       "q1": "What is an 'active conversation'?",

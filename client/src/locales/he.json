@@ -413,6 +413,32 @@
       "feature3": "סיכום שיחות",
       "feature4": "אנליטיקס ותובנות בזמן אמת"
     },
+    "notices": {
+      "messageCosts": {
+        "title": "חשוב: עלויות הודעות WhatsApp",
+        "description": "משלוח הודעות WhatsApp מחויב בנפרד על ידי הספק שלך (Twilio או Meta WhatsApp Business API).",
+        "noCharge": "WhachatCRM לא גובה על כל הודעה.",
+        "planControls": "התוכנית שלך שולטת רק במספר השיחות שאתה מנהל בתוך ה-CRM.",
+        "transparent": "זה שומר על תמחור שקוף וצפוי.",
+        "viewCosts": "צפה בעלויות הודעות:",
+        "twilioLink": "תמחור WhatsApp של Twilio",
+        "metaLink": "תמחור Meta WhatsApp Business API"
+      },
+      "activeConversation": {
+        "title": "מהי \"שיחה פעילה\"?",
+        "description": "שיחה פעילה היא:",
+        "point1": "איש קשר WhatsApp ייחודי אחד בתוך חלון מתגלגל של 30 יום",
+        "point2": "הודעות ללא הגבלה יכולות להתרחש בתוך אותה שיחה — הספירה נשארת אותו דבר"
+      },
+      "reachLimit": {
+        "title": "מה קורה כשאני מגיע למגבלה שלי?",
+        "inboundContinue": "הודעות נכנסות ממשיכות כרגיל",
+        "outboundPaused": "תשובות יוצאות מושהות",
+        "upgradePrompt": "תראה הודעת שדרוג ברורה",
+        "instantUpgrade": "שדרג מיידית — ללא השבתה",
+        "inControl": "אתה תמיד בשליטה."
+      }
+    },
     "faq": {
       "title": "שאלות נפוצות",
       "q1": "מהי 'שיחה פעילה'?",

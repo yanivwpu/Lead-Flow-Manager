@@ -464,20 +464,20 @@ export function Pricing() {
 
         {/* Important Notice */}
         <div className="mt-12 bg-amber-50 border border-amber-200 rounded-xl p-6">
-          <div className="flex items-start gap-3">
+          <div className={`flex items-start gap-3 ${isRTL ? 'flex-row-reverse' : ''}`}>
             <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
-            <div>
-              <h3 className="font-semibold text-amber-900 mb-2">Important: WhatsApp Message Costs</h3>
+            <div className={isRTL ? 'text-right' : ''}>
+              <h3 className="font-semibold text-amber-900 mb-2">{t('pricing.notices.messageCosts.title')}</h3>
               <p className="text-amber-800 text-sm mb-3">
-                WhatsApp message delivery is billed separately by your provider (Twilio or Meta WhatsApp Business API).
+                {t('pricing.notices.messageCosts.description')}
               </p>
-              <ul className="text-sm text-amber-800 space-y-1 mb-3">
-                <li><strong>WhachatCRM does not charge per message.</strong></li>
-                <li>Your plan only controls how many conversations you manage inside the CRM.</li>
-                <li>This keeps pricing transparent and predictable.</li>
+              <ul className={`text-sm text-amber-800 space-y-1 mb-3 ${isRTL ? 'text-right' : ''}`}>
+                <li><strong>{t('pricing.notices.messageCosts.noCharge')}</strong></li>
+                <li>{t('pricing.notices.messageCosts.planControls')}</li>
+                <li>{t('pricing.notices.messageCosts.transparent')}</li>
               </ul>
               <p className="text-sm text-amber-800 mb-2">
-                <strong>View message costs:</strong>
+                <strong>{t('pricing.notices.messageCosts.viewCosts')}</strong>
               </p>
               <ul className="text-sm text-amber-800 space-y-1">
                 <li>
@@ -487,7 +487,7 @@ export function Pricing() {
                     rel="noopener noreferrer"
                     className="text-amber-900 hover:text-amber-700 underline"
                   >
-                    Twilio WhatsApp Pricing
+                    {t('pricing.notices.messageCosts.twilioLink')}
                   </a>
                 </li>
                 <li>
@@ -497,7 +497,7 @@ export function Pricing() {
                     rel="noopener noreferrer"
                     className="text-amber-900 hover:text-amber-700 underline"
                   >
-                    Meta WhatsApp Business API Pricing
+                    {t('pricing.notices.messageCosts.metaLink')}
                   </a>
                 </li>
               </ul>
@@ -507,14 +507,14 @@ export function Pricing() {
 
         {/* What is an Active Conversation */}
         <div className="mt-8 bg-blue-50 border border-blue-200 rounded-xl p-6">
-          <div className="flex items-start gap-3">
+          <div className={`flex items-start gap-3 ${isRTL ? 'flex-row-reverse' : ''}`}>
             <HelpCircle className="h-5 w-5 text-blue-600 shrink-0 mt-0.5" />
-            <div>
-              <h3 className="font-semibold text-blue-900 mb-2">What Is an "Active Conversation"?</h3>
-              <p className="text-blue-800 text-sm mb-2">An active conversation is:</p>
-              <ul className="text-sm text-blue-800 space-y-1 list-disc list-inside">
-                <li>One unique WhatsApp contact within a rolling 30-day window</li>
-                <li>Unlimited messages can happen inside that conversation — the count stays the same</li>
+            <div className={isRTL ? 'text-right' : ''}>
+              <h3 className="font-semibold text-blue-900 mb-2">{t('pricing.notices.activeConversation.title')}</h3>
+              <p className="text-blue-800 text-sm mb-2">{t('pricing.notices.activeConversation.description')}</p>
+              <ul className={`text-sm text-blue-800 space-y-1 ${isRTL ? 'list-none' : 'list-disc list-inside'}`}>
+                <li className={isRTL ? 'before:content-["•"] before:ml-2' : ''}>{t('pricing.notices.activeConversation.point1')}</li>
+                <li className={isRTL ? 'before:content-["•"] before:ml-2' : ''}>{t('pricing.notices.activeConversation.point2')}</li>
               </ul>
             </div>
           </div>
@@ -522,26 +522,26 @@ export function Pricing() {
 
         {/* What Happens at Limit */}
         <div className="mt-8 bg-gray-100 border border-gray-200 rounded-xl p-6">
-          <h3 className="font-semibold text-gray-900 mb-3">What Happens When I Reach My Limit?</h3>
+          <h3 className={`font-semibold text-gray-900 mb-3 ${isRTL ? 'text-right' : ''}`}>{t('pricing.notices.reachLimit.title')}</h3>
           <div className="grid sm:grid-cols-2 gap-4 text-sm">
-            <div className="flex items-start gap-2">
+            <div className={`flex items-start gap-2 ${isRTL ? 'flex-row-reverse text-right' : ''}`}>
               <Check className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
-              <span className="text-gray-700">Inbound messages continue normally</span>
+              <span className="text-gray-700">{t('pricing.notices.reachLimit.inboundContinue')}</span>
             </div>
-            <div className="flex items-start gap-2">
+            <div className={`flex items-start gap-2 ${isRTL ? 'flex-row-reverse text-right' : ''}`}>
               <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
-              <span className="text-gray-700">Outbound replies are paused</span>
+              <span className="text-gray-700">{t('pricing.notices.reachLimit.outboundPaused')}</span>
             </div>
-            <div className="flex items-start gap-2">
+            <div className={`flex items-start gap-2 ${isRTL ? 'flex-row-reverse text-right' : ''}`}>
               <Check className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
-              <span className="text-gray-700">You'll see a clear upgrade prompt</span>
+              <span className="text-gray-700">{t('pricing.notices.reachLimit.upgradePrompt')}</span>
             </div>
-            <div className="flex items-start gap-2">
+            <div className={`flex items-start gap-2 ${isRTL ? 'flex-row-reverse text-right' : ''}`}>
               <Zap className="h-4 w-4 text-brand-green shrink-0 mt-0.5" />
-              <span className="text-gray-700">Upgrade instantly — no downtime</span>
+              <span className="text-gray-700">{t('pricing.notices.reachLimit.instantUpgrade')}</span>
             </div>
           </div>
-          <p className="text-sm text-gray-600 mt-4 font-medium">You're always in control.</p>
+          <p className={`text-sm text-gray-600 mt-4 font-medium ${isRTL ? 'text-right' : ''}`}>{t('pricing.notices.reachLimit.inControl')}</p>
         </div>
 
         {/* FAQ Section */}
@@ -549,117 +549,117 @@ export function Pricing() {
           <h2 className="text-2xl font-bold text-gray-900 mb-8 text-center">{t('pricing.faq.title')}</h2>
           <Accordion type="single" collapsible className="space-y-4">
             <AccordionItem value="pay-twice" className="bg-white border border-gray-200 rounded-xl px-6">
-              <AccordionTrigger className="text-left font-semibold text-gray-900 hover:no-underline" data-testid="faq-pay-twice">
-                Do I pay twice — once to my provider and once to WhachatCRM?
+              <AccordionTrigger className={`font-semibold text-gray-900 hover:no-underline ${isRTL ? 'text-right' : 'text-left'}`} data-testid="faq-pay-twice">
+                {t('pricing.faq.payTwice.q')}
               </AccordionTrigger>
-              <AccordionContent className="text-gray-600">
-                <p className="mb-3">No. You're paying for two different things:</p>
-                <ul className="list-disc list-inside space-y-1 mb-3">
-                  <li><strong>Your provider (Twilio or Meta):</strong> WhatsApp message delivery</li>
-                  <li><strong>WhachatCRM:</strong> Managing conversations, teams, notes, tasks & workflows</li>
+              <AccordionContent className={`text-gray-600 ${isRTL ? 'text-right' : ''}`}>
+                <p className="mb-3">{t('pricing.faq.payTwice.a1')}</p>
+                <ul className={`space-y-1 mb-3 ${isRTL ? 'list-none' : 'list-disc list-inside'}`}>
+                  <li>{isRTL ? '• ' : ''}<strong>{t('pricing.faq.payTwice.provider')}</strong> {t('pricing.faq.payTwice.providerDesc')}</li>
+                  <li>{isRTL ? '• ' : ''}<strong>{t('pricing.faq.payTwice.whachat')}</strong> {t('pricing.faq.payTwice.whachatDesc')}</li>
                 </ul>
-                <p>Think of it like email: Gmail sends emails, CRM manages customers.</p>
+                <p>{t('pricing.faq.payTwice.analogy')}</p>
               </AccordionContent>
             </AccordionItem>
 
             <AccordionItem value="no-message-fees" className="bg-white border border-gray-200 rounded-xl px-6">
-              <AccordionTrigger className="text-left font-semibold text-gray-900 hover:no-underline" data-testid="faq-no-message-fees">
-                Why don't your plans include WhatsApp message fees?
+              <AccordionTrigger className={`font-semibold text-gray-900 hover:no-underline ${isRTL ? 'text-right' : 'text-left'}`} data-testid="faq-no-message-fees">
+                {t('pricing.faq.noMessageFees.q')}
               </AccordionTrigger>
-              <AccordionContent className="text-gray-600">
-                <p className="mb-3">Because WhatsApp pricing varies by:</p>
-                <ul className="list-disc list-inside space-y-1 mb-3">
-                  <li>Country</li>
-                  <li>Message type</li>
-                  <li>Volume</li>
+              <AccordionContent className={`text-gray-600 ${isRTL ? 'text-right' : ''}`}>
+                <p className="mb-3">{t('pricing.faq.noMessageFees.a1')}</p>
+                <ul className={`space-y-1 mb-3 ${isRTL ? 'list-none' : 'list-disc list-inside'}`}>
+                  <li>{isRTL ? '• ' : ''}{t('pricing.faq.noMessageFees.country')}</li>
+                  <li>{isRTL ? '• ' : ''}{t('pricing.faq.noMessageFees.type')}</li>
+                  <li>{isRTL ? '• ' : ''}{t('pricing.faq.noMessageFees.volume')}</li>
                 </ul>
-                <p className="mb-3">By letting customers connect their own provider:</p>
-                <ul className="list-disc list-inside space-y-1">
-                  <li>You avoid hidden fees</li>
-                  <li>Costs stay transparent</li>
-                  <li>You keep full control</li>
+                <p className="mb-3">{t('pricing.faq.noMessageFees.a2')}</p>
+                <ul className={`space-y-1 ${isRTL ? 'list-none' : 'list-disc list-inside'}`}>
+                  <li>{isRTL ? '• ' : ''}{t('pricing.faq.noMessageFees.noHidden')}</li>
+                  <li>{isRTL ? '• ' : ''}{t('pricing.faq.noMessageFees.transparent')}</li>
+                  <li>{isRTL ? '• ' : ''}{t('pricing.faq.noMessageFees.control')}</li>
                 </ul>
-                <p className="mt-3">This is the standard SaaS model.</p>
+                <p className="mt-3">{t('pricing.faq.noMessageFees.standard')}</p>
               </AccordionContent>
             </AccordionItem>
 
             <AccordionItem value="which-channels" className="bg-white border border-gray-200 rounded-xl px-6">
-              <AccordionTrigger className="text-left font-semibold text-gray-900 hover:no-underline" data-testid="faq-which-channels">
-                Which channels do you support?
+              <AccordionTrigger className={`font-semibold text-gray-900 hover:no-underline ${isRTL ? 'text-right' : 'text-left'}`} data-testid="faq-which-channels">
+                {t('pricing.faq.channels.q')}
               </AccordionTrigger>
-              <AccordionContent className="text-gray-600">
-                <p className="mb-3">WhachatCRM supports 7 messaging channels in one unified inbox:</p>
-                <ul className="list-disc list-inside space-y-1 mb-3">
-                  <li><strong>WhatsApp:</strong> Via Twilio or Meta Business API (your choice)</li>
-                  <li><strong>SMS:</strong> Via Twilio</li>
-                  <li><strong>Telegram:</strong> Connect your bot</li>
-                  <li><strong>Instagram DM:</strong> Via Meta integration</li>
-                  <li><strong>Facebook Messenger:</strong> Via Meta integration</li>
-                  <li><strong>Web Chat:</strong> Embeddable widget for your website</li>
-                  <li><strong>TikTok:</strong> Lead intake only (capture leads from TikTok ads)</li>
+              <AccordionContent className={`text-gray-600 ${isRTL ? 'text-right' : ''}`}>
+                <p className="mb-3">{t('pricing.faq.channels.a1')}</p>
+                <ul className={`space-y-1 mb-3 ${isRTL ? 'list-none' : 'list-disc list-inside'}`}>
+                  <li>{isRTL ? '• ' : ''}<strong>WhatsApp:</strong> {t('pricing.faq.channels.whatsapp')}</li>
+                  <li>{isRTL ? '• ' : ''}<strong>SMS:</strong> {t('pricing.faq.channels.sms')}</li>
+                  <li>{isRTL ? '• ' : ''}<strong>Telegram:</strong> {t('pricing.faq.channels.telegram')}</li>
+                  <li>{isRTL ? '• ' : ''}<strong>Instagram DM:</strong> {t('pricing.faq.channels.instagram')}</li>
+                  <li>{isRTL ? '• ' : ''}<strong>Facebook Messenger:</strong> {t('pricing.faq.channels.facebook')}</li>
+                  <li>{isRTL ? '• ' : ''}<strong>Web Chat:</strong> {t('pricing.faq.channels.webchat')}</li>
+                  <li>{isRTL ? '• ' : ''}<strong>TikTok:</strong> {t('pricing.faq.channels.tiktok')}</li>
                 </ul>
-                <p className="text-amber-700 font-medium">Note: SMS requires Twilio. Meta only supports WhatsApp, not SMS.</p>
+                <p className="text-amber-700 font-medium">{t('pricing.faq.channels.note')}</p>
               </AccordionContent>
             </AccordionItem>
 
             <AccordionItem value="which-provider" className="bg-white border border-gray-200 rounded-xl px-6">
-              <AccordionTrigger className="text-left font-semibold text-gray-900 hover:no-underline" data-testid="faq-which-provider">
-                Which WhatsApp providers do you support?
+              <AccordionTrigger className={`font-semibold text-gray-900 hover:no-underline ${isRTL ? 'text-right' : 'text-left'}`} data-testid="faq-which-provider">
+                {t('pricing.faq.providers.q')}
               </AccordionTrigger>
-              <AccordionContent className="text-gray-600">
-                <p className="mb-3">WhachatCRM supports two official WhatsApp Business API providers:</p>
-                <ul className="list-disc list-inside space-y-1 mb-3">
-                  <li><strong>Twilio:</strong> Fast approval, reliable infrastructure, includes SMS support</li>
-                  <li><strong>Meta WhatsApp Business API:</strong> Direct integration, green checkmark verification, WhatsApp-only</li>
+              <AccordionContent className={`text-gray-600 ${isRTL ? 'text-right' : ''}`}>
+                <p className="mb-3">{t('pricing.faq.providers.a1')}</p>
+                <ul className={`space-y-1 mb-3 ${isRTL ? 'list-none' : 'list-disc list-inside'}`}>
+                  <li>{isRTL ? '• ' : ''}<strong>Twilio:</strong> {t('pricing.faq.providers.twilio')}</li>
+                  <li>{isRTL ? '• ' : ''}<strong>Meta WhatsApp Business API:</strong> {t('pricing.faq.providers.meta')}</li>
                 </ul>
-                <p className="mb-3">Choose the provider that best fits your needs — we guide you step-by-step during setup.</p>
-                <p className="text-amber-700 font-medium">The WhatsApp Business mobile app is not supported.</p>
+                <p className="mb-3">{t('pricing.faq.providers.a2')}</p>
+                <p className="text-amber-700 font-medium">{t('pricing.faq.providers.note')}</p>
               </AccordionContent>
             </AccordionItem>
 
             <AccordionItem value="twilio-vs-meta" className="bg-white border border-gray-200 rounded-xl px-6">
-              <AccordionTrigger className="text-left font-semibold text-gray-900 hover:no-underline" data-testid="faq-twilio-vs-meta">
-                Twilio vs Meta — which should I choose?
+              <AccordionTrigger className={`font-semibold text-gray-900 hover:no-underline ${isRTL ? 'text-right' : 'text-left'}`} data-testid="faq-twilio-vs-meta">
+                {t('pricing.faq.twilioVsMeta.q')}
               </AccordionTrigger>
-              <AccordionContent className="text-gray-600">
-                <p className="mb-3"><strong>Choose Twilio if:</strong></p>
-                <ul className="list-disc list-inside space-y-1 mb-3">
-                  <li>You want the easiest setup experience</li>
-                  <li>You need Twilio's other communication tools (SMS, voice)</li>
-                  <li>You prefer an intermediary handling WhatsApp compliance</li>
+              <AccordionContent className={`text-gray-600 ${isRTL ? 'text-right' : ''}`}>
+                <p className="mb-3"><strong>{t('pricing.faq.twilioVsMeta.chooseTwilio')}</strong></p>
+                <ul className={`space-y-1 mb-3 ${isRTL ? 'list-none' : 'list-disc list-inside'}`}>
+                  <li>{isRTL ? '• ' : ''}{t('pricing.faq.twilioVsMeta.twilio1')}</li>
+                  <li>{isRTL ? '• ' : ''}{t('pricing.faq.twilioVsMeta.twilio2')}</li>
+                  <li>{isRTL ? '• ' : ''}{t('pricing.faq.twilioVsMeta.twilio3')}</li>
                 </ul>
-                <p className="mb-3"><strong>Choose Meta WhatsApp Business API if:</strong></p>
-                <ul className="list-disc list-inside space-y-1 mb-3">
-                  <li>You already have a WhatsApp Business account</li>
-                  <li>You want the official green checkmark verification</li>
-                  <li>You need lower messaging costs for high-volume usage</li>
-                  <li>You want access to native WhatsApp features (catalogs, interactive buttons)</li>
+                <p className="mb-3"><strong>{t('pricing.faq.twilioVsMeta.chooseMeta')}</strong></p>
+                <ul className={`space-y-1 mb-3 ${isRTL ? 'list-none' : 'list-disc list-inside'}`}>
+                  <li>{isRTL ? '• ' : ''}{t('pricing.faq.twilioVsMeta.meta1')}</li>
+                  <li>{isRTL ? '• ' : ''}{t('pricing.faq.twilioVsMeta.meta2')}</li>
+                  <li>{isRTL ? '• ' : ''}{t('pricing.faq.twilioVsMeta.meta3')}</li>
+                  <li>{isRTL ? '• ' : ''}{t('pricing.faq.twilioVsMeta.meta4')}</li>
                 </ul>
               </AccordionContent>
             </AccordionItem>
 
             <AccordionItem value="other-providers" className="bg-white border border-gray-200 rounded-xl px-6">
-              <AccordionTrigger className="text-left font-semibold text-gray-900 hover:no-underline" data-testid="faq-other-providers">
-                Do you support other WhatsApp providers?
+              <AccordionTrigger className={`font-semibold text-gray-900 hover:no-underline ${isRTL ? 'text-right' : 'text-left'}`} data-testid="faq-other-providers">
+                {t('pricing.faq.otherProviders.q')}
               </AccordionTrigger>
-              <AccordionContent className="text-gray-600">
-                <p className="mb-3">Currently we support Twilio and Meta WhatsApp Business API.</p>
-                <p className="mb-3">We're collecting demand for additional providers like:</p>
-                <ul className="list-disc list-inside space-y-1 mb-3">
-                  <li>360dialog</li>
-                  <li>Gupshup</li>
-                  <li>MessageBird</li>
+              <AccordionContent className={`text-gray-600 ${isRTL ? 'text-right' : ''}`}>
+                <p className="mb-3">{t('pricing.faq.otherProviders.a1')}</p>
+                <p className="mb-3">{t('pricing.faq.otherProviders.a2')}</p>
+                <ul className={`space-y-1 mb-3 ${isRTL ? 'list-none' : 'list-disc list-inside'}`}>
+                  <li>{isRTL ? '• ' : ''}360dialog</li>
+                  <li>{isRTL ? '• ' : ''}Gupshup</li>
+                  <li>{isRTL ? '• ' : ''}MessageBird</li>
                 </ul>
-                <p>Contact us to help shape future integrations.</p>
+                <p>{t('pricing.faq.otherProviders.contact')}</p>
               </AccordionContent>
             </AccordionItem>
 
             <AccordionItem value="upgrade-downgrade" className="bg-white border border-gray-200 rounded-xl px-6">
-              <AccordionTrigger className="text-left font-semibold text-gray-900 hover:no-underline" data-testid="faq-upgrade-downgrade">
-                Can I upgrade or downgrade anytime?
+              <AccordionTrigger className={`font-semibold text-gray-900 hover:no-underline ${isRTL ? 'text-right' : 'text-left'}`} data-testid="faq-upgrade-downgrade">
+                {t('pricing.faq.upgradeDowngrade.q')}
               </AccordionTrigger>
-              <AccordionContent className="text-gray-600">
-                Yes. Plans are monthly, flexible, and update instantly.
+              <AccordionContent className={`text-gray-600 ${isRTL ? 'text-right' : ''}`}>
+                {t('pricing.faq.upgradeDowngrade.a')}
               </AccordionContent>
             </AccordionItem>
           </Accordion>

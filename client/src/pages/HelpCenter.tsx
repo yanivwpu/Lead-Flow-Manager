@@ -1442,7 +1442,7 @@ export function HelpCenter() {
                   <button
                     key={article.id}
                     onClick={() => { setSelectedArticle(article); scrollToTop(); }}
-                    className="w-full flex items-center gap-3 p-4 rounded-lg border border-gray-200 hover:border-brand-green hover:bg-green-50/30 transition-colors text-left"
+                    className={cn("w-full flex items-center gap-3 p-4 rounded-lg border border-gray-200 hover:border-brand-green hover:bg-green-50/30 transition-colors", isRTL ? "flex-row-reverse text-right" : "text-left")}
                     data-testid={`button-article-${article.id}`}
                   >
                     <div className="h-10 w-10 rounded-lg bg-gray-100 flex items-center justify-center shrink-0">
@@ -1452,7 +1452,7 @@ export function HelpCenter() {
                       <h3 className="font-medium text-gray-900">{article.title}</h3>
                       <p className="text-sm text-gray-500">{article.category}</p>
                     </div>
-                    <ChevronRight className="h-5 w-5 text-gray-400 shrink-0" />
+                    <ChevronRight className={cn("h-5 w-5 text-gray-400 shrink-0", isRTL && "rotate-180")} />
                   </button>
                 ))}
 
@@ -1476,7 +1476,7 @@ export function HelpCenter() {
                 {UI.backToHelpCenter}
               </button>
 
-              <div className="flex items-center gap-2 text-sm text-gray-500 mb-4">
+              <div className={cn("flex items-center gap-2 text-sm text-gray-500 mb-4", isRTL && "flex-row-reverse")}>
                 <span>{selectedArticle.category}</span>
               </div>
 
