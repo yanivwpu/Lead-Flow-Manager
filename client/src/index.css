@@ -408,3 +408,67 @@ ul, ol {
 /* Float replacement with logical values */
 .float-start { float: inline-start; }
 .float-end { float: inline-end; }
+
+/* RTL text alignment fixes */
+[dir="rtl"] body,
+[dir="rtl"] p,
+[dir="rtl"] li,
+[dir="rtl"] div,
+[dir="rtl"] span,
+[dir="rtl"] .feature-description,
+[dir="rtl"] .pricing-feature,
+[dir="rtl"] .card-text {
+  text-align: start !important;
+}
+
+[dir="rtl"] h1,
+[dir="rtl"] h2,
+[dir="rtl"] h3,
+[dir="rtl"] h4,
+[dir="rtl"] .text-center,
+[dir="rtl"] .pricing-header {
+  text-align: center !important;
+}
+
+/* RTL list styling */
+[dir="rtl"] ul,
+[dir="rtl"] ol,
+[dir="rtl"] .features-list,
+[dir="rtl"] .pricing-features {
+  padding-inline-start: 0;
+  padding-inline-end: 1.5rem;
+}
+
+/* RTL checkmark/icon positioning */
+[dir="rtl"] .feature-item::before,
+[dir="rtl"] .check-icon,
+[dir="rtl"] .checkmark {
+  margin-inline-end: 0.5rem;
+  margin-inline-start: 0;
+}
+
+/* Keep pricing cards in LTR order (Free → Starter → Pro) */
+.pricing-grid,
+.pricing-cards-container {
+  direction: ltr !important;
+}
+
+/* But allow card content to be RTL */
+[dir="rtl"] .pricing-grid > *,
+[dir="rtl"] .pricing-cards-container > * {
+  direction: rtl;
+}
+
+/* Section padding with logical properties */
+.hero,
+.pricing-section {
+  padding-inline-start: 2rem;
+  padding-inline-end: 2rem;
+}
+
+/* CTA buttons centering */
+.cta-button,
+.pricing-cta {
+  margin-inline-start: auto;
+  margin-inline-end: auto;
+}

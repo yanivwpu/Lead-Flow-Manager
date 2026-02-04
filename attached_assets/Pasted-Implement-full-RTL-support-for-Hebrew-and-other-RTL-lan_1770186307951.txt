@@ -1,0 +1,105 @@
+Implement full RTL support for Hebrew (and other RTL languages like Arabic) on the entire site, including the homepage and pricing page. The goal is:
+
+- When switching to Hebrew, text should align to the right, lists should indent from the right, checkmarks should appear on the right of list items, and layouts should mirror correctly.
+- Language switches should update instantly without page refresh.
+- Do not reverse the order of pricing cards (keep Free → Starter → Pro from left to right even in RTL).
+- Keep all existing functionality and styling intact for LTR languages.
+
+Steps to implement:
+
+1. In the root component (likely src/App.jsx or src/main.jsx where i18n is initialized), add this useEffect to dynamically set dir and lang on language change:
+
+import { useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
+
+function App() {
+  const { i18n } = useTranslation();
+
+  useEffect(() => {
+    const rtlLanguages = ['he', 'ar', 'fa', 'ur'];
+    const isRtl = rtlLanguages.includes(i18n.language);
+
+    document.documentElement.dir = isRtl ? 'rtl' : 'ltr';
+    document.documentElement.lang = i18n.language;
+  }, [i18n.language]);
+
+  // ...rest of App
+}
+
+2. In public/index.html, add this script right before the closing </head> tag to set dir/lang on initial page load (prevents flash of wrong alignment):
+
+<script>
+  (function() {
+    const storedLang = localStorage.getItem('i18nextLng') || 'en';
+    const rtlLanguages = ['he', 'ar', 'fa', 'ur'];
+    const isRtl = rtlLanguages.includes(storedLang);
+
+    document.documentElement.lang = storedLang;
+    document.documentElement.dir = isRtl ? 'rtl' : 'ltr';
+  })();
+</script>
+
+3. In the main global CSS file (likely src/index.css or src/App.css), add these RTL fixes at the bottom:
+
+[dir="rtl"] body,
+[dir="rtl"] p,
+[dir="rtl"] li,
+[dir="rtl"] div,
+[dir="rtl"] span,
+[dir="rtl"] .feature-description,
+[dir="rtl"] .pricing-feature,
+[dir="rtl"] .card-text {
+  text-align: start !important;
+}
+
+[dir="rtl"] h1,
+[dir="rtl"] h2,
+[dir="rtl"] h3,
+[dir="rtl"] h4,
+[dir="rtl"] .text-center,
+[dir="rtl"] .pricing-header {
+  text-align: center !important;
+}
+
+[dir="rtl"] ul,
+[dir="rtl"] ol,
+[dir="rtl"] .features-list,
+[dir="rtl"] .pricing-features {
+  padding-inline-start: 0;
+  padding-inline-end: 1.5rem;
+}
+
+[dir="rtl"] .feature-item::before,
+[dir="rtl"] .check-icon,
+[dir="rtl"] .checkmark {
+  margin-inline-end: 0.5rem;
+  margin-inline-start: 0;
+}
+
+.pricing-grid,
+.pricing-cards-container {
+  direction: ltr !important;
+}
+
+.container,
+.section,
+.hero,
+.pricing-section {
+  padding-inline-start: 2rem;
+  padding-inline-end: 2rem;
+}
+
+.cta-button,
+.pricing-cta {
+  margin-inline-start: auto;
+  margin-inline-end: auto;
+}
+
+4. Search the codebase for any hardcoded text-align: left/right, padding-left/right, margin-left/right and replace them with logical properties where possible (e.g., text-align: start, padding-inline-start).
+
+5. Test thoroughly:
+   - Switch to English → everything left-aligned as before.
+   - Switch to Hebrew → text right-aligned, lists indented right, checkmarks on right, pricing cards order unchanged.
+   - No page refresh needed for changes to apply.
+
+Apply these changes and confirm the pricing page and homepage now look correct in Hebrew.
