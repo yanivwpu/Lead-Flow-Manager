@@ -216,13 +216,13 @@ export function LocalizedTemplateSelector({
 
   return (
     <div className="space-y-4" dir={isRTL ? 'rtl' : 'ltr'}>
-      <div className={`flex flex-wrap gap-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
-        <div className="flex-1 min-w-[150px]">
-          <Label className={`text-sm font-medium mb-1 block ${isRTL ? 'text-right' : ''}`}>
+      <div className={`grid grid-cols-1 sm:grid-cols-3 gap-3 ${isRTL ? 'text-right' : ''}`}>
+        <div>
+          <Label className={`text-sm font-medium mb-2 block ${isRTL ? 'text-right' : ''}`}>
             {t("language.select", "Language")}
           </Label>
           <Select value={selectedLanguage} onValueChange={setSelectedLanguage}>
-            <SelectTrigger data-testid="template-language-select">
+            <SelectTrigger data-testid="template-language-select" className="w-full">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -234,12 +234,12 @@ export function LocalizedTemplateSelector({
           </Select>
         </div>
         
-        <div className="flex-1 min-w-[150px]">
-          <Label className={`text-sm font-medium mb-1 block ${isRTL ? 'text-right' : ''}`}>
+        <div>
+          <Label className={`text-sm font-medium mb-2 block ${isRTL ? 'text-right' : ''}`}>
             {t("templates.category", "Category")}
           </Label>
           <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-            <SelectTrigger data-testid="template-category-select">
+            <SelectTrigger data-testid="template-category-select" className="w-full">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -252,12 +252,12 @@ export function LocalizedTemplateSelector({
           </Select>
         </div>
         
-        <div className="flex-1 min-w-[150px]">
-          <Label className={`text-sm font-medium mb-1 block ${isRTL ? 'text-right' : ''}`}>
+        <div>
+          <Label className={`text-sm font-medium mb-2 block ${isRTL ? 'text-right' : ''}`}>
             {t("templates.industry", "Industry")}
           </Label>
           <Select value={selectedIndustry} onValueChange={setSelectedIndustry}>
-            <SelectTrigger data-testid="template-industry-select">
+            <SelectTrigger data-testid="template-industry-select" className="w-full">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -291,7 +291,7 @@ export function LocalizedTemplateSelector({
           <p className="text-gray-500">{t("templates.noTemplates", "No templates found for the selected filters")}</p>
         </Card>
       ) : (
-        <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pb-12 ${isRTL ? 'text-right' : ''}`} dir={isRTL ? 'rtl' : 'ltr'}>
+        <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pb-20 ${isRTL ? 'text-right' : ''}`} dir={isRTL ? 'rtl' : 'ltr'}>
           {templates.map((template) => (
             <Card key={template.id} className="hover:shadow-md transition-shadow">
               <CardHeader className="pb-2">

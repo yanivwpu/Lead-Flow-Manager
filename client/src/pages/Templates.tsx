@@ -238,18 +238,21 @@ export function Templates() {
         </div>
 
         <Tabs defaultValue="presets" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="presets" data-testid="tab-presets">
-              <Sparkles className="h-4 w-4 mr-2" />
-              Preset Templates
+          <TabsList className="grid w-full grid-cols-3 h-auto p-1">
+            <TabsTrigger value="presets" data-testid="tab-presets" className="text-xs sm:text-sm py-2 px-1 sm:px-3 flex flex-col sm:flex-row items-center gap-1">
+              <Sparkles className="h-4 w-4 sm:mr-1" />
+              <span className="hidden sm:inline">Preset Templates</span>
+              <span className="sm:hidden">Presets</span>
             </TabsTrigger>
-            <TabsTrigger value="templates" data-testid="tab-templates">
-              <FileText className="h-4 w-4 mr-2" />
-              Template Library ({templates.length})
+            <TabsTrigger value="templates" data-testid="tab-templates" className="text-xs sm:text-sm py-2 px-1 sm:px-3 flex flex-col sm:flex-row items-center gap-1">
+              <FileText className="h-4 w-4 sm:mr-1" />
+              <span className="hidden sm:inline">Template Library ({templates.length})</span>
+              <span className="sm:hidden">Library ({templates.length})</span>
             </TabsTrigger>
-            <TabsTrigger value="retargeting" data-testid="tab-retargeting">
-              <Target className="h-4 w-4 mr-2" />
-              Retargeting ({retargetableChats.length})
+            <TabsTrigger value="retargeting" data-testid="tab-retargeting" className="text-xs sm:text-sm py-2 px-1 sm:px-3 flex flex-col sm:flex-row items-center gap-1">
+              <Target className="h-4 w-4 sm:mr-1" />
+              <span className="hidden sm:inline">Retargeting ({retargetableChats.length})</span>
+              <span className="sm:hidden">Retarget ({retargetableChats.length})</span>
             </TabsTrigger>
           </TabsList>
 
