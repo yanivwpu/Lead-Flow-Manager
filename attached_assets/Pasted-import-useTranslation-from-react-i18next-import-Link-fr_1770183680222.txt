@@ -1,0 +1,121 @@
+import { useTranslation } from 'react-i18next';
+import { Link } from 'wouter'; // or your router
+
+function AuthPage() {
+  const { t, i18n } = useTranslation();
+  const isRTL = i18n.language === 'he';
+
+  return (
+    <div 
+      dir={isRTL ? 'rtl' : 'ltr'}
+      className={`min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8 ${isRTL ? 'text-right' : 'text-left'}`}
+    >
+      <div className="sm:mx-auto sm:w-full sm:max-w-md">
+        <img 
+          className="mx-auto h-12 w-auto" 
+          src="/logo.png" 
+          alt="WhachatCRM" 
+        />
+        
+        <h2 className="mt-6 text-center text-3xl font-bold text-gray-900">
+          {t('auth.login.title', 'התחבר לחשבון WhachatCRM')}
+        </h2>
+        
+        <p className="mt-2 text-center text-sm text-gray-600">
+          {t('auth.login.noAccount', 'אין לך חשבון?')} {' '}
+          <Link href="/signup" className="font-medium text-brand-green hover:text-green-600">
+            {t('auth.login.signup', 'צור חשבון חדש')}
+          </Link>
+        </p>
+      </div>
+
+      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
+        <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10">
+          <form className="space-y-6">
+            {/* Phone/Email Field */}
+            <div>
+              <label htmlFor="identifier" className="block text-sm font-medium text-gray-700">
+                {t('auth.identifier', 'מספר טלפון או אימייל')}
+              </label>
+              <div className="mt-1">
+                <input
+                  id="identifier"
+                  name="identifier"
+                  type="text"
+                  required
+                  className={`appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-brand-green focus:border-brand-green sm:text-sm ${isRTL ? 'text-right' : 'text-left'}`}
+                  placeholder={t('auth.identifierPlaceholder', '+972501234567 או you@example.com')}
+                  dir={isRTL ? 'ltr' : 'auto'} // Keep numbers/emails LTR for readability
+                />
+              </div>
+            </div>
+
+            {/* Password Field */}
+            <div>
+              <label htmlFor="password" className="block text-sm font-medium text-gray-700">
+                {t('auth.password', 'סיסמה')}
+              </label>
+              <div className="mt-1">
+                <input
+                  id="password"
+                  name="password"
+                  type="password"
+                  required
+                  className={`appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-brand-green focus:border-brand-green sm:text-sm ${isRTL ? 'text-right' : 'text-left'}`}
+                />
+              </div>
+            </div>
+
+            {/* Remember + Forgot */}
+            <div className={`flex items-center justify-between ${isRTL ? 'flex-row-reverse' : ''}`}>
+              <div className="flex items-center">
+                <input
+                  id="remember"
+                  name="remember"
+                  type="checkbox"
+                  className="h-4 w-4 text-brand-green focus:ring-brand-green border-gray-300 rounded"
+                />
+                <label htmlFor="remember" className={`ml-3 block text-sm text-gray-900 ${isRTL ? 'mr-3 ml-0' : ''}`}>
+                  {t('auth.remember', 'זכור אותי')}
+                </label>
+              </div>
+
+              <Link href="/forgot-password" className="text-sm font-medium text-brand-green hover:text-green-600">
+                {t('auth.forgot', 'שכחת סיסמה?')}
+              </Link>
+            </div>
+
+            {/* Submit */}
+            <button
+              type="submit"
+              className="w-full py-3 px-4 bg-brand-green text-white font-medium rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-brand-green"
+            >
+              {t('auth.submit', 'התחבר')}
+            </button>
+          </form>
+
+          {/* Divider */}
+          <div className="mt-6 relative">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-gray-300" />
+            </div>
+            <div className="relative flex justify-center text-sm">
+              <span className="px-4 bg-white text-gray-500">
+                {t('auth.or', 'או')}
+              </span>
+            </div>
+          </div>
+
+          {/* Google/WhatsApp SSO if you have */}
+          <div className="mt-6">
+            <button className="w-full py-3 px-4 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50">
+              {t('auth.google', 'התחבר עם Google')}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default AuthPage;

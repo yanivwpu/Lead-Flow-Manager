@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useLocation, Link } from "wouter";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/lib/auth-context";
+import { getDirection } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,6 +17,7 @@ import {
 
 export function AuthPage() {
   const { t } = useTranslation();
+  const isRTL = getDirection() === 'rtl';
   const params = new URLSearchParams(window.location.search);
   const defaultToLogin = params.get('mode') === 'login';
   const [isLogin, setIsLogin] = useState(defaultToLogin);
@@ -94,7 +96,7 @@ export function AuthPage() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col md:flex-row bg-white overflow-auto">
+    <div dir={isRTL ? 'rtl' : 'ltr'} className={`min-h-screen flex flex-col md:flex-row bg-white overflow-auto ${isRTL ? 'text-right' : 'text-left'}`}>
       {/* Left Panel - Branding */}
       <div className="md:flex-1 bg-brand-dark relative overflow-hidden flex flex-col justify-between p-6 md:p-12 text-white">
         <div className="relative z-10">
@@ -114,22 +116,22 @@ export function AuthPage() {
 
         <div className="relative z-10 space-y-4 hidden md:block">
            <div className="flex items-center gap-3">
-             <CheckCircle2 className="text-brand-green h-5 w-5" />
+             <CheckCircle2 className="text-brand-green h-5 w-5 shrink-0" />
              <span className="font-medium">{t('auth.syncChats')}</span>
            </div>
            <div className="flex items-center gap-3">
-             <CheckCircle2 className="text-brand-green h-5 w-5" />
+             <CheckCircle2 className="text-brand-green h-5 w-5 shrink-0" />
              <span className="font-medium">{t('auth.trackPipeline')}</span>
            </div>
            <div className="flex items-center gap-3">
-             <CheckCircle2 className="text-brand-green h-5 w-5" />
+             <CheckCircle2 className="text-brand-green h-5 w-5 shrink-0" />
              <span className="font-medium">{t('auth.automatedReminders')}</span>
            </div>
         </div>
 
         {/* Abstract background */}
-        <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-brand-green/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
-        <div className="absolute bottom-0 left-0 w-[600px] h-[600px] bg-brand-teal/20 rounded-full blur-3xl translate-y-1/2 -translate-x-1/2" />
+        <div className={`absolute top-0 w-[600px] h-[600px] bg-brand-green/10 rounded-full blur-3xl -translate-y-1/2 ${isRTL ? 'left-0 -translate-x-1/2' : 'right-0 translate-x-1/2'}`} />
+        <div className={`absolute bottom-0 w-[600px] h-[600px] bg-brand-teal/20 rounded-full blur-3xl translate-y-1/2 ${isRTL ? 'right-0 translate-x-1/2' : 'left-0 -translate-x-1/2'}`} />
       </div>
 
       {/* Right Panel - Form */}
@@ -187,6 +189,7 @@ export function AuthPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="bg-gray-50 border-gray-200"
+                dir="ltr"
               />
               {isLogin && (
                 <p className="text-[10px] text-gray-400 mt-1">Demo: demo@whachat.com / password123</p>
@@ -203,13 +206,14 @@ export function AuthPage() {
                   required 
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="bg-gray-50 border-gray-200 pr-10"
+                  className={`bg-gray-50 border-gray-200 ${isRTL ? 'ps-10' : 'pe-10'}`}
                   data-testid="input-password"
+                  dir="ltr"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none"
+                  className={`absolute top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none ${isRTL ? 'left-3' : 'right-3'}`}
                   data-testid="button-toggle-password"
                 >
                   {showPassword ? (
@@ -222,7 +226,7 @@ export function AuthPage() {
             </div>
 
             {isLogin && (
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center gap-2">
                 <input
                   type="checkbox"
                   id="remember"
@@ -241,7 +245,7 @@ export function AuthPage() {
             )}
 
             {!isLogin && (
-              <div className="flex items-start space-x-2">
+              <div className="flex items-start gap-2">
                 <input
                   type="checkbox"
                   id="terms"
@@ -283,7 +287,7 @@ export function AuthPage() {
               ) : (
                 <>
                   {isLogin ? t('auth.loginButton') : t('auth.signupButton')}
-                  <ArrowRight className="ml-2 h-4 w-4" />
+                  <ArrowRight className={`h-4 w-4 ${isRTL ? 'me-2 rotate-180' : 'ms-2'}`} />
                 </>
               )}
             </Button>
