@@ -258,3 +258,81 @@ html.rtl .chat-message-outgoing {
   margin-right: auto;
   margin-left: 0;
 }
+
+/* Global RTL overrides */
+[dir="rtl"] .logo {
+  margin-inline-start: 0;
+  margin-inline-end: auto;
+}
+
+[dir="rtl"] nav {
+  margin-inline-start: auto;
+  margin-inline-end: 0;
+}
+
+/* Flex header alignment for RTL */
+[dir="rtl"] .top-nav {
+  flex-direction: row-reverse;
+}
+
+/* Logical properties for RTL-aware layouts */
+.header-nav {
+  margin-inline-start: auto;
+  padding-inline-end: 1rem;
+  text-align: end;
+}
+
+/* RTL icon flipping for directional icons */
+[dir="rtl"] .icon-arrow-right {
+  transform: scaleX(-1);
+}
+
+[dir="rtl"] .icon-chevron-right {
+  transform: scaleX(-1);
+}
+
+/* RTL list markers positioning */
+[dir="rtl"] ul {
+  padding-inline-start: 1.5rem;
+  padding-inline-end: 0;
+}
+
+/* RTL form input text alignment */
+[dir="rtl"] input[type="email"],
+[dir="rtl"] input[type="tel"],
+[dir="rtl"] input[type="number"],
+[dir="rtl"] input[type="url"] {
+  direction: ltr;
+  text-align: left;
+}
+
+/* RTL checkbox/radio label spacing */
+[dir="rtl"] .checkbox-label {
+  margin-inline-start: 0.5rem;
+  margin-inline-end: 0;
+}
+
+/* RTL modal/dialog close button positioning */
+[dir="rtl"] .dialog-close {
+  inset-inline-end: 1rem;
+  inset-inline-start: auto;
+}
+
+/* RTL toast notifications */
+[dir="rtl"] .toast-container {
+  inset-inline-end: 1rem;
+  inset-inline-start: auto;
+}
+
+/* Body RTL class for additional targeting */
+body.rtl {
+  text-align: right;
+}
+
+body.rtl .text-left {
+  text-align: right;
+}
+
+body.rtl .text-right {
+  text-align: left;
+}
