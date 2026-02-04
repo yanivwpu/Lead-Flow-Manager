@@ -560,68 +560,68 @@ export function Pricing() {
           <h2 className="text-2xl font-bold text-gray-900 mb-8 text-center">{t('pricing.faq.title')}</h2>
           <Accordion type="single" collapsible className="space-y-4">
             <AccordionItem value="pay-twice" className="bg-white border border-gray-200 rounded-xl px-6">
-              <AccordionTrigger className={`font-semibold text-gray-900 hover:no-underline ${isRTL ? 'text-right' : 'text-left'}`} data-testid="faq-pay-twice">
+              <AccordionTrigger className="font-semibold text-gray-900 hover:no-underline" data-testid="faq-pay-twice">
                 {t('pricing.faq.payTwice.q')}
               </AccordionTrigger>
-              <AccordionContent className={`text-gray-600 ${isRTL ? 'text-right' : ''}`}>
+              <AccordionContent className="text-gray-600">
                 <p className="mb-3">{t('pricing.faq.payTwice.a1')}</p>
-                <ul className={`space-y-1 mb-3 ${isRTL ? 'list-none' : 'list-disc list-inside'}`}>
-                  <li>{isRTL ? '• ' : ''}<strong>{t('pricing.faq.payTwice.provider')}</strong> {t('pricing.faq.payTwice.providerDesc')}</li>
-                  <li>{isRTL ? '• ' : ''}<strong>{t('pricing.faq.payTwice.whachat')}</strong> {t('pricing.faq.payTwice.whachatDesc')}</li>
+                <ul dir={isRTL ? 'rtl' : 'ltr'} className={`space-y-1 mb-3 list-disc ${isRTL ? 'pr-6' : 'pl-6'}`}>
+                  <li><strong>{t('pricing.faq.payTwice.provider')}</strong> {t('pricing.faq.payTwice.providerDesc')}</li>
+                  <li><strong>{t('pricing.faq.payTwice.whachat')}</strong> {t('pricing.faq.payTwice.whachatDesc')}</li>
                 </ul>
                 <p>{t('pricing.faq.payTwice.analogy')}</p>
               </AccordionContent>
             </AccordionItem>
 
             <AccordionItem value="no-message-fees" className="bg-white border border-gray-200 rounded-xl px-6">
-              <AccordionTrigger className={`font-semibold text-gray-900 hover:no-underline ${isRTL ? 'text-right' : 'text-left'}`} data-testid="faq-no-message-fees">
+              <AccordionTrigger className="font-semibold text-gray-900 hover:no-underline" data-testid="faq-no-message-fees">
                 {t('pricing.faq.noMessageFees.q')}
               </AccordionTrigger>
-              <AccordionContent className={`text-gray-600 ${isRTL ? 'text-right' : ''}`}>
+              <AccordionContent className="text-gray-600">
                 <p className="mb-3">{t('pricing.faq.noMessageFees.a1')}</p>
-                <ul className={`space-y-1 mb-3 ${isRTL ? 'list-none' : 'list-disc list-inside'}`}>
-                  <li>{isRTL ? '• ' : ''}{t('pricing.faq.noMessageFees.country')}</li>
-                  <li>{isRTL ? '• ' : ''}{t('pricing.faq.noMessageFees.type')}</li>
-                  <li>{isRTL ? '• ' : ''}{t('pricing.faq.noMessageFees.volume')}</li>
+                <ul dir={isRTL ? 'rtl' : 'ltr'} className={`space-y-1 mb-3 list-disc ${isRTL ? 'pr-6' : 'pl-6'}`}>
+                  <li>{t('pricing.faq.noMessageFees.country')}</li>
+                  <li>{t('pricing.faq.noMessageFees.type')}</li>
+                  <li>{t('pricing.faq.noMessageFees.volume')}</li>
                 </ul>
                 <p className="mb-3">{t('pricing.faq.noMessageFees.a2')}</p>
-                <ul className={`space-y-1 ${isRTL ? 'list-none' : 'list-disc list-inside'}`}>
-                  <li>{isRTL ? '• ' : ''}{t('pricing.faq.noMessageFees.noHidden')}</li>
-                  <li>{isRTL ? '• ' : ''}{t('pricing.faq.noMessageFees.transparent')}</li>
-                  <li>{isRTL ? '• ' : ''}{t('pricing.faq.noMessageFees.control')}</li>
+                <ul dir={isRTL ? 'rtl' : 'ltr'} className={`space-y-1 list-disc ${isRTL ? 'pr-6' : 'pl-6'}`}>
+                  <li>{t('pricing.faq.noMessageFees.noHidden')}</li>
+                  <li>{t('pricing.faq.noMessageFees.transparent')}</li>
+                  <li>{t('pricing.faq.noMessageFees.control')}</li>
                 </ul>
                 <p className="mt-3">{t('pricing.faq.noMessageFees.standard')}</p>
               </AccordionContent>
             </AccordionItem>
 
             <AccordionItem value="which-channels" className="bg-white border border-gray-200 rounded-xl px-6">
-              <AccordionTrigger className={`font-semibold text-gray-900 hover:no-underline ${isRTL ? 'text-right' : 'text-left'}`} data-testid="faq-which-channels">
+              <AccordionTrigger className="font-semibold text-gray-900 hover:no-underline" data-testid="faq-which-channels">
                 {t('pricing.faq.channels.q')}
               </AccordionTrigger>
-              <AccordionContent className={`text-gray-600 ${isRTL ? 'text-right' : ''}`}>
+              <AccordionContent className="text-gray-600">
                 <p className="mb-3">{t('pricing.faq.channels.a1')}</p>
-                <ul className={`space-y-1 mb-3 ${isRTL ? 'list-none' : 'list-disc list-inside'}`}>
-                  <li>{isRTL ? '• ' : ''}<strong>WhatsApp:</strong> {t('pricing.faq.channels.whatsapp')}</li>
-                  <li>{isRTL ? '• ' : ''}<strong>SMS:</strong> {t('pricing.faq.channels.sms')}</li>
-                  <li>{isRTL ? '• ' : ''}<strong>Telegram:</strong> {t('pricing.faq.channels.telegram')}</li>
-                  <li>{isRTL ? '• ' : ''}<strong>Instagram DM:</strong> {t('pricing.faq.channels.instagram')}</li>
-                  <li>{isRTL ? '• ' : ''}<strong>Facebook Messenger:</strong> {t('pricing.faq.channels.facebook')}</li>
-                  <li>{isRTL ? '• ' : ''}<strong>Web Chat:</strong> {t('pricing.faq.channels.webchat')}</li>
-                  <li>{isRTL ? '• ' : ''}<strong>TikTok:</strong> {t('pricing.faq.channels.tiktok')}</li>
+                <ul dir={isRTL ? 'rtl' : 'ltr'} className={`space-y-1 mb-3 list-disc ${isRTL ? 'pr-6' : 'pl-6'}`}>
+                  <li><strong>WhatsApp:</strong> {t('pricing.faq.channels.whatsapp')}</li>
+                  <li><strong>SMS:</strong> {t('pricing.faq.channels.sms')}</li>
+                  <li><strong>Telegram:</strong> {t('pricing.faq.channels.telegram')}</li>
+                  <li><strong>Instagram DM:</strong> {t('pricing.faq.channels.instagram')}</li>
+                  <li><strong>Facebook Messenger:</strong> {t('pricing.faq.channels.facebook')}</li>
+                  <li><strong>Web Chat:</strong> {t('pricing.faq.channels.webchat')}</li>
+                  <li><strong>TikTok:</strong> {t('pricing.faq.channels.tiktok')}</li>
                 </ul>
                 <p className="text-amber-700 font-medium">{t('pricing.faq.channels.note')}</p>
               </AccordionContent>
             </AccordionItem>
 
             <AccordionItem value="which-provider" className="bg-white border border-gray-200 rounded-xl px-6">
-              <AccordionTrigger className={`font-semibold text-gray-900 hover:no-underline ${isRTL ? 'text-right' : 'text-left'}`} data-testid="faq-which-provider">
+              <AccordionTrigger className="font-semibold text-gray-900 hover:no-underline" data-testid="faq-which-provider">
                 {t('pricing.faq.providers.q')}
               </AccordionTrigger>
-              <AccordionContent className={`text-gray-600 ${isRTL ? 'text-right' : ''}`}>
+              <AccordionContent className="text-gray-600">
                 <p className="mb-3">{t('pricing.faq.providers.a1')}</p>
-                <ul className={`space-y-1 mb-3 ${isRTL ? 'list-none' : 'list-disc list-inside'}`}>
-                  <li>{isRTL ? '• ' : ''}<strong>Twilio:</strong> {t('pricing.faq.providers.twilio')}</li>
-                  <li>{isRTL ? '• ' : ''}<strong>Meta WhatsApp Business API:</strong> {t('pricing.faq.providers.meta')}</li>
+                <ul dir={isRTL ? 'rtl' : 'ltr'} className={`space-y-1 mb-3 list-disc ${isRTL ? 'pr-6' : 'pl-6'}`}>
+                  <li><strong>Twilio:</strong> {t('pricing.faq.providers.twilio')}</li>
+                  <li><strong>Meta WhatsApp Business API:</strong> {t('pricing.faq.providers.meta')}</li>
                 </ul>
                 <p className="mb-3">{t('pricing.faq.providers.a2')}</p>
                 <p className="text-amber-700 font-medium">{t('pricing.faq.providers.note')}</p>
@@ -629,47 +629,47 @@ export function Pricing() {
             </AccordionItem>
 
             <AccordionItem value="twilio-vs-meta" className="bg-white border border-gray-200 rounded-xl px-6">
-              <AccordionTrigger className={`font-semibold text-gray-900 hover:no-underline ${isRTL ? 'text-right' : 'text-left'}`} data-testid="faq-twilio-vs-meta">
+              <AccordionTrigger className="font-semibold text-gray-900 hover:no-underline" data-testid="faq-twilio-vs-meta">
                 {t('pricing.faq.twilioVsMeta.q')}
               </AccordionTrigger>
-              <AccordionContent className={`text-gray-600 ${isRTL ? 'text-right' : ''}`}>
+              <AccordionContent className="text-gray-600">
                 <p className="mb-3"><strong>{t('pricing.faq.twilioVsMeta.chooseTwilio')}</strong></p>
-                <ul className={`space-y-1 mb-3 ${isRTL ? 'list-none' : 'list-disc list-inside'}`}>
-                  <li>{isRTL ? '• ' : ''}{t('pricing.faq.twilioVsMeta.twilio1')}</li>
-                  <li>{isRTL ? '• ' : ''}{t('pricing.faq.twilioVsMeta.twilio2')}</li>
-                  <li>{isRTL ? '• ' : ''}{t('pricing.faq.twilioVsMeta.twilio3')}</li>
+                <ul dir={isRTL ? 'rtl' : 'ltr'} className={`space-y-1 mb-3 list-disc ${isRTL ? 'pr-6' : 'pl-6'}`}>
+                  <li>{t('pricing.faq.twilioVsMeta.twilio1')}</li>
+                  <li>{t('pricing.faq.twilioVsMeta.twilio2')}</li>
+                  <li>{t('pricing.faq.twilioVsMeta.twilio3')}</li>
                 </ul>
                 <p className="mb-3"><strong>{t('pricing.faq.twilioVsMeta.chooseMeta')}</strong></p>
-                <ul className={`space-y-1 mb-3 ${isRTL ? 'list-none' : 'list-disc list-inside'}`}>
-                  <li>{isRTL ? '• ' : ''}{t('pricing.faq.twilioVsMeta.meta1')}</li>
-                  <li>{isRTL ? '• ' : ''}{t('pricing.faq.twilioVsMeta.meta2')}</li>
-                  <li>{isRTL ? '• ' : ''}{t('pricing.faq.twilioVsMeta.meta3')}</li>
-                  <li>{isRTL ? '• ' : ''}{t('pricing.faq.twilioVsMeta.meta4')}</li>
+                <ul dir={isRTL ? 'rtl' : 'ltr'} className={`space-y-1 mb-3 list-disc ${isRTL ? 'pr-6' : 'pl-6'}`}>
+                  <li>{t('pricing.faq.twilioVsMeta.meta1')}</li>
+                  <li>{t('pricing.faq.twilioVsMeta.meta2')}</li>
+                  <li>{t('pricing.faq.twilioVsMeta.meta3')}</li>
+                  <li>{t('pricing.faq.twilioVsMeta.meta4')}</li>
                 </ul>
               </AccordionContent>
             </AccordionItem>
 
             <AccordionItem value="other-providers" className="bg-white border border-gray-200 rounded-xl px-6">
-              <AccordionTrigger className={`font-semibold text-gray-900 hover:no-underline ${isRTL ? 'text-right' : 'text-left'}`} data-testid="faq-other-providers">
+              <AccordionTrigger className="font-semibold text-gray-900 hover:no-underline" data-testid="faq-other-providers">
                 {t('pricing.faq.otherProviders.q')}
               </AccordionTrigger>
-              <AccordionContent className={`text-gray-600 ${isRTL ? 'text-right' : ''}`}>
+              <AccordionContent className="text-gray-600">
                 <p className="mb-3">{t('pricing.faq.otherProviders.a1')}</p>
                 <p className="mb-3">{t('pricing.faq.otherProviders.a2')}</p>
-                <ul className={`space-y-1 mb-3 ${isRTL ? 'list-none' : 'list-disc list-inside'}`}>
-                  <li>{isRTL ? '• ' : ''}360dialog</li>
-                  <li>{isRTL ? '• ' : ''}Gupshup</li>
-                  <li>{isRTL ? '• ' : ''}MessageBird</li>
+                <ul dir={isRTL ? 'rtl' : 'ltr'} className={`space-y-1 mb-3 list-disc ${isRTL ? 'pr-6' : 'pl-6'}`}>
+                  <li>360dialog</li>
+                  <li>Gupshup</li>
+                  <li>MessageBird</li>
                 </ul>
                 <p>{t('pricing.faq.otherProviders.contact')}</p>
               </AccordionContent>
             </AccordionItem>
 
             <AccordionItem value="upgrade-downgrade" className="bg-white border border-gray-200 rounded-xl px-6">
-              <AccordionTrigger className={`font-semibold text-gray-900 hover:no-underline ${isRTL ? 'text-right' : 'text-left'}`} data-testid="faq-upgrade-downgrade">
+              <AccordionTrigger className="font-semibold text-gray-900 hover:no-underline" data-testid="faq-upgrade-downgrade">
                 {t('pricing.faq.upgradeDowngrade.q')}
               </AccordionTrigger>
-              <AccordionContent className={`text-gray-600 ${isRTL ? 'text-right' : ''}`}>
+              <AccordionContent className="text-gray-600">
                 {t('pricing.faq.upgradeDowngrade.a')}
               </AccordionContent>
             </AccordionItem>
