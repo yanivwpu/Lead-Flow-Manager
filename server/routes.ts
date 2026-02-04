@@ -5372,13 +5372,17 @@ export async function registerRoutes(
       const validTones = ["neutral", "friendly", "professional", "sales"];
       const selectedTone = validTones.includes(tone) ? tone : undefined;
       
+      // Get user's preferred language for AI responses
+      const userLanguage = req.user.language as "en" | "he" | "es" | "ar" | undefined;
+      
       const suggestion = await aiService.suggestReply(
         userId,
         chatId,
         conversationHistory,
         knowledge || undefined,
         settings || undefined,
-        selectedTone
+        selectedTone,
+        userLanguage
       );
       
       // Track usage
