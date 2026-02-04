@@ -552,7 +552,45 @@ ul, ol {
   text-align: center !important;
 }
 
-/* Final RTL Header Centering Fixes */
+/* Header Centering for all languages (center by default) */
+.text-center,
+section .text-center,
+section header,
+.pricing-header,
+.max-w-6xl.mx-auto.text-center,
+.max-w-5xl.mx-auto.text-center,
+.max-w-3xl.mx-auto.text-center,
+.max-w-4xl.mx-auto.text-center {
+  text-align: center !important;
+}
+
+.text-center h1,
+.text-center h2,
+.text-center p,
+.text-center h3,
+.pricing-header h1,
+.pricing-header p,
+.max-w-6xl.mx-auto.text-center h1,
+.max-w-6xl.mx-auto.text-center h2,
+.max-w-6xl.mx-auto.text-center p,
+.max-w-5xl.mx-auto.text-center h2,
+.max-w-5xl.mx-auto.text-center p,
+.max-w-3xl.mx-auto.text-center h2,
+.max-w-3xl.mx-auto.text-center p,
+.max-w-4xl.mx-auto.text-center h2,
+.max-w-4xl.mx-auto.text-center p {
+  text-align: center !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+}
+
+/* Specific section overrides to ensure they remain centered */
+section h2,
+section h2 + p {
+  text-align: center !important;
+}
+
+/* Final RTL Header Centering Fixes (kept for completeness) */
 [dir="rtl"] .text-center,
 [dir="rtl"] section .text-center,
 [dir="rtl"] section header,
@@ -561,32 +599,6 @@ ul, ol {
 [dir="rtl"] .max-w-5xl.mx-auto.text-center,
 [dir="rtl"] .max-w-3xl.mx-auto.text-center,
 [dir="rtl"] .max-w-4xl.mx-auto.text-center {
-  text-align: center !important;
-}
-
-[dir="rtl"] .text-center h1,
-[dir="rtl"] .text-center h2,
-[dir="rtl"] .text-center p,
-[dir="rtl"] .text-center h3,
-[dir="rtl"] .pricing-header h1,
-[dir="rtl"] .pricing-header p,
-[dir="rtl"] .max-w-6xl.mx-auto.text-center h1,
-[dir="rtl"] .max-w-6xl.mx-auto.text-center h2,
-[dir="rtl"] .max-w-6xl.mx-auto.text-center p,
-[dir="rtl"] .max-w-5xl.mx-auto.text-center h2,
-[dir="rtl"] .max-w-5xl.mx-auto.text-center p,
-[dir="rtl"] .max-w-3xl.mx-auto.text-center h2,
-[dir="rtl"] .max-w-3xl.mx-auto.text-center p,
-[dir="rtl"] .max-w-4xl.mx-auto.text-center h2,
-[dir="rtl"] .max-w-4xl.mx-auto.text-center p {
-  text-align: center !important;
-  margin-left: auto !important;
-  margin-right: auto !important;
-}
-
-/* Specific section overrides to ensure they remain centered */
-[dir="rtl"] section h2,
-[dir="rtl"] section h2 + p {
   text-align: center !important;
 }
 
