@@ -107,7 +107,7 @@ export function AuthPage() {
             <span className="font-display font-bold text-xl md:hidden">WhachatCRM</span>
           </div>
           <h1 className="text-2xl md:text-5xl font-display font-bold mb-2 md:mb-4 leading-tight">
-            {t('auth.manageWhatsApp')}
+            <span style={{ whiteSpace: 'nowrap' }}>{t('auth.manageWhatsApp')}</span>
           </h1>
           <p className="text-brand-teal/80 text-sm md:text-lg max-w-md leading-relaxed hidden md:block">
             {t('auth.crmDescription')}
