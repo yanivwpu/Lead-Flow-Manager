@@ -215,8 +215,8 @@ export function LocalizedTemplateSelector({
   };
 
   return (
-    <div className="flex flex-col h-full gap-4" dir={isRTL ? 'rtl' : 'ltr'}>
-      <div className={`grid grid-cols-1 sm:grid-cols-3 gap-3 shrink-0 bg-white z-10 py-2 ${isRTL ? 'text-right' : ''}`}>
+    <div className="space-y-4" dir={isRTL ? 'rtl' : 'ltr'}>
+      <div className={`grid grid-cols-1 sm:grid-cols-3 gap-3 bg-white z-10 py-2 ${isRTL ? 'text-right' : ''}`}>
         <div>
           <Label className={`text-sm font-medium mb-2 block ${isRTL ? 'text-right' : ''}`}>
             {t("language.select", "Language")}
@@ -291,7 +291,7 @@ export function LocalizedTemplateSelector({
           <p className="text-gray-500">{t("templates.noTemplates", "No templates found for the selected filters")}</p>
         </Card>
       ) : (
-        <div className={`flex-1 overflow-y-auto min-h-0 pr-2 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 ${isRTL ? 'text-right' : ''}`} dir={isRTL ? 'rtl' : 'ltr'}>
+        <div className={`overflow-y-auto max-h-[500px] pr-2 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 ${isRTL ? 'text-right' : ''}`} dir={isRTL ? 'rtl' : 'ltr'}>
             {templates.map((template) => (
             <Card key={template.id} className="hover:shadow-md transition-shadow">
               <CardHeader className="pb-2">
