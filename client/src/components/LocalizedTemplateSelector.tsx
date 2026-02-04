@@ -42,7 +42,7 @@ import {
   Rocket,
   Loader2
 } from "lucide-react";
-import { getCurrentLanguage, type SupportedLanguage } from "@/lib/i18n";
+import { getCurrentLanguage, getDirection, type SupportedLanguage } from "@/lib/i18n";
 import { apiRequest } from "@/lib/queryClient";
 
 interface AutomationTemplate {
@@ -103,6 +103,7 @@ export function LocalizedTemplateSelector({
   const [placeholderValues, setPlaceholderValues] = useState<Record<string, string>>({});
   const [previewDialogOpen, setPreviewDialogOpen] = useState(false);
   const [launchImmediately, setLaunchImmediately] = useState(false);
+  const isRTL = getDirection() === 'rtl';
 
   const { data, isLoading } = useQuery<TemplateResponse>({
     queryKey: ["/api/automation-templates", selectedLanguage, selectedCategory, selectedIndustry],
@@ -214,10 +215,10 @@ export function LocalizedTemplateSelector({
   };
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap gap-4">
+    <div className="space-y-4" dir={isRTL ? 'rtl' : 'ltr'}>
+      <div className={`flex flex-wrap gap-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
         <div className="flex-1 min-w-[150px]">
-          <Label className="text-sm font-medium mb-1 block">
+          <Label className={`text-sm font-medium mb-1 block ${isRTL ? 'text-right' : ''}`}>
             {t("language.select", "Language")}
           </Label>
           <Select value={selectedLanguage} onValueChange={setSelectedLanguage}>
@@ -234,7 +235,7 @@ export function LocalizedTemplateSelector({
         </div>
         
         <div className="flex-1 min-w-[150px]">
-          <Label className="text-sm font-medium mb-1 block">
+          <Label className={`text-sm font-medium mb-1 block ${isRTL ? 'text-right' : ''}`}>
             {t("templates.category", "Category")}
           </Label>
           <Select value={selectedCategory} onValueChange={setSelectedCategory}>
@@ -252,7 +253,7 @@ export function LocalizedTemplateSelector({
         </div>
         
         <div className="flex-1 min-w-[150px]">
-          <Label className="text-sm font-medium mb-1 block">
+          <Label className={`text-sm font-medium mb-1 block ${isRTL ? 'text-right' : ''}`}>
             {t("templates.industry", "Industry")}
           </Label>
           <Select value={selectedIndustry} onValueChange={setSelectedIndustry}>
@@ -290,12 +291,12 @@ export function LocalizedTemplateSelector({
           <p className="text-gray-500">{t("templates.noTemplates", "No templates found for the selected filters")}</p>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pb-8">
+        <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pb-12 ${isRTL ? 'text-right' : ''}`} dir={isRTL ? 'rtl' : 'ltr'}>
           {templates.map((template) => (
             <Card key={template.id} className="hover:shadow-md transition-shadow">
               <CardHeader className="pb-2">
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-2">
+                <div className={`flex items-start justify-between ${isRTL ? 'flex-row-reverse' : ''}`}>
+                  <div className={`flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
                     {getCategoryIcon(template.category)}
                     <CardTitle className="text-base">{template.name}</CardTitle>
                   </div>
@@ -308,21 +309,25 @@ export function LocalizedTemplateSelector({
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="flex flex-wrap gap-1 mb-3">
+                <div className={`flex flex-wrap gap-1 mb-3 ${isRTL ? 'flex-row-reverse justify-end' : ''}`}>
                   <Badge className={getMessageTypeColor(template.category)} variant="secondary">
-                    {getIndustryIcon(template.industry)}
-                    <span className="ml-1">{industryLabels[template.industry] || template.industry}</span>
+                    <span className={`flex items-center gap-1 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                      {getIndustryIcon(template.industry)}
+                      <span>{industryLabels[template.industry] || template.industry}</span>
+                    </span>
                   </Badge>
                   <Badge variant="outline" className="text-xs">
-                    <Clock className="h-3 w-3 mr-1" />
-                    {template.messages.length} {t("templates.messages", "messages")}
+                    <span className={`flex items-center gap-1 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                      <Clock className="h-3 w-3" />
+                      <span>{template.messages.length} {t("templates.messages", "messages")}</span>
+                    </span>
                   </Badge>
                   {template.aiEnabled && (
                     <Badge className="bg-purple-100 text-purple-700">AI</Badge>
                   )}
                 </div>
                 
-                <div className="flex gap-2">
+                <div className={`flex gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
                   <Button 
                     variant="outline" 
                     size="sm" 
@@ -330,8 +335,10 @@ export function LocalizedTemplateSelector({
                     onClick={() => handlePreview(template)}
                     data-testid={`template-preview-${template.id}`}
                   >
-                    <Eye className="h-3 w-3 mr-1" />
-                    {t("common.view", "Preview")}
+                    <span className={`flex items-center gap-1 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                      <Eye className="h-3 w-3" />
+                      <span>{t("common.view", "Preview")}</span>
+                    </span>
                   </Button>
                   {!showPreviewOnly && (
                     <Button 
@@ -340,8 +347,10 @@ export function LocalizedTemplateSelector({
                       onClick={() => handlePreview(template)}
                       data-testid={`template-use-${template.id}`}
                     >
-                      <Check className="h-3 w-3 mr-1" />
-                      {t("common.select", "Use")}
+                      <span className={`flex items-center gap-1 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                        <Check className="h-3 w-3" />
+                        <span>{t("common.select", "Use")}</span>
+                      </span>
                     </Button>
                   )}
                 </div>
