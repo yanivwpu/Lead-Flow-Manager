@@ -519,11 +519,25 @@ ul, ol {
 /* Fix comparison list alignment and flex direction */
 [dir="rtl"] section div.grid.md\:grid-cols-2.gap-8.md\:gap-12 > div {
   text-align: right !important;
+  display: flex;
+  flex-direction: column;
 }
 
 [dir="rtl"] section div.grid.md\:grid-cols-2.gap-8.md\:gap-12 .flex.items-start.gap-3 {
   flex-direction: row;
+  justify-content: flex-start;
   text-align: right !important;
+  width: 100%;
+}
+
+[dir="rtl"] section div.grid.md\:grid-cols-2.gap-8.md\:gap-12 p {
+  text-align: right !important;
+  flex: 1;
+}
+
+[dir="rtl"] section div.grid.md\:grid-cols-2.gap-8.md\:gap-12 h3 {
+  text-align: right !important;
+  width: 100%;
 }
 
 [dir="rtl"] .comparison-list,
