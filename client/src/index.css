@@ -648,3 +648,54 @@ ul, ol {
   margin-inline: auto;
   max-width: 800px;
 }
+
+/* Targeted RTL Flush Right + Header Centering Fix */
+[dir="rtl"] p,
+[dir="rtl"] .hero-subtext,
+[dir="rtl"] .hero-description,
+[dir="rtl"] .section-text,
+[dir="rtl"] .feature-desc,
+[dir="rtl"] .comparison-item,
+[dir="rtl"] .comparison-text,
+[dir="rtl"] .list-item,
+[dir="rtl"] .step-desc,
+[dir="rtl"] .onboarding-text {
+  text-align: right !important;
+}
+
+/* Lists — indent from right only */
+[dir="rtl"] ul,
+[dir="rtl"] ol,
+[dir="rtl"] .comparison-list,
+[dir="rtl"] .features-list {
+  padding-right: 1.5rem !important;
+  padding-left: 0 !important;
+}
+
+/* Headers marked in red — force center */
+[dir="rtl"] .hero-headline,
+[dir="rtl"] h1,
+[dir="rtl"] h2,
+[dir="rtl"] .section-title,
+[dir="rtl"] .comparison-header,
+[dir="rtl"] .solution-title,
+[dir="rtl"] .problem-title,
+[dir="rtl"] .onboarding-title {
+  text-align: center !important;
+}
+
+/* Fix comparison section flex items in RTL - reverse icon/text order */
+[dir="rtl"] .flex.items-start.gap-3 {
+  flex-direction: row-reverse !important;
+}
+
+/* Comparison section text flush right */
+[dir="rtl"] .text-gray-300,
+[dir="rtl"] .text-white {
+  text-align: right !important;
+}
+
+/* Comparison section headings */
+[dir="rtl"] h3.uppercase {
+  text-align: right !important;
+}
