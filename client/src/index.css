@@ -606,3 +606,31 @@ ul, ol {
 [dir="rtl"] .section-text {
   text-align: start !important;
 }
+
+/* Final Fix for Big Headings / Large Text in RTL (Hebrew) */
+[dir="rtl"] h1,
+[dir="rtl"] h2,
+[dir="rtl"] h3,
+[dir="rtl"] .hero-headline,
+[dir="rtl"] .section-title,
+[dir="rtl"] .large-heading,
+[dir="rtl"] .main-title,
+[dir="rtl"] .banner-title {
+  text-align: right !important;
+  direction: rtl;
+}
+
+/* Subtext / paragraphs under big headings - always flush right */
+[dir="rtl"] .hero-subtext,
+[dir="rtl"] .section-subtext,
+[dir="rtl"] p,
+[dir="rtl"] .description {
+  text-align: right !important;
+}
+
+/* Remove any max-width limits on headings to allow full flush */
+[dir="rtl"] .hero-text,
+[dir="rtl"] .title-container {
+  max-width: none !important;
+  padding-inline: 2rem;
+}
