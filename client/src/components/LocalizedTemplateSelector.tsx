@@ -216,7 +216,7 @@ export function LocalizedTemplateSelector({
 
   return (
     <div className="space-y-4" dir={isRTL ? 'rtl' : 'ltr'}>
-      <div className={`grid grid-cols-1 sm:grid-cols-3 gap-3 ${isRTL ? 'text-right' : ''}`}>
+      <div className={`grid grid-cols-1 sm:grid-cols-3 gap-3 sticky top-0 bg-white z-10 py-2 ${isRTL ? 'text-right' : ''}`}>
         <div>
           <Label className={`text-sm font-medium mb-2 block ${isRTL ? 'text-right' : ''}`}>
             {t("language.select", "Language")}
@@ -291,7 +291,7 @@ export function LocalizedTemplateSelector({
           <p className="text-gray-500">{t("templates.noTemplates", "No templates found for the selected filters")}</p>
         </Card>
       ) : (
-        <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pb-20 ${isRTL ? 'text-right' : ''}`} dir={isRTL ? 'rtl' : 'ltr'}>
+        <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pb-24 ${isRTL ? 'text-right' : ''}`} dir={isRTL ? 'rtl' : 'ltr'}>
           {templates.map((template) => (
             <Card key={template.id} className="hover:shadow-md transition-shadow">
               <CardHeader className="pb-2">

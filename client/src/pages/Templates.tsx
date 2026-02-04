@@ -219,7 +219,7 @@ export function Templates() {
   }
 
   return (
-    <div className="flex-1 overflow-auto">
+    <div className="flex-1 overflow-auto pb-20 md:pb-6">
       <div className="p-4 md:p-6 max-w-5xl mx-auto">
         <div className="flex items-center justify-between mb-6">
           <div>
@@ -258,16 +258,16 @@ export function Templates() {
 
           <TabsContent value="presets" className="space-y-4">
             <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
+              <CardHeader className="pb-2">
+                <CardTitle className="flex items-center gap-2 text-lg">
                   <Sparkles className="h-5 w-5 text-purple-500" />
                   Preset Automation Templates
                 </CardTitle>
-                <CardDescription>
+                <CardDescription className="text-sm">
                   Pre-built message sequences for different industries. Available in English, Spanish, and Hebrew.
                 </CardDescription>
               </CardHeader>
-              <CardContent>
+              <CardContent className="px-3 md:px-6">
                 <LocalizedTemplateSelector 
                   showPreviewOnly={false}
                   onSelectTemplate={(template, values) => {
