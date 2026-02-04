@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en"> <!-- Will be updated dynamically in React via useEffect -->
+  <head>
+    <!-- Google Analytics -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-6Y1CWBVBHL"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-6Y1CWBVBHL');
+    </script>
+
+    <meta charset="UTF-8" />
+    <!-- Fixed: Removed maximum-scale=1 for better mobile/accessibility -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <title>Official WhatsApp API, Instagram & SMS - One Unified Inbox | WhachatCRM</title>
+    <meta name="description" content="Manage all your customer conversations from WhatsApp Business API, Instagram, Facebook, SMS and more in one unified inbox. Built for SMBs and solo founders." />
+    <link rel="canonical" href="https://whachatcrm.com/" />
+
+    <!-- Open Graph - Fixed: Updated to production OG image -->
+    <meta property="og:title" content="Official WhatsApp API, Instagram & SMS - One Unified Inbox | WhachatCRM" />
+    <meta property="og:description" content="Manage all your customer conversations from WhatsApp Business API, Instagram, Facebook, SMS and more in one unified inbox. Built for SMBs and solo founders." />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://whachatcrm.com" />
+    <meta property="og:image" content="https://whachatcrm.com/og-image.png" />
+    <meta property="og:image:alt" content="WhachatCRM Unified Inbox Dashboard" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+
+    <!-- Twitter Card - Fixed: Updated to production OG image -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Official WhatsApp API, Instagram & SMS - One Unified Inbox | WhachatCRM" />
+    <meta name="twitter:description" content="Manage all your customer conversations from WhatsApp Business API, Instagram, Facebook, SMS and more in one unified inbox. Built for SMBs and solo founders." />
+    <meta name="twitter:image" content="https://whachatcrm.com/og-image.png" />
+    <meta name="twitter:image:alt" content="WhachatCRM Unified Inbox Dashboard" />
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/favicon.png" />
+
+    <!-- Fonts (unchanged) -->
+    ... (keep your font links)
+
+    <!-- Critical CSS (unchanged) -->
+    ...
+
+    <!-- PWA (unchanged) -->
+    ...
+
+    <!-- Preload OG Image - Consistent with metas -->
+    <link rel="preload" as="image" href="https://whachatcrm.com/og-image.png" />
+
+    <!-- Prefetch Key Pages (unchanged) -->
+    ...
+
+    <!-- Structured Data (minor: update foundingDate if needed) -->
+    ... (keep all JSON-LD)
+
+    <!-- Main JS -->
+    <script type="module" crossorigin src="/assets/index-Dcg7wCDg.js"></script>
+  </head>
+  <body>
+    <div id="root"></div>
+
+    <!-- Service Worker & Lazy Loading (unchanged) -->
+    ...
+  </body>
+</html>
