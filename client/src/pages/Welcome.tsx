@@ -27,6 +27,7 @@ import {
 import { useAuth } from "@/lib/auth-context";
 import { BookDemoModal } from "@/components/BookDemoModal";
 import { LanguageSelector } from "@/components/LanguageSelector";
+import { getDirection } from "@/lib/i18n";
 import heroImage from "@assets/generated_images/whatsapp_crm_dashboard_mockup_resized.png";
 import heroImageWebp from "@assets/generated_images/whatsapp_crm_dashboard_mockup.webp";
 
@@ -103,9 +104,10 @@ export function Welcome() {
   const { user } = useAuth();
   const { t } = useTranslation();
   const [showDemoModal, setShowDemoModal] = useState(false);
+  const isRTL = getDirection() === 'rtl';
 
   return (
-    <div className="min-h-screen bg-white overflow-x-hidden">
+    <div dir={isRTL ? 'rtl' : 'ltr'} className={`min-h-screen bg-white overflow-x-hidden ${isRTL ? 'text-right' : 'text-left'}`}>
       <Helmet>
         <title>Official WhatsApp API CRM: Unified Inbox for WhatsApp, Instagram & SMS | WhachatCRM</title>
         <meta name="description" content="Manage WhatsApp customer chats like a CRM. Unified inbox, notes, tags, follow-ups, AI replies & chatbot builder. Free plan forever – start in minutes." />
@@ -208,15 +210,15 @@ export function Welcome() {
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-gray-600">
               <div className="flex items-center gap-2">
                 <CheckCircle2 className="h-4 w-4 text-brand-green" />
-                <span>Built on the official WhatsApp Business API</span>
+                <span>{t('home.hero.badge1')}</span>
               </div>
               <div className="flex items-center gap-2">
                 <CheckCircle2 className="h-4 w-4 text-brand-green" />
-                <span>Secure & compliant — no scraping</span>
+                <span>{t('home.hero.badge2')}</span>
               </div>
               <div className="flex items-center gap-2">
                 <CheckCircle2 className="h-4 w-4 text-brand-green" />
-                <span>Designed for founders, sales teams & support teams</span>
+                <span>{t('home.hero.badge3')}</span>
               </div>
             </div>
           </div>
@@ -243,60 +245,60 @@ export function Welcome() {
       <section className="px-4 md:px-6 py-16 md:py-20 bg-gray-900 text-white">
         <div className="max-w-6xl mx-auto">
           <h2 className="text-2xl md:text-4xl font-display font-bold text-center mb-10 md:mb-14">
-            WhatsApp Wasn't Built for Managing Customers — Until Now
+            {t('home.problem.title')}
           </h2>
           
           <div className="grid md:grid-cols-2 gap-8 md:gap-12">
             {/* Problems */}
             <div>
-              <h3 className="text-lg font-semibold text-gray-400 mb-6 uppercase tracking-wide">The Problem</h3>
+              <h3 className="text-lg font-semibold text-gray-400 mb-6 uppercase tracking-wide">{t('home.problem.heading')}</h3>
               <div className="space-y-4">
                 <div className="flex items-start gap-3">
                   <div className="h-6 w-6 rounded-full bg-red-500/20 flex items-center justify-center shrink-0 mt-0.5">
                     <span className="text-red-400 text-sm">✕</span>
                   </div>
-                  <p className="text-gray-300">Important chats get buried</p>
+                  <p className="text-gray-300">{t('home.problem.item1')}</p>
                 </div>
                 <div className="flex items-start gap-3">
                   <div className="h-6 w-6 rounded-full bg-red-500/20 flex items-center justify-center shrink-0 mt-0.5">
                     <span className="text-red-400 text-sm">✕</span>
                   </div>
-                  <p className="text-gray-300">No context about customers</p>
+                  <p className="text-gray-300">{t('home.problem.item2')}</p>
                 </div>
                 <div className="flex items-start gap-3">
                   <div className="h-6 w-6 rounded-full bg-red-500/20 flex items-center justify-center shrink-0 mt-0.5">
                     <span className="text-red-400 text-sm">✕</span>
                   </div>
-                  <p className="text-gray-300">Follow-ups are forgotten</p>
+                  <p className="text-gray-300">{t('home.problem.item3')}</p>
                 </div>
                 <div className="flex items-start gap-3">
                   <div className="h-6 w-6 rounded-full bg-red-500/20 flex items-center justify-center shrink-0 mt-0.5">
                     <span className="text-red-400 text-sm">✕</span>
                   </div>
-                  <p className="text-gray-300">Teams lose visibility</p>
+                  <p className="text-gray-300">{t('home.problem.item4')}</p>
                 </div>
               </div>
             </div>
             
             {/* Solution */}
             <div>
-              <h3 className="text-lg font-semibold text-brand-green mb-6 uppercase tracking-wide">WhachatCRM Solution</h3>
+              <h3 className="text-lg font-semibold text-brand-green mb-6 uppercase tracking-wide">{t('home.solution.heading')}</h3>
               <div className="space-y-4">
                 <div className="flex items-start gap-3">
                   <CheckCircle2 className="h-6 w-6 text-brand-green shrink-0 mt-0.5" />
-                  <p className="text-white">One conversation per customer</p>
+                  <p className="text-white">{t('home.solution.item1')}</p>
                 </div>
                 <div className="flex items-start gap-3">
                   <CheckCircle2 className="h-6 w-6 text-brand-green shrink-0 mt-0.5" />
-                  <p className="text-white">Notes, tags & tasks inside each chat</p>
+                  <p className="text-white">{t('home.solution.item2')}</p>
                 </div>
                 <div className="flex items-start gap-3">
                   <CheckCircle2 className="h-6 w-6 text-brand-green shrink-0 mt-0.5" />
-                  <p className="text-white">Clear follow-ups so nothing slips through</p>
+                  <p className="text-white">{t('home.solution.item3')}</p>
                 </div>
                 <div className="flex items-start gap-3">
                   <CheckCircle2 className="h-6 w-6 text-brand-green shrink-0 mt-0.5" />
-                  <p className="text-white">Multi-channel integrations with your favorite tools</p>
+                  <p className="text-white">{t('home.solution.item4')}</p>
                 </div>
               </div>
             </div>
@@ -309,18 +311,18 @@ export function Welcome() {
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-10 md:mb-14">
             <h2 className="text-2xl md:text-4xl font-display font-bold text-gray-900 mb-3 md:mb-4">
-              Everything You Need to Manage WhatsApp Like a CRM
+              {t('home.features.title')}
             </h2>
           </div>
           
           <div className="grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6 md:gap-8">
             {[
-              { icon: MessageSquare, color: "bg-emerald-100", iconColor: "text-brand-green", title: "Organized Conversations", desc: "Every WhatsApp chat becomes a customer record — no more searching or guessing." },
-              { icon: Tag, color: "bg-blue-100", iconColor: "text-blue-600", title: "Notes & Tags", desc: "Add internal notes and tags so your team always knows the full context." },
-              { icon: Bell, color: "bg-amber-100", iconColor: "text-amber-600", title: "Follow-Ups & Tasks", desc: "Set reminders and tasks to make sure every lead is followed up on time." },
-              { icon: Brain, color: "bg-purple-100", iconColor: "text-purple-600", title: "AI Brain", desc: "Smart reply suggestions, lead capture & tone control. Your AI-powered business assistant." },
-              { icon: Phone, color: "bg-cyan-100", iconColor: "text-cyan-600", title: "Visual Chatbot Builder", desc: "Build automated flows with our drag-and-drop chatbot builder. No coding required." },
-              { icon: Zap, color: "bg-pink-100", iconColor: "text-pink-600", title: "Multi-Channel Integrations", desc: "Connect with Shopify, HubSpot, Salesforce, Stripe & more to sync leads across all your tools." },
+              { icon: MessageSquare, color: "bg-emerald-100", iconColor: "text-brand-green", title: t('home.features.item1.title'), desc: t('home.features.item1.desc') },
+              { icon: Tag, color: "bg-blue-100", iconColor: "text-blue-600", title: t('home.features.item2.title'), desc: t('home.features.item2.desc') },
+              { icon: Bell, color: "bg-amber-100", iconColor: "text-amber-600", title: t('home.features.item3.title'), desc: t('home.features.item3.desc') },
+              { icon: Brain, color: "bg-purple-100", iconColor: "text-purple-600", title: t('home.features.item4.title'), desc: t('home.features.item4.desc') },
+              { icon: Phone, color: "bg-cyan-100", iconColor: "text-cyan-600", title: t('home.features.item5.title'), desc: t('home.features.item5.desc') },
+              { icon: Zap, color: "bg-pink-100", iconColor: "text-pink-600", title: t('home.features.item6.title'), desc: t('home.features.item6.desc') },
             ].map((benefit, i) => {
               const Icon = benefit.icon;
               return (
@@ -346,10 +348,10 @@ export function Welcome() {
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-10 md:mb-12">
             <h2 className="text-2xl md:text-4xl font-display font-bold text-gray-900 mb-3 md:mb-4">
-              Connect Your Favorite Tools
+              {t('home.integrations.title')}
             </h2>
             <p className="text-base md:text-lg text-gray-600 max-w-2xl mx-auto">
-              WhachatCRM integrates seamlessly with the apps you already use — sync leads, automate workflows, and keep everything in one place.
+              {t('home.integrations.subtitle')}
             </p>
           </div>
           
@@ -362,10 +364,10 @@ export function Welcome() {
         <div className="max-w-5xl mx-auto">
           <div className="text-center mb-12 md:mb-16">
             <h2 className="text-2xl md:text-4xl font-display font-bold text-gray-900 mb-3 md:mb-4">
-              Up and running in minutes
+              {t('home.howItWorks.title')}
             </h2>
             <p className="text-base md:text-lg text-gray-600">
-              No complex setup. No training required.
+              {t('home.howItWorks.subtitle')}
             </p>
           </div>
           
@@ -374,24 +376,24 @@ export function Welcome() {
               <div className="h-14 w-14 bg-brand-green text-white rounded-2xl flex items-center justify-center mx-auto mb-4 text-xl font-bold">
                 1
               </div>
-              <h3 className="text-lg font-bold text-gray-900 mb-2">Connect your number</h3>
-              <p className="text-gray-600">Link your WhatsApp Business number in just a few clicks.</p>
+              <h3 className="text-lg font-bold text-gray-900 mb-2">{t('home.howItWorks.step1.title')}</h3>
+              <p className="text-gray-600">{t('home.howItWorks.step1.desc')}</p>
             </div>
             
             <div className="text-center">
               <div className="h-14 w-14 bg-brand-green text-white rounded-2xl flex items-center justify-center mx-auto mb-4 text-xl font-bold">
                 2
               </div>
-              <h3 className="text-lg font-bold text-gray-900 mb-2">Organize your chats</h3>
-              <p className="text-gray-600">Add notes, tags, and set follow-up reminders for each conversation.</p>
+              <h3 className="text-lg font-bold text-gray-900 mb-2">{t('home.howItWorks.step2.title')}</h3>
+              <p className="text-gray-600">{t('home.howItWorks.step2.desc')}</p>
             </div>
             
             <div className="text-center">
               <div className="h-14 w-14 bg-brand-green text-white rounded-2xl flex items-center justify-center mx-auto mb-4 text-xl font-bold">
                 3
               </div>
-              <h3 className="text-lg font-bold text-gray-900 mb-2">Close more deals</h3>
-              <p className="text-gray-600">Get reminders, follow up on time, and convert more leads into customers.</p>
+              <h3 className="text-lg font-bold text-gray-900 mb-2">{t('home.howItWorks.step3.title')}</h3>
+              <p className="text-gray-600">{t('home.howItWorks.step3.desc')}</p>
             </div>
           </div>
         </div>
@@ -401,30 +403,30 @@ export function Welcome() {
       <section className="px-4 md:px-6 py-16 md:py-20">
         <div className="max-w-3xl mx-auto text-center">
           <h2 className="text-2xl md:text-4xl font-display font-bold text-gray-900 mb-3 md:mb-4">
-            Simple, Transparent Pricing
+            {t('home.pricingTeaser.title')}
           </h2>
           <p className="text-base md:text-lg text-gray-600 mb-8">
-            Start for free. Upgrade only when you need more.
+            {t('home.pricingTeaser.subtitle')}
           </p>
           
           <div className="flex flex-wrap justify-center gap-4 md:gap-6 mb-8">
             <div className="flex items-center gap-2 text-gray-700">
               <CheckCircle2 className="h-5 w-5 text-brand-green" />
-              <span>Free plan for individuals</span>
+              <span>{t('home.pricingTeaser.freePlan')}</span>
             </div>
             <div className="flex items-center gap-2 text-gray-700">
               <CheckCircle2 className="h-5 w-5 text-brand-green" />
-              <span>Paid plans start at $19/month</span>
+              <span>{t('home.pricingTeaser.paidPlans')}</span>
             </div>
             <div className="flex items-center gap-2 text-gray-700">
               <CheckCircle2 className="h-5 w-5 text-brand-green" />
-              <span>Cancel anytime</span>
+              <span>{t('home.pricingTeaser.cancelAnytime')}</span>
             </div>
           </div>
           
           <Link href="/pricing">
             <button className="h-14 px-8 bg-brand-green hover:bg-emerald-700 text-white font-semibold rounded-full inline-flex items-center gap-2 transition-all shadow-lg">
-              See Plans
+              {t('home.pricingTeaser.seePlans')}
               <ArrowRight className="h-5 w-5" />
             </button>
           </Link>
@@ -435,26 +437,26 @@ export function Welcome() {
       <section className="px-4 md:px-6 py-16 md:py-20 bg-gray-50">
         <div className="max-w-4xl mx-auto text-center">
           <h2 className="text-2xl md:text-4xl font-display font-bold text-gray-900 mb-10">
-            Built for Businesses That Live on WhatsApp
+            {t('home.builtFor.title')}
           </h2>
           
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 mb-10">
             <div className="bg-white p-4 md:p-6 rounded-xl border border-gray-200">
-              <p className="font-medium text-gray-900 text-sm md:text-base">Sales teams managing inbound leads</p>
+              <p className="font-medium text-gray-900 text-sm md:text-base">{t('home.builtFor.salesTeams')}</p>
             </div>
             <div className="bg-white p-4 md:p-6 rounded-xl border border-gray-200">
-              <p className="font-medium text-gray-900 text-sm md:text-base">Customer support teams</p>
+              <p className="font-medium text-gray-900 text-sm md:text-base">{t('home.builtFor.supportTeams')}</p>
             </div>
             <div className="bg-white p-4 md:p-6 rounded-xl border border-gray-200">
-              <p className="font-medium text-gray-900 text-sm md:text-base">Agencies & consultants</p>
+              <p className="font-medium text-gray-900 text-sm md:text-base">{t('home.builtFor.agencies')}</p>
             </div>
             <div className="bg-white p-4 md:p-6 rounded-xl border border-gray-200">
-              <p className="font-medium text-gray-900 text-sm md:text-base">Small businesses & founders</p>
+              <p className="font-medium text-gray-900 text-sm md:text-base">{t('home.builtFor.smallBiz')}</p>
             </div>
           </div>
           
           <p className="text-lg text-gray-600">
-            If WhatsApp is how you talk to customers — this is your CRM.
+            {t('home.builtFor.tagline')}
           </p>
         </div>
       </section>
@@ -466,13 +468,13 @@ export function Welcome() {
             <Shield className="h-7 w-7 text-brand-green" />
           </div>
           <h2 className="text-xl md:text-3xl font-display font-bold mb-4">
-            Official. Secure. Reliable.
+            {t('home.trust.title')}
           </h2>
           <p className="text-gray-300 mb-2">
-            WhachatCRM uses the official WhatsApp Business API and does not scrape personal accounts.
+            {t('home.trust.line1')}
           </p>
           <p className="text-gray-400">
-            Your data stays secure and compliant with Meta's policies.
+            {t('home.trust.line2')}
           </p>
         </div>
       </section>
@@ -482,25 +484,25 @@ export function Welcome() {
         <div className="max-w-3xl mx-auto text-center">
           <div className="inline-flex items-center gap-2 px-4 py-2 bg-brand-green/10 text-brand-green rounded-full text-sm font-medium mb-6">
             <Zap className="h-4 w-4" />
-            Set up in under 5 minutes
+            {t('home.cta.setupTime')}
           </div>
           <h2 className="text-2xl md:text-4xl font-display font-bold text-gray-900 mb-3 md:mb-4">
-            Stop Losing Leads in Your WhatsApp Inbox
+            {t('home.cta.title')}
           </h2>
           <p className="text-base md:text-lg text-gray-600 mb-8">
-            Join growing businesses using WhachatCRM to close more deals via WhatsApp.
+            {t('home.cta.subtitle')}
           </p>
           
           <div className="flex flex-col sm:flex-row gap-4 justify-center mb-6">
             <Link href={user ? "/app/chats" : "/auth"}>
               <button className="h-14 px-8 bg-brand-green hover:bg-emerald-700 text-white font-semibold rounded-full inline-flex items-center justify-center gap-2 transition-all shadow-lg hover:shadow-xl" data-testid="button-final-cta">
-                Start Your 14-Day Pro Trial
+                {t('home.cta.primary')}
                 <ArrowRight className="h-5 w-5" />
               </button>
             </Link>
             <Link href="/pricing">
               <button className="h-14 px-8 bg-white border border-gray-200 text-gray-700 font-medium rounded-full inline-flex items-center justify-center gap-2 hover:bg-gray-50 transition-colors" data-testid="button-final-pricing">
-                See Pricing
+                {t('home.cta.secondary')}
               </button>
             </Link>
           </div>
@@ -508,15 +510,15 @@ export function Welcome() {
           <div className="flex flex-wrap justify-center gap-6 text-sm text-gray-500">
             <span className="flex items-center gap-1.5">
               <CheckCircle2 className="h-4 w-4 text-brand-green" />
-              No credit card required
+              {t('home.hero.note')}
             </span>
             <span className="flex items-center gap-1.5">
               <CheckCircle2 className="h-4 w-4 text-brand-green" />
-              Free plan forever
+              {t('pricing.foreverFree')}
             </span>
             <span className="flex items-center gap-1.5">
               <CheckCircle2 className="h-4 w-4 text-brand-green" />
-              Cancel anytime
+              {t('home.pricingTeaser.cancelAnytime')}
             </span>
           </div>
         </div>

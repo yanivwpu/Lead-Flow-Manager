@@ -300,7 +300,128 @@
       "analyticsDesc": "Track performance and optimize"
     },
     "integrations": "Integrations",
-    "integrationsDesc": "Connect with your favorite tools"
+    "integrationsDesc": "Connect with your favorite tools",
+    "badge1": "Built on the official WhatsApp Business API",
+    "badge2": "Secure & compliant — no scraping",
+    "badge3": "Designed for founders, sales teams & support teams"
+  },
+  "home": {
+    "hero": {
+      "title": "One Inbox. Every Channel. Zero Complexity.",
+      "subtitle": "WhatsApp, SMS, Telegram, Instagram, Facebook, Messenger, Web Chat — all in one unified inbox. Stop juggling apps. Respond faster, never lose a lead.",
+      "cta": {
+        "primary": "Start Your 14-Day Free Trial",
+        "secondary": "See Pricing",
+        "demo": "Book a Demo"
+      },
+      "note": "No credit card required",
+      "badge1": "Built on the official WhatsApp Business API",
+      "badge2": "Secure & compliant — no scraping",
+      "badge3": "Designed for founders, sales teams & support teams"
+    },
+    "dashboard": {
+      "alt": "WhachatCRM Dashboard - WhatsApp CRM Interface"
+    },
+    "problem": {
+      "title": "WhatsApp Wasn't Built for Managing Customers — Until Now",
+      "heading": "The Problem",
+      "item1": "Important chats get buried",
+      "item2": "No context about customers",
+      "item3": "Follow-ups are forgotten",
+      "item4": "Teams lose visibility"
+    },
+    "solution": {
+      "heading": "WhachatCRM Solution",
+      "item1": "One conversation per customer",
+      "item2": "Notes, tags & tasks inside each chat",
+      "item3": "Clear follow-ups so nothing slips through",
+      "item4": "Multi-channel integrations with your favorite tools"
+    },
+    "features": {
+      "title": "Everything You Need to Manage WhatsApp Like a CRM",
+      "item1": {
+        "title": "Organized Conversations",
+        "desc": "Every WhatsApp chat becomes a customer record — no more searching or guessing."
+      },
+      "item2": {
+        "title": "Notes & Tags",
+        "desc": "Add internal notes and tags so your team always knows the full context."
+      },
+      "item3": {
+        "title": "Follow-Ups & Tasks",
+        "desc": "Set reminders and tasks to make sure every lead is followed up on time."
+      },
+      "item4": {
+        "title": "AI Brain",
+        "desc": "Smart reply suggestions, lead capture & tone control. Your AI-powered business assistant."
+      },
+      "item5": {
+        "title": "Visual Chatbot Builder",
+        "desc": "Build automated flows with our drag-and-drop chatbot builder. No coding required."
+      },
+      "item6": {
+        "title": "Multi-Channel Integrations",
+        "desc": "Connect with Shopify, HubSpot, Salesforce, Stripe & more to sync leads across all your tools."
+      }
+    },
+    "integrations": {
+      "title": "Connect Your Favorite Tools",
+      "subtitle": "WhachatCRM integrates seamlessly with the apps you already use — sync leads, automate workflows, and keep everything in one place."
+    },
+    "howItWorks": {
+      "title": "Up and running in minutes",
+      "subtitle": "No complex setup. No training required.",
+      "step1": {
+        "title": "Connect your number",
+        "desc": "Link your WhatsApp Business number in just a few clicks."
+      },
+      "step2": {
+        "title": "Organize your chats",
+        "desc": "Add notes, tags, and set follow-up reminders for each conversation."
+      },
+      "step3": {
+        "title": "Close more deals",
+        "desc": "Get reminders, follow up on time, and convert more leads into customers."
+      }
+    },
+    "pricingTeaser": {
+      "title": "Simple, Transparent Pricing",
+      "subtitle": "Start for free. Upgrade only when you need more.",
+      "freePlan": "Free plan for individuals",
+      "paidPlans": "Paid plans start at $19/month",
+      "cancelAnytime": "Cancel anytime",
+      "seePlans": "See Plans"
+    },
+    "builtFor": {
+      "title": "Built for Businesses That Live on WhatsApp",
+      "salesTeams": "Sales teams managing inbound leads",
+      "supportTeams": "Customer support teams",
+      "agencies": "Agencies & consultants",
+      "smallBiz": "Small businesses & founders",
+      "tagline": "If WhatsApp is how you talk to customers — this is your CRM."
+    },
+    "trust": {
+      "title": "Official. Secure. Reliable.",
+      "line1": "WhachatCRM uses the official WhatsApp Business API and does not scrape personal accounts.",
+      "line2": "Your data stays secure and compliant with Meta's policies."
+    },
+    "cta": {
+      "title": "Stop Losing Leads in Your WhatsApp Inbox",
+      "subtitle": "Join growing businesses using WhachatCRM to close more deals via WhatsApp.",
+      "primary": "Start Your 14-Day Pro Trial",
+      "secondary": "See Pricing",
+      "note": "No credit card required • Free plan forever • Cancel anytime",
+      "setupTime": "Set up in under 5 minutes"
+    },
+    "footer": {
+      "copyright": "© 2025 WhachatCRM. All rights reserved.",
+      "whatsappCrm": "WhatsApp CRM",
+      "respondAlt": "Respond.io Alternative",
+      "watiAlt": "WATI Alternative",
+      "contact": "Contact",
+      "privacy": "Privacy",
+      "terms": "Terms"
+    }
   },
   "auth": {
     "welcomeBack": "Welcome back",

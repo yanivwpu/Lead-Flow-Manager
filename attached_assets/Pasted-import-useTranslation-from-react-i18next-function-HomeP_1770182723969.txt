@@ -1,0 +1,163 @@
+import { useTranslation } from 'react-i18next';
+
+function HomePage() {
+  const { t, i18n } = useTranslation();
+  const isRTL = i18n.language === 'he';
+
+  return (
+    <div dir={isRTL ? 'rtl' : 'ltr'} className={`min-h-screen bg-white ${isRTL ? 'text-right' : 'text-left'}`}>
+      {/* Hero Section */}
+      <section className="py-20 px-6 text-center">
+        <h1 className="text-4xl md:text-5xl font-bold">
+          {t('home.hero.title', 'תיבת דואר אחת. כל הערוצים. אפס מורכבות.')}
+        </h1>
+        <p className="text-xl md:text-2xl mt-6 max-w-4xl mx-auto">
+          {t('home.hero.subtitle', 'WhatsApp, SMS, טלגרם, אינסטגרם, פייסבוק ומסנג\'ר, צ\'אט באתר — הכל בתיבה מאוחדת אחת. תפסיק ללהטט בין אפליקציות. הגב מהר יותר, ואל תפספס אף ליד.')}
+        </p>
+
+        <div className="flex flex-col sm:flex-row justify-center gap-4 mt-10">
+          <button className="bg-brand-green text-white px-8 py-4 rounded-lg text-lg font-semibold">
+            {t('home.hero.cta.primary', 'התחל ניסיון חינם ל-14 יום')}
+          </button>
+          <button className="border border-gray-300 px-8 py-4 rounded-lg text-lg font-semibold">
+            {t('home.hero.cta.secondary', 'צפה במחירון')}
+          </button>
+          <button className="border border-gray-300 px-8 py-4 rounded-lg text-lg font-semibold">
+            {t('home.hero.cta.demo', 'קבע הדגמה')}
+          </button>
+        </div>
+
+        <p className="mt-4 text-gray-600">
+          {t('home.hero.note', 'לא נדרש כרטיס אשראי')}
+        </p>
+
+        <div className="mt-12 text-sm text-gray-600 space-y-1">
+          <p>{t('home.hero.badge1', 'מבוסס על WhatsApp Business API הרשמי')}</p>
+          <p>{t('home.hero.badge2', 'מאובטח ותקני — ללא סריקה של חשבונות אישיים')}</p>
+          <p>{t('home.hero.badge3', 'מיועד ליזמים, צוותי מכירות ותמיכה')}</p>
+        </div>
+      </section>
+
+      {/* Dashboard Screenshot */}
+      <section className="my-16 px-6">
+        <img 
+          src="/dashboard-hebrew.png" 
+          alt={t('home.dashboard.alt', 'ממשק WhachatCRM - CRM לווטסאפ')} 
+          className="mx-auto rounded-2xl shadow-2xl max-w-full"
+        />
+      </section>
+
+      {/* Problem vs Solution */}
+      <section className="py-20 px-6 bg-gray-50">
+        <h2 className="text-3xl md:text-4xl font-bold text-center">
+          {t('home.problem.title', 'ווטסאפ לא נבנה לניהול לקוחות — עד עכשיו')}
+        </h2>
+
+        <div className="grid md:grid-cols-2 gap-12 mt-12 max-w-6xl mx-auto">
+          <div>
+            <h3 className="text-2xl font-semibold">{t('home.problem.heading', 'הבעיה')}</h3>
+            <ul className="mt-6 space-y-4">
+              <li className="flex items-start gap-4">
+                <span className="text-red-600 text-2xl">❌</span>
+                <span>{t('home.problem.item1', 'שיחות חשובות נקברות בין מאות הודעות')}</span>
+              </li>
+              <li className="flex items-start gap-4">
+                <span className="text-red-600 text-2xl">❌</span>
+                <span>{t('home.problem.item2', 'אין הקשר מלא על הלקוח')}</span>
+              </li>
+              <li className="flex items-start gap-4">
+                <span className="text-red-600 text-2xl">❌</span>
+                <span>{t('home.problem.item3', 'מעקבים נשכחים')}</span>
+              </li>
+              <li className="flex items-start gap-4">
+                <span className="text-red-600 text-2xl">❌</span>
+                <span>{t('home.problem.item4', 'הצוות מאבד שקיפות')}</span>
+              </li>
+            </ul>
+          </div>
+
+          <div>
+            <h3 className="text-2xl font-semibold">{t('home.solution.heading', 'הפתרון של WhachatCRM')}</h3>
+            <ul className="mt-6 space-y-4">
+              <li className="flex items-start gap-4">
+                <span className="text-green-600 text-2xl">✅</span>
+                <span>{t('home.solution.item1', 'שיחה אחת מאוחדת לכל לקוח')}</span>
+              </li>
+              <li className="flex items-start gap-4">
+                <span className="text-green-600 text-2xl">✅</span>
+                <span>{t('home.solution.item2', 'הערות, תגיות ומשימות בתוך כל צ\'אט')}</span>
+              </li>
+              <li className="flex items-start gap-4">
+                <span className="text-green-600 text-2xl">✅</span>
+                <span>{t('home.solution.item3', 'מעקבים ברורים — שום דבר לא נופל בין הכיסאות')}</span>
+              </li>
+              <li className="flex items-start gap-4">
+                <span className="text-green-600 text-2xl">✅</span>
+                <span>{t('home.solution.item4', 'אינטגרציות רב-ערוציות עם הכלים האהובים עליך')}</span>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      {/* Features Grid */}
+      <section className="py-20 px-6">
+        <h2 className="text-3xl md:text-4xl font-bold text-center">
+          {t('home.features.title', 'כל מה שצריך כדי לנהל ווטסאפ כמו CRM אמיתי')}
+        </h2>
+
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8 mt-12 max-w-7xl mx-auto">
+          <div className="bg-gray-50 p-8 rounded-2xl">
+            <h4 className="text-xl font-semibold">{t('home.features.item1.title', 'שיחות מאורגנות')}</h4>
+            <p>{t('home.features.item1.desc', 'כל צ\'אט בווטסאפ הופך לרשומת לקוח — בלי חיפושים ובלי ניחושים.')}</p>
+          </div>
+
+          <div className="bg-gray-50 p-8 rounded-2xl">
+            <h4 className="text-xl font-semibold">{t('home.features.item2.title', 'הערות ותגיות')}</h4>
+            <p>{t('home.features.item2.desc', 'הוסף הערות פנימיות ותגיות כדי שהצוות תמיד ידע את ההקשר המלא.')}</p>
+          </div>
+
+          <div className="bg-gray-50 p-8 rounded-2xl">
+            <h4 className="text-xl font-semibold">{t('home.features.item3.title', 'מעקבים ומשימות')}</h4>
+            <p>{t('home.features.item3.desc', 'קבע תזכורות ומשימות כדי לוודא שכל ליד מקבל מעקב בזמן.')}</p>
+          </div>
+
+          <div className="bg-gray-50 p-8 rounded-2xl">
+            <h4 className="text-xl font-semibold">{t('home.features.item4.title', 'מוח AI')}</h4>
+            <p>{t('home.features.item4.desc', 'הצעות תשובה חכמות, זיהוי לידים ושליטה בטון. העוזר העסקי המופעל בינה מלאכותית שלך.')}</p>
+          </div>
+
+          <div className="bg-gray-50 p-8 rounded-2xl">
+            <h4 className="text-xl font-semibold">{t('home.features.item5.title', 'בונה צ\'אטבוט ויזואלי')}</h4>
+            <p>{t('home.features.item5.desc', 'בנה זרימות אוטומטיות עם בונה drag-and-drop. ללא קוד.')}</p>
+          </div>
+
+          <div className="bg-gray-50 p-8 rounded-2xl">
+            <h4 className="text-xl font-semibold">{t('home.features.item6.title', 'אינטגרציות רב-ערוציות')}</h4>
+            <p>{t('home.features.item6.desc', 'התחבר ל-Shopify, HubSpot, Salesforce, Stripe ועוד — סנכרן לידים בכל הכלים שלך.')}</p>
+          </div>
+        </div>
+      </section>
+
+      {/* Continue with other sections (integrations, setup steps, pricing teaser, testimonials, footer) using the same pattern */}
+      
+      {/* Example CTA at bottom */}
+      <section className="py-20 px-6 text-center bg-brand-green text-white">
+        <h2 className="text-3xl md:text-4xl font-bold">
+          {t('home.cta.title', 'תפסיק לאבד לידים בתיבת הווטסאפ שלך')}
+        </h2>
+        <div className="mt-8">
+          <button className="bg-white text-brand-green px-8 py-4 rounded-lg text-lg font-semibold">
+            {t('home.cta.primary', 'התחל ניסיון Pro ל-14 יום')}
+          </button>
+          <button className="ml-4 border border-white px-8 py-4 rounded-lg text-lg font-semibold">
+            {t('home.cta.secondary', 'צפה במחירון')}
+          </button>
+        </div>
+        <p className="mt-4">{t('home.cta.note', 'ללא כרטיס אשראי • תוכנית חינמית לנצח • ביטול בכל עת')}</p>
+      </section>
+    </div>
+  );
+}
+
+export default HomePage;
