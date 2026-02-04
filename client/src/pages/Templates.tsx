@@ -257,7 +257,7 @@ export function Templates() {
           </TabsList>
 
           <TabsContent value="presets" className="space-y-4">
-            <Card className="overflow-hidden">
+            <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="flex items-center gap-2 text-lg">
                   <Sparkles className="h-5 w-5 text-purple-500" />
@@ -267,7 +267,7 @@ export function Templates() {
                   Pre-built message sequences for different industries. Available in English, Spanish, and Hebrew.
                 </CardDescription>
               </CardHeader>
-              <CardContent className="px-3 md:px-6 min-h-0">
+              <CardContent className="px-3 md:px-6 flex flex-col h-[60vh] md:h-[500px] min-h-0">
                 <LocalizedTemplateSelector 
                   showPreviewOnly={false}
                   onSelectTemplate={(template, values) => {
