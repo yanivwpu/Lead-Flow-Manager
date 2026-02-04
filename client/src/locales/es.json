@@ -435,5 +435,114 @@
       "q6": "¿Cuál es la diferencia entre AI Assist y AI Brain?",
       "a6": "AI Assist está incluido en planes de pago con límites de uso. AI Brain es un complemento que elimina límites y agrega funciones avanzadas como puntuación de leads y construcción de automatización."
     }
+  },
+  "home": {
+    "hero": {
+      "title": "Una Bandeja. Todos los Canales. Cero Complejidad.",
+      "subtitle": "WhatsApp, SMS, Telegram, Instagram, Facebook, Chat Web — todo en una bandeja unificada. Deja de cambiar entre apps. Responde más rápido, nunca pierdas un lead.",
+      "cta": "Inicia tu Prueba Pro de 14 Días",
+      "secondary": "Comparar Planes",
+      "note": "No se requiere tarjeta de crédito",
+      "badge1": "Construido sobre la API oficial de WhatsApp Business",
+      "badge2": "Seguro y compliant — sin scraping",
+      "badge3": "Diseñado para fundadores, equipos de ventas y equipos de soporte"
+    },
+    "problem": {
+      "title": "WhatsApp no fue diseñado para gestionar clientes — Hasta ahora",
+      "heading": "El Problema",
+      "item1": "Los chats importantes se entierran",
+      "item2": "No hay contexto sobre los clientes",
+      "item3": "Los seguimientos se olvidan",
+      "item4": "Los equipos pierden visibilidad"
+    },
+    "solution": {
+      "heading": "Solución WhachatCRM",
+      "item1": "Una conversación por cliente",
+      "item2": "Notas, etiquetas y tareas dentro de cada chat",
+      "item3": "Seguimientos claros para que nada se escape",
+      "item4": "Integraciones multicanal con tus herramientas favoritas"
+    },
+    "features": {
+      "title": "Todo lo que necesitas para gestionar WhatsApp como un CRM",
+      "item1": {
+        "title": "Conversaciones Organizadas",
+        "desc": "Cada chat de WhatsApp se convierte en un registro de cliente — sin más búsquedas ni adivinanzas."
+      },
+      "item2": {
+        "title": "Notas y Etiquetas",
+        "desc": "Agrega notas internas y etiquetas para que tu equipo siempre tenga el contexto completo."
+      },
+      "item3": {
+        "title": "Seguimientos y Tareas",
+        "desc": "Establece recordatorios y tareas para asegurar que cada lead sea seguido a tiempo."
+      },
+      "item4": {
+        "title": "Cerebro IA",
+        "desc": "Sugerencias de respuestas inteligentes, captura de leads y control de tono. Tu asistente de negocio impulsado por IA."
+      },
+      "item5": {
+        "title": "Constructor de Chatbot Visual",
+        "desc": "Crea flujos automatizados con nuestro constructor drag-and-drop. Sin código necesario."
+      },
+      "item6": {
+        "title": "Integraciones Multicanal",
+        "desc": "Conecta con Shopify, HubSpot, Salesforce, Stripe y más para sincronizar leads en todas tus herramientas."
+      }
+    },
+    "integrations": {
+      "title": "Conecta Tus Herramientas Favoritas",
+      "subtitle": "WhachatCRM se integra perfectamente con las apps que ya usas — sincroniza leads, automatiza flujos de trabajo y mantén todo en un solo lugar."
+    },
+    "howItWorks": {
+      "title": "Operativo en minutos",
+      "subtitle": "Sin configuración compleja. Sin capacitación requerida.",
+      "step1": {
+        "title": "Conecta tu número",
+        "desc": "Vincula tu número de WhatsApp Business en unos pocos clics."
+      },
+      "step2": {
+        "title": "Organiza tus chats",
+        "desc": "Agrega notas, etiquetas y recordatorios de seguimiento para cada conversación."
+      },
+      "step3": {
+        "title": "Cierra más ventas",
+        "desc": "Recibe recordatorios, haz seguimiento a tiempo y convierte más leads en clientes."
+      }
+    },
+    "pricingTeaser": {
+      "title": "Precios Simples y Transparentes",
+      "subtitle": "Comienza gratis. Mejora solo cuando lo necesites.",
+      "freePlan": "Plan gratuito para individuos",
+      "paidPlans": "Planes de pago desde $19/mes",
+      "cancelAnytime": "Cancela en cualquier momento",
+      "seePlans": "Ver Planes"
+    },
+    "builtFor": {
+      "title": "Diseñado para Negocios que Viven en WhatsApp",
+      "salesTeams": "Equipos de ventas gestionando leads entrantes",
+      "supportTeams": "Equipos de soporte al cliente",
+      "agencies": "Agencias y consultores",
+      "smallBiz": "Pequeños negocios y fundadores",
+      "tagline": "Si WhatsApp es cómo hablas con tus clientes — este es tu CRM."
+    },
+    "trust": {
+      "title": "Oficial. Seguro. Confiable.",
+      "line1": "WhachatCRM usa la API oficial de WhatsApp Business y no hace scraping de cuentas personales.",
+      "line2": "Tus datos permanecen seguros y cumplen con las políticas de Meta."
+    },
+    "cta": {
+      "setupTime": "Configúralo en menos de 5 minutos",
+      "title": "Deja de Perder Leads en tu Bandeja de WhatsApp",
+      "subtitle": "Únete a los negocios en crecimiento que usan WhachatCRM para cerrar más ventas vía WhatsApp.",
+      "primary": "Inicia tu Prueba Pro de 14 Días",
+      "secondary": "Ver Precios"
+    },
+    "footer": {
+      "copyright": "© 2025 WhachatCRM. Todos los derechos reservados.",
+      "privacy": "Privacidad",
+      "terms": "Términos de Uso",
+      "contact": "Contacto",
+      "blog": "Blog"
+    }
   }
 }

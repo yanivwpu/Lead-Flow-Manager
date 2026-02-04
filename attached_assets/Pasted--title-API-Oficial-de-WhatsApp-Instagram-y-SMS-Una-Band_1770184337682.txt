@@ -1,0 +1,47 @@
+{
+  "title": "API Oficial de WhatsApp, Instagram y SMS - Una Bandeja Unificada | WhachatCRM",
+  "metaDescription": "Gestiona todas tus conversaciones con clientes desde la API de WhatsApp Business, Instagram, Facebook, SMS y más en una bandeja de entrada unificada. Diseñado para PYMEs y fundadores individuales.",
+  "ogTitle": "API Oficial de WhatsApp, Instagram y SMS - Una Bandeja Unificada | WhachatCRM",
+  "ogDescription": "Gestiona todas tus conversaciones con clientes desde la API de WhatsApp Business, Instagram, Facebook, SMS y más en una bandeja de entrada unificada. Diseñado para PYMEs y fundadores individuales.",
+  "twitterTitle": "API Oficial de WhatsApp, Instagram y SMS - Una Bandeja Unificada | WhachatCRM",
+  "twitterDescription": "Gestiona todas tus conversaciones con clientes desde la API de WhatsApp Business, Instagram, Facebook, SMS y más en una bandeja de entrada unificada. Diseñado para PYMEs y fundadores individuales.",
+
+  "heroHeadline": "Una Bandeja. Todos los Canales. Cero Complejidad.",
+  "heroSubtext": "WhatsApp, SMS, Telegram, Instagram, Facebook, Chat Web — todo en una bandeja unificada. Deja de cambiar entre apps. Responde más rápido, nunca pierdas un lead.",
+  "heroTagline": "WhachatCRM - API Oficial de WhatsApp, Instagram y SMS - Una Bandeja Unificada",
+  "heroParagraph": "Gestiona todas tus conversaciones con clientes desde la API de WhatsApp Business, Instagram, Facebook, SMS y más en una bandeja de entrada unificada. Diseñado para PYMEs y fundadores individuales.",
+
+  "problemTitle": "WhatsApp no fue diseñado para gestionar clientes — Hasta ahora",
+  "problemText": "Los chats importantes se entierran. No hay contexto sobre los clientes. Los seguimientos se olvidan. Los equipos pierden visibilidad.",
+  "solutionText": "Solución WhachatCRM: Una conversación por cliente. Notas, etiquetas y tareas dentro de cada chat. Seguimientos claros para que nada se escape. Integraciones multicanal con tus herramientas favoritas.",
+
+  "featuresTitle": "Todo lo que necesitas para gestionar WhatsApp como un CRM",
+  "organizedConversationsTitle": "Conversaciones Organizadas",
+  "organizedConversationsDesc": "Cada chat de WhatsApp se convierte en un registro de cliente — sin más búsquedas ni adivinanzas.",
+  "notesTagsTitle": "Notas y Etiquetas",
+  "notesTagsDesc": "Agrega notas internas y etiquetas para que tu equipo siempre tenga el contexto completo.",
+  "followUpsTitle": "Seguimientos y Tareas",
+  "followUpsDesc": "Establece recordatorios y tareas para asegurar que cada lead sea seguido a tiempo.",
+  "aiBrainTitle": "Cerebro IA",
+  "aiBrainDesc": "Sugerencias de respuestas inteligentes, captura de leads y control de tono. Tu asistente de negocio impulsado por IA.",
+  "chatbotBuilderTitle": "Constructor de Chatbot Visual",
+  "chatbotBuilderDesc": "Crea flujos automatizados con nuestro constructor drag-and-drop. Sin código necesario.",
+  "integrationsTitle": "Integraciones Multicanal",
+  "integrationsDesc": "Conecta con Shopify, HubSpot, Salesforce, Stripe y más para sincronizar leads en todas tus herramientas.",
+
+  "gettingStartedTitle": "Operativo en minutos",
+  "gettingStartedSub": "Sin configuración compleja. Sin capacitación requerida.",
+  "step1": "Conecta tu número - Vincula tu número de WhatsApp Business en unos pocos clics.",
+  "step2": "Organiza tus chats - Agrega notas, etiquetas y recordatorios de seguimiento para cada conversación.",
+  "step3": "Cierra más ventas - Recibe recordatorios, haz seguimiento a tiempo y convierte más leads en clientes.",
+  "trialButton": "Inicia tu Prueba Pro de 14 Días",
+  "pricingButton": "Comparar Planes",
+  "noCreditCard": "No se requiere tarjeta de crédito. Plan gratuito disponible para siempre.",
+  "secureText": "Construido sobre la API oficial de WhatsApp Business. Seguro y compliant — sin scraping. Diseñado para fundadores, equipos de ventas y equipos de soporte.",
+
+  "copyright": "© 2025 WhachatCRM. Todos los derechos reservados.",
+  "privacyLink": "Privacidad",
+  "termsLink": "Términos de Uso",
+  "contactLink": "Contacto",
+  "blogLink": "Blog"
+}
