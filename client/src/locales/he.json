@@ -37,7 +37,8 @@
     "yes": "כן",
     "no": "לא",
     "or": "או",
-    "and": "ו"
+    "and": "ו",
+    "signedInAs": "מחובר כ"
   },
   "nav": {
     "main": "ראשי",
@@ -47,19 +48,25 @@
     "inbox": "דואר נכנס",
     "dashboard": "לוח בקרה",
     "chats": "צ׳אטים",
+    "followUps": "מעקבים",
     "followups": "מעקבים",
     "pipelines": "צינורות מכירה",
     "broadcasts": "שידורים",
     "automations": "אוטומציות",
+    "automation": "אוטומציה",
     "chatbot": "צ׳אטבוט",
     "aiBrain": "תכונות AI",
+    "aiFeatures": "תכונות AI",
     "templates": "תבניות",
     "widget": "ווידג׳ט לאתר",
+    "websiteWidget": "ווידג׳ט לאתר",
     "contacts": "אנשי קשר",
     "integrations": "אינטגרציות",
     "settings": "הגדרות",
     "help": "מרכז עזרה",
-    "pricing": "מחירון"
+    "pricing": "מחירון",
+    "more": "עוד",
+    "search": "חיפוש"
   },
   "dashboard": {
     "title": "לוח בקרה",

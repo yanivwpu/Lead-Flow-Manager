@@ -37,7 +37,8 @@
     "yes": "Sí",
     "no": "No",
     "or": "o",
-    "and": "y"
+    "and": "y",
+    "signedInAs": "Conectado como"
   },
   "nav": {
     "main": "Principal",
@@ -47,19 +48,25 @@
     "inbox": "Bandeja de Entrada",
     "dashboard": "Panel de Control",
     "chats": "Chats",
+    "followUps": "Seguimientos",
     "followups": "Seguimientos",
     "pipelines": "Embudos",
     "broadcasts": "Difusiones",
     "automations": "Automatizaciones",
+    "automation": "Automatización",
     "chatbot": "Chatbot",
     "aiBrain": "Funciones IA",
+    "aiFeatures": "Funciones IA",
     "templates": "Plantillas",
     "widget": "Widget Web",
+    "websiteWidget": "Widget Web",
     "contacts": "Contactos",
     "integrations": "Integraciones",
     "settings": "Configuración",
     "help": "Centro de Ayuda",
-    "pricing": "Precios"
+    "pricing": "Precios",
+    "more": "Más",
+    "search": "Buscar"
   },
   "dashboard": {
     "title": "Panel de Control",

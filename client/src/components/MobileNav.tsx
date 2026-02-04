@@ -13,30 +13,30 @@ import { useAuth } from "@/lib/auth-context";
 import { useTranslation } from "react-i18next";
 import { getDirection } from "@/lib/i18n";
 
-const mainNavItems = [
-  { icon: Inbox, label: "Inbox", href: "/app/inbox", testId: "mobile-nav-inbox" },
-  { icon: MessageSquare, label: "Chats", href: "/app/chats", testId: "mobile-nav-chats" },
-  { icon: ListTodo, label: "Follow-ups", href: "/app/followups", testId: "mobile-nav-followups" },
-  { icon: Settings, label: "Settings", href: "/app/settings", testId: "mobile-nav-settings" },
-];
-
-const moreNavItems = [
-  { label: "Chatbot", href: "/app/chatbot" },
-  { label: "Automation", href: "/app/workflows" },
-  { label: "Templates", href: "/app/templates" },
-  { label: "Website Widget", href: "/app/widget" },
-  { label: "Integrations", href: "/app/integrations" },
-  { label: "AI Features", href: "/app/ai-brain" },
-  { label: "Search", href: "/app/search" },
-  { label: "Help", href: "/app/help" },
-];
-
 export function MobileNav() {
   const [location] = useLocation();
   const [open, setOpen] = useState(false);
   const { logout, user } = useAuth();
   const { t } = useTranslation();
   const isRTL = getDirection() === 'rtl';
+
+  const mainNavItems = [
+    { icon: Inbox, label: t('nav.inbox', 'Inbox'), href: "/app/inbox", testId: "mobile-nav-inbox" },
+    { icon: MessageSquare, label: t('nav.chats', 'Chats'), href: "/app/chats", testId: "mobile-nav-chats" },
+    { icon: ListTodo, label: t('nav.followUps', 'Follow-ups'), href: "/app/followups", testId: "mobile-nav-followups" },
+    { icon: Settings, label: t('nav.settings', 'Settings'), href: "/app/settings", testId: "mobile-nav-settings" },
+  ];
+
+  const moreNavItems = [
+    { label: t('nav.chatbot', 'Chatbot'), href: "/app/chatbot", testId: "chatbot" },
+    { label: t('nav.automation', 'Automation'), href: "/app/workflows", testId: "automation" },
+    { label: t('nav.templates', 'Templates'), href: "/app/templates", testId: "templates" },
+    { label: t('nav.websiteWidget', 'Website Widget'), href: "/app/widget", testId: "website-widget" },
+    { label: t('nav.integrations', 'Integrations'), href: "/app/integrations", testId: "integrations" },
+    { label: t('nav.aiFeatures', 'AI Features'), href: "/app/ai-brain", testId: "ai-features" },
+    { label: t('nav.search', 'Search'), href: "/app/search", testId: "search" },
+    { label: t('nav.help', 'Help'), href: "/app/help", testId: "help" },
+  ];
 
   return (
     <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-50 safe-area-bottom" dir={isRTL ? 'rtl' : 'ltr'}>
@@ -66,7 +66,7 @@ export function MobileNav() {
               className="flex flex-col items-center justify-center px-3 py-1 rounded-lg text-gray-500"
             >
               <Menu className="h-5 w-5" />
-              <span className="text-[10px] mt-0.5 font-medium">More</span>
+              <span className="text-[10px] mt-0.5 font-medium">{t('nav.more', 'More')}</span>
             </button>
           </SheetTrigger>
           <SheetContent side="bottom" className="h-auto max-h-[70vh] rounded-t-2xl">
@@ -83,7 +83,7 @@ export function MobileNav() {
                 <Link key={item.href} href={item.href}>
                   <a
                     onClick={() => setOpen(false)}
-                    data-testid={`mobile-menu-${item.label.toLowerCase().replace(/\s+/g, '-')}`}
+                    data-testid={`mobile-menu-${item.testId}`}
                     className={cn(
                       "block p-3 rounded-lg text-center font-medium transition-colors",
                       location.startsWith(item.href)
@@ -106,7 +106,7 @@ export function MobileNav() {
                       : "bg-gray-50 text-gray-700 hover:bg-gray-100"
                   )}
                 >
-                  Settings
+                  {t('nav.settings', 'Settings')}
                 </a>
               </Link>
               <button
@@ -117,12 +117,12 @@ export function MobileNav() {
                 data-testid="mobile-menu-logout"
                 className="block p-3 rounded-lg text-center font-medium bg-red-50 text-red-600 hover:bg-red-100 transition-colors"
               >
-                Logout
+                {t('common.logout', 'Logout')}
               </button>
             </div>
             {user && (
               <div className="border-t pt-3 pb-2 text-center text-xs text-gray-500">
-                Signed in as <span className="font-medium text-gray-700">{user.name}</span>
+                {t('common.signedInAs', 'Signed in as')} <span className="font-medium text-gray-700">{user.name}</span>
               </div>
             )}
           </SheetContent>
