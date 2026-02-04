@@ -552,6 +552,22 @@ ul, ol {
   text-align: center !important;
 }
 
+/* Integrations Section Header RTL Centering */
+[dir="rtl"] .integrations-section-header,
+[dir="rtl"] section:has(h2:contains("התחבר לכלים האהובים עליך")) .text-center,
+[dir="rtl"] section:has(h2:contains("התחבר לכלים האהובים עליך")) h2,
+[dir="rtl"] section:has(h2:contains("התחבר לכלים האהובים עליך")) p {
+  text-align: center !important;
+  margin-inline: auto !important;
+}
+
+/* Fallback for specific integration header if selectors above are too specific */
+[dir="rtl"] .integrations-title,
+[dir="rtl"] .integrations-subtitle {
+  text-align: center !important;
+  margin-inline: auto !important;
+}
+
 /* Better text wrapping for RTL headlines (prevents bad breaks/orphans) */
 [dir="rtl"] .auth-title,
 [dir="rtl"] .login-title,
