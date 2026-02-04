@@ -2,12 +2,14 @@ import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import { Helmet } from "react-helmet";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Check, Zap, Users, MessageSquare, Phone, Loader2, Shield, AlertTriangle, HelpCircle, XCircle, Brain, Sparkles, Target, BarChart3, X } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { useAuth } from "@/lib/auth-context";
 import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { getDirection } from "@/lib/i18n";
 
 const PLANS = [
   {
@@ -85,9 +87,11 @@ const PLANS = [
 
 export function Pricing() {
   const { user } = useAuth();
+  const { t } = useTranslation();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
+  const isRTL = getDirection() === 'rtl';
 
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -143,7 +147,7 @@ export function Pricing() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 py-12 px-4">
+    <div className={`min-h-screen bg-gray-50 py-12 px-4 ${isRTL ? 'rtl' : 'ltr'}`} dir={isRTL ? 'rtl' : 'ltr'}>
       <Helmet>
         <title>WhachatCRM Pricing: Free Plan Forever, Starter from $19/mo | WhatsApp CRM</title>
         <meta name="description" content="Simple, transparent pricing for WhatsApp CRM. Free plan forever, Starter at $19/mo, Pro at $49/mo. No hidden fees, no message markup. Start free today." />
@@ -158,35 +162,35 @@ export function Pricing() {
       </Helmet>
       <div className="max-w-5xl mx-auto">
         <Link href={user ? "/app/settings" : "/"}>
-          <a className="inline-flex items-center text-sm text-gray-500 hover:text-brand-green mb-6">
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            {user ? "Back to Settings" : "Back to Home"}
+          <a className={`inline-flex items-center text-sm text-gray-500 hover:text-brand-green mb-6 ${isRTL ? 'flex-row-reverse' : ''}`}>
+            <ArrowLeft className={`h-4 w-4 ${isRTL ? 'ml-2 rotate-180' : 'mr-2'}`} />
+            {user ? t('pricing.backToSettings') : t('pricing.backToHome')}
           </a>
         </Link>
 
         <div className="text-center mb-12">
           <h1 className="text-4xl font-display font-bold text-gray-900 mb-4">
-            One Inbox. Every Channel. Simple Pricing.
+            {t('pricing.title')}
           </h1>
           <p className="text-xl text-gray-600 max-w-2xl mx-auto">
-            WhatsApp, SMS, Telegram, Instagram, Facebook, Web Chat — all in one place.
+            {t('pricing.subtitle')}
           </p>
           <p className="text-gray-500 mt-2 max-w-2xl mx-auto">
-            Stop juggling apps. Respond faster, never lose a lead, and look bigger than you are.
+            {t('pricing.subtitle2')}
           </p>
           
           <div className="flex flex-wrap justify-center gap-4 mt-6">
-            <div className="inline-flex items-center gap-2 bg-emerald-50 border border-emerald-200 text-emerald-800 px-4 py-2 rounded-full text-sm font-medium">
+            <div className={`inline-flex items-center gap-2 bg-emerald-50 border border-emerald-200 text-emerald-800 px-4 py-2 rounded-full text-sm font-medium ${isRTL ? 'flex-row-reverse' : ''}`}>
               <Shield className="h-4 w-4" />
-              No Markup on Messages
+              {t('pricing.noMarkup')}
             </div>
-            <div className="inline-flex items-center gap-2 bg-blue-50 border border-blue-200 text-blue-800 px-4 py-2 rounded-full text-sm font-medium">
+            <div className={`inline-flex items-center gap-2 bg-blue-50 border border-blue-200 text-blue-800 px-4 py-2 rounded-full text-sm font-medium ${isRTL ? 'flex-row-reverse' : ''}`}>
               <MessageSquare className="h-4 w-4" />
-              7 Channels Supported
+              {t('pricing.channels')}
             </div>
-            <div className="inline-flex items-center gap-2 bg-purple-50 border border-purple-200 text-purple-800 px-4 py-2 rounded-full text-sm font-medium">
+            <div className={`inline-flex items-center gap-2 bg-purple-50 border border-purple-200 text-purple-800 px-4 py-2 rounded-full text-sm font-medium ${isRTL ? 'flex-row-reverse' : ''}`}>
               <XCircle className="h-4 w-4" />
-              Cancel Anytime
+              {t('pricing.cancelAnytime')}
             </div>
           </div>
         </div>
@@ -211,29 +215,29 @@ export function Pricing() {
               >
                 {plan.popular && (
                   <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-brand-green text-white text-xs font-semibold px-3 py-1 rounded-full">
-                    Most Popular
+                    {t('pricing.mostPopular')}
                   </div>
                 )}
 
                 <div className="mb-6">
-                  <div className="flex items-center gap-2 mb-1">
-                    <h3 className="text-xl font-bold text-gray-900">{plan.name}</h3>
+                  <div className={`flex items-center gap-2 mb-1 ${isRTL ? 'flex-row-reverse justify-end' : ''}`}>
+                    <h3 className="text-xl font-bold text-gray-900">{t(`pricing.plans.${plan.id}.name`, plan.name)}</h3>
                     {plan.badge && (
                       <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-medium">
-                        {plan.badge}
+                        {plan.id === 'free' ? t('pricing.foreverFree') : plan.badge}
                       </span>
                     )}
                   </div>
-                  <div className="flex items-baseline gap-1 mb-2">
+                  <div className={`flex items-baseline gap-1 mb-2 ${isRTL ? 'flex-row-reverse justify-end' : ''}`}>
                     <span className="text-4xl font-bold text-gray-900">${plan.price}</span>
-                    {plan.price > 0 && <span className="text-gray-500">/ month</span>}
+                    {plan.price > 0 && <span className="text-gray-500">{t('pricing.perMonth')}</span>}
                   </div>
-                  <p className="text-sm text-gray-600">{plan.description}</p>
+                  <p className="text-sm text-gray-600">{t(`pricing.plans.${plan.id}.description`, plan.description)}</p>
                 </div>
 
                 <ul className="space-y-3 flex-1 mb-4">
                   {plan.features.map((feature, i) => (
-                    <li key={i} className="flex items-start gap-2 text-sm">
+                    <li key={i} className={`flex items-start gap-2 text-sm ${isRTL ? 'flex-row-reverse text-right' : ''}`}>
                       <Check className="h-4 w-4 text-brand-green shrink-0 mt-0.5" />
                       <span className="text-gray-700">{feature}</span>
                     </li>
@@ -241,7 +245,7 @@ export function Pricing() {
                 </ul>
 
                 {plan.note && (
-                  <p className="text-xs text-gray-500 mb-4 italic">{plan.note}</p>
+                  <p className="text-xs text-gray-500 mb-4 italic">{t(`pricing.plans.${plan.id}.note`, plan.note)}</p>
                 )}
 
                 <Button
@@ -259,9 +263,9 @@ export function Pricing() {
                   {isLoading ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : isCurrentPlan ? (
-                    "Current Plan"
+                    t('pricing.currentPlan')
                   ) : (
-                    plan.cta
+                    t(`pricing.plans.${plan.id}.cta`, plan.cta)
                   )}
                 </Button>
               </div>
@@ -272,48 +276,44 @@ export function Pricing() {
         {/* Full AI Brain Add-on */}
         <div className="mt-12 max-w-2xl mx-auto">
           <div className="bg-gradient-to-br from-purple-50 to-blue-50 border-2 border-purple-200 rounded-2xl p-6 sm:p-8 relative overflow-hidden">
-            <div className="absolute top-4 right-4 bg-purple-600 text-white text-xs font-bold px-3 py-1 rounded-full">
-              $29/mo ADD-ON
+            <div className={`absolute top-4 ${isRTL ? 'left-4' : 'right-4'} bg-purple-600 text-white text-xs font-bold px-3 py-1 rounded-full`}>
+              {t('pricing.aiBrain.addon')}
             </div>
-            <div className="flex items-center gap-3 mb-4">
+            <div className={`flex items-center gap-3 mb-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
               <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-blue-500 rounded-xl flex items-center justify-center">
                 <Brain className="w-6 h-6 text-white" />
               </div>
-              <div>
-                <h3 className="text-xl font-bold text-gray-900">Full AI Brain</h3>
-                <p className="text-sm text-gray-600">Upgrade your AI Assist to unlimited power</p>
+              <div className={isRTL ? 'text-right' : ''}>
+                <h3 className="text-xl font-bold text-gray-900">{t('pricing.aiBrain.title')}</h3>
+                <p className="text-sm text-gray-600">{t('pricing.aiBrain.subtitle')}</p>
               </div>
             </div>
             
-            <div className="flex items-baseline gap-1 mb-4">
-              <span className="text-3xl font-bold text-gray-900">$29</span>
-              <span className="text-gray-600">/month</span>
+            <div className={`flex items-baseline gap-1 mb-4 ${isRTL ? 'flex-row-reverse justify-end' : ''}`}>
+              <span className="text-3xl font-bold text-gray-900">{t('pricing.aiBrain.price')}</span>
+              <span className="text-gray-600">{t('pricing.aiBrain.perMonth')}</span>
             </div>
             
             <p className="text-sm text-gray-700 mb-4 bg-purple-100/50 p-3 rounded-lg">
-              Upgrade your AI Assist to Full AI Brain – unlock unlimited suggestions, lead qualification, smart summarization, plain-English automation builder, and more. Available on Starter or Pro plans.
+              {t('pricing.aiBrain.description')}
             </p>
             
             <div className="grid gap-3 mb-6">
-              <div className="flex items-start gap-2">
+              <div className={`flex items-start gap-2 ${isRTL ? 'flex-row-reverse text-right' : ''}`}>
                 <Sparkles className="w-4 h-4 text-purple-500 mt-0.5 shrink-0" />
-                <span className="text-sm text-gray-700"><strong>Unlimited</strong> AI-powered reply suggestions</span>
+                <span className="text-sm text-gray-700">{t('pricing.aiBrain.feature1')}</span>
               </div>
-              <div className="flex items-start gap-2">
+              <div className={`flex items-start gap-2 ${isRTL ? 'flex-row-reverse text-right' : ''}`}>
                 <Target className="w-4 h-4 text-green-500 mt-0.5 shrink-0" />
-                <span className="text-sm text-gray-700">Automatic lead qualification & scoring (0-100)</span>
+                <span className="text-sm text-gray-700">{t('pricing.aiBrain.feature2')}</span>
               </div>
-              <div className="flex items-start gap-2">
+              <div className={`flex items-start gap-2 ${isRTL ? 'flex-row-reverse text-right' : ''}`}>
                 <Zap className="w-4 h-4 text-yellow-500 mt-0.5 shrink-0" />
-                <span className="text-sm text-gray-700">Plain English automation builder - describe workflows naturally</span>
+                <span className="text-sm text-gray-700">{t('pricing.aiBrain.feature3')}</span>
               </div>
-              <div className="flex items-start gap-2">
+              <div className={`flex items-start gap-2 ${isRTL ? 'flex-row-reverse text-right' : ''}`}>
                 <MessageSquare className="w-4 h-4 text-blue-500 mt-0.5 shrink-0" />
-                <span className="text-sm text-gray-700">Conversation summaries & smart data extraction</span>
-              </div>
-              <div className="flex items-start gap-2">
-                <Users className="w-4 h-4 text-orange-500 mt-0.5 shrink-0" />
-                <span className="text-sm text-gray-700">Human handoff controls & abuse prevention</span>
+                <span className="text-sm text-gray-700">{t('pricing.aiBrain.feature4')}</span>
               </div>
             </div>
             
@@ -554,7 +554,7 @@ export function Pricing() {
 
         {/* FAQ Section */}
         <div className="mt-16 max-w-3xl mx-auto">
-          <h2 className="text-2xl font-bold text-gray-900 mb-8 text-center">Frequently Asked Questions</h2>
+          <h2 className="text-2xl font-bold text-gray-900 mb-8 text-center">{t('pricing.faq.title')}</h2>
           <Accordion type="single" collapsible className="space-y-4">
             <AccordionItem value="pay-twice" className="bg-white border border-gray-200 rounded-xl px-6">
               <AccordionTrigger className="text-left font-semibold text-gray-900 hover:no-underline" data-testid="faq-pay-twice">

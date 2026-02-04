@@ -330,5 +330,103 @@
     "sendResetLink": "Send Reset Link",
     "checkEmail": "Check your email",
     "resetEmailSent": "If an account exists with this email, you will receive password reset instructions."
+  },
+  "pricing": {
+    "backToSettings": "Back to Settings",
+    "backToHome": "Back to Home",
+    "title": "One Inbox. Every Channel. Simple Pricing.",
+    "subtitle": "WhatsApp, SMS, Telegram, Instagram, Facebook, Web Chat — all in one place.",
+    "subtitle2": "Stop juggling apps. Respond faster, never lose a lead, and look bigger than you are.",
+    "noMarkup": "No Markup on Messages",
+    "channels": "7 Channels Supported",
+    "cancelAnytime": "Cancel Anytime",
+    "mostPopular": "Most Popular",
+    "perMonth": "/ month",
+    "currentPlan": "Current Plan",
+    "foreverFree": "Forever Free",
+    "noCreditCard": "No credit card required",
+    "plans": {
+      "free": {
+        "name": "Free",
+        "description": "Try unified inbox with real workflows",
+        "cta": "Start Free",
+        "note": "No credit card required"
+      },
+      "starter": {
+        "name": "Starter",
+        "description": "For small businesses & solo teams",
+        "cta": "Start Starter",
+        "note": "Best for multi-channel sales & support"
+      },
+      "pro": {
+        "name": "Pro",
+        "description": "For growing teams handling high volume",
+        "cta": "Upgrade to Pro",
+        "note": "Built for serious multi-channel operations"
+      }
+    },
+    "features": {
+      "unifiedInbox": "Unified inbox (all channels)",
+      "whatsappWebchat": "WhatsApp + Web Chat",
+      "oneUser": "1 user",
+      "activeConversations50": "50 active conversations / month",
+      "autoRouting": "Auto channel routing",
+      "tagsNotes": "Tags & internal notes",
+      "tasksReminders": "Tasks & reminders",
+      "smartPrioritization": "Smart task prioritization (AI Recommended)",
+      "awayMessages": "Away messages (business hours)",
+      "exportConversations": "Export conversations (CSV)",
+      "communitySupport": "Community support",
+      "everythingFree": "Everything in Free, plus:",
+      "allChannels": "All channels: WhatsApp, SMS, Telegram, Instagram, Facebook, Web Chat",
+      "tiktokIntake": "TikTok lead intake",
+      "threeUsers": "Up to 3 team members",
+      "activeConversations500": "500 active conversations / month",
+      "chatbotBuilder": "Visual chatbot builder",
+      "autoReply": "Auto-reply messages",
+      "smartFallback": "Smart fallback routing",
+      "csvImport": "CSV import contacts",
+      "notifications": "Email & push notifications",
+      "webhooks3": "3 webhook integrations",
+      "aiAssistBasic": "AI Assist included (basic reply suggestions & sentiment detection – up to 50/month)",
+      "aiBrainAddon": "Full AI Brain add-on available (+$29/mo)",
+      "everythingStarter": "Everything in Starter, plus:",
+      "fiveNumbers": "Up to 5 WhatsApp Business numbers",
+      "unlimitedTeam": "Unlimited team members",
+      "activeConversations2000": "2,000 active conversations / month",
+      "dripSequences": "Drip sequences & campaigns",
+      "workflowAutomation": "Workflow automation",
+      "templateMessaging": "Template messaging & retargeting",
+      "webhooks10": "10 webhook + native integrations",
+      "prioritySupport": "Priority support",
+      "aiAssistEnhanced": "Enhanced AI Assist included (higher limits – up to 200/month)"
+    },
+    "aiBrain": {
+      "title": "Full AI Brain",
+      "subtitle": "Upgrade your AI Assist to unlimited power",
+      "price": "$29",
+      "perMonth": "/month",
+      "addon": "$29/mo ADD-ON",
+      "description": "Upgrade your AI Assist to Full AI Brain – unlock unlimited suggestions, lead qualification, smart summarization, plain-English automation builder, and more. Available on Starter or Pro plans.",
+      "feature1": "Unlimited Smart Replies & AI suggestions",
+      "feature2": "Auto lead qualification & scoring",
+      "feature3": "Conversation summarization",
+      "feature4": "Real-time analytics & insights"
+    },
+    "faq": {
+      "title": "Frequently Asked Questions",
+      "q1": "What is an 'active conversation'?",
+      "a1": "An active conversation is any chat that had at least one message (inbound or outbound) in the last 30 days. Archived or closed conversations don't count.",
+      "q2": "Do you charge per WhatsApp message?",
+      "a2": "No. We never markup Meta's WhatsApp API pricing. You pay Meta's rates directly. Our subscription only covers the CRM features.",
+      "q3": "Can I upgrade or downgrade later?",
+      "a3": "Yes! Upgrade anytime, prorated. Downgrade at the end of your billing cycle. No penalties or hidden fees.",
+      "q4": "Is there a free trial for paid plans?",
+      "a4": "Yes. Every paid plan comes with a 14-day free trial. No credit card required to start.",
+      "q5": "How does AI Assist work?",
+      "a5": "AI Assist uses GPT-4 to analyze incoming messages and suggest contextual replies. On Free, you get read-only previews. On Starter+, you get real suggestions up to your plan limit.",
+      "q6": "What's the difference between AI Assist and AI Brain?",
+      "a6": "AI Assist is included in paid plans with usage limits. AI Brain is an add-on that removes limits and adds advanced features like lead scoring and automation building."
+    }
   }
 }

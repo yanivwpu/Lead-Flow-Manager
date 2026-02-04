@@ -290,7 +290,7 @@ export function LocalizedTemplateSelector({
           <p className="text-gray-500">{t("templates.noTemplates", "No templates found for the selected filters")}</p>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pb-8">
           {templates.map((template) => (
             <Card key={template.id} className="hover:shadow-md transition-shadow">
               <CardHeader className="pb-2">
