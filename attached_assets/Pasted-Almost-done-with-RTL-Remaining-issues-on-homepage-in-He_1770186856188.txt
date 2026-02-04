@@ -1,0 +1,78 @@
+Almost done with RTL! Remaining issues on homepage in Hebrew:
+
+- Hero headline and other headers/titles not perfectly centered.
+- Main text (paragraphs, subtext) not flush to the right edge (starts too far from right).
+- Onboarding steps numbers reversed (shows 3 2 1 instead of 1 2 3).
+- Some section titles (e.g., comparison "הפתרון של WHACHATCRM" and "הבעיה") misaligned.
+
+The dir="rtl" switching is working. We just need better CSS targeting.
+
+1. Add the CSS block below to the very bottom of the main global stylesheet (src/index.css or src/App.css). Use the generic class names — adjust if exact classes differ (e.g., .hero-headline, .steps-container).
+
+2. This will:
+   - Make paragraphs and body text flush right in RTL (text-align: start).
+   - Force headers/titles centered.
+   - Keep steps order 1-2-3 left-to-right while mirroring text.
+   - Fix comparison section alignment.
+
+3. Test in Hebrew:
+   - Hero headline centered and text flush right.
+   - Steps show 1 (rightmost) → 2 → 3 (leftmost), text aligned right inside cards.
+   - All headers centered.
+   - No changes/breakage in English/Spanish.
+
+CSS to add:
+
+/* Final RTL Homepage Fixes */
+[dir="rtl"] body {
+  text-align: start;
+}
+
+[dir="rtl"] p,
+[dir="rtl"] .hero-subtext,
+[dir="rtl"] .section-text,
+[dir="rtl"] .feature-desc,
+[dir="rtl"] .step-desc {
+  text-align: start !important;
+}
+
+[dir="rtl"] .hero-headline,
+[dir="rtl"] h1,
+[dir="rtl"] .main-title,
+[dir="rtl"] h2,
+[dir="rtl"] h3,
+[dir="rtl"] .section-title,
+[dir="rtl"] .comparison-title,
+[dir="rtl"] .steps-title {
+  text-align: center !important;
+}
+
+.steps-container,
+.steps-grid,
+.onboarding-steps {
+  direction: ltr !important;
+}
+
+[dir="rtl"] .step-card,
+[dir="rtl"] .step-item {
+  text-align: start !important;
+}
+
+[dir="rtl"] .comparison-header,
+[dir="rtl"] .solution-title,
+[dir="rtl"] .problem-title {
+  text-align: center !important;
+}
+
+[dir="rtl"] .comparison-list,
+[dir="rtl"] .feature-comparison {
+  padding-inline-end: 1.5rem;
+  padding-inline-start: 0;
+}
+
+[dir="rtl"] .secure-text,
+[dir="rtl"] .compliance-text {
+  text-align: center !important;
+}
+
+After adding, the homepage should look perfect in Hebrew instantly on language switch. Confirm and deploy.

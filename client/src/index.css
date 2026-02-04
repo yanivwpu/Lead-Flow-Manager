@@ -472,3 +472,58 @@ ul, ol {
   margin-inline-start: auto;
   margin-inline-end: auto;
 }
+
+/* Final RTL Homepage Fixes */
+[dir="rtl"] body {
+  text-align: start;
+}
+
+[dir="rtl"] p,
+[dir="rtl"] .hero-subtext,
+[dir="rtl"] .section-text,
+[dir="rtl"] .feature-desc,
+[dir="rtl"] .step-desc {
+  text-align: start !important;
+}
+
+[dir="rtl"] .hero-headline,
+[dir="rtl"] h1,
+[dir="rtl"] .main-title,
+[dir="rtl"] h2,
+[dir="rtl"] h3,
+[dir="rtl"] .section-title,
+[dir="rtl"] .comparison-title,
+[dir="rtl"] .steps-title {
+  text-align: center !important;
+}
+
+/* Keep steps order 1-2-3 left-to-right */
+.steps-container,
+.steps-grid,
+.onboarding-steps {
+  direction: ltr !important;
+}
+
+[dir="rtl"] .step-card,
+[dir="rtl"] .step-item {
+  text-align: start !important;
+}
+
+/* Comparison section alignment */
+[dir="rtl"] .comparison-header,
+[dir="rtl"] .solution-title,
+[dir="rtl"] .problem-title {
+  text-align: center !important;
+}
+
+[dir="rtl"] .comparison-list,
+[dir="rtl"] .feature-comparison {
+  padding-inline-end: 1.5rem;
+  padding-inline-start: 0;
+}
+
+/* Security/compliance text centering */
+[dir="rtl"] .secure-text,
+[dir="rtl"] .compliance-text {
+  text-align: center !important;
+}
