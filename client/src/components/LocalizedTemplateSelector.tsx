@@ -327,28 +327,28 @@ export function LocalizedTemplateSelector({
                   )}
                 </div>
                 
-                <div className={`flex gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                <div className={`flex flex-col xs:flex-row gap-2 ${isRTL ? 'xs:flex-row-reverse' : ''}`}>
                   <Button 
                     variant="outline" 
                     size="sm" 
-                    className="flex-1"
+                    className="flex-1 min-h-[44px]"
                     onClick={() => handlePreview(template)}
                     data-testid={`template-preview-${template.id}`}
                   >
-                    <span className={`flex items-center gap-1 ${isRTL ? 'flex-row-reverse' : ''}`}>
-                      <Eye className="h-3 w-3" />
+                    <span className={`flex items-center justify-center gap-1 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                      <Eye className="h-4 w-4" />
                       <span>{t("common.view", "Preview")}</span>
                     </span>
                   </Button>
                   {!showPreviewOnly && (
                     <Button 
                       size="sm" 
-                      className="flex-1 bg-emerald-600 hover:bg-emerald-700"
+                      className="flex-1 min-h-[44px] bg-emerald-600 hover:bg-emerald-700"
                       onClick={() => handlePreview(template)}
                       data-testid={`template-use-${template.id}`}
                     >
-                      <span className={`flex items-center gap-1 ${isRTL ? 'flex-row-reverse' : ''}`}>
-                        <Check className="h-3 w-3" />
+                      <span className={`flex items-center justify-center gap-1 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                        <Check className="h-4 w-4" />
                         <span>{t("common.select", "Use")}</span>
                       </span>
                     </Button>
@@ -361,7 +361,7 @@ export function LocalizedTemplateSelector({
       )}
 
       <Dialog open={previewDialogOpen} onOpenChange={setPreviewDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh]">
+        <DialogContent className="w-[95vw] max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               {previewTemplate && getCategoryIcon(previewTemplate.category)}
@@ -372,7 +372,7 @@ export function LocalizedTemplateSelector({
             </DialogDescription>
           </DialogHeader>
           
-          <ScrollArea className="max-h-[60vh]">
+          <ScrollArea className="flex-1 overflow-auto">
             <Tabs defaultValue="preview" className="w-full">
               <TabsList className="grid w-full grid-cols-2">
                 <TabsTrigger value="preview">{t("templates.preview", "Preview")}</TabsTrigger>
@@ -428,9 +428,9 @@ export function LocalizedTemplateSelector({
             </Tabs>
           </ScrollArea>
           
-          <DialogFooter className="flex flex-col sm:flex-row gap-4 items-center">
+          <DialogFooter className="flex flex-col gap-3 pt-4 border-t mt-auto shrink-0">
             {!showPreviewOnly && (
-              <div className="flex items-center gap-2 mr-auto">
+              <div className="flex items-center gap-2 w-full">
                 <Switch 
                   id="launch-immediately" 
                   checked={launchImmediately}
@@ -441,13 +441,13 @@ export function LocalizedTemplateSelector({
                 </Label>
               </div>
             )}
-            <div className="flex gap-2">
-              <Button variant="outline" onClick={() => setPreviewDialogOpen(false)}>
+            <div className="flex flex-col sm:flex-row gap-2 w-full">
+              <Button variant="outline" onClick={() => setPreviewDialogOpen(false)} className="w-full sm:w-auto">
                 {t("common.close", "Close")}
               </Button>
               {!showPreviewOnly && (
                 <Button 
-                  className={launchImmediately ? "bg-purple-600 hover:bg-purple-700" : "bg-emerald-600 hover:bg-emerald-700"}
+                  className={`w-full sm:w-auto ${launchImmediately ? "bg-purple-600 hover:bg-purple-700" : "bg-emerald-600 hover:bg-emerald-700"}`}
                   onClick={handleUseTemplate}
                   disabled={saveTemplateMutation.isPending}
                 >
