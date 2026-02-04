@@ -219,9 +219,9 @@ export function Templates() {
   }
 
   return (
-    <div className="h-full flex flex-col overflow-hidden">
-      <div className="p-4 md:p-6 max-w-5xl mx-auto w-full flex-1 flex flex-col min-h-0">
-        <div className="flex items-center justify-between mb-6 shrink-0">
+    <div className="flex-1 overflow-auto pb-20 md:pb-6">
+      <div className="p-4 md:p-6 max-w-5xl mx-auto w-full">
+        <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Message Templates</h1>
             <p className="text-gray-500 mt-1">Send pre-approved templates for smart retargeting</p>
@@ -237,8 +237,8 @@ export function Templates() {
           </Button>
         </div>
 
-        <Tabs defaultValue="presets" className="flex-1 flex flex-col min-h-0 space-y-6">
-          <TabsList className="grid w-full grid-cols-3 h-auto p-1 shrink-0">
+        <Tabs defaultValue="presets" className="space-y-6">
+          <TabsList className="grid w-full grid-cols-3 h-auto p-1">
             <TabsTrigger value="presets" data-testid="tab-presets" className="text-xs sm:text-sm py-2 px-1 sm:px-3 flex flex-col sm:flex-row items-center gap-1">
               <Sparkles className="h-4 w-4 sm:mr-1" />
               <span className="hidden sm:inline">Preset Templates</span>
@@ -256,9 +256,9 @@ export function Templates() {
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="presets" className="flex-1 min-h-0 mt-0">
-            <Card className="h-full flex flex-col">
-              <CardHeader className="pb-2 shrink-0">
+          <TabsContent value="presets" className="space-y-4 mt-0">
+            <Card>
+              <CardHeader className="pb-2">
                 <CardTitle className="flex items-center gap-2 text-lg">
                   <Sparkles className="h-5 w-5 text-purple-500" />
                   Preset Automation Templates
@@ -267,7 +267,7 @@ export function Templates() {
                   Pre-built message sequences for different industries. Available in English, Spanish, and Hebrew.
                 </CardDescription>
               </CardHeader>
-              <CardContent className="px-3 md:px-6 flex-1 min-h-0 pb-4">
+              <CardContent className="px-3 md:px-6">
                 <LocalizedTemplateSelector 
                   showPreviewOnly={false}
                   onSelectTemplate={(template, values) => {
@@ -278,7 +278,7 @@ export function Templates() {
             </Card>
           </TabsContent>
 
-          <TabsContent value="templates" className="flex-1 min-h-0 mt-0 overflow-y-auto pr-2">
+          <TabsContent value="templates" className="space-y-4 mt-0">
             {templatesLoading ? (
               <div className="flex items-center justify-center py-12">
                 <RefreshCw className="h-6 w-6 animate-spin text-gray-400" />
@@ -378,7 +378,7 @@ export function Templates() {
             </Card>
           </TabsContent>
 
-          <TabsContent value="retargeting" className="flex-1 min-h-0 mt-0 overflow-y-auto pr-2">
+          <TabsContent value="retargeting" className="space-y-4 mt-0">
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="text-lg flex items-center gap-2">
