@@ -26,6 +26,7 @@ const Contact = lazy(() => import("@/pages/Contact").then(m => ({ default: m.Con
 const Blog = lazy(() => import("@/pages/Blog").then(m => ({ default: m.Blog })));
 const BlogPost = lazy(() => import("@/pages/BlogPost").then(m => ({ default: m.BlogPost })));
 const Admin = lazy(() => import("@/pages/Admin").then(m => ({ default: m.Admin })));
+const QrLanding = lazy(() => import("@/pages/QrLanding").then(m => ({ default: m.QrLanding })));
 const SalesPortal = lazy(() => import("@/pages/SalesPortal").then(m => ({ default: m.SalesPortal })));
 const PartnerPortal = lazy(() => import("@/pages/PartnerPortal").then(m => ({ default: m.PartnerPortal })));
 const NotFound = lazy(() => import("@/pages/not-found"));
@@ -70,6 +71,7 @@ function Router() {
       <Route path="/contact" component={Contact} />
       <Route path="/blog/:slug" component={BlogPost} />
       <Route path="/blog" component={Blog} />
+      <Route path="/demo-scan" component={QrLanding} />
       <Route path="/sales-admin" component={Admin} />
       <Route path="/sales-portal" component={SalesPortal} />
       <Route path="/partner-portal" component={PartnerPortal} />
