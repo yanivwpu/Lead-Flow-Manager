@@ -108,7 +108,8 @@ export function BookDemoModal({ isOpen, onClose }: BookDemoModalProps) {
           email,
           phone,
           scheduledDate: scheduledDate.toISOString(),
-          consent
+          consent,
+          source: 'qr_code'
         })
       });
 
