@@ -634,3 +634,17 @@ ul, ol {
   max-width: none !important;
   padding-inline: 2rem;
 }
+
+/* Hero Section Additional RTL Centering & Flush Fix */
+.hero-section,
+.hero-container {
+  text-align: center !important;
+}
+
+[dir="rtl"] .hero-subtext,
+[dir="rtl"] .hero-description,
+[dir="rtl"] .hero-paragraph {
+  text-align: start !important;
+  margin-inline: auto;
+  max-width: 800px;
+}
