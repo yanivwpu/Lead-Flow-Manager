@@ -279,20 +279,23 @@ export function Pricing() {
         {/* Full AI Brain Add-on */}
         <div className="mt-16 md:mt-20 max-w-2xl mx-auto">
           <div className="bg-gradient-to-br from-purple-50 to-blue-50 border-2 border-purple-200 rounded-2xl p-6 sm:p-8 relative overflow-hidden">
-            <div className={`absolute top-4 ${isRTL ? 'left-4' : 'right-4'} bg-purple-600 text-white text-xs font-bold px-3 py-1 rounded-full`}>
+            {/* Badge - fixed positioning to prevent touching price */}
+            <span className={`absolute top-4 px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium ${isRTL ? '-left-2 rounded-l-none' : '-right-2 rounded-r-none'}`}>
               {t('pricing.aiBrain.addon')}
-            </div>
-            <div className={`flex items-center gap-3 mb-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
+            </span>
+            
+            {/* Header with icon - extra top margin to give badge space */}
+            <div className="flex items-center gap-3 mt-8 mb-4">
               <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-blue-500 rounded-xl flex items-center justify-center">
                 <Brain className="w-6 h-6 text-white" />
               </div>
-              <div className={isRTL ? 'text-right' : ''}>
+              <div>
                 <h3 className="text-xl font-bold text-gray-900">{t('pricing.aiBrain.title')}</h3>
                 <p className="text-sm text-gray-600">{t('pricing.aiBrain.subtitle')}</p>
               </div>
             </div>
             
-            <div className={`flex items-baseline gap-1 mb-4 ${isRTL ? 'flex-row-reverse justify-end' : ''}`}>
+            <div className="flex items-baseline gap-1 mb-4">
               <span className="text-3xl font-bold text-gray-900">{t('pricing.aiBrain.price')}</span>
               <span className="text-gray-600">{t('pricing.aiBrain.perMonth')}</span>
             </div>
@@ -301,34 +304,35 @@ export function Pricing() {
               {t('pricing.aiBrain.description')}
             </p>
             
+            {/* Feature list with icons */}
             <div className="grid gap-3 mb-6">
-              <div className={`flex items-start gap-2 ${isRTL ? 'flex-row-reverse text-right' : ''}`}>
+              <div className="flex items-start gap-2">
                 <Sparkles className="w-4 h-4 text-purple-500 mt-0.5 shrink-0" />
                 <span className="text-sm text-gray-700">{t('pricing.aiBrain.feature1')}</span>
               </div>
-              <div className={`flex items-start gap-2 ${isRTL ? 'flex-row-reverse text-right' : ''}`}>
+              <div className="flex items-start gap-2">
                 <Target className="w-4 h-4 text-green-500 mt-0.5 shrink-0" />
                 <span className="text-sm text-gray-700">{t('pricing.aiBrain.feature2')}</span>
               </div>
-              <div className={`flex items-start gap-2 ${isRTL ? 'flex-row-reverse text-right' : ''}`}>
+              <div className="flex items-start gap-2">
                 <Zap className="w-4 h-4 text-yellow-500 mt-0.5 shrink-0" />
                 <span className="text-sm text-gray-700">{t('pricing.aiBrain.feature3')}</span>
               </div>
-              <div className={`flex items-start gap-2 ${isRTL ? 'flex-row-reverse text-right' : ''}`}>
+              <div className="flex items-start gap-2">
                 <MessageSquare className="w-4 h-4 text-blue-500 mt-0.5 shrink-0" />
                 <span className="text-sm text-gray-700">{t('pricing.aiBrain.feature4')}</span>
               </div>
             </div>
             
             <p className="text-xs text-gray-500 mb-4">
-              Available for Starter and Pro plan subscribers.
+              {t('pricing.aiBrain.availableFor')}
             </p>
             
             {currentPlan === 'starter' || currentPlan === 'pro' ? (
               <Link href="/app/ai-brain">
                 <Button className="w-full bg-purple-600 hover:bg-purple-700 text-white" data-testid="button-ai-brain-setup">
-                  <Brain className="w-4 h-4 mr-2" />
-                  Unlock Full AI Brain – $29/mo
+                  <Brain className={`w-4 h-4 ${isRTL ? 'ms-2' : 'me-2'}`} />
+                  {t('pricing.aiBrain.unlockButton')}
                 </Button>
               </Link>
             ) : (
@@ -338,8 +342,8 @@ export function Pricing() {
                 disabled={loadingPlan === 'starter'}
                 data-testid="button-upgrade-for-ai"
               >
-                {loadingPlan === 'starter' ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-                Get Starter to Access AI Features
+                {loadingPlan === 'starter' ? <Loader2 className={`w-4 h-4 animate-spin ${isRTL ? 'ms-2' : 'me-2'}`} /> : null}
+                {t('pricing.aiBrain.getStarterButton')}
               </Button>
             )}
             

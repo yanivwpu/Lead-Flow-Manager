@@ -532,7 +532,10 @@
       "feature1": "Unlimited Smart Replies & AI suggestions",
       "feature2": "Auto lead qualification & scoring",
       "feature3": "Conversation summarization",
-      "feature4": "Real-time analytics & insights"
+      "feature4": "Real-time analytics & insights",
+      "availableFor": "Available for Starter and Pro plan subscribers",
+      "unlockButton": "Unlock Full AI Brain – $29/mo",
+      "getStarterButton": "Get Starter to Access AI Features"
     },
     "notices": {
       "messageCosts": {

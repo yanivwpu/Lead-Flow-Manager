@@ -539,7 +539,10 @@
       "feature1": "תגובות חכמות והצעות AI ללא הגבלה",
       "feature2": "הסמכת לידים וניקוד אוטומטי",
       "feature3": "סיכום שיחות",
-      "feature4": "אנליטיקס ותובנות בזמן אמת"
+      "feature4": "אנליטיקס ותובנות בזמן אמת",
+      "availableFor": "זמין למנויי סטארטר ופרו",
+      "unlockButton": "הפעל AI Brain מלא – $29/חודש",
+      "getStarterButton": "קבל סטארטר לגישה לתכונות AI"
     },
     "notices": {
       "messageCosts": {
