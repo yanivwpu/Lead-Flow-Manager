@@ -1053,7 +1053,10 @@ export class DbStorage implements IStorage {
   }
 
   async createDemoBooking(booking: InsertDemoBooking): Promise<DemoBooking> {
-    const result = await db.insert(demoBookings).values(booking).returning();
+    const result = await db.insert(demoBookings).values({
+      ...booking,
+      source: booking.source || 'web'
+    }).returning();
     await db.update(salespeople)
       .set({ totalBookings: sql`${salespeople.totalBookings} + 1` })
       .where(eq(salespeople.id, booking.salespersonId));

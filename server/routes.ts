@@ -3486,7 +3486,7 @@ export async function registerRoutes(
   // Book a demo (public endpoint)
   app.post("/api/demo/book", async (req, res) => {
     try {
-      const { name, email, phone, scheduledDate, consent } = req.body;
+      const { name, email, phone, scheduledDate, consent, source } = req.body;
       
       if (!name || !email || !phone || !scheduledDate || !consent) {
         return res.status(400).json({ error: "All fields are required including consent" });
@@ -3510,7 +3510,8 @@ export async function registerRoutes(
         visitorPhone: phone,
         scheduledDate: new Date(scheduledDate),
         consentGiven: consent,
-        status: 'pending'
+        status: 'pending',
+        source: source || 'web'
       });
 
       // Send email notification to salesperson

@@ -640,6 +640,7 @@ export const demoBookings = pgTable("demo_bookings", {
   consentGiven: boolean("consent_given").default(true),
   status: text("status").notNull().default("pending"), // pending, completed, cancelled, converted
   notes: text("notes"),
+  source: text("source").default("web"), // web, qr_code
   createdAt: timestamp("created_at").defaultNow(),
 });
 

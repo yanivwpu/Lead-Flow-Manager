@@ -25,6 +25,7 @@ interface Demo {
   status: string;
   notes?: string;
   createdAt: string;
+  source?: string;
 }
 
 interface Conversion {
@@ -476,7 +477,14 @@ export function SalesPortal() {
                     <div key={demo.id} className="p-4 hover:bg-gray-50">
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                         <div className="space-y-1">
-                          <h3 className="font-medium text-gray-900">{demo.visitorName}</h3>
+                          <div className="flex items-center gap-2">
+                            <h3 className="font-medium text-gray-900">{demo.visitorName}</h3>
+                            {demo.source === 'qr_code' && (
+                              <Badge variant="outline" className="text-[10px] bg-amber-50 text-amber-600 border-amber-200">
+                                QR Scan
+                              </Badge>
+                            )}
+                          </div>
                           <div className="flex flex-wrap gap-4 text-sm text-gray-500">
                             <span className="flex items-center gap-1">
                               <Mail className="h-3.5 w-3.5" />
