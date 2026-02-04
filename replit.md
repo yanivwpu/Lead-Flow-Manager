@@ -15,7 +15,15 @@ The application is a full multi-tenant SaaS implementation with:
 - Notification system for follow-up reminders (push & email)
 - PWA capabilities (installable, offline-first)
 
-## Recent Changes (January 6, 2026)
+## Recent Changes (February 4, 2026)
+- **RTL/Hebrew Support Improvements**:
+  - Pricing page notices (Message Costs, Active Conversation, Reach Limit) now have RTL layout with icons on right side
+  - Added Hebrew translations for pricing notices in `client/src/locales/he.json`
+  - HelpCenter article list items now have RTL support with flex-row-reverse
+  - FAQ section updated with RTL-aware styling (in progress - needs translation keys completed)
+  - Key files: `client/src/pages/Pricing.tsx`, `client/src/pages/HelpCenter.tsx`, `client/src/locales/he.json`
+
+## Previous Changes (January 6, 2026)
 - **Onboarding Tour**: 7-step guided walkthrough for new users
   - Shows automatically when user hasn't completed onboarding
   - Covers key features: Inbox, Search, Follow-ups, Templates, Workflows, Integrations, Settings
