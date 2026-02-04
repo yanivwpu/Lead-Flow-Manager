@@ -1,6 +1,7 @@
 import { useState, useEffect, lazy, Suspense } from "react";
 import { Switch, Route } from "wouter";
 import { useQuery } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { Sidebar } from "@/components/Sidebar";
 import { MobileNav } from "@/components/MobileNav";
 import { Chats } from "./Chats";
@@ -10,7 +11,7 @@ import { TrialBanner } from "@/components/TrialBanner";
 import { OnboardingTour } from "@/components/OnboardingTour";
 import { SubscriptionProvider, useSubscription } from "@/lib/subscription-context";
 import { Loader2 } from "lucide-react";
-import { getDirection } from "@/lib/i18n";
+import { supportedLanguages, type SupportedLanguage } from "@/lib/i18n";
 
 const Search = lazy(() => import("./Search").then(m => ({ default: m.Search })));
 const Settings = lazy(() => import("./Settings").then(m => ({ default: m.Settings })));
@@ -33,6 +34,7 @@ function AppContent() {
   const { data: subscription, isLoading } = useSubscription();
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [onboardingShown, setOnboardingShown] = useState(false);
+  const { i18n } = useTranslation();
   
   const { data: user } = useQuery<{ onboardingCompleted?: boolean }>({
     queryKey: ["/api/auth/me"],
@@ -52,7 +54,8 @@ function AppContent() {
   const showTrialBanner = !isLoading && subscription?.limits?.isInTrial && 
     subscription.limits.trialDaysRemaining > 0;
 
-  const isRTL = getDirection() === 'rtl';
+  const currentLang = (i18n.language || 'en') as SupportedLanguage;
+  const isRTL = supportedLanguages[currentLang]?.dir === 'rtl';
 
   return (
     <div className={`fixed inset-0 flex bg-gray-50 overflow-hidden ${isRTL ? 'flex-row-reverse' : ''}`} dir={isRTL ? 'rtl' : 'ltr'}>
