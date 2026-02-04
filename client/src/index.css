@@ -552,20 +552,37 @@ ul, ol {
   text-align: center !important;
 }
 
-/* Integrations Section Header RTL Centering */
-[dir="rtl"] .integrations-section-header,
-[dir="rtl"] section:has(h2:contains("התחבר לכלים האהובים עליך")) .text-center,
-[dir="rtl"] section:has(h2:contains("התחבר לכלים האהובים עליך")) h2,
-[dir="rtl"] section:has(h2:contains("התחבר לכלים האהובים עליך")) p {
+/* Final RTL Header Centering Fixes */
+[dir="rtl"] .text-center,
+[dir="rtl"] section .text-center,
+[dir="rtl"] section header,
+[dir="rtl"] .max-w-6xl.mx-auto.text-center,
+[dir="rtl"] .max-w-5xl.mx-auto.text-center,
+[dir="rtl"] .max-w-3xl.mx-auto.text-center,
+[dir="rtl"] .max-w-4xl.mx-auto.text-center {
   text-align: center !important;
-  margin-inline: auto !important;
 }
 
-/* Fallback for specific integration header if selectors above are too specific */
-[dir="rtl"] .integrations-title,
-[dir="rtl"] .integrations-subtitle {
+[dir="rtl"] .text-center h2,
+[dir="rtl"] .text-center p,
+[dir="rtl"] .text-center h3,
+[dir="rtl"] .max-w-6xl.mx-auto.text-center h2,
+[dir="rtl"] .max-w-6xl.mx-auto.text-center p,
+[dir="rtl"] .max-w-5xl.mx-auto.text-center h2,
+[dir="rtl"] .max-w-5xl.mx-auto.text-center p,
+[dir="rtl"] .max-w-3xl.mx-auto.text-center h2,
+[dir="rtl"] .max-w-3xl.mx-auto.text-center p,
+[dir="rtl"] .max-w-4xl.mx-auto.text-center h2,
+[dir="rtl"] .max-w-4xl.mx-auto.text-center p {
   text-align: center !important;
-  margin-inline: auto !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+}
+
+/* Specific section overrides to ensure they remain centered */
+[dir="rtl"] section h2,
+[dir="rtl"] section h2 + p {
+  text-align: center !important;
 }
 
 /* Better text wrapping for RTL headlines (prevents bad breaks/orphans) */
