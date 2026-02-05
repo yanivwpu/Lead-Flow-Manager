@@ -3756,12 +3756,25 @@ export async function registerRoutes(
   // Admin: Get all users with support ticket status and attribution
   app.get("/api/admin/users", requireAdmin, async (req, res) => {
     try {
+      console.log('[Admin Users] Fetching data...');
+      
       const allUsers = await storage.getAllUsers();
+      console.log('[Admin Users] Users:', allUsers.length);
+      
       const allBookings = await storage.getDemoBookings();
+      console.log('[Admin Users] Bookings:', allBookings.length);
+      
       const allTickets = await storage.getSupportTickets();
+      console.log('[Admin Users] Tickets:', allTickets.length);
+      
       const allConversions = await storage.getSalesConversions();
+      console.log('[Admin Users] Conversions:', allConversions.length);
+      
       const allPartners = await storage.getPartners();
+      console.log('[Admin Users] Partners:', allPartners.length);
+      
       const allSalespeople = await storage.getSalespeople();
+      console.log('[Admin Users] Salespeople:', allSalespeople.length);
       
       // Build lookup maps
       const partnerMap = new Map(allPartners.map(p => [p.id, p.name]));
@@ -3813,9 +3826,9 @@ export async function registerRoutes(
       });
       
       res.json(usersWithInfo);
-    } catch (error) {
-      console.error("Error fetching admin users:", error);
-      res.status(500).json({ error: "Failed to fetch users" });
+    } catch (error: any) {
+      console.error("Error fetching admin users:", error?.message || error, error?.stack);
+      res.status(500).json({ error: `Failed to fetch users: ${error?.message || 'Unknown error'}` });
     }
   });
 
