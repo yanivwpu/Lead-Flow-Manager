@@ -137,6 +137,8 @@ export function Admin() {
         throw new Error(data.error || 'Login failed');
       }
 
+      // Small delay to ensure session is persisted before queries start
+      await new Promise(resolve => setTimeout(resolve, 500));
       setIsLoggedIn(true);
       setPassword("");
     } catch (err: any) {
@@ -802,7 +804,8 @@ export function Admin() {
               <div className="md:hidden divide-y divide-gray-100">
                 {usersError ? (
                   <div className="text-center py-8">
-                    <p className="text-red-500 mb-2">Failed to load users. Please try again.</p>
+                    <p className="text-red-500 mb-2">Failed to load users: {usersErrorDetails?.message || 'Unknown error'}</p>
+                    <p className="text-gray-500 text-xs mb-3">Try logging out and back in</p>
                     <Button variant="outline" size="sm" onClick={() => refetchUsers()}>
                       Retry
                     </Button>
@@ -942,7 +945,8 @@ export function Admin() {
                     {usersError ? (
                       <TableRow>
                         <TableCell colSpan={8} className="text-center py-8">
-                          <p className="text-red-500 mb-2">Failed to load users. Please try again.</p>
+                          <p className="text-red-500 mb-2">Failed to load users: {usersErrorDetails?.message || 'Unknown error'}</p>
+                          <p className="text-gray-500 text-xs mb-3">Try logging out and back in</p>
                           <Button variant="outline" size="sm" onClick={() => refetchUsers()}>
                             Retry
                           </Button>

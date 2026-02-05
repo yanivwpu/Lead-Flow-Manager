@@ -3547,7 +3547,15 @@ export async function registerRoutes(
         const hash = await bcrypt.hash(password, 10);
         await storage.setAdminPassword(hash);
         (req.session as any).isAdmin = true;
-        return res.json({ success: true, message: "Admin password set" });
+        
+        return req.session.save((err) => {
+          if (err) {
+            console.error('[Admin] Session save error on setup:', err);
+            return res.status(500).json({ error: "Session save failed" });
+          }
+          console.log('[Admin] Password set, session:', req.sessionID);
+          res.json({ success: true, message: "Admin password set" });
+        });
       }
 
       const valid = await bcrypt.compare(password, storedHash);
@@ -3556,7 +3564,16 @@ export async function registerRoutes(
       }
 
       (req.session as any).isAdmin = true;
-      res.json({ success: true });
+      
+      // Explicitly save session to ensure it's persisted before responding
+      req.session.save((err) => {
+        if (err) {
+          console.error('[Admin] Session save error:', err);
+          return res.status(500).json({ error: "Session save failed" });
+        }
+        console.log('[Admin] Login successful, session:', req.sessionID);
+        res.json({ success: true });
+      });
     } catch (error) {
       console.error("Error in admin login:", error);
       res.status(500).json({ error: "Login failed" });
@@ -3565,6 +3582,7 @@ export async function registerRoutes(
 
   app.get("/api/admin/check", async (req, res) => {
     const isAdmin = (req.session as any)?.isAdmin === true;
+    console.log('[Admin] Check - session:', req.sessionID, 'isAdmin:', isAdmin);
     res.json({ isAdmin });
   });
 
