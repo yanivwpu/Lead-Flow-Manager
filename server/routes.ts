@@ -3576,6 +3576,7 @@ export async function registerRoutes(
   // Admin middleware
   const requireAdmin = (req: any, res: any, next: any) => {
     if ((req.session as any)?.isAdmin !== true) {
+      console.log('[Admin] Auth failed - session:', req.sessionID, 'isAdmin:', (req.session as any)?.isAdmin);
       return res.status(401).json({ error: "Admin authentication required" });
     }
     next();

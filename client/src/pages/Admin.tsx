@@ -113,7 +113,7 @@ export function Admin() {
   const queryClient = useQueryClient();
 
   useEffect(() => {
-    fetch('/api/admin/check')
+    fetch('/api/admin/check', { credentials: 'include' })
       .then(res => res.json())
       .then(data => setIsLoggedIn(data.isAdmin))
       .catch(() => setIsLoggedIn(false));
@@ -128,7 +128,8 @@ export function Admin() {
       const res = await fetch('/api/admin/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password })
+        body: JSON.stringify({ password }),
+        credentials: 'include'
       });
 
       if (!res.ok) {
@@ -146,7 +147,7 @@ export function Admin() {
   };
 
   const handleLogout = async () => {
-    await fetch('/api/admin/logout', { method: 'POST' });
+    await fetch('/api/admin/logout', { method: 'POST', credentials: 'include' });
     setIsLoggedIn(false);
   };
 
@@ -170,9 +171,10 @@ export function Admin() {
     enabled: isLoggedIn,
   });
 
-  const { data: adminUsers = [] } = useQuery<AdminUser[]>({
+  const { data: adminUsers = [], isError: usersError, error: usersErrorDetails, refetch: refetchUsers } = useQuery<AdminUser[]>({
     queryKey: ['/api/admin/users'],
     enabled: isLoggedIn,
+    retry: 1,
   });
 
   const { data: partners = [] } = useQuery<Partner[]>({
@@ -218,7 +220,8 @@ export function Admin() {
       const res = await fetch(`/api/admin/partners/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
+        body: JSON.stringify(data),
+        credentials: 'include'
       });
       if (!res.ok) throw new Error('Failed to update partner');
       return res.json();
@@ -231,7 +234,7 @@ export function Admin() {
 
   const deletePartner = useMutation({
     mutationFn: async (id: string) => {
-      const res = await fetch(`/api/admin/partners/${id}`, { method: 'DELETE' });
+      const res = await fetch(`/api/admin/partners/${id}`, { method: 'DELETE', credentials: 'include' });
       if (!res.ok) throw new Error('Failed to delete partner');
     },
     onSuccess: () => {
@@ -269,7 +272,8 @@ export function Admin() {
       const res = await fetch(`/api/admin/salespeople/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
+        body: JSON.stringify(data),
+        credentials: 'include'
       });
       if (!res.ok) throw new Error('Failed to update salesperson');
       return res.json();
@@ -282,7 +286,7 @@ export function Admin() {
 
   const deleteSalesperson = useMutation({
     mutationFn: async (id: string) => {
-      const res = await fetch(`/api/admin/salespeople/${id}`, { method: 'DELETE' });
+      const res = await fetch(`/api/admin/salespeople/${id}`, { method: 'DELETE', credentials: 'include' });
       if (!res.ok) throw new Error('Failed to delete salesperson');
     },
     onSuccess: () => {
@@ -295,7 +299,8 @@ export function Admin() {
       const res = await fetch(`/api/admin/bookings/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status })
+        body: JSON.stringify({ status }),
+        credentials: 'include'
       });
       if (!res.ok) throw new Error('Failed to update booking');
       return res.json();
@@ -307,7 +312,7 @@ export function Admin() {
 
   const markConversionPaid = useMutation({
     mutationFn: async (id: string) => {
-      const res = await fetch(`/api/admin/conversions/${id}/paid`, { method: 'PATCH' });
+      const res = await fetch(`/api/admin/conversions/${id}/paid`, { method: 'PATCH', credentials: 'include' });
       if (!res.ok) throw new Error('Failed to mark as paid');
       return res.json();
     },
@@ -795,7 +800,14 @@ export function Admin() {
               
               {/* Mobile Card View */}
               <div className="md:hidden divide-y divide-gray-100">
-                {filteredUsers.length === 0 ? (
+                {usersError ? (
+                  <div className="text-center py-8">
+                    <p className="text-red-500 mb-2">Failed to load users. Please try again.</p>
+                    <Button variant="outline" size="sm" onClick={() => refetchUsers()}>
+                      Retry
+                    </Button>
+                  </div>
+                ) : filteredUsers.length === 0 ? (
                   <div className="text-center py-8 text-gray-500">
                     {showSupportOnly ? 'No support tickets.' : 'No users yet.'}
                   </div>
@@ -927,7 +939,16 @@ export function Admin() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredUsers.length === 0 ? (
+                    {usersError ? (
+                      <TableRow>
+                        <TableCell colSpan={8} className="text-center py-8">
+                          <p className="text-red-500 mb-2">Failed to load users. Please try again.</p>
+                          <Button variant="outline" size="sm" onClick={() => refetchUsers()}>
+                            Retry
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ) : filteredUsers.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={8} className="text-center py-8 text-gray-500">
                           {showSupportOnly ? 'No support tickets.' : 'No users yet.'}
