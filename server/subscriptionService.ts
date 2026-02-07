@@ -59,7 +59,9 @@ class SubscriptionService {
 
     // Check if user has the AI Brain add-on subscription from Stripe
     // Trial users get full AI Brain access as part of the Pro trial experience
-    const hasAIBrainAddon = isInTrial ? true : await this.checkAIBrainAddonStatus(user.stripeCustomerId);
+    // Demo user (demo@whachat.com) gets full AI Brain for demonstration purposes
+    const isDemoUser = user.email === 'demo@whachat.com';
+    const hasAIBrainAddon = isInTrial || isDemoUser ? true : await this.checkAIBrainAddonStatus(user.stripeCustomerId);
 
     return {
       plan: effectivePlan,
