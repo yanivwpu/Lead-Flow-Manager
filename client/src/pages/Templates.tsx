@@ -267,7 +267,7 @@ export function Templates() {
                   Preset Automation Templates
                 </CardTitle>
                 <CardDescription className="text-sm">
-                  Pre-built message sequences for different industries. Available in English, Spanish, and Hebrew.
+                  Pre-built Revenue Automation sequences for different industries. Available in English, Spanish, and Hebrew.
                 </CardDescription>
               </CardHeader>
               <CardContent className="px-3 md:px-6">
