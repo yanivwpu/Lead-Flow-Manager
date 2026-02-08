@@ -126,14 +126,21 @@ export function UnifiedInbox() {
     queryKey: ["/api/inbox"],
   });
 
+  const isDemoUser = user?.email === "demo@whachat.com";
+
   const { data: demoChats = [] } = useQuery<any[]>({
     queryKey: ["/api/chats"],
-    enabled: user?.email === "demo@whachat.com",
+    enabled: isDemoUser,
   });
 
-  const inbox = useMemo(() => {
-    if (user?.email === "demo@whachat.com" && demoChats.length > 0) {
-      return demoChats.map(chat => ({
+  const selectedDemoChat = useMemo(() => {
+    if (!isDemoUser || !selectedContactId) return null;
+    return demoChats.find(c => String(c.id) === String(selectedContactId)) || null;
+  }, [isDemoUser, selectedContactId, demoChats]);
+
+  const inbox: InboxItem[] = useMemo(() => {
+    if (isDemoUser && demoChats.length > 0) {
+      return demoChats.map((chat: any) => ({
         contact: {
           id: chat.id,
           name: chat.name,
@@ -151,70 +158,67 @@ export function UnifiedInbox() {
         },
         channel: 'whatsapp' as Channel,
         lastMessage: chat.lastMessage,
-        lastMessageAt: chat.time === "Just now" ? new Date().toISOString() : new Date().toISOString(), // Simplified for demo
+        lastMessageAt: chat.createdAt || new Date().toISOString(),
         unreadCount: chat.unread || 0,
       }));
     }
     return inboxData || [];
-  }, [user?.email, inboxData, demoChats]);
+  }, [isDemoUser, inboxData, demoChats]);
 
-  const { data: contactData } = useQuery<{ contact: Contact; conversations: Conversation[] }>({
+  const { data: realContactData } = useQuery<{ contact: Contact; conversations: Conversation[] }>({
     queryKey: ["/api/contacts", selectedContactId],
-    enabled: !!selectedContactId,
-    retry: 1,
-    select: (data) => {
-      if (user?.email === "demo@whachat.com" && demoChats.length > 0) {
-        const demoChat = demoChats.find(c => String(c.id) === String(selectedContactId));
-        if (demoChat) {
-          return {
-            contact: {
-              id: demoChat.id,
-              name: demoChat.name,
-              avatar: demoChat.avatar,
-              primaryChannel: 'whatsapp' as Channel,
-              tag: demoChat.tag,
-              pipelineStage: demoChat.pipelineStage,
-              notes: demoChat.notes,
-              createdAt: demoChat.createdAt || new Date().toISOString(),
-            },
-            conversations: [{
-              id: demoChat.id,
-              channel: 'whatsapp' as Channel,
-              status: demoChat.status || 'open',
-              unreadCount: demoChat.unread || 0,
-            }]
-          };
-        }
-      }
-      return data;
-    }
+    enabled: !!selectedContactId && !isDemoUser,
   });
+
+  const contactData = useMemo(() => {
+    if (isDemoUser && selectedDemoChat) {
+      return {
+        contact: {
+          id: selectedDemoChat.id,
+          name: selectedDemoChat.name,
+          avatar: selectedDemoChat.avatar,
+          phone: selectedDemoChat.whatsappPhone || '',
+          email: '',
+          primaryChannel: 'whatsapp' as Channel,
+          primaryChannelOverride: undefined as Channel | undefined,
+          tag: selectedDemoChat.tag,
+          pipelineStage: selectedDemoChat.pipelineStage,
+          notes: selectedDemoChat.notes,
+          createdAt: selectedDemoChat.createdAt || new Date().toISOString(),
+        },
+        conversations: [{
+          id: selectedDemoChat.id,
+          channel: 'whatsapp' as Channel,
+          status: selectedDemoChat.status || 'open',
+          unreadCount: selectedDemoChat.unread || 0,
+        }]
+      };
+    }
+    return realContactData;
+  }, [isDemoUser, selectedDemoChat, realContactData]);
 
   const primaryConversation = contactData?.conversations?.find(
     c => c.channel === (contactData?.contact?.primaryChannelOverride || contactData?.contact?.primaryChannel)
   ) || contactData?.conversations?.[0];
 
-  const { data: messages = [] } = useQuery<Message[]>({
+  const { data: realMessages = [] } = useQuery<Message[]>({
     queryKey: ["/api/conversations", primaryConversation?.id, "messages"],
-    enabled: !!primaryConversation?.id,
-    retry: 1,
-    select: (data) => {
-      if (user?.email === "demo@whachat.com" && demoChats.length > 0) {
-        const demoChat = demoChats.find(c => String(c.id) === String(selectedContactId));
-        if (demoChat) {
-          return demoChat.messages.map((m: any, i: number) => ({
-            id: m.id || `demo-msg-${i}`,
-            direction: (m.sender === 'me' ? 'outbound' : 'inbound') as 'outbound' | 'inbound',
-            content: m.text || m.content,
-            contentType: 'text',
-            status: 'sent',
-            createdAt: new Date().toISOString(), // Simplified
-          }));
-        }
-      }
-      return data;
-    }
+    enabled: !!primaryConversation?.id && !isDemoUser,
   });
+
+  const messages: Message[] = useMemo(() => {
+    if (isDemoUser && selectedDemoChat) {
+      return selectedDemoChat.messages.map((m: any, i: number) => ({
+        id: m.id || `demo-msg-${i}`,
+        direction: (m.sender === 'me' ? 'outbound' : 'inbound') as 'outbound' | 'inbound',
+        content: m.text || m.content,
+        contentType: 'text',
+        status: 'sent',
+        createdAt: new Date().toISOString(),
+      }));
+    }
+    return realMessages;
+  }, [isDemoUser, selectedDemoChat, realMessages]);
 
   // Window status for Meta channels (Instagram, Facebook)
   interface WindowStatus {
