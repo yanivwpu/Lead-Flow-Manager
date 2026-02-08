@@ -138,29 +138,34 @@ export function UnifiedInbox() {
     return demoChats.find(c => String(c.id) === String(selectedContactId)) || null;
   }, [isDemoUser, selectedContactId, demoChats]);
 
+  const DEMO_CHANNELS: Channel[] = ['whatsapp', 'instagram', 'facebook', 'telegram', 'sms', 'webchat'];
+
   const inbox: InboxItem[] = useMemo(() => {
     if (isDemoUser && demoChats.length > 0) {
-      return demoChats.map((chat: any) => ({
-        contact: {
-          id: chat.id,
-          name: chat.name,
-          avatar: chat.avatar,
-          primaryChannel: (chat.channel || 'whatsapp') as Channel,
-          tag: chat.tag,
-          pipelineStage: chat.pipelineStage,
-          createdAt: chat.createdAt || new Date().toISOString(),
-        },
-        conversation: {
-          id: chat.id,
-          channel: (chat.channel || 'whatsapp') as Channel,
-          status: chat.status || 'open',
+      return demoChats.map((chat: any, index: number) => {
+        const ch = (chat.channel || DEMO_CHANNELS[index % DEMO_CHANNELS.length]) as Channel;
+        return {
+          contact: {
+            id: chat.id,
+            name: chat.name,
+            avatar: chat.avatar,
+            primaryChannel: ch,
+            tag: chat.tag,
+            pipelineStage: chat.pipelineStage,
+            createdAt: chat.createdAt || new Date().toISOString(),
+          },
+          conversation: {
+            id: chat.id,
+            channel: ch,
+            status: chat.status || 'open',
+            unreadCount: chat.unread || 0,
+          },
+          channel: ch,
+          lastMessage: chat.lastMessage,
+          lastMessageAt: chat.createdAt || new Date().toISOString(),
           unreadCount: chat.unread || 0,
-        },
-        channel: (chat.channel || 'whatsapp') as Channel,
-        lastMessage: chat.lastMessage,
-        lastMessageAt: chat.createdAt || new Date().toISOString(),
-        unreadCount: chat.unread || 0,
-      }));
+        };
+      });
     }
     return inboxData || [];
   }, [isDemoUser, inboxData, demoChats]);
@@ -172,7 +177,8 @@ export function UnifiedInbox() {
 
   const contactData = useMemo(() => {
     if (isDemoUser && selectedDemoChat) {
-      const ch = (selectedDemoChat.channel || 'whatsapp') as Channel;
+      const chatIndex = demoChats.findIndex(c => String(c.id) === String(selectedDemoChat.id));
+      const ch = (selectedDemoChat.channel || DEMO_CHANNELS[chatIndex >= 0 ? chatIndex % DEMO_CHANNELS.length : 0]) as Channel;
       return {
         contact: {
           id: selectedDemoChat.id,
