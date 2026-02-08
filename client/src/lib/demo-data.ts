@@ -1,9 +1,12 @@
+export type DemoChannel = 'whatsapp' | 'instagram' | 'facebook' | 'sms' | 'webchat' | 'telegram' | 'tiktok';
+
 export interface DemoChat {
   id: string;
   userId: string;
   name: string;
   avatar: string;
   whatsappPhone?: string | null;
+  channel: DemoChannel;
   lastMessage: string;
   time: string;
   unread: number;
@@ -22,6 +25,7 @@ export const DEMO_CHATS: DemoChat[] = [
     userId: "demo",
     name: "Sarah Johnson",
     avatar: "https://i.pravatar.cc/150?u=sarah",
+    channel: "whatsapp",
     lastMessage: "Yes, I'd love to see the premium package details!",
     time: "10:32 AM",
     unread: 2,
@@ -44,6 +48,7 @@ export const DEMO_CHATS: DemoChat[] = [
     userId: "demo",
     name: "Mike Chen",
     avatar: "https://i.pravatar.cc/150?u=mike",
+    channel: "instagram",
     lastMessage: "Let me discuss with my partner and get back to you",
     time: "Yesterday",
     unread: 0,
@@ -66,6 +71,7 @@ export const DEMO_CHATS: DemoChat[] = [
     userId: "demo",
     name: "Emma Wilson",
     avatar: "https://i.pravatar.cc/150?u=emma",
+    channel: "facebook",
     lastMessage: "Perfect! The payment has been sent",
     time: "2 days ago",
     unread: 0,
@@ -87,6 +93,7 @@ export const DEMO_CHATS: DemoChat[] = [
     userId: "demo",
     name: "David Martinez",
     avatar: "https://i.pravatar.cc/150?u=david",
+    channel: "telegram",
     lastMessage: "Can you tell me more about your services?",
     time: "Just now",
     unread: 1,
@@ -105,6 +112,7 @@ export const DEMO_CHATS: DemoChat[] = [
     userId: "demo",
     name: "Lisa Thompson",
     avatar: "https://i.pravatar.cc/150?u=lisa",
+    channel: "sms",
     lastMessage: "I'll need to think about it. The price is a bit high for us right now.",
     time: "3 days ago",
     unread: 0,
@@ -125,6 +133,7 @@ export const DEMO_CHATS: DemoChat[] = [
     userId: "demo",
     name: "James Brown",
     avatar: "https://i.pravatar.cc/150?u=james",
+    channel: "webchat",
     lastMessage: "We've decided to go with another vendor. Thanks anyway!",
     time: "1 week ago",
     unread: 0,

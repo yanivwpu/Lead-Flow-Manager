@@ -145,18 +145,18 @@ export function UnifiedInbox() {
           id: chat.id,
           name: chat.name,
           avatar: chat.avatar,
-          primaryChannel: 'whatsapp' as Channel,
+          primaryChannel: (chat.channel || 'whatsapp') as Channel,
           tag: chat.tag,
           pipelineStage: chat.pipelineStage,
           createdAt: chat.createdAt || new Date().toISOString(),
         },
         conversation: {
           id: chat.id,
-          channel: 'whatsapp' as Channel,
+          channel: (chat.channel || 'whatsapp') as Channel,
           status: chat.status || 'open',
           unreadCount: chat.unread || 0,
         },
-        channel: 'whatsapp' as Channel,
+        channel: (chat.channel || 'whatsapp') as Channel,
         lastMessage: chat.lastMessage,
         lastMessageAt: chat.createdAt || new Date().toISOString(),
         unreadCount: chat.unread || 0,
@@ -172,6 +172,7 @@ export function UnifiedInbox() {
 
   const contactData = useMemo(() => {
     if (isDemoUser && selectedDemoChat) {
+      const ch = (selectedDemoChat.channel || 'whatsapp') as Channel;
       return {
         contact: {
           id: selectedDemoChat.id,
@@ -179,7 +180,7 @@ export function UnifiedInbox() {
           avatar: selectedDemoChat.avatar,
           phone: selectedDemoChat.whatsappPhone || '',
           email: '',
-          primaryChannel: 'whatsapp' as Channel,
+          primaryChannel: ch,
           primaryChannelOverride: undefined as Channel | undefined,
           tag: selectedDemoChat.tag,
           pipelineStage: selectedDemoChat.pipelineStage,
@@ -188,7 +189,7 @@ export function UnifiedInbox() {
         },
         conversations: [{
           id: selectedDemoChat.id,
-          channel: 'whatsapp' as Channel,
+          channel: ch,
           status: selectedDemoChat.status || 'open',
           unreadCount: selectedDemoChat.unread || 0,
         }]
