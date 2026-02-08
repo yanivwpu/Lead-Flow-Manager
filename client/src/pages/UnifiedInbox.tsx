@@ -129,15 +129,13 @@ export function UnifiedInbox() {
   const { data: contactData } = useQuery<{ contact: Contact; conversations: Conversation[] }>({
     queryKey: ["/api/contacts", selectedContactId],
     enabled: !!selectedContactId,
+    retry: 1,
   });
-
-  const primaryConversation = contactData?.conversations?.find(
-    c => c.channel === (contactData?.contact?.primaryChannelOverride || contactData?.contact?.primaryChannel)
-  ) || contactData?.conversations?.[0];
 
   const { data: messages = [] } = useQuery<Message[]>({
     queryKey: ["/api/conversations", primaryConversation?.id, "messages"],
     enabled: !!primaryConversation?.id,
+    retry: 1,
   });
 
   // Window status for Meta channels (Instagram, Facebook)

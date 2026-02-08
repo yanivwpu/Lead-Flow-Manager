@@ -296,9 +296,10 @@ export function Chats() {
   };
 
   const activeChats = viewMode === "team" ? teamChats : chats;
-  const selectedChat = demoMode 
-    ? demoChats.find(c => c.id === selectedChatId)
-    : activeChats.find(c => c.id === selectedChatId);
+  const selectedChat = useMemo(() => {
+    const chatsToSearch = demoMode ? demoChats : activeChats;
+    return chatsToSearch.find(c => String(c.id) === String(selectedChatId));
+  }, [demoMode, demoChats, activeChats, selectedChatId]);
 
   // Client-side cooldown for AI suggestions (3 seconds)
   const [aiCooldown, setAiCooldown] = useState(false);
