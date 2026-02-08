@@ -1,0 +1,77 @@
+🔎 SECTION 1 — AI Trigger Logic
+	1.	When exactly is the AI invoked?
+	•	On every incoming message?
+	•	Only when user clicks “AI Suggest”?
+	•	On new conversation start?
+	•	On workflow triggers?
+	•	On summary requests only?
+	2.	Is AI ever auto-replying without human approval?
+	3.	Can AI trigger itself recursively (AI reply → user reply → AI reply → etc.)?
+	4.	Is there any debounce or delay logic to prevent rapid consecutive AI calls?
+
+⸻
+
+💰 SECTION 2 — Cost Control & Throttling
+	5.	Do we have a hard monthly cap per account on AI usage?
+	6.	Is the cap based on:
+	•	AI calls count?
+	•	Tokens?
+	•	Cost in dollars?
+	7.	What happens when a user hits the cap?
+	•	Block AI?
+	•	Soft warning?
+	•	Auto-upgrade prompt?
+	8.	Do we currently throttle AI calls per minute per account?
+	9.	Is there a global system-level throttle to prevent abuse?
+
+⸻
+
+📊 SECTION 3 — Cost Visibility
+	10.	Do we log the following per AI request:
+	•	Tokens input
+	•	Tokens output
+	•	Model used
+	•	Cost per request
+	11.	Can we calculate:
+	•	Total AI cost per account per month?
+	•	Average cost per AI call?
+	•	Highest 10% AI users?
+	12.	Do we store conversation length before sending to AI?
+(Or are we sometimes sending entire long chat history?)
+
+⸻
+
+🧠 SECTION 4 — Prompt & Token Control
+	13.	Do we limit maximum output tokens per AI response?
+	14.	Do we limit how much conversation history is sent in the prompt?
+	15.	Are we using:
+	•	Full thread context?
+	•	Last X messages?
+	•	Or summarized memory?
+	16.	Are we using GPT-4 class model or cheaper optimized model?
+	17.	Is the system prompt forcing short, concise answers?
+
+⸻
+
+🏗 SECTION 5 — Architecture & Scaling
+	18.	Is AI usage synchronous or queued async?
+	19.	If OpenAI API slows down, what happens?
+	20.	Can one heavy account degrade performance for others?
+	21.	Is AI cost isolated per tenant (account-based separation)?
+
+⸻
+
+📈 SECTION 6 — Business Risk
+	22.	What was the highest AI usage by a single account last month?
+	23.	What was the total AI bill last month?
+	24.	What is the average AI cost per active AI subscriber?
+	25.	If 100 customers all use AI Brain heavily, what is projected monthly AI cost?
+
+⸻
+
+🚨 SECTION 7 — Abuse Scenarios
+	26.	Can a user create a workflow that auto-triggers AI endlessly?
+	27.	Can AI be triggered on bulk messages or broadcasts?
+	28.	Is there protection against extremely long user messages being sent to AI?
+	29.	Is there a max characters limit per AI input?
+	30.	Is there a failsafe if AI returns extremely long outputs?
