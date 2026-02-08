@@ -605,7 +605,16 @@ export function UnifiedInbox() {
                         return (
                           <DropdownMenuItem
                             key={key}
-                            onClick={() => switchChannelMutation.mutate({ contactId: selectedContactId!, channel: key as Channel })}
+                            onClick={() => {
+                              if (isDemoUser && selectedContactId) {
+                                // Simulate channel switch for demo user
+                                queryClient.setQueryData(["/api/chats"], (old: any) => 
+                                  old?.map((c: any) => c.id === selectedContactId ? { ...c, channel: key } : c)
+                                );
+                              } else {
+                                switchChannelMutation.mutate({ contactId: selectedContactId!, channel: key as Channel });
+                              }
+                            }}
                             className={cn("gap-2", isActive && "bg-slate-100")}
                             data-testid={`channel-option-${key}`}
                           >
