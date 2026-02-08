@@ -122,14 +122,72 @@ export function UnifiedInbox() {
 
   const selectedContactId = match ? params?.contactId : null;
 
-  const { data: inbox = [], isLoading: inboxLoading } = useQuery<InboxItem[]>({
+  const { data: inboxData, isLoading: inboxLoading } = useQuery<InboxItem[]>({
     queryKey: ["/api/inbox"],
   });
+
+  const { data: demoChats = [] } = useQuery<any[]>({
+    queryKey: ["/api/chats"],
+    enabled: user?.email === "demo@whachat.com",
+  });
+
+  const inbox = useMemo(() => {
+    if (user?.email === "demo@whachat.com" && demoChats.length > 0) {
+      return demoChats.map(chat => ({
+        contact: {
+          id: chat.id,
+          name: chat.name,
+          avatar: chat.avatar,
+          primaryChannel: 'whatsapp' as Channel,
+          tag: chat.tag,
+          pipelineStage: chat.pipelineStage,
+          createdAt: chat.createdAt || new Date().toISOString(),
+        },
+        conversation: {
+          id: chat.id,
+          channel: 'whatsapp' as Channel,
+          status: chat.status || 'open',
+          unreadCount: chat.unread || 0,
+        },
+        channel: 'whatsapp' as Channel,
+        lastMessage: chat.lastMessage,
+        lastMessageAt: chat.time === "Just now" ? new Date().toISOString() : new Date().toISOString(), // Simplified for demo
+        unreadCount: chat.unread || 0,
+      }));
+    }
+    return inboxData || [];
+  }, [user?.email, inboxData, demoChats]);
 
   const { data: contactData } = useQuery<{ contact: Contact; conversations: Conversation[] }>({
     queryKey: ["/api/contacts", selectedContactId],
     enabled: !!selectedContactId,
     retry: 1,
+    select: (data) => {
+      if (user?.email === "demo@whachat.com" && demoChats.length > 0) {
+        const demoChat = demoChats.find(c => String(c.id) === String(selectedContactId));
+        if (demoChat) {
+          return {
+            contact: {
+              id: demoChat.id,
+              name: demoChat.name,
+              avatar: demoChat.avatar,
+              primaryChannel: 'whatsapp' as Channel,
+              tag: demoChat.tag,
+              pipelineStage: demoChat.pipelineStage,
+              notes: demoChat.notes,
+              createdAt: demoChat.createdAt || new Date().toISOString(),
+            },
+            conversations: [{
+              id: demoChat.id,
+              channel: 'whatsapp' as Channel,
+              status: demoChat.status || 'open',
+              unreadCount: demoChat.unread || 0,
+            }]
+          };
+        }
+      }
+      return data;
+    }
   });
 
   const primaryConversation = contactData?.conversations?.find(
@@ -140,6 +198,22 @@ export function UnifiedInbox() {
     queryKey: ["/api/conversations", primaryConversation?.id, "messages"],
     enabled: !!primaryConversation?.id,
     retry: 1,
+    select: (data) => {
+      if (user?.email === "demo@whachat.com" && demoChats.length > 0) {
+        const demoChat = demoChats.find(c => String(c.id) === String(selectedContactId));
+        if (demoChat) {
+          return demoChat.messages.map((m: any, i: number) => ({
+            id: m.id || `demo-msg-${i}`,
+            direction: (m.sender === 'me' ? 'outbound' : 'inbound') as 'outbound' | 'inbound',
+            content: m.text || m.content,
+            contentType: 'text',
+            status: 'sent',
+            createdAt: new Date().toISOString(), // Simplified
+          }));
+        }
+      }
+      return data;
+    }
   });
 
   // Window status for Meta channels (Instagram, Facebook)
