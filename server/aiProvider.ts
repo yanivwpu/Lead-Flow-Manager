@@ -17,9 +17,9 @@ export interface AIModelRegistry {
 }
 
 const DEFAULT_MODEL_REGISTRY: AIModelRegistry = {
-  reply: { provider: "openai", model: "gpt-4o", maxTokens: 300 },
-  extraction: { provider: "openai", model: "gpt-4o-mini", maxTokens: 500 },
-  summarization: { provider: "openai", model: "gpt-4o-mini", maxTokens: 500 },
+  reply: { provider: "openai", model: "gpt-4o", maxTokens: 250 },
+  extraction: { provider: "openai", model: "gpt-4o-mini", maxTokens: 400 },
+  summarization: { provider: "openai", model: "gpt-4o-mini", maxTokens: 400 },
   automation: { provider: "openai", model: "gpt-4o", maxTokens: 1000 },
 };
 
