@@ -1,0 +1,17 @@
+{
+  "event": "contact_created",
+  "id": "ghl_event_12345",
+  "locationId": "loc_abcdef123",
+  "timestamp": "2026-02-10T12:00:00Z",
+  "data": {
+    "id": "contact_98765",
+    "firstName": "John",
+    "lastName": "Doe",
+    "email": "john.doe@example.com",
+    "phone": "+1234567890",
+    "type": "lead",
+    "source": "WhachatCRM",
+    "tags": ["new_lead", "whatsapp"],
+    "customFields": {}
+  }
+}
