@@ -79,12 +79,15 @@ export class AIService {
     score: number;
     status: string;
   }> {
+    // Optimization: Only send the last 8 messages for extraction to save tokens
+    const limitedHistory = conversationHistory.slice(-8);
+    
     const extractionPrompt = `You are a lead data extraction AI. Analyze this conversation and extract any customer information.
 
 Business context: ${businessKnowledge?.businessName || "Unknown business"} - ${businessKnowledge?.industry || "General"}
 
 Conversation:
-${conversationHistory.map(m => `${m.role}: ${m.content}`).join("\n")}
+${limitedHistory.map(m => `${m.role}: ${m.content}`).join("\n")}
 
 Extract and return a JSON object with these fields (use null for unknown):
 - name: Customer's name

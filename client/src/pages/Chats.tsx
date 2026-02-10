@@ -358,8 +358,17 @@ export function Chats() {
     }
   }, [selectedChat, aiEnabled, demoMode, toast, aiCooldown, aiTone]);
   
-  // Silent lead extraction (no popup, just tiny hint)
+  // Silent lead extraction with frequency limiting
+  const lastExtractionRef = useRef<Record<string, number>>({});
+  
   const extractLeadData = useCallback(async (chatId: string, conversationHistory: any[]) => {
+    // Optimization: Only extract every 3 messages per chat to save costs
+    const lastCount = lastExtractionRef.current[chatId] || 0;
+    if (conversationHistory.length > 0 && conversationHistory.length - lastCount < 3) {
+      return;
+    }
+    lastExtractionRef.current[chatId] = conversationHistory.length;
+
     try {
       const response = await fetch('/api/ai/extract-lead', {
         method: 'POST',
