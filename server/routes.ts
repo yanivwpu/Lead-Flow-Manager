@@ -1750,6 +1750,23 @@ export async function registerRoutes(
         unread: (chat.unread || 0) + 1,
       });
 
+      // Also route to unified inbox (dual-write)
+      try {
+        const { channelService } = await import("./channelService");
+        const isWhatsApp = req.body.From?.startsWith("whatsapp:");
+        await channelService.processIncomingMessage({
+          userId,
+          channel: isWhatsApp ? 'whatsapp' : 'sms',
+          channelContactId: parsed.from,
+          contactName: parsed.profileName || parsed.from,
+          content: parsed.body,
+          contentType: 'text',
+          externalMessageId: parsed.messageSid,
+        });
+      } catch (unifiedErr) {
+        console.error("Unified inbox dual-write error:", unifiedErr);
+      }
+
       // Trigger workflow automations (Pro feature)
       const updatedChat = await storage.getChat(chat.id);
       if (updatedChat) {
@@ -1915,18 +1932,51 @@ export async function registerRoutes(
         signatureValid = verifyMetaWebhookSignature(rawBody, signature, globalAppSecret);
       }
       
-      // If not valid with global secret, try to find user's app secret from phone number ID
+      // If not valid with global secret, try to find user's app secret
       if (!signatureValid) {
         const entry = req.body.entry?.[0];
         const phoneNumberId = entry?.changes?.[0]?.value?.metadata?.phone_number_id;
         
         if (phoneNumberId) {
+          // WhatsApp: lookup by phone number ID
           const user = await findUserByMetaPhoneNumberId(phoneNumberId);
           if (user?.metaAppSecret) {
             const userSecret = isMetaEncrypted(user.metaAppSecret)
               ? decryptMetaCredential(user.metaAppSecret)
               : user.metaAppSecret;
             signatureValid = verifyMetaWebhookSignature(rawBody, signature, userSecret);
+          }
+        }
+
+        // Instagram/Facebook: lookup by recipient page/IG account ID
+        if (!signatureValid && entry?.messaging) {
+          const recipientId = entry.messaging[0]?.recipient?.id;
+          if (recipientId) {
+            const { db: database } = await import("../drizzle/db");
+            const { channelSettings: csTable } = await import("@shared/schema");
+            const { eq: eqOp } = await import("drizzle-orm");
+            
+            const allConnected = await database.select().from(csTable)
+              .where(eqOp(csTable.isConnected, true));
+            
+            for (const setting of allConnected) {
+              const config = setting.config as any;
+              if (config?.pageId === recipientId || config?.instagramAccountId === recipientId) {
+                if (config?.appSecret) {
+                  signatureValid = verifyMetaWebhookSignature(rawBody, signature, config.appSecret);
+                  if (signatureValid) break;
+                }
+                // Also check the user's Meta app secret
+                const settingUser = await storage.getUser(setting.userId);
+                if (settingUser?.metaAppSecret) {
+                  const userSecret = isMetaEncrypted(settingUser.metaAppSecret)
+                    ? decryptMetaCredential(settingUser.metaAppSecret)
+                    : settingUser.metaAppSecret;
+                  signatureValid = verifyMetaWebhookSignature(rawBody, signature, userSecret);
+                  if (signatureValid) break;
+                }
+              }
+            }
           }
         }
       }
@@ -2039,15 +2089,129 @@ export async function registerRoutes(
         }
 
         console.log("Meta message processed successfully");
+
+        // Also route to unified inbox (dual-write)
+        try {
+          const { channelService } = await import("./channelService");
+          await channelService.processIncomingMessage({
+            userId: user.id,
+            channel: 'whatsapp',
+            channelContactId: incomingMessage.from,
+            contactName: incomingMessage.profileName || incomingMessage.from,
+            content: incomingMessage.text || incomingMessage.caption || `[${incomingMessage.type}]`,
+            contentType: incomingMessage.type === 'text' ? 'text' : incomingMessage.type,
+            externalMessageId: incomingMessage.messageId,
+          });
+        } catch (unifiedErr) {
+          console.error("Unified inbox dual-write error:", unifiedErr);
+        }
+      }
+
+      // Parse Instagram Direct messages
+      const igEntry = req.body.entry?.[0];
+      if (igEntry?.messaging && req.body.object === 'instagram') {
+        for (const event of igEntry.messaging) {
+          if (event.message) {
+            const senderId = event.sender?.id;
+            const messageText = event.message.text || '';
+            const messageId = event.message.mid;
+
+            if (senderId && messageText) {
+              try {
+                // Find user by Instagram page ID
+                const recipientId = event.recipient?.id;
+                const { db: database } = await import("../drizzle/db");
+                const { channelSettings: channelSettingsTable } = await import("@shared/schema");
+                const { eq: eqOp, and: andOp } = await import("drizzle-orm");
+
+                const allSettings = await database.select().from(channelSettingsTable)
+                  .where(andOp(
+                    eqOp(channelSettingsTable.channel, 'instagram'),
+                    eqOp(channelSettingsTable.isConnected, true)
+                  ));
+
+                const matchSetting = allSettings.find(s => {
+                  const config = s.config as any;
+                  return config?.pageId === recipientId || config?.instagramAccountId === recipientId;
+                });
+
+                if (matchSetting) {
+                  const { channelService } = await import("./channelService");
+                  await channelService.processIncomingMessage({
+                    userId: matchSetting.userId,
+                    channel: 'instagram',
+                    channelContactId: senderId,
+                    contactName: event.sender?.username || senderId,
+                    content: messageText,
+                    contentType: 'text',
+                    externalMessageId: messageId,
+                  });
+                  console.log("[Instagram] Message processed for user:", matchSetting.userId);
+                } else {
+                  console.log("[Instagram] No matching channel setting for recipient:", recipientId);
+                }
+              } catch (igErr) {
+                console.error("[Instagram] Processing error:", igErr);
+              }
+            }
+          }
+        }
+      }
+
+      // Parse Facebook Messenger messages
+      if (igEntry?.messaging && req.body.object === 'page') {
+        for (const event of igEntry.messaging) {
+          if (event.message) {
+            const senderId = event.sender?.id;
+            const messageText = event.message.text || '';
+            const messageId = event.message.mid;
+
+            if (senderId && messageText) {
+              try {
+                const recipientId = event.recipient?.id;
+                const { db: database } = await import("../drizzle/db");
+                const { channelSettings: channelSettingsTable } = await import("@shared/schema");
+                const { eq: eqOp, and: andOp } = await import("drizzle-orm");
+
+                const allSettings = await database.select().from(channelSettingsTable)
+                  .where(andOp(
+                    eqOp(channelSettingsTable.channel, 'facebook'),
+                    eqOp(channelSettingsTable.isConnected, true)
+                  ));
+
+                const matchSetting = allSettings.find(s => {
+                  const config = s.config as any;
+                  return config?.pageId === recipientId;
+                });
+
+                if (matchSetting) {
+                  const { channelService } = await import("./channelService");
+                  await channelService.processIncomingMessage({
+                    userId: matchSetting.userId,
+                    channel: 'facebook',
+                    channelContactId: senderId,
+                    contactName: event.sender?.name || senderId,
+                    content: messageText,
+                    contentType: 'text',
+                    externalMessageId: messageId,
+                  });
+                  console.log("[Facebook] Message processed for user:", matchSetting.userId);
+                } else {
+                  console.log("[Facebook] No matching channel setting for page:", recipientId);
+                }
+              } catch (fbErr) {
+                console.error("[Facebook] Processing error:", fbErr);
+              }
+            }
+          }
+        }
       }
 
       if (statusUpdate) {
         console.log("Meta status update:", statusUpdate);
-        // Could update message status in the chat if needed
       }
     } catch (error) {
       console.error("Meta webhook error:", error);
-      // Don't return error - Meta expects 200
     }
   });
 
