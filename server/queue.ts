@@ -38,10 +38,11 @@ export function createRedisConnection(): IORedis {
   const redisUrl = parseRedisUrl(rawUrl);
   console.log(`[Queue] Connecting to Redis at ${redisUrl.replace(/:[^:@]+@/, ':***@')}`);
 
+  const useTls = redisUrl.startsWith("rediss://") || redisUrl.includes("upstash.io");
   const connection = new IORedis(redisUrl, {
     maxRetriesPerRequest: null,
     enableReadyCheck: false,
-    tls: redisUrl.startsWith("rediss://") ? { rejectUnauthorized: false } : undefined,
+    tls: useTls ? {} : undefined,
     retryStrategy(times: number) {
       const delay = Math.min(times * 500, 5000);
       console.log(`[Queue] Redis reconnecting in ${delay}ms (attempt ${times})`);
