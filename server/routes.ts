@@ -48,6 +48,7 @@ import { sendWelcomeEmail, sendContactFormEmail, sendDemoBookingNotification, se
 import bcrypt from "bcryptjs";
 import { triggerNewChatWorkflows, triggerKeywordWorkflows } from "./workflowEngine";
 import shopifyRoutes from "./shopifyRoutes";
+import ghlRoutes from "./ghlRoutes";
 
 const TWILIO_BASE_COST_PER_MESSAGE = 0.005;
 const MARKUP_PERCENT = 5;
@@ -125,6 +126,9 @@ export async function registerRoutes(
 
   // Shopify integration routes
   app.use('/api/shopify', shopifyRoutes);
+
+  // GoHighLevel integration routes
+  app.use('/api/ext', ghlRoutes);
 
   // Contact form endpoint (public - no auth required)
   app.post("/api/contact", async (req, res) => {
