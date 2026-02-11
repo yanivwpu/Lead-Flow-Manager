@@ -1,0 +1,119 @@
+We are upgrading the unified inbox architecture from best-effort dual write to guaranteed delivery using BullMQ + Redis. This must be production-safe, not just functional.
+
+Implement the following:
+
+Infrastructure
+
+Provision a managed Redis instance (Upstash is fine for Replit).
+
+Store Redis credentials in environment variables.
+
+Install bullmq and ioredis.
+
+Queue Design
+
+Create a queue named "unified-inbox".
+
+Webhook handlers must STOP writing directly to the unified inbox.
+
+After legacy write succeeds, push a job to the queue:
+
+job name: "process-message"
+
+jobId: externalMessageId (Meta mid / wamid / Twilio MessageSid)
+
+attempts: 5
+
+backoff: exponential starting at 5 seconds
+
+removeOnComplete: true
+
+removeOnFail: false
+
+If queue.add fails (Redis unavailable), DO NOT return 200.
+Return 500 so Meta/Twilio retry the webhook.
+We must never silently lose unified inbox writes.
+
+Worker Process (Separate from API Server)
+
+Create a dedicated worker file (e.g., worker.js).
+
+The worker must run as a separate process from Express.
+
+The worker will call channelService.processIncomingMessage(payload).
+
+Concurrency: 5–10 (configurable).
+
+Log job start, completion, and failure.
+
+Idempotency
+
+Keep existing DB unique constraints on externalMessageId.
+
+Worker must safely handle retries (no duplicate inserts).
+
+No write should occur if message already exists.
+
+Failure Handling
+
+Failed jobs must remain in Redis (do NOT auto-delete failed jobs).
+
+Log all failed jobs with error stack.
+
+Expose a simple admin endpoint or script to reprocess failed jobs manually.
+
+Monitoring
+
+Integrate Bull Board (or equivalent) so we can view:
+
+Queue size
+
+Active jobs
+
+Failed jobs
+
+Retry count
+
+This must be accessible in development and production.
+
+Startup Logic
+
+API server initializes only the Queue instance.
+
+Worker process initializes only the Worker instance.
+
+They must not run in the same process.
+
+Flow After Upgrade
+
+Webhook → Legacy Write → Queue Job → Return 200
+Worker → Unified Inbox Write → Emit WebSocket Update
+
+Safety Requirement
+
+If:
+
+Redis is down
+
+Queue add fails
+
+Worker crashes
+
+Messages must NOT be silently lost.
+Either provider retries or job remains in Redis until processed.
+
+This is required before scaling paid traffic or onboarding more customers.
+
+Confirm once:
+
+Queue is live
+
+Worker is isolated
+
+Retry logic verified
+
+Redis-down scenario tested
+
+Failed job reprocessing tested
+
+No partial implementation. This must be production-grade.
