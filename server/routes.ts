@@ -49,6 +49,7 @@ import bcrypt from "bcryptjs";
 import { triggerNewChatWorkflows, triggerKeywordWorkflows } from "./workflowEngine";
 import shopifyRoutes from "./shopifyRoutes";
 import ghlRoutes from "./ghlRoutes";
+import { addInboxJob } from "./queue";
 
 const TWILIO_BASE_COST_PER_MESSAGE = 0.005;
 const MARKUP_PERCENT = 5;
@@ -1750,11 +1751,10 @@ export async function registerRoutes(
         unread: (chat.unread || 0) + 1,
       });
 
-      // Also route to unified inbox (dual-write)
+      // Queue unified inbox write via BullMQ (guaranteed delivery)
+      const isWhatsApp = req.body.From?.startsWith("whatsapp:");
       try {
-        const { channelService } = await import("./channelService");
-        const isWhatsApp = req.body.From?.startsWith("whatsapp:");
-        await channelService.processIncomingMessage({
+        await addInboxJob({
           userId,
           channel: isWhatsApp ? 'whatsapp' : 'sms',
           channelContactId: parsed.from,
@@ -1763,8 +1763,9 @@ export async function registerRoutes(
           contentType: 'text',
           externalMessageId: parsed.messageSid,
         });
-      } catch (unifiedErr) {
-        console.error("Unified inbox dual-write error:", unifiedErr);
+      } catch (queueErr) {
+        console.error("[Queue] Failed to enqueue Twilio message:", queueErr);
+        return res.status(500).send("Queue unavailable");
       }
 
       // Trigger workflow automations (Pro feature)
@@ -1983,117 +1984,21 @@ export async function registerRoutes(
       
       if (!signatureValid) {
         console.warn("Meta webhook signature verification failed");
-        // Respond 403 for invalid signatures
         return res.status(403).send("Invalid signature");
       }
 
-      // Always respond quickly to avoid timeout
-      res.status(200).send("EVENT_RECEIVED");
-
-      // Process message asynchronously
       const incomingMessage = parseMetaIncomingWebhook(req.body);
       const statusUpdate = parseMetaStatusWebhook(req.body);
 
+      // Queue all inbox jobs BEFORE responding 200
+      // If queueing fails, return 500 so Meta retries
+      const queueJobs: Promise<void>[] = [];
+
       if (incomingMessage) {
         console.log("Parsed incoming Meta message:", incomingMessage);
-
-        // Find user by phone number ID
         const user = await findUserByMetaPhoneNumberId(incomingMessage.phoneNumberId);
-        if (!user) {
-          console.log("No user found for phone number ID:", incomingMessage.phoneNumberId);
-          return;
-        }
-
-        // Find or create chat
-        const chat = await findOrCreateChatByPhone(
-          user.id,
-          incomingMessage.from,
-          incomingMessage.profileName || incomingMessage.from
-        );
-
-        // Add message to chat
-        const newMessage = {
-          id: incomingMessage.messageId,
-          text: incomingMessage.text || incomingMessage.caption || `[${incomingMessage.type}]`,
-          time: new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
-          sent: false,
-          sender: "them" as const,
-          status: "delivered" as const,
-          metaMessageId: incomingMessage.messageId,
-        };
-
-        const messages = (chat.messages as any[]) || [];
-        messages.push(newMessage);
-
-        await storage.updateChat(chat.id, {
-          messages,
-          lastMessage: newMessage.text,
-          time: newMessage.time,
-          unread: (chat.unread || 0) + 1,
-        });
-
-        // Track usage
-        const costs = calculateCostWithMarkup(TWILIO_BASE_COST_PER_MESSAGE);
-        await storage.recordMessageUsage({
-          userId: user.id,
-          chatId: chat.id,
-          direction: "inbound",
-          messageType: incomingMessage.type === "text" ? "text" : "media",
-          twilioSid: incomingMessage.messageId,
-          twilioCost: costs.twilioCost,
-          markupPercent: costs.markupPercent,
-          totalCost: costs.totalCost,
-        });
-
-        // Mark message as read
-        await markMessageAsRead(user.id, incomingMessage.messageId);
-
-        // Trigger workflows for new chats
-        if (messages.length === 1) {
-          await triggerNewChatWorkflows(user.id, chat);
-        }
-
-        // Trigger keyword workflows
-        if (incomingMessage.text) {
-          await triggerKeywordWorkflows(user.id, chat, incomingMessage.text);
-        }
-
-        // Handle auto-reply if enabled
-        if (user.autoReplyEnabled && user.autoReplyMessage) {
-          try {
-            const delay = user.autoReplyDelay || 0;
-            setTimeout(async () => {
-              try {
-                await sendMetaWhatsAppMessage(user.id, incomingMessage.from, user.autoReplyMessage!);
-                
-                const autoReplyMsg = {
-                  id: `auto-${Date.now()}`,
-                  text: user.autoReplyMessage,
-                  time: new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
-                  sent: true,
-                  sender: "me" as const,
-                };
-                const currentChat = await storage.getChat(chat.id);
-                if (currentChat) {
-                  const msgs = (currentChat.messages as any[]) || [];
-                  msgs.push(autoReplyMsg);
-                  await storage.updateChat(chat.id, { messages: msgs });
-                }
-              } catch (err) {
-                console.error("Failed to send auto-reply via Meta:", err);
-              }
-            }, delay * 1000);
-          } catch (autoReplyError) {
-            console.error("Auto-reply error:", autoReplyError);
-          }
-        }
-
-        console.log("Meta message processed successfully");
-
-        // Also route to unified inbox (dual-write)
-        try {
-          const { channelService } = await import("./channelService");
-          await channelService.processIncomingMessage({
+        if (user) {
+          queueJobs.push(addInboxJob({
             userId: user.id,
             channel: 'whatsapp',
             channelContactId: incomingMessage.from,
@@ -2101,9 +2006,7 @@ export async function registerRoutes(
             content: incomingMessage.text || incomingMessage.caption || `[${incomingMessage.type}]`,
             contentType: incomingMessage.type === 'text' ? 'text' : incomingMessage.type,
             externalMessageId: incomingMessage.messageId,
-          });
-        } catch (unifiedErr) {
-          console.error("Unified inbox dual-write error:", unifiedErr);
+          }));
         }
       }
 
@@ -2117,41 +2020,32 @@ export async function registerRoutes(
             const messageId = event.message.mid;
 
             if (senderId && messageText) {
-              try {
-                // Find user by Instagram page ID
-                const recipientId = event.recipient?.id;
-                const { db: database } = await import("../drizzle/db");
-                const { channelSettings: channelSettingsTable } = await import("@shared/schema");
-                const { eq: eqOp, and: andOp } = await import("drizzle-orm");
+              const recipientId = event.recipient?.id;
+              const { db: database } = await import("../drizzle/db");
+              const { channelSettings: channelSettingsTable } = await import("@shared/schema");
+              const { eq: eqOp, and: andOp } = await import("drizzle-orm");
 
-                const allSettings = await database.select().from(channelSettingsTable)
-                  .where(andOp(
-                    eqOp(channelSettingsTable.channel, 'instagram'),
-                    eqOp(channelSettingsTable.isConnected, true)
-                  ));
+              const allSettings = await database.select().from(channelSettingsTable)
+                .where(andOp(
+                  eqOp(channelSettingsTable.channel, 'instagram'),
+                  eqOp(channelSettingsTable.isConnected, true)
+                ));
 
-                const matchSetting = allSettings.find(s => {
-                  const config = s.config as any;
-                  return config?.pageId === recipientId || config?.instagramAccountId === recipientId;
-                });
+              const matchSetting = allSettings.find(s => {
+                const config = s.config as any;
+                return config?.pageId === recipientId || config?.instagramAccountId === recipientId;
+              });
 
-                if (matchSetting) {
-                  const { channelService } = await import("./channelService");
-                  await channelService.processIncomingMessage({
-                    userId: matchSetting.userId,
-                    channel: 'instagram',
-                    channelContactId: senderId,
-                    contactName: event.sender?.username || senderId,
-                    content: messageText,
-                    contentType: 'text',
-                    externalMessageId: messageId,
-                  });
-                  console.log("[Instagram] Message processed for user:", matchSetting.userId);
-                } else {
-                  console.log("[Instagram] No matching channel setting for recipient:", recipientId);
-                }
-              } catch (igErr) {
-                console.error("[Instagram] Processing error:", igErr);
+              if (matchSetting) {
+                queueJobs.push(addInboxJob({
+                  userId: matchSetting.userId,
+                  channel: 'instagram',
+                  channelContactId: senderId,
+                  contactName: event.sender?.username || senderId,
+                  content: messageText,
+                  contentType: 'text',
+                  externalMessageId: messageId,
+                }));
               }
             }
           }
@@ -2167,42 +2061,131 @@ export async function registerRoutes(
             const messageId = event.message.mid;
 
             if (senderId && messageText) {
-              try {
-                const recipientId = event.recipient?.id;
-                const { db: database } = await import("../drizzle/db");
-                const { channelSettings: channelSettingsTable } = await import("@shared/schema");
-                const { eq: eqOp, and: andOp } = await import("drizzle-orm");
+              const recipientId = event.recipient?.id;
+              const { db: database } = await import("../drizzle/db");
+              const { channelSettings: channelSettingsTable } = await import("@shared/schema");
+              const { eq: eqOp, and: andOp } = await import("drizzle-orm");
 
-                const allSettings = await database.select().from(channelSettingsTable)
-                  .where(andOp(
-                    eqOp(channelSettingsTable.channel, 'facebook'),
-                    eqOp(channelSettingsTable.isConnected, true)
-                  ));
+              const allSettings = await database.select().from(channelSettingsTable)
+                .where(andOp(
+                  eqOp(channelSettingsTable.channel, 'facebook'),
+                  eqOp(channelSettingsTable.isConnected, true)
+                ));
 
-                const matchSetting = allSettings.find(s => {
-                  const config = s.config as any;
-                  return config?.pageId === recipientId;
-                });
+              const matchSetting = allSettings.find(s => {
+                const config = s.config as any;
+                return config?.pageId === recipientId;
+              });
 
-                if (matchSetting) {
-                  const { channelService } = await import("./channelService");
-                  await channelService.processIncomingMessage({
-                    userId: matchSetting.userId,
-                    channel: 'facebook',
-                    channelContactId: senderId,
-                    contactName: event.sender?.name || senderId,
-                    content: messageText,
-                    contentType: 'text',
-                    externalMessageId: messageId,
-                  });
-                  console.log("[Facebook] Message processed for user:", matchSetting.userId);
-                } else {
-                  console.log("[Facebook] No matching channel setting for page:", recipientId);
-                }
-              } catch (fbErr) {
-                console.error("[Facebook] Processing error:", fbErr);
+              if (matchSetting) {
+                queueJobs.push(addInboxJob({
+                  userId: matchSetting.userId,
+                  channel: 'facebook',
+                  channelContactId: senderId,
+                  contactName: event.sender?.name || senderId,
+                  content: messageText,
+                  contentType: 'text',
+                  externalMessageId: messageId,
+                }));
               }
             }
+          }
+        }
+      }
+
+      // Enqueue all jobs - if ANY fail, return 500 so Meta retries
+      if (queueJobs.length > 0) {
+        try {
+          await Promise.all(queueJobs);
+        } catch (queueErr) {
+          console.error("[Queue] Failed to enqueue Meta message(s):", queueErr);
+          return res.status(500).send("Queue unavailable");
+        }
+      }
+
+      // Only respond 200 AFTER all jobs are queued successfully
+      res.status(200).send("EVENT_RECEIVED");
+
+      // Process legacy chat write and other side effects asynchronously (non-critical)
+      if (incomingMessage) {
+        const user = await findUserByMetaPhoneNumberId(incomingMessage.phoneNumberId);
+        if (user) {
+          try {
+            const chat = await findOrCreateChatByPhone(
+              user.id,
+              incomingMessage.from,
+              incomingMessage.profileName || incomingMessage.from
+            );
+
+            const newMessage = {
+              id: incomingMessage.messageId,
+              text: incomingMessage.text || incomingMessage.caption || `[${incomingMessage.type}]`,
+              time: new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
+              sent: false,
+              sender: "them" as const,
+              status: "delivered" as const,
+              metaMessageId: incomingMessage.messageId,
+            };
+
+            const messages = (chat.messages as any[]) || [];
+            messages.push(newMessage);
+
+            await storage.updateChat(chat.id, {
+              messages,
+              lastMessage: newMessage.text,
+              time: newMessage.time,
+              unread: (chat.unread || 0) + 1,
+            });
+
+            const costs = calculateCostWithMarkup(TWILIO_BASE_COST_PER_MESSAGE);
+            await storage.recordMessageUsage({
+              userId: user.id,
+              chatId: chat.id,
+              direction: "inbound",
+              messageType: incomingMessage.type === "text" ? "text" : "media",
+              twilioSid: incomingMessage.messageId,
+              twilioCost: costs.twilioCost,
+              markupPercent: costs.markupPercent,
+              totalCost: costs.totalCost,
+            });
+
+            await markMessageAsRead(user.id, incomingMessage.messageId);
+
+            if (messages.length === 1) {
+              triggerNewChatWorkflows(user.id, chat).catch(err => console.error("New chat workflow error:", err));
+            }
+
+            if (incomingMessage.text) {
+              triggerKeywordWorkflows(user.id, chat, incomingMessage.text).catch(err => console.error("Keyword workflow error:", err));
+            }
+
+            if (user.autoReplyEnabled && user.autoReplyMessage) {
+              const delay = user.autoReplyDelay || 0;
+              setTimeout(async () => {
+                try {
+                  await sendMetaWhatsAppMessage(user.id, incomingMessage.from, user.autoReplyMessage!);
+                  const autoReplyMsg = {
+                    id: `auto-${Date.now()}`,
+                    text: user.autoReplyMessage,
+                    time: new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
+                    sent: true,
+                    sender: "me" as const,
+                  };
+                  const currentChat = await storage.getChat(chat.id);
+                  if (currentChat) {
+                    const msgs = (currentChat.messages as any[]) || [];
+                    msgs.push(autoReplyMsg);
+                    await storage.updateChat(chat.id, { messages: msgs });
+                  }
+                } catch (err) {
+                  console.error("Failed to send auto-reply via Meta:", err);
+                }
+              }, delay * 1000);
+            }
+
+            console.log("Meta message processed successfully");
+          } catch (legacyErr) {
+            console.error("Meta legacy chat write error (non-critical):", legacyErr);
           }
         }
       }
@@ -5205,16 +5188,20 @@ export async function registerRoutes(
           ? `${message.from.first_name} ${message.from.last_name || ""}`.trim()
           : chatId;
 
-        const { channelService } = await import("./channelService");
-        await channelService.processIncomingMessage({
-          userId,
-          channel: 'telegram',
-          channelContactId: chatId,
-          contactName: senderName,
-          content: text,
-          contentType: 'text',
-          externalMessageId: String(message.message_id),
-        });
+        try {
+          await addInboxJob({
+            userId,
+            channel: 'telegram',
+            channelContactId: chatId,
+            contactName: senderName,
+            content: text,
+            contentType: 'text',
+            externalMessageId: String(message.message_id),
+          });
+        } catch (queueErr) {
+          console.error("[Queue] Failed to enqueue Telegram message:", queueErr);
+          return res.status(500).json({ ok: false, error: "Queue unavailable" });
+        }
       }
 
       res.status(200).json({ ok: true });
@@ -5268,20 +5255,28 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Message required" });
       }
 
-      const { channelService } = await import("./channelService");
-      const result = await channelService.processIncomingMessage({
-        userId,
-        channel: 'webchat',
-        channelContactId: visitorId || `visitor_${Date.now()}`,
-        contactName: name || "Website Visitor",
-        content: message,
-        contentType: 'text',
-      });
+      const webchatExternalId = `webchat_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const webchatVisitorId = visitorId || `visitor_${Date.now()}`;
+
+      try {
+        await addInboxJob({
+          userId,
+          channel: 'webchat',
+          channelContactId: webchatVisitorId,
+          contactName: name || "Website Visitor",
+          content: message,
+          contentType: 'text',
+          externalMessageId: webchatExternalId,
+        });
+      } catch (queueErr) {
+        console.error("[Queue] Failed to enqueue webchat message:", queueErr);
+        return res.status(500).json({ error: "Queue unavailable" });
+      }
 
       res.json({
         success: true,
-        contactId: result.contact.id,
-        conversationId: result.conversation.id,
+        visitorId: webchatVisitorId,
+        queued: true,
       });
     } catch (error) {
       console.error("Web chat error:", error);
@@ -5326,16 +5321,20 @@ export async function registerRoutes(
       const isWhatsApp = req.body.From?.startsWith("whatsapp:");
       const channel = isWhatsApp ? 'whatsapp' : 'sms';
 
-      const { channelService } = await import("./channelService");
-      await channelService.processIncomingMessage({
-        userId: user.id,
-        channel: channel as any,
-        channelContactId: parsed.from,
-        contactName: parsed.profileName || parsed.from,
-        content: parsed.body,
-        contentType: 'text',
-        externalMessageId: parsed.messageSid,
-      });
+      try {
+        await addInboxJob({
+          userId: user.id,
+          channel: channel as any,
+          channelContactId: parsed.from,
+          contactName: parsed.profileName || parsed.from,
+          content: parsed.body,
+          contentType: 'text',
+          externalMessageId: parsed.messageSid,
+        });
+      } catch (queueErr) {
+        console.error("[Queue] Failed to enqueue unified inbox Twilio message:", queueErr);
+        return res.status(500).send("Queue unavailable");
+      }
 
       res.status(200).send("");
     } catch (error) {

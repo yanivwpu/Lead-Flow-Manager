@@ -12,6 +12,10 @@ import { getStripeSync } from "./stripeClient";
 import { WebhookHandlers } from "./webhookHandlers";
 import { setupPresenceServer } from "./presence";
 import { registerChannelAdapters } from "./channelAdapters";
+import { getQueue } from "./queue";
+import { createBullBoard } from "@bull-board/api";
+import { BullMQAdapter } from "@bull-board/api/bullMQAdapter";
+import { ExpressAdapter } from "@bull-board/express";
 
 const app = express();
 const httpServer = createServer(app);
@@ -163,6 +167,74 @@ app.use((req, res, next) => {
   
   // Register channel adapters for unified inbox
   registerChannelAdapters();
+
+  // Initialize BullMQ queue and Bull Board monitoring
+  try {
+    const queue = getQueue();
+    const serverAdapter = new ExpressAdapter();
+    serverAdapter.setBasePath("/admin/queues");
+    createBullBoard({
+      queues: [new BullMQAdapter(queue)],
+      serverAdapter,
+    });
+    app.use("/admin/queues", serverAdapter.getRouter());
+    console.log("[Queue] Bull Board mounted at /admin/queues");
+
+    // Admin endpoint: reprocess failed jobs
+    app.post("/api/admin/queue/reprocess-failed", async (req, res) => {
+      try {
+        const failed = await queue.getFailed(0, 1000);
+        let reprocessed = 0;
+        for (const job of failed) {
+          await job.retry();
+          reprocessed++;
+        }
+        res.json({ success: true, reprocessed, total: failed.length });
+      } catch (error: any) {
+        console.error("[Queue] Failed to reprocess jobs:", error);
+        res.status(500).json({ error: error.message });
+      }
+    });
+
+    // Admin endpoint: get queue stats
+    app.get("/api/admin/queue/stats", async (_req, res) => {
+      try {
+        const [waiting, active, completed, failed, delayed] = await Promise.all([
+          queue.getWaitingCount(),
+          queue.getActiveCount(),
+          queue.getCompletedCount(),
+          queue.getFailedCount(),
+          queue.getDelayedCount(),
+        ]);
+        res.json({ waiting, active, completed, failed, delayed });
+      } catch (error: any) {
+        console.error("[Queue] Failed to get stats:", error);
+        res.status(500).json({ error: error.message });
+      }
+    });
+
+    // Admin endpoint: get failed jobs detail
+    app.get("/api/admin/queue/failed", async (_req, res) => {
+      try {
+        const failed = await queue.getFailed(0, 100);
+        const jobs = failed.map(job => ({
+          id: job.id,
+          data: job.data,
+          failedReason: job.failedReason,
+          attemptsMade: job.attemptsMade,
+          timestamp: job.timestamp,
+          finishedOn: job.finishedOn,
+        }));
+        res.json({ jobs, count: jobs.length });
+      } catch (error: any) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+
+    console.log("[Queue] Admin endpoints registered");
+  } catch (queueErr) {
+    console.error("[Queue] Failed to initialize queue (Redis may be unavailable):", queueErr);
+  }
   
   await registerRoutes(httpServer, app);
 

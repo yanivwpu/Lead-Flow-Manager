@@ -184,6 +184,7 @@ export interface IStorage {
   // Message methods
   getMessages(conversationId: string, limit?: number, offset?: number): Promise<Message[]>;
   getMessage(id: string): Promise<Message | undefined>;
+  getMessageByExternalId(externalMessageId: string): Promise<Message | undefined>;
   createMessage(message: InsertMessage): Promise<Message>;
   updateMessage(id: string, updates: Partial<Message>): Promise<Message | undefined>;
   
@@ -1346,6 +1347,13 @@ export class DbStorage implements IStorage {
 
   async getMessage(id: string): Promise<Message | undefined> {
     const result = await db.select().from(messages).where(eq(messages.id, id));
+    return result[0];
+  }
+
+  async getMessageByExternalId(externalMessageId: string): Promise<Message | undefined> {
+    const result = await db.select().from(messages)
+      .where(eq(messages.externalMessageId, externalMessageId))
+      .limit(1);
     return result[0];
   }
 

@@ -15,7 +15,22 @@ The application is a full multi-tenant SaaS implementation with:
 - Notification system for follow-up reminders (push & email)
 - PWA capabilities (installable, offline-first)
 
-## Recent Changes (February 4, 2026)
+## Recent Changes (February 11, 2026)
+- **BullMQ + Redis Guaranteed Message Delivery**:
+  - Upgraded unified inbox from best-effort dual-write to guaranteed delivery using BullMQ + Redis (Upstash)
+  - Queue: `unified-inbox` with exponential backoff (5s start, 5 attempts), deduplication by externalMessageId
+  - Worker: Separate process (`server/worker.ts`) with configurable concurrency (default: 5), idempotency checks
+  - All webhook handlers (Twilio, Meta WhatsApp, Instagram, Facebook, Telegram, WebChat) now enqueue jobs instead of direct writes
+  - If Redis/queue is unavailable, webhooks return 500 so providers retry (never silently lose messages)
+  - Failed jobs remain in Redis for manual reprocessing
+  - Bull Board monitoring at `/admin/queues`
+  - Admin endpoints: `GET /api/admin/queue/stats`, `GET /api/admin/queue/failed`, `POST /api/admin/queue/reprocess-failed`
+  - Key files: `server/queue.ts`, `server/worker.ts`, `server/index.ts`, `server/routes.ts`
+  - Env vars: `REDIS_URL` (required), `WORKER_CONCURRENCY` (optional, default: 5)
+  - Worker start: `npx tsx server/worker.ts` (dev) or `node dist/worker.cjs` (prod)
+  - Build: `script/build.ts` now also builds `dist/worker.cjs`
+
+## Previous Changes (February 4, 2026)
 - **RTL/Hebrew Support Improvements**:
   - Pricing page notices (Message Costs, Active Conversation, Reach Limit) now have RTL layout with icons on right side
   - Added Hebrew translations for pricing notices in `client/src/locales/he.json`

@@ -59,6 +59,21 @@ async function buildAll() {
     external: externals,
     logLevel: "info",
   });
+
+  console.log("building worker...");
+  await esbuild({
+    entryPoints: ["server/worker.ts"],
+    platform: "node",
+    bundle: true,
+    format: "cjs",
+    outfile: "dist/worker.cjs",
+    define: {
+      "process.env.NODE_ENV": '"production"',
+    },
+    minify: true,
+    external: externals,
+    logLevel: "info",
+  });
 }
 
 buildAll().catch((err) => {
