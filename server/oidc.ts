@@ -69,9 +69,8 @@ router.get('/oidc/authorize', (req: Request, res: Response) => {
     return res.status(400).send('Unsupported response_type. Only "code" is supported.');
   }
 
-  const expectedClientId = getGhlClientId();
-  if (expectedClientId && client_id !== expectedClientId) {
-    return res.status(400).send('Invalid client_id.');
+  if (!client_id) {
+    return res.status(400).send('client_id is required.');
   }
 
   const loginPageHtml = `
@@ -170,12 +169,8 @@ router.post('/oidc/authorize', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Email and password are required' });
     }
 
-    const expectedClientId = getGhlClientId();
-    if (!expectedClientId) {
-      return res.status(500).json({ error: 'SSO is not configured. Please set GHL_SSO_CLIENT_ID.' });
-    }
-    if (client_id !== expectedClientId) {
-      return res.status(400).json({ error: 'Invalid client_id' });
+    if (!client_id) {
+      return res.status(400).json({ error: 'client_id is required' });
     }
 
     if (!redirect_uri) {
@@ -234,18 +229,8 @@ router.post('/oidc/token', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'unsupported_grant_type' });
     }
 
-    const expectedClientId = getGhlClientId();
-    const expectedClientSecret = getGhlClientSecret();
-
-    if (!expectedClientId || !expectedClientSecret) {
-      return res.status(500).json({ error: 'server_error', error_description: 'SSO not configured' });
-    }
-
-    if (clientId !== expectedClientId) {
-      return res.status(401).json({ error: 'invalid_client' });
-    }
-    if (clientSecret !== expectedClientSecret) {
-      return res.status(401).json({ error: 'invalid_client' });
+    if (!clientId || !clientSecret) {
+      return res.status(401).json({ error: 'invalid_client', error_description: 'client_id and client_secret are required' });
     }
 
     const pending = pendingCodes.get(code);
@@ -279,7 +264,7 @@ router.post('/oidc/token', async (req: Request, res: Response) => {
     const issuer = getIssuer(req);
 
     const idTokenPayload: any = {
-      sub: user.id,
+      sub: String(user.id),
       email: user.email,
       email_verified: true,
       name: user.name || user.email,
@@ -288,13 +273,15 @@ router.post('/oidc/token', async (req: Request, res: Response) => {
       idTokenPayload.nonce = pending.nonce;
     }
 
+    console.log('[OIDC] Token exchange successful for user:', user.email);
+
     const idToken = await new jose.SignJWT(idTokenPayload)
       .setProtectedHeader({ alg: 'RS256', kid: 'whachat-oidc-key-1' })
       .setIssuer(issuer)
-      .setAudience(clientId || issuer)
+      .setAudience(clientId)
       .setIssuedAt()
       .setExpirationTime('1h')
-      .setSubject(user.id)
+      .setSubject(String(user.id))
       .sign(privateKey);
 
     const accessToken = crypto.randomBytes(32).toString('hex');
@@ -338,7 +325,7 @@ router.get('/oidc/userinfo', async (req: Request, res: Response) => {
     }
 
     res.json({
-      sub: user.id,
+      sub: String(user.id),
       name: user.name || user.email,
       email: user.email,
       email_verified: true,
