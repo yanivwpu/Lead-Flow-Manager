@@ -13,6 +13,7 @@ import { WebhookHandlers } from "./webhookHandlers";
 import { setupPresenceServer } from "./presence";
 import { registerChannelAdapters } from "./channelAdapters";
 import { getQueue } from "./queue";
+import oidcRouter from "./oidc";
 import { createBullBoard } from "@bull-board/api";
 import { BullMQAdapter } from "@bull-board/api/bullMQAdapter";
 import { ExpressAdapter } from "@bull-board/express";
@@ -120,6 +121,9 @@ app.use('/api/shopify/webhooks', express.json({
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
+
+// OIDC provider for GHL SSO (must be before auth middleware)
+app.use(oidcRouter);
 
 // Setup authentication
 setupAuth(app);
