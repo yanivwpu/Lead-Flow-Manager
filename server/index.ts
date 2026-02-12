@@ -14,6 +14,8 @@ import { setupPresenceServer } from "./presence";
 import { registerChannelAdapters } from "./channelAdapters";
 import { getQueue } from "./queue";
 import oidcRouter from "./oidc";
+import bcrypt from "bcryptjs";
+import { storage } from "./storage";
 import { createBullBoard } from "@bull-board/api";
 import { BullMQAdapter } from "@bull-board/api/bullMQAdapter";
 import { ExpressAdapter } from "@bull-board/express";
@@ -241,6 +243,22 @@ app.use((req, res, next) => {
   }
   
   await registerRoutes(httpServer, app);
+
+  // Ensure SSO user exists for GHL integration
+  try {
+    const ssoUser = await storage.getUserByEmail('yaniv@whachatcrm.com');
+    if (!ssoUser) {
+      const hashedPassword = await bcrypt.hash('WhachatSSO2026!', 10);
+      await storage.createUser({
+        name: 'Yaniv',
+        email: 'yaniv@whachatcrm.com',
+        password: hashedPassword,
+      });
+      console.log('[SSO] Created SSO user: yaniv@whachatcrm.com');
+    }
+  } catch (err) {
+    console.error('[SSO] Failed to seed SSO user:', err);
+  }
 
   // Start notification scheduler
   startNotificationScheduler();
