@@ -116,7 +116,7 @@ function calculateNextDueDate(
 // Current agreement versions - update these when agreements change
 // Partners/salespeople must re-accept if their stored version differs
 export const AGREEMENT_VERSIONS = {
-  partner_referral: "2026-01-26",
+  partner_referral: "2026-02-14",
   salesperson_commission: "2026-01-26",
 } as const;
 

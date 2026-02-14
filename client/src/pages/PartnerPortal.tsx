@@ -155,69 +155,169 @@ const SHAREABLE_CONTENT = [
 const PARTNER_AGREEMENT_TEXT = `Partner Referral Agreement
 
 WhachatCRM Partner Program
-Last updated: January 3, 2026
+Last updated: February 14, 2026
 
 This Partner Referral Agreement ("Agreement") governs participation in the WhachatCRM Partner Program.
-By registering as a Partner, you agree to these terms.
+
+By registering as a Partner and clicking “I Agree,” you acknowledge that you have read, understood, and agree to be legally bound by this Agreement.
 
 1. Definitions
-"Company" – WhachatCRM
-"Partner" – An approved freelancer, agency, or individual promoting WhachatCRM
-"Referral Link" – A unique tracking link or identifier assigned to the Partner
-"Qualified Referral" – A referred user who becomes a paying subscriber in good standing
+
+"Company" – WhachatCRM, operated in the State of Florida, USA.
+"Partner" – An approved freelancer, agency, consultant, or individual promoting WhachatCRM.
+"Referral Link" – A unique tracking link or identifier assigned to the Partner.
+"Qualified Referral" – A referred user who becomes a paying subscriber in good standing.
+"Basic Referrer" – A Partner who refers a customer that becomes a Qualified Referral.
+"Pro Partner" – A Partner who qualifies for enhanced commission on a specific client by assisting with activation as defined in Section 4.
 
 2. Program Participation
-Participation is subject to approval by WhachatCRM
-Approval may be revoked at any time at WhachatCRM's discretion
-Partners must provide accurate payment and contact information
+
+Participation is subject to approval by WhachatCRM.
+
+WhachatCRM may approve, deny, suspend, or terminate participation at its sole discretion.
+
+Partners must provide accurate contact and Stripe payment information and keep such information current.
 
 3. Referral Attribution
-Attribution is determined solely by WhachatCRM's tracking systems
-Only the first valid referral recorded for a customer is eligible
-WhachatCRM's decision on attribution is final
 
-5. Commission Payout Schedule
-Partners earn 50% of subscription revenue collected from Qualified Referrals.
-Commission duration: up to six (6) months from the customer's first paid invoice.
-Commissions apply to subscription fees only and exclude AI add-ons, messaging fees, and third-party costs.
-Commissions are calculated monthly based on payments successfully collected during the previous calendar month and are paid on the first business day of each month.
-A minimum payout threshold of $50 USD applies. Commission balances below the threshold will roll over to the next payout cycle.
-Payments are made via Stripe, ACH, PayPal, or another payment method supported by WhachatCRM. Partners are responsible for any applicable taxes.
-If a customer payment is refunded, disputed, reversed, or fails, the related commission is not payable and may be reversed or deducted from future payouts.
+Referral attribution is determined solely by WhachatCRM’s tracking systems.
 
-6. No Lifetime Commission Guarantee
+Only the first valid referral recorded for a customer will be eligible for commission.
+
+WhachatCRM’s determination of attribution and qualification is final and binding.
+
+4. Commission Structure
+
+WhachatCRM offers two commission tiers per Qualified Referral:
+
+A. Basic Referrer Tier
+
+• Commission Rate: 30% of base subscription revenue
+• Duration: Up to twelve (12) months from the customer’s first successful paid invoice
+
+Basic Referrer status applies when a Partner refers a Qualified Referral but does not meet Pro activation requirements.
+
+B. Pro Partner Tier (Per-Client Qualification)
+
+A Partner may qualify as a Pro Partner for a specific referred client if ALL of the following conditions are verified by WhachatCRM’s system:
+
+The customer signed up using the Partner’s Referral Link or identifier.
+
+The customer successfully connects and activates WhatsApp Business API (via Meta or Twilio).
+
+The Partner assists the customer in connecting the customer’s communication channel(s), as applicable to the customer’s business.
+
+At least one message is successfully sent or received through the system.
+
+If these conditions are verified within sixty (60) days of the customer’s signup:
+
+• Commission Rate: 40% of base subscription revenue
+• Duration: Up to twenty-four (24) months from the customer’s first successful paid invoice
+
+Pro status applies per client only and does not automatically upgrade the Partner globally.
+
+WhachatCRM reserves the right to verify activation through system logs and internal review.
+
+5. Commission Scope
+
+Commissions apply to base subscription revenue only.
+
+Commissions do NOT apply to:
+
+• AI add-ons
+• Messaging fees (Meta, Twilio, or other providers)
+• Third-party costs
+• Setup fees
+• Professional services
+
+Commissions are payable only while the customer remains active and in good standing.
+
+6. Payout Schedule
+
+Commissions are calculated monthly based on subscription payments successfully collected during the previous calendar month.
+
+Payments are issued on the first business day of each month.
+
+All payouts are processed exclusively via Stripe to the Partner’s connected Stripe account.
+
+If a customer payment is refunded, disputed, reversed, or fails, the related commission is not payable and may be deducted from future payouts.
+
+Partners are responsible for all applicable taxes related to commission payments.
+
+7. No Lifetime Commission Guarantee
+
 Commissions are not guaranteed for the lifetime of any customer.
-Partner commissions are limited to the commission duration defined by WhachatCRM at the time the commission is earned (currently up to six (6) months).
-WhachatCRM reserves the right to modify, limit, or discontinue commission rates, durations, eligibility requirements, or payout terms at any time, provided such changes do not retroactively reduce commissions already earned.
 
-7. Partner Responsibilities
+Commission payments are limited to the applicable commission duration in effect at the time the commission is earned (12 months for Basic Referrer; 24 months for Pro Partner unless otherwise specified in writing).
+
+WhachatCRM reserves the right to modify commission rates, durations, eligibility requirements, or payout terms at any time. Such changes will not retroactively reduce commissions already earned.
+
+8. Administrative Overrides
+
+WhachatCRM reserves the right, at its sole discretion, to:
+
+• Approve or deny Pro status qualification
+• Override commission rates or durations for any specific Partner or referral
+• Adjust commissions in cases of error, fraud, abuse, or dispute
+
+All administrative decisions are final.
+
+9. Partner Responsibilities
+
 Partners must:
-Market WhachatCRM honestly and accurately
-Avoid misleading claims, spam, or unauthorized discounts
-Comply with all applicable laws and platform policies
 
-7. Prohibited Activities
+• Market WhachatCRM honestly and accurately
+• Avoid misleading claims or guarantees
+• Comply with all applicable laws and regulations
+• Comply with Meta, Twilio, and other platform policies
+• Avoid unauthorized discounting or contractual commitments
+
+Partners may independently offer paid onboarding, automation building, consulting, or other services to referred customers. WhachatCRM is not responsible for agreements between Partners and customers.
+
+10. Prohibited Activities
+
 Partners may not:
-Self-refer or create fake accounts
-Use spam, bots, or deceptive advertising
-Impersonate WhachatCRM or act as an employee
-Modify branding or make contractual promises
+
+• Self-refer or create fake accounts
+• Use spam, bots, or deceptive marketing practices
+• Misrepresent themselves as employees or agents of WhachatCRM
+• Modify WhachatCRM branding without permission
+• Engage in fraudulent activation attempts
+
 Violations may result in immediate termination and forfeiture of unpaid commissions.
 
-8. Independent Contractor Relationship
-Partners are independent contractors, not employees, agents, or representatives of WhachatCRM.
+11. Independent Contractor Relationship
 
-9. Termination
+Partners are independent contractors.
+
+Nothing in this Agreement creates an employment, agency, joint venture, or partnership relationship.
+
+12. Termination
+
 Either party may terminate participation at any time.
+
 Upon termination:
-No new commissions accrue
-Earned but unpaid commissions may be paid at WhachatCRM's discretion
 
-10. Limitation of Liability
-WhachatCRM is not liable for indirect or consequential damages related to the Partner Program.
+• No new commissions will accrue.
+• Earned commissions will be paid according to the standard payout schedule, unless forfeited due to violation of this Agreement.
 
-11. Governing Law
-This Agreement is governed by the laws of the State of Florida, USA.`;
+WhachatCRM reserves the right to withhold payment in cases of fraud or material breach.
+
+13. Limitation of Liability
+
+To the maximum extent permitted by law, WhachatCRM shall not be liable for indirect, incidental, special, consequential, or punitive damages arising from participation in the Partner Program.
+
+14. Governing Law
+
+This Agreement is governed by the laws of the State of Florida, United States, without regard to conflict of law principles.
+
+Any disputes shall be resolved in the state or federal courts located in Florida.
+
+Acceptance
+
+I have read and agree to the Partner Referral Agreement.
+
+I understand that my acceptance is legally binding and that my IP address, timestamp, and agreement version will be recorded.`;
 
 export function PartnerPortal() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
