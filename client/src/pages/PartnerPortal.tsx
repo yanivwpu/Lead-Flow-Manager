@@ -711,9 +711,6 @@ export function PartnerPortal() {
             </div>
           </div>
 
-          <p className="text-green-100 text-sm mt-4">
-            Earn {stats?.commissionRate || '50'}% commission for {stats?.commissionDurationMonths || 6} months on every paid subscription
-          </p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
