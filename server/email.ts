@@ -472,9 +472,10 @@ export async function sendSalespersonWelcomeEmail(
 export async function sendPartnerWelcomeEmail(
   name: string, 
   email: string, 
-  refCode: string
+  refCode: string,
+  password?: string
 ): Promise<boolean> {
-  const partnerPortalUrl = `${APP_URL}/partner-portal`;
+  const portalUrl = `${APP_URL}/partner-portal`;
   
   return sendEmail({
     to: email,
@@ -486,33 +487,61 @@ export async function sendPartnerWelcomeEmail(
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
       </head>
-      <body style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #334155; margin: 0; padding: 0; background-color: #f1f5f9;">
+      <body style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #334155; margin: 0; padding: 0; background-color: #f8fafc;">
         <div style="padding: 40px 20px;">
-          <div style="max-width: 600px; margin: 0 auto; background: white; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
-            <div style="background: linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%); color: white; padding: 40px 30px; text-align: center;">
-              <div style="width: 50px; height: 50px; background: white; border-radius: 12px; display: inline-block; margin-bottom: 16px; font-size: 24px; font-weight: bold; color: #7c3aed; line-height: 50px;">W</div>
-              <h1 style="margin: 0; font-size: 24px; font-weight: 600;">Welcome, Partner!</h1>
+          <div style="max-width: 600px; margin: 0 auto; background: white; border-radius: 20px; overflow: hidden; box-shadow: 0 10px 25px rgba(0, 0, 0, 0.05);">
+            <div style="background: #059669; color: white; padding: 50px 30px; text-align: center;">
+              <div style="width: 60px; height: 60px; background: rgba(255,255,255,0.2); border-radius: 16px; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 20px; font-size: 28px; font-weight: bold; color: white; line-height: 60px;">W</div>
+              <h1 style="margin: 0; font-size: 28px; font-weight: 700; letter-spacing: -0.02em;">Welcome to the Team!</h1>
+              <p style="margin: 10px 0 0 0; font-size: 16px; color: #d1fae5; font-weight: 400;">WhachatCRM Partner Program</p>
             </div>
-            <div style="padding: 40px 30px;">
-              <h2 style="color: #1e293b; margin-top: 0; font-size: 20px;">Hi ${name}!</h2>
-              <p style="color: #475569; font-size: 15px;">Welcome to the WhaChatCRM Partner Program! We're excited to have you on board.</p>
+            <div style="padding: 40px 35px;">
+              <h2 style="color: #1e293b; margin-top: 0; font-size: 22px; font-weight: 700;">Hi ${name},</h2>
+              <p style="color: #475569; font-size: 16px;">We're thrilled to have you as a partner! You're now equipped with everything you need to start referring clients and earning commissions.</p>
               
-              <div style="background: #f5f3ff; border: 1px solid #c4b5fd; padding: 20px; border-radius: 8px; margin: 24px 0;">
-                <p style="margin: 0 0 8px 0; color: #5b21b6; font-size: 15px;"><strong>Your Referral Code:</strong></p>
-                <div style="background: white; border: 2px dashed #7c3aed; padding: 16px; border-radius: 8px; text-align: center;">
-                  <code style="font-size: 24px; color: #7c3aed; font-weight: bold; letter-spacing: 2px;">${refCode}</code>
+              <div style="background: #f1f5f9; border-radius: 12px; padding: 25px; margin: 30px 0;">
+                <h3 style="color: #1e293b; font-size: 14px; text-transform: uppercase; letter-spacing: 0.05em; margin: 0 0 15px 0; font-weight: 700;">Your Partner Credentials</h3>
+                
+                <div style="margin-bottom: 15px;">
+                  <p style="margin: 0; font-size: 12px; color: #64748b; font-weight: 600;">PORTAL URL</p>
+                  <p style="margin: 2px 0 0 0; font-size: 15px; color: #1e293b;">${portalUrl}</p>
+                </div>
+
+                <div style="margin-bottom: 15px;">
+                  <p style="margin: 0; font-size: 12px; color: #64748b; font-weight: 600;">EMAIL</p>
+                  <p style="margin: 2px 0 0 0; font-size: 15px; color: #1e293b;">${email}</p>
+                </div>
+                
+                ${password ? `
+                <div style="margin-bottom: 15px;">
+                  <p style="margin: 0; font-size: 12px; color: #64748b; font-weight: 600;">PASSWORD</p>
+                  <p style="margin: 2px 0 0 0; font-size: 15px; color: #1e293b; font-family: monospace; font-weight: 700;">${password}</p>
+                </div>
+                ` : ''}
+
+                <div>
+                  <p style="margin: 0; font-size: 12px; color: #64748b; font-weight: 600;">YOUR REF CODE</p>
+                  <p style="margin: 2px 0 0 0; font-size: 18px; color: #059669; font-weight: 700; font-family: monospace;">${refCode}</p>
                 </div>
               </div>
-              
-              <p style="color: #475569; font-size: 15px;">Share your referral code with potential customers. When they sign up and upgrade, you'll earn commission on their subscription!</p>
-              
+
               <div style="text-align: center;">
-                <a href="${partnerPortalUrl}" style="display: inline-block; background: #7c3aed; color: white; padding: 14px 32px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px; margin: 24px 0;">Access Partner Portal</a>
+                <a href="${portalUrl}" style="display: inline-block; background: #059669; color: white; padding: 16px 40px; text-decoration: none; border-radius: 12px; font-weight: 700; font-size: 16px; transition: background 0.2s;">Access Partner Dashboard</a>
+              </div>
+
+              <div style="margin-top: 40px; padding-top: 30px; border-top: 1px solid #f1f5f9;">
+                <h3 style="color: #1e293b; font-size: 16px; font-weight: 700; margin-bottom: 12px;">Quick Start Guide:</h3>
+                <ul style="color: #475569; font-size: 15px; padding-left: 20px; margin: 0;">
+                  <li style="margin-bottom: 10px;">Login to your dashboard using the credentials above.</li>
+                  <li style="margin-bottom: 10px;">Review and accept the new Partner Agreement.</li>
+                  <li style="margin-bottom: 10px;">Copy your unique referral link to start sharing.</li>
+                </ul>
               </div>
             </div>
-            <div style="text-align: center; padding: 24px 30px; background: #f8fafc; border-top: 1px solid #e2e8f0;">
-              <p style="margin: 0; color: #94a3b8; font-size: 12px;">Need help? Contact us at <a href="mailto:partners@whachatcrm.com" style="color: #7c3aed; text-decoration: none;">partners@whachatcrm.com</a></p>
-              <p style="margin: 12px 0 0 0; color: #94a3b8; font-size: 12px;">&copy; ${new Date().getFullYear()} WhaChatCRM. All rights reserved.</p>
+            <div style="text-align: center; padding: 30px; background: #f8fafc; border-top: 1px solid #f1f5f9;">
+              <p style="margin: 0; color: #64748b; font-size: 13px;">Need assistance? We're here to help.</p>
+              <p style="margin: 5px 0 0 0; color: #64748b; font-size: 13px;">Contact us at <a href="mailto:support@whachatcrm.com" style="color: #059669; text-decoration: none; font-weight: 600;">support@whachatcrm.com</a></p>
+              <p style="margin: 20px 0 0 0; color: #94a3b8; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em;">&copy; ${new Date().getFullYear()} WhaChatCRM. All rights reserved.</p>
             </div>
           </div>
         </div>

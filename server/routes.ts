@@ -4658,7 +4658,7 @@ export async function registerRoutes(
 
       // Send welcome email to new partner
       const { sendPartnerWelcomeEmail } = await import("./email");
-      sendPartnerWelcomeEmail(partner.name, partner.email, partner.refCode)
+      sendPartnerWelcomeEmail(partner.name, partner.email, partner.refCode, password)
         .then((sent: boolean) => {
           if (sent) {
             console.log(`[Admin] Welcome email sent to partner: ${partner.email}`);
