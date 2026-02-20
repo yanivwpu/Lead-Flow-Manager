@@ -176,11 +176,11 @@ export function Pricing() {
           <div className="flex flex-wrap justify-center gap-4 mt-6">
             <div className={`inline-flex items-center gap-2 bg-emerald-50 border border-emerald-200 text-emerald-800 px-4 py-2 rounded-full text-sm font-medium ${isRTL ? 'flex-row-reverse' : ''}`}>
               <Shield className="h-4 w-4" />
-              {t('pricing.noMarkup')}
+              Unlimited Messages & AI
             </div>
-            <div className={`inline-flex items-center gap-2 bg-blue-50 border border-blue-200 text-blue-800 px-4 py-2 rounded-full text-sm font-medium ${isRTL ? 'flex-row-reverse' : ''}`}>
-              <MessageSquare className="h-4 w-4" />
-              {t('pricing.channels')}
+            <div className={`inline-flex items-center gap-2 bg-red-50 border border-red-200 text-red-800 px-4 py-2 rounded-full text-sm font-medium ${isRTL ? 'flex-row-reverse' : ''}`}>
+              <XCircle className="h-4 w-4" />
+              No Per-Message Fees
             </div>
             <div className={`inline-flex items-center gap-2 bg-purple-50 border border-purple-200 text-purple-800 px-4 py-2 rounded-full text-sm font-medium ${isRTL ? 'flex-row-reverse' : ''}`}>
               <XCircle className="h-4 w-4" />
