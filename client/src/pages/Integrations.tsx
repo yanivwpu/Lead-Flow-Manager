@@ -834,7 +834,7 @@ export function Integrations() {
             <div className="space-y-4 py-2">
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-800 space-y-1">
                 <p className="font-medium">Transparent Pricing:</p>
-                <p className="text-xs">Unlike other CRMs, WhachatCRM has <strong>zero per-message fees</strong> and no markups. Your plan includes unlimited AI-powered conversations.</p>
+                <p className="text-xs">Unlike other CRMs, WhachatCRM has <strong>zero per-message fees</strong> and no markups. Your plan includes unlimited manual conversations.</p>
               </div>
               <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-sm text-green-800 space-y-1">
                 <p className="font-medium">How to install:</p>
