@@ -1,0 +1,114 @@
+App Store requirements
+
+Ask assistant
+
+To qualify for the Shopify App Store, your app must meet the requirements listed below. Each requirement in this list helps your app meet our app quality standards. Some requirements are general and apply to all apps, and others apply to specific categories of apps.
+
+These requirements are subject to change, as we're continuously making improvements to the Shopify App Store and developer platform. The App Excellence Team conducts quality checks regularly. Your app is expected to meet any new requirements that are added here. The Shopify App Review team can reject an app at their discretion if it doesn't meet the set standards.
+
+1. Policy
+All Shopify App Store apps must comply with the Partner Program Agreement. Partners should act in good faith and in the best interests of merchants and buyers. Partners should not intentionally circumvent critical platform functionality.
+
+1.1 Build and operate within Shopify's platform
+Shopify requires apps to be secure, truthful, and privacy-safe, operating within—not around—Shopify’s core systems. Apps that circumvent core workflows or provide unapproved services (such as unauthorized payments, marketplaces, agency brokering, content copying, refunds, or lending) aren’t allowed.
+
+1.2 Bill through the Shopify Billing API or Managed Pricing
+Apps that use off-platform billing cannot be distributed through the Shopify App store, unless you've been notified otherwise by Shopify. Your app must use Managed Pricing or the Shopify Billing API for all app charges and be free of billing related errors.
+
+2. Functionality
+Apps must deliver on the features described in their app store listing. The core functionality must work properly and comply with the Shopify Partner Program Agreement and Acceptable Use Policy.
+
+2.1 Create reliable and user-friendly apps
+Merchants should have a positive experience when using your app. Your app should be easy to use and free from errors that prevent your core functionality from working.
+
+2.2 Use Shopify's APIs and platform tools
+Your app must use Shopify's APIs and integrate with platform tools like Shopify App Bridge to provide an embedded admin experience. Admin extensions must provide novel, feature-complete functionality without promotions or inappropriate modal launches.
+
+2.3 Provide seamless and secure installation
+Apps can only be installed and initiated on Shopify services. Merchants expect a seamless experience when installing and uninstalling your application.
+
+3. Security
+App security is critical for protecting merchants' businesses and their data. Before submitting your app, ensure it's secure and follows best practices to minimize risk.
+
+3.1 Secure data with valid TLS/SSL certificates
+Information must be exchanged securely to ensure merchant and/or buyer data is protected when in transit.
+
+3.2 Request only necessary access scopes
+Your app must request only the access scopes that are necessary for your app to function properly. You may be requested to provide proof that the access scopes you've requested are required for your app to function properly. For scopes that are not required for all merchants, we strongly recommend using optional scopes.
+
+4. App Store Listing
+Your app store listing is a merchant's first impression of your app. Create clear, accurate listings that help merchants understand your app's features, pricing, and value.
+
+4.1 Brand your app consistently
+Your app name and icon should be consistent throughout the experience.
+
+4.2 Keep pricing accurate and in designated areas
+Merchants scan specific places in app listings to quickly understand costs and value. Do not include pricing information in undesignated areas like your app logo, to prevent merchant confusion. Keep this information in Pricing details.
+
+4.3 Provide accurate and truthful listing information
+Your app store listing should be truthful and accurate. Merchants should know based on your listing if your app will work for them.
+
+4.4 Provide clear assets and descriptions
+Your app store listing content should describe your app's features at a high level. When creating your app store listing content, don't reference your other apps and services in your app store listing content.
+
+4.5 Ensure your submission is complete and accurate
+Ensure your app is properly classified and submit with complete, up-to-date documentation and credentials for review.
+
+5. Category-specific
+Certain app types have unique impacts on merchant operations and require different APIs, extensions, and implementations.
+
+These category-specific requirements ensure these apps properly serve their use cases. Note that some apps may fall into multiple categories.
+
+5.1 Online store
+Extend themes properly with app extensions. Modify themes only through theme app extensions, not through direct code changes.
+
+5.2 Payment
+A payments app integrates with the Shopify admin to provide payment processing services.
+
+Build compliant integrations. Payment apps require strict API usage, comprehensive testing documentation, functional payment flows, and checkout compliance. Revenue share agreement required.
+
+5.3 Payment facilitator
+A payment facilitator app works in tandem with a payment app. They enable merchants to display the related payment branding throughout their storefront.
+
+Offer free integrations. These apps must be gateway-owned, non-transactional, and free for merchants.
+
+5.4 Purchase option
+A purchase option app offers subscription-based products and services to merchants' customers.
+
+Build compliant purchase option integrations. These apps require strict API compliance, comprehensive testing across browsers, functional customer portals with full subscription management, and clear pricing transparency.
+
+5.5 Product sourcing
+A product sourcing app allows merchants to source products from external suppliers and fulfill orders through their own fulfillment process.
+
+Build compliant product sourcing integrations. These apps require compliant fulfillment workflows, secure payment processing, product restrictions adherence, and proper order payment verification.
+
+5.6 Checkout customization
+A checkout customization app allows merchants to customize the checkout process to add custom UI or content.
+
+Extend checkout compliantly and transparently. Checkout extensions require strict compliance including proper display, merchant-controlled content, customer consent for charges, accurate product data, and prohibited element restrictions.
+
+5.7 Sales channel
+A sales channel app lets merchants publish their products from their Shopify admin to your platform, whether they're selling online, on mobile apps, or through social media.
+
+Build compliant sales channel integrations. Sales channel apps require strict UI and API compliance, proper account management workflows, Shopify checkout integration, and transparent merchant communication.
+
+5.8 Post purchase
+A post purchase app allows merchants to upsell products to their customers after they've made a purchase.
+
+Create compliant upsell experiences. Post-purchase apps require transparent and accurate upsells, limited consecutive requests, proper UI components, and restrictions on third-party content.
+
+5.9 Mobile app builders
+A mobile app builder lets merchants create a mobile app based on their online store.
+
+Configure mobile apps as sales channels. These apps must operate as sales channels for checkout functionality and inform merchants about app store submission processes and requirements.
+
+5.10 Donation
+A donation app allows merchants to collect donations from their customers.
+
+Build compliant integrations and be charity-verified. Donation apps require charity verification, compliant payment processing through Shopify Checkout, transparent cost and proof documentation, and proper donation widget setup.
+
+5.11 Blockchain
+A blockchain app allows merchants to sell, transfer, or modify non-fungible tokens (NFTs).
+
+Build compliant integrations and get payment partner approval. Blockchain apps require payment partner approval, primary sales support only, comprehensive fulfillment tracking, data privacy protections, and strict compliance with securities regulations.
+
