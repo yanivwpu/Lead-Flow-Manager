@@ -47,10 +47,7 @@ const NATIVE_INTEGRATIONS: IntegrationConfig[] = [
     icon: ShoppingCart, 
     description: "Auto-create leads from new orders and customers", 
     color: "bg-green-500",
-    fields: [
-      { key: "shopUrl", label: "Shop URL", placeholder: "your-store.myshopify.com", helpText: "Your Shopify store URL" },
-      { key: "accessToken", label: "Admin API Access Token", placeholder: "shpat_xxxxx", type: "password", helpText: "Create in Shopify Admin > Apps > Develop apps" },
-    ],
+    fields: [],
     syncOptions: [
       { id: "new_orders", label: "New Orders", description: "Create a chat when a new order is placed" },
       { id: "abandoned_carts", label: "Abandoned Carts", description: "Create a chat for abandoned checkouts" },
@@ -243,11 +240,9 @@ function WebhookUrlDisplay({ integrationType }: { integrationType: string }) {
     switch (integrationType) {
       case 'shopify':
         return [
-          "Go to Shopify Admin → Settings → Notifications → Webhooks",
-          "Click 'Create webhook'",
-          "Select events: orders/create, customers/create",
-          "Paste the webhook URL above",
-          "Format: JSON"
+          "Webhooks are registered automatically when you install the app",
+          "New orders and customers will sync to WhachatCRM automatically",
+          "Use the webhook URL above for custom Zapier/Make.com workflows"
         ];
       case 'calendly':
         return [
@@ -331,6 +326,9 @@ export function Integrations() {
   });
   const [integrationForm, setIntegrationForm] = useState<Record<string, string>>({});
   const [selectedSyncOptions, setSelectedSyncOptions] = useState<string[]>([]);
+  const [shopifyShopUrl, setShopifyShopUrl] = useState("");
+  const [showShopifyInstall, setShowShopifyInstall] = useState(false);
+  const [shopifyError, setShopifyError] = useState("");
 
 
   const integrationsEnabled = subscription?.limits?.integrationsEnabled;
@@ -566,6 +564,21 @@ export function Integrations() {
                             </Button>
                           </div>
                         </div>
+                      ) : integration.id === 'shopify' ? (
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          className="w-full"
+                          onClick={() => {
+                            setShopifyShopUrl("");
+                            setShopifyError("");
+                            setShowShopifyInstall(true);
+                          }}
+                          data-testid={`button-connect-${integration.id}`}
+                        >
+                          Install on Shopify
+                          <ExternalLink className="h-3 w-3 ml-2" />
+                        </Button>
                       ) : (
                         <Button 
                           variant="outline" 
@@ -805,6 +818,80 @@ export function Integrations() {
                 data-testid="button-save-webhook"
               >
                 {createWebhookMutation.isPending ? "Creating..." : "Create Webhook"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Shopify OAuth Install Dialog */}
+        <Dialog open={showShopifyInstall} onOpenChange={setShowShopifyInstall}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-green-500 flex items-center justify-center">
+                  <ShoppingCart className="h-5 w-5 text-white" />
+                </div>
+                <div>
+                  <DialogTitle>Install WhachatCRM on Shopify</DialogTitle>
+                  <DialogDescription>Connect your Shopify store automatically via OAuth</DialogDescription>
+                </div>
+              </div>
+            </DialogHeader>
+            <div className="space-y-4 py-2">
+              <div className="space-y-2">
+                <Label htmlFor="shopify-shop-url">Your Shopify Store URL</Label>
+                <Input
+                  id="shopify-shop-url"
+                  placeholder="your-store.myshopify.com"
+                  value={shopifyShopUrl}
+                  onChange={(e) => { setShopifyShopUrl(e.target.value.trim()); setShopifyError(""); }}
+                  data-testid="input-shopify-shop-url"
+                />
+                {shopifyError && (
+                  <p className="text-xs text-red-500">{shopifyError}</p>
+                )}
+                <p className="text-xs text-gray-500">Enter your store's .myshopify.com URL. You'll be redirected to Shopify to authorize the connection.</p>
+              </div>
+              <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-sm text-green-800 space-y-1">
+                <p className="font-medium">How it works:</p>
+                <ol className="list-decimal list-inside text-xs space-y-1 text-green-700">
+                  <li>Click "Install" to go to your Shopify admin</li>
+                  <li>Review the permissions and approve the app</li>
+                  <li>You'll be redirected back here automatically</li>
+                </ol>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowShopifyInstall(false)}>Cancel</Button>
+              <Button 
+                onClick={async () => {
+                  let shop = shopifyShopUrl.replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+                  if (!shop.endsWith('.myshopify.com')) {
+                    shop = shop.replace(/\.myshopify\.com.*/, '') + '.myshopify.com';
+                  }
+                  if (!shop.match(/^[a-zA-Z0-9][a-zA-Z0-9-]*\.myshopify\.com$/)) {
+                    setShopifyError("Please enter a valid Shopify store URL (e.g., your-store.myshopify.com)");
+                    return;
+                  }
+                  try {
+                    const statusRes = await fetch('/api/shopify/status');
+                    const status = await statusRes.json();
+                    if (!status.configured) {
+                      setShopifyError("Shopify integration is not configured on the server. Please contact support.");
+                      return;
+                    }
+                  } catch {
+                    setShopifyError("Unable to verify Shopify configuration. Please try again.");
+                    return;
+                  }
+                  window.location.href = `/api/shopify/install?shop=${encodeURIComponent(shop)}`;
+                }}
+                disabled={!shopifyShopUrl}
+                className="bg-green-600 hover:bg-green-700 text-white"
+                data-testid="button-shopify-install"
+              >
+                <ShoppingCart className="h-4 w-4 mr-2" />
+                Install on Shopify
               </Button>
             </DialogFooter>
           </DialogContent>

@@ -119,6 +119,23 @@ router.get('/callback', async (req: Request, res: Response) => {
       shopifySubscriptionStatus: 'pending',
     });
 
+    const existingIntegration = await storage.getIntegrationByUserAndType(user.id, 'shopify');
+    if (!existingIntegration) {
+      await storage.createIntegration({
+        userId: user.id,
+        type: 'shopify',
+        name: 'Shopify',
+        config: { shopUrl: shop, syncOptions: ['new_orders', 'new_customers'] },
+        isActive: true,
+      });
+    } else {
+      const existingConfig = (existingIntegration.config && typeof existingIntegration.config === 'object') ? existingIntegration.config as Record<string, any> : {};
+      await storage.updateIntegration(existingIntegration.id, {
+        config: { ...existingConfig, shopUrl: shop },
+        isActive: true,
+      });
+    }
+
     // Register mandatory compliance webhooks
     await registerMandatoryWebhooks(shop, accessToken);
 
@@ -298,6 +315,11 @@ router.post('/webhooks/app-uninstalled', async (req: Request, res: Response) => 
         shopifySubscriptionStatus: 'uninstalled',
         subscriptionStatus: 'canceled',
       });
+
+      const integration = await storage.getIntegrationByUserAndType(user.id, 'shopify');
+      if (integration) {
+        await storage.updateIntegration(integration.id, { isActive: false });
+      }
     }
 
     res.status(200).json({ received: true });
