@@ -139,9 +139,7 @@ router.get('/callback', async (req: Request, res: Response) => {
     // Register mandatory compliance webhooks
     await registerMandatoryWebhooks(shop, accessToken);
 
-    const HOST = process.env.REPL_SLUG 
-      ? `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co`
-      : process.env.HOST || 'https://whachatcrm.com';
+    const HOST = process.env.SHOPIFY_APP_HOST || process.env.HOST || 'https://whachatcrm.com';
 
     const billingResult = await createShopifyBillingCharge(
       shop,
@@ -158,7 +156,7 @@ router.get('/callback', async (req: Request, res: Response) => {
       return res.redirect(billingResult.confirmationUrl);
     }
 
-    res.redirect(`/dashboard?shopify_installed=true&shop=${shop}`);
+    res.redirect(`/app?shopify_installed=true&shop=${shop}`);
   } catch (error) {
     console.error('Shopify callback error:', error);
     res.status(500).json({ error: 'Installation failed' });
@@ -193,14 +191,14 @@ router.get('/billing/callback', async (req: Request, res: Response) => {
         subscriptionStatus: 'active',
       });
 
-      return res.redirect(`/dashboard?shopify_billing=success&plan=pro`);
+      return res.redirect(`/app?shopify_billing=success&plan=pro`);
     }
 
     await storage.updateUser(user.id, {
       shopifySubscriptionStatus: 'cancelled',
     });
 
-    res.redirect(`/dashboard?shopify_billing=declined`);
+    res.redirect(`/app?shopify_billing=declined`);
   } catch (error) {
     console.error('Shopify billing callback error:', error);
     res.status(500).json({ error: 'Billing verification failed' });
@@ -226,9 +224,7 @@ router.post('/billing/change-plan', shopifySessionMiddleware(), async (req: Requ
       await cancelShopifySubscription(shop, user.shopifyAccessToken, user.shopifyChargeId);
     }
 
-    const HOST = process.env.REPL_SLUG 
-      ? `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co`
-      : process.env.HOST || 'https://whachatcrm.com';
+    const HOST = process.env.SHOPIFY_APP_HOST || process.env.HOST || 'https://whachatcrm.com';
 
     const billingResult = await createShopifyBillingCharge(
       shop,
