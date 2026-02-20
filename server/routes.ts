@@ -1142,7 +1142,7 @@ export async function registerRoutes(
 
       // For Twilio, we need a publicly accessible URL for the media
       // Since we're on Replit, we can serve the file temporarily
-      const appUrl = process.env.APP_URL || `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co`;
+      const appUrl = process.env.APP_URL || process.env.HOST || 'https://whachatcrm.com';
       const mediaUrl = `${appUrl}/uploads/${path.basename(req.file.path)}`;
 
       const result = await sendUserWhatsAppMedia(req.user.id, phone, mediaUrl);
