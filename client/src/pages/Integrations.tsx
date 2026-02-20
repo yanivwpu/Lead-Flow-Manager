@@ -326,9 +326,7 @@ export function Integrations() {
   });
   const [integrationForm, setIntegrationForm] = useState<Record<string, string>>({});
   const [selectedSyncOptions, setSelectedSyncOptions] = useState<string[]>([]);
-  const [shopifyShopUrl, setShopifyShopUrl] = useState("");
-  const [showShopifyInstall, setShowShopifyInstall] = useState(false);
-  const [shopifyError, setShopifyError] = useState("");
+  const [showShopifyInfo, setShowShopifyInfo] = useState(false);
 
 
   const integrationsEnabled = subscription?.limits?.integrationsEnabled;
@@ -569,11 +567,7 @@ export function Integrations() {
                           variant="outline" 
                           size="sm" 
                           className="w-full"
-                          onClick={() => {
-                            setShopifyShopUrl("");
-                            setShopifyError("");
-                            setShowShopifyInstall(true);
-                          }}
+                          onClick={() => setShowShopifyInfo(true)}
                           data-testid={`button-connect-${integration.id}`}
                         >
                           Install on Shopify
@@ -824,7 +818,7 @@ export function Integrations() {
         </Dialog>
 
         {/* Shopify OAuth Install Dialog */}
-        <Dialog open={showShopifyInstall} onOpenChange={setShowShopifyInstall}>
+        <Dialog open={showShopifyInfo} onOpenChange={setShowShopifyInfo}>
           <DialogContent className="max-w-md">
             <DialogHeader>
               <div className="flex items-center gap-3">
@@ -833,65 +827,34 @@ export function Integrations() {
                 </div>
                 <div>
                   <DialogTitle>Install WhachatCRM on Shopify</DialogTitle>
-                  <DialogDescription>Connect your Shopify store automatically via OAuth</DialogDescription>
+                  <DialogDescription>Connect your Shopify store via the Shopify App Store</DialogDescription>
                 </div>
               </div>
             </DialogHeader>
             <div className="space-y-4 py-2">
-              <div className="space-y-2">
-                <Label htmlFor="shopify-shop-url">Your Shopify Store URL</Label>
-                <Input
-                  id="shopify-shop-url"
-                  placeholder="your-store.myshopify.com"
-                  value={shopifyShopUrl}
-                  onChange={(e) => { setShopifyShopUrl(e.target.value.trim()); setShopifyError(""); }}
-                  data-testid="input-shopify-shop-url"
-                />
-                {shopifyError && (
-                  <p className="text-xs text-red-500">{shopifyError}</p>
-                )}
-                <p className="text-xs text-gray-500">Enter your store's .myshopify.com URL. You'll be redirected to Shopify to authorize the connection.</p>
-              </div>
               <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-sm text-green-800 space-y-1">
-                <p className="font-medium">How it works:</p>
+                <p className="font-medium">How to install:</p>
                 <ol className="list-decimal list-inside text-xs space-y-1 text-green-700">
-                  <li>Click "Install" to go to your Shopify admin</li>
-                  <li>Review the permissions and approve the app</li>
-                  <li>You'll be redirected back here automatically</li>
+                  <li>Visit the Shopify App Store and search for "WhachatCRM"</li>
+                  <li>Click "Add app" on the listing page</li>
+                  <li>Review the permissions and approve the app in your Shopify admin</li>
+                  <li>You'll be redirected back here automatically once installed</li>
                 </ol>
+              </div>
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 text-sm text-gray-700">
+                <p className="text-xs">The installation is initiated directly from Shopify to ensure a secure, verified connection. No manual configuration is needed — everything is set up automatically.</p>
               </div>
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setShowShopifyInstall(false)}>Cancel</Button>
+              <Button variant="outline" onClick={() => setShowShopifyInfo(false)}>Close</Button>
               <Button 
-                onClick={async () => {
-                  let shop = shopifyShopUrl.replace(/^https?:\/\//, '').replace(/\/.*$/, '');
-                  if (!shop.endsWith('.myshopify.com')) {
-                    shop = shop.replace(/\.myshopify\.com.*/, '') + '.myshopify.com';
-                  }
-                  if (!shop.match(/^[a-zA-Z0-9][a-zA-Z0-9-]*\.myshopify\.com$/)) {
-                    setShopifyError("Please enter a valid Shopify store URL (e.g., your-store.myshopify.com)");
-                    return;
-                  }
-                  try {
-                    const statusRes = await fetch('/api/shopify/status');
-                    const status = await statusRes.json();
-                    if (!status.configured) {
-                      setShopifyError("Shopify integration is not configured on the server. Please contact support.");
-                      return;
-                    }
-                  } catch {
-                    setShopifyError("Unable to verify Shopify configuration. Please try again.");
-                    return;
-                  }
-                  window.location.href = `/api/shopify/install?shop=${encodeURIComponent(shop)}`;
-                }}
-                disabled={!shopifyShopUrl}
+                onClick={() => window.open('https://apps.shopify.com/whachatcrm', '_blank')}
                 className="bg-green-600 hover:bg-green-700 text-white"
-                data-testid="button-shopify-install"
+                data-testid="button-shopify-app-store"
               >
                 <ShoppingCart className="h-4 w-4 mr-2" />
-                Install on Shopify
+                Go to Shopify App Store
+                <ExternalLink className="h-3 w-3 ml-2" />
               </Button>
             </DialogFooter>
           </DialogContent>
