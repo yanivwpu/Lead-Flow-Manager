@@ -550,8 +550,11 @@ export function Welcome() {
             <Link href="/wati-alternative">
               <span className="hover:text-gray-900 cursor-pointer">WATI Alternative</span>
             </Link>
-            <Link href="/contact">
-              <span className="hover:text-gray-900 cursor-pointer">Contact</span>
+            <Link href="/zoko-alternative">
+              <span className="hover:text-gray-900 cursor-pointer font-bold text-brand-green">Zoko Alternative</span>
+            </Link>
+            <Link href="/pabbly-alternative">
+              <span className="hover:text-gray-900 cursor-pointer">Pabbly Alternative</span>
             </Link>
             <Link href="/privacy-policy">
               <span className="hover:text-gray-900 cursor-pointer">Privacy</span>
