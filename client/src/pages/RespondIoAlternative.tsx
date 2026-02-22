@@ -10,11 +10,11 @@ export function RespondIoAlternative() {
   return (
     <div className="min-h-screen bg-white">
       <Helmet>
-        <title>Best Respond.io Alternative for SMBs | Affordable WhatsApp CRM – WhachatCRM</title>
+        <title>Best Respond.io Alternative | WhachatCRM</title>
         <meta name="description" content="Switch from Respond.io to WhachatCRM: Starts at $19/mo, free plan, unlimited users, simple setup. Better for small teams managing WhatsApp leads." />
         <meta name="keywords" content="Respond.io alternative, WhatsApp CRM, Respond.io competitor, affordable WhatsApp CRM, WhatsApp business tool" />
         <link rel="canonical" href="https://whachatcrm.com/respond-io-alternative" />
-        <meta property="og:title" content="Best Respond.io Alternative for SMBs | Affordable WhatsApp CRM – WhachatCRM" />
+        <meta property="og:title" content="Best Respond.io Alternative | WhachatCRM" />
         <meta property="og:description" content="Switch from Respond.io to WhachatCRM: Starts at $19/mo, free plan, unlimited users, simple setup." />
         <meta property="og:url" content="https://whachatcrm.com/respond-io-alternative" />
         <meta property="og:type" content="website" />

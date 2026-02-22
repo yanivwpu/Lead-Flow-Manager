@@ -109,11 +109,11 @@ export function Welcome() {
   return (
     <div dir={isRTL ? 'rtl' : 'ltr'} className={`min-h-screen bg-white overflow-x-hidden ${isRTL ? 'text-right' : 'text-left'}`}>
       <Helmet>
-        <title>WhatsApp CRM: Unified Inbox for WhatsApp & Instagram | WhachatCRM</title>
-        <meta name="description" content="Manage WhatsApp, Instagram, and SMS in one unified inbox. The simple CRM for SMBs and Shopify sellers." />
+        <title>WhatsApp & Unified Mailbox | WhachatCRM</title>
+        <meta name="description" content="Manage WhatsApp, Instagram, and SMS in one unified mailbox. The simple CRM for SMBs and Shopify sellers." />
         <link rel="canonical" href="https://whachatcrm.com/" />
-        <meta property="og:title" content="WhatsApp CRM: Unified Inbox for WhatsApp & Instagram | WhachatCRM" />
-        <meta property="og:description" content="Manage WhatsApp, Instagram, and SMS in one unified inbox. The simple CRM for SMBs and Shopify sellers." />
+        <meta property="og:title" content="WhatsApp & Unified Mailbox | WhachatCRM" />
+        <meta property="og:description" content="Manage WhatsApp, Instagram, and SMS in one unified mailbox. The simple CRM for SMBs and Shopify sellers." />
         <meta property="og:url" content="https://whachatcrm.com/" />
         <meta property="og:type" content="website" />
         <meta property="og:image" content="https://whachatcrm.com/og-image.png" />
@@ -121,8 +121,8 @@ export function Welcome() {
         <meta property="og:image:height" content="630" />
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:image" content="https://whachatcrm.com/og-image.png" />
-        <meta name="twitter:title" content="WhatsApp CRM: Unified Inbox for WhatsApp & Instagram | WhachatCRM" />
-        <meta name="twitter:description" content="Manage WhatsApp, Instagram, and SMS in one unified inbox. The simple CRM for SMBs and Shopify sellers." />
+        <meta name="twitter:title" content="WhatsApp & Unified Mailbox | WhachatCRM" />
+        <meta name="twitter:description" content="Manage WhatsApp, Instagram, and SMS in one unified mailbox. The simple CRM for SMBs and Shopify sellers." />
       </Helmet>
       <BookDemoModal isOpen={showDemoModal} onClose={() => setShowDemoModal(false)} />
       {/* Navigation */}

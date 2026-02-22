@@ -10,7 +10,7 @@ export function ManychatAlternative() {
   return (
     <div className="min-h-screen bg-white">
       <Helmet>
-        <title>Best Manychat Alternative for WhatsApp & Multi-Channel | WhachatCRM</title>
+        <title>Best Manychat Alternative | WhachatCRM</title>
         <meta name="description" content="Looking for a Manychat alternative? WhachatCRM offers a unified inbox for 7+ channels, no message markups, and advanced AI automation for SMBs." />
         <link rel="canonical" href="https://whachatcrm.com/manychat-alternative" />
       </Helmet>

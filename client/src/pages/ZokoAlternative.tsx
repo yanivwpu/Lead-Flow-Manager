@@ -10,7 +10,7 @@ export function ZokoAlternative() {
   return (
     <div className="min-h-screen bg-white">
       <Helmet>
-        <title>Best Zoko Alternative for Shopify | Affordable WhatsApp CRM – WhachatCRM</title>
+        <title>Best Zoko Alternative for Shopify | WhachatCRM</title>
         <meta name="description" content="Switch from Zoko to WhachatCRM: $19/mo vs $35+, zero per-message fees, unlimited flows, and affordable AI. Best for Shopify sellers." />
         <link rel="canonical" href="https://whachatcrm.com/zoko-alternative" />
       </Helmet>

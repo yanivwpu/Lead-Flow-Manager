@@ -10,11 +10,11 @@ export function Waba360Alternative() {
   return (
     <div className="min-h-screen bg-white">
       <Helmet>
-        <title>Best 360dialog Alternative for SMBs | WhatsApp CRM with Built-in Inbox – WhachatCRM</title>
+        <title>Best 360dialog Alternative | WhachatCRM</title>
         <meta name="description" content="Switch from 360dialog to WhachatCRM: $19/mo, built-in CRM features, visual chatbot builder, team inbox. No separate inbox tool needed." />
         <meta name="keywords" content="360dialog alternative, WABA360 alternative, WhatsApp CRM, WhatsApp business tool, affordable WhatsApp CRM" />
         <link rel="canonical" href="https://whachatcrm.com/waba360-alternative" />
-        <meta property="og:title" content="Best 360dialog Alternative for SMBs | WhatsApp CRM with Built-in Inbox – WhachatCRM" />
+        <meta property="og:title" content="Best 360dialog Alternative | WhachatCRM" />
         <meta property="og:description" content="Switch from 360dialog to WhachatCRM: $19/mo, built-in CRM features, visual chatbot builder." />
         <meta property="og:url" content="https://whachatcrm.com/waba360-alternative" />
         <meta property="og:type" content="website" />

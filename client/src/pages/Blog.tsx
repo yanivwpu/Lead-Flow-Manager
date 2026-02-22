@@ -111,10 +111,10 @@ export function Blog() {
   return (
     <div className="min-h-screen bg-white">
       <Helmet>
-        <title>WhatsApp CRM Blog | Tips, Guides & Best Practices | WhachatCRM</title>
+        <title>WhatsApp CRM Blog & Guides | WhachatCRM</title>
         <meta name="description" content="Learn how to grow your business with WhatsApp. Expert guides on WhatsApp CRM, automation, lead management, and customer service best practices." />
         <meta name="keywords" content="WhatsApp CRM blog, WhatsApp business tips, WhatsApp automation guide, WhatsApp lead management, WhatsApp customer service" />
-        <meta property="og:title" content="WhatsApp CRM Blog | Tips, Guides & Best Practices" />
+        <meta property="og:title" content="WhatsApp CRM Blog & Guides | WhachatCRM" />
         <meta property="og:description" content="Learn how to grow your business with WhatsApp. Expert guides on WhatsApp CRM, automation, lead management, and customer service." />
         <meta property="og:type" content="website" />
         <link rel="canonical" href="https://whachatcrm.com/blog" />

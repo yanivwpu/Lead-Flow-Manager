@@ -10,11 +10,11 @@ export function PabblyAlternative() {
   return (
     <div className="min-h-screen bg-white">
       <Helmet>
-        <title>Best Pabbly Chatflow Alternative for SMBs | Affordable WhatsApp CRM – WhachatCRM</title>
+        <title>Best Pabbly Alternative | WhachatCRM</title>
         <meta name="description" content="Switch from Pabbly Chatflow to WhachatCRM: $19/mo, no credit limits, free plan available. Visual chatbot builder & unified inbox for small teams." />
         <meta name="keywords" content="Pabbly alternative, Pabbly Chatflow alternative, WhatsApp CRM, WhatsApp automation, Pabbly competitor" />
         <link rel="canonical" href="https://whachatcrm.com/pabbly-alternative" />
-        <meta property="og:title" content="Best Pabbly Chatflow Alternative for SMBs | Affordable WhatsApp CRM – WhachatCRM" />
+        <meta property="og:title" content="Best Pabbly Alternative | WhachatCRM" />
         <meta property="og:description" content="Switch from Pabbly Chatflow to WhachatCRM: $19/mo, no credit limits, free plan available." />
         <meta property="og:url" content="https://whachatcrm.com/pabbly-alternative" />
         <meta property="og:type" content="website" />

@@ -10,16 +10,16 @@ export function WhatsappCrm() {
   return (
     <div className="min-h-screen bg-white">
       <Helmet>
-        <title>WhatsApp CRM: Manage Customer Chats with Notes, Tags & Follow-Ups | WhachatCRM</title>
+        <title>WhatsApp CRM with Notes & Tags | WhachatCRM</title>
         <meta name="description" content="Turn WhatsApp into a full CRM. Organize conversations, set reminders, collaborate with teams. Free plan available – no credit card needed." />
         <meta name="keywords" content="WhatsApp CRM, what is WhatsApp CRM, WhatsApp business CRM, WhatsApp customer management, WhatsApp lead management" />
         <link rel="canonical" href="https://whachatcrm.com/whatsapp-crm" />
-        <meta property="og:title" content="WhatsApp CRM: Manage Customer Chats with Notes, Tags & Follow-Ups | WhachatCRM" />
+        <meta property="og:title" content="WhatsApp CRM with Notes & Tags | WhachatCRM" />
         <meta property="og:description" content="Turn WhatsApp into a full CRM. Organize conversations, set reminders, collaborate with teams. Free plan available." />
         <meta property="og:url" content="https://whachatcrm.com/whatsapp-crm" />
         <meta property="og:type" content="website" />
         <meta name="twitter:card" content="summary_large_image" />
-        <meta name="twitter:title" content="WhatsApp CRM: Manage Customer Chats with Notes, Tags & Follow-Ups" />
+        <meta name="twitter:title" content="WhatsApp CRM with Notes & Tags | WhachatCRM" />
         <meta name="twitter:description" content="Turn WhatsApp into a full CRM. Organize conversations, set reminders, collaborate with teams." />
       </Helmet>
 

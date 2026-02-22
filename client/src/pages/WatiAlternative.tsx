@@ -10,11 +10,11 @@ export function WatiAlternative() {
   return (
     <div className="min-h-screen bg-white">
       <Helmet>
-        <title>Best WATI Alternative for SMBs | Affordable WhatsApp CRM – WhachatCRM</title>
+        <title>Best WATI Alternative for SMBs | WhachatCRM</title>
         <meta name="description" content="Switch from WATI to WhachatCRM: $19/mo vs $30+, free plan, zero message markup, unlimited users, simple setup. Better for small teams." />
         <meta name="keywords" content="WATI alternative, WhatsApp CRM, WATI competitor, simple WhatsApp CRM, affordable WhatsApp business tool" />
         <link rel="canonical" href="https://whachatcrm.com/wati-alternative" />
-        <meta property="og:title" content="Best WATI Alternative for SMBs | Affordable WhatsApp CRM – WhachatCRM" />
+        <meta property="og:title" content="Best WATI Alternative for SMBs | WhachatCRM" />
         <meta property="og:description" content="Switch from WATI to WhachatCRM: $19/mo vs $30+, free plan, zero message markup, simple setup." />
         <meta property="og:url" content="https://whachatcrm.com/wati-alternative" />
         <meta property="og:type" content="website" />

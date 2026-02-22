@@ -10,11 +10,11 @@ export function InteraktAlternative() {
   return (
     <div className="min-h-screen bg-white">
       <Helmet>
-        <title>Best Interakt Alternative for SMBs | Affordable WhatsApp CRM – WhachatCRM</title>
+        <title>Best Interakt Alternative | WhachatCRM</title>
         <meta name="description" content="Switch from Interakt to WhachatCRM: $19/mo, simpler pricing, unlimited team members. Visual chatbot builder & unified inbox for small teams." />
         <meta name="keywords" content="Interakt alternative, WhatsApp CRM, Interakt competitor, WhatsApp business tool, affordable WhatsApp CRM" />
         <link rel="canonical" href="https://whachatcrm.com/interakt-alternative" />
-        <meta property="og:title" content="Best Interakt Alternative for SMBs | Affordable WhatsApp CRM – WhachatCRM" />
+        <meta property="og:title" content="Best Interakt Alternative | WhachatCRM" />
         <meta property="og:description" content="Switch from Interakt to WhachatCRM: $19/mo, simpler pricing, unlimited team members." />
         <meta property="og:url" content="https://whachatcrm.com/interakt-alternative" />
         <meta property="og:type" content="website" />
