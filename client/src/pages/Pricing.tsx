@@ -392,8 +392,8 @@ export function Pricing() {
                             <tr className="bg-gray-50/50">
                               <td className="py-3 px-4 font-medium text-gray-900">Automation Flows</td>
                               <td className="text-center py-3 px-4 text-gray-400">—</td>
-                              <td className="text-center py-3 px-4 text-purple-600 font-bold">Unlimited</td>
-                              <td className="text-center py-3 px-4 text-purple-600 font-bold">Unlimited</td>
+                              <td className="text-center py-3 px-4 text-emerald-500 font-bold">Unlimited</td>
+                              <td className="text-center py-3 px-4 text-emerald-500 font-bold">Unlimited</td>
                               <td className="text-center py-3 px-4 text-purple-600 font-bold">Unlimited</td>
                             </tr>
                             <tr>
