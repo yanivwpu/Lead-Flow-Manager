@@ -15,6 +15,7 @@ const PLAN_FEATURE_KEYS = {
   free: [
     "unifiedInbox",
     "whatsappWebchat",
+    "websiteWidget",
     "oneUser",
     "activeConversations50",
     "autoRouting",
@@ -375,6 +376,13 @@ export function Pricing() {
                           </thead>
                           <tbody className="divide-y divide-gray-100">
                             <tr className="bg-gray-50/50">
+                              <td className="py-3 px-4 font-medium text-gray-900">Website Widget</td>
+                              <td className="text-center py-3 px-4"><Check className="w-4 h-4 text-emerald-500 mx-auto" /></td>
+                              <td className="text-center py-3 px-4"><Check className="w-4 h-4 text-emerald-500 mx-auto" /></td>
+                              <td className="text-center py-3 px-4"><Check className="w-4 h-4 text-emerald-500 mx-auto" /></td>
+                              <td className="text-center py-3 px-4"><Check className="w-4 h-4 text-emerald-500 mx-auto" /></td>
+                            </tr>
+                            <tr>
                               <td className="py-3 px-4 font-medium text-gray-900">Smart Task Prioritization</td>
                               <td className="text-center py-3 px-4"><Check className="w-4 h-4 text-emerald-500 mx-auto" /></td>
                               <td className="text-center py-3 px-4"><Check className="w-4 h-4 text-emerald-500 mx-auto" /></td>

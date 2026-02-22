@@ -375,6 +375,7 @@
     "features": {
       "unifiedInbox": "Bandeja unificada (todos los canales)",
       "whatsappWebchat": "WhatsApp + Chat Web",
+      "websiteWidget": "Widget para Sitios Web",
       "oneUser": "1 usuario",
       "activeConversations50": "50 conversaciones activas / mes",
       "autoRouting": "Enrutamiento automático de canales",

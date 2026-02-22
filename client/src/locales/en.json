@@ -489,6 +489,7 @@
     "features": {
       "unifiedInbox": "Unified inbox (all channels)",
       "whatsappWebchat": "WhatsApp + Web Chat",
+      "websiteWidget": "Website Widget",
       "oneUser": "1 user",
       "activeConversations50": "50 active conversations / month",
       "autoRouting": "Auto channel routing",
