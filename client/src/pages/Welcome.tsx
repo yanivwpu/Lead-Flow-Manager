@@ -551,7 +551,10 @@ export function Welcome() {
               <span className="hover:text-gray-900 cursor-pointer">WATI Alternative</span>
             </Link>
             <Link href="/zoko-alternative">
-              <span className="hover:text-gray-900 cursor-pointer font-bold text-brand-green">Zoko Alternative</span>
+              <span className="hover:text-gray-900 cursor-pointer">Zoko Alternative</span>
+            </Link>
+            <Link href="/manychat-alternative">
+              <span className="hover:text-gray-900 cursor-pointer">Manychat Alternative</span>
             </Link>
             <Link href="/pabbly-alternative">
               <span className="hover:text-gray-900 cursor-pointer">Pabbly Alternative</span>

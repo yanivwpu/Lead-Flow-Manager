@@ -230,6 +230,7 @@ export function ZokoAlternative() {
             <p className="text-sm text-gray-500 max-w-xs">The fair-priced WhatsApp CRM for growing Shopify brands.</p>
           </div>
           <div className="flex items-center gap-6 text-sm text-gray-500 font-medium">
+            <Link href="/manychat-alternative"><span className="hover:text-brand-green cursor-pointer">Manychat Alternative</span></Link>
             <Link href="/pricing"><span className="hover:text-brand-green cursor-pointer">Pricing</span></Link>
             <Link href="/wati-alternative"><span className="hover:text-brand-green cursor-pointer">Wati Alternative</span></Link>
             <Link href="/contact"><span className="hover:text-brand-green cursor-pointer">Contact</span></Link>

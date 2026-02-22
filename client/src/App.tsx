@@ -16,6 +16,7 @@ const TermsOfUse = lazy(() => import("@/pages/TermsOfUse").then(m => ({ default:
 const Pricing = lazy(() => import("@/pages/Pricing").then(m => ({ default: m.Pricing })));
 const WatiAlternative = lazy(() => import("@/pages/WatiAlternative").then(m => ({ default: m.WatiAlternative })));
 const ZokoAlternative = lazy(() => import("@/pages/ZokoAlternative").then(m => ({ default: m.ZokoAlternative })));
+const ManychatAlternative = lazy(() => import("@/pages/ManychatAlternative").then(m => ({ default: m.ManychatAlternative })));
 const PabblyAlternative = lazy(() => import("@/pages/PabblyAlternative").then(m => ({ default: m.PabblyAlternative })));
 const InteraktAlternative = lazy(() => import("@/pages/InteraktAlternative").then(m => ({ default: m.InteraktAlternative })));
 const RespondIoAlternative = lazy(() => import("@/pages/RespondIoAlternative").then(m => ({ default: m.RespondIoAlternative })));
@@ -63,6 +64,7 @@ function Router() {
       <Route path="/pricing" component={Pricing} />
       <Route path="/wati-alternative" component={WatiAlternative} />
       <Route path="/zoko-alternative" component={ZokoAlternative} />
+      <Route path="/manychat-alternative" component={ManychatAlternative} />
       <Route path="/pabbly-alternative" component={PabblyAlternative} />
       <Route path="/interakt-alternative" component={InteraktAlternative} />
       <Route path="/respond-io-alternative" component={RespondIoAlternative} />
