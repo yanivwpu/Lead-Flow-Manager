@@ -192,6 +192,9 @@ export function WatiAlternative() {
         <div className="max-w-4xl mx-auto">
           <h3 className="text-lg font-bold text-gray-900 mb-4">Related Comparisons</h3>
           <div className="flex flex-wrap gap-4">
+            <Link href="/zoko-alternative">
+              <span className="text-brand-green hover:underline cursor-pointer font-bold">Zoko Alternative</span>
+            </Link>
             <Link href="/pabbly-alternative">
               <span className="text-brand-green hover:underline cursor-pointer">Pabbly Alternative</span>
             </Link>
