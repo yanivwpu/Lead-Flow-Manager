@@ -152,9 +152,9 @@ export function injectSeoMeta(html: string, url: string): string {
     html = html.replace(/<link rel="canonical"[^>]*>/gi, '');
     
     const metaTags = `
-    <title>WhatsApp CRM Blog | Tips, Guides & Best Practices | WhachatCRM</title>
+    <title>WhatsApp CRM Blog & Guides | WhachatCRM</title>
     <meta name="description" content="Learn how to grow your business with WhatsApp. Expert guides on WhatsApp CRM, automation, lead management, and customer service best practices." />
-    <meta property="og:title" content="WhatsApp CRM Blog | Tips, Guides & Best Practices" />
+    <meta property="og:title" content="WhatsApp CRM Blog & Guides | WhachatCRM" />
     <meta property="og:description" content="Learn how to grow your business with WhatsApp. Expert guides on WhatsApp CRM, automation, lead management, and customer service." />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="${canonicalUrl}" />
@@ -163,7 +163,7 @@ export function injectSeoMeta(html: string, url: string): string {
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="WhatsApp CRM Blog | Tips, Guides & Best Practices" />
+    <meta name="twitter:title" content="WhatsApp CRM Blog & Guides | WhachatCRM" />
     <meta name="twitter:description" content="Learn how to grow your business with WhatsApp. Expert guides on WhatsApp CRM, automation, lead management, and customer service." />
     <meta name="twitter:image" content="${BASE_URL}/og-image.png" />
     <meta name="twitter:image:alt" content="WhachatCRM Unified Inbox Dashboard" />
@@ -212,44 +212,59 @@ interface PageMeta {
 
 const PAGE_META: Record<string, PageMeta> = {
   "/pricing": {
-    title: "WhachatCRM Pricing: Free Plan Forever, Starter from $19/mo | WhatsApp CRM",
+    title: "Pricing – Free Forever | WhachatCRM",
     description: "Simple, transparent pricing for WhatsApp CRM. Free plan forever, Starter at $19/mo, Pro at $49/mo. No hidden fees, no message markup. Start free today.",
     canonical: `${BASE_URL}/pricing`
   },
   "/whatsapp-crm": {
-    title: "WhatsApp CRM: Manage Customer Chats with Notes, Tags & Follow-Ups | WhachatCRM",
+    title: "WhatsApp CRM with Notes & Tags | WhachatCRM",
     description: "Turn WhatsApp into a full CRM. Organize conversations, set reminders, collaborate with teams. Free plan available – no credit card needed.",
     canonical: `${BASE_URL}/whatsapp-crm`
   },
   "/respond-io-alternative": {
-    title: "Best Respond.io Alternative for SMBs | Affordable WhatsApp CRM – WhachatCRM",
+    title: "Best Respond.io Alternative | WhachatCRM",
     description: "Switch from Respond.io to WhachatCRM: Starts at $19/mo, free plan, unlimited users, simple setup. Better for small teams managing WhatsApp leads.",
     canonical: `${BASE_URL}/respond-io-alternative`
   },
   "/wati-alternative": {
-    title: "Best WATI Alternative for SMBs | Affordable WhatsApp CRM – WhachatCRM",
+    title: "Best WATI Alternative for SMBs | WhachatCRM",
     description: "Switch from WATI to WhachatCRM: $19/mo vs $30+, free plan, zero message markup, unlimited users, simple setup. Better for small teams.",
     canonical: `${BASE_URL}/wati-alternative`
   },
   "/pabbly-alternative": {
-    title: "Best Pabbly Chatflow Alternative for SMBs | Affordable WhatsApp CRM – WhachatCRM",
+    title: "Best Pabbly Alternative | WhachatCRM",
     description: "Switch from Pabbly Chatflow to WhachatCRM: $19/mo, no credit limits, free plan available. Visual chatbot builder & unified inbox for small teams.",
     canonical: `${BASE_URL}/pabbly-alternative`
   },
   "/interakt-alternative": {
-    title: "Best Interakt Alternative for SMBs | Affordable WhatsApp CRM – WhachatCRM",
+    title: "Best Interakt Alternative | WhachatCRM",
     description: "Switch from Interakt to WhachatCRM: $19/mo, simpler pricing, unlimited team members. Visual chatbot builder & unified inbox for small teams.",
     canonical: `${BASE_URL}/interakt-alternative`
   },
   "/waba360-alternative": {
-    title: "Best 360dialog Alternative for SMBs | WhatsApp CRM with Built-in Inbox – WhachatCRM",
+    title: "Best 360dialog Alternative | WhachatCRM",
     description: "Switch from 360dialog to WhachatCRM: $19/mo, built-in CRM features, visual chatbot builder, team inbox. No separate inbox tool needed.",
     canonical: `${BASE_URL}/waba360-alternative`
   },
   "/crm-for-whatsapp-business": {
-    title: "Multi-Channel CRM for WhatsApp Business | Unified Inbox – WhachatCRM",
+    title: "CRM for WhatsApp Business | WhachatCRM",
     description: "Unified inbox for WhatsApp, SMS, Telegram, Instagram, Facebook & Web Chat. Manage all customer conversations in one place. Free plan available.",
     canonical: `${BASE_URL}/crm-for-whatsapp-business`
+  },
+  "/zoko-alternative": {
+    title: "Best Zoko Alternative for Shopify | WhachatCRM",
+    description: "Switch from Zoko to WhachatCRM: $19/mo vs $35+, zero per-message fees, unlimited flows, and affordable AI. Best for Shopify sellers.",
+    canonical: `${BASE_URL}/zoko-alternative`
+  },
+  "/manychat-alternative": {
+    title: "Best Manychat Alternative | WhachatCRM",
+    description: "Looking for a Manychat alternative? WhachatCRM offers a unified inbox for 7+ channels, no message markups, and advanced AI automation for SMBs.",
+    canonical: `${BASE_URL}/manychat-alternative`
+  },
+  "/best-whatsapp-crm-2026": {
+    title: "Best WhatsApp CRM Software 2026 | WhachatCRM",
+    description: "Discover the best WhatsApp CRM software in 2026. Compare CRM-first platforms vs. BSP providers. A comprehensive guide for small business sales and support.",
+    canonical: `${BASE_URL}/best-whatsapp-crm-2026`
   },
   "/contact": {
     title: "Contact WhachatCRM | Get Support & Sales Help",
