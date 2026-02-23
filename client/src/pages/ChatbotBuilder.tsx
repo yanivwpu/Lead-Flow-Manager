@@ -6,7 +6,8 @@ import {
   Play, Save, ArrowRight, MessageSquare, GitBranch, 
   Clock, Tag, User, Loader2, AlertCircle, Crown,
   GripVertical, X, ChevronDown, ChevronUp, Keyboard,
-  Send, MousePointer, CheckCircle2, ChevronLeft
+  Send, MousePointer, CheckCircle2, ChevronLeft,
+  Image, Video, FileText, ListOrdered
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -34,6 +35,8 @@ import { apiRequest } from "@/lib/queryClient";
 import { Link } from "wouter";
 import { cn } from "@/lib/utils";
 
+type MessageType = 'text' | 'image' | 'video' | 'file' | 'buttons';
+
 interface ChatbotNode {
   id: string;
   type: 'message' | 'question' | 'condition' | 'action' | 'delay';
@@ -41,6 +44,11 @@ interface ChatbotNode {
   data: {
     label: string;
     content?: string;
+    messageType?: MessageType;
+    mediaUrl?: string;
+    mediaCaption?: string;
+    fileName?: string;
+    buttons?: string[];
     options?: { label: string; nextNodeId: string }[];
     condition?: { type: string; value: string };
     action?: { type: string; value: string };
@@ -48,6 +56,14 @@ interface ChatbotNode {
     variableName?: string;
   };
 }
+
+const MESSAGE_TYPES: { value: MessageType; label: string; icon: any; description: string }[] = [
+  { value: 'text', label: 'Text', icon: MessageSquare, description: 'Plain text message' },
+  { value: 'image', label: 'Image', icon: Image, description: 'Send an image with optional caption' },
+  { value: 'video', label: 'Video', icon: Video, description: 'Send a video with optional caption' },
+  { value: 'file', label: 'File', icon: FileText, description: 'Send a document or PDF' },
+  { value: 'buttons', label: 'Buttons', icon: ListOrdered, description: 'Message with quick reply buttons' },
+];
 
 interface ChatbotEdge {
   id: string;
@@ -212,6 +228,7 @@ export function ChatbotBuilder() {
       data: {
         label: NODE_TYPES.find(n => n.type === type)?.label || type,
         content: type === 'message' ? 'Enter your message here...' : undefined,
+        messageType: type === 'message' ? 'text' as MessageType : undefined,
         options: type === 'question' ? [{ label: 'Option 1', nextNodeId: '' }] : undefined,
         delayMinutes: type === 'delay' ? 5 : undefined,
         action: type === 'action' ? { type: 'set_tag', value: '' } : undefined,
@@ -525,15 +542,174 @@ export function ChatbotBuilder() {
 
                     <div className="p-3 md:p-4">
                       {node.type === 'message' && (
-                        <div>
-                          <Label className="text-xs text-gray-500 mb-1 block">Message</Label>
-                          <Textarea
-                            value={node.data.content || ''}
-                            onChange={(e) => updateNode(node.id, { content: e.target.value })}
-                            placeholder="Enter your message..."
-                            className="min-h-[80px] text-sm"
-                            data-testid={`input-message-${node.id}`}
-                          />
+                        <div className="space-y-3">
+                          <div>
+                            <Label className="text-xs text-gray-500 mb-1 block">Message Type</Label>
+                            <div className="flex flex-wrap gap-1.5">
+                              {MESSAGE_TYPES.map((mt) => {
+                                const Icon = mt.icon;
+                                const isActive = (node.data.messageType || 'text') === mt.value;
+                                return (
+                                  <button
+                                    key={mt.value}
+                                    onClick={() => updateNode(node.id, { 
+                                      messageType: mt.value,
+                                      ...(mt.value === 'text' ? { mediaUrl: undefined, mediaCaption: undefined, fileName: undefined, buttons: undefined } : {}),
+                                      ...(mt.value === 'buttons' && !node.data.buttons ? { buttons: ['Option 1'] } : {}),
+                                    })}
+                                    className={cn(
+                                      "flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors",
+                                      isActive 
+                                        ? "bg-brand-green text-white" 
+                                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                                    )}
+                                    data-testid={`msg-type-${mt.value}-${node.id}`}
+                                  >
+                                    <Icon className="h-3.5 w-3.5" />
+                                    {mt.label}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+
+                          {(node.data.messageType || 'text') === 'text' && (
+                            <div>
+                              <Label className="text-xs text-gray-500 mb-1 block">Message</Label>
+                              <Textarea
+                                value={node.data.content || ''}
+                                onChange={(e) => updateNode(node.id, { content: e.target.value })}
+                                placeholder="Enter your message..."
+                                className="min-h-[80px] text-sm"
+                                data-testid={`input-message-${node.id}`}
+                              />
+                            </div>
+                          )}
+
+                          {((node.data.messageType) === 'image' || (node.data.messageType) === 'video') && (
+                            <div className="space-y-2">
+                              <div>
+                                <Label className="text-xs text-gray-500 mb-1 block">
+                                  {node.data.messageType === 'image' ? 'Image' : 'Video'} URL
+                                </Label>
+                                <Input
+                                  value={node.data.mediaUrl || ''}
+                                  onChange={(e) => updateNode(node.id, { mediaUrl: e.target.value })}
+                                  placeholder={`https://example.com/my-${node.data.messageType}.${node.data.messageType === 'image' ? 'jpg' : 'mp4'}`}
+                                  className="text-sm"
+                                  data-testid={`input-media-url-${node.id}`}
+                                />
+                              </div>
+                              <div>
+                                <Label className="text-xs text-gray-500 mb-1 block">Caption (optional)</Label>
+                                <Textarea
+                                  value={node.data.mediaCaption || ''}
+                                  onChange={(e) => updateNode(node.id, { mediaCaption: e.target.value })}
+                                  placeholder="Add a caption to your media..."
+                                  className="min-h-[50px] text-sm"
+                                  data-testid={`input-media-caption-${node.id}`}
+                                />
+                              </div>
+                            </div>
+                          )}
+
+                          {(node.data.messageType) === 'file' && (
+                            <div className="space-y-2">
+                              <div>
+                                <Label className="text-xs text-gray-500 mb-1 block">File URL</Label>
+                                <Input
+                                  value={node.data.mediaUrl || ''}
+                                  onChange={(e) => updateNode(node.id, { mediaUrl: e.target.value })}
+                                  placeholder="https://example.com/document.pdf"
+                                  className="text-sm"
+                                  data-testid={`input-file-url-${node.id}`}
+                                />
+                              </div>
+                              <div>
+                                <Label className="text-xs text-gray-500 mb-1 block">File Name (optional)</Label>
+                                <Input
+                                  value={node.data.fileName || ''}
+                                  onChange={(e) => updateNode(node.id, { fileName: e.target.value })}
+                                  placeholder="e.g., Price List.pdf"
+                                  className="text-sm"
+                                  data-testid={`input-file-name-${node.id}`}
+                                />
+                              </div>
+                              <div>
+                                <Label className="text-xs text-gray-500 mb-1 block">Message (optional)</Label>
+                                <Textarea
+                                  value={node.data.content || ''}
+                                  onChange={(e) => updateNode(node.id, { content: e.target.value })}
+                                  placeholder="Here's the file you requested..."
+                                  className="min-h-[50px] text-sm"
+                                  data-testid={`input-file-message-${node.id}`}
+                                />
+                              </div>
+                            </div>
+                          )}
+
+                          {(node.data.messageType) === 'buttons' && (
+                            <div className="space-y-2">
+                              <div>
+                                <Label className="text-xs text-gray-500 mb-1 block">Message</Label>
+                                <Textarea
+                                  value={node.data.content || ''}
+                                  onChange={(e) => updateNode(node.id, { content: e.target.value })}
+                                  placeholder="Choose an option below:"
+                                  className="min-h-[60px] text-sm"
+                                  data-testid={`input-buttons-message-${node.id}`}
+                                />
+                              </div>
+                              <div>
+                                <Label className="text-xs text-gray-500 mb-1 block">Button Options (max 3)</Label>
+                                <div className="space-y-2">
+                                  {(node.data.buttons || []).map((btn, btnIndex) => (
+                                    <div key={btnIndex} className="flex items-center gap-2">
+                                      <div className="flex items-center justify-center w-6 h-6 rounded-full bg-brand-green/10 text-brand-green text-xs font-medium flex-shrink-0">
+                                        {btnIndex + 1}
+                                      </div>
+                                      <Input
+                                        value={btn}
+                                        onChange={(e) => {
+                                          const newButtons = [...(node.data.buttons || [])];
+                                          newButtons[btnIndex] = e.target.value;
+                                          updateNode(node.id, { buttons: newButtons });
+                                        }}
+                                        placeholder={`Button ${btnIndex + 1}`}
+                                        className="text-sm flex-1"
+                                        maxLength={20}
+                                        data-testid={`input-button-${node.id}-${btnIndex}`}
+                                      />
+                                      <button
+                                        onClick={() => {
+                                          const newButtons = (node.data.buttons || []).filter((_, i) => i !== btnIndex);
+                                          updateNode(node.id, { buttons: newButtons });
+                                        }}
+                                        className="p-1 text-gray-400 hover:text-red-500"
+                                      >
+                                        <X className="h-4 w-4" />
+                                      </button>
+                                    </div>
+                                  ))}
+                                  {(node.data.buttons || []).length < 3 && (
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => {
+                                        const newButtons = [...(node.data.buttons || []), ''];
+                                        updateNode(node.id, { buttons: newButtons });
+                                      }}
+                                      className="w-full text-xs"
+                                      data-testid={`add-button-${node.id}`}
+                                    >
+                                      <Plus className="h-3 w-3 mr-1" />
+                                      Add Button
+                                    </Button>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       )}
 
