@@ -5673,8 +5673,10 @@ export async function registerRoutes(
       const validTones = ["neutral", "friendly", "professional", "sales"];
       const selectedTone = validTones.includes(tone) ? tone : undefined;
       
-      // Get user's preferred language for AI responses
-      const userLanguage = req.user.language as "en" | "he" | "es" | "ar" | undefined;
+      // Use explicit language override from request, fall back to user's preferred language
+      const validLanguages = ["en", "he", "es", "ar"];
+      const requestLanguage = req.body.language;
+      const aiLanguage = (validLanguages.includes(requestLanguage) ? requestLanguage : req.user.language) as "en" | "he" | "es" | "ar" | undefined;
       
       const suggestion = await aiService.suggestReply(
         userId,
@@ -5683,7 +5685,7 @@ export async function registerRoutes(
         knowledge || undefined,
         settings || undefined,
         selectedTone,
-        userLanguage
+        aiLanguage
       );
       
       // Track usage

@@ -128,6 +128,7 @@ export function Chats() {
   const [aiSuggestionLoading, setAiSuggestionLoading] = useState(false);
   const [showAiSuggestion, setShowAiSuggestion] = useState(false);
   const [aiTone, setAiTone] = useState<"neutral" | "friendly" | "professional" | "sales">("neutral");
+  const [aiLanguage, setAiLanguage] = useState<"auto" | "en" | "he" | "es" | "ar">("auto");
   const [leadUpdateHint, setLeadUpdateHint] = useState(false);
   
   // Contact menu state (Edit, Timeline, Delete)
@@ -329,7 +330,8 @@ export function Chats() {
         body: JSON.stringify({
           chatId: selectedChat.id,
           conversationHistory,
-          tone: aiTone
+          tone: aiTone,
+          ...(aiLanguage !== 'auto' ? { language: aiLanguage } : {})
         })
       });
       
@@ -356,7 +358,7 @@ export function Chats() {
     } finally {
       setAiSuggestionLoading(false);
     }
-  }, [selectedChat, aiEnabled, demoMode, toast, aiCooldown, aiTone]);
+  }, [selectedChat, aiEnabled, demoMode, toast, aiCooldown, aiTone, aiLanguage]);
   
   // Silent lead extraction with frequency limiting
   const lastExtractionRef = useRef<Record<string, number>>({});
@@ -1141,6 +1143,19 @@ export function Chats() {
                           )}
                         </div>
                         <div className="flex items-center gap-2">
+                          {/* Language selector */}
+                          <select
+                            value={aiLanguage}
+                            onChange={(e) => setAiLanguage(e.target.value as typeof aiLanguage)}
+                            className="text-xs px-2 py-1 rounded border border-purple-200 bg-white text-purple-700 focus:outline-none focus:ring-1 focus:ring-purple-300"
+                            data-testid="select-ai-language"
+                          >
+                            <option value="auto">Auto</option>
+                            <option value="en">English</option>
+                            <option value="he">עברית</option>
+                            <option value="es">Español</option>
+                            <option value="ar">العربية</option>
+                          </select>
                           {/* Tone selector */}
                           <select
                             value={aiTone}
