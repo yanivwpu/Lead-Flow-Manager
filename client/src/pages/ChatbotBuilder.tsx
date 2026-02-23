@@ -98,6 +98,7 @@ export function ChatbotBuilder() {
   const [triggerKeywords, setTriggerKeywords] = useState("");
   const [triggerOnNewChat, setTriggerOnNewChat] = useState(false);
   const [unsavedChanges, setUnsavedChanges] = useState(false);
+  const [keywordsRaw, setKeywordsRaw] = useState("");
   const canvasRef = useRef<HTMLDivElement>(null);
 
   const { data: flows = [], isLoading, error } = useQuery<ChatbotFlow[]>({
@@ -114,6 +115,7 @@ export function ChatbotBuilder() {
       queryClient.invalidateQueries({ queryKey: ["/api/chatbot-flows"] });
       toast({ title: "Flow created successfully" });
       setSelectedFlow(flow);
+      setKeywordsRaw(flow.triggerKeywords?.join(', ') || '');
       setIsCreateDialogOpen(false);
       setNewFlowName("");
       setNewFlowDescription("");
@@ -360,6 +362,7 @@ export function ChatbotBuilder() {
                     key={flow.id}
                     onClick={() => {
                       setSelectedFlow(flow);
+                      setKeywordsRaw(flow.triggerKeywords?.join(', ') || '');
                       setUnsavedChanges(false);
                     }}
                     className={cn(
@@ -676,8 +679,9 @@ export function ChatbotBuilder() {
                 <div className="flex-1 min-w-0">
                   <Label className="text-xs text-gray-500 mb-1 block">Trigger Keywords (comma-separated)</Label>
                   <Input
-                    value={selectedFlow.triggerKeywords?.join(', ') || ''}
+                    value={keywordsRaw}
                     onChange={(e) => {
+                      setKeywordsRaw(e.target.value);
                       setSelectedFlow({
                         ...selectedFlow,
                         triggerKeywords: e.target.value.split(',').map(k => k.trim()).filter(k => k),
