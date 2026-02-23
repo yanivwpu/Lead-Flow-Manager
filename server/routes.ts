@@ -47,6 +47,7 @@ import { subscriptionService } from "./subscriptionService";
 import { sendWelcomeEmail, sendContactFormEmail, sendDemoBookingNotification, sendDemoConfirmationEmail, sendSalespersonWelcomeEmail } from "./email";
 import bcrypt from "bcryptjs";
 import { triggerNewChatWorkflows, triggerKeywordWorkflows } from "./workflowEngine";
+import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import shopifyRoutes from "./shopifyRoutes";
 import ghlRoutes from "./ghlRoutes";
 import { addInboxJob } from "./queue";
@@ -124,6 +125,9 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+
+  // Object storage routes for file uploads
+  registerObjectStorageRoutes(app);
 
   // Shopify integration routes
   app.use('/api/shopify', shopifyRoutes);
