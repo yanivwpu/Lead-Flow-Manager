@@ -7,8 +7,9 @@ import {
   Clock, Tag, User, Loader2, AlertCircle, Crown,
   GripVertical, X, ChevronDown, ChevronUp, Keyboard,
   Send, MousePointer, CheckCircle2, ChevronLeft,
-  Image, Video, FileText, ListOrdered
+  Image, Video, FileText, ListOrdered, Upload
 } from "lucide-react";
+import { useUpload } from "@/hooks/use-upload";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -101,6 +102,69 @@ const ACTION_TYPES = [
   { value: 'assign', label: 'Assign to Team' },
   { value: 'set_pipeline', label: 'Set Pipeline Stage' },
 ];
+
+function FileUploadButton({ 
+  onUploaded, 
+  accept, 
+  nodeId,
+  label = "Upload"
+}: { 
+  onUploaded: (url: string, fileName: string) => void; 
+  accept: string; 
+  nodeId: string;
+  label?: string;
+}) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const { uploadFile, isUploading, progress } = useUpload({
+    onSuccess: (response) => {
+      const absoluteUrl = `${window.location.origin}${response.objectPath}`;
+      onUploaded(absoluteUrl, response.metadata.name);
+    },
+  });
+
+  return (
+    <div className="flex-shrink-0">
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept={accept}
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) {
+            uploadFile(file);
+            e.target.value = '';
+          }
+        }}
+        data-testid={`file-input-${nodeId}`}
+      />
+      <button
+        type="button"
+        onClick={() => fileInputRef.current?.click()}
+        disabled={isUploading}
+        className={cn(
+          "flex items-center gap-1.5 px-3 py-2 rounded-md text-xs font-medium border transition-colors",
+          isUploading
+            ? "bg-gray-100 text-gray-400 border-gray-200 cursor-wait"
+            : "bg-white text-brand-green border-brand-green/30 hover:bg-brand-green/5 hover:border-brand-green/50"
+        )}
+        data-testid={`upload-btn-${nodeId}`}
+      >
+        {isUploading ? (
+          <>
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            {progress > 0 && progress < 100 ? `${progress}%` : 'Uploading...'}
+          </>
+        ) : (
+          <>
+            <Upload className="h-3.5 w-3.5" />
+            {label}
+          </>
+        )}
+      </button>
+    </div>
+  );
+}
 
 export function ChatbotBuilder() {
   const { toast } = useToast();
@@ -590,15 +654,35 @@ export function ChatbotBuilder() {
                             <div className="space-y-2">
                               <div>
                                 <Label className="text-xs text-gray-500 mb-1 block">
-                                  {node.data.messageType === 'image' ? 'Image' : 'Video'} URL
+                                  {node.data.messageType === 'image' ? 'Image' : 'Video'}
                                 </Label>
-                                <Input
-                                  value={node.data.mediaUrl || ''}
-                                  onChange={(e) => updateNode(node.id, { mediaUrl: e.target.value })}
-                                  placeholder={`https://example.com/my-${node.data.messageType}.${node.data.messageType === 'image' ? 'jpg' : 'mp4'}`}
-                                  className="text-sm"
-                                  data-testid={`input-media-url-${node.id}`}
-                                />
+                                <div className="flex items-center gap-2">
+                                  <Input
+                                    value={node.data.mediaUrl || ''}
+                                    onChange={(e) => updateNode(node.id, { mediaUrl: e.target.value })}
+                                    placeholder={`Paste URL or upload a ${node.data.messageType}...`}
+                                    className="text-sm flex-1"
+                                    data-testid={`input-media-url-${node.id}`}
+                                  />
+                                  <FileUploadButton
+                                    nodeId={`media-${node.id}`}
+                                    accept={node.data.messageType === 'image' ? 'image/*' : 'video/*'}
+                                    label={node.data.mediaUrl ? 'Replace' : 'Upload'}
+                                    onUploaded={(url, fileName) => {
+                                      updateNode(node.id, { mediaUrl: url });
+                                    }}
+                                  />
+                                </div>
+                                {node.data.mediaUrl && node.data.messageType === 'image' && (
+                                  <div className="mt-2 rounded-md overflow-hidden border border-gray-200 max-h-32">
+                                    <img 
+                                      src={node.data.mediaUrl} 
+                                      alt="Preview" 
+                                      className="w-full h-full object-cover max-h-32"
+                                      onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                                    />
+                                  </div>
+                                )}
                               </div>
                               <div>
                                 <Label className="text-xs text-gray-500 mb-1 block">Caption (optional)</Label>
@@ -616,14 +700,30 @@ export function ChatbotBuilder() {
                           {(node.data.messageType) === 'file' && (
                             <div className="space-y-2">
                               <div>
-                                <Label className="text-xs text-gray-500 mb-1 block">File URL</Label>
-                                <Input
-                                  value={node.data.mediaUrl || ''}
-                                  onChange={(e) => updateNode(node.id, { mediaUrl: e.target.value })}
-                                  placeholder="https://example.com/document.pdf"
-                                  className="text-sm"
-                                  data-testid={`input-file-url-${node.id}`}
-                                />
+                                <Label className="text-xs text-gray-500 mb-1 block">File</Label>
+                                <div className="flex items-center gap-2">
+                                  <Input
+                                    value={node.data.mediaUrl || ''}
+                                    onChange={(e) => updateNode(node.id, { mediaUrl: e.target.value })}
+                                    placeholder="Paste URL or upload a file..."
+                                    className="text-sm flex-1"
+                                    data-testid={`input-file-url-${node.id}`}
+                                  />
+                                  <FileUploadButton
+                                    nodeId={`file-${node.id}`}
+                                    accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.zip"
+                                    label={node.data.mediaUrl ? 'Replace' : 'Upload'}
+                                    onUploaded={(url, fileName) => {
+                                      updateNode(node.id, { mediaUrl: url, fileName: fileName });
+                                    }}
+                                  />
+                                </div>
+                                {node.data.mediaUrl && (
+                                  <div className="mt-1.5 flex items-center gap-2 p-2 bg-gray-50 rounded-md border border-gray-200">
+                                    <FileText className="h-4 w-4 text-gray-500 flex-shrink-0" />
+                                    <span className="text-xs text-gray-600 truncate">{node.data.fileName || 'Uploaded file'}</span>
+                                  </div>
+                                )}
                               </div>
                               <div>
                                 <Label className="text-xs text-gray-500 mb-1 block">File Name (optional)</Label>

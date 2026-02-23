@@ -35,8 +35,12 @@ export function registerObjectStorageRoutes(app: Express): void {
    * IMPORTANT: The client should NOT send the file to this endpoint.
    * Send JSON metadata only, then upload the file directly to uploadURL.
    */
-  app.post("/api/uploads/request-url", async (req, res) => {
+  app.post("/api/uploads/request-url", async (req: any, res) => {
     try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
       const { name, size, contentType } = req.body;
 
       if (!name) {
@@ -45,15 +49,17 @@ export function registerObjectStorageRoutes(app: Express): void {
         });
       }
 
+      if (size && size > 25 * 1024 * 1024) {
+        return res.status(400).json({ error: "File too large. Max 25MB." });
+      }
+
       const uploadURL = await objectStorageService.getObjectEntityUploadURL();
 
-      // Extract object path from the presigned URL for later reference
       const objectPath = objectStorageService.normalizeObjectEntityPath(uploadURL);
 
       res.json({
         uploadURL,
         objectPath,
-        // Echo back the metadata for client convenience
         metadata: { name, size, contentType },
       });
     } catch (error) {
