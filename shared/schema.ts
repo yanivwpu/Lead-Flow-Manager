@@ -1265,11 +1265,22 @@ export const templateAssets = pgTable("template_assets", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+export const userTemplateData = pgTable("user_template_data", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  templateId: text("template_id").notNull(),
+  assetType: text("asset_type").notNull(),
+  assetKey: text("asset_key").notNull(),
+  definition: jsonb("definition").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 export const insertTemplateSchema = createInsertSchema(templates);
 export const insertTemplateEntitlementSchema = createInsertSchema(templateEntitlements).omit({ id: true, createdAt: true });
 export const insertRealtorOnboardingSubmissionSchema = createInsertSchema(realtorOnboardingSubmissions).omit({ id: true, submittedAt: true });
 export const insertTemplateInstallSchema = createInsertSchema(templateInstalls).omit({ id: true, createdAt: true });
 export const insertTemplateAssetSchema = createInsertSchema(templateAssets).omit({ id: true, createdAt: true });
+export const insertUserTemplateDataSchema = createInsertSchema(userTemplateData).omit({ id: true, createdAt: true });
 
 export type Template = typeof templates.$inferSelect;
 export type InsertTemplate = z.infer<typeof insertTemplateSchema>;
@@ -1281,3 +1292,5 @@ export type TemplateInstall = typeof templateInstalls.$inferSelect;
 export type InsertTemplateInstall = z.infer<typeof insertTemplateInstallSchema>;
 export type TemplateAsset = typeof templateAssets.$inferSelect;
 export type InsertTemplateAsset = z.infer<typeof insertTemplateAssetSchema>;
+export type UserTemplateData = typeof userTemplateData.$inferSelect;
+export type InsertUserTemplateData = z.infer<typeof insertUserTemplateDataSchema>;

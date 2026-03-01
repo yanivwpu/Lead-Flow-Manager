@@ -212,6 +212,22 @@ export function registerTemplateRoutes(app: Express) {
       res.status(500).json({ error: "Failed to fetch status" });
     }
   });
+  app.delete("/api/templates/realtor-growth-engine/reset", requireAuth, async (req, res) => {
+    try {
+      if (process.env.NODE_ENV === "production") {
+        return res.status(403).json({ error: "Reset not available in production" });
+      }
+
+      const userId = (req.user as any).id;
+      await storage.resetTemplateForUser(userId, TEMPLATE_ID);
+
+      console.log(`[Template] Reset template ${TEMPLATE_ID} for user ${userId}`);
+      res.json({ success: true, message: "Template state fully reset. Refresh to start from locked state." });
+    } catch (error: any) {
+      console.error("[Template] Reset error:", error);
+      res.status(500).json({ error: "Failed to reset template" });
+    }
+  });
 }
 
 async function installTemplateForUser(userId: string) {
@@ -240,22 +256,74 @@ async function installTemplateForUser(userId: string) {
 
       switch (asset.assetType) {
         case "pipeline": {
-          installLog.push(`Pipeline: ${def.name || "Realtor Pipeline"} with ${def.stages?.length || 0} stages`);
+          const key = "pipeline";
+          const existing = await storage.getUserTemplateDataByKey(userId, TEMPLATE_ID_CONST, "pipeline", key);
+          if (!existing) {
+            await storage.createUserTemplateData({
+              userId,
+              templateId: TEMPLATE_ID_CONST,
+              assetType: "pipeline",
+              assetKey: key,
+              definition: def,
+            });
+            installLog.push(`Pipeline: ${def.name || "Realtor Pipeline"} with ${def.stages?.length || 0} stages — installed`);
+          } else {
+            installLog.push(`Pipeline: already exists, skipped`);
+          }
           break;
         }
         case "tags": {
           const tags = def.tags || [];
-          installLog.push(`Tags: ${tags.length} tags provisioned`);
+          for (const tag of tags) {
+            const tagKey = `tag_${tag.toLowerCase().replace(/\s+/g, '_')}`;
+            const existing = await storage.getUserTemplateDataByKey(userId, TEMPLATE_ID_CONST, "tags", tagKey);
+            if (!existing) {
+              await storage.createUserTemplateData({
+                userId,
+                templateId: TEMPLATE_ID_CONST,
+                assetType: "tags",
+                assetKey: tagKey,
+                definition: { tag },
+              });
+            }
+          }
+          installLog.push(`Tags: ${tags.length} tags installed`);
           break;
         }
         case "fields": {
           const fields = def.fields || [];
-          installLog.push(`Fields: ${fields.length} lead fields mapped`);
+          for (const field of fields) {
+            const fieldKey = `field_${field.key}`;
+            const existing = await storage.getUserTemplateDataByKey(userId, TEMPLATE_ID_CONST, "fields", fieldKey);
+            if (!existing) {
+              await storage.createUserTemplateData({
+                userId,
+                templateId: TEMPLATE_ID_CONST,
+                assetType: "fields",
+                assetKey: fieldKey,
+                definition: field,
+              });
+            }
+          }
+          installLog.push(`Fields: ${fields.length} lead fields installed`);
           break;
         }
         case "message_templates": {
           const templates = def.templates || [];
-          installLog.push(`Message Templates: ${templates.length} templates provisioned`);
+          for (const tpl of templates) {
+            const tplKey = `msg_${tpl.key}`;
+            const existing = await storage.getUserTemplateDataByKey(userId, TEMPLATE_ID_CONST, "message_templates", tplKey);
+            if (!existing) {
+              await storage.createUserTemplateData({
+                userId,
+                templateId: TEMPLATE_ID_CONST,
+                assetType: "message_templates",
+                assetKey: tplKey,
+                definition: tpl,
+              });
+            }
+          }
+          installLog.push(`Message Templates: ${templates.length} templates installed`);
           break;
         }
         case "workflows": {
@@ -283,7 +351,20 @@ async function installTemplateForUser(userId: string) {
           break;
         }
         case "ai_rules": {
-          installLog.push(`AI Rules: scoring and classification rules provisioned`);
+          const key = "ai_rules";
+          const existing = await storage.getUserTemplateDataByKey(userId, TEMPLATE_ID_CONST, "ai_rules", key);
+          if (!existing) {
+            await storage.createUserTemplateData({
+              userId,
+              templateId: TEMPLATE_ID_CONST,
+              assetType: "ai_rules",
+              assetKey: key,
+              definition: def,
+            });
+            installLog.push(`AI Rules: scoring and classification rules installed`);
+          } else {
+            installLog.push(`AI Rules: already exists, skipped`);
+          }
           break;
         }
       }

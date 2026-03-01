@@ -24,15 +24,18 @@ The application is a full multi-tenant SaaS implementation with:
   - Email to support@whachatcrm.com on onboarding submission (Resend)
   - Status page showing submission status + install state
   - Route guards: locked -> purchased -> submitted states
+  - Install approach: Option A — all assets (pipeline, tags, fields, message templates, AI rules) installed as user-owned rows in `user_template_data` table + workflows in `workflows` table. Idempotency via UNIQUE(userId, templateId, assetType, assetKey).
+  - Dev-only reset endpoint: `DELETE /api/templates/realtor-growth-engine/reset` (blocked in production)
+  - Migration file: `migrations/0001_realtor_growth_engine.sql` (all 6 tables)
   - Key files:
-    - `shared/schema.ts`: 5 new tables (templates, template_entitlements, realtor_onboarding_submissions, template_installs, template_assets)
-    - `server/templateRoutes.ts`: 5 API endpoints for template lifecycle
+    - `shared/schema.ts`: 6 tables (templates, template_entitlements, realtor_onboarding_submissions, template_installs, template_assets, user_template_data)
+    - `server/templateRoutes.ts`: 6 API endpoints (GET info, POST purchase, POST onboarding/submit, POST install, GET status, DELETE reset)
     - `server/seedRealtorTemplate.ts`: Idempotent seed of template assets on startup
     - `server/email.ts`: `sendRealtorOnboardingEmail` function
-    - `server/storage.ts`: 9 new storage methods for template operations
+    - `server/storage.ts`: 14 storage methods for template operations (including reset)
     - `client/src/pages/RealtorGrowthEngine.tsx`: All-in-one page (detail, checkout, onboarding, status)
   - Frontend routes: `/app/templates/realtor-growth-engine`, `/app/templates/realtor-growth-engine/onboarding`, `/app/templates/realtor-growth-engine/status`
-  - API routes: `GET/POST /api/templates/realtor-growth-engine/*`
+  - API routes: `GET/POST/DELETE /api/templates/realtor-growth-engine/*`
 
 ## Previous Changes (February 11, 2026)
 - **BullMQ + Redis Guaranteed Message Delivery**:

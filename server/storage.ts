@@ -37,10 +37,11 @@ import {
   type RealtorOnboardingSubmission, type InsertRealtorOnboardingSubmission,
   type TemplateInstall, type InsertTemplateInstall,
   type TemplateAsset, type InsertTemplateAsset,
+  type UserTemplateData, type InsertUserTemplateData,
   aiSettings, aiBusinessKnowledge, aiUsage, aiLeadScores,
   userAutomationTemplates, templateUsageAnalytics,
   templates as templatesTable, templateEntitlements, realtorOnboardingSubmissions,
-  templateInstalls, templateAssets
+  templateInstalls, templateAssets, userTemplateData
 } from "@shared/schema";
 import { db } from "../drizzle/db";
 import { users, chats, registeredPhones, messageUsage, conversationWindows, teamMembers, workflows, workflowExecutions, recurringReminders, webhooks, webhookDeliveries, integrations, messageTemplates, templateSends, dripCampaigns, dripSteps, dripEnrollments, dripSends, chatbotFlows, chatbotSessions, salespeople, demoBookings, salesConversions, adminSettings, contacts, conversations, messages, activityEvents, channelSettings, supportTickets, partners, commissions, agreementAcceptances, type InsertConversationWindow, type ConversationWindow } from "@shared/schema";
@@ -238,6 +239,11 @@ export interface IStorage {
   createTemplateInstall(data: InsertTemplateInstall): Promise<TemplateInstall>;
   updateTemplateInstall(id: string, updates: Partial<TemplateInstall>): Promise<TemplateInstall | undefined>;
   getTemplateAssets(templateId: string): Promise<TemplateAsset[]>;
+  getUserTemplateData(userId: string, templateId: string): Promise<UserTemplateData[]>;
+  getUserTemplateDataByKey(userId: string, templateId: string, assetType: string, assetKey: string): Promise<UserTemplateData | undefined>;
+  createUserTemplateData(data: InsertUserTemplateData): Promise<UserTemplateData>;
+  deleteUserTemplateDataForTemplate(userId: string, templateId: string): Promise<void>;
+  resetTemplateForUser(userId: string, templateId: string): Promise<void>;
 }
 
 export class DbStorage implements IStorage {
@@ -2097,6 +2103,56 @@ export class DbStorage implements IStorage {
 
   async getTemplateAssets(templateId: string): Promise<TemplateAsset[]> {
     return await db.select().from(templateAssets).where(eq(templateAssets.templateId, templateId));
+  }
+
+  async getUserTemplateData(userId: string, templateId: string): Promise<UserTemplateData[]> {
+    return await db.select().from(userTemplateData).where(
+      and(eq(userTemplateData.userId, userId), eq(userTemplateData.templateId, templateId))
+    );
+  }
+
+  async getUserTemplateDataByKey(userId: string, templateId: string, assetType: string, assetKey: string): Promise<UserTemplateData | undefined> {
+    const result = await db.select().from(userTemplateData).where(
+      and(
+        eq(userTemplateData.userId, userId),
+        eq(userTemplateData.templateId, templateId),
+        eq(userTemplateData.assetType, assetType),
+        eq(userTemplateData.assetKey, assetKey)
+      )
+    );
+    return result[0];
+  }
+
+  async createUserTemplateData(data: InsertUserTemplateData): Promise<UserTemplateData> {
+    const result = await db.insert(userTemplateData).values(data).returning();
+    return result[0];
+  }
+
+  async deleteUserTemplateDataForTemplate(userId: string, templateId: string): Promise<void> {
+    await db.delete(userTemplateData).where(
+      and(eq(userTemplateData.userId, userId), eq(userTemplateData.templateId, templateId))
+    );
+  }
+
+  async resetTemplateForUser(userId: string, templateId: string): Promise<void> {
+    await db.delete(userTemplateData).where(
+      and(eq(userTemplateData.userId, userId), eq(userTemplateData.templateId, templateId))
+    );
+    await db.delete(realtorOnboardingSubmissions).where(
+      and(eq(realtorOnboardingSubmissions.userId, userId), eq(realtorOnboardingSubmissions.templateId, templateId))
+    );
+    await db.delete(templateInstalls).where(
+      and(eq(templateInstalls.userId, userId), eq(templateInstalls.templateId, templateId))
+    );
+    await db.delete(templateEntitlements).where(
+      and(eq(templateEntitlements.userId, userId), eq(templateEntitlements.templateId, templateId))
+    );
+    await db.delete(workflows).where(
+      and(
+        eq(workflows.userId, userId),
+        sql`description LIKE ${'Realtor Growth Engine%'}`
+      )
+    );
   }
 }
 
