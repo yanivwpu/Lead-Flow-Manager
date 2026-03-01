@@ -156,58 +156,74 @@ export function RealtorGrowthEngine() {
 
   // --- Views ---
 
+  const handlePrimaryCta = () => {
+    if (status === 'locked') {
+      purchaseMutation.mutate();
+    } else if (status === 'purchased') {
+      setLocation("/app/templates/realtor-growth-engine/onboarding");
+    }
+  };
+
   const renderStepper = () => (
-    <div className="flex items-center justify-center space-x-4 mb-8">
+    <div className="flex items-center justify-center space-x-4 mb-5">
       <div className="flex flex-col items-center">
         <div className={cn(
-          "w-10 h-10 rounded-full flex items-center justify-center border-2",
+          "w-9 h-9 rounded-full flex items-center justify-center border-2 text-sm",
           status !== 'locked' ? "bg-brand-green border-brand-green text-white" : "border-gray-300 text-gray-400"
         )}>
-          {status !== 'locked' ? <CheckCircle2 className="w-6 h-6" /> : "1"}
+          {status !== 'locked' ? <CheckCircle2 className="w-5 h-5" /> : "1"}
         </div>
-        <span className="text-xs mt-2 font-medium">Purchase</span>
+        <span className="text-xs mt-1.5 font-medium">Purchase</span>
       </div>
-      <div className="w-12 h-0.5 bg-gray-200" />
+      <div className="w-10 h-0.5 bg-gray-200" />
       <div className="flex flex-col items-center">
         <div className={cn(
-          "w-10 h-10 rounded-full flex items-center justify-center border-2",
+          "w-9 h-9 rounded-full flex items-center justify-center border-2 text-sm",
           status === 'submitted' || status === 'installed' ? "bg-brand-green border-brand-green text-white" : 
           status === 'purchased' ? "border-brand-green text-brand-green" : "border-gray-300 text-gray-400"
         )}>
-          {status === 'submitted' || status === 'installed' ? <CheckCircle2 className="w-6 h-6" /> : "2"}
+          {status === 'submitted' || status === 'installed' ? <CheckCircle2 className="w-5 h-5" /> : "2"}
         </div>
-        <span className="text-xs mt-2 font-medium">Onboarding</span>
+        <span className="text-xs mt-1.5 font-medium">Onboarding</span>
       </div>
-      <div className="w-12 h-0.5 bg-gray-200" />
+      <div className="w-10 h-0.5 bg-gray-200" />
       <div className="flex flex-col items-center">
         <div className={cn(
-          "w-10 h-10 rounded-full flex items-center justify-center border-2",
+          "w-9 h-9 rounded-full flex items-center justify-center border-2 text-sm",
           status === 'installed' ? "bg-brand-green border-brand-green text-white" : "border-gray-300 text-gray-400"
         )}>
-          {status === 'installed' ? <CheckCircle2 className="w-6 h-6" /> : "3"}
+          {status === 'installed' ? <CheckCircle2 className="w-5 h-5" /> : "3"}
         </div>
-        <span className="text-xs mt-2 font-medium">Go Live</span>
+        <span className="text-xs mt-1.5 font-medium">Go Live</span>
       </div>
     </div>
   );
 
   const DetailPage = () => (
-    <div className="max-w-5xl mx-auto px-4 py-8">
-      <div className="flex items-center justify-between mb-6">
+    <div className="max-w-5xl mx-auto px-4 py-5">
+      <div className="flex items-start justify-between mb-3">
         <div>
-          <Badge variant="secondary" className="mb-2 bg-amber-100 text-amber-800 border-amber-200">
+          <Badge variant="secondary" className="mb-1.5 bg-amber-100 text-amber-800 border-amber-200">
             <ShieldCheck className="w-3 h-3 mr-1" />
             Premium Template
           </Badge>
-          <h1 className="text-3xl font-bold tracking-tight text-gray-900">Realtor Growth Engine</h1>
-          <p className="text-lg text-muted-foreground mt-2">
+          <h1 className="text-2xl font-bold tracking-tight text-gray-900">Realtor Growth Engine</h1>
+          <p className="text-base text-muted-foreground mt-1">
             The ultimate WhatsApp-first automation system for real estate professionals.
           </p>
+          <Button 
+            className="mt-3 bg-brand-green hover:bg-brand-green/90"
+            onClick={handlePrimaryCta}
+            disabled={purchaseMutation.isPending || status === 'submitted' || status === 'installed'}
+            data-testid="button-hero-cta"
+          >
+            {status === 'locked' ? 'Unlock Now for $199' : status === 'purchased' ? 'Start Onboarding' : 'Onboarding Submitted'}
+            <ChevronRight className="ml-2 w-4 h-4" />
+          </Button>
         </div>
         {status === 'locked' && (
           <Button 
-            size="lg" 
-            className="bg-brand-green hover:bg-brand-green/90"
+            className="bg-brand-green hover:bg-brand-green/90 hidden md:flex"
             onClick={() => purchaseMutation.mutate()}
             disabled={purchaseMutation.isPending}
             data-testid="button-purchase-template"
@@ -218,8 +234,8 @@ export function RealtorGrowthEngine() {
         )}
         {status === 'purchased' && (
           <Button 
-            size="lg" 
             variant="secondary"
+            className="hidden md:flex"
             onClick={() => setLocation("/app/templates/realtor-growth-engine/onboarding")}
             data-testid="button-start-onboarding"
           >
@@ -231,14 +247,14 @@ export function RealtorGrowthEngine() {
 
       {renderStepper()}
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-        <div className="md:col-span-2 space-y-8">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+        <div className="md:col-span-2 space-y-5">
           <Card>
-            <CardHeader>
-              <CardTitle>What you get</CardTitle>
-              <CardDescription>A complete, out-of-the-box automation system.</CardDescription>
+            <CardHeader className="pb-2 pt-4 px-5">
+              <CardTitle className="text-base">What you get</CardTitle>
+              <CardDescription className="text-xs">A complete, out-of-the-box automation system.</CardDescription>
             </CardHeader>
-            <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-3 px-5 pb-4">
               {[
                 { icon: Rocket, title: "8 High-Converting Workflows", desc: "From lead capture to closing." },
                 { icon: MessageSquare, title: "Optimized Message Templates", desc: "Professionally written scripts." },
@@ -247,50 +263,65 @@ export function RealtorGrowthEngine() {
                 { icon: ClipboardCheck, title: "Property Viewing Automations", desc: "Schedule and confirm viewings." },
                 { icon: Users, title: "Team Collaboration Tools", desc: "Built-in pipeline for agencies." },
               ].map((item, idx) => (
-                <div key={idx} className="flex space-x-3">
-                  <div className="mt-1 bg-brand-green/10 p-2 rounded-lg">
-                    <item.icon className="w-5 h-5 text-brand-green" />
+                <div key={idx} className="flex space-x-2.5">
+                  <div className="mt-0.5 bg-brand-green/10 p-1.5 rounded-md">
+                    <item.icon className="w-4 h-4 text-brand-green" />
                   </div>
                   <div>
-                    <h4 className="font-semibold text-sm">{item.title}</h4>
+                    <h4 className="font-semibold text-sm leading-tight">{item.title}</h4>
                     <p className="text-xs text-muted-foreground">{item.desc}</p>
                   </div>
                 </div>
               ))}
             </CardContent>
+            <CardFooter className="px-5 pb-4 pt-0 border-t border-gray-100">
+              <div className="flex items-center justify-between w-full pt-3">
+                <p className="text-sm font-medium text-gray-700">Ready to activate your Realtor Growth Engine?</p>
+                <Button
+                  className="bg-brand-green hover:bg-brand-green/90"
+                  size="sm"
+                  onClick={handlePrimaryCta}
+                  disabled={purchaseMutation.isPending || status === 'submitted' || status === 'installed'}
+                  data-testid="button-whatyouget-cta"
+                >
+                  {status === 'locked' ? 'Unlock Now' : status === 'purchased' ? 'Start Onboarding' : 'Submitted'}
+                  <ChevronRight className="ml-1.5 w-3.5 h-3.5" />
+                </Button>
+              </div>
+            </CardFooter>
           </Card>
 
           <Card>
-            <CardHeader>
-              <CardTitle>How it works</CardTitle>
+            <CardHeader className="pb-2 pt-4 px-5">
+              <CardTitle className="text-base">How it works</CardTitle>
             </CardHeader>
-            <CardContent>
-              <ol className="relative border-l border-gray-200 ml-3 space-y-6">
-                <li className="mb-10 ml-6">
-                  <span className="absolute flex items-center justify-center w-8 h-8 bg-brand-green rounded-full -left-4 ring-8 ring-white">
-                    <ShieldCheck className="w-4 h-4 text-white" />
+            <CardContent className="px-5 pb-4">
+              <ol className="relative border-l border-gray-200 ml-3 space-y-4">
+                <li className="mb-6 ml-6">
+                  <span className="absolute flex items-center justify-center w-7 h-7 bg-brand-green rounded-full -left-3.5 ring-4 ring-white">
+                    <ShieldCheck className="w-3.5 h-3.5 text-white" />
                   </span>
-                  <h3 className="font-semibold leading-tight">Step 1: Setup & Compliance</h3>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    We handle the Meta Business verification and WhatsApp Official API setup to ensure 100% compliance.
+                  <h3 className="font-semibold text-sm leading-tight">Step 1: Setup & Compliance</h3>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    We handle Meta Business verification and WhatsApp Official API setup for 100% compliance.
                   </p>
                 </li>
-                <li className="mb-10 ml-6">
-                  <span className="absolute flex items-center justify-center w-8 h-8 bg-brand-green rounded-full -left-4 ring-8 ring-white">
-                    <Rocket className="w-4 h-4 text-white" />
+                <li className="mb-6 ml-6">
+                  <span className="absolute flex items-center justify-center w-7 h-7 bg-brand-green rounded-full -left-3.5 ring-4 ring-white">
+                    <Rocket className="w-3.5 h-3.5 text-white" />
                   </span>
-                  <h3 className="font-semibold leading-tight">Step 2: Automated Provisioning</h3>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Once verified, our engine deploys all 8 workflows, tags, and pipeline stages directly into your workspace.
+                  <h3 className="font-semibold text-sm leading-tight">Step 2: Automated Provisioning</h3>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Our engine deploys all 8 workflows, tags, and pipeline stages directly into your workspace.
                   </p>
                 </li>
                 <li className="ml-6">
-                  <span className="absolute flex items-center justify-center w-8 h-8 bg-brand-green rounded-full -left-4 ring-8 ring-white">
-                    <CheckCircle2 className="w-4 h-4 text-white" />
+                  <span className="absolute flex items-center justify-center w-7 h-7 bg-brand-green rounded-full -left-3.5 ring-4 ring-white">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-white" />
                   </span>
-                  <h3 className="font-semibold leading-tight">Step 3: Customization & Go Live</h3>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    A dedicated onboarding specialist helps you tweak the messages to your voice and launches your first campaign.
+                  <h3 className="font-semibold text-sm leading-tight">Step 3: Customization & Go Live</h3>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    A dedicated specialist helps you tweak messages to your voice and launches your first campaign.
                   </p>
                 </li>
               </ol>
@@ -298,40 +329,40 @@ export function RealtorGrowthEngine() {
           </Card>
         </div>
 
-        <div className="space-y-6">
+        <div className="space-y-4">
           <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Requirements</CardTitle>
+            <CardHeader className="pb-2 pt-4 px-5">
+              <CardTitle className="text-sm">Requirements</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-3">
+            <CardContent className="space-y-2 px-5 pb-4">
               <div className="flex items-start space-x-2">
-                <CheckCircle2 className="w-4 h-4 text-brand-green mt-0.5" />
-                <span className="text-sm">Registered Business Entity</span>
+                <CheckCircle2 className="w-3.5 h-3.5 text-brand-green mt-0.5" />
+                <span className="text-xs">Registered Business Entity</span>
               </div>
               <div className="flex items-start space-x-2">
-                <CheckCircle2 className="w-4 h-4 text-brand-green mt-0.5" />
-                <span className="text-sm">Meta Business Manager Access</span>
+                <CheckCircle2 className="w-3.5 h-3.5 text-brand-green mt-0.5" />
+                <span className="text-xs">Meta Business Manager Access</span>
               </div>
               <div className="flex items-start space-x-2">
-                <CheckCircle2 className="w-4 h-4 text-brand-green mt-0.5" />
-                <span className="text-sm">Official WhatsApp API (Meta)</span>
+                <CheckCircle2 className="w-3.5 h-3.5 text-brand-green mt-0.5" />
+                <span className="text-xs">Official WhatsApp API (Meta)</span>
               </div>
               <div className="flex items-start space-x-2">
-                <CheckCircle2 className="w-4 h-4 text-brand-green mt-0.5" />
-                <span className="text-sm">Pro Subscription Plan</span>
+                <CheckCircle2 className="w-3.5 h-3.5 text-brand-green mt-0.5" />
+                <span className="text-xs">Pro Subscription Plan</span>
               </div>
             </CardContent>
           </Card>
 
           <Card className="bg-brand-green/5 border-brand-green/20">
-            <CardHeader>
-              <CardTitle className="text-base flex items-center">
-                <Clock className="w-4 h-4 mr-2 text-brand-green" />
+            <CardHeader className="pb-1 pt-3 px-5">
+              <CardTitle className="text-sm flex items-center">
+                <Clock className="w-3.5 h-3.5 mr-1.5 text-brand-green" />
                 Limited Availability
               </CardTitle>
             </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground">
+            <CardContent className="px-5 pb-3">
+              <p className="text-xs text-muted-foreground">
                 We only onboard 10 realtors per month to ensure premium white-glove setup and support.
               </p>
             </CardContent>
