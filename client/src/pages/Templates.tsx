@@ -68,7 +68,7 @@ function GrowthEnginesTab() {
     { icon: Bot, text: "AI qualifies buyers & sellers automatically" },
     { icon: Clock, text: "Smart follow-ups so no lead goes cold" },
     { icon: Target, text: "Built-in real estate CRM pipeline" },
-    { icon: CalendarCheck, text: "Book showings & calls from chat" },
+    { icon: CalendarCheck, text: "Done-for-you setup + live onboarding sessions" },
   ];
 
   return (
