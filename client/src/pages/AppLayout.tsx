@@ -75,7 +75,7 @@ function AppContent() {
             planName={subscription.limits.planName}
           />
         )}
-        <div className="flex-1 min-h-0 overflow-hidden">
+        <div className="flex-1 min-h-0 overflow-auto">
           <Suspense fallback={<PageLoader />}>
             <Switch>
               <Route path="/app/inbox/:contactId" component={UnifiedInbox} />
