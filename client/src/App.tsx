@@ -31,6 +31,7 @@ const Admin = lazy(() => import("@/pages/Admin").then(m => ({ default: m.Admin }
 const QrLanding = lazy(() => import("@/pages/QrLanding").then(m => ({ default: m.QrLanding })));
 const SalesPortal = lazy(() => import("@/pages/SalesPortal").then(m => ({ default: m.SalesPortal })));
 const PartnerPortal = lazy(() => import("@/pages/PartnerPortal").then(m => ({ default: m.PartnerPortal })));
+const RealtorGrowthEngine = lazy(() => import("@/pages/RealtorGrowthEngine").then(m => ({ default: m.RealtorGrowthEngine })));
 const NotFound = lazy(() => import("@/pages/not-found"));
 import { ReferralCapture } from "@/components/ReferralCapture";
 

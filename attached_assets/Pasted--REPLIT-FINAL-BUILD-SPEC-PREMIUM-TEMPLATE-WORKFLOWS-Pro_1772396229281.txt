@@ -1,0 +1,434 @@
+# REPLIT FINAL BUILD SPEC — PREMIUM TEMPLATE + WORKFLOWS
+Product: WhachatCRM
+Template: REALTOR GROWTH ENGINE (Premium / Locked)
+Stack: React + TypeScript (FE), Express (BE), Drizzle ORM + PostgreSQL (DB)
+
+GOAL:
+Deliver a premium, locked vertical template called “REALTOR GROWTH ENGINE” that includes:
+1) Premium template UI/UX (same size as other templates, but locked + premium feel)
+2) Purchase -> Unlock -> Onboarding Form (required) -> Submission stored + emailed to support@whachatcrm.com
+3) Auto-provision the template package on activation:
+   - CRM Pipeline (stages)
+   - Tags
+   - Lead fields mapping
+   - Message templates
+   - Automation workflows (trigger/action rules)
+   - AI lead scoring + qualification rules
+   - Default assignments + follow-up tasks
+4) Status page after onboarding submission
+
+IMPORTANT:
+This is INTEGRATION/PROVISIONING of existing pieces (no net-new “custom dev per client”).
+Template package must be repeatable and “one-click install” once purchased.
+
+------------------------------------------------------------
+## 1) ROUTES / PAGES
+
+### A) Template Detail Page
+Route: /templates/realtor-growth-engine
+States:
+- LOCKED (not purchased): show preview + disabled actions + CTA “Purchase to Unlock”
+- UNLOCKED (purchased, onboarding not submitted): CTA “Complete onboarding form (required)”
+- ACTIVE (purchased + onboarding submitted): show “Submitted” + status CTA
+
+UI Requirements (premium feel):
+- Premium badge + lock icon
+- Crisp spacing, minimal sections, micro-interactions
+- “What you get” list, “Requirements”, “How it works (3 steps)”
+- Progress indicator:
+  Step 1 Purchase ✅
+  Step 2 Onboarding ⏳/✅
+  Step 3 Go Live ⏳
+
+### B) Checkout (can be mocked for MVP)
+Route: /templates/realtor-growth-engine/checkout
+If Stripe exists, use it. If not:
+- “Confirm Purchase” button simulates checkout success
+- On success call backend to mark template purchased and create a TemplateInstall record
+
+### C) Onboarding Form (required)
+Route: /templates/realtor-growth-engine/onboarding
+Multi-step form with validation, includes Business Eligibility Gate + WhatsApp section anti-wrong-number logic.
+Submit:
+- Save submission to DB
+- Email support@whachatcrm.com with formatted summary
+- Mark onboardingSubmitted = true
+- Redirect to Status page
+
+### D) Status Page
+Route: /templates/realtor-growth-engine/status
+Shows:
+- Submission timestamp
+- Key info summary (business name, number, WABA/Twilio path)
+- “Support reviewing” message
+- (Optional) “Edit submission” (MVP can be read-only)
+
+------------------------------------------------------------
+## 2) LOCKING / ENTITLEMENT MODEL (must)
+
+Create user->template entitlement:
+- templatePurchased: boolean
+- onboardingSubmitted: boolean
+
+Logic:
+- If user not purchased: cannot access onboarding route (redirect to template page).
+- If purchased but onboarding not submitted: show onboarding CTA and status Step 2 pending.
+- If onboarding submitted: show status page and “Submitted”.
+
+Implementation:
+- Backend endpoints return entitlement status
+- Frontend uses entitlement state for route guards + UI
+
+------------------------------------------------------------
+## 3) DATABASE (Drizzle + PostgreSQL)
+
+### Tables
+
+#### templates
+- id (pk) e.g. 'realtor-growth-engine'
+- name
+- description
+- isPremium boolean
+- version string (e.g. '1.0.0')
+- createdAt
+
+#### template_entitlements
+- id (pk)
+- userId (fk)
+- templateId (fk templates.id)
+- purchasedAt timestamp (nullable)
+- onboardingSubmittedAt timestamp (nullable)
+- status enum: 'locked' | 'purchased' | 'submitted' | 'installed'
+- UNIQUE(userId, templateId)
+
+#### realtor_onboarding_submissions
+- id (pk uuid)
+- userId (fk)
+- templateId (string) default 'realtor-growth-engine'
+- submittedAt timestamp
+- payload jsonb (raw form answers)
+- normalized jsonb (normalized key fields for quick querying)
+- status enum: 'submitted' | 'reviewing' | 'scheduled' | 'live' default 'submitted'
+
+#### template_installs
+Represents “package provisioned into user workspace”
+- id (pk uuid)
+- userId
+- templateId
+- installedAt timestamp (nullable)
+- installStatus enum: 'pending' | 'installed' | 'failed' default 'pending'
+- installLog text (nullable)
+
+#### template_assets
+Stores the template package definition & versioned assets
+- id (pk uuid)
+- templateId
+- assetType enum:
+  'pipeline' | 'tags' | 'fields' | 'message_templates' | 'workflows' | 'ai_rules'
+- version string
+- definition jsonb
+- createdAt timestamp
+
+NOTE:
+We will seed template_assets for 'realtor-growth-engine' with definitions below.
+
+------------------------------------------------------------
+## 4) BACKEND (Express) API CONTRACT
+
+### Auth
+Assume existing session/JWT middleware. All endpoints require auth.
+
+### Endpoints
+
+1) GET /api/templates/realtor-growth-engine
+Returns template metadata + entitlement state + install state.
+
+Response:
+{
+  template: {...},
+  entitlement: { status, purchasedAt, onboardingSubmittedAt },
+  install: { installStatus, installedAt }
+}
+
+2) POST /api/templates/realtor-growth-engine/purchase
+Marks entitlement purchased. (If mocked checkout)
+- Creates/updates entitlement: status='purchased', purchasedAt=now
+- Creates template_installs row with installStatus='pending' if not exists
+
+3) POST /api/templates/realtor-growth-engine/onboarding/submit
+Body: onboarding form payload
+Actions:
+- validate required fields
+- insert into realtor_onboarding_submissions (payload + normalized)
+- update entitlement: onboardingSubmittedAt=now, status='submitted'
+- trigger email to support@whachatcrm.com (formatted)
+- trigger “install/provision template package” job (sync for MVP, async later)
+
+4) POST /api/templates/realtor-growth-engine/install
+Installs the template assets into the user workspace (pipelines/tags/workflows).
+Called automatically after onboarding submit (or can be manual retry).
+Actions:
+- read template_assets definitions
+- create user-specific records in existing CRM tables (pipelines, tags, workflows, templates)
+- update template_installs: installStatus installed/failed + installedAt
+
+5) GET /api/templates/realtor-growth-engine/status
+Returns latest submission + entitlement + install state for status page.
+
+------------------------------------------------------------
+## 5) EMAIL (must)
+On onboarding submit, email:
+TO: support@whachatcrm.com
+SUBJECT: New Realtor Growth Engine Onboarding — {Legal Business Name} — {Full Name}
+
+BODY (human formatted, not JSON):
+- Contact: name, email, mobile
+- Business eligibility: entity yes/no, country, legal name, docs availability, website
+- WhatsApp setup: desired number, active on WhatsApp yes/no, migrate/new number, sms access, ownership
+- Meta: BM yes/no, BM email, BM id if provided
+- CRM/team: solo/team, seats, notifications
+- Lead sources + goals
+- Scheduling: timezone + preferred windows
+- Notes
+- Submission ID + internal status link (if exists)
+
+Implementation:
+Use nodemailer (SMTP) OR SendGrid if already in system.
+Do not expose secrets; use env vars.
+
+------------------------------------------------------------
+## 6) FRONTEND (React + TS) REQUIREMENTS
+
+### Route Guards
+- If not purchased: /onboarding redirects to template page
+- If purchased and onboardingSubmitted: /onboarding redirects to /status
+
+### Premium UX Notes
+- Use the same template card dimensions as other templates.
+- Add premium “Locked/Unlocked/Active” badges and clear stepper.
+- Make onboarding multi-step with progress and “Save & Continue” (optional).
+- Strong validation + helpful inline warnings.
+
+------------------------------------------------------------
+## 7) THE MISSING PART YOU ASKED FOR: TEMPLATE PACKAGE CONTENT (WORKFLOWS)
+The “Realtor Growth Engine” template includes these assets that must be provisioned automatically.
+
+We will define these as JSON in template_assets.definition and install them into user workspace.
+
+### 7.1 PIPELINE (CRM stages)
+Pipeline Name: Realtor Pipeline (Growth Engine)
+Stages (in order):
+1) New Lead
+2) Responded
+3) Qualified (Hot)
+4) Qualified (Warm)
+5) Nurture / Follow-Up
+6) Appointment Set
+7) Under Contract
+8) Closed
+9) Unqualified
+
+Each stage has:
+- stageKey (string)
+- displayName
+- order
+- defaultSLADays (optional)
+
+### 7.2 TAGS (standard)
+Tags:
+- New
+- Warm
+- Hot
+- Appointment Requested
+- Appointment Booked
+- Buyer
+- Seller
+- Investor
+- Rental
+- Unqualified
+- Do Not Contact
+- Follow-Up Needed
+- High Intent
+
+### 7.3 LEAD FIELDS (data extraction mapping)
+Fields to store/update:
+- fullName
+- phone
+- email
+- budget (numeric or text)
+- timeline (e.g. ASAP, 1–3 months, 3–6 months)
+- location (neighborhood/city)
+- leadType (Buyer/Seller/Rental/Investor)
+- preApproved (Yes/No/Unknown)
+- appointmentPreference (text)
+- notes (text)
+- leadScore (0–100)
+- languageDetected (en/es/he) (optional)
+
+### 7.4 MESSAGE TEMPLATES (WhatsApp-friendly copy)
+Template messages are *short, human, realtor tone*. Seed these as editable templates:
+
+- “Intro / Fast Reply”
+- “Buyer Qualification”
+- “Seller Qualification”
+- “Schedule Showing / Call”
+- “Follow-up 24h”
+- “Follow-up 3d”
+- “Follow-up 7d”
+- “Unqualified / polite close”
+- “Re-engagement”
+
+Store as:
+{ key, title, body, variables[] }
+
+Variables examples:
+{{firstName}}, {{city}}, {{budget}}, {{preferredTime}}
+
+### 7.5 AI RULES (lead scoring + classification)
+Define a ruleset (can start deterministic, later LLM-based):
+Outputs:
+- leadScore 0–100
+- classification: Hot/Warm/New/Unqualified
+- leadType: Buyer/Seller/Rental/Investor
+Signals:
+- asks price / availability / viewing => +25
+- shares budget => +20
+- asks to call / book => +30
+- “just looking” => -20
+- spam/irrelevant => Unqualified
+
+Implementation MVP:
+- Use keyword + pattern scoring (regex) on inbound messages
+- Store computed leadScore and classification in lead record
+- Trigger workflows based on classification
+
+### 7.6 AUTOMATION WORKFLOWS (core of template)
+Workflows must be installed as user-owned workflows (enabled by default).
+Define each workflow as:
+{
+  key,
+  name,
+  enabledByDefault,
+  trigger: { type, ... },
+  conditions: [ ... ],
+  actions: [ ... ]
+}
+
+#### Workflow W1: New Lead Auto-Reply + Create Lead
+Trigger:
+- inbound_message_received (first time from a phone not in CRM OR conversation starts)
+Actions:
+- create_or_update_lead
+- apply_tag: "New"
+- set_pipeline_stage: "New Lead"
+- send_message_template: "Intro / Fast Reply"
+- create_task: "Review new lead" due in 1 day
+
+#### Workflow W2: AI Qualify + Score on every inbound
+Trigger:
+- inbound_message_received
+Actions:
+- run_lead_scoring (keyword rules MVP)
+- update_lead_field: leadScore, leadType, budget, timeline, location (basic extraction)
+- if leadScore >= 75 => apply_tag Hot + set stage "Qualified (Hot)"
+- else if leadScore >= 45 => apply_tag Warm + set stage "Qualified (Warm)"
+- else keep as New
+
+#### Workflow W3: Appointment Intent -> Booking Prompt
+Trigger:
+- inbound_message_received
+Condition:
+- message contains intent: "call", "book", "available", "tour", "showing"
+Actions:
+- apply_tag: "Appointment Requested"
+- send_message_template: "Schedule Showing / Call"
+- create_task: "Book appointment" due in 1 day
+
+#### Workflow W4: No Response Follow-Up (24h)
+Trigger:
+- timer (relative to last inbound from lead) OR “lead idle 24h after agent reply”
+Condition:
+- lead stage in New/Responded/Qualified and no inbound for 24h
+Actions:
+- send_message_template: "Follow-up 24h"
+- apply_tag: "Follow-Up Needed"
+
+#### Workflow W5: No Response Follow-Up (3d)
+Trigger:
+- timer 72h since last inbound
+Condition:
+- not Closed/Unqualified
+Actions:
+- send_message_template: "Follow-up 3d"
+
+#### Workflow W6: No Response Follow-Up (7d) + Nurture Stage
+Trigger:
+- timer 7d since last inbound
+Condition:
+- not Closed/Unqualified
+Actions:
+- send_message_template: "Follow-up 7d"
+- set_pipeline_stage: "Nurture / Follow-Up"
+
+#### Workflow W7: Unqualified / DNC Safety
+Trigger:
+- inbound_message_received OR manual tag applied
+Condition:
+- message contains "stop" OR user marks Do Not Contact OR spam keywords
+Actions:
+- apply_tag: "Do Not Contact"
+- set_pipeline_stage: "Unqualified"
+- disable_automation_for_lead (optional)
+- send_message_template: "Unqualified / polite close" (only if appropriate)
+
+#### Workflow W8: Language Detection (Optional)
+Trigger:
+- inbound_message_received
+Actions:
+- detect_language (simple heuristic)
+- set_lead_field: languageDetected
+- choose template language variant (if available)
+
+IMPORTANT:
+Even if your engine already has a workflow schema, map these workflows into your existing schema.
+If workflows are not yet supported in DB, create a minimal workflows table:
+- id, userId, key, name, enabled, trigger jsonb, conditions jsonb, actions jsonb, createdAt
+
+------------------------------------------------------------
+## 8) TEMPLATE INSTALL / PROVISIONING (must)
+When template is installed for a user:
+- Create pipeline stages in user's workspace (if not exists)
+- Create tags in user's workspace (if not exists)
+- Create message templates in user's workspace (if not exists)
+- Create AI rules entry for this template (if your system supports it; else store as workflow action logic)
+- Create workflows W1–W8 enabled by default
+- Link these assets to the entitlement/template_install record
+
+Idempotency:
+- Running install twice should not duplicate assets.
+- Use unique keys per user: (userId + templateId + assetKey)
+
+------------------------------------------------------------
+## 9) ONBOARDING FORM (FINAL — MUST IMPLEMENT)
+Use exactly the final version previously agreed:
+- Business Eligibility Gate (registered entity yes/no/not sure with hard stop)
+- WhatsApp Setup section with anti-wrong-number questions + migration willingness
+- Store payload + normalized fields + email to support@whachatcrm.com
+
+(Implementation note: store payload jsonb; normalized includes legalBusinessName, desiredWhatsappNumber, numberActiveStatus, bmEmail, timezone, preferredCallWindows, etc.)
+
+------------------------------------------------------------
+## 10) ACCEPTANCE CRITERIA (Definition of Done)
+- Premium template page renders correctly in three states (locked/purchased/submitted)
+- Purchase endpoint works (real or mocked) and unlocks onboarding
+- Onboarding multi-step form validates and blocks ineligible (no business) users
+- Submitting onboarding:
+  1) stores in DB
+  2) emails support@whachatcrm.com
+  3) updates entitlement status
+  4) triggers install/provision
+- Install provisions pipeline/tags/messages/workflows into user workspace
+- Status page shows submitted + install status
+- Everything is repeatable and works for multiple users
+
+END

@@ -16,6 +16,7 @@ import { getQueue } from "./queue";
 import oidcRouter from "./oidc";
 import bcrypt from "bcryptjs";
 import { storage } from "./storage";
+import { seedRealtorTemplate } from "./seedRealtorTemplate";
 import { createBullBoard } from "@bull-board/api";
 import { BullMQAdapter } from "@bull-board/api/bullMQAdapter";
 import { ExpressAdapter } from "@bull-board/express";
@@ -258,6 +259,13 @@ app.use((req, res, next) => {
     }
   } catch (err) {
     console.error('[SSO] Failed to seed SSO user:', err);
+  }
+
+  // Seed Realtor Growth Engine template
+  try {
+    await seedRealtorTemplate();
+  } catch (err) {
+    console.error('[Seed] Failed to seed Realtor Growth Engine template:', err);
   }
 
   // Start notification scheduler

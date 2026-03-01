@@ -1212,3 +1212,72 @@ export const LEAD_SCORE_THRESHOLDS = {
   warm: 50,
   hot: 75,
 } as const;
+
+// ==========================================
+// PREMIUM TEMPLATE TABLES
+// ==========================================
+
+export const templates = pgTable("templates", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  description: text("description"),
+  isPremium: boolean("is_premium").default(false),
+  version: text("version").default("1.0.0"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const templateEntitlements = pgTable("template_entitlements", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  templateId: text("template_id").notNull(),
+  purchasedAt: timestamp("purchased_at"),
+  onboardingSubmittedAt: timestamp("onboarding_submitted_at"),
+  status: text("status").notNull().default("locked"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const realtorOnboardingSubmissions = pgTable("realtor_onboarding_submissions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  templateId: text("template_id").notNull().default("realtor-growth-engine"),
+  submittedAt: timestamp("submitted_at").defaultNow(),
+  payload: jsonb("payload").notNull(),
+  normalized: jsonb("normalized"),
+  status: text("status").notNull().default("submitted"),
+});
+
+export const templateInstalls = pgTable("template_installs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  templateId: text("template_id").notNull(),
+  installedAt: timestamp("installed_at"),
+  installStatus: text("install_status").notNull().default("pending"),
+  installLog: text("install_log"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const templateAssets = pgTable("template_assets", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  templateId: text("template_id").notNull(),
+  assetType: text("asset_type").notNull(),
+  version: text("version").default("1.0.0"),
+  definition: jsonb("definition").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertTemplateSchema = createInsertSchema(templates);
+export const insertTemplateEntitlementSchema = createInsertSchema(templateEntitlements).omit({ id: true, createdAt: true });
+export const insertRealtorOnboardingSubmissionSchema = createInsertSchema(realtorOnboardingSubmissions).omit({ id: true, submittedAt: true });
+export const insertTemplateInstallSchema = createInsertSchema(templateInstalls).omit({ id: true, createdAt: true });
+export const insertTemplateAssetSchema = createInsertSchema(templateAssets).omit({ id: true, createdAt: true });
+
+export type Template = typeof templates.$inferSelect;
+export type InsertTemplate = z.infer<typeof insertTemplateSchema>;
+export type TemplateEntitlement = typeof templateEntitlements.$inferSelect;
+export type InsertTemplateEntitlement = z.infer<typeof insertTemplateEntitlementSchema>;
+export type RealtorOnboardingSubmission = typeof realtorOnboardingSubmissions.$inferSelect;
+export type InsertRealtorOnboardingSubmission = z.infer<typeof insertRealtorOnboardingSubmissionSchema>;
+export type TemplateInstall = typeof templateInstalls.$inferSelect;
+export type InsertTemplateInstall = z.infer<typeof insertTemplateInstallSchema>;
+export type TemplateAsset = typeof templateAssets.$inferSelect;
+export type InsertTemplateAsset = z.infer<typeof insertTemplateAssetSchema>;

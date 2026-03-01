@@ -23,6 +23,7 @@ const ChatbotBuilder = lazy(() => import("./ChatbotBuilder").then(m => ({ defaul
 const UnifiedInbox = lazy(() => import("./UnifiedInbox").then(m => ({ default: m.UnifiedInbox })));
 const WebsiteWidget = lazy(() => import("./WebsiteWidget").then(m => ({ default: m.WebsiteWidget })));
 const AIBrain = lazy(() => import("./AIBrain").then(m => ({ default: m.AIBrain })));
+const RealtorGrowthEngine = lazy(() => import("./RealtorGrowthEngine").then(m => ({ default: m.RealtorGrowthEngine })));
 
 const PageLoader = () => (
   <div className="flex h-full items-center justify-center">
@@ -89,6 +90,9 @@ function AppContent() {
               <Route path="/app/integrations" component={Integrations} />
               <Route path="/app/ai-brain" component={AIBrain} />
               <Route path="/app/search" component={Search} />
+              <Route path="/app/templates/realtor-growth-engine" component={RealtorGrowthEngine} />
+              <Route path="/app/templates/realtor-growth-engine/onboarding" component={RealtorGrowthEngine} />
+              <Route path="/app/templates/realtor-growth-engine/status" component={RealtorGrowthEngine} />
               <Route path="/app/settings" component={Settings} />
               <Route path="/app/help" component={HelpCenter} />
             </Switch>

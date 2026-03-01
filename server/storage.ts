@@ -33,8 +33,14 @@ import {
   type AiSettings, type AiBusinessKnowledge, type AiUsage, type AiLeadScore,
   type UserAutomationTemplate, type InsertUserAutomationTemplate,
   type TemplateUsageAnalytics, type InsertTemplateUsageAnalytics,
+  type Template, type TemplateEntitlement, type InsertTemplateEntitlement,
+  type RealtorOnboardingSubmission, type InsertRealtorOnboardingSubmission,
+  type TemplateInstall, type InsertTemplateInstall,
+  type TemplateAsset, type InsertTemplateAsset,
   aiSettings, aiBusinessKnowledge, aiUsage, aiLeadScores,
-  userAutomationTemplates, templateUsageAnalytics
+  userAutomationTemplates, templateUsageAnalytics,
+  templates as templatesTable, templateEntitlements, realtorOnboardingSubmissions,
+  templateInstalls, templateAssets
 } from "@shared/schema";
 import { db } from "../drizzle/db";
 import { users, chats, registeredPhones, messageUsage, conversationWindows, teamMembers, workflows, workflowExecutions, recurringReminders, webhooks, webhookDeliveries, integrations, messageTemplates, templateSends, dripCampaigns, dripSteps, dripEnrollments, dripSends, chatbotFlows, chatbotSessions, salespeople, demoBookings, salesConversions, adminSettings, contacts, conversations, messages, activityEvents, channelSettings, supportTickets, partners, commissions, agreementAcceptances, type InsertConversationWindow, type ConversationWindow } from "@shared/schema";
@@ -221,6 +227,17 @@ export interface IStorage {
   // Template usage analytics methods
   recordTemplateUsage(usage: InsertTemplateUsageAnalytics): Promise<TemplateUsageAnalytics>;
   getTemplateUsageStats(userId: string, templateId?: string): Promise<{ sent: number; delivered: number; read: number; replied: number; aiResponses: number }>;
+
+  // Premium template methods
+  getTemplateById(templateId: string): Promise<Template | undefined>;
+  getTemplateEntitlement(userId: string, templateId: string): Promise<TemplateEntitlement | undefined>;
+  upsertTemplateEntitlement(userId: string, templateId: string, updates: Partial<TemplateEntitlement>): Promise<TemplateEntitlement>;
+  createRealtorOnboardingSubmission(data: InsertRealtorOnboardingSubmission): Promise<RealtorOnboardingSubmission>;
+  getRealtorOnboardingSubmission(userId: string): Promise<RealtorOnboardingSubmission | undefined>;
+  getTemplateInstall(userId: string, templateId: string): Promise<TemplateInstall | undefined>;
+  createTemplateInstall(data: InsertTemplateInstall): Promise<TemplateInstall>;
+  updateTemplateInstall(id: string, updates: Partial<TemplateInstall>): Promise<TemplateInstall | undefined>;
+  getTemplateAssets(templateId: string): Promise<TemplateAsset[]>;
 }
 
 export class DbStorage implements IStorage {
@@ -2019,6 +2036,67 @@ export class DbStorage implements IStorage {
     .where(and(...conditions));
     
     return result[0] || { sent: 0, delivered: 0, read: 0, replied: 0, aiResponses: 0 };
+  }
+
+  // ============= Premium Template Methods =============
+
+  async getTemplateById(templateId: string): Promise<Template | undefined> {
+    const result = await db.select().from(templatesTable).where(eq(templatesTable.id, templateId));
+    return result[0];
+  }
+
+  async getTemplateEntitlement(userId: string, templateId: string): Promise<TemplateEntitlement | undefined> {
+    const result = await db.select().from(templateEntitlements)
+      .where(and(eq(templateEntitlements.userId, userId), eq(templateEntitlements.templateId, templateId)));
+    return result[0];
+  }
+
+  async upsertTemplateEntitlement(userId: string, templateId: string, updates: Partial<TemplateEntitlement>): Promise<TemplateEntitlement> {
+    const existing = await this.getTemplateEntitlement(userId, templateId);
+    if (existing) {
+      const result = await db.update(templateEntitlements)
+        .set(updates)
+        .where(eq(templateEntitlements.id, existing.id))
+        .returning();
+      return result[0];
+    }
+    const result = await db.insert(templateEntitlements)
+      .values({ userId, templateId, ...updates } as any)
+      .returning();
+    return result[0];
+  }
+
+  async createRealtorOnboardingSubmission(data: InsertRealtorOnboardingSubmission): Promise<RealtorOnboardingSubmission> {
+    const result = await db.insert(realtorOnboardingSubmissions).values(data).returning();
+    return result[0];
+  }
+
+  async getRealtorOnboardingSubmission(userId: string): Promise<RealtorOnboardingSubmission | undefined> {
+    const result = await db.select().from(realtorOnboardingSubmissions)
+      .where(eq(realtorOnboardingSubmissions.userId, userId))
+      .orderBy(desc(realtorOnboardingSubmissions.submittedAt))
+      .limit(1);
+    return result[0];
+  }
+
+  async getTemplateInstall(userId: string, templateId: string): Promise<TemplateInstall | undefined> {
+    const result = await db.select().from(templateInstalls)
+      .where(and(eq(templateInstalls.userId, userId), eq(templateInstalls.templateId, templateId)));
+    return result[0];
+  }
+
+  async createTemplateInstall(data: InsertTemplateInstall): Promise<TemplateInstall> {
+    const result = await db.insert(templateInstalls).values(data).returning();
+    return result[0];
+  }
+
+  async updateTemplateInstall(id: string, updates: Partial<TemplateInstall>): Promise<TemplateInstall | undefined> {
+    const result = await db.update(templateInstalls).set(updates).where(eq(templateInstalls.id, id)).returning();
+    return result[0];
+  }
+
+  async getTemplateAssets(templateId: string): Promise<TemplateAsset[]> {
+    return await db.select().from(templateAssets).where(eq(templateAssets.templateId, templateId));
   }
 }
 

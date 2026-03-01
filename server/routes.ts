@@ -51,6 +51,7 @@ import { registerObjectStorageRoutes } from "./replit_integrations/object_storag
 import shopifyRoutes from "./shopifyRoutes";
 import ghlRoutes from "./ghlRoutes";
 import { addInboxJob } from "./queue";
+import { registerTemplateRoutes } from "./templateRoutes";
 
 const TWILIO_BASE_COST_PER_MESSAGE = 0.005;
 const MARKUP_PERCENT = 5;
@@ -128,6 +129,9 @@ export async function registerRoutes(
 
   // Object storage routes for file uploads
   registerObjectStorageRoutes(app);
+
+  // Premium template routes
+  registerTemplateRoutes(app);
 
   // Shopify integration routes
   app.use('/api/shopify', shopifyRoutes);

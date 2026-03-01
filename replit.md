@@ -15,7 +15,26 @@ The application is a full multi-tenant SaaS implementation with:
 - Notification system for follow-up reminders (push & email)
 - PWA capabilities (installable, offline-first)
 
-## Recent Changes (February 11, 2026)
+## Recent Changes (March 1, 2026)
+- **Realtor Growth Engine (Premium Template)**:
+  - Premium locked vertical template for real estate industry
+  - Purchase -> Unlock -> Onboarding Form (required) -> Submission stored + emailed
+  - Auto-provisions template package: CRM Pipeline (9 stages), Tags (13), Lead Fields (12), Message Templates (9), Automation Workflows (W1-W8), AI lead scoring rules
+  - Multi-step onboarding form with business eligibility gate + WhatsApp setup anti-wrong-number logic
+  - Email to support@whachatcrm.com on onboarding submission (Resend)
+  - Status page showing submission status + install state
+  - Route guards: locked -> purchased -> submitted states
+  - Key files:
+    - `shared/schema.ts`: 5 new tables (templates, template_entitlements, realtor_onboarding_submissions, template_installs, template_assets)
+    - `server/templateRoutes.ts`: 5 API endpoints for template lifecycle
+    - `server/seedRealtorTemplate.ts`: Idempotent seed of template assets on startup
+    - `server/email.ts`: `sendRealtorOnboardingEmail` function
+    - `server/storage.ts`: 9 new storage methods for template operations
+    - `client/src/pages/RealtorGrowthEngine.tsx`: All-in-one page (detail, checkout, onboarding, status)
+  - Frontend routes: `/app/templates/realtor-growth-engine`, `/app/templates/realtor-growth-engine/onboarding`, `/app/templates/realtor-growth-engine/status`
+  - API routes: `GET/POST /api/templates/realtor-growth-engine/*`
+
+## Previous Changes (February 11, 2026)
 - **BullMQ + Redis Guaranteed Message Delivery**:
   - Upgraded unified inbox from best-effort dual-write to guaranteed delivery using BullMQ + Redis (Upstash)
   - Queue: `unified-inbox` with exponential backoff (5s start, 5 attempts), deduplication by externalMessageId

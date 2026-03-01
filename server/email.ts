@@ -668,3 +668,84 @@ export async function sendFollowUpReminderEmail(email: string, chatName: string,
     `
   });
 }
+
+export async function sendRealtorOnboardingEmail(payload: any, normalized: any, submissionId: string): Promise<boolean> {
+  const n = normalized || {};
+  const p = payload || {};
+  const fullName = n.fullName || p.fullName || 'N/A';
+  const email = n.email || p.email || 'N/A';
+  const mobile = n.mobile || p.mobile || 'N/A';
+  const legalBusinessName = n.legalBusinessName || p.legalBusinessName || 'N/A';
+  const country = n.country || p.country || 'N/A';
+  const hasRegisteredEntity = p.hasRegisteredEntity || 'N/A';
+  const docsAvailable = p.docsAvailable || 'N/A';
+  const website = n.website || p.website || 'N/A';
+  const desiredWhatsappNumber = n.desiredWhatsappNumber || p.desiredWhatsappNumber || 'N/A';
+  const numberActiveOnWhatsapp = p.numberActiveOnWhatsapp || 'N/A';
+  const migrateOrNew = p.migrateOrNew || 'N/A';
+  const smsAccess = p.smsAccess || 'N/A';
+  const numberOwnership = p.numberOwnership || 'N/A';
+  const hasBM = p.hasBM || 'N/A';
+  const bmEmail = n.bmEmail || p.bmEmail || 'N/A';
+  const bmId = p.bmId || 'N/A';
+  const teamSize = p.teamSize || 'N/A';
+  const seats = p.seats || 'N/A';
+  const notifications = p.notifications || 'N/A';
+  const leadSources = p.leadSources || 'N/A';
+  const goals = p.goals || 'N/A';
+  const timezone = n.timezone || p.timezone || 'N/A';
+  const preferredCallWindows = n.preferredCallWindows || p.preferredCallWindows || 'N/A';
+  const notes = p.notes || 'N/A';
+
+  return sendEmail({
+    to: 'support@whachatcrm.com',
+    subject: `New Realtor Growth Engine Onboarding — ${legalBusinessName} — ${fullName}`,
+    html: `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f1f5f9;font-family:Arial,sans-serif;">
+      <div style="max-width:640px;margin:40px auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e2e8f0;">
+        <div style="background:linear-gradient(135deg,#059669,#0d9488);padding:30px;text-align:center;">
+          <h1 style="color:#fff;margin:0;font-size:22px;">Realtor Growth Engine — New Onboarding</h1>
+        </div>
+        <div style="padding:30px;">
+          <h2 style="color:#1e293b;font-size:16px;border-bottom:1px solid #e2e8f0;padding-bottom:8px;">Contact Information</h2>
+          <p style="color:#475569;margin:6px 0;"><strong>Full Name:</strong> ${fullName}</p>
+          <p style="color:#475569;margin:6px 0;"><strong>Email:</strong> ${email}</p>
+          <p style="color:#475569;margin:6px 0;"><strong>Mobile:</strong> ${mobile}</p>
+          <h2 style="color:#1e293b;font-size:16px;border-bottom:1px solid #e2e8f0;padding-bottom:8px;margin-top:24px;">Business Eligibility</h2>
+          <p style="color:#475569;margin:6px 0;"><strong>Registered Entity:</strong> ${hasRegisteredEntity}</p>
+          <p style="color:#475569;margin:6px 0;"><strong>Country:</strong> ${country}</p>
+          <p style="color:#475569;margin:6px 0;"><strong>Legal Business Name:</strong> ${legalBusinessName}</p>
+          <p style="color:#475569;margin:6px 0;"><strong>Documents Available:</strong> ${docsAvailable}</p>
+          <p style="color:#475569;margin:6px 0;"><strong>Website:</strong> ${website}</p>
+          <h2 style="color:#1e293b;font-size:16px;border-bottom:1px solid #e2e8f0;padding-bottom:8px;margin-top:24px;">WhatsApp Setup</h2>
+          <p style="color:#475569;margin:6px 0;"><strong>Desired Number:</strong> ${desiredWhatsappNumber}</p>
+          <p style="color:#475569;margin:6px 0;"><strong>Active on WhatsApp:</strong> ${numberActiveOnWhatsapp}</p>
+          <p style="color:#475569;margin:6px 0;"><strong>Migrate / New:</strong> ${migrateOrNew}</p>
+          <p style="color:#475569;margin:6px 0;"><strong>SMS Access:</strong> ${smsAccess}</p>
+          <p style="color:#475569;margin:6px 0;"><strong>Ownership:</strong> ${numberOwnership}</p>
+          <h2 style="color:#1e293b;font-size:16px;border-bottom:1px solid #e2e8f0;padding-bottom:8px;margin-top:24px;">Meta Business Manager</h2>
+          <p style="color:#475569;margin:6px 0;"><strong>Has BM:</strong> ${hasBM}</p>
+          <p style="color:#475569;margin:6px 0;"><strong>BM Email:</strong> ${bmEmail}</p>
+          <p style="color:#475569;margin:6px 0;"><strong>BM ID:</strong> ${bmId}</p>
+          <h2 style="color:#1e293b;font-size:16px;border-bottom:1px solid #e2e8f0;padding-bottom:8px;margin-top:24px;">CRM & Team</h2>
+          <p style="color:#475569;margin:6px 0;"><strong>Team Size:</strong> ${teamSize}</p>
+          <p style="color:#475569;margin:6px 0;"><strong>Seats:</strong> ${seats}</p>
+          <p style="color:#475569;margin:6px 0;"><strong>Notifications:</strong> ${notifications}</p>
+          <h2 style="color:#1e293b;font-size:16px;border-bottom:1px solid #e2e8f0;padding-bottom:8px;margin-top:24px;">Lead Sources & Goals</h2>
+          <p style="color:#475569;margin:6px 0;"><strong>Sources:</strong> ${Array.isArray(leadSources) ? leadSources.join(', ') : leadSources}</p>
+          <p style="color:#475569;margin:6px 0;"><strong>Goals:</strong> ${Array.isArray(goals) ? goals.join(', ') : goals}</p>
+          <h2 style="color:#1e293b;font-size:16px;border-bottom:1px solid #e2e8f0;padding-bottom:8px;margin-top:24px;">Scheduling</h2>
+          <p style="color:#475569;margin:6px 0;"><strong>Timezone:</strong> ${timezone}</p>
+          <p style="color:#475569;margin:6px 0;"><strong>Preferred Windows:</strong> ${Array.isArray(preferredCallWindows) ? preferredCallWindows.join(', ') : preferredCallWindows}</p>
+          <h2 style="color:#1e293b;font-size:16px;border-bottom:1px solid #e2e8f0;padding-bottom:8px;margin-top:24px;">Notes</h2>
+          <p style="color:#475569;margin:6px 0;">${notes}</p>
+          <div style="margin-top:30px;padding:16px;background:#f0fdf4;border-radius:8px;border:1px solid #bbf7d0;">
+            <p style="color:#166534;margin:4px 0;font-size:13px;"><strong>Submission ID:</strong> ${submissionId}</p>
+            <p style="color:#166534;margin:4px 0;font-size:13px;"><strong>Status:</strong> Submitted — Awaiting Review</p>
+          </div>
+        </div>
+        <div style="text-align:center;padding:20px;background:#f8fafc;border-top:1px solid #e2e8f0;">
+          <p style="margin:0;color:#94a3b8;font-size:12px;">WhaChatCRM ${new Date().getFullYear()}</p>
+        </div>
+      </div></body></html>`
+  });
+}
