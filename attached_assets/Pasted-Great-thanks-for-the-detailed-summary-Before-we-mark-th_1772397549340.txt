@@ -1,0 +1,50 @@
+Great — thanks for the detailed summary.
+
+Before we mark this complete, I want to run a quick acceptance check with you and make sure everything is production-safe and repeatable (especially installs + email).
+
+Can you please send me the following in one message:
+
+1) Where to test (exact URLs)
+- Template page URL
+- Checkout URL
+- Onboarding URL
+- Status URL
+
+2) Test credentials
+- A test user account I can use (email/password) OR clear steps to create one
+- If there’s a way to reset entitlement/submission for retesting, tell me the steps
+
+3) Proof of critical behaviors (screenshots or short Loom)
+A) Locking logic
+- Not purchased → onboarding route blocked (redirect)
+- Purchased → onboarding unlocked
+- Submitted → onboarding redirects to status
+
+B) Business eligibility gate
+- “No / Not sure” must hard-stop the form and prevent submit
+
+C) WhatsApp number logic
+- Confirm the section captures “active on WhatsApp / migrate / new number” correctly
+
+D) Install / provisioning idempotency (IMPORTANT)
+- If /install is called twice, it must NOT duplicate pipeline/tags/templates/workflows
+- Please confirm the unique keys used for each seeded asset (per user + template + asset key)
+
+E) Manual install/retry
+- If install fails, /install can be retried safely and updates template_installs properly
+
+4) Email deliverability
+- Confirm Resend is using a verified sending domain
+- Confirm the email includes: business name, contact, WhatsApp details, Meta details, scheduling, notes, and submission ID
+
+5) Data / schema handoff
+- Link to the new Drizzle schema files + migration files
+- Where the startup seeding lives (template_assets seeding code)
+- Where the workflow schema lives and how actions/conditions are interpreted
+
+6) Quick admin/maintenance notes
+- How do we bump template_assets versions?
+- How do we add/edit message templates and workflows later?
+- Any env vars required (RESEND_API_KEY, FROM_EMAIL, etc.)
+
+Once I have the above and confirm the behaviors, we’re good to close this milestone.

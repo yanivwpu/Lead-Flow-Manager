@@ -94,8 +94,8 @@ export function registerTemplateRoutes(app: Express) {
         return res.status(400).json({ error: "Invalid form data", details: validation.error.issues });
       }
 
-      if (payload.isRegisteredEntity === "no") {
-        return res.status(400).json({ error: "A registered business entity is required for this template." });
+      if (payload.isRegisteredEntity === "no" || payload.isRegisteredEntity === "not_sure") {
+        return res.status(400).json({ error: "A registered business entity is required for this template. Meta requires business verification for WhatsApp API access." });
       }
 
       const normalized = {

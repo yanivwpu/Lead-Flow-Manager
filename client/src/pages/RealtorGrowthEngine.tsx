@@ -342,10 +342,14 @@ export function RealtorGrowthEngine() {
   );
 
   const OnboardingForm = () => {
+    const isEligibilityBlocked = step === 1 && form.watch("isRegisteredEntity") !== "yes";
+
     const nextStep = async () => {
       const fields = getFieldsForStep(step);
       const result = await form.trigger(fields as any);
-      if (result) setStep(s => Math.min(s + 1, totalSteps));
+      if (!result) return;
+      if (step === 1 && form.getValues("isRegisteredEntity") !== "yes") return;
+      setStep(s => Math.min(s + 1, totalSteps));
     };
 
     const prevStep = () => setStep(s => Math.max(s - 1, 1));
@@ -415,6 +419,20 @@ export function RealtorGrowthEngine() {
                     </FormItem>
                   )}
                 />
+                {isEligibilityBlocked && (
+                  <div className="mt-4 p-4 rounded-lg bg-red-50 border border-red-200 flex items-start gap-3" data-testid="eligibility-block">
+                    <AlertCircle className="w-5 h-5 text-red-500 mt-0.5 shrink-0" />
+                    <div>
+                      <p className="font-semibold text-red-800 text-sm">Cannot proceed</p>
+                      <p className="text-red-700 text-sm mt-1">
+                        A registered business entity is required for WhatsApp Business API access. Meta requires business verification before provisioning an official WhatsApp number.
+                      </p>
+                      <p className="text-red-600 text-xs mt-2">
+                        If you need help with registration, contact us at <span className="font-medium">support@whachatcrm.com</span>.
+                      </p>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -708,7 +726,7 @@ export function RealtorGrowthEngine() {
                 Back
               </Button>
               {step < totalSteps ? (
-                <Button type="button" onClick={nextStep} data-testid="button-next-step">
+                <Button type="button" onClick={nextStep} disabled={isEligibilityBlocked} data-testid="button-next-step">
                   Next
                   <ChevronRight className="ml-2 w-4 h-4" />
                 </Button>
