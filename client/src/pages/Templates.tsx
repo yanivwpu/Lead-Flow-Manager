@@ -13,10 +13,11 @@ import { Link } from "wouter";
 import { 
   FileText, RefreshCw, Lock, Zap, Send, Clock, CheckCircle2, XCircle, 
   AlertCircle, Image, Video, FileIcon, LayoutGrid, ChevronLeft, ChevronRight,
-  Users, Target, Sparkles
+  Users, Target, Sparkles, Rocket, Crown, Bot, MessageSquare, CalendarCheck, ArrowRight
 } from "lucide-react";
 import { LocalizedTemplateSelector } from "@/components/LocalizedTemplateSelector";
 import { apiRequest } from "@/lib/queryClient";
+import { useLocation } from "wouter";
 
 interface MessageTemplate {
   id: string;
@@ -58,6 +59,91 @@ const STATUS_ICONS: Record<string, any> = {
   pending: { icon: Clock, color: "text-amber-500" },
   rejected: { icon: XCircle, color: "text-red-500" },
 };
+
+function GrowthEnginesTab() {
+  const [, setLocation] = useLocation();
+
+  const features = [
+    { icon: MessageSquare, text: "Capture leads from WhatsApp & ads instantly" },
+    { icon: Bot, text: "AI qualifies buyers & sellers automatically" },
+    { icon: Clock, text: "Smart follow-ups so no lead goes cold" },
+    { icon: Target, text: "Built-in real estate CRM pipeline" },
+    { icon: CalendarCheck, text: "Book showings & calls from chat" },
+  ];
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h2 className="text-lg font-semibold text-gray-900">Growth Engines</h2>
+        <p className="text-sm text-gray-500 mt-0.5">
+          Pre-built industry systems designed to capture, qualify, and convert leads automatically on WhatsApp.
+        </p>
+      </div>
+
+      <Card className="overflow-hidden border-emerald-200/60 shadow-sm" data-testid="card-realtor-growth-engine">
+        <div className="flex flex-col lg:flex-row">
+          <div className="flex-1 p-5 lg:p-6">
+            <div className="flex items-start justify-between mb-3">
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <Badge className="bg-gradient-to-r from-emerald-500 to-teal-500 text-white border-0 text-[10px] px-2 py-0">Premium</Badge>
+                </div>
+                <h3 className="text-lg font-bold text-gray-900" data-testid="text-engine-title">Realtor Growth Engine</h3>
+              </div>
+              <div className="hidden sm:flex items-center justify-center w-10 h-10 rounded-lg bg-emerald-50">
+                <Rocket className="h-5 w-5 text-emerald-600" />
+              </div>
+            </div>
+
+            <p className="text-sm text-gray-600 mb-4 leading-relaxed">
+              Turn property inquiries into qualified buyers and booked showings — automatically.
+            </p>
+
+            <div className="space-y-2 mb-5">
+              {features.map((f, i) => (
+                <div key={i} className="flex items-center gap-2.5 text-sm text-gray-700">
+                  <div className="flex items-center justify-center w-5 h-5 rounded-full bg-emerald-50 shrink-0">
+                    <f.icon className="h-3 w-3 text-emerald-600" />
+                  </div>
+                  <span>{f.text}</span>
+                </div>
+              ))}
+            </div>
+
+            <Button
+              className="bg-emerald-600 hover:bg-emerald-700 text-white w-full sm:w-auto"
+              onClick={() => setLocation("/app/templates/realtor-growth-engine")}
+              data-testid="button-view-activate-engine"
+            >
+              View & Activate
+              <ArrowRight className="ml-2 h-4 w-4" />
+            </Button>
+          </div>
+
+          <div className="lg:w-56 border-t lg:border-t-0 lg:border-l border-gray-100 bg-gray-50/50 p-5 lg:p-6 flex flex-col justify-center">
+            <div className="text-center lg:text-left">
+              <div className="flex items-baseline gap-1 justify-center lg:justify-start">
+                <span className="text-2xl font-bold text-gray-900">$199</span>
+              </div>
+              <p className="text-xs text-gray-500 mt-0.5">one-time onboarding</p>
+
+              <div className="mt-4 pt-3 border-t border-gray-200">
+                <div className="flex items-center gap-1.5 text-xs text-gray-600">
+                  <Crown className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+                  <span>Requires Pro + AI plan</span>
+                </div>
+              </div>
+
+              <p className="text-[10px] text-gray-400 mt-3 leading-snug">
+                WhatsApp conversation fees billed separately by Meta
+              </p>
+            </div>
+          </div>
+        </div>
+      </Card>
+    </div>
+  );
+}
 
 export function Templates() {
   const { data: subscription, isLoading: subLoading } = useSubscription();
@@ -220,14 +306,15 @@ export function Templates() {
 
   return (
     <div className="flex-1 h-full bg-white flex flex-col overflow-hidden">
-      <div className="px-4 md:px-6 py-4 md:py-6 border-b border-gray-100 flex-shrink-0">
+      <div className="px-4 md:px-6 py-3 md:py-4 border-b border-gray-100 flex-shrink-0">
         <div className="flex items-center justify-between max-w-5xl mx-auto">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Message Templates</h1>
-            <p className="text-gray-500 mt-1">Send pre-approved templates for smart retargeting</p>
+            <h1 className="text-xl md:text-2xl font-bold text-gray-900">Message Templates</h1>
+            <p className="text-gray-500 text-sm mt-0.5">Send pre-approved templates for smart retargeting</p>
           </div>
           <Button 
             variant="outline"
+            size="sm"
             onClick={() => syncTemplatesMutation.mutate()}
             disabled={syncTemplatesMutation.isPending}
             data-testid="button-sync-templates"
@@ -238,10 +325,10 @@ export function Templates() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 md:px-6 py-4 pb-24 md:pb-6">
+      <div className="flex-1 overflow-y-auto px-4 md:px-6 py-3 pb-24 md:pb-6">
         <div className="max-w-5xl mx-auto">
-          <Tabs defaultValue="presets" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-3 h-auto p-1">
+          <Tabs defaultValue="presets" className="space-y-4">
+          <TabsList className="grid w-full grid-cols-4 h-auto p-1 sticky top-0 z-10 bg-muted">
             <TabsTrigger value="presets" data-testid="tab-presets" className="text-xs sm:text-sm py-2 px-1 sm:px-3 flex flex-col sm:flex-row items-center gap-1">
               <Sparkles className="h-4 w-4 sm:mr-1" />
               <span className="hidden sm:inline">Preset Templates</span>
@@ -256,6 +343,12 @@ export function Templates() {
               <Target className="h-4 w-4 sm:mr-1" />
               <span className="hidden sm:inline">Retargeting ({retargetableChats.length})</span>
               <span className="sm:hidden">Retarget ({retargetableChats.length})</span>
+            </TabsTrigger>
+            <TabsTrigger value="growth-engines" data-testid="tab-growth-engines" className="text-xs sm:text-sm py-2 px-1 sm:px-3 flex flex-col sm:flex-row items-center gap-1 relative">
+              <Rocket className="h-4 w-4 sm:mr-1" />
+              <span className="hidden sm:inline">Growth Engines</span>
+              <span className="sm:hidden">Engines</span>
+              <Badge variant="secondary" className="absolute -top-1 -right-1 text-[9px] px-1 py-0 h-4 bg-emerald-100 text-emerald-700 border-0 hidden sm:flex">NEW</Badge>
             </TabsTrigger>
           </TabsList>
 
@@ -459,6 +552,10 @@ export function Templates() {
                 )}
               </CardContent>
             </Card>
+          </TabsContent>
+
+          <TabsContent value="growth-engines" className="mt-0">
+            <GrowthEnginesTab />
           </TabsContent>
         </Tabs>
 

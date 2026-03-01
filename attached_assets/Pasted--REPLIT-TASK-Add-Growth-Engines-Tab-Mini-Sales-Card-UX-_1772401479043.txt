@@ -1,0 +1,112 @@
+# REPLIT TASK — Add “Growth Engines” Tab + Mini Sales Card + UX polish (14” screens)
+Scope: Implement inside the existing **Templates → Message Templates** page (the top tab row currently: Preset Templates | Template Library | Retargeting).
+Goal: Make “Growth Engines” a discoverable upsell surface with a premium mini product card, better wording, and improved layout on 14” screens.
+
+✅ IN SCOPE
+- Add new tab: “Growth Engines”
+- When selected, render a “mini sales” section with product card + pricing + CTA
+- Update copy (wordings) to be outcome-focused
+- Improve above-the-fold layout and spacing for 14” screens (no content cut-off feel)
+- CTA routes to existing premium page: `/app/templates/realtor-growth-engine`
+
+❌ OUT OF SCOPE
+- Do NOT build a separate gallery page yet
+- Do NOT change sidebar structure
+- Do NOT implement Stripe here (this is discovery/upsell; purchase stays on the Realtor page)
+
+---
+
+## 1) Add new tab
+Add 4th tab to the existing tab bar:
+- Label: **Growth Engines**
+- Optional: small badge “NEW” (only if quick and consistent with existing UI components)
+
+Tab order:
+Preset Templates | Template Library | Retargeting | Growth Engines
+
+Behavior:
+- Clicking sets active tab state (same pattern as existing tabs).
+- If tabs use URL query/state, follow the same convention (e.g., `?tab=growth-engines`); otherwise use local state.
+
+---
+
+## 2) Growth Engines tab content (mini sales section)
+When Growth Engines tab is active, render:
+
+### A) Header (compact)
+- Title: **Growth Engines**
+- Subtitle:
+  “Pre-built industry systems designed to capture, qualify, and convert leads automatically on WhatsApp.”
+
+### B) Product Card (Realtor Growth Engine)
+Single premium card (for now) with:
+- Badge: “Premium”
+- Title: **Realtor Growth Engine**
+- Short outcome description:
+  “Turn property inquiries into qualified buyers and booked showings — automatically.”
+
+#### Feature bullets (keep short, 5 max)
+- “Capture leads from WhatsApp & ads instantly”
+- “AI qualifies buyers & sellers automatically”
+- “Smart follow-ups so no lead goes cold”
+- “Built-in real estate CRM pipeline”
+- “Book showings & calls from chat”
+
+#### Pricing block (visible)
+- Price line (bold):
+  “$199 one-time onboarding”
+- Requirement line (smaller):
+  “Requires Pro + AI plan”
+- Optional micro-note (smallest):
+  “WhatsApp conversation fees billed by Meta”
+
+#### CTA buttons
+Primary button: **View & Activate**
+- Route to: `/app/templates/realtor-growth-engine`
+
+Secondary button (optional): **Learn more**
+- Same route (or omit if redundant)
+
+---
+
+## 3) UX improvements for 14” screens (important)
+Problem: On smaller/laptop displays, this page feels “cut off” and the action is not obvious.
+
+Implement the following improvements (keep minimal and consistent):
+
+### A) Reduce vertical padding above the content
+- Tighten spacing between:
+  - page title/subtitle
+  - tab bar
+  - content block
+Target: bring the card fully into view on a 14” laptop without heavy scrolling.
+
+### B) Make tab bar sticky (recommended if easy)
+- On scroll, keep the tabs pinned at the top of the content area (NOT the whole viewport sidebar).
+- This prevents users from losing navigation when scrolling.
+
+### C) Ensure card fits above fold
+- Card should not exceed ~420–480px height on typical 14” viewport.
+- Bullets should wrap nicely and not overflow.
+
+### D) Add clear visual hierarchy and “shop-like” layout
+- Use a max-width container (avoid overly wide text lines).
+- Use consistent spacing and subtle separators (no heavy borders).
+
+---
+
+## 4) Copy changes (wordings)
+Update any existing “Preset Automation Templates” intro copy only if it clashes, otherwise leave as-is.
+For Growth Engines tab, use the exact copy provided above.
+
+---
+
+## 5) Acceptance Criteria
+- New “Growth Engines” tab appears and matches existing tab styles.
+- Clicking it shows the new mini sales section + Realtor Growth Engine product card.
+- Pricing ($199) and “Requires Pro + AI plan” are visible without scrolling on 14” screens.
+- “View & Activate” routes to `/app/templates/realtor-growth-engine`.
+- Existing tabs (Preset/Templates Library/Retargeting) unchanged and still work.
+- No layout overflow or clipped content on common laptop heights (test ~768px height).
+
+END
