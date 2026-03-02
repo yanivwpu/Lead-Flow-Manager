@@ -30,7 +30,11 @@ import {
   ShieldCheck,
   Building2,
   Calendar,
-  AlertCircle
+  AlertCircle,
+  Video,
+  Handshake,
+  RotateCcw,
+  BarChart3
 } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -173,7 +177,7 @@ export function RealtorGrowthEngine() {
         )}>
           {status !== 'locked' ? <CheckCircle2 className="w-5 h-5" /> : "1"}
         </div>
-        <span className="text-xs mt-1.5 font-medium">Purchase</span>
+        <span className="text-xs mt-1.5 font-medium">Activate</span>
       </div>
       <div className="w-10 h-0.5 bg-gray-200" />
       <div className="flex flex-col items-center">
@@ -184,7 +188,7 @@ export function RealtorGrowthEngine() {
         )}>
           {status === 'submitted' || status === 'installed' ? <CheckCircle2 className="w-5 h-5" /> : "2"}
         </div>
-        <span className="text-xs mt-1.5 font-medium">Onboarding</span>
+        <span className="text-xs mt-1.5 font-medium">Setup</span>
       </div>
       <div className="w-10 h-0.5 bg-gray-200" />
       <div className="flex flex-col items-center">
@@ -207,9 +211,9 @@ export function RealtorGrowthEngine() {
             <ShieldCheck className="w-3 h-3 mr-1" />
             Premium Template
           </Badge>
-          <h1 className="text-2xl font-bold tracking-tight text-gray-900">Realtor Growth Engine</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-gray-900">Convert your WhatsApp inquiries into qualified buyers & booked showings — automatically.</h1>
           <p className="text-base text-muted-foreground mt-1">
-            The ultimate WhatsApp-first automation system for real estate professionals.
+            A done-for-you WhatsApp automation system built specifically for real estate agents. Capture, qualify, and follow up with every lead — without missing opportunities.
           </p>
           <Button 
             className="mt-3 bg-brand-green hover:bg-brand-green/90"
@@ -217,9 +221,10 @@ export function RealtorGrowthEngine() {
             disabled={purchaseMutation.isPending || status === 'submitted' || status === 'installed'}
             data-testid="button-hero-cta"
           >
-            {status === 'locked' ? 'Unlock Now for $199' : status === 'purchased' ? 'Start Onboarding' : 'Onboarding Submitted'}
+            {status === 'locked' ? 'Start Onboarding' : status === 'purchased' ? 'Start Onboarding' : 'Onboarding Submitted'}
             <ChevronRight className="ml-2 w-4 h-4" />
           </Button>
+          <p className="text-[11px] text-muted-foreground mt-1.5">One-time onboarding $199 · Requires Pro + AI plan</p>
         </div>
         {status === 'locked' && (
           <Button 
@@ -228,7 +233,7 @@ export function RealtorGrowthEngine() {
             disabled={purchaseMutation.isPending}
             data-testid="button-purchase-template"
           >
-            Unlock Now for $199
+            Start Onboarding
             <ChevronRight className="ml-2 w-4 h-4" />
           </Button>
         )}
@@ -252,16 +257,18 @@ export function RealtorGrowthEngine() {
           <Card>
             <CardHeader className="pb-2 pt-4 px-5">
               <CardTitle className="text-base">What you get</CardTitle>
-              <CardDescription className="text-xs">A complete, out-of-the-box automation system.</CardDescription>
+              <CardDescription className="text-xs">Everything you need to capture, qualify, and convert real estate leads on WhatsApp — fully set up for you.</CardDescription>
             </CardHeader>
             <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-3 px-5 pb-4">
               {[
-                { icon: Rocket, title: "8 High-Converting Workflows", desc: "From lead capture to closing." },
-                { icon: MessageSquare, title: "Optimized Message Templates", desc: "Professionally written scripts." },
-                { icon: Zap, title: "AI-Powered Lead Routing", desc: "Smart assignment based on criteria." },
-                { icon: Target, title: "Retargeting Sequences", desc: "Re-engage cold leads automatically." },
-                { icon: ClipboardCheck, title: "Property Viewing Automations", desc: "Schedule and confirm viewings." },
-                { icon: Users, title: "Team Collaboration Tools", desc: "Built-in pipeline for agencies." },
+                { icon: Rocket, title: "High-Converting Lead Workflows", desc: "From first inquiry to booked showing and follow-up." },
+                { icon: Zap, title: "AI Lead Qualification & Routing", desc: "Automatically identify serious buyers and sellers so you focus only on real opportunities." },
+                { icon: Clock, title: "Smart Follow-Up Sequences", desc: "Never lose a lead again — automated follow-ups keep conversations active." },
+                { icon: MessageSquare, title: "Optimized WhatsApp Message Templates", desc: "Professionally written scripts designed specifically for real estate conversations." },
+                { icon: RotateCcw, title: "Retargeting & Re-engagement Flows", desc: "Automatically follow up with cold or unresponsive leads." },
+                { icon: BarChart3, title: "Built-In Real Estate CRM Pipeline", desc: "Track every lead from first message to closing inside a structured deal pipeline." },
+                { icon: Users, title: "Team Collaboration & Assignment", desc: "Assign conversations, add notes, and manage deals with your team." },
+                { icon: Handshake, title: "Done-for-You Setup + Live Onboarding Sessions", desc: "We configure everything with you and ensure your system is fully operational." },
               ].map((item, idx) => (
                 <div key={idx} className="flex space-x-2.5">
                   <div className="mt-0.5 bg-brand-green/10 p-1.5 rounded-md">
@@ -299,29 +306,38 @@ export function RealtorGrowthEngine() {
               <ol className="relative border-l border-gray-200 ml-3 space-y-4">
                 <li className="mb-6 ml-6">
                   <span className="absolute flex items-center justify-center w-7 h-7 bg-brand-green rounded-full -left-3.5 ring-4 ring-white">
-                    <ShieldCheck className="w-3.5 h-3.5 text-white" />
+                    <Zap className="w-3.5 h-3.5 text-white" />
                   </span>
-                  <h3 className="font-semibold text-sm leading-tight">Step 1: Setup & Compliance</h3>
+                  <h3 className="font-semibold text-sm leading-tight">Step 1 — Activate your system</h3>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    We handle Meta Business verification and WhatsApp Official API setup for 100% compliance.
+                    Purchase and unlock your Realtor Growth Engine.
                   </p>
                 </li>
                 <li className="mb-6 ml-6">
                   <span className="absolute flex items-center justify-center w-7 h-7 bg-brand-green rounded-full -left-3.5 ring-4 ring-white">
-                    <Rocket className="w-3.5 h-3.5 text-white" />
+                    <ClipboardCheck className="w-3.5 h-3.5 text-white" />
                   </span>
-                  <h3 className="font-semibold text-sm leading-tight">Step 2: Automated Provisioning</h3>
+                  <h3 className="font-semibold text-sm leading-tight">Step 2 — Complete onboarding form</h3>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    Our engine deploys all 8 workflows, tags, and pipeline stages directly into your workspace.
+                    Provide your business, WhatsApp, and CRM details so we can configure everything properly.
+                  </p>
+                </li>
+                <li className="mb-6 ml-6">
+                  <span className="absolute flex items-center justify-center w-7 h-7 bg-brand-green rounded-full -left-3.5 ring-4 ring-white">
+                    <Video className="w-3.5 h-3.5 text-white" />
+                  </span>
+                  <h3 className="font-semibold text-sm leading-tight">Step 3 — Live setup session</h3>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    We connect with you on Zoom and complete your WhatsApp + CRM setup together.
                   </p>
                 </li>
                 <li className="ml-6">
                   <span className="absolute flex items-center justify-center w-7 h-7 bg-brand-green rounded-full -left-3.5 ring-4 ring-white">
                     <CheckCircle2 className="w-3.5 h-3.5 text-white" />
                   </span>
-                  <h3 className="font-semibold text-sm leading-tight">Step 3: Customization & Go Live</h3>
+                  <h3 className="font-semibold text-sm leading-tight">Step 4 — Go live</h3>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    A dedicated specialist helps you tweak messages to your voice and launches your first campaign.
+                    Your automation system is fully active and ready to capture and convert leads automatically.
                   </p>
                 </li>
               </ol>
@@ -333,24 +349,26 @@ export function RealtorGrowthEngine() {
           <Card>
             <CardHeader className="pb-2 pt-4 px-5">
               <CardTitle className="text-sm">Requirements</CardTitle>
+              <CardDescription className="text-xs">To activate your WhatsApp automation system, you'll need:</CardDescription>
             </CardHeader>
             <CardContent className="space-y-2 px-5 pb-4">
               <div className="flex items-start space-x-2">
                 <CheckCircle2 className="w-3.5 h-3.5 text-brand-green mt-0.5" />
-                <span className="text-xs">Registered Business Entity</span>
+                <span className="text-xs">Registered business entity (LLC / Corp / Ltd)</span>
               </div>
               <div className="flex items-start space-x-2">
                 <CheckCircle2 className="w-3.5 h-3.5 text-brand-green mt-0.5" />
-                <span className="text-xs">Meta Business Manager Access</span>
+                <span className="text-xs">Access to your Meta (Facebook) Business Manager</span>
               </div>
               <div className="flex items-start space-x-2">
                 <CheckCircle2 className="w-3.5 h-3.5 text-brand-green mt-0.5" />
-                <span className="text-xs">Official WhatsApp API (Meta)</span>
+                <span className="text-xs">WhatsApp Business API eligibility (we guide you through this)</span>
               </div>
               <div className="flex items-start space-x-2">
                 <CheckCircle2 className="w-3.5 h-3.5 text-brand-green mt-0.5" />
-                <span className="text-xs">Pro Subscription Plan</span>
+                <span className="text-xs">Active WhachatCRM Pro + AI plan</span>
               </div>
+              <p className="text-[11px] text-muted-foreground pt-1">Our team will guide you through each step during onboarding.</p>
             </CardContent>
           </Card>
 
@@ -363,12 +381,32 @@ export function RealtorGrowthEngine() {
             </CardHeader>
             <CardContent className="px-5 pb-3">
               <p className="text-xs text-muted-foreground">
-                We only onboard 10 realtors per month to ensure premium white-glove setup and support.
+                To ensure high-quality onboarding and personalized setup support, we onboard a limited number of real estate agents each month.
+              </p>
+              <p className="text-xs font-medium text-brand-green mt-1.5">
+                Secure your activation slot today.
               </p>
             </CardContent>
           </Card>
         </div>
       </div>
+
+      <Card className="mt-5">
+        <CardContent className="px-5 py-6 text-center">
+          <h3 className="text-lg font-bold text-gray-900 mb-1">Ready to turn your WhatsApp into a lead-conversion machine?</h3>
+          <p className="text-sm text-muted-foreground mb-4">Launch your Realtor Growth Engine today and activate your automated lead system with our team.</p>
+          <Button 
+            className="bg-brand-green hover:bg-brand-green/90"
+            onClick={handlePrimaryCta}
+            disabled={purchaseMutation.isPending || status === 'submitted' || status === 'installed'}
+            data-testid="button-bottom-cta"
+          >
+            {status === 'locked' ? 'Start Onboarding' : status === 'purchased' ? 'Start Onboarding' : 'Onboarding Submitted'}
+            <ChevronRight className="ml-2 w-4 h-4" />
+          </Button>
+          <p className="text-[11px] text-muted-foreground mt-2">One-time onboarding $199 · Requires Pro + AI plan</p>
+        </CardContent>
+      </Card>
     </div>
   );
 

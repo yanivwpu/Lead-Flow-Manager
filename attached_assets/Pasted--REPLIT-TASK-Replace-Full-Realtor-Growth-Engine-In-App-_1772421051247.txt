@@ -1,0 +1,158 @@
+# REPLIT TASK — Replace Full Realtor Growth Engine In-App Page Copy
+
+Scope:
+Replace ALL textual content on `/app/templates/realtor-growth-engine` with the updated premium conversion copy below.
+Do NOT change layout, components, routing logic, or styling.
+Text changes only.
+
+---
+
+## 1️⃣ HERO SECTION
+
+Replace hero text with:
+
+Badge:
+Premium Template
+
+Headline:
+Convert your WhatsApp inquiries into qualified buyers & booked showings — automatically.
+
+Subheadline:
+A done-for-you WhatsApp automation system built specifically for real estate agents. Capture, qualify, and follow up with every lead — without missing opportunities.
+
+Primary Button:
+Start Onboarding
+
+Small text under primary button:
+One-time onboarding $199 • Requires Pro + AI plan
+
+---
+
+## 2️⃣ STEPPER LABELS
+
+Update stepper labels to:
+
+Step 1: Activate  
+Step 2: Setup  
+Step 3: Go Live
+
+(Keep logic unchanged, only update the displayed labels.)
+
+---
+
+## 3️⃣ WHAT YOU GET SECTION
+
+Title:
+What you get
+
+Subtitle:
+Everything you need to capture, qualify, and convert real estate leads on WhatsApp — fully set up for you.
+
+Replace all feature descriptions with the following:
+
+High-Converting Lead Workflows  
+From first inquiry to booked showing and follow-up.
+
+AI Lead Qualification & Routing  
+Automatically identify serious buyers and sellers so you focus only on real opportunities.
+
+Smart Follow-Up Sequences  
+Never lose a lead again — automated follow-ups keep conversations active.
+
+Optimized WhatsApp Message Templates  
+Professionally written scripts designed specifically for real estate conversations.
+
+Retargeting & Re-engagement Flows  
+Automatically follow up with cold or unresponsive leads.
+
+Built-In Real Estate CRM Pipeline  
+Track every lead from first message to closing inside a structured deal pipeline.
+
+Team Collaboration & Assignment  
+Assign conversations, add notes, and manage deals with your team.
+
+Done-for-You Setup + Live Onboarding Sessions  
+We configure everything with you and ensure your system is fully operational.
+
+---
+
+## 4️⃣ REQUIREMENTS SECTION
+
+Title:
+Requirements
+
+Subtitle:
+To activate your WhatsApp automation system, you’ll need:
+
+Replace requirement bullets with:
+
+• Registered business entity (LLC / Corp / Ltd)  
+• Access to your Meta (Facebook) Business Manager  
+• WhatsApp Business API eligibility (we guide you through this)  
+• Active WhachatCRM Pro + AI plan  
+
+Add small helper line at bottom:
+Our team will guide you through each step during onboarding.
+
+---
+
+## 5️⃣ LIMITED AVAILABILITY SECTION
+
+Title:
+Limited Availability
+
+Text:
+To ensure high-quality onboarding and personalized setup support, we onboard a limited number of real estate agents each month.
+
+Secure your activation slot today.
+
+---
+
+## 6️⃣ HOW IT WORKS SECTION
+
+Title:
+How it works
+
+Replace steps with:
+
+Step 1 — Activate your system  
+Purchase and unlock your Realtor Growth Engine.
+
+Step 2 — Complete onboarding form  
+Provide your business, WhatsApp, and CRM details so we can configure everything properly.
+
+Step 3 — Live setup session  
+We connect with you on Zoom and complete your WhatsApp + CRM setup together.
+
+Step 4 — Go live  
+Your automation system is fully active and ready to capture and convert leads automatically.
+
+---
+
+## 7️⃣ FINAL CTA SECTION (Add if not already present)
+
+Add a closing call-to-action section at bottom of page:
+
+Headline:
+Ready to turn your WhatsApp into a lead-conversion machine?
+
+Text:
+Launch your Realtor Growth Engine today and activate your automated lead system with our team.
+
+Primary Button:
+Start Onboarding
+
+Small text under button:
+One-time onboarding $199 • Requires Pro + AI plan
+
+---
+
+Acceptance Criteria:
+
+- All text content replaced with the above copy.
+- No layout or routing changes.
+- Page remains fully responsive.
+- All CTA buttons still trigger existing onboarding logic.
+- Stepper logic remains intact.
+
+END
