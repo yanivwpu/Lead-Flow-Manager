@@ -678,27 +678,27 @@ export async function sendRealtorPaymentConfirmationEmail(name: string, email: s
     html: `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f1f5f9;font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;line-height:1.6;color:#334155;">
       <div style="padding:40px 20px;">
         <div style="max-width:600px;margin:0 auto;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 4px 6px rgba(0,0,0,0.1);">
-          <div style="background:linear-gradient(135deg,#059669,#0d9488);padding:30px;text-align:center;">
+          <div style="background:linear-gradient(135deg,#4f46e5,#6366f1);padding:30px;text-align:center;">
             <h1 style="color:#fff;margin:0;font-size:22px;">Payment Confirmed</h1>
-            <p style="color:#d1fae5;margin:8px 0 0;font-size:14px;">Your Realtor Growth Engine is ready to set up</p>
+            <p style="color:#e0e7ff;margin:8px 0 0;font-size:14px;">Your Realtor Growth Engine is ready to set up</p>
           </div>
           <div style="padding:30px;">
             <p style="color:#334155;font-size:15px;margin:0 0 16px;">Hi ${name || 'there'},</p>
             <p style="color:#334155;font-size:15px;margin:0 0 16px;">Thank you for purchasing the <strong>Realtor Growth Engine</strong>. Your payment has been received and your template is ready to activate.</p>
             <p style="color:#334155;font-size:15px;margin:0 0 8px;">Your next step is to complete a short onboarding form so we can configure your system.</p>
             <div style="text-align:center;margin:28px 0;">
-              <a href="${onboardingUrl}" style="display:inline-block;background:#059669;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:600;font-size:15px;">Complete Onboarding</a>
+              <a href="${onboardingUrl}" style="display:inline-block;background:#4f46e5;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:600;font-size:15px;">Complete Onboarding</a>
             </div>
-            <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:20px;margin:24px 0 0;">
-              <p style="color:#166534;font-weight:600;font-size:14px;margin:0 0 12px;">What to have ready:</p>
+            <div style="background:#eef2ff;border:1px solid #c7d2fe;border-radius:10px;padding:20px;margin:24px 0 0;">
+              <p style="color:#3730a3;font-weight:600;font-size:14px;margin:0 0 12px;">What to have ready:</p>
               <table style="width:100%;border-collapse:collapse;">
-                <tr><td style="padding:6px 0;color:#475569;font-size:13px;vertical-align:top;">1.</td><td style="padding:6px 0 6px 8px;color:#475569;font-size:13px;"><strong>Meta Business Manager</strong> — your BM ID and admin email (create one at <a href="https://business.facebook.com" style="color:#059669;">business.facebook.com</a> if you don't have it)</td></tr>
+                <tr><td style="padding:6px 0;color:#475569;font-size:13px;vertical-align:top;">1.</td><td style="padding:6px 0 6px 8px;color:#475569;font-size:13px;"><strong>Meta Business Manager</strong> — your BM ID and admin email (create one at <a href="https://business.facebook.com" style="color:#4f46e5;">business.facebook.com</a> if you don't have it)</td></tr>
                 <tr><td style="padding:6px 0;color:#475569;font-size:13px;vertical-align:top;">2.</td><td style="padding:6px 0 6px 8px;color:#475569;font-size:13px;"><strong>WhatsApp phone number</strong> — the number you want to use for your business (can be new or existing)</td></tr>
                 <tr><td style="padding:6px 0;color:#475569;font-size:13px;vertical-align:top;">3.</td><td style="padding:6px 0 6px 8px;color:#475569;font-size:13px;"><strong>SMS access</strong> — ability to receive a verification code on that number</td></tr>
                 <tr><td style="padding:6px 0;color:#475569;font-size:13px;vertical-align:top;">4.</td><td style="padding:6px 0 6px 8px;color:#475569;font-size:13px;"><strong>Business details</strong> — legal name, country, and website (if available)</td></tr>
               </table>
             </div>
-            <p style="color:#94a3b8;font-size:12px;margin:20px 0 0;">If you have any questions, reply to this email or contact <a href="mailto:support@whachatcrm.com" style="color:#059669;">support@whachatcrm.com</a>.</p>
+            <p style="color:#94a3b8;font-size:12px;margin:20px 0 0;">If you have any questions, reply to this email or contact <a href="mailto:support@whachatcrm.com" style="color:#4f46e5;">support@whachatcrm.com</a>.</p>
           </div>
           <div style="text-align:center;padding:20px;background:#f8fafc;border-top:1px solid #e2e8f0;">
             <p style="margin:0;color:#94a3b8;font-size:12px;">WhaChatCRM ${new Date().getFullYear()}</p>
@@ -741,7 +741,7 @@ export async function sendRealtorOnboardingEmail(payload: any, normalized: any, 
     subject: `New Realtor Growth Engine Onboarding — ${legalBusinessName} — ${fullName}`,
     html: `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f1f5f9;font-family:Arial,sans-serif;">
       <div style="max-width:640px;margin:40px auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e2e8f0;">
-        <div style="background:linear-gradient(135deg,#059669,#0d9488);padding:30px;text-align:center;">
+        <div style="background:linear-gradient(135deg,#4f46e5,#6366f1);padding:30px;text-align:center;">
           <h1 style="color:#fff;margin:0;font-size:22px;">Realtor Growth Engine — New Onboarding</h1>
         </div>
         <div style="padding:30px;">
