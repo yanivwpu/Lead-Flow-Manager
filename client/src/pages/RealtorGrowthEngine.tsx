@@ -4,7 +4,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -226,28 +226,6 @@ export function RealtorGrowthEngine() {
           </Button>
           <p className="text-[11px] text-muted-foreground mt-1.5">One-time onboarding $199 · Requires Pro + AI plan</p>
         </div>
-        {status === 'locked' && (
-          <Button 
-            className="bg-brand-green hover:bg-brand-green/90 hidden md:flex"
-            onClick={() => purchaseMutation.mutate()}
-            disabled={purchaseMutation.isPending}
-            data-testid="button-purchase-template"
-          >
-            Start Onboarding
-            <ChevronRight className="ml-2 w-4 h-4" />
-          </Button>
-        )}
-        {status === 'purchased' && (
-          <Button 
-            variant="secondary"
-            className="hidden md:flex"
-            onClick={() => setLocation("/app/templates/realtor-growth-engine/onboarding")}
-            data-testid="button-start-onboarding"
-          >
-            Start Onboarding
-            <ChevronRight className="ml-2 w-4 h-4" />
-          </Button>
-        )}
       </div>
 
       {renderStepper()}
@@ -259,7 +237,7 @@ export function RealtorGrowthEngine() {
               <CardTitle className="text-base">What you get</CardTitle>
               <CardDescription className="text-xs">Everything you need to capture, qualify, and convert real estate leads on WhatsApp — fully set up for you.</CardDescription>
             </CardHeader>
-            <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-3 px-5 pb-4">
+            <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 px-5 pb-3">
               {[
                 { icon: Rocket, title: "High-Converting Lead Workflows", desc: "From first inquiry to booked showing and follow-up." },
                 { icon: Zap, title: "AI Lead Qualification & Routing", desc: "Automatically identify serious buyers and sellers so you focus only on real opportunities." },
@@ -281,21 +259,6 @@ export function RealtorGrowthEngine() {
                 </div>
               ))}
             </CardContent>
-            <CardFooter className="px-5 pb-4 pt-0 border-t border-gray-100">
-              <div className="flex items-center justify-between w-full pt-3">
-                <p className="text-sm font-medium text-gray-700">Ready to activate your Realtor Growth Engine?</p>
-                <Button
-                  className="bg-brand-green hover:bg-brand-green/90"
-                  size="sm"
-                  onClick={handlePrimaryCta}
-                  disabled={purchaseMutation.isPending || status === 'submitted' || status === 'installed'}
-                  data-testid="button-whatyouget-cta"
-                >
-                  {status === 'locked' ? 'Unlock Now' : status === 'purchased' ? 'Start Onboarding' : 'Submitted'}
-                  <ChevronRight className="ml-1.5 w-3.5 h-3.5" />
-                </Button>
-              </div>
-            </CardFooter>
           </Card>
 
           <Card>
@@ -393,8 +356,8 @@ export function RealtorGrowthEngine() {
 
       <Card className="mt-5">
         <CardContent className="px-5 py-6 text-center">
-          <h3 className="text-lg font-bold text-gray-900 mb-1">Ready to turn your WhatsApp into a lead-conversion machine?</h3>
-          <p className="text-sm text-muted-foreground mb-4">Launch your Realtor Growth Engine today and activate your automated lead system with our team.</p>
+          <h3 className="text-lg font-bold text-gray-900 mb-1">Turn your WhatsApp into a lead-conversion machine.</h3>
+          <p className="text-sm text-muted-foreground mb-4">Launch your Realtor Growth Engine with our team and start capturing and converting leads automatically.</p>
           <Button 
             className="bg-brand-green hover:bg-brand-green/90"
             onClick={handlePrimaryCta}
