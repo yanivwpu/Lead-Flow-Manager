@@ -1,0 +1,29 @@
+The Realtor Growth Engine is a high-performance, "done-for-you" automation layer built on top of WhachatCRM. It’s designed to transform a realtor's WhatsApp from a simple chat app into an automated lead-conversion machine.
+
+Here is a breakdown of how it works, how it’s implemented, and how to integrate it:
+
+1. What it Accomplishes for Realtors
+Instant Responsiveness: Captures and greets every new lead 24/7 so no inquiry goes cold.
+Automated Qualification: Uses AI to score leads based on their budget, timeline, and intent (Buyer vs. Seller), filtering out the "window shoppers."
+Consistency: Automatically follows up at 24h, 3d, and 7d intervals if a lead stops responding, ensuring no one falls through the cracks.
+CRM Organization: Automatically moves leads through a custom real estate pipeline (New -> Discovery -> Tour -> Offer -> Closed).
+2. How it is Implemented (Technical Flow)
+The engine is implemented as a workspace provisioning system:
+
+The "Provisioning" Phase: When a user activates the engine, the backend automatically "injects" 8 pre-built workflows, a custom real estate pipeline, and a specialized set of tags and lead fields directly into their private database.
+The "Preference" Layer: We created a custom user_template_data system. This allows realtors to change their "Service Territory" or "Follow-up Timing" through the dashboard without ever touching a single line of code or complex workflow logic.
+Runtime Execution: Every time a message arrives, the CRM's workflow engine checks if the Realtor Growth Engine is active for that user. If it is, it executes the specialized logic using the realtor's saved preferences.
+3. How to Integrate Communication Channels
+To get the engine running, the realtor needs to connect their channels in the Settings or Channels tab:
+
+WhatsApp (Primary): The engine is optimized for the WhatsApp Business API via Twilio. Once the realtor connects their Twilio number and Meta Business Manager, the workflows automatically begin intercepting those messages.
+SMS: The engine can be toggled to handle standard SMS inquiries using the same lead-scoring and follow-up logic.
+Other Channels: Because the engine works at the "CRM Lead" level, once a contact is created from Telegram, Instagram, or Facebook, the follow-up and pipeline workflows will manage them just like a WhatsApp lead.
+Activation Steps for Users:
+Subscription: Ensure they have an active Pro + AI plan (required for the AI Scoring and multi-step Automations).
+Onboarding: The realtor completes the 8-step form to provide their legal business details (required by Meta for WhatsApp approval).
+Live Setup: Your team (or the partner) does a quick 1-on-1 to finalize the Meta Business Manager connection.
+Go Live: The realtor simply toggles the workflows to "Active" on their Growth Engine dashboard.
+This implementation ensures that while the core logic is locked and safe (so users don't accidentally break the automation), they still have the **flexibility to
+
+customize** their territory, keywords, and prices.
