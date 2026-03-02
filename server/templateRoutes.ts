@@ -32,9 +32,16 @@ export function registerTemplateRoutes(app: Express) {
   app.get("/api/templates/realtor-growth-engine", requireAuth, async (req, res) => {
     try {
       const userId = (req.user as any).id;
+      const user = await storage.getUser(userId);
       const template = await storage.getTemplateById(TEMPLATE_ID);
       const entitlement = await storage.getTemplateEntitlement(userId, TEMPLATE_ID);
       const install = await storage.getTemplateInstall(userId, TEMPLATE_ID);
+
+      const plan = (user?.subscriptionPlan || "free").toLowerCase();
+      const hasPro = plan === "pro" || plan === "scale";
+      const limits = await subscriptionService.getUserLimits(userId);
+      const hasAI = limits?.hasAIBrainAddon || false;
+      const subscriptionActive = hasPro && hasAI;
 
       res.json({
         template: template || {
@@ -54,6 +61,7 @@ export function registerTemplateRoutes(app: Express) {
         install: install
           ? { installStatus: install.installStatus, installedAt: install.installedAt }
           : { installStatus: null, installedAt: null },
+        subscription: { hasPro, hasAI, active: subscriptionActive },
       });
     } catch (error: any) {
       console.error("[Template] Error fetching template:", error);
@@ -183,6 +191,14 @@ export function registerTemplateRoutes(app: Express) {
         return res.status(403).json({ error: "Template not purchased" });
       }
 
+      const plan = (user.subscriptionPlan || "free").toLowerCase();
+      const hasPro = plan === "pro" || plan === "scale";
+      const limits = await subscriptionService.getUserLimits(userId);
+      const hasAI = limits?.hasAIBrainAddon || false;
+      if (user.email !== "demo@whachat.com" && (!hasPro || !hasAI)) {
+        return res.status(403).json({ error: "Active Pro + AI plan required", hasPro, hasAI });
+      }
+
       if (entitlement.onboardingSubmittedAt) {
         return res.status(400).json({ error: "Onboarding already submitted" });
       }
@@ -272,10 +288,21 @@ export function registerTemplateRoutes(app: Express) {
   app.post("/api/templates/realtor-growth-engine/install", requireAuth, async (req, res) => {
     try {
       const userId = (req.user as any).id;
+      const user = await storage.getUser(userId);
 
       const entitlement = await storage.getTemplateEntitlement(userId, TEMPLATE_ID);
       if (!entitlement || entitlement.status === "locked") {
         return res.status(403).json({ error: "Template not purchased" });
+      }
+
+      if (user && user.email !== "demo@whachat.com") {
+        const plan = (user.subscriptionPlan || "free").toLowerCase();
+        const hasPro = plan === "pro" || plan === "scale";
+        const limits = await subscriptionService.getUserLimits(userId);
+        const hasAI = limits?.hasAIBrainAddon || false;
+        if (!hasPro || !hasAI) {
+          return res.status(403).json({ error: "Active Pro + AI plan required", hasPro, hasAI });
+        }
       }
 
       await installTemplateForUser(userId);

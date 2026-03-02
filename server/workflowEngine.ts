@@ -1,5 +1,6 @@
 import { storage } from "./storage";
 import { type Chat, type Workflow } from "@shared/schema";
+import { subscriptionService } from "./subscriptionService";
 
 export interface WorkflowAction {
   type: "assign" | "tag" | "set_status" | "set_pipeline" | "add_note" | "set_followup";
@@ -13,6 +14,21 @@ export interface WorkflowCondition {
   noReplyMinutes?: number;
 }
 
+async function isTemplateWorkflowAllowed(workflow: Workflow): Promise<boolean> {
+  const conditions = workflow.triggerConditions as any;
+  if (!conditions?.templateKey) return true;
+
+  const user = await storage.getUser(workflow.userId);
+  if (!user) return false;
+
+  const plan = (user.subscriptionPlan || "free").toLowerCase();
+  const hasPro = plan === "pro" || plan === "scale";
+  if (!hasPro) return false;
+
+  const limits = await subscriptionService.getUserLimits(workflow.userId);
+  return limits?.hasAIBrainAddon || false;
+}
+
 export async function executeWorkflowActions(
   workflow: Workflow,
   chat: Chat,
@@ -22,6 +38,10 @@ export async function executeWorkflowActions(
   const executedActions: WorkflowAction[] = [];
   
   try {
+    if (!(await isTemplateWorkflowAllowed(workflow))) {
+      console.log(`[Workflow] Skipping template workflow "${workflow.name}" — Pro+AI subscription inactive for user ${workflow.userId}`);
+      return { success: false, actionsExecuted: [] };
+    }
     for (const action of actions) {
       switch (action.type) {
         case "assign":

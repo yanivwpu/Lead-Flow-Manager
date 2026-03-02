@@ -35,7 +35,8 @@ import {
   Video,
   Handshake,
   RotateCcw,
-  BarChart3
+  BarChart3,
+  PauseCircle
 } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -63,6 +64,11 @@ interface TemplateData {
     installStatus: string;
     installedAt: string | null;
   } | null;
+  subscription?: {
+    hasPro: boolean;
+    hasAI: boolean;
+    active: boolean;
+  };
 }
 
 const onboardingSchema = z.object({
@@ -192,6 +198,8 @@ export function RealtorGrowthEngine() {
   }
 
   const status = templateData?.entitlement?.status || 'locked';
+  const subscriptionActive = templateData?.subscription?.active !== false;
+  const isPaused = !subscriptionActive && (status === 'purchased' || status === 'submitted' || status === 'installed');
 
   // --- Views ---
 
@@ -200,6 +208,8 @@ export function RealtorGrowthEngine() {
       setEligibilityAnswer("");
       setEligibilityBlocked(false);
       setEligibilityOpen(true);
+    } else if (isPaused) {
+      return;
     } else if (status === 'purchased') {
       setLocation("/app/templates/realtor-growth-engine/onboarding");
     }
@@ -277,19 +287,54 @@ export function RealtorGrowthEngine() {
             A done-for-you WhatsApp automation system built specifically for real estate agents. Capture, qualify, and follow up with every lead — without missing opportunities.
           </p>
           <Button 
-            className="mt-3 bg-brand-green hover:bg-brand-green/90"
-            onClick={handlePrimaryCta}
-            disabled={purchaseMutation.isPending || status === 'submitted' || status === 'installed'}
+            className={cn("mt-3", isPaused ? "bg-amber-600 hover:bg-amber-700" : "bg-brand-green hover:bg-brand-green/90")}
+            onClick={isPaused ? undefined : handlePrimaryCta}
+            disabled={purchaseMutation.isPending || status === 'submitted' || status === 'installed' || isPaused}
             data-testid="button-hero-cta"
           >
-            {status === 'locked' ? 'Start Onboarding' : status === 'purchased' ? 'Start Onboarding' : 'Onboarding Submitted'}
-            <ChevronRight className="ml-2 w-4 h-4" />
+            {isPaused ? (
+              <><PauseCircle className="mr-2 w-4 h-4" /> Paused — Subscription Required</>
+            ) : status === 'locked' ? 'Start Onboarding' : status === 'purchased' ? 'Start Onboarding' : 'Onboarding Submitted'}
+            {!isPaused && <ChevronRight className="ml-2 w-4 h-4" />}
           </Button>
           <p className="text-[11px] text-muted-foreground mt-1.5">One-time onboarding $199 · Requires Pro + AI plan</p>
         </div>
       </div>
 
       {renderStepper()}
+
+      {isPaused && (
+        <Card className="border-amber-300 bg-amber-50 mb-4" data-testid="banner-subscription-paused">
+          <CardContent className="flex items-start gap-3 py-4 px-5">
+            <PauseCircle className="w-5 h-5 text-amber-600 mt-0.5 shrink-0" />
+            <div className="flex-1">
+              <p className="font-semibold text-amber-900 text-sm">Growth Engine Paused</p>
+              <p className="text-xs text-amber-800 mt-0.5">
+                Your Growth Engine workflows and AI scoring are paused because your
+                {!templateData?.subscription?.hasPro && !templateData?.subscription?.hasAI
+                  ? " Pro plan and AI add-on are"
+                  : !templateData?.subscription?.hasPro
+                  ? " Pro plan is"
+                  : " AI add-on is"}{" "}
+                no longer active. Reactivate to resume automation.
+              </p>
+              <p className="text-[11px] text-amber-700 mt-1">Your purchase and configuration are saved — nothing is lost.</p>
+              <div className="flex gap-2 mt-2.5">
+                {!templateData?.subscription?.hasPro && (
+                  <Button size="sm" variant="outline" className="text-xs border-amber-400 text-amber-900 hover:bg-amber-100" onClick={() => setLocation("/app/settings")} data-testid="button-reactivate-pro">
+                    Reactivate Pro
+                  </Button>
+                )}
+                {!templateData?.subscription?.hasAI && (
+                  <Button size="sm" variant="outline" className="text-xs border-amber-400 text-amber-900 hover:bg-amber-100" onClick={() => setLocation("/app/ai-brain")} data-testid="button-reactivate-ai">
+                    Enable AI Add-on
+                  </Button>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
         <div className="md:col-span-2 space-y-5">
@@ -1003,7 +1048,7 @@ export function RealtorGrowthEngine() {
   // --- Router Logic ---
 
   if (location === "/app/templates/realtor-growth-engine/onboarding") {
-    if (status === 'locked') return <Redirect to="/app/templates/realtor-growth-engine" />;
+    if (status === 'locked' || isPaused) return <Redirect to="/app/templates/realtor-growth-engine" />;
     if (status === 'submitted' || status === 'installed') return <Redirect to="/app/templates/realtor-growth-engine/status" />;
     return <OnboardingForm />;
   }
