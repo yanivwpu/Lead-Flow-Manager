@@ -201,6 +201,16 @@ export function RealtorGrowthEngine() {
   const subscriptionActive = templateData?.subscription?.active !== false;
   const isPaused = !subscriptionActive && (status === 'purchased' || status === 'submitted' || status === 'installed');
 
+  React.useEffect(() => {
+    if (subscriptionActive && sessionStorage.getItem("rge_reactivating")) {
+      sessionStorage.removeItem("rge_reactivating");
+      toast({
+        title: "Subscription active",
+        description: "You can now continue your Realtor Growth Engine.",
+      });
+    }
+  }, [subscriptionActive]);
+
   // --- Views ---
 
   const handlePrimaryCta = () => {
@@ -321,12 +331,12 @@ export function RealtorGrowthEngine() {
               <p className="text-[11px] text-amber-700 mt-1">Your purchase and configuration are saved — nothing is lost.</p>
               <div className="flex gap-2 mt-2.5">
                 {!templateData?.subscription?.hasPro && (
-                  <Button size="sm" variant="outline" className="text-xs border-amber-400 text-amber-900 hover:bg-amber-100" onClick={() => setLocation("/app/settings")} data-testid="button-reactivate-pro">
+                  <Button size="sm" variant="outline" className="text-xs border-amber-400 text-amber-900 hover:bg-amber-100" onClick={() => { sessionStorage.setItem("rge_reactivating", "1"); setLocation("/app/settings"); }} data-testid="button-reactivate-pro">
                     Reactivate Pro
                   </Button>
                 )}
                 {!templateData?.subscription?.hasAI && (
-                  <Button size="sm" variant="outline" className="text-xs border-amber-400 text-amber-900 hover:bg-amber-100" onClick={() => setLocation("/app/ai-brain")} data-testid="button-reactivate-ai">
+                  <Button size="sm" variant="outline" className="text-xs border-amber-400 text-amber-900 hover:bg-amber-100" onClick={() => { sessionStorage.setItem("rge_reactivating", "1"); setLocation("/app/ai-brain"); }} data-testid="button-reactivate-ai">
                     Enable AI Add-on
                   </Button>
                 )}
