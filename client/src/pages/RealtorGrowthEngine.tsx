@@ -36,7 +36,8 @@ import {
   Handshake,
   RotateCcw,
   BarChart3,
-  PauseCircle
+  PauseCircle,
+  LayoutGrid
 } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -129,6 +130,72 @@ export function RealtorGrowthEngine() {
       const url = queryKey[1] ? `/api/templates/realtor-growth-engine?bypass=${queryKey[1]}` : "/api/templates/realtor-growth-engine";
       const res = await apiRequest("GET", url);
       return res.json();
+    }
+  });
+
+  const verifyPaymentMutation = useMutation({
+    mutationFn: async (sessionId: string) => {
+      const res = await apiRequest("POST", "/api/templates/realtor-growth-engine/verify-payment", { sessionId });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/templates/realtor-growth-engine"] });
+      toast({ title: "Payment confirmed", description: "Next step: complete your onboarding so we can activate your system." });
+      const url = new URL(window.location.href);
+      url.searchParams.delete("paid");
+      url.searchParams.delete("session_id");
+      window.history.replaceState({}, "", url.pathname);
+    }
+  });
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const paid = params.get("paid");
+    const sessionId = params.get("session_id");
+    if (paid === "true" && sessionId) {
+      verifyPaymentMutation.mutate(sessionId);
+    }
+  }, []);
+
+  const purchaseMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/templates/realtor-growth-engine/purchase");
+      return res.json();
+    },
+    onSuccess: (data) => {
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        queryClient.invalidateQueries({ queryKey: ["/api/templates/realtor-growth-engine"] });
+        toast({ title: "Template Unlocked", description: "You can now proceed to onboarding." });
+        setEligibilityOpen(false);
+      }
+    }
+  });
+
+  const submitOnboardingMutation = useMutation({
+    mutationFn: async (values: OnboardingValues) => {
+      const res = await apiRequest("POST", "/api/templates/realtor-growth-engine/onboarding/submit", { payload: values });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/templates/realtor-growth-engine"] });
+      toast({ title: "Onboarding Submitted", description: "Our team will review your details shortly." });
+    }
+  });
+
+  const form = useForm<OnboardingValues>({
+    resolver: zodResolver(onboardingSchema),
+    defaultValues: {
+      isRegisteredEntity: "yes",
+      isNumberActive: "no",
+      willingToMigrate: "yes",
+      hasSmsAccess: "yes",
+      hasMetaBM: "no",
+      teamType: "solo",
+      estimatedSeats: "1",
+      notificationsEnabled: true,
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     }
   });
 
