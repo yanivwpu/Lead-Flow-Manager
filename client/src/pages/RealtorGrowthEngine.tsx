@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -15,6 +15,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { 
   CheckCircle2, 
   ChevronRight, 
@@ -66,7 +67,7 @@ interface TemplateData {
 
 const onboardingSchema = z.object({
   // Step 1: Business Eligibility
-  isRegisteredEntity: z.enum(["yes", "no", "not_sure"]),
+  isRegisteredEntity: z.enum(["yes", "no"]),
   
   // Step 2: Business Details
   legalName: z.string().min(2, "Legal name is required"),
@@ -110,19 +111,51 @@ export function RealtorGrowthEngine() {
   const { toast } = useToast();
   const [step, setStep] = useState(1);
   const totalSteps = 8;
+  const [eligibilityOpen, setEligibilityOpen] = useState(false);
+  const [eligibilityAnswer, setEligibilityAnswer] = useState<string>("");
+  const [eligibilityBlocked, setEligibilityBlocked] = useState(false);
 
   const { data: templateData, isLoading } = useQuery<TemplateData>({
     queryKey: ["/api/templates/realtor-growth-engine"],
   });
+
+  const verifyPaymentMutation = useMutation({
+    mutationFn: async (sessionId: string) => {
+      const res = await apiRequest("POST", "/api/templates/realtor-growth-engine/verify-payment", { sessionId });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/templates/realtor-growth-engine"] });
+      toast({ title: "Payment Verified", description: "You can now proceed to onboarding." });
+      const url = new URL(window.location.href);
+      url.searchParams.delete("paid");
+      url.searchParams.delete("session_id");
+      window.history.replaceState({}, "", url.pathname);
+    }
+  });
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const paid = params.get("paid");
+    const sessionId = params.get("session_id");
+    if (paid === "true" && sessionId) {
+      verifyPaymentMutation.mutate(sessionId);
+    }
+  }, []);
 
   const purchaseMutation = useMutation({
     mutationFn: async () => {
       const res = await apiRequest("POST", "/api/templates/realtor-growth-engine/purchase");
       return res.json();
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/templates/realtor-growth-engine"] });
-      toast({ title: "Template Unlocked", description: "You can now proceed to onboarding." });
+    onSuccess: (data) => {
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        queryClient.invalidateQueries({ queryKey: ["/api/templates/realtor-growth-engine"] });
+        toast({ title: "Template Unlocked", description: "You can now proceed to onboarding." });
+        setEligibilityOpen(false);
+      }
     }
   });
 
@@ -162,9 +195,19 @@ export function RealtorGrowthEngine() {
 
   const handlePrimaryCta = () => {
     if (status === 'locked') {
-      purchaseMutation.mutate();
+      setEligibilityAnswer("");
+      setEligibilityBlocked(false);
+      setEligibilityOpen(true);
     } else if (status === 'purchased') {
       setLocation("/app/templates/realtor-growth-engine/onboarding");
+    }
+  };
+
+  const handleEligibilityContinue = () => {
+    if (eligibilityAnswer === "no") {
+      setEligibilityBlocked(true);
+    } else if (eligibilityAnswer === "yes") {
+      purchaseMutation.mutate();
     }
   };
 
@@ -439,12 +482,6 @@ export function RealtorGrowthEngine() {
                             </FormControl>
                             <FormLabel className="font-normal">No, I operate as an individual</FormLabel>
                           </FormItem>
-                          <FormItem className="flex items-center space-x-3 space-y-0">
-                            <FormControl>
-                              <RadioGroupItem value="not_sure" />
-                            </FormControl>
-                            <FormLabel className="font-normal">I'm not sure</FormLabel>
-                          </FormItem>
                         </RadioGroup>
                       </FormControl>
                       <FormMessage />
@@ -588,7 +625,7 @@ export function RealtorGrowthEngine() {
                           </FormItem>
                           <FormItem className="flex items-center space-x-3 space-y-0">
                             <FormControl><RadioGroupItem value="no" /></FormControl>
-                            <FormLabel className="font-normal">No / I'm not sure</FormLabel>
+                            <FormLabel className="font-normal">No</FormLabel>
                           </FormItem>
                         </RadioGroup>
                       </FormControl>
@@ -822,6 +859,70 @@ export function RealtorGrowthEngine() {
     </div>
   );
 
+  // --- Eligibility Modal ---
+
+  const EligibilityModal = () => (
+    <Dialog open={eligibilityOpen} onOpenChange={setEligibilityOpen}>
+      <DialogContent className="max-w-[520px]" data-testid="eligibility-modal">
+        {!eligibilityBlocked ? (
+          <>
+            <DialogHeader>
+              <DialogTitle>Quick Eligibility Check (30 seconds)</DialogTitle>
+              <DialogDescription>
+                Is your real estate business a registered legal entity (LLC / Corp / Ltd)?
+              </DialogDescription>
+              <p className="text-xs text-muted-foreground pt-1">Required for WhatsApp Business API approval with Meta.</p>
+            </DialogHeader>
+            <RadioGroup value={eligibilityAnswer} onValueChange={setEligibilityAnswer} className="flex flex-col space-y-2 py-2">
+              <div className="flex items-center space-x-3">
+                <RadioGroupItem value="yes" id="elig-yes" data-testid="radio-eligible-yes" />
+                <Label htmlFor="elig-yes" className="font-normal cursor-pointer">Yes, I have a registered business entity</Label>
+              </div>
+              <div className="flex items-center space-x-3">
+                <RadioGroupItem value="no" id="elig-no" data-testid="radio-eligible-no" />
+                <Label htmlFor="elig-no" className="font-normal cursor-pointer">No, I operate as an individual</Label>
+              </div>
+            </RadioGroup>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setEligibilityOpen(false)} data-testid="button-eligibility-cancel">Cancel</Button>
+              <Button
+                className="bg-brand-green hover:bg-brand-green/90"
+                onClick={handleEligibilityContinue}
+                disabled={!eligibilityAnswer || purchaseMutation.isPending}
+                data-testid="button-eligibility-continue"
+              >
+                {purchaseMutation.isPending ? "Processing..." : "Continue"}
+              </Button>
+            </DialogFooter>
+          </>
+        ) : (
+          <>
+            <DialogHeader>
+              <DialogTitle>Business Eligibility Required</DialogTitle>
+            </DialogHeader>
+            <div className="py-2 space-y-3">
+              <p className="text-sm text-muted-foreground">
+                To activate WhatsApp Business API, Meta requires a registered business entity (LLC / Corp / Ltd).
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Once your business is registered, come back here and we'll complete your setup.
+              </p>
+            </div>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => { setEligibilityOpen(false); setEligibilityBlocked(false); }}
+                data-testid="button-eligibility-dismiss"
+              >
+                Got it — I'll return after registering
+              </Button>
+            </DialogFooter>
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+
   // --- Router Logic ---
 
   if (location === "/app/templates/realtor-growth-engine/onboarding") {
@@ -835,7 +936,12 @@ export function RealtorGrowthEngine() {
     return <StatusPage />;
   }
 
-  return <DetailPage />;
+  return (
+    <>
+      <EligibilityModal />
+      <DetailPage />
+    </>
+  );
 }
 
 function Redirect({ to }: { to: string }) {

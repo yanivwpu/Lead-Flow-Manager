@@ -1,0 +1,192 @@
+REPLIT TASK: REALTOR GROWTH ENGINE — CLEAN ONBOARDING FLOW
+
+GOAL:
+Implement a clean onboarding flow that:
+1) Verifies business eligibility BEFORE payment
+2) Removes the “I’m not sure” option
+3) Prevents ineligible users from paying
+4) Sends eligible users to Stripe checkout
+5) After payment, redirects to full onboarding form
+
+----------------------------------------
+1) FRONTEND — START ONBOARDING BUTTON
+----------------------------------------
+
+Location:
+Template detail page:
+`/app/templates/realtor-growth-engine`
+
+Update behavior of button: "Start Onboarding"
+
+Instead of navigating directly to /onboarding, it should open a modal:
+
+Function name: openEligibilityModal()
+
+----------------------------------------
+2) ELIGIBILITY MODAL UI
+----------------------------------------
+
+Modal Title:
+"Quick Eligibility Check (30 seconds)"
+
+Question:
+"Is your real estate business a registered legal entity (LLC / Corp / Ltd)?"
+
+Helper text (small under question):
+"Required for WhatsApp Business API approval with Meta."
+
+Options (RADIO ONLY — 2 OPTIONS):
+
+( ) Yes, I have a registered business entity  
+( ) No, I operate as an individual
+
+NO third option.
+
+Buttons:
+Primary: "Continue"
+Secondary: "Cancel"
+
+----------------------------------------
+3) ELIGIBILITY LOGIC
+----------------------------------------
+
+On Continue click:
+
+IF answer == "No":
+
+Show blocking message inside modal:
+
+Title:
+"Business Eligibility Required"
+
+Body:
+"To activate WhatsApp Business API, Meta requires a registered business entity (LLC / Corp / Ltd).
+Once your business is registered, come back here and we’ll complete your setup."
+
+Button:
+[ Got it — I’ll return after registering ]
+
+Close modal on click.
+
+DO NOT call Stripe.
+
+----------------------------------------
+
+IF answer == "Yes":
+
+Call backend endpoint:
+
+POST /api/templates/realtor-growth-engine/purchase
+
+This endpoint should return:
+{ url: stripeCheckoutUrl }
+
+Frontend:
+window.location.href = url
+
+----------------------------------------
+4) BACKEND — PURCHASE ENDPOINT
+----------------------------------------
+
+File:
+server/templateRoutes.ts
+
+Update endpoint:
+POST /api/templates/realtor-growth-engine/purchase
+
+Replace mock logic with Stripe checkout session:
+
+Stripe Checkout:
+
+- Amount: 199 USD (19900 cents)
+- Product name: "Realtor Growth Engine Onboarding"
+- Mode: payment (one-time)
+
+Success URL:
+${APP_URL}/app/templates/realtor-growth-engine/onboarding?paid=true
+
+Cancel URL:
+${APP_URL}/app/templates/realtor-growth-engine
+
+Metadata:
+userId
+templateId: "realtor-growth-engine"
+
+Return session.url
+
+----------------------------------------
+5) AFTER PAYMENT SUCCESS
+----------------------------------------
+
+On page load of:
+/app/templates/realtor-growth-engine/onboarding?paid=true
+
+Backend should:
+
+- verify payment (via Stripe session or webhook)
+- create template_entitlements record
+- set purchased = true for this user
+
+----------------------------------------
+6) LOCKING LOGIC
+----------------------------------------
+
+Update route guards:
+
+User CANNOT access:
+/onboarding
+UNLESS:
+template_entitlements.purchased === true
+
+Otherwise redirect to detail page.
+
+----------------------------------------
+7) DEMO USER BYPASS (for testing)
+----------------------------------------
+
+If user.email === "demo@whachat.com":
+
+Skip Stripe and automatically mark as purchased.
+
+----------------------------------------
+8) REMOVE “I’M NOT SURE” OPTION EVERYWHERE
+----------------------------------------
+
+Search in codebase:
+- realtor onboarding form
+- eligibility logic
+
+Remove any reference to:
+"I'm not sure"
+
+Ensure only 2 options remain.
+
+----------------------------------------
+9) UX NOTES
+----------------------------------------
+
+Modal width: max 520px
+Mobile responsive
+Buttons aligned right
+
+Primary button color: brand green
+
+----------------------------------------
+
+FINAL RESULT FLOW:
+
+Click "Start Onboarding"
+→ Eligibility Modal
+→ Yes → Stripe payment
+→ Payment success
+→ Redirect to onboarding form (Step 1 of 8)
+→ Submit form
+→ Install + status page
+
+Ineligible users:
+→ see message
+→ no payment taken
+
+----------------------------------------
+
+END TASK

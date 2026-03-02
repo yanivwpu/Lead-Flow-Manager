@@ -2,9 +2,11 @@ import type { Express } from "express";
 import { storage } from "./storage";
 import { requireAuth } from "./auth";
 import { sendRealtorOnboardingEmail } from "./email";
+import { getUncachableStripeClient } from "./stripeClient";
 import { z } from "zod";
 
 const TEMPLATE_ID = "realtor-growth-engine";
+const TEMPLATE_PRICE_CENTS = 19900;
 
 export function registerTemplateRoutes(app: Express) {
   app.get("/api/templates/realtor-growth-engine", requireAuth, async (req, res) => {
@@ -42,6 +44,84 @@ export function registerTemplateRoutes(app: Express) {
   app.post("/api/templates/realtor-growth-engine/purchase", requireAuth, async (req, res) => {
     try {
       const userId = (req.user as any).id;
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(404).json({ error: "User not found" });
+
+      const existing = await storage.getTemplateEntitlement(userId, TEMPLATE_ID);
+      if (existing && existing.status !== "locked") {
+        return res.json({ success: true, alreadyPurchased: true });
+      }
+
+      if (user.email === "demo@whachat.com") {
+        const entitlement = await storage.upsertTemplateEntitlement(userId, TEMPLATE_ID, {
+          status: "purchased",
+          purchasedAt: new Date(),
+        });
+        const existingInstall = await storage.getTemplateInstall(userId, TEMPLATE_ID);
+        if (!existingInstall) {
+          await storage.createTemplateInstall({ userId, templateId: TEMPLATE_ID, installStatus: "pending" });
+        }
+        return res.json({ success: true, demo: true });
+      }
+
+      const stripe = await getUncachableStripeClient();
+
+      let customerId = user.stripeCustomerId;
+      if (!customerId) {
+        const customer = await stripe.customers.create({
+          email: user.email,
+          metadata: { userId },
+        });
+        await storage.updateUser(userId, { stripeCustomerId: customer.id });
+        customerId = customer.id;
+      }
+
+      const baseUrl = `${req.protocol}://${req.get("host")}`;
+
+      const session = await stripe.checkout.sessions.create({
+        customer: customerId,
+        payment_method_types: ["card"],
+        line_items: [{
+          price_data: {
+            currency: "usd",
+            product_data: { name: "Realtor Growth Engine Onboarding" },
+            unit_amount: TEMPLATE_PRICE_CENTS,
+          },
+          quantity: 1,
+        }],
+        mode: "payment",
+        success_url: `${baseUrl}/app/templates/realtor-growth-engine/onboarding?paid=true&session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${baseUrl}/app/templates/realtor-growth-engine`,
+        metadata: { userId, templateId: TEMPLATE_ID },
+      });
+
+      if (!session.url) throw new Error("Failed to create checkout session");
+      res.json({ success: true, url: session.url });
+    } catch (error: any) {
+      console.error("[Template] Purchase error:", error);
+      res.status(500).json({ error: "Failed to process purchase" });
+    }
+  });
+
+  app.post("/api/templates/realtor-growth-engine/verify-payment", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      const { sessionId } = req.body;
+
+      if (!sessionId) {
+        return res.status(400).json({ error: "Session ID required" });
+      }
+
+      const stripe = await getUncachableStripeClient();
+      const session = await stripe.checkout.sessions.retrieve(sessionId);
+
+      if (session.payment_status !== "paid") {
+        return res.status(400).json({ error: "Payment not completed" });
+      }
+
+      if (session.metadata?.userId !== userId) {
+        return res.status(403).json({ error: "Session does not belong to this user" });
+      }
 
       const entitlement = await storage.upsertTemplateEntitlement(userId, TEMPLATE_ID, {
         status: "purchased",
@@ -50,17 +130,13 @@ export function registerTemplateRoutes(app: Express) {
 
       const existingInstall = await storage.getTemplateInstall(userId, TEMPLATE_ID);
       if (!existingInstall) {
-        await storage.createTemplateInstall({
-          userId,
-          templateId: TEMPLATE_ID,
-          installStatus: "pending",
-        });
+        await storage.createTemplateInstall({ userId, templateId: TEMPLATE_ID, installStatus: "pending" });
       }
 
       res.json({ success: true, entitlement });
     } catch (error: any) {
-      console.error("[Template] Purchase error:", error);
-      res.status(500).json({ error: "Failed to process purchase" });
+      console.error("[Template] Verify payment error:", error);
+      res.status(500).json({ error: "Failed to verify payment" });
     }
   });
 
@@ -84,7 +160,7 @@ export function registerTemplateRoutes(app: Express) {
       }
 
       const onboardingSchema = z.object({
-        isRegisteredEntity: z.enum(["yes", "no", "not_sure"]),
+        isRegisteredEntity: z.enum(["yes", "no"]),
         legalName: z.string().min(2),
         country: z.string().min(2),
       });
@@ -94,7 +170,7 @@ export function registerTemplateRoutes(app: Express) {
         return res.status(400).json({ error: "Invalid form data", details: validation.error.issues });
       }
 
-      if (payload.isRegisteredEntity === "no" || payload.isRegisteredEntity === "not_sure") {
+      if (payload.isRegisteredEntity === "no") {
         return res.status(400).json({ error: "A registered business entity is required for this template. Meta requires business verification for WhatsApp API access." });
       }
 
