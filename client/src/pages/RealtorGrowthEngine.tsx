@@ -320,13 +320,8 @@ export function RealtorGrowthEngine() {
             <div className="flex-1">
               <p className="font-semibold text-amber-900 text-sm">Growth Engine Paused</p>
               <p className="text-xs text-amber-800 mt-0.5">
-                Your Growth Engine workflows and AI scoring are paused because your
-                {!templateData?.subscription?.hasPro && !templateData?.subscription?.hasAI
-                  ? " Pro plan and AI add-on are"
-                  : !templateData?.subscription?.hasPro
-                  ? " Pro plan is"
-                  : " AI add-on is"}{" "}
-                no longer active. Reactivate to resume automation.
+                Your Realtor Growth Engine requires an active Pro + AI plan to run automations and handle conversations.
+                Reactivate your plan to resume your system instantly.
               </p>
               <p className="text-[11px] text-amber-700 mt-1">Your purchase and configuration are saved — nothing is lost.</p>
               <div className="flex gap-2 mt-2.5">
@@ -337,7 +332,7 @@ export function RealtorGrowthEngine() {
                 )}
                 {!templateData?.subscription?.hasAI && (
                   <Button size="sm" variant="outline" className="text-xs border-amber-400 text-amber-900 hover:bg-amber-100" onClick={() => { sessionStorage.setItem("rge_reactivating", "1"); setLocation("/app/ai-brain"); }} data-testid="button-reactivate-ai">
-                    Enable AI Add-on
+                    Enable AI
                   </Button>
                 )}
               </div>
