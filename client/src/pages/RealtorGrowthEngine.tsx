@@ -193,10 +193,6 @@ export function RealtorGrowthEngine() {
     }
   });
 
-  if (isLoading) {
-    return <div className="flex h-full items-center justify-center">Loading...</div>;
-  }
-
   const status = templateData?.entitlement?.status || 'locked';
   const subscriptionActive = templateData?.subscription?.active !== false;
   const isPaused = !subscriptionActive && (status === 'purchased' || status === 'submitted' || status === 'installed');
@@ -210,6 +206,10 @@ export function RealtorGrowthEngine() {
       });
     }
   }, [subscriptionActive]);
+
+  if (isLoading) {
+    return <div className="flex h-full items-center justify-center">Loading...</div>;
+  }
 
   // --- Views ---
 
