@@ -64,11 +64,11 @@ function GrowthEnginesTab() {
   const [, setLocation] = useLocation();
 
   const features = [
-    { icon: MessageSquare, text: "Capture leads from WhatsApp & ads instantly" },
-    { icon: Bot, text: "AI qualifies buyers & sellers automatically" },
-    { icon: Clock, text: "Smart follow-ups so no lead goes cold" },
-    { icon: Target, text: "Built-in real estate CRM pipeline" },
-    { icon: CalendarCheck, text: "Done-for-you setup + live onboarding sessions" },
+    { icon: MessageSquare, text: "Capture and respond to every new lead instantly on WhatsApp" },
+    { icon: Bot, text: "AI qualifies buyers & sellers so you focus only on serious prospects" },
+    { icon: Clock, text: "Automated follow-ups that turn cold leads into active conversations" },
+    { icon: Target, text: "Built-in real estate CRM pipeline to track every deal from first message to closing" },
+    { icon: CalendarCheck, text: "Done-for-you setup + live onboarding sessions so you launch fast" },
   ];
 
   return (
@@ -95,11 +95,14 @@ function GrowthEnginesTab() {
               </div>
             </div>
 
-            <p className="text-sm text-gray-600 mb-4 leading-relaxed">
-              Turn property inquiries into qualified buyers and booked showings — automatically.
+            <p className="text-sm text-gray-600 mb-1 leading-relaxed">
+              Convert more WhatsApp inquiries into qualified buyers & booked showings — automatically.
+            </p>
+            <p className="text-xs text-gray-500 mb-4 leading-relaxed">
+              A done-for-you WhatsApp automation system built specifically for real estate agents.
             </p>
 
-            <div className="space-y-2 mb-5">
+            <div className="space-y-2 mb-2">
               {features.map((f, i) => (
                 <div key={i} className="flex items-center gap-2.5 text-sm text-gray-700">
                   <div className="flex items-center justify-center w-5 h-5 rounded-full bg-emerald-50 shrink-0">
@@ -109,6 +112,7 @@ function GrowthEnginesTab() {
                 </div>
               ))}
             </div>
+            <p className="text-[11px] text-gray-400 mb-4">Includes onboarding + live setup call + system configuration</p>
 
             <Button
               className="bg-emerald-600 hover:bg-emerald-700 text-white w-full sm:w-auto"
