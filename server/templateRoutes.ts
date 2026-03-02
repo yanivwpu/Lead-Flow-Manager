@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { storage } from "./storage";
 import { requireAuth } from "./auth";
-import { sendRealtorOnboardingEmail } from "./email";
+import { sendRealtorOnboardingEmail, sendRealtorPaymentConfirmationEmail } from "./email";
 import { getUncachableStripeClient } from "./stripeClient";
 import { subscriptionService } from "./subscriptionService";
 import { z } from "zod";
@@ -172,6 +172,13 @@ export function registerTemplateRoutes(app: Express) {
       const existingInstall = await storage.getTemplateInstall(userId, TEMPLATE_ID);
       if (!existingInstall) {
         await storage.createTemplateInstall({ userId, templateId: TEMPLATE_ID, installStatus: "pending" });
+      }
+
+      const user = await storage.getUser(userId);
+      if (user?.email) {
+        sendRealtorPaymentConfirmationEmail(user.name || "", user.email).catch((err) =>
+          console.error("[Template] Failed to send payment confirmation email:", err)
+        );
       }
 
       res.json({ success: true, entitlement });
