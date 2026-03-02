@@ -72,6 +72,19 @@ export function registerTemplateRoutes(app: Express) {
         return res.json({ success: true, alreadyPurchased: true });
       }
 
+      const plan = (user.subscriptionPlan || "free").toLowerCase();
+      const hasPro = plan === "pro" || plan === "scale";
+      const limits = await subscriptionService.getUserLimits(userId);
+      const hasAI = limits?.hasAIBrainAddon || false;
+
+      if (user.email !== "demo@whachat.com" && (!hasPro || !hasAI)) {
+        return res.status(403).json({
+          error: "Active Pro + AI plan required",
+          hasPro,
+          hasAI,
+        });
+      }
+
       if (user.email === "demo@whachat.com") {
         const entitlement = await storage.upsertTemplateEntitlement(userId, TEMPLATE_ID, {
           status: "purchased",
