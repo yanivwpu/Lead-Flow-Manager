@@ -114,6 +114,8 @@ export function RealtorGrowthEngine() {
   const [eligibilityOpen, setEligibilityOpen] = useState(false);
   const [eligibilityAnswer, setEligibilityAnswer] = useState<string>("");
   const [eligibilityBlocked, setEligibilityBlocked] = useState(false);
+  const [subscriptionGate, setSubscriptionGate] = useState<{ show: boolean; hasPro: boolean; hasAI: boolean }>({ show: false, hasPro: true, hasAI: true });
+  const [checkingSubscription, setCheckingSubscription] = useState(false);
 
   const { data: templateData, isLoading } = useQuery<TemplateData>({
     queryKey: ["/api/templates/realtor-growth-engine"],
@@ -203,11 +205,27 @@ export function RealtorGrowthEngine() {
     }
   };
 
-  const handleEligibilityContinue = () => {
+  const handleEligibilityContinue = async () => {
     if (eligibilityAnswer === "no") {
       setEligibilityBlocked(true);
-    } else if (eligibilityAnswer === "yes") {
-      purchaseMutation.mutate();
+      return;
+    }
+    if (eligibilityAnswer === "yes") {
+      setCheckingSubscription(true);
+      try {
+        const res = await apiRequest("GET", "/api/templates/realtor-growth-engine/check-subscription");
+        const data = await res.json();
+        if (!data.hasPro || !data.hasAI) {
+          setSubscriptionGate({ show: true, hasPro: data.hasPro, hasAI: data.hasAI });
+          setCheckingSubscription(false);
+          return;
+        }
+        setCheckingSubscription(false);
+        purchaseMutation.mutate();
+      } catch {
+        setCheckingSubscription(false);
+        toast({ title: "Error", description: "Could not verify your subscription. Please try again.", variant: "destructive" });
+      }
     }
   };
 
@@ -861,10 +879,69 @@ export function RealtorGrowthEngine() {
 
   // --- Eligibility Modal ---
 
+  const closeAndResetModal = () => {
+    setEligibilityOpen(false);
+    setEligibilityBlocked(false);
+    setSubscriptionGate({ show: false, hasPro: true, hasAI: true });
+  };
+
   const EligibilityModal = () => (
-    <Dialog open={eligibilityOpen} onOpenChange={setEligibilityOpen}>
+    <Dialog open={eligibilityOpen} onOpenChange={(open) => { if (!open) closeAndResetModal(); }}>
       <DialogContent className="max-w-[520px]" data-testid="eligibility-modal">
-        {!eligibilityBlocked ? (
+        {subscriptionGate.show ? (
+          <>
+            <DialogHeader>
+              <DialogTitle>Subscription Upgrade Required</DialogTitle>
+            </DialogHeader>
+            <div className="py-2 space-y-3">
+              {!subscriptionGate.hasPro && (
+                <div className="p-3 rounded-lg bg-amber-50 border border-amber-200">
+                  <p className="text-sm font-medium text-amber-800">Pro plan required</p>
+                  <p className="text-xs text-amber-700 mt-1">
+                    The Realtor Growth Engine requires an active Pro subscription. Upgrade your plan to continue.
+                  </p>
+                  <Button
+                    size="sm"
+                    className="mt-2 bg-brand-green hover:bg-brand-green/90"
+                    onClick={() => { closeAndResetModal(); setLocation("/app/settings"); }}
+                    data-testid="button-upgrade-pro"
+                  >
+                    Upgrade to Pro
+                  </Button>
+                </div>
+              )}
+              {subscriptionGate.hasPro && !subscriptionGate.hasAI && (
+                <div className="p-3 rounded-lg bg-blue-50 border border-blue-200">
+                  <p className="text-sm font-medium text-blue-800">AI add-on required</p>
+                  <p className="text-xs text-blue-700 mt-1">
+                    The Realtor Growth Engine requires the AI Brain add-on for automated lead qualification and routing.
+                  </p>
+                  <Button
+                    size="sm"
+                    className="mt-2 bg-brand-green hover:bg-brand-green/90"
+                    onClick={() => { closeAndResetModal(); setLocation("/app/ai-brain"); }}
+                    data-testid="button-enable-ai"
+                  >
+                    Enable AI Add-on
+                  </Button>
+                </div>
+              )}
+              {!subscriptionGate.hasPro && !subscriptionGate.hasAI && (
+                <div className="p-3 rounded-lg bg-blue-50 border border-blue-200">
+                  <p className="text-sm font-medium text-blue-800">AI add-on also required</p>
+                  <p className="text-xs text-blue-700 mt-1">
+                    After upgrading to Pro, you'll also need to enable the AI Brain add-on ($29/mo).
+                  </p>
+                </div>
+              )}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={closeAndResetModal} data-testid="button-subscription-dismiss">
+                Close
+              </Button>
+            </DialogFooter>
+          </>
+        ) : !eligibilityBlocked ? (
           <>
             <DialogHeader>
               <DialogTitle>Quick Eligibility Check (30 seconds)</DialogTitle>
@@ -884,14 +961,14 @@ export function RealtorGrowthEngine() {
               </div>
             </RadioGroup>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setEligibilityOpen(false)} data-testid="button-eligibility-cancel">Cancel</Button>
+              <Button variant="outline" onClick={closeAndResetModal} data-testid="button-eligibility-cancel">Cancel</Button>
               <Button
                 className="bg-brand-green hover:bg-brand-green/90"
                 onClick={handleEligibilityContinue}
-                disabled={!eligibilityAnswer || purchaseMutation.isPending}
+                disabled={!eligibilityAnswer || purchaseMutation.isPending || checkingSubscription}
                 data-testid="button-eligibility-continue"
               >
-                {purchaseMutation.isPending ? "Processing..." : "Continue"}
+                {checkingSubscription ? "Checking..." : purchaseMutation.isPending ? "Processing..." : "Continue"}
               </Button>
             </DialogFooter>
           </>
@@ -911,7 +988,7 @@ export function RealtorGrowthEngine() {
             <DialogFooter>
               <Button
                 variant="outline"
-                onClick={() => { setEligibilityOpen(false); setEligibilityBlocked(false); }}
+                onClick={closeAndResetModal}
                 data-testid="button-eligibility-dismiss"
               >
                 Got it — I'll return after registering

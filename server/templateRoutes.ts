@@ -3,12 +3,32 @@ import { storage } from "./storage";
 import { requireAuth } from "./auth";
 import { sendRealtorOnboardingEmail } from "./email";
 import { getUncachableStripeClient } from "./stripeClient";
+import { subscriptionService } from "./subscriptionService";
 import { z } from "zod";
 
 const TEMPLATE_ID = "realtor-growth-engine";
 const TEMPLATE_PRICE_CENTS = 19900;
 
 export function registerTemplateRoutes(app: Express) {
+  app.get("/api/templates/realtor-growth-engine/check-subscription", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(404).json({ error: "User not found" });
+
+      const plan = (user.subscriptionPlan || "free").toLowerCase();
+      const hasPro = plan === "pro" || plan === "scale";
+
+      const limits = await subscriptionService.getUserLimits(userId);
+      const hasAI = limits?.hasAIBrainAddon || false;
+
+      res.json({ hasPro, hasAI, plan });
+    } catch (error: any) {
+      console.error("[Template] Subscription check error:", error);
+      res.status(500).json({ error: "Failed to check subscription" });
+    }
+  });
+
   app.get("/api/templates/realtor-growth-engine", requireAuth, async (req, res) => {
     try {
       const userId = (req.user as any).id;
