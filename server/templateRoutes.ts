@@ -345,6 +345,17 @@ export function registerTemplateRoutes(app: Express) {
     }
   });
 
+  app.get("/api/templates/realtor-growth-engine/assets", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      const assets = await storage.getTemplateAssets(TEMPLATE_ID);
+      res.json({ assets });
+    } catch (error: any) {
+      console.error("[Template] Assets error:", error);
+      res.status(500).json({ error: "Failed to fetch assets" });
+    }
+  });
+
   app.get("/api/templates/realtor-growth-engine/status", requireAuth, async (req, res) => {
     try {
       const userId = (req.user as any).id;

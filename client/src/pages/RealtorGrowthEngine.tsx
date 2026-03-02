@@ -124,7 +124,17 @@ export function RealtorGrowthEngine() {
   const [checkingSubscription, setCheckingSubscription] = useState(false);
 
   const { data: templateData, isLoading } = useQuery<TemplateData>({
-    queryKey: ["/api/templates/realtor-growth-engine"],
+    queryKey: ["/api/templates/realtor-growth-engine", new URLSearchParams(window.location.search).get("bypass")],
+    queryFn: async ({ queryKey }) => {
+      const url = queryKey[1] ? `/api/templates/realtor-growth-engine?bypass=${queryKey[1]}` : "/api/templates/realtor-growth-engine";
+      const res = await apiRequest("GET", url);
+      return res.json();
+    }
+  });
+
+  const { data: assetsData } = useQuery({
+    queryKey: ["/api/templates/realtor-growth-engine/assets"],
+    enabled: status === 'installed'
   });
 
   const verifyPaymentMutation = useMutation({
@@ -298,13 +308,13 @@ export function RealtorGrowthEngine() {
           </p>
           <Button 
             className={cn("mt-3", isPaused ? "bg-amber-600 hover:bg-amber-700" : "bg-brand-green hover:bg-brand-green/90")}
-            onClick={isPaused ? undefined : handlePrimaryCta}
-            disabled={purchaseMutation.isPending || status === 'submitted' || status === 'installed' || isPaused}
+            onClick={status === 'installed' ? () => setLocation("/app/workflows") : handlePrimaryCta}
+            disabled={purchaseMutation.isPending || status === 'submitted' || isPaused}
             data-testid="button-hero-cta"
           >
             {isPaused ? (
               <><PauseCircle className="mr-2 w-4 h-4" /> Paused — Subscription Required</>
-            ) : status === 'locked' ? 'Start Onboarding' : status === 'purchased' ? 'Start Onboarding' : 'Onboarding Submitted'}
+            ) : status === 'locked' ? 'Start Onboarding' : status === 'purchased' ? 'Start Onboarding' : status === 'installed' ? 'Open Workflows' : 'Onboarding Submitted'}
             {!isPaused && <ChevronRight className="ml-2 w-4 h-4" />}
           </Button>
           <p className="text-[11px] text-muted-foreground mt-1.5">One-time onboarding $199 · Requires Pro + AI plan</p>
@@ -1050,6 +1060,111 @@ export function RealtorGrowthEngine() {
     </Dialog>
   );
 
+  const DashboardView = () => {
+    const workflows = assetsData?.assets?.find((a: any) => a.assetType === 'workflows')?.definition?.workflows || [];
+    const pipeline = assetsData?.assets?.find((a: any) => a.assetType === 'pipeline')?.definition || { stages: [] };
+
+    return (
+      <div className="max-w-5xl mx-auto px-4 py-8">
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <Badge className="mb-2 bg-brand-green/10 text-brand-green border-brand-green/20">Active Engine</Badge>
+            <h1 className="text-3xl font-bold text-gray-900">Realtor Growth Engine</h1>
+            <p className="text-muted-foreground">Your real estate automation system is active and running.</p>
+          </div>
+          <Button onClick={() => setLocation("/app/workflows")} className="bg-brand-green hover:bg-brand-green/90">
+            Manage Workflows
+            <Zap className="ml-2 w-4 h-4" />
+          </Button>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <Card className="md:col-span-2">
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Zap className="w-5 h-5 text-brand-green" />
+                Active Automations
+              </CardTitle>
+              <CardDescription>Template workflows running in your workspace.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {workflows.length > 0 ? workflows.slice(0, 4).map((wf: any, i: number) => (
+                  <div key={i} className="flex items-center justify-between p-3 border rounded-lg bg-gray-50/50">
+                    <div>
+                      <p className="font-medium text-sm text-gray-900">{wf.name}</p>
+                      <p className="text-xs text-muted-foreground">{wf.description || "Automated real estate workflow"}</p>
+                    </div>
+                    <Badge variant="outline" className="text-[10px] bg-green-50 text-green-700 border-green-200">Running</Badge>
+                  </div>
+                )) : (
+                  <div className="text-center py-6 text-muted-foreground text-sm">
+                    Loading automation details...
+                  </div>
+                )}
+                <Button variant="ghost" size="sm" className="w-full text-brand-green hover:text-brand-green hover:bg-brand-green/5" onClick={() => setLocation("/app/workflows")}>
+                  View All {workflows.length || 8} Workflows
+                  <ChevronRight className="ml-1 w-4 h-4" />
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          <div className="space-y-6">
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Target className="w-4 h-4 text-brand-green" />
+                  AI Qualification
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">Status</span>
+                    <span className="font-medium text-green-600 flex items-center gap-1">
+                      <CheckCircle2 className="w-3.5 h-3.5" /> Active
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">Rules</span>
+                    <span className="font-medium">Real Estate Pro</span>
+                  </div>
+                  <Separator />
+                  <p className="text-[11px] text-muted-foreground leading-relaxed">
+                    AI is currently scoring leads based on property interest, budget, and purchasing timeline.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <LayoutGrid className="w-4 h-4 text-brand-green" />
+                  CRM Pipeline
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  {(pipeline.stages?.length > 0 ? pipeline.stages : ['New Lead', 'Discovery', 'Tour Scheduled', 'Offer', 'Closed']).map((stage: any, i: number) => (
+                    <div key={i} className="flex items-center gap-2 text-xs">
+                      <div className="w-1.5 h-1.5 rounded-full bg-brand-green" />
+                      <span className="text-gray-700">{typeof stage === 'string' ? stage : stage.name}</span>
+                    </div>
+                  ))}
+                </div>
+                <Button variant="outline" size="sm" className="w-full mt-4 text-xs" onClick={() => setLocation("/app/chats")}>
+                  Open CRM
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   // --- Router Logic ---
 
   if (location === "/app/templates/realtor-growth-engine/onboarding") {
@@ -1060,13 +1175,14 @@ export function RealtorGrowthEngine() {
 
   if (location === "/app/templates/realtor-growth-engine/status") {
     if (status === 'locked' || status === 'purchased') return <Redirect to="/app/templates/realtor-growth-engine" />;
+    if (status === 'installed') return <DashboardView />;
     return <StatusPage />;
   }
 
   return (
     <>
       <EligibilityModal />
-      <DetailPage />
+      {status === 'installed' ? <DashboardView /> : <DetailPage />}
     </>
   );
 }
