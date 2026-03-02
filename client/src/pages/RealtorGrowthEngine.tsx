@@ -1445,16 +1445,16 @@ export function RealtorGrowthEngine() {
         </div>
 
         <Dialog open={!!selectedWf} onOpenChange={(open) => { if (!open) setSelectedWf(null); }}>
-          <DialogContent className="max-w-2xl max-h-[85vh] p-0 overflow-hidden">
-            <div className="flex items-center justify-between px-6 pt-5 pb-3 border-b">
+          <DialogContent className="max-w-2xl p-0 flex flex-col" style={{ maxHeight: 'calc(100vh - 4rem)' }}>
+            <div className="flex items-center justify-between px-6 pt-5 pb-3 border-b shrink-0">
               <div>
                 <DialogTitle className="text-lg font-bold">{selectedWf?.name}</DialogTitle>
                 <DialogDescription className="text-xs mt-0.5">Customize preferences safely — core logic is locked.</DialogDescription>
               </div>
             </div>
 
-            <Tabs value={modalTab} onValueChange={setModalTab} className="flex-1">
-              <div className="px-6 pt-2">
+            <Tabs value={modalTab} onValueChange={setModalTab} className="flex flex-col min-h-0 flex-1">
+              <div className="px-6 pt-2 shrink-0">
                 <TabsList className="grid w-full grid-cols-2">
                   <TabsTrigger value="preview" className="text-sm" data-testid="tab-preview">
                     <Eye className="w-3.5 h-3.5 mr-1.5" /> Preview
@@ -1465,7 +1465,7 @@ export function RealtorGrowthEngine() {
                 </TabsList>
               </div>
 
-              <ScrollArea className="max-h-[50vh]">
+              <div className="flex-1 min-h-0 overflow-y-auto">
                 <TabsContent value="preview" className="px-6 pb-4 mt-0 space-y-5">
                   <div className="pt-3">
                     <h4 className="text-sm font-semibold text-gray-800 mb-1">What this workflow does</h4>
@@ -1524,10 +1524,10 @@ export function RealtorGrowthEngine() {
                     {selectedWf && renderWorkflowFields(selectedWf.key)}
                   </div>
                 </TabsContent>
-              </ScrollArea>
+              </div>
             </Tabs>
 
-            <div className="flex items-center justify-between px-6 py-4 border-t bg-gray-50/50">
+            <div className="flex items-center justify-between px-6 py-4 border-t bg-gray-50/50 shrink-0">
               {modalTab === "customize" && (
                 <Button variant="ghost" size="sm" className="text-xs text-muted-foreground" onClick={handleRestore} data-testid="button-restore-defaults">
                   <RotateCcw className="w-3 h-3 mr-1" /> Restore Defaults
