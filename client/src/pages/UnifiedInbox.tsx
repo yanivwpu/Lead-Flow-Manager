@@ -172,7 +172,7 @@ export function UnifiedInbox() {
 
   const { data: realContactData } = useQuery<{ contact: Contact; conversations: Conversation[] }>({
     queryKey: ["/api/contacts", selectedContactId],
-    enabled: !!selectedContactId && !isDemoUser,
+    enabled: !!selectedContactId && (!isDemoUser || !selectedDemoChat),
   });
 
   const contactData = useMemo(() => {
@@ -210,14 +210,14 @@ export function UnifiedInbox() {
 
   const { data: realMessages = [] } = useQuery<Message[]>({
     queryKey: ["/api/conversations", primaryConversation?.id, "messages"],
-    enabled: !!primaryConversation?.id && !isDemoUser,
+    enabled: !!primaryConversation?.id && (!isDemoUser || !selectedDemoChat),
   });
 
   const messages: Message[] = useMemo(() => {
     if (isDemoUser && selectedDemoChat) {
       return selectedDemoChat.messages.map((m: any, i: number) => ({
         id: m.id || `demo-msg-${i}`,
-        direction: (m.sender === 'me' ? 'outbound' : 'inbound') as 'outbound' | 'inbound',
+        direction: (m.sender === 'me' || m.sender === 'agent' ? 'outbound' : 'inbound') as 'outbound' | 'inbound',
         content: m.text || m.content,
         contentType: 'text',
         status: 'sent',
