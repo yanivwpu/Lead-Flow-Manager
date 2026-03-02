@@ -134,7 +134,7 @@ export function RealtorGrowthEngine() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/templates/realtor-growth-engine"] });
-      toast({ title: "Payment Verified", description: "You can now proceed to onboarding." });
+      toast({ title: "Payment confirmed", description: "Next step: complete your onboarding so we can activate your system." });
       const url = new URL(window.location.href);
       url.searchParams.delete("paid");
       url.searchParams.delete("session_id");
