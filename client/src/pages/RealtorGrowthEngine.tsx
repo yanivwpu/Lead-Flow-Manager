@@ -459,9 +459,6 @@ export function RealtorGrowthEngine() {
                       <p className="text-red-700 text-sm mt-1">
                         A registered business entity is required for WhatsApp Business API access. Meta requires business verification before provisioning an official WhatsApp number.
                       </p>
-                      <p className="text-red-600 text-xs mt-2">
-                        If you need help with registration, contact us at <span className="font-medium">support@whachatcrm.com</span>.
-                      </p>
                     </div>
                   </div>
                 )}
