@@ -242,6 +242,7 @@ export interface IStorage {
   getUserTemplateData(userId: string, templateId: string): Promise<UserTemplateData[]>;
   getUserTemplateDataByKey(userId: string, templateId: string, assetType: string, assetKey: string): Promise<UserTemplateData | undefined>;
   createUserTemplateData(data: InsertUserTemplateData): Promise<UserTemplateData>;
+  upsertUserTemplateData(userId: string, templateId: string, assetType: string, assetKey: string, definition: any): Promise<UserTemplateData>;
   deleteUserTemplateDataForTemplate(userId: string, templateId: string): Promise<void>;
   resetTemplateForUser(userId: string, templateId: string): Promise<void>;
 }
@@ -2126,6 +2127,18 @@ export class DbStorage implements IStorage {
   async createUserTemplateData(data: InsertUserTemplateData): Promise<UserTemplateData> {
     const result = await db.insert(userTemplateData).values(data).returning();
     return result[0];
+  }
+
+  async upsertUserTemplateData(userId: string, templateId: string, assetType: string, assetKey: string, definition: any): Promise<UserTemplateData> {
+    const existing = await this.getUserTemplateDataByKey(userId, templateId, assetType, assetKey);
+    if (existing) {
+      const result = await db.update(userTemplateData)
+        .set({ definition })
+        .where(eq(userTemplateData.id, existing.id))
+        .returning();
+      return result[0];
+    }
+    return this.createUserTemplateData({ userId, templateId, assetType, assetKey, definition });
   }
 
   async deleteUserTemplateDataForTemplate(userId: string, templateId: string): Promise<void> {

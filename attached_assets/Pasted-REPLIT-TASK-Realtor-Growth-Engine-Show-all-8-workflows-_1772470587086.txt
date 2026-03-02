@@ -1,0 +1,130 @@
+REPLIT TASK — Realtor Growth Engine: Show all 8 workflows inline + click-to-edit modal (SAFE preferences only)
+
+Goal:
+Keep the current “Active Automations” list UI on the Realtor Growth Engine dashboard, but:
+1) Ensure all 8 template workflows are visible in that same list (scroll if needed)
+2) Make each workflow row clickable
+3) On click, open a popup modal (same UX pattern as existing template editor popup)
+4) Allow ONLY safe “preferences” editing (territory, price, keywords, timing, etc.) — NO full workflow builder / JSON editing
+5) Remove/disable the “View All 8 Workflows” link since we are not navigating anywhere
+
+-----------------------------------------
+A) SHOW ALL 8 WORKFLOWS INLINE (NO NAV)
+-----------------------------------------
+
+On the Realtor Growth Engine “Active Engine” page (dashboard with Active Automations):
+- The “Active Automations” list must render ALL 8 template workflows (W1–W8).
+- If the list is currently capped to 4, remove the slice/limit so it displays all.
+- Keep the card height and allow internal scroll if needed.
+
+Also:
+- Remove “View All 8 Workflows” link OR change it to “Scroll to view all” (no click navigation).
+
+IMPORTANT:
+Do NOT route to /app/automations anywhere from this Growth Engine dashboard.
+
+-----------------------------------------
+B) MAKE EACH WORKFLOW ROW CLICKABLE
+-----------------------------------------
+
+Each workflow item row in the “Active Automations” list should be clickable:
+- cursor: pointer
+- hover: subtle background highlight
+- add a small right-side action label/icon: “Edit” (or gear icon)
+
+On click:
+openWorkflowSettingsModal(workflowId)
+
+-----------------------------------------
+C) WORKFLOW SETTINGS MODAL (LIKE EXISTING POPUP)
+-----------------------------------------
+
+Use the same modal UX pattern as the existing template editor modal (example: Abandoned Cart Recovery popup):
+- Centered modal
+- Close X top-right
+- Bottom buttons: Close + Save
+
+Modal Title:
+Workflow name (e.g., “AI Qualify + Score on Every Inbound”)
+
+Modal Subtitle:
+“Customize preferences safely — core logic is locked.”
+
+Tabs (2 tabs only):
+1) Preview
+2) Customize
+
+TAB 1 — Preview (read-only):
+- Show what this workflow does in simple English
+- Show the message templates (read-only)
+- Show timing (read-only)
+- Show triggers (read-only)
+(NO editing here)
+
+TAB 2 — Customize (safe fields only):
+Show only approved inputs. NO workflow JSON editor. NO node editing.
+
+-----------------------------------------
+D) SAFE FIELDS (PREFERENCES) — WHAT USERS CAN EDIT
+-----------------------------------------
+
+We want users to change generic preferences like territory, price, keywords, timing without breaking the engine.
+
+Store ALL preferences in user_template_data:
+- asset_type = "preferences"
+- asset_key = "realtor_growth_engine_preferences"
+- data = JSON
+
+Global fields (available for all workflows):
+- serviceTerritory: string (free text) + optional tags list
+- priceMin: number
+- priceMax: number
+- includeKeywords: string (comma-separated)
+- excludeKeywords: string (comma-separated)
+- preferredLanguage: "en" | "es" | "he"
+
+Workflow-specific fields (only show when relevant):
+W2 (AI Qualify + Score):
+- buyerKeywords (comma-separated)
+- sellerKeywords (comma-separated)
+- investorKeywords (comma-separated)
+
+W3 (Appointment Intent → Booking Prompt):
+- appointmentIntentKeywords (comma-separated)
+
+W4/W5 (Follow-ups):
+- followUpDelayHours (number) OR select presets (2h / 24h / 48h / 72h)
+
+Rules:
+- Show only fields relevant to the clicked workflow
+- Provide sensible defaults if not set
+
+Buttons:
+- Save Settings (primary)
+- Close (secondary)
+Optional:
+- “Restore Defaults” (resets only the fields for this workflow back to template defaults)
+
+-----------------------------------------
+E) APPLY SETTINGS AT RUNTIME
+-----------------------------------------
+
+Update the template workflow execution / scoring logic to read preferences JSON at runtime:
+- keyword matching uses include/exclude + buyer/seller/investor keywords
+- follow-up timers use followUpDelayHours
+- territory/price range can influence scoring/routing and message personalization
+Fallback to template defaults if preferences missing.
+
+-----------------------------------------
+F) ACCEPTANCE CRITERIA
+-----------------------------------------
+
+1) Growth Engine dashboard shows ALL 8 workflows in “Active Automations” list
+2) No navigation to /app/automations from Growth Engine page
+3) Clicking any workflow row opens the modal editor
+4) Preview tab is read-only and clearly explains the workflow
+5) Customize tab allows only safe preference edits (no full workflow editing)
+6) Preferences persist per user and affect runtime behavior
+7) Demo user works as expected
+
+END TASK

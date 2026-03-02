@@ -29,6 +29,17 @@ async function isTemplateWorkflowAllowed(workflow: Workflow): Promise<boolean> {
   return limits?.hasAIBrainAddon || false;
 }
 
+export async function getTemplatePreferences(userId: string): Promise<Record<string, any>> {
+  try {
+    const prefs = await storage.getUserTemplateDataByKey(
+      userId, "realtor-growth-engine", "preferences", "realtor_growth_engine_preferences"
+    );
+    return (prefs?.definition as Record<string, any>) || {};
+  } catch {
+    return {};
+  }
+}
+
 export async function executeWorkflowActions(
   workflow: Workflow,
   chat: Chat,

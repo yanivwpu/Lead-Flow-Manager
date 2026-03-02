@@ -16,6 +16,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { 
   CheckCircle2, 
   ChevronRight, 
@@ -37,7 +39,11 @@ import {
   RotateCcw,
   BarChart3,
   PauseCircle,
-  LayoutGrid
+  LayoutGrid,
+  Settings,
+  Eye,
+  X,
+  Loader2
 } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -312,13 +318,13 @@ export function RealtorGrowthEngine() {
           </p>
           <Button 
             className={cn("mt-3", isPaused ? "bg-amber-600 hover:bg-amber-700" : "bg-brand-green hover:bg-brand-green/90")}
-            onClick={status === 'installed' ? () => setLocation("/app/workflows") : handlePrimaryCta}
-            disabled={purchaseMutation.isPending || status === 'submitted' || isPaused}
+            onClick={handlePrimaryCta}
+            disabled={purchaseMutation.isPending || status === 'submitted' || status === 'installed' || isPaused}
             data-testid="button-hero-cta"
           >
             {isPaused ? (
               <><PauseCircle className="mr-2 w-4 h-4" /> Paused — Subscription Required</>
-            ) : status === 'locked' ? 'Start Onboarding' : status === 'purchased' ? 'Start Onboarding' : status === 'installed' ? 'Open Workflows' : 'Onboarding Submitted'}
+            ) : status === 'locked' ? 'Start Onboarding' : status === 'purchased' ? 'Start Onboarding' : 'Onboarding Submitted'}
             {!isPaused && <ChevronRight className="ml-2 w-4 h-4" />}
           </Button>
           <p className="text-[11px] text-muted-foreground mt-1.5">One-time onboarding $199 · Requires Pro + AI plan</p>
@@ -1064,7 +1070,273 @@ export function RealtorGrowthEngine() {
     </Dialog>
   );
 
+  const WORKFLOW_DESCRIPTIONS: Record<string, { summary: string; triggers: string; timing: string }> = {
+    W1: {
+      summary: "Instantly replies to every new WhatsApp inquiry with a personalized greeting. Creates a lead record, tags as 'New', sets pipeline to 'New Lead', and creates a review task.",
+      triggers: "New chat / first message from an unknown number",
+      timing: "Immediate (within seconds of first message)",
+    },
+    W2: {
+      summary: "Analyzes every inbound message using AI to score the lead (0-100). Detects lead type (Buyer/Seller/Investor/Rental), extracts budget and timeline, and routes hot leads (75+) vs warm leads (45+) to the appropriate pipeline stage.",
+      triggers: "Every inbound message with keywords",
+      timing: "Real-time on each message",
+    },
+    W3: {
+      summary: "Detects when a lead mentions scheduling intent (tour, showing, call, visit) and automatically sends a booking prompt with available times. Tags as 'Appointment Requested' and creates a booking task.",
+      triggers: "Keywords: call, book, available, tour, showing, visit, schedule",
+      timing: "Immediate on keyword detection",
+    },
+    W4: {
+      summary: "Sends a friendly follow-up if a lead hasn't replied within 24 hours. Only targets active pipeline stages (New Lead, Responded, Qualified). Tags as 'Follow-Up Needed'.",
+      triggers: "No reply detected",
+      timing: "24 hours after last message",
+    },
+    W5: {
+      summary: "Second follow-up attempt for leads who still haven't responded after 3 days. Suggests new listings matching their criteria to re-engage interest.",
+      triggers: "No reply detected (3 days)",
+      timing: "72 hours after last message",
+    },
+    W6: {
+      summary: "Final follow-up after 7 days of silence. Moves the lead to 'Nurture / Follow-Up' pipeline stage for long-term re-engagement. Sends a low-pressure message about market updates.",
+      triggers: "No reply detected (7 days)",
+      timing: "168 hours (7 days) after last message",
+    },
+    W7: {
+      summary: "Safety workflow that detects opt-out or disinterest signals. Tags as 'Do Not Contact', moves to 'Unqualified' stage, and sends a polite close message. Prevents further automated outreach.",
+      triggers: "Keywords: stop, unsubscribe, spam, not interested, remove",
+      timing: "Immediate on keyword detection",
+    },
+    W8: {
+      summary: "Detects the language of incoming messages and updates the lead's language field. Can be used to route leads to language-appropriate agents or templates.",
+      triggers: "Every inbound message",
+      timing: "Real-time analysis",
+    },
+  };
+
+  const WORKFLOW_FIELDS: Record<string, string[]> = {
+    W2: ["buyerKeywords", "sellerKeywords", "investorKeywords"],
+    W3: ["appointmentIntentKeywords"],
+    W4: ["followUpDelayHours"],
+    W5: ["followUpDelayHours"],
+  };
+
+  const GLOBAL_PREF_DEFAULTS: Record<string, any> = {
+    serviceTerritory: "",
+    priceMin: 0,
+    priceMax: 0,
+    includeKeywords: "",
+    excludeKeywords: "",
+    preferredLanguage: "en",
+  };
+
+  const WORKFLOW_PREF_DEFAULTS: Record<string, Record<string, any>> = {
+    W2: { buyerKeywords: "buy, purchase, looking for, apartment, house, condo", sellerKeywords: "sell, listing, list my, market value", investorKeywords: "invest, roi, return, flip, portfolio" },
+    W3: { appointmentIntentKeywords: "call, book, available, tour, showing, visit, schedule" },
+    W4: { followUpDelayHours: 24 },
+    W5: { followUpDelayHours: 72 },
+  };
+
   const DashboardView = () => {
+    const [selectedWf, setSelectedWf] = useState<any>(null);
+    const [modalTab, setModalTab] = useState<string>("preview");
+    const [localPrefs, setLocalPrefs] = useState<Record<string, any>>({});
+    const [saving, setSaving] = useState(false);
+
+    const { data: prefsData } = useQuery({
+      queryKey: ["/api/templates/realtor-growth-engine/preferences"],
+      enabled: status === 'installed',
+    });
+
+    const savedPrefs = (prefsData as any)?.preferences || {};
+
+    const openModal = (wf: any) => {
+      const wfKey = wf.key;
+      const merged: Record<string, any> = { ...GLOBAL_PREF_DEFAULTS, ...savedPrefs };
+      if (WORKFLOW_PREF_DEFAULTS[wfKey]) {
+        for (const [k, v] of Object.entries(WORKFLOW_PREF_DEFAULTS[wfKey])) {
+          if (merged[`${wfKey}_${k}`] === undefined) merged[`${wfKey}_${k}`] = v;
+          else merged[`${wfKey}_${k}`] = merged[`${wfKey}_${k}`];
+        }
+      }
+      setLocalPrefs(merged);
+      setSelectedWf(wf);
+      setModalTab("preview");
+    };
+
+    const handleSave = async () => {
+      setSaving(true);
+      try {
+        await apiRequest("PUT", "/api/templates/realtor-growth-engine/preferences", { preferences: localPrefs });
+        queryClient.invalidateQueries({ queryKey: ["/api/templates/realtor-growth-engine/preferences"] });
+        toast({ title: "Settings saved", description: `Preferences for "${selectedWf?.name}" updated.` });
+        setSelectedWf(null);
+      } catch {
+        toast({ title: "Error", description: "Failed to save settings.", variant: "destructive" });
+      } finally {
+        setSaving(false);
+      }
+    };
+
+    const handleRestore = () => {
+      if (!selectedWf) return;
+      const wfKey = selectedWf.key;
+      const restored: Record<string, any> = { ...localPrefs };
+      for (const [k, v] of Object.entries(GLOBAL_PREF_DEFAULTS)) {
+        restored[k] = v;
+      }
+      if (WORKFLOW_PREF_DEFAULTS[wfKey]) {
+        for (const [k, v] of Object.entries(WORKFLOW_PREF_DEFAULTS[wfKey])) {
+          restored[`${wfKey}_${k}`] = v;
+        }
+      }
+      setLocalPrefs(restored);
+      toast({ title: "Defaults restored", description: "Fields reset to template defaults. Click Save to apply." });
+    };
+
+    const updatePref = (key: string, value: any) => {
+      setLocalPrefs(prev => ({ ...prev, [key]: value }));
+    };
+
+    const msgTemplates = assetsData?.assets?.find((a: any) => a.assetType === 'message_templates')?.definition?.templates || [];
+
+    const getWorkflowTemplates = (wf: any) => {
+      const templateKeys = (wf.actions || [])
+        .filter((a: any) => a.type === 'send_message_template')
+        .map((a: any) => a.templateKey);
+      return msgTemplates.filter((t: any) => templateKeys.includes(t.key));
+    };
+
+    const hasWorkflowSpecificFields = (wfKey: string) => !!WORKFLOW_FIELDS[wfKey];
+
+    const renderGlobalFields = () => (
+      <div className="space-y-4">
+        <div>
+          <Label className="text-sm font-medium">Service Territory</Label>
+          <Input
+            placeholder="e.g. Miami-Dade, Broward County"
+            value={localPrefs.serviceTerritory || ""}
+            onChange={e => updatePref("serviceTerritory", e.target.value)}
+            className="mt-1"
+            data-testid="input-service-territory"
+          />
+          <p className="text-[11px] text-muted-foreground mt-1">Areas you serve — used in message personalization</p>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <Label className="text-sm font-medium">Min Price ($)</Label>
+            <Input
+              type="number"
+              placeholder="0"
+              value={localPrefs.priceMin || ""}
+              onChange={e => updatePref("priceMin", Number(e.target.value))}
+              className="mt-1"
+              data-testid="input-price-min"
+            />
+          </div>
+          <div>
+            <Label className="text-sm font-medium">Max Price ($)</Label>
+            <Input
+              type="number"
+              placeholder="0"
+              value={localPrefs.priceMax || ""}
+              onChange={e => updatePref("priceMax", Number(e.target.value))}
+              className="mt-1"
+              data-testid="input-price-max"
+            />
+          </div>
+        </div>
+        <div>
+          <Label className="text-sm font-medium">Include Keywords</Label>
+          <Input
+            placeholder="luxury, waterfront, penthouse"
+            value={localPrefs.includeKeywords || ""}
+            onChange={e => updatePref("includeKeywords", e.target.value)}
+            className="mt-1"
+            data-testid="input-include-keywords"
+          />
+          <p className="text-[11px] text-muted-foreground mt-1">Comma-separated — boost scoring when detected</p>
+        </div>
+        <div>
+          <Label className="text-sm font-medium">Exclude Keywords</Label>
+          <Input
+            placeholder="spam, lottery, scam"
+            value={localPrefs.excludeKeywords || ""}
+            onChange={e => updatePref("excludeKeywords", e.target.value)}
+            className="mt-1"
+            data-testid="input-exclude-keywords"
+          />
+          <p className="text-[11px] text-muted-foreground mt-1">Comma-separated — penalize or filter when detected</p>
+        </div>
+        <div>
+          <Label className="text-sm font-medium">Preferred Language</Label>
+          <Select value={localPrefs.preferredLanguage || "en"} onValueChange={v => updatePref("preferredLanguage", v)}>
+            <SelectTrigger className="mt-1" data-testid="select-preferred-language">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="en">English</SelectItem>
+              <SelectItem value="es">Spanish</SelectItem>
+              <SelectItem value="he">Hebrew</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+    );
+
+    const renderWorkflowFields = (wfKey: string) => {
+      const fields = WORKFLOW_FIELDS[wfKey];
+      if (!fields) return null;
+
+      return (
+        <div className="space-y-4 mt-4">
+          <Separator />
+          <p className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Workflow-Specific Settings</p>
+          {fields.map(field => {
+            const prefKey = `${wfKey}_${field}`;
+            if (field === "followUpDelayHours") {
+              return (
+                <div key={field}>
+                  <Label className="text-sm font-medium">Follow-Up Delay</Label>
+                  <Select value={String(localPrefs[prefKey] || WORKFLOW_PREF_DEFAULTS[wfKey]?.[field] || 24)} onValueChange={v => updatePref(prefKey, Number(v))}>
+                    <SelectTrigger className="mt-1" data-testid={`select-${field}`}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="2">2 hours</SelectItem>
+                      <SelectItem value="24">24 hours</SelectItem>
+                      <SelectItem value="48">48 hours</SelectItem>
+                      <SelectItem value="72">72 hours</SelectItem>
+                      <SelectItem value="168">7 days</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-[11px] text-muted-foreground mt-1">How long to wait before sending this follow-up</p>
+                </div>
+              );
+            }
+            const labelMap: Record<string, string> = {
+              buyerKeywords: "Buyer Detection Keywords",
+              sellerKeywords: "Seller Detection Keywords",
+              investorKeywords: "Investor Detection Keywords",
+              appointmentIntentKeywords: "Appointment Intent Keywords",
+            };
+            return (
+              <div key={field}>
+                <Label className="text-sm font-medium">{labelMap[field] || field}</Label>
+                <Input
+                  placeholder="keyword1, keyword2, keyword3"
+                  value={localPrefs[prefKey] || WORKFLOW_PREF_DEFAULTS[wfKey]?.[field] || ""}
+                  onChange={e => updatePref(prefKey, e.target.value)}
+                  className="mt-1"
+                  data-testid={`input-${field}`}
+                />
+                <p className="text-[11px] text-muted-foreground mt-1">Comma-separated keywords used for detection</p>
+              </div>
+            );
+          })}
+        </div>
+      );
+    };
+
     return (
       <div className="max-w-5xl mx-auto px-4 py-8">
         <div className="flex items-center justify-between mb-8">
@@ -1073,10 +1345,6 @@ export function RealtorGrowthEngine() {
             <h1 className="text-3xl font-bold text-gray-900">Realtor Growth Engine</h1>
             <p className="text-muted-foreground">Your real estate automation system is active and running.</p>
           </div>
-          <Button onClick={() => setLocation("/app/workflows")} className="bg-brand-green hover:bg-brand-green/90">
-            Manage Workflows
-            <Zap className="ml-2 w-4 h-4" />
-          </Button>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -1086,28 +1354,41 @@ export function RealtorGrowthEngine() {
                 <Zap className="w-5 h-5 text-brand-green" />
                 Active Automations
               </CardTitle>
-              <CardDescription>Template workflows running in your workspace.</CardDescription>
+              <CardDescription>Click any workflow to preview or customize its settings.</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {workflows.length > 0 ? workflows.slice(0, 4).map((wf: any, i: number) => (
-                  <div key={i} className="flex items-center justify-between p-3 border rounded-lg bg-gray-50/50">
-                    <div>
-                      <p className="font-medium text-sm text-gray-900">{wf.name}</p>
-                      <p className="text-xs text-muted-foreground">{wf.description || "Automated real estate workflow"}</p>
+              <ScrollArea className="max-h-[520px]">
+                <div className="space-y-2 pr-2">
+                  {workflows.length > 0 ? workflows.map((wf: any, i: number) => (
+                    <div
+                      key={i}
+                      className="flex items-center justify-between p-3 border rounded-lg bg-gray-50/50 cursor-pointer hover:bg-gray-100/80 hover:border-brand-green/30 transition-colors group"
+                      onClick={() => openModal(wf)}
+                      data-testid={`workflow-row-${wf.key}`}
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-mono text-muted-foreground bg-gray-200 px-1.5 py-0.5 rounded">{wf.key}</span>
+                          <p className="font-medium text-sm text-gray-900 truncate">{wf.name}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 ml-3 shrink-0">
+                        <Badge variant="outline" className={cn("text-[10px]", wf.enabledByDefault !== false ? "bg-green-50 text-green-700 border-green-200" : "bg-gray-50 text-gray-500 border-gray-200")}>
+                          {wf.enabledByDefault !== false ? "Running" : "Disabled"}
+                        </Badge>
+                        <Settings className="w-3.5 h-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                      </div>
                     </div>
-                    <Badge variant="outline" className="text-[10px] bg-green-50 text-green-700 border-green-200">Running</Badge>
-                  </div>
-                )) : (
-                  <div className="text-center py-6 text-muted-foreground text-sm">
-                    Loading automation details...
-                  </div>
-                )}
-                <Button variant="ghost" size="sm" className="w-full text-brand-green hover:text-brand-green hover:bg-brand-green/5" onClick={() => setLocation("/app/workflows")}>
-                  View All {workflows.length || 8} Workflows
-                  <ChevronRight className="ml-1 w-4 h-4" />
-                </Button>
-              </div>
+                  )) : (
+                    <div className="text-center py-6 text-muted-foreground text-sm">
+                      Loading automation details...
+                    </div>
+                  )}
+                </div>
+              </ScrollArea>
+              <p className="text-[11px] text-center text-muted-foreground mt-3">
+                {workflows.length} workflows active — click to customize
+              </p>
             </CardContent>
           </Card>
 
@@ -1151,7 +1432,7 @@ export function RealtorGrowthEngine() {
                   {(pipeline.stages?.length > 0 ? pipeline.stages : ['New Lead', 'Discovery', 'Tour Scheduled', 'Offer', 'Closed']).map((stage: any, i: number) => (
                     <div key={i} className="flex items-center gap-2 text-xs">
                       <div className="w-1.5 h-1.5 rounded-full bg-brand-green" />
-                      <span className="text-gray-700">{typeof stage === 'string' ? stage : stage.name}</span>
+                      <span className="text-gray-700">{typeof stage === 'string' ? stage : stage.name || stage.displayName}</span>
                     </div>
                   ))}
                 </div>
@@ -1162,6 +1443,110 @@ export function RealtorGrowthEngine() {
             </Card>
           </div>
         </div>
+
+        <Dialog open={!!selectedWf} onOpenChange={(open) => { if (!open) setSelectedWf(null); }}>
+          <DialogContent className="max-w-2xl max-h-[85vh] p-0 overflow-hidden">
+            <div className="flex items-center justify-between px-6 pt-5 pb-3 border-b">
+              <div>
+                <DialogTitle className="text-lg font-bold">{selectedWf?.name}</DialogTitle>
+                <DialogDescription className="text-xs mt-0.5">Customize preferences safely — core logic is locked.</DialogDescription>
+              </div>
+            </div>
+
+            <Tabs value={modalTab} onValueChange={setModalTab} className="flex-1">
+              <div className="px-6 pt-2">
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="preview" className="text-sm" data-testid="tab-preview">
+                    <Eye className="w-3.5 h-3.5 mr-1.5" /> Preview
+                  </TabsTrigger>
+                  <TabsTrigger value="customize" className="text-sm" data-testid="tab-customize">
+                    <Settings className="w-3.5 h-3.5 mr-1.5" /> Customize
+                  </TabsTrigger>
+                </TabsList>
+              </div>
+
+              <ScrollArea className="max-h-[50vh]">
+                <TabsContent value="preview" className="px-6 pb-4 mt-0 space-y-5">
+                  <div className="pt-3">
+                    <h4 className="text-sm font-semibold text-gray-800 mb-1">What this workflow does</h4>
+                    <p className="text-sm text-muted-foreground leading-relaxed">
+                      {selectedWf && WORKFLOW_DESCRIPTIONS[selectedWf.key]?.summary}
+                    </p>
+                  </div>
+
+                  <div>
+                    <h4 className="text-sm font-semibold text-gray-800 mb-1">Trigger</h4>
+                    <p className="text-sm text-muted-foreground">
+                      {selectedWf && WORKFLOW_DESCRIPTIONS[selectedWf.key]?.triggers}
+                    </p>
+                  </div>
+
+                  <div>
+                    <h4 className="text-sm font-semibold text-gray-800 mb-1">Timing</h4>
+                    <p className="text-sm text-muted-foreground">
+                      {selectedWf && WORKFLOW_DESCRIPTIONS[selectedWf.key]?.timing}
+                    </p>
+                  </div>
+
+                  {selectedWf && getWorkflowTemplates(selectedWf).length > 0 && (
+                    <div>
+                      <h4 className="text-sm font-semibold text-gray-800 mb-2">Message Templates Used</h4>
+                      <div className="space-y-2">
+                        {getWorkflowTemplates(selectedWf).map((tpl: any) => (
+                          <div key={tpl.key} className="border rounded-lg p-3 bg-gray-50/50">
+                            <p className="text-xs font-medium text-gray-700 mb-1">{tpl.title}</p>
+                            <p className="text-xs text-muted-foreground whitespace-pre-line leading-relaxed">{tpl.body}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div>
+                    <h4 className="text-sm font-semibold text-gray-800 mb-1">Actions</h4>
+                    <div className="space-y-1.5">
+                      {selectedWf?.actions?.map((action: any, i: number) => (
+                        <div key={i} className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <div className="w-1 h-1 rounded-full bg-brand-green" />
+                          <span>{action.type.replace(/_/g, ' ')}{action.tag ? `: ${action.tag}` : ''}{action.stage ? `: ${action.stage}` : ''}{action.templateKey ? `: ${action.templateKey}` : ''}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="customize" className="px-6 pb-4 mt-0">
+                  <div className="pt-3">
+                    <p className="text-xs text-muted-foreground mb-4">
+                      Adjust preferences below. Core workflow logic cannot be changed — only safe customization fields are shown.
+                    </p>
+                    {renderGlobalFields()}
+                    {selectedWf && renderWorkflowFields(selectedWf.key)}
+                  </div>
+                </TabsContent>
+              </ScrollArea>
+            </Tabs>
+
+            <div className="flex items-center justify-between px-6 py-4 border-t bg-gray-50/50">
+              {modalTab === "customize" && (
+                <Button variant="ghost" size="sm" className="text-xs text-muted-foreground" onClick={handleRestore} data-testid="button-restore-defaults">
+                  <RotateCcw className="w-3 h-3 mr-1" /> Restore Defaults
+                </Button>
+              )}
+              {modalTab !== "customize" && <div />}
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" onClick={() => setSelectedWf(null)} data-testid="button-modal-close">
+                  Close
+                </Button>
+                {modalTab === "customize" && (
+                  <Button size="sm" className="bg-brand-green hover:bg-brand-green/90" onClick={handleSave} disabled={saving} data-testid="button-save-settings">
+                    {saving ? <><Loader2 className="w-3 h-3 mr-1 animate-spin" /> Saving...</> : "Save Settings"}
+                  </Button>
+                )}
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     );
   };

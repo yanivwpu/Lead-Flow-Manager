@@ -389,6 +389,34 @@ export function registerTemplateRoutes(app: Express) {
       res.status(500).json({ error: "Failed to fetch status" });
     }
   });
+  app.get("/api/templates/realtor-growth-engine/preferences", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      const prefs = await storage.getUserTemplateDataByKey(userId, TEMPLATE_ID, "preferences", "realtor_growth_engine_preferences");
+      res.json({ preferences: prefs?.definition || null });
+    } catch (error: any) {
+      console.error("[Template] Preferences fetch error:", error);
+      res.status(500).json({ error: "Failed to fetch preferences" });
+    }
+  });
+
+  app.put("/api/templates/realtor-growth-engine/preferences", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      const { preferences } = req.body;
+      if (!preferences || typeof preferences !== "object") {
+        return res.status(400).json({ error: "Invalid preferences payload" });
+      }
+      const result = await storage.upsertUserTemplateData(
+        userId, TEMPLATE_ID, "preferences", "realtor_growth_engine_preferences", preferences
+      );
+      res.json({ success: true, preferences: result.definition });
+    } catch (error: any) {
+      console.error("[Template] Preferences save error:", error);
+      res.status(500).json({ error: "Failed to save preferences" });
+    }
+  });
+
   app.delete("/api/templates/realtor-growth-engine/reset", requireAuth, async (req, res) => {
     try {
       if (process.env.NODE_ENV === "production") {
