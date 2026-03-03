@@ -264,10 +264,10 @@ export async function seedRealtorTemplate() {
           { signal: "spam / irrelevant", scoreChange: -100, keywords: ["spam", "scam", "lottery", "won"] },
         ],
         classification: {
-          hot: { minScore: 75 },
-          warm: { minScore: 45 },
-          new: { minScore: 0 },
-          unqualified: { maxScore: 0 },
+          hot: { minScore: 75, label: "Qualified (Hot)" },
+          warm: { minScore: 45, label: "Qualified (Warm)" },
+          new: { minScore: 0, label: "New Lead" },
+          unqualified: { maxScore: 0, label: "Unqualified" },
         },
         leadTypeDetection: [
           { type: "Buyer", keywords: ["buy", "purchase", "looking for", "apartment", "house", "condo", "property"] },
