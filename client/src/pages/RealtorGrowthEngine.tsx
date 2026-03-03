@@ -1110,7 +1110,7 @@ export function RealtorGrowthEngine() {
 
   const WORKFLOW_FIELDS: Record<string, string[]> = {
     W2: ["buyerKeywords", "sellerKeywords", "investorKeywords"],
-    W3: ["appointmentIntentKeywords"],
+    W3: ["appointmentIntentKeywords", "bookingLink"],
     W4: ["followUpDelayHours"],
     W5: ["followUpDelayHours"],
   };
@@ -1126,7 +1126,7 @@ export function RealtorGrowthEngine() {
 
   const WORKFLOW_PREF_DEFAULTS: Record<string, Record<string, any>> = {
     W2: { buyerKeywords: "buy, purchase, looking for, apartment, house, condo", sellerKeywords: "sell, listing, list my, market value", investorKeywords: "invest, roi, return, flip, portfolio" },
-    W3: { appointmentIntentKeywords: "call, book, available, tour, showing, visit, schedule" },
+    W3: { appointmentIntentKeywords: "call, book, available, tour, showing, visit, schedule", bookingLink: "https://calendly.com/your-profile/showing" },
     W4: { followUpDelayHours: 24 },
     W5: { followUpDelayHours: 72 },
   };
@@ -1288,6 +1288,23 @@ export function RealtorGrowthEngine() {
           <p className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Workflow-Specific Settings</p>
           {fields.map(field => {
             const prefKey = `${wfKey}_${field}`;
+            if (field === "bookingLink") {
+              return (
+                <div key={field}>
+                  <Label className="text-sm font-medium">Booking Link (Calendly / TidyCal)</Label>
+                  <Input
+                    placeholder="https://calendly.com/your-name/showing"
+                    value={localPrefs[prefKey] || ""}
+                    onChange={e => updatePref(prefKey, e.target.value)}
+                    className="mt-1"
+                    data-testid="input-booking-link"
+                  />
+                  <p className="text-[11px] text-muted-foreground mt-1">
+                    This link will be sent automatically when a lead asks to book a tour or call.
+                  </p>
+                </div>
+              );
+            }
             if (field === "followUpDelayHours") {
               return (
                 <div key={field}>
