@@ -366,18 +366,18 @@ export function RealtorGrowthEngine() {
           <Card>
             <CardHeader className="pb-2 pt-4 px-5">
               <CardTitle className="text-base">What you get</CardTitle>
-              <CardDescription className="text-xs">Everything you need to capture, qualify, and convert real estate leads on WhatsApp — fully set up for you.</CardDescription>
+              <CardDescription className="text-xs">Everything you need to capture, qualify, and convert real estate leads on WhatsApp — fully set up for you by our concierge team.</CardDescription>
             </CardHeader>
             <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 px-5 pb-3">
               {[
                 { icon: Rocket, title: "High-Converting Lead Workflows", desc: "From first inquiry to booked showing and follow-up." },
-                { icon: Zap, title: "AI Lead Qualification & Routing", desc: "Automatically identify serious buyers and sellers so you focus only on real opportunities." },
-                { icon: Clock, title: "Smart Follow-Up Sequences", desc: "Never lose a lead again — automated follow-ups keep conversations active." },
-                { icon: MessageSquare, title: "Optimized WhatsApp Message Templates", desc: "Professionally written scripts designed specifically for real estate conversations." },
-                { icon: RotateCcw, title: "Retargeting & Re-engagement Flows", desc: "Automatically follow up with cold or unresponsive leads." },
-                { icon: BarChart3, title: "Built-In Real Estate CRM Pipeline", desc: "Track every lead from first message to closing inside a structured deal pipeline." },
-                { icon: Users, title: "Team Collaboration & Assignment", desc: "Assign conversations, add notes, and manage deals with your team." },
-                { icon: Handshake, title: "Done-for-You Setup + Live Onboarding Sessions", desc: "We configure everything with you and ensure your system is fully operational." },
+                { icon: Zap, title: "AI Lead Qualification & Scoring", desc: "Instantly identify serious buyers and sellers with tiered intent signals." },
+                { icon: Clock, title: "Smart Lead Nurturing", desc: "Automated multi-day sequences keep your cold leads engaged for months." },
+                { icon: MessageSquare, title: "AI Suggested Replies", desc: "Get smart reply suggestions based on the lead's unique score and intent." },
+                { icon: Calendar, title: "Automated Showing Bookings", desc: "Sync your Calendly/TidyCal to let leads book tours 24/7." },
+                { icon: Handshake, title: "White-Glove Concierge Setup", desc: "We handle everything: WABA setup, Meta verification, and channel sync." },
+                { icon: Users, title: "Full Channel Integration", desc: "We connect your WhatsApp, Instagram, FB, and SMS for a unified inbox." },
+                { icon: Target, title: "Daily 'Hot List' Notifications", desc: "Get your top 5 ready-to-close leads delivered to your inbox at 8 AM." },
               ].map((item, idx) => (
                 <div key={idx} className="flex space-x-2.5">
                   <div className="mt-0.5 bg-brand-green/10 p-1.5 rounded-md">
