@@ -788,3 +788,96 @@ export async function sendRealtorOnboardingEmail(payload: any, normalized: any, 
       </div></body></html>`
   });
 }
+
+export interface HotLeadEntry {
+  name: string;
+  score: number;
+  lastMessage: string;
+  pipelineStage: string;
+  phone: string;
+  chatId: string;
+}
+
+export async function sendDailyHotListEmail(
+  userEmail: string,
+  userName: string,
+  leads: HotLeadEntry[]
+): Promise<boolean> {
+  const hasLeads = leads.length > 0;
+  const subject = hasLeads
+    ? `Your Hot Leads Today (Top ${leads.length})`
+    : "No Hot Leads Today — Your Engine Is Running";
+
+  const leadRows = leads.map((lead, i) => {
+    const snippet = lead.lastMessage.length > 120
+      ? lead.lastMessage.substring(0, 120) + "..."
+      : lead.lastMessage;
+    const waLink = lead.phone
+      ? `https://wa.me/${lead.phone.replace(/[^0-9]/g, '')}`
+      : '#';
+    const crmLink = `${APP_URL}/chats?id=${lead.chatId}`;
+
+    return `
+      <tr style="border-bottom:1px solid #e2e8f0;">
+        <td style="padding:12px 8px;">
+          <div style="font-weight:600;color:#1e293b;font-size:14px;">${i + 1}. ${lead.name}</div>
+          <div style="color:#64748b;font-size:12px;margin-top:4px;">${lead.pipelineStage}</div>
+        </td>
+        <td style="padding:12px 8px;text-align:center;">
+          <span style="background:#dc2626;color:#fff;padding:4px 10px;border-radius:12px;font-weight:700;font-size:13px;">${lead.score}</span>
+        </td>
+        <td style="padding:12px 8px;">
+          <div style="color:#475569;font-size:12px;max-width:200px;">${snippet}</div>
+        </td>
+        <td style="padding:12px 8px;text-align:center;">
+          <a href="${waLink}" style="display:inline-block;background:#25D366;color:#fff;padding:6px 14px;border-radius:6px;font-size:12px;font-weight:600;text-decoration:none;margin-bottom:4px;">WhatsApp</a>
+          <br/>
+          <a href="${crmLink}" style="color:#16a34a;font-size:11px;text-decoration:underline;">Open in CRM</a>
+        </td>
+      </tr>`;
+  }).join('');
+
+  const noLeadsContent = `
+    <div style="text-align:center;padding:40px 20px;">
+      <div style="font-size:48px;margin-bottom:16px;">&#9989;</div>
+      <h3 style="color:#1e293b;margin:0 0 8px;">No Hot Leads Right Now</h3>
+      <p style="color:#64748b;font-size:14px;margin:0;">Your Growth Engine is running. When a lead scores 80+, they'll appear here.</p>
+    </div>`;
+
+  const leadsTable = hasLeads ? `
+    <table style="width:100%;border-collapse:collapse;margin-top:16px;">
+      <thead>
+        <tr style="background:#f8fafc;border-bottom:2px solid #e2e8f0;">
+          <th style="padding:10px 8px;text-align:left;font-size:12px;color:#64748b;font-weight:600;">Lead</th>
+          <th style="padding:10px 8px;text-align:center;font-size:12px;color:#64748b;font-weight:600;">Score</th>
+          <th style="padding:10px 8px;text-align:left;font-size:12px;color:#64748b;font-weight:600;">Last Message</th>
+          <th style="padding:10px 8px;text-align:center;font-size:12px;color:#64748b;font-weight:600;">Action</th>
+        </tr>
+      </thead>
+      <tbody>${leadRows}</tbody>
+    </table>` : noLeadsContent;
+
+  return sendEmail({
+    to: userEmail,
+    subject,
+    html: `<!DOCTYPE html><html><body style="margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f1f5f9;">
+      <div style="max-width:600px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+        <div style="background:linear-gradient(135deg,#16a34a 0%,#15803d 100%);padding:28px 24px;text-align:center;">
+          <h1 style="margin:0;color:#fff;font-size:22px;font-weight:700;">Your Daily Hot List</h1>
+          <p style="margin:6px 0 0;color:#bbf7d0;font-size:13px;">${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+        </div>
+        <div style="padding:24px;">
+          <p style="color:#475569;font-size:14px;margin:0 0 16px;">Good morning, ${userName.split(' ')[0]}!</p>
+          ${hasLeads
+            ? `<p style="color:#475569;font-size:14px;margin:0 0 8px;">Here are your <strong>Top ${leads.length} Hot Leads</strong> (scored 80+) ready for your attention today:</p>`
+            : ''
+          }
+          ${leadsTable}
+        </div>
+        <div style="text-align:center;padding:20px;background:#f8fafc;border-top:1px solid #e2e8f0;">
+          <a href="${APP_URL}" style="color:#16a34a;font-size:13px;text-decoration:underline;">Open WhaChatCRM Dashboard</a>
+          <p style="margin:8px 0 0;color:#94a3b8;font-size:11px;">Realtor Growth Engine &bull; WhaChatCRM ${new Date().getFullYear()}</p>
+        </div>
+      </div></body></html>`
+  });
+}

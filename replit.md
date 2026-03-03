@@ -15,7 +15,23 @@ The application is a full multi-tenant SaaS implementation with:
 - Notification system for follow-up reminders (push & email)
 - PWA capabilities (installable, offline-first)
 
-## Recent Changes (March 1, 2026)
+## Recent Changes (March 3, 2026)
+- **Lead Scoring v2 — Tiered Signals + Decay + Daily Hot List**:
+  - Upgraded from 3-tier (Hot/Warm/Unqualified) to 5-tier scoring: Hot (80+), Warm (50-79), New (20-49), Low Intent (1-19), Unqualified (0)
+  - 14+ intent signals across 4 categories: High-Intent (+30-40), Medium-Intent (+15-25), Low-Intent (+5-10), Negative (-50 to -100)
+  - Per-message positive point cap at +60 to prevent score inflation
+  - STOP_DNC and SPAM_PATTERN signals force immediate Unqualified override
+  - Time-based score decay: 15% reduction after 14 days inactivity, 30% after 30 days
+  - Hot leads (80+) automatically create "Call / Follow up today" task
+  - Daily Hot List email: Top 5 hot leads with one-click WhatsApp links, sent at 9 AM EST to users with active Growth Engine
+  - Key files:
+    - `server/leadScoring.ts`: Scoring engine with signals, decay, classification
+    - `server/cron.ts`: Added `runDailyHotListEmails` cron job (13:00 UTC / 9 AM EST)
+    - `server/email.ts`: Added `sendDailyHotListEmail` function with formatted HTML template
+    - `server/seedRealtorTemplate.ts`: Updated ai_rules asset with full signal table + decay rules + 5-tier classification
+    - `client/src/pages/RealtorGrowthEngine.tsx`: Updated W2 dashboard description with new scoring details
+
+## Previous Changes (March 1, 2026)
 - **Realtor Growth Engine (Premium Template)**:
   - Premium locked vertical template for real estate industry
   - Purchase -> Unlock -> Onboarding Form (required) -> Submission stored + emailed

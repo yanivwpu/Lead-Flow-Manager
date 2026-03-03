@@ -50,7 +50,7 @@ export async function seedRealtorTemplate() {
       version: "1.0.0",
       definition: {
         tags: [
-          "New", "Warm", "Hot", "Appointment Requested", "Appointment Booked",
+          "New", "Warm", "Hot", "Low Intent", "Appointment Requested", "Appointment Booked",
           "Buyer", "Seller", "Investor", "Rental", "Unqualified",
           "Do Not Contact", "Follow-Up Needed", "High Intent",
         ],
@@ -168,15 +168,28 @@ export async function seedRealtorTemplate() {
             conditions: [],
             actions: [
               { type: "run_lead_scoring" },
-              { type: "update_lead_fields", fields: ["leadScore", "leadType", "budget", "timeline", "location"] },
+              { type: "update_lead_fields", fields: ["leadScore", "leadType", "budget", "timeline", "location", "lastScoreAt", "lastScoreReasons", "lastMessageAt"] },
               { type: "conditional", rules: [
-                { condition: "leadScore >= 75", actions: [
+                { condition: "leadScore >= 80", actions: [
                   { type: "apply_tag", tag: "Hot" },
                   { type: "set_pipeline_stage", stage: "Qualified (Hot)" },
+                  { type: "create_task", title: "Call / Follow up today", dueDays: 0 },
                 ]},
-                { condition: "leadScore >= 45", actions: [
+                { condition: "leadScore >= 50", actions: [
                   { type: "apply_tag", tag: "Warm" },
                   { type: "set_pipeline_stage", stage: "Qualified (Warm)" },
+                ]},
+                { condition: "leadScore >= 20", actions: [
+                  { type: "apply_tag", tag: "New" },
+                  { type: "set_pipeline_stage", stage: "New Lead" },
+                ]},
+                { condition: "leadScore >= 1", actions: [
+                  { type: "apply_tag", tag: "Low Intent" },
+                  { type: "set_pipeline_stage", stage: "New Lead" },
+                ]},
+                { condition: "leadScore <= 0", actions: [
+                  { type: "apply_tag", tag: "Unqualified" },
+                  { type: "set_pipeline_stage", stage: "Unqualified" },
                 ]},
               ]},
             ],
@@ -256,18 +269,43 @@ export async function seedRealtorTemplate() {
       assetType: "ai_rules" as const,
       version: "1.0.0",
       definition: {
-        scoringRules: [
-          { signal: "asks price / availability / viewing", scoreChange: 25, keywords: ["price", "cost", "how much", "available", "viewing", "tour", "show me"] },
-          { signal: "shares budget", scoreChange: 20, keywords: ["budget", "afford", "range", "max", "spend"] },
-          { signal: "asks to call / book", scoreChange: 30, keywords: ["call", "book", "appointment", "schedule", "meet"] },
-          { signal: "just looking", scoreChange: -20, keywords: ["just looking", "browsing", "not ready", "maybe later"] },
-          { signal: "spam / irrelevant", scoreChange: -100, keywords: ["spam", "scam", "lottery", "won"] },
+        scoringModel: "tiered_signals_v2",
+        maxPointsPerMessage: 60,
+        decayRules: [
+          { inactiveDays: 14, multiplier: 0.85 },
+          { inactiveDays: 30, multiplier: 0.70 },
         ],
+        signals: {
+          highIntent: [
+            { key: "BOOKING_INTENT", label: "Booking Intent", scoreChange: 35, keywords: ["tour", "showing", "visit", "call", "appointment", "schedule"] },
+            { key: "READY_TO_BUY", label: "Ready to Buy", scoreChange: 35, keywords: ["offer", "contract", "ready to buy", "close", "asap"] },
+            { key: "BUDGET_AND_TIMELINE_CONFIRMED", label: "Budget + Timeline Confirmed", scoreChange: 40, keywords: ["budget", "timeline", "move in", "closing date", "within 30 days", "this month", "next month"] },
+            { key: "PREAPPROVED_OR_CASH", label: "Pre-approved / Cash", scoreChange: 30, keywords: ["pre-approved", "preapproved", "cash buyer", "cash offer", "no mortgage"] },
+          ],
+          mediumIntent: [
+            { key: "PRICE_QUESTION", label: "Price Question", scoreChange: 20, keywords: ["price", "how much", "cost", "rent", "asking price"] },
+            { key: "AVAILABILITY_QUESTION", label: "Availability Question", scoreChange: 15, keywords: ["available", "still available", "when available", "on the market"] },
+            { key: "LOCATION_NEIGHBORHOOD", label: "Location / Neighborhood", scoreChange: 15, keywords: ["area", "neighborhood", "schools", "commute", "district"] },
+            { key: "PROPERTY_DETAILS", label: "Property Details", scoreChange: 15, keywords: ["bed", "bath", "sqft", "hoa", "pets", "parking", "garage", "pool"] },
+            { key: "FINANCING_QUESTION", label: "Financing Question", scoreChange: 20, keywords: ["mortgage", "loan", "down payment", "rates", "financing"] },
+          ],
+          lowIntent: [
+            { key: "REQUEST_INFO", label: "Request Info", scoreChange: 10, keywords: ["send info", "more details", "brochure"] },
+            { key: "GENERIC_INTEREST", label: "Generic Interest", scoreChange: 5, keywords: ["interested", "tell me more", "looks nice"] },
+            { key: "FIRST_MESSAGE_ONLY", label: "First Message", scoreChange: 5, keywords: ["hi", "hello", "hey"] },
+          ],
+          negative: [
+            { key: "NOT_INTERESTED", label: "Not Interested", scoreChange: -50, keywords: ["not interested", "no longer looking", "changed my mind"] },
+            { key: "STOP_DNC", label: "Stop / DNC", scoreChange: -100, keywords: ["stop", "unsubscribe", "don't message", "remove me", "opt out"] },
+            { key: "SPAM_PATTERN", label: "Spam", scoreChange: -100, keywords: ["crypto", "bitcoin", "scam", "lottery", "won"] },
+          ],
+        },
         classification: {
-          hot: { minScore: 75, label: "Qualified (Hot)" },
-          warm: { minScore: 45, label: "Qualified (Warm)" },
-          new: { minScore: 0, label: "New Lead" },
-          unqualified: { maxScore: 0, label: "Unqualified" },
+          hot: { minScore: 80, label: "Qualified (Hot)", tag: "Hot", pipeline: "Qualified (Hot)" },
+          warm: { minScore: 50, label: "Qualified (Warm)", tag: "Warm", pipeline: "Qualified (Warm)" },
+          new: { minScore: 20, label: "New Lead", tag: "New", pipeline: "New Lead" },
+          low: { minScore: 1, label: "Low Intent", tag: "Low Intent", pipeline: "New Lead" },
+          unqualified: { maxScore: 0, label: "Unqualified", tag: "Unqualified", pipeline: "Unqualified" },
         },
         leadTypeDetection: [
           { type: "Buyer", keywords: ["buy", "purchase", "looking for", "apartment", "house", "condo", "property"] },

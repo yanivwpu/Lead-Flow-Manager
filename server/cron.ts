@@ -1,7 +1,7 @@
 import { db } from '../drizzle/db';
-import { users } from '@shared/schema';
-import { eq, and, lte, gte, isNotNull, or } from 'drizzle-orm';
-import { sendTrialCheckinEmail } from './email';
+import { users, chats, templateEntitlements } from '@shared/schema';
+import { eq, and, lte, gte, isNotNull, or, desc, ne } from 'drizzle-orm';
+import { sendTrialCheckinEmail, sendDailyHotListEmail, type HotLeadEntry } from './email';
 
 export async function runTrialCheckinEmails(): Promise<{ sent: number; errors: number }> {
   console.log('[Cron] Starting trial check-in email job...');
@@ -90,7 +90,85 @@ export async function runTrialCheckinEmails(): Promise<{ sent: number; errors: n
   }
 }
 
+export async function runDailyHotListEmails(): Promise<{ sent: number; errors: number }> {
+  console.log('[Cron] Starting daily hot list email job...');
+
+  let sent = 0;
+  let errors = 0;
+
+  try {
+    const installedEntitlements = await db
+      .select({
+        userId: templateEntitlements.userId,
+      })
+      .from(templateEntitlements)
+      .where(
+        and(
+          eq(templateEntitlements.templateId, 'realtor-growth-engine'),
+          eq(templateEntitlements.status, 'installed')
+        )
+      );
+
+    console.log(`[Cron/HotList] Found ${installedEntitlements.length} users with active Growth Engine`);
+
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+    for (const ent of installedEntitlements) {
+      try {
+        const user = await db.query.users.findFirst({
+          where: eq(users.id, ent.userId),
+        });
+        if (!user) continue;
+
+        const hotChats = await db
+          .select()
+          .from(chats)
+          .where(
+            and(
+              eq(chats.userId, ent.userId),
+              eq(chats.tag, 'Hot'),
+              ne(chats.pipelineStage, 'Closed'),
+              ne(chats.pipelineStage, 'Unqualified')
+            )
+          )
+          .orderBy(desc(chats.updatedAt))
+          .limit(5);
+
+        const leads: HotLeadEntry[] = hotChats.map(chat => ({
+          name: chat.name,
+          score: 80,
+          lastMessage: chat.lastMessage || '',
+          pipelineStage: chat.pipelineStage,
+          phone: chat.whatsappPhone || '',
+          chatId: chat.id,
+        }));
+
+        const success = await sendDailyHotListEmail(user.email, user.name, leads);
+
+        if (success) {
+          sent++;
+          console.log(`[Cron/HotList] ✓ Sent hot list to ${user.email} (${leads.length} leads)`);
+        } else {
+          errors++;
+          console.log(`[Cron/HotList] ✗ Failed to send to ${user.email}`);
+        }
+      } catch (userErr) {
+        errors++;
+        console.error(`[Cron/HotList] Error processing user ${ent.userId}:`, userErr);
+      }
+    }
+
+    console.log(`[Cron/HotList] Completed: ${sent} emails sent, ${errors} errors`);
+    return { sent, errors };
+  } catch (error) {
+    console.error('[Cron/HotList] Error in daily hot list job:', error);
+    throw error;
+  }
+}
+
 let cronInterval: NodeJS.Timeout | null = null;
+let hotListRanToday = false;
 
 export function startCronJobs() {
   console.log('[Cron] Starting cron scheduler...');
@@ -99,12 +177,22 @@ export function startCronJobs() {
   
   cronInterval = setInterval(() => {
     const now = new Date();
+
     if (now.getUTCHours() === 14 && now.getUTCMinutes() === 0) {
       runTrialCheckinEmails().catch(err => console.error('[Cron] Scheduled run error:', err));
     }
+
+    if (now.getUTCHours() === 13 && now.getUTCMinutes() === 0 && !hotListRanToday) {
+      hotListRanToday = true;
+      runDailyHotListEmails().catch(err => console.error('[Cron/HotList] Scheduled run error:', err));
+    }
+
+    if (now.getUTCHours() === 0 && now.getUTCMinutes() === 0) {
+      hotListRanToday = false;
+    }
   }, 60000);
   
-  console.log('[Cron] Cron scheduler started (runs daily at 10 AM EST / 2 PM UTC)');
+  console.log('[Cron] Cron scheduler started (trial check-in: 10 AM EST, hot list: 9 AM EST)');
 }
 
 export function stopCronJobs() {
