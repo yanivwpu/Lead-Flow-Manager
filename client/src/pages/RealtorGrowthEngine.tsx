@@ -955,7 +955,7 @@ export function RealtorGrowthEngine() {
     setSubscriptionGate({ show: false, hasPro: true, hasAI: true });
   };
 
-  const EligibilityModal = () => (
+  const eligibilityModalContent = (
     <Dialog open={eligibilityOpen} onOpenChange={(open) => { if (!open) closeAndResetModal(); }}>
       <DialogContent className="max-w-[520px]" data-testid="eligibility-modal">
         {subscriptionGate.show ? (
@@ -1579,7 +1579,7 @@ export function RealtorGrowthEngine() {
 
   return (
     <>
-      <EligibilityModal />
+      {eligibilityModalContent}
       {status === 'installed' ? <DashboardView /> : <DetailPage />}
     </>
   );
