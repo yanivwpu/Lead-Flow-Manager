@@ -314,7 +314,7 @@ export function RealtorGrowthEngine() {
           </Badge>
           <h1 className="text-2xl font-bold tracking-tight text-gray-900">Convert your WhatsApp inquiries into qualified buyers & booked showings — automatically.</h1>
           <p className="text-base text-muted-foreground mt-1">
-            A done-for-you WhatsApp automation system built specifically for real estate agents. Capture, qualify, and follow up with every lead — without missing opportunities.
+            Capture, qualify, and follow up with every lead — without missing opportunities.
           </p>
           <Button 
             className={cn("mt-3", isPaused ? "bg-amber-600 hover:bg-amber-700" : "bg-brand-green hover:bg-brand-green/90")}
