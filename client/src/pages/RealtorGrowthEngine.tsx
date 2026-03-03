@@ -1076,13 +1076,8 @@ export function RealtorGrowthEngine() {
       triggers: "New chat / first message from an unknown number",
       timing: "Immediate (within seconds of first message)",
     },
-    W2: {
-      summary: "Analyzes every inbound message using a tiered signal scoring model (0-100). Detects 14+ intent signals across 4 categories: High-Intent (+30-40 pts: booking, ready-to-buy, pre-approved), Medium-Intent (+15-25 pts: price, availability, financing), Low-Intent (+5-10 pts: info requests), and Negative (-50 to -100 pts: spam, DNC). Caps per-message inflation at +60 pts. Routes leads into 5 tiers: Hot (80+), Warm (50-79), New (20-49), Low Intent (1-19), Unqualified (0). Includes 14-day and 30-day score decay for stale leads. Hot leads automatically create a 'Call / Follow up today' task.",
-      triggers: "Every inbound message with signal keywords",
-      timing: "Real-time on each message, with time-based decay applied before scoring",
-    },
     W3: {
-      summary: "Detects when a lead mentions scheduling intent (tour, showing, call, visit) and automatically sends a booking prompt with available times. Tags as 'Appointment Requested' and creates a booking task.",
+      summary: "Detects when a lead mentions scheduling intent (tour, showing, call, visit) and automatically sends your customized Booking Link (e.g., Calendly/TidyCal). This allows the lead to book directly into your calendar. Also tags the lead as 'Appointment Requested' and creates a high-priority task in your CRM.",
       triggers: "Keywords: call, book, available, tour, showing, visit, schedule",
       timing: "Immediate on keyword detection",
     },
