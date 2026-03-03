@@ -962,52 +962,52 @@ export function RealtorGrowthEngine() {
           <>
             <DialogHeader>
               <DialogTitle>Subscription Upgrade Required</DialogTitle>
+              <DialogDescription>
+                The Realtor Growth Engine requires a Pro plan with the AI Brain add-on to operate.
+              </DialogDescription>
             </DialogHeader>
             <div className="py-2 space-y-3">
               {!subscriptionGate.hasPro && (
                 <div className="p-3 rounded-lg bg-amber-50 border border-amber-200">
-                  <p className="text-sm font-medium text-amber-800">Pro plan required</p>
+                  <p className="text-sm font-medium text-amber-800">Pro + AI plan required</p>
                   <p className="text-xs text-amber-700 mt-1">
-                    The Realtor Growth Engine requires an active Pro subscription. Upgrade your plan to continue.
+                    Upgrade to Pro with the AI Brain add-on to unlock lead scoring, automated workflows, and smart reply suggestions.
                   </p>
-                  <Button
-                    size="sm"
-                    className="mt-2 bg-brand-green hover:bg-brand-green/90"
-                    onClick={() => { closeAndResetModal(); setLocation("/app/settings"); }}
-                    data-testid="button-upgrade-pro"
-                  >
-                    Upgrade to Pro
-                  </Button>
                 </div>
               )}
               {subscriptionGate.hasPro && !subscriptionGate.hasAI && (
                 <div className="p-3 rounded-lg bg-blue-50 border border-blue-200">
-                  <p className="text-sm font-medium text-blue-800">AI add-on required</p>
+                  <p className="text-sm font-medium text-blue-800">AI Brain add-on required</p>
                   <p className="text-xs text-blue-700 mt-1">
-                    The Realtor Growth Engine requires the AI Brain add-on for automated lead qualification and routing.
-                  </p>
-                  <Button
-                    size="sm"
-                    className="mt-2 bg-brand-green hover:bg-brand-green/90"
-                    onClick={() => { closeAndResetModal(); setLocation("/app/ai-brain"); }}
-                    data-testid="button-enable-ai"
-                  >
-                    Enable AI Add-on
-                  </Button>
-                </div>
-              )}
-              {!subscriptionGate.hasPro && !subscriptionGate.hasAI && (
-                <div className="p-3 rounded-lg bg-blue-50 border border-blue-200">
-                  <p className="text-sm font-medium text-blue-800">AI add-on also required</p>
-                  <p className="text-xs text-blue-700 mt-1">
-                    After upgrading to Pro, you'll also need to enable the AI Brain add-on ($29/mo).
+                    You're on Pro — great! Now enable the AI Brain add-on to power automated lead qualification and smart routing.
                   </p>
                 </div>
               )}
             </div>
-            <DialogFooter>
+            <DialogFooter className="flex gap-2">
               <Button variant="outline" onClick={closeAndResetModal} data-testid="button-subscription-dismiss">
                 Close
+              </Button>
+              <Button
+                className="bg-brand-green hover:bg-brand-green/90"
+                onClick={async () => {
+                  try {
+                    const res = await fetch("/api/subscription/portal", {
+                      method: "POST",
+                      credentials: "include",
+                    });
+                    if (!res.ok) throw new Error("Failed to open billing portal");
+                    const data = await res.json();
+                    if (data.url) {
+                      window.location.href = data.url;
+                    }
+                  } catch (err) {
+                    console.error("Portal error:", err);
+                  }
+                }}
+                data-testid="button-upgrade-plan"
+              >
+                {!subscriptionGate.hasPro ? "Upgrade to Pro + AI" : "Enable AI Add-on"}
               </Button>
             </DialogFooter>
           </>
