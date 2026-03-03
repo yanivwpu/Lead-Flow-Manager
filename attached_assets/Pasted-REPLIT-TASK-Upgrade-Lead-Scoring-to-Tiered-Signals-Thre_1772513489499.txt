@@ -1,0 +1,166 @@
+REPLIT TASK — Upgrade Lead Scoring to Tiered Signals + Thresholds + Decay + Daily Hot List Email
+
+Scope:
+Implement improvements #1–#4:
+1) Signal weight categories + exact scoring table
+2) Updated thresholds (Hot/Warm/New/Low/Unqualified)
+3) Time-based score decay for stale leads
+4) Daily “Hot List” email (Top 5) with one-click WhatsApp links
+
+IMPORTANT:
+Keep existing W2/W3 workflow structure. We are refining scoring + actions, not rebuilding the engine.
+
+========================================================
+1) SCORING MODEL (POINTS 0–100) + THRESHOLDS
+========================================================
+
+Update lead categories + thresholds to:
+
+- HOT: score >= 80
+- WARM: score 50–79
+- NEW: score 20–49
+- LOW: score 1–19
+- UNQUALIFIED: score <= 0
+
+Pipeline mapping:
+- HOT -> "Qualified (Hot)"
+- WARM -> "Qualified (Warm)"
+- NEW -> "New Lead"
+- LOW -> "New Lead" (or "Nurture" if you already have it)
+- UNQUALIFIED -> "Unqualified"
+
+Tag mapping:
+- HOT -> tag "Hot"
+- WARM -> tag "Warm"
+- NEW -> tag "New"
+- LOW -> tag "Low Intent"
+- UNQUALIFIED -> tag "Unqualified"
+
+========================================================
+2) EXACT SCORING TABLE (SIGNALS)
+========================================================
+
+Implement a signal-based scoring system. Each inbound message can trigger one or more signals.
+Score = clamp(0..100) of accumulated points (after decay), plus/minus signal points.
+
+Use this exact table:
+
+A) HIGH-INTENT SIGNALS (30–40)
+- BOOKING_INTENT (tour/showing/visit/call/appointment/schedule): +35
+- READY_TO_BUY (offer/contract/ready to buy/close/ASAP): +35
+- BUDGET_AND_TIMELINE_CONFIRMED (budget stated + timeline <= 30 days in same conversation): +40
+- PREAPPROVED_OR_CASH (pre-approved/cash buyer): +30
+
+B) MEDIUM-INTENT SIGNALS (15–25)
+- PRICE_QUESTION (price/how much/cost/rent): +20
+- AVAILABILITY_QUESTION (available/still available/when available): +15
+- LOCATION_NEIGHBORHOOD (area/neighborhood/schools/commute): +15
+- PROPERTY_DETAILS (bed/bath/sqft/HOA/pets/parking): +15
+- FINANCING_QUESTION (mortgage/loan/down payment/rates): +20
+
+C) LOW-INTENT SIGNALS (5–10)
+- REQUEST_INFO (send info/more details/brochure): +10
+- GENERIC_INTEREST (interested/tell me more): +5
+- FIRST_MESSAGE_ONLY (initial inquiry without intent): +5
+
+D) NEGATIVE SIGNALS (-20 to -100)
+- NOT_INTERESTED (not interested/no longer looking): -50
+- STOP_DNC (stop/unsubscribe/don't message): -100  (also set DNC flag)
+- SPAM_PATTERN (crypto, adult, scam keywords, repeated gibberish): -100  (move to Unqualified)
+
+Signal rules:
+- In a single message, cap total positive points to +60 to avoid over-inflation.
+- If STOP_DNC or SPAM_PATTERN triggers, override and force UNQUALIFIED immediately.
+- Always clamp final score between 0 and 100.
+
+Implementation detail:
+Store in lead record:
+- leadScore (0–100)
+- lastScoreAt (timestamp)
+- lastScoreReasons (array of strings) e.g. ["BOOKING_INTENT:+35", "PRICE_QUESTION:+20"]
+- lastMessageAt (timestamp)
+
+========================================================
+3) TIME-BASED DECAY (STALE LEADS)
+========================================================
+
+Add score decay that applies when recalculating score:
+
+If no inbound or outbound message activity for:
+- 14 days: reduce current score by 15% (score *= 0.85)
+- 30 days: reduce current score by 30% (score *= 0.70)
+
+Decay should be applied based on lastMessageAt before adding new signal points.
+Example:
+score = applyDecay(score, lastMessageAt, now)
+score += newSignalPoints
+score = clamp(0..100)
+
+========================================================
+4) WORKFLOW ACTION UPDATES (W2) — TIERED ACTIONS
+========================================================
+
+Update W2 scoring workflow logic:
+
+On every inbound message:
+1) Detect signals + compute updated score using decay + scoring table.
+2) Update leadScore field.
+3) Apply tag + pipeline stage based on thresholds:
+   - score >= 80 -> Hot + Qualified (Hot)
+   - score 50–79 -> Warm + Qualified (Warm)
+   - score 20–49 -> New + New Lead
+   - score 1–19 -> Low Intent + New Lead (or Nurture)
+   - score <=0 or negative -> Unqualified + Unqualified stage
+
+Additional actions:
+- For HOT (>=80): create task "Call / Follow up today" if one does not exist in last 24h
+- For WARM (50–79): enroll in nurture follow-up sequence (if exists)
+- For UNQUALIFIED: stop follow-ups, set DNC if STOP_DNC
+
+Ensure W3 booking intent continues to run additively and can trigger even if score < 80.
+
+========================================================
+5) DAILY HOT LIST EMAIL (RETENTION)
+========================================================
+
+Add a daily scheduled email per user at 8:00 AM local time (use user timezone if stored; otherwise default).
+
+Email content:
+- Top 5 leads with score >= 80
+- Prefer leads with most recent activity in last 7 days
+- Exclude Closed / Unqualified
+- Exclude leads where a "Call / Follow up today" task was completed in last 24h (if task tracking exists)
+
+Each lead entry includes:
+- Lead name
+- Score
+- Last message snippet (first 120 chars)
+- Pipeline stage
+- One-click WhatsApp link
+- Link to open conversation in CRM
+
+One-click WhatsApp link format:
+https://wa.me/<E164_NUMBER>
+
+Subject examples:
+- "🔥 Your Hot Leads Today (Top 5)"
+- If none: "No Hot Leads Today — Your Engine Is Running"
+
+Implementation:
+- Create a server job/cron (or existing scheduler) that runs daily.
+- Use existing email provider (Resend).
+- Log sends for troubleshooting.
+
+========================================================
+6) ACCEPTANCE CRITERIA
+========================================================
+
+- Lead score now categorizes into 5 tiers (Hot/Warm/New/Low/Unqualified)
+- Signal scoring matches table above and caps per-message inflation
+- STOP/DNC and spam force Unqualified immediately
+- Decay applies correctly at 14d and 30d inactivity
+- W2 updates pipeline + tags based on new thresholds and creates tasks for Hot
+- Daily Hot List email sends top 5 Hot leads with WhatsApp deep links
+- No regression to existing booking intent workflow (W3)
+
+END TASK
