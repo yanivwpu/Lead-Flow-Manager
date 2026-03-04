@@ -280,6 +280,11 @@ const PAGE_META: Record<string, PageMeta> = {
     title: "Terms of Use | WhachatCRM",
     description: "WhachatCRM terms of use. Read our service terms, user responsibilities, and platform guidelines.",
     canonical: `${BASE_URL}/terms-of-use`
+  },
+  "/realtor-growth-engine": {
+    title: "Realtor Growth Engine – Automated Lead Qualification for Real Estate | WhachatCRM",
+    description: "Turn conversations into showings with the Realtor Growth Engine. AI-powered lead scoring, automated bookings, and white-glove concierge setup for real estate agents. $199 one-time.",
+    canonical: `${BASE_URL}/realtor-growth-engine`
   }
 };
 
