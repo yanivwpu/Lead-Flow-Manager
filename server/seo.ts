@@ -108,14 +108,14 @@ export function injectSeoMeta(html: string, url: string): string {
     <meta property="og:description" content="${post.excerpt}" />
     <meta property="og:type" content="article" />
     <meta property="og:url" content="${canonicalUrl}" />
-    <meta property="og:image" content="${BASE_URL}/og/og-whachatcrm.png" />
+    <meta property="og:image" content="${BASE_URL}/og/og-whachatcrm.png?v=2" />
     <meta property="og:image:alt" content="WhachatCRM – WhatsApp CRM & Automation Platform" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="${post.title}" />
     <meta name="twitter:description" content="${post.excerpt}" />
-    <meta name="twitter:image" content="${BASE_URL}/og/og-whachatcrm.png" />
+    <meta name="twitter:image" content="${BASE_URL}/og/og-whachatcrm.png?v=2" />
     <meta name="twitter:image:alt" content="WhachatCRM – WhatsApp CRM & Automation Platform" />
     <link rel="canonical" href="${canonicalUrl}" />
     <script type="application/ld+json">
@@ -158,14 +158,14 @@ export function injectSeoMeta(html: string, url: string): string {
     <meta property="og:description" content="Learn how to grow your business with WhatsApp. Expert guides on WhatsApp CRM, automation, lead management, and customer service." />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="${canonicalUrl}" />
-    <meta property="og:image" content="${BASE_URL}/og/og-whachatcrm.png" />
+    <meta property="og:image" content="${BASE_URL}/og/og-whachatcrm.png?v=2" />
     <meta property="og:image:alt" content="WhachatCRM – WhatsApp CRM & Automation Platform" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="WhatsApp CRM Blog & Guides | WhachatCRM" />
     <meta name="twitter:description" content="Learn how to grow your business with WhatsApp. Expert guides on WhatsApp CRM, automation, lead management, and customer service." />
-    <meta name="twitter:image" content="${BASE_URL}/og/og-whachatcrm.png" />
+    <meta name="twitter:image" content="${BASE_URL}/og/og-whachatcrm.png?v=2" />
     <meta name="twitter:image:alt" content="WhachatCRM – WhatsApp CRM & Automation Platform" />
     <link rel="canonical" href="${canonicalUrl}" />
     <script type="application/ld+json">
@@ -311,14 +311,14 @@ export function injectPageMeta(html: string, url: string): string {
     <meta property="og:description" content="${pageMeta.description}" />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="${pageMeta.canonical}" />
-    <meta property="og:image" content="${BASE_URL}/og/og-whachatcrm.png" />
+    <meta property="og:image" content="${BASE_URL}/og/og-whachatcrm.png?v=2" />
     <meta property="og:image:alt" content="WhachatCRM – WhatsApp CRM & Automation Platform" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="${pageMeta.title}" />
     <meta name="twitter:description" content="${pageMeta.description}" />
-    <meta name="twitter:image" content="${BASE_URL}/og/og-whachatcrm.png" />
+    <meta name="twitter:image" content="${BASE_URL}/og/og-whachatcrm.png?v=2" />
     <meta name="twitter:image:alt" content="WhachatCRM – WhatsApp CRM & Automation Platform" />
     <link rel="canonical" href="${pageMeta.canonical}" />`;
 
