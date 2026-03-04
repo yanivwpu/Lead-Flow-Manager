@@ -208,6 +208,7 @@ interface PageMeta {
   title: string;
   description: string;
   canonical: string;
+  ogImage?: string;
 }
 
 const PAGE_META: Record<string, PageMeta> = {
@@ -282,9 +283,10 @@ const PAGE_META: Record<string, PageMeta> = {
     canonical: `${BASE_URL}/terms-of-use`
   },
   "/realtor-growth-engine": {
-    title: "Realtor Growth Engine – Automated Lead Qualification for Real Estate | WhachatCRM",
-    description: "Turn conversations into showings with the Realtor Growth Engine. AI-powered lead scoring, automated bookings, and white-glove concierge setup for real estate agents. $199 one-time.",
-    canonical: `${BASE_URL}/realtor-growth-engine`
+    title: "Realtor Growth Engine – Turn Real Estate Leads Into Showings | WhachatCRM",
+    description: "AI-powered WhatsApp automation that qualifies leads and schedules showings automatically. Fully done-for-you setup for real estate agents.",
+    canonical: `${BASE_URL}/realtor-growth-engine`,
+    ogImage: `${BASE_URL}/og/og-realtor-growth-engine.png`
   }
 };
 
@@ -316,14 +318,14 @@ export function injectPageMeta(html: string, url: string): string {
     <meta property="og:description" content="${pageMeta.description}" />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="${pageMeta.canonical}" />
-    <meta property="og:image" content="${BASE_URL}/og/og-whachatcrm.png?v=3" />
-    <meta property="og:image:alt" content="WhachatCRM – WhatsApp CRM & Automation Platform" />
+    <meta property="og:image" content="${pageMeta.ogImage || `${BASE_URL}/og/og-whachatcrm.png?v=3`}" />
+    <meta property="og:image:alt" content="${pageMeta.title}" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="${pageMeta.title}" />
     <meta name="twitter:description" content="${pageMeta.description}" />
-    <meta name="twitter:image" content="${BASE_URL}/og/og-whachatcrm.png?v=3" />
+    <meta name="twitter:image" content="${pageMeta.ogImage || `${BASE_URL}/og/og-whachatcrm.png?v=3`}" />
     <meta name="twitter:image:alt" content="WhachatCRM – WhatsApp CRM & Automation Platform" />
     <link rel="canonical" href="${pageMeta.canonical}" />`;
 

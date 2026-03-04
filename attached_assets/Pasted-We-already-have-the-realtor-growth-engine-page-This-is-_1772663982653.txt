@@ -1,0 +1,192 @@
+We already have the /realtor-growth-engine page. This is not a rebuild. 
+Improve the page for clarity and conversions from LinkedIn traffic.
+
+Important: Do NOT add "Book a Demo" buttons.
+
+Goal: Visitors should understand the system quickly and either:
+• Request early access
+• Contact us
+• Explore the platform
+
+--------------------------------
+1) HERO SECTION IMPROVEMENT
+--------------------------------
+
+Update the hero to clearly explain the product.
+
+Headline:
+"Realtor Growth Engine"
+
+Subheadline:
+"Turn real estate leads into showings automatically with AI-powered WhatsApp automation."
+
+Add 3 benefit bullets below the headline:
+
+• Instantly respond to every new lead
+• AI qualifies buyers and sellers automatically
+• Book showings directly through WhatsApp
+
+Primary CTA button:
+"Get Early Access"
+
+Secondary CTA:
+"See How It Works"
+
+The "See How It Works" button should scroll to the workflow section.
+
+Add a small line below the buttons:
+
+"Launch offer: 50% off Concierge Setup for the first 5 real estate agents."
+
+--------------------------------
+2) ADD VISUAL WORKFLOW SECTION
+--------------------------------
+
+Add a section titled:
+
+"How the Realtor Growth Engine Works"
+
+Create a simple step flow using icons:
+
+Step 1
+Lead comes from website, Facebook ad, or Zillow
+
+Step 2
+System instantly responds via WhatsApp
+
+Step 3
+AI qualifies buyer or seller intent
+
+Step 4
+Hot leads routed to the agent
+
+Step 5
+Showing scheduled automatically
+
+Step 6
+Lead details saved inside the CRM
+
+Keep this section visual and easy to scan.
+
+--------------------------------
+3) ADD "DONE FOR YOU SETUP" SECTION
+--------------------------------
+
+Title:
+"Fully Done-For-You Setup"
+
+Explain that agents do not need technical knowledge.
+
+Include bullets:
+
+• WhatsApp Business API setup
+• Meta business verification assistance
+• Automation workflows configured
+• Calendar booking integration
+• CRM pipeline setup
+
+Add small line:
+
+"Most agents are live within a few days."
+
+--------------------------------
+4) ADD "BUILT ON WHACHATCRM" SECTION
+--------------------------------
+
+Add credibility by showing the platform foundation.
+
+Title:
+"Built on WhachatCRM"
+
+Include feature highlights:
+
+• Unified messaging inbox
+• AI lead scoring
+• Lead data extraction
+• Team collaboration tools
+• Multi-channel messaging (WhatsApp, Instagram, Facebook, SMS)
+
+This helps visitors understand it's a real platform.
+
+--------------------------------
+5) ADD PRICING / REQUIREMENTS BLOCK
+--------------------------------
+
+Title:
+"What You Need to Get Started"
+
+Explain clearly:
+
+• Requires WhachatCRM Pro plan
+• Requires AI Brain add-on
+• One-time Concierge Setup (launch discount available)
+
+Also include:
+
+"WhatsApp messaging fees are billed directly by Meta with no markup."
+
+--------------------------------
+6) ADD FAQ SECTION
+--------------------------------
+
+Add a short FAQ with these questions:
+
+1) Do I need WhatsApp Business API?
+2) Can I use my existing phone number?
+3) How long does setup take?
+4) Does it work with Zillow or website leads?
+5) Do you charge per message?
+6) Can teams use this system?
+
+--------------------------------
+7) NAVIGATION UPDATE
+--------------------------------
+
+Add "Realtor Growth Engine" to the main navigation menu linking to:
+
+/realtor-growth-engine
+
+Also add it in the footer under a "Solutions" section.
+
+--------------------------------
+8) SOCIAL PREVIEW (OG TAGS)
+--------------------------------
+
+Add dedicated Open Graph tags for this page:
+
+og:title:
+"Realtor Growth Engine – Turn Real Estate Leads Into Showings"
+
+og:description:
+"AI-powered WhatsApp automation that qualifies leads and schedules showings automatically."
+
+og:image:
+https://whachatcrm.com/og/og-realtor-growth-engine.png
+
+Image size: 1200x630.
+
+--------------------------------
+9) LINKEDIN TRAFFIC UX
+--------------------------------
+
+Add a small callout near the top of the page:
+
+"Curious how this works for your market?
+Message us or request early access."
+
+This encourages inbound conversations.
+
+--------------------------------
+10) FINAL CHECK
+--------------------------------
+
+Ensure:
+
+• Page loads fast
+• No horizontal scroll
+• Works on mobile
+• RTL Hebrew still renders correctly
+• OG preview works in LinkedIn inspector
+
+Commit message:
+"Realtor Growth Engine landing page improvements"
