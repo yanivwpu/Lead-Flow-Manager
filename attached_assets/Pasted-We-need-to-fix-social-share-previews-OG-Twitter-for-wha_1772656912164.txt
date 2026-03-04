@@ -1,0 +1,46 @@
+We need to fix social share previews (OG + Twitter) for whachatcrm.com across LinkedIn/Facebook/X/Slack/WhatsApp.
+
+IMPORTANT: Since the frontend is a React SPA, crawlers may not execute JS. OG tags MUST exist in the initial HTML response served by Express (index.html), not only client-side.
+
+1) Add OG image asset
+- Use the finalized image file (1200x630) named: og-whachatcrm.png
+- Put it in the publicly served static folder:
+  - If Express serves /public as static: place in /public/og/og-whachatcrm.png
+  - Ensure it is reachable at: https://whachatcrm.com/og/og-whachatcrm.png
+- Confirm it returns HTTP 200 and correct content-type (image/png).
+
+2) Update the base HTML head (the template served to everyone)
+- Find the static HTML template your SPA uses (commonly /public/index.html or /client/public/index.html depending on repo).
+- In the <head> add/replace the following tags:
+
+<title>WhachatCRM – WhatsApp CRM & Automation Platform</title>
+<meta name="description" content="Convert conversations into customers across WhatsApp and social messaging channels." />
+
+<!-- Open Graph -->
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="WhachatCRM" />
+<meta property="og:title" content="WhachatCRM – WhatsApp CRM & Automation Platform" />
+<meta property="og:description" content="Convert conversations into customers across WhatsApp and social messaging channels." />
+<meta property="og:url" content="https://whachatcrm.com/" />
+<meta property="og:image" content="https://whachatcrm.com/og/og-whachatcrm.png" />
+<meta property="og:image:secure_url" content="https://whachatcrm.com/og/og-whachatcrm.png" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta property="og:image:alt" content="WhachatCRM – WhatsApp CRM & Automation Platform" />
+
+<!-- Twitter/X -->
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="WhachatCRM – WhatsApp CRM & Automation Platform" />
+<meta name="twitter:description" content="Convert conversations into customers across WhatsApp and social messaging channels." />
+<meta name="twitter:image" content="https://whachatcrm.com/og/og-whachatcrm.png" />
+
+3) Ensure Express serves the SPA HTML for /
+- Confirm GET / returns that HTML template (with the tags above) before the React bundle loads.
+- Also confirm the same HTML is returned for any client-side route (Express catch-all -> index.html), so crawlers always see OG tags.
+
+4) Verify after deploy
+- LinkedIn: https://www.linkedin.com/post-inspector/  -> Inspect https://whachatcrm.com
+- Facebook: https://developers.facebook.com/tools/debug/ -> Scrape Again
+- Also verify by viewing page source in browser (Ctrl+U) and confirm the og:* and twitter:* tags exist in source.
+
+Note: If in the future we want per-page OG images (e.g., /realtor-growth-engine), we’ll need SSR or a server-side prerender solution. For now, homepage OG tags are enough.
