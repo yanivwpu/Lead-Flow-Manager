@@ -48,7 +48,7 @@ function IntegrationsHub() {
   const bottomRow = INTEGRATIONS.slice(4);
 
   return (
-    <div className="w-full max-w-6xl mx-auto px-4">
+    <div className="w-full max-w-6xl xl:max-w-[1440px] 2xl:max-w-[1536px] mx-auto px-4">
       <div className="flex flex-col items-center gap-6 md:gap-8">
         <div className="flex flex-wrap justify-center gap-4 md:gap-8 w-full">
           {topRow.map((integration, i) => {
@@ -126,7 +126,7 @@ export function Welcome() {
       </Helmet>
       <BookDemoModal isOpen={showDemoModal} onClose={() => setShowDemoModal(false)} />
       {/* Navigation */}
-      <nav className="p-4 md:p-6 flex justify-between items-center max-w-7xl mx-auto">
+      <nav className="p-4 md:p-6 flex justify-between items-center max-w-7xl xl:max-w-[1440px] 2xl:max-w-[1536px] mx-auto">
         <div className="flex items-center gap-2">
           <div className="h-8 w-8 bg-brand-green rounded-lg flex items-center justify-center">
             <span className="text-white font-bold text-lg">W</span>
@@ -163,13 +163,13 @@ export function Welcome() {
       </nav>
 
       {/* Hero Section */}
-      <section className="px-4 md:px-6 pt-4 md:pt-8 pb-12 md:pb-20 max-w-7xl mx-auto">
-        <div className="grid md:grid-cols-2 gap-8 md:gap-12 items-start">
+      <section className="px-4 md:px-6 pt-4 md:pt-8 pb-12 md:pb-20 max-w-7xl xl:max-w-[1440px] 2xl:max-w-[1536px] mx-auto">
+        <div className="grid md:grid-cols-2 gap-8 md:gap-12 xl:gap-16 2xl:gap-20 items-start">
           <div className="animate-hero-text">
-            <h1 className="text-3xl md:text-5xl lg:text-6xl font-display font-bold text-gray-900 leading-[1.1] mb-4 md:mb-6">
+            <h1 className="text-3xl md:text-5xl lg:text-6xl xl:text-7xl font-display font-bold text-gray-900 leading-[1.1] mb-4 md:mb-6">
               {t('landing.heroTitle')}
             </h1>
-            <p className="text-lg md:text-xl text-gray-600 mb-6 md:mb-8 leading-relaxed">
+            <p className="text-lg md:text-xl xl:text-2xl text-gray-600 mb-6 md:mb-8 leading-relaxed">
               {t('landing.heroSubtitle')}
             </p>
             
@@ -229,7 +229,7 @@ export function Welcome() {
               <img 
                 src={heroImage} 
                 alt="WhachatCRM Dashboard - WhatsApp CRM Interface" 
-                className="w-full rounded-xl md:rounded-2xl shadow-2xl border border-gray-200 md:scale-105 origin-top relative z-10"
+                className="w-full rounded-xl md:rounded-2xl shadow-2xl border border-gray-200 md:scale-105 xl:scale-110 origin-top relative z-10"
                 width="704"
                 height="384"
                 loading="eager"
@@ -243,62 +243,62 @@ export function Welcome() {
 
       {/* Problem/Solution Section */}
       <section className="px-4 md:px-6 py-16 md:py-20 bg-gray-900 text-white">
-        <div className="max-w-6xl mx-auto">
-          <h2 className="text-2xl md:text-4xl font-display font-bold text-center mb-10 md:mb-14">
+        <div className="max-w-6xl xl:max-w-[1440px] 2xl:max-w-[1536px] mx-auto">
+          <h2 className="text-2xl md:text-4xl xl:text-5xl font-display font-bold text-center mb-10 md:mb-14">
             {t('home.problem.title')}
           </h2>
           
-          <div className="grid md:grid-cols-2 gap-8 md:gap-12">
+          <div className="grid md:grid-cols-2 gap-8 md:gap-12 xl:gap-16">
             {/* Problems */}
             <div>
-              <h3 className="text-lg font-semibold text-gray-400 mb-6 uppercase tracking-wide">{t('home.problem.heading')}</h3>
+              <h3 className="text-lg xl:text-xl font-semibold text-gray-400 mb-6 uppercase tracking-wide">{t('home.problem.heading')}</h3>
               <div className="space-y-4">
                 <div className="flex items-start gap-3">
                   <div className="h-6 w-6 rounded-full bg-red-500/20 flex items-center justify-center shrink-0 mt-0.5">
                     <span className="text-red-400 text-sm">✕</span>
                   </div>
-                  <p className="text-gray-300">{t('home.problem.item1')}</p>
+                  <p className="text-gray-300 xl:text-lg">{t('home.problem.item1')}</p>
                 </div>
                 <div className="flex items-start gap-3">
                   <div className="h-6 w-6 rounded-full bg-red-500/20 flex items-center justify-center shrink-0 mt-0.5">
                     <span className="text-red-400 text-sm">✕</span>
                   </div>
-                  <p className="text-gray-300">{t('home.problem.item2')}</p>
+                  <p className="text-gray-300 xl:text-lg">{t('home.problem.item2')}</p>
                 </div>
                 <div className="flex items-start gap-3">
                   <div className="h-6 w-6 rounded-full bg-red-500/20 flex items-center justify-center shrink-0 mt-0.5">
                     <span className="text-red-400 text-sm">✕</span>
                   </div>
-                  <p className="text-gray-300">{t('home.problem.item3')}</p>
+                  <p className="text-gray-300 xl:text-lg">{t('home.problem.item3')}</p>
                 </div>
                 <div className="flex items-start gap-3">
                   <div className="h-6 w-6 rounded-full bg-red-500/20 flex items-center justify-center shrink-0 mt-0.5">
                     <span className="text-red-400 text-sm">✕</span>
                   </div>
-                  <p className="text-gray-300">{t('home.problem.item4')}</p>
+                  <p className="text-gray-300 xl:text-lg">{t('home.problem.item4')}</p>
                 </div>
               </div>
             </div>
             
             {/* Solution */}
             <div>
-              <h3 className="text-lg font-semibold text-brand-green mb-6 uppercase tracking-wide">{t('home.solution.heading')}</h3>
+              <h3 className="text-lg xl:text-xl font-semibold text-brand-green mb-6 uppercase tracking-wide">{t('home.solution.heading')}</h3>
               <div className="space-y-4">
                 <div className="flex items-start gap-3">
                   <CheckCircle2 className="h-6 w-6 text-brand-green shrink-0 mt-0.5" />
-                  <p className="text-white">{t('home.solution.item1')}</p>
+                  <p className="text-white xl:text-lg">{t('home.solution.item1')}</p>
                 </div>
                 <div className="flex items-start gap-3">
                   <CheckCircle2 className="h-6 w-6 text-brand-green shrink-0 mt-0.5" />
-                  <p className="text-white">{t('home.solution.item2')}</p>
+                  <p className="text-white xl:text-lg">{t('home.solution.item2')}</p>
                 </div>
                 <div className="flex items-start gap-3">
                   <CheckCircle2 className="h-6 w-6 text-brand-green shrink-0 mt-0.5" />
-                  <p className="text-white">{t('home.solution.item3')}</p>
+                  <p className="text-white xl:text-lg">{t('home.solution.item3')}</p>
                 </div>
                 <div className="flex items-start gap-3">
                   <CheckCircle2 className="h-6 w-6 text-brand-green shrink-0 mt-0.5" />
-                  <p className="text-white">{t('home.solution.item4')}</p>
+                  <p className="text-white xl:text-lg">{t('home.solution.item4')}</p>
                 </div>
               </div>
             </div>
@@ -308,9 +308,9 @@ export function Welcome() {
 
       {/* Benefits Section */}
       <section className="px-4 md:px-6 py-16 md:py-20 bg-gray-50">
-        <div className="max-w-7xl mx-auto">
+        <div className="max-w-7xl xl:max-w-[1440px] 2xl:max-w-[1536px] mx-auto">
           <div className="text-center mb-10 md:mb-14">
-            <h2 className="text-2xl md:text-4xl font-display font-bold text-gray-900 mb-3 md:mb-4">
+            <h2 className="text-2xl md:text-4xl xl:text-5xl font-display font-bold text-gray-900 mb-3 md:mb-4">
               {t('home.features.title')}
             </h2>
           </div>
@@ -334,8 +334,8 @@ export function Welcome() {
                   <div className={`h-12 w-12 ${benefit.color} rounded-xl flex items-center justify-center mb-4`}>
                     <Icon className={`h-6 w-6 ${benefit.iconColor}`} />
                   </div>
-                  <h3 className="text-lg font-bold text-gray-900 mb-2">{benefit.title}</h3>
-                  <p className="text-gray-600">{benefit.desc}</p>
+                  <h3 className="text-lg xl:text-xl font-bold text-gray-900 mb-2">{benefit.title}</h3>
+                  <p className="text-gray-600 xl:text-base">{benefit.desc}</p>
                 </div>
               );
             })}
@@ -345,12 +345,12 @@ export function Welcome() {
 
       {/* Integrations Section */}
       <section className="px-4 md:px-6 py-16 md:py-20 bg-gradient-to-b from-gray-50 to-white">
-        <div className="max-w-6xl mx-auto">
+        <div className="max-w-6xl xl:max-w-[1440px] 2xl:max-w-[1536px] mx-auto">
           <div className="text-center mb-10 md:mb-12">
-            <h2 className="text-2xl md:text-4xl font-display font-bold text-gray-900 mb-3 md:mb-4">
+            <h2 className="text-2xl md:text-4xl xl:text-5xl font-display font-bold text-gray-900 mb-3 md:mb-4">
               {t('home.integrations.title')}
             </h2>
-            <p className="text-base md:text-lg text-gray-600 max-w-2xl mx-auto">
+            <p className="text-base md:text-lg xl:text-xl text-gray-600 max-w-2xl xl:max-w-3xl mx-auto">
               {t('home.integrations.subtitle')}
             </p>
           </div>
@@ -361,39 +361,39 @@ export function Welcome() {
 
       {/* How It Works - Simple 3 steps */}
       <section className="px-4 md:px-6 py-16 md:py-20 bg-gray-50">
-        <div className="max-w-5xl mx-auto">
+        <div className="max-w-5xl xl:max-w-6xl mx-auto">
           <div className="text-center mb-12 md:mb-16">
-            <h2 className="text-2xl md:text-4xl font-display font-bold text-gray-900 mb-3 md:mb-4">
+            <h2 className="text-2xl md:text-4xl xl:text-5xl font-display font-bold text-gray-900 mb-3 md:mb-4">
               {t('home.howItWorks.title')}
             </h2>
-            <p className="text-base md:text-lg text-gray-600">
+            <p className="text-base md:text-lg xl:text-xl text-gray-600">
               {t('home.howItWorks.subtitle')}
             </p>
           </div>
           
-          <div className="grid md:grid-cols-3 gap-8 md:gap-12">
+          <div className="grid md:grid-cols-3 gap-8 md:gap-12 xl:gap-16">
             <div className="text-center">
-              <div className="h-14 w-14 bg-brand-green text-white rounded-2xl flex items-center justify-center mx-auto mb-4 text-xl font-bold">
+              <div className="h-14 w-14 xl:h-16 xl:w-16 bg-brand-green text-white rounded-2xl flex items-center justify-center mx-auto mb-4 text-xl xl:text-2xl font-bold">
                 1
               </div>
-              <h3 className="text-lg font-bold text-gray-900 mb-2">{t('home.howItWorks.step1.title')}</h3>
-              <p className="text-gray-600">{t('home.howItWorks.step1.desc')}</p>
+              <h3 className="text-lg xl:text-xl font-bold text-gray-900 mb-2">{t('home.howItWorks.step1.title')}</h3>
+              <p className="text-gray-600 xl:text-lg">{t('home.howItWorks.step1.desc')}</p>
             </div>
             
             <div className="text-center">
-              <div className="h-14 w-14 bg-brand-green text-white rounded-2xl flex items-center justify-center mx-auto mb-4 text-xl font-bold">
+              <div className="h-14 w-14 xl:h-16 xl:w-16 bg-brand-green text-white rounded-2xl flex items-center justify-center mx-auto mb-4 text-xl xl:text-2xl font-bold">
                 2
               </div>
-              <h3 className="text-lg font-bold text-gray-900 mb-2">{t('home.howItWorks.step2.title')}</h3>
-              <p className="text-gray-600">{t('home.howItWorks.step2.desc')}</p>
+              <h3 className="text-lg xl:text-xl font-bold text-gray-900 mb-2">{t('home.howItWorks.step2.title')}</h3>
+              <p className="text-gray-600 xl:text-lg">{t('home.howItWorks.step2.desc')}</p>
             </div>
             
             <div className="text-center">
-              <div className="h-14 w-14 bg-brand-green text-white rounded-2xl flex items-center justify-center mx-auto mb-4 text-xl font-bold">
+              <div className="h-14 w-14 xl:h-16 xl:w-16 bg-brand-green text-white rounded-2xl flex items-center justify-center mx-auto mb-4 text-xl xl:text-2xl font-bold">
                 3
               </div>
-              <h3 className="text-lg font-bold text-gray-900 mb-2">{t('home.howItWorks.step3.title')}</h3>
-              <p className="text-gray-600">{t('home.howItWorks.step3.desc')}</p>
+              <h3 className="text-lg xl:text-xl font-bold text-gray-900 mb-2">{t('home.howItWorks.step3.title')}</h3>
+              <p className="text-gray-600 xl:text-lg">{t('home.howItWorks.step3.desc')}</p>
             </div>
           </div>
         </div>
@@ -401,11 +401,11 @@ export function Welcome() {
 
       {/* Pricing Teaser */}
       <section className="px-4 md:px-6 py-16 md:py-20">
-        <div className="max-w-3xl mx-auto text-center">
-          <h2 className="text-2xl md:text-4xl font-display font-bold text-gray-900 mb-3 md:mb-4">
+        <div className="max-w-3xl xl:max-w-4xl mx-auto text-center">
+          <h2 className="text-2xl md:text-4xl xl:text-5xl font-display font-bold text-gray-900 mb-3 md:mb-4">
             {t('home.pricingTeaser.title')}
           </h2>
-          <p className="text-base md:text-lg text-gray-600 mb-8">
+          <p className="text-base md:text-lg xl:text-xl text-gray-600 mb-8">
             {t('home.pricingTeaser.subtitle')}
           </p>
           
@@ -435,12 +435,12 @@ export function Welcome() {
 
       {/* Built For Section */}
       <section className="px-4 md:px-6 py-16 md:py-20 bg-gray-50">
-        <div className="max-w-4xl mx-auto text-center">
-          <h2 className="text-2xl md:text-4xl font-display font-bold text-gray-900 mb-10">
+        <div className="max-w-4xl xl:max-w-5xl mx-auto text-center">
+          <h2 className="text-2xl md:text-4xl xl:text-5xl font-display font-bold text-gray-900 mb-10">
             {t('home.builtFor.title')}
           </h2>
           
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 mb-10">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 xl:gap-8 mb-10">
             <div className="bg-white p-4 md:p-6 rounded-xl border border-gray-200">
               <p className="font-medium text-gray-900 text-sm md:text-base">{t('home.builtFor.salesTeams')}</p>
             </div>
@@ -455,7 +455,7 @@ export function Welcome() {
             </div>
           </div>
           
-          <p className="text-lg text-gray-600">
+          <p className="text-lg xl:text-xl text-gray-600">
             {t('home.builtFor.tagline')}
           </p>
         </div>
@@ -463,17 +463,17 @@ export function Welcome() {
 
       {/* Trust Section */}
       <section className="px-4 md:px-6 py-12 md:py-16 bg-gray-900 text-white">
-        <div className="max-w-3xl mx-auto text-center">
+        <div className="max-w-3xl xl:max-w-4xl mx-auto text-center">
           <div className="h-14 w-14 bg-brand-green/20 rounded-2xl flex items-center justify-center mx-auto mb-6">
             <Shield className="h-7 w-7 text-brand-green" />
           </div>
-          <h2 className="text-xl md:text-3xl font-display font-bold mb-4">
+          <h2 className="text-xl md:text-3xl xl:text-4xl font-display font-bold mb-4">
             {t('home.trust.title')}
           </h2>
-          <p className="text-gray-300 mb-2">
+          <p className="text-gray-300 xl:text-lg mb-2">
             {t('home.trust.line1')}
           </p>
-          <p className="text-gray-400">
+          <p className="text-gray-400 xl:text-lg">
             {t('home.trust.line2')}
           </p>
         </div>
@@ -481,15 +481,15 @@ export function Welcome() {
 
       {/* Final CTA */}
       <section className="px-4 md:px-6 py-16 md:py-20 bg-gradient-to-br from-brand-green/5 to-brand-teal/5">
-        <div className="max-w-3xl mx-auto text-center">
-          <div className="inline-flex items-center gap-2 px-4 py-2 bg-brand-green/10 text-brand-green rounded-full text-sm font-medium mb-6">
+        <div className="max-w-3xl xl:max-w-4xl mx-auto text-center">
+          <div className="inline-flex items-center gap-2 px-4 py-2 bg-brand-green/10 text-brand-green rounded-full text-sm xl:text-base font-medium mb-6">
             <Zap className="h-4 w-4" />
             {t('home.cta.setupTime')}
           </div>
-          <h2 className="text-2xl md:text-4xl font-display font-bold text-gray-900 mb-3 md:mb-4">
+          <h2 className="text-2xl md:text-4xl xl:text-5xl font-display font-bold text-gray-900 mb-3 md:mb-4">
             {t('home.cta.title')}
           </h2>
-          <p className="text-base md:text-lg text-gray-600 mb-8">
+          <p className="text-base md:text-lg xl:text-xl text-gray-600 mb-8">
             {t('home.cta.subtitle')}
           </p>
           
@@ -526,7 +526,7 @@ export function Welcome() {
 
       {/* Footer */}
       <footer className="px-4 md:px-6 py-6 md:py-8 border-t border-gray-100">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
+        <div className="max-w-7xl xl:max-w-[1440px] 2xl:max-w-[1536px] mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
           <div className="flex items-center gap-2">
             <div className="h-6 w-6 bg-brand-green rounded-md flex items-center justify-center">
               <span className="text-white font-bold text-sm">W</span>

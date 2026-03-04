@@ -155,7 +155,7 @@ export function Pricing() {
         <meta name="twitter:title" content="WhachatCRM Pricing: Free Plan Forever" />
         <meta name="twitter:description" content="Simple pricing for WhatsApp CRM. Free plan forever, Starter at $19/mo." />
       </Helmet>
-      <div className="max-w-5xl mx-auto">
+      <div className="max-w-5xl xl:max-w-6xl 2xl:max-w-7xl mx-auto">
         <Link href={user ? "/app/settings" : "/"}>
           <a className={`inline-flex items-center text-sm text-gray-500 hover:text-brand-green mb-6 ${isRTL ? 'flex-row-reverse' : ''}`}>
             <ArrowLeft className={`h-4 w-4 ${isRTL ? 'ml-2 rotate-180' : 'mr-2'}`} />
@@ -164,13 +164,13 @@ export function Pricing() {
         </Link>
 
         <div className="text-center mb-12">
-          <h1 className="text-4xl font-display font-bold text-gray-900 mb-4">
+          <h1 className="text-4xl xl:text-5xl font-display font-bold text-gray-900 mb-4">
             {t('pricing.title')}
           </h1>
-          <p className="text-xl text-gray-600 max-w-2xl mx-auto">
+          <p className="text-xl xl:text-2xl text-gray-600 max-w-2xl xl:max-w-3xl mx-auto">
             {t('pricing.subtitle')}
           </p>
-          <p className="text-gray-500 mt-2 max-w-2xl mx-auto">
+          <p className="text-gray-500 xl:text-lg mt-2 max-w-2xl xl:max-w-3xl mx-auto">
             {t('pricing.subtitle2')}
           </p>
           
