@@ -143,6 +143,9 @@ export function Welcome() {
           <Link href="/realtor-growth-engine">
             <button className="text-sm font-medium text-gray-600 hover:text-gray-900 hidden md:block">Realtor Growth Engine</button>
           </Link>
+          <Link href="/contact">
+            <button className="text-sm font-medium text-gray-600 hover:text-gray-900 hidden md:block">Contact</button>
+          </Link>
           <LanguageSelector variant="compact" className="text-gray-600 hover:text-gray-900 hover:bg-gray-100" />
           {user ? (
             <Link href="/app/chats">
@@ -564,6 +567,9 @@ export function Welcome() {
             </Link>
             <Link href="/realtor-growth-engine">
               <span className="hover:text-gray-900 cursor-pointer">Realtor Growth Engine</span>
+            </Link>
+            <Link href="/contact">
+              <span className="hover:text-gray-900 cursor-pointer">Contact</span>
             </Link>
             <Link href="/privacy-policy">
               <span className="hover:text-gray-900 cursor-pointer">Privacy</span>
