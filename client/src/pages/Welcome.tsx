@@ -141,7 +141,7 @@ export function Welcome() {
             <button className="text-sm font-medium text-gray-600 hover:text-gray-900 hidden sm:block">{t('landing.blog')}</button>
           </Link>
           <Link href="/realtor-growth-engine">
-            <button className="text-sm font-medium text-gray-600 hover:text-gray-900 hidden md:block">Realtor Growth Engine</button>
+            <button className="text-sm font-medium text-gray-600 hover:text-gray-900 hidden md:block">{t('landing.realtorGrowthEngine')}</button>
           </Link>
           <LanguageSelector variant="compact" className="text-gray-600 hover:text-gray-900 hover:bg-gray-100" />
           {user ? (
@@ -563,7 +563,7 @@ export function Welcome() {
               <span className="hover:text-gray-900 cursor-pointer">Pabbly Alternative</span>
             </Link>
             <Link href="/realtor-growth-engine">
-              <span className="hover:text-gray-900 cursor-pointer">Realtor Growth Engine</span>
+              <span className="hover:text-gray-900 cursor-pointer">{t('landing.realtorGrowthEngine')}</span>
             </Link>
             <Link href="/contact">
               <span className="hover:text-gray-900 cursor-pointer">Contact</span>
