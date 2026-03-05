@@ -34,7 +34,7 @@ export function RealtorLanding() {
   const { user } = useAuth();
 
   const workflowSteps = [
-    { num: 1, icon: Globe, title: "Lead Arrives", desc: "From your website, Facebook ad, landing page, or any lead source." },
+    { num: 1, icon: Globe, title: "Lead Arrives", desc: "From your website, ShowcaseIDX, Facebook ad, landing page, or any lead source." },
     { num: 2, icon: Zap, title: "Instant WhatsApp Reply", desc: "System responds automatically via WhatsApp within seconds." },
     { num: 3, icon: Brain, title: "AI Qualifies Intent", desc: "AI analyzes the message to detect buyer or seller intent." },
     { num: 4, icon: Target, title: "Hot Leads Routed", desc: "High-intent leads are flagged and routed directly to you." },
@@ -62,7 +62,7 @@ export function RealtorLanding() {
     { q: "Do I need WhatsApp Business API?", a: "Yes, but you don't need to set it up yourself. Our concierge team handles the entire WABA registration and Meta Business Manager verification as part of the one-time setup fee." },
     { q: "Can I use my existing phone number?", a: "In most cases, yes. If your number isn't currently on WhatsApp Business API, we can migrate it. If it's on a personal WhatsApp account, we'll walk you through the migration process during onboarding." },
     { q: "How long does setup take?", a: "Most agents are fully live within 3–5 business days. The onboarding session takes about 45–60 minutes, and we handle the rest behind the scenes." },
-    { q: "Does it work with leads from my website or landing pages?", a: "Yes. Any lead source that triggers a WhatsApp message or web form submission will feed into the system. We configure the connections during setup." },
+    { q: "Does it work with leads from ShowcaseIDX or my website?", a: "Yes. Leads from ShowcaseIDX, your website, landing pages, or any source that triggers a WhatsApp message or web form submission will feed into the system. We configure the connections during setup." },
     { q: "Do you charge per message?", a: "No. WhachatCRM does not add any markup to messages. WhatsApp messaging fees are billed directly by Meta at their standard rates." },
     { q: "Can teams use this system?", a: "Absolutely. The Pro plan includes unlimited team members. You can assign leads, share notes, and collaborate from a single unified inbox." },
   ];
