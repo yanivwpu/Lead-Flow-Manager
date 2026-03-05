@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import {
   ArrowRight, CheckCircle2, Zap, MessageSquare, Brain, Calendar,
   Users, Target, Shield, ChevronDown, Globe, Smartphone, Search,
@@ -33,6 +33,15 @@ function FaqItem({ question, answer }: { question: string; answer: string }) {
 export function RealtorLanding() {
   const { user } = useAuth();
   const [copied, setCopied] = useState(false);
+  const [, setLocation] = useLocation();
+
+  const ctaHref = user
+    ? "/app/templates/realtor-growth-engine"
+    : "/auth?redirect=/app/templates/realtor-growth-engine";
+
+  const handleCta = () => {
+    setLocation(ctaHref);
+  };
 
   const handleShare = () => {
     navigator.clipboard.writeText(window.location.href);
@@ -172,12 +181,14 @@ export function RealtorLanding() {
             </div>
 
             <div className="flex flex-col sm:flex-row gap-3 mb-4">
-              <Link href="/contact">
-                <button className="w-full sm:w-auto h-14 px-8 bg-brand-green hover:bg-emerald-700 text-white font-semibold rounded-full flex items-center justify-center gap-2 transition-all shadow-lg hover:shadow-xl" data-testid="button-hero-early-access">
-                  Get Early Access
-                  <ArrowRight className="h-5 w-5" />
-                </button>
-              </Link>
+              <button
+                onClick={handleCta}
+                className="w-full sm:w-auto h-14 px-8 bg-brand-green hover:bg-emerald-700 text-white font-semibold rounded-full flex items-center justify-center gap-2 transition-all shadow-lg hover:shadow-xl cursor-pointer"
+                data-testid="button-hero-early-access"
+              >
+                Get Early Access
+                <ArrowRight className="h-5 w-5" />
+              </button>
               <button
                 onClick={scrollToWorkflow}
                 className="w-full sm:w-auto h-14 px-8 bg-white border border-gray-200 text-gray-700 font-medium rounded-full flex items-center justify-center gap-2 hover:bg-gray-50 transition-colors"
@@ -401,7 +412,7 @@ export function RealtorLanding() {
               <div className="bg-white rounded-xl border border-emerald-200 p-5 shadow-sm ring-2 ring-emerald-100">
                 <div className="text-sm font-medium text-emerald-600 mb-1">One-Time Setup</div>
                 <div className="text-lg font-bold text-gray-900">Concierge Setup</div>
-                <div className="text-sm text-emerald-600 font-medium">Launch discount available</div>
+                <div className="text-sm text-emerald-600 font-medium">50% off for the first 5 installs</div>
               </div>
             </div>
 
@@ -410,16 +421,18 @@ export function RealtorLanding() {
             </p>
 
             <div className="flex flex-col sm:flex-row gap-4 justify-center mb-4">
-              <Link href="/contact">
-                <button className="h-14 px-10 bg-brand-green hover:bg-emerald-700 text-white font-semibold rounded-full inline-flex items-center justify-center gap-2 transition-all shadow-lg hover:shadow-xl text-lg" data-testid="button-pricing-early-access">
-                  Get Early Access
-                  <ArrowRight className="h-5 w-5" />
-                </button>
-              </Link>
-              <Link href="/contact">
-                <button className="h-14 px-10 bg-white border border-gray-200 text-gray-700 font-medium rounded-full inline-flex items-center justify-center gap-2 hover:bg-gray-50 transition-colors text-lg" data-testid="button-pricing-contact">
-                  <Mail className="h-5 w-5" />
-                  Contact Us
+              <button
+                onClick={handleCta}
+                className="h-14 px-10 bg-brand-green hover:bg-emerald-700 text-white font-semibold rounded-full inline-flex items-center justify-center gap-2 transition-all shadow-lg hover:shadow-xl text-lg cursor-pointer"
+                data-testid="button-pricing-early-access"
+              >
+                Get Early Access
+                <ArrowRight className="h-5 w-5" />
+              </button>
+              <Link href="/pricing">
+                <button className="h-14 px-10 bg-white border border-gray-200 text-gray-700 font-medium rounded-full inline-flex items-center justify-center gap-2 hover:bg-gray-50 transition-colors text-lg" data-testid="button-pricing-plans">
+                  <BarChart3 className="h-5 w-5" />
+                  View Plans
                 </button>
               </Link>
             </div>
@@ -449,16 +462,18 @@ export function RealtorLanding() {
             Join the first agents to use AI-powered WhatsApp automation for real estate.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link href="/contact">
-              <button className="h-12 px-8 bg-brand-green hover:bg-emerald-700 text-white font-semibold rounded-full inline-flex items-center justify-center gap-2 transition-all" data-testid="button-footer-cta">
-                Get Early Access
-                <ArrowRight className="h-4 w-4" />
-              </button>
-            </Link>
-            <Link href="/contact">
-              <button className="h-12 px-8 bg-gray-800 border border-gray-700 text-gray-300 font-medium rounded-full inline-flex items-center justify-center gap-2 hover:bg-gray-700 transition-colors" data-testid="button-footer-contact">
-                <Mail className="h-4 w-4" />
-                Contact Us
+            <button
+              onClick={handleCta}
+              className="h-12 px-8 bg-brand-green hover:bg-emerald-700 text-white font-semibold rounded-full inline-flex items-center justify-center gap-2 transition-all cursor-pointer"
+              data-testid="button-footer-cta"
+            >
+              Get Early Access
+              <ArrowRight className="h-4 w-4" />
+            </button>
+            <Link href="/pricing">
+              <button className="h-12 px-8 bg-gray-800 border border-gray-700 text-gray-300 font-medium rounded-full inline-flex items-center justify-center gap-2 hover:bg-gray-700 transition-colors" data-testid="button-footer-plans">
+                <BarChart3 className="h-4 w-4" />
+                View Plans
               </button>
             </Link>
           </div>

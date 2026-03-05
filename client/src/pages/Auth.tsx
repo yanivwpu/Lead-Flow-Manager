@@ -20,6 +20,7 @@ export function AuthPage() {
   const isRTL = getDirection() === 'rtl';
   const params = new URLSearchParams(window.location.search);
   const defaultToLogin = params.get('mode') === 'login';
+  const redirectTo = params.get('redirect') || null;
   const [isLogin, setIsLogin] = useState(defaultToLogin);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -73,17 +74,18 @@ export function AuthPage() {
     setIsSubmitting(true);
 
     try {
+      const postAuthRedirect = redirectTo || "/app/chats";
       if (isLogin) {
         const success = await login(email, password, rememberMe);
         if (success) {
-          setLocation("/app/chats");
+          setLocation(postAuthRedirect);
         } else {
           setError("Invalid email or password");
         }
       } else {
         const result = await signup(name, email, password, "", businessName);
         if (result.success) {
-          setLocation("/app/chats");
+          setLocation(postAuthRedirect);
         } else {
           setError(result.error || "Signup failed");
         }
@@ -299,6 +301,12 @@ export function AuthPage() {
               onClick={() => {
                 setIsLogin(!isLogin);
                 setError("");
+                const newMode = isLogin ? '' : 'login';
+                const newParams = new URLSearchParams();
+                if (newMode) newParams.set('mode', newMode);
+                if (redirectTo) newParams.set('redirect', redirectTo);
+                const qs = newParams.toString();
+                window.history.replaceState({}, '', `/auth${qs ? '?' + qs : ''}`);
               }}
               className="font-semibold text-brand-green hover:underline"
             >

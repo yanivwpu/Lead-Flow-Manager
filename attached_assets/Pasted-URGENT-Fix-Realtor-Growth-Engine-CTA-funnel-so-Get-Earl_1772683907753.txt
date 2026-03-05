@@ -1,0 +1,102 @@
+URGENT: Fix Realtor Growth Engine CTA funnel so “Get Early Access” drives login/register + purchase + install.
+
+Context:
+- Public landing page: /realtor-growth-engine  (client/src/pages/RealtorLanding.tsx)
+- In-app install page: /app/templates/realtor-growth-engine (client/src/pages/RealtorGrowthEngine.tsx)
+
+Goal:
+When a visitor clicks “Get Early Access” on the public page, they must be guided into:
+1) Login/Register (if not logged in)
+2) Template page in-app
+3) Stripe purchase (if not entitled / not paid)
+4) Onboarding form
+5) Auto-install
+No sending to generic Contact page.
+
+-------------------------------------------------------
+A) Update the CTA on /realtor-growth-engine
+-------------------------------------------------------
+1) Primary button stays:
+   Label: “Get Early Access”
+
+2) Click behavior:
+   - If user IS authenticated:
+       navigate to /app/templates/realtor-growth-engine
+   - If user is NOT authenticated:
+       navigate to /signup?redirect=/app/templates/realtor-growth-engine
+
+(If you have /login, also add a “Already have an account? Log in” link next to CTA:
+ /login?redirect=/app/templates/realtor-growth-engine )
+
+3) Remove/replace the “Contact Us” button:
+   Replace with either:
+   - “See How It Works” (scroll to workflow section), OR
+   - “Learn About WhachatCRM” (link to / or /pricing)
+Do NOT route CTA traffic to /contact.
+
+-------------------------------------------------------
+B) Ensure Signup/Login preserves redirect
+-------------------------------------------------------
+On signup + login success:
+- Read query param “redirect”
+- After successful auth, navigate to that redirect value
+Default fallback: /app/templates/realtor-growth-engine
+
+Example:
+- /signup?redirect=/app/templates/realtor-growth-engine
+- /login?redirect=/app/templates/realtor-growth-engine
+
+Important: preserve the redirect through the auth flow.
+
+-------------------------------------------------------
+C) In-app template page behavior (/app/templates/realtor-growth-engine)
+-------------------------------------------------------
+This page should enforce the purchase/install funnel:
+
+1) If user DOES NOT have Pro + AI subscription:
+   Show a clear gated screen:
+   “Requires WhachatCRM Pro + AI Brain”
+   Buttons:
+   - “Upgrade to Pro + AI”
+   - “Back to Pricing”
+   (Do not allow template purchase until Pro+AI exists)
+
+2) If user HAS Pro+AI but does NOT have Realtor Growth Engine entitlement/install:
+   Show “Purchase / Start Install” button.
+   Click launches existing Stripe Checkout session ($199) as already implemented.
+
+3) After Stripe success:
+   Route back to /app/templates/realtor-growth-engine?checkout=success
+   Then immediately show onboarding form if not submitted yet.
+
+4) After onboarding submitted:
+   Show install status UI:
+   - Installing…
+   - Installed ✅
+   - Failed (with retry CTA)
+This already exists; just confirm it’s the default post-checkout path.
+
+-------------------------------------------------------
+D) Confirm clean end-to-end redirect path
+-------------------------------------------------------
+Test the full flow from a fresh browser session:
+
+1) Open /realtor-growth-engine logged out
+2) Click “Get Early Access”
+3) Land on /signup?redirect=/app/templates/realtor-growth-engine
+4) Signup success → auto redirect to /app/templates/realtor-growth-engine
+5) If Pro+AI missing → upgrade gate
+6) If Pro+AI active → purchase button → Stripe checkout
+7) After payment → return to template page → onboarding form
+8) Submit onboarding → auto-install → installed ✅
+
+-------------------------------------------------------
+E) Small copy tweak for discount (optional but recommended)
+-------------------------------------------------------
+On the marketing page in the “Concierge Setup” card:
+Replace “Launch discount available” with:
+“Launch Offer: 50% off concierge setup for the first 5 installs”
+(This is premium scarcity, not “cheap sale” language.)
+
+Commit message:
+“RGE funnel: CTA → auth redirect → purchase/install flow”
