@@ -41,11 +41,11 @@ export function RealtorLanding() {
   };
 
   const workflowSteps = [
-    { num: 1, icon: Globe, title: "Lead Arrives", desc: "From your website, ShowcaseIDX, Facebook ad, landing page, or any lead source." },
+    { num: 1, icon: Globe, title: "Lead Arrives", desc: "From your website, IDX listings, Facebook ads, landing pages, or property portals." },
     { num: 2, icon: Zap, title: "Instant WhatsApp Reply", desc: "System responds automatically via WhatsApp within seconds." },
-    { num: 3, icon: Brain, title: "AI Qualifies Intent", desc: "AI analyzes the message to detect buyer or seller intent." },
+    { num: 3, icon: Brain, title: "AI Qualifies Intent", desc: "AI identifies serious buyers or sellers automatically." },
     { num: 4, icon: Target, title: "Hot Leads Routed", desc: "High-intent leads are flagged and routed directly to you." },
-    { num: 5, icon: Calendar, title: "Showing Scheduled", desc: "Calendar link sent automatically. Showings book themselves." },
+    { num: 5, icon: Calendar, title: "Showing Scheduled", desc: "Qualified leads receive your calendar link and book showings automatically." },
     { num: 6, icon: Database, title: "Saved in CRM", desc: "Lead details, score, and conversation history stored in your pipeline." },
   ];
 
@@ -253,36 +253,43 @@ export function RealtorLanding() {
               How the Realtor Growth Engine Works
             </h2>
             <p className="text-base md:text-lg xl:text-xl text-gray-600 max-w-3xl mx-auto">
-              From lead capture to showing booked — fully automated.
+              From new lead to booked showing — automatically.
             </p>
           </div>
 
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6 xl:gap-8">
-            {workflowSteps.map((step) => {
-              const Icon = step.icon;
-              return (
-                <motion.div
-                  key={step.num}
-                  initial={{ opacity: 0, y: 20 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true }}
-                  transition={{ delay: step.num * 0.08 }}
-                  className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm hover:shadow-md transition-shadow"
-                >
-                  <div className="flex items-start gap-4">
-                    <div className="h-12 w-12 bg-brand-green text-white rounded-xl flex items-center justify-center shrink-0 shadow-md">
-                      <Icon className="h-6 w-6" />
+          <div className="relative">
+            <div className="hidden lg:block absolute top-1/2 left-8 right-8 h-0.5 bg-gradient-to-r from-emerald-200 via-emerald-300 to-emerald-200 -translate-y-1/2 rounded-full" />
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6 xl:gap-8 relative">
+              {workflowSteps.map((step) => {
+                const Icon = step.icon;
+                return (
+                  <motion.div
+                    key={step.num}
+                    initial={{ opacity: 0, y: 20 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    viewport={{ once: true }}
+                    transition={{ delay: step.num * 0.08 }}
+                    className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm hover:shadow-md transition-shadow relative z-10"
+                  >
+                    <div className="flex items-start gap-4">
+                      <div className="h-12 w-12 bg-brand-green text-white rounded-xl flex items-center justify-center shrink-0 shadow-md">
+                        <Icon className="h-6 w-6" />
+                      </div>
+                      <div>
+                        <span className="text-xs font-bold text-brand-green uppercase tracking-wider">Step {step.num}</span>
+                        <h3 className="text-lg font-bold text-gray-900 mt-1 mb-1">{step.title}</h3>
+                        <p className="text-sm text-gray-600">{step.desc}</p>
+                      </div>
                     </div>
-                    <div>
-                      <span className="text-xs font-bold text-brand-green uppercase tracking-wider">Step {step.num}</span>
-                      <h3 className="text-lg font-bold text-gray-900 mt-1 mb-1">{step.title}</h3>
-                      <p className="text-sm text-gray-600">{step.desc}</p>
-                    </div>
-                  </div>
-                </motion.div>
-              );
-            })}
+                  </motion.div>
+                );
+              })}
+            </div>
           </div>
+
+          <p className="text-center text-sm md:text-base text-gray-500 mt-8 max-w-2xl mx-auto">
+            The system handles the first conversation, qualifies the lead, and only sends you serious buyers.
+          </p>
         </div>
       </section>
 
