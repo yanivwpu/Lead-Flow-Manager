@@ -3,7 +3,7 @@ import { Link } from "wouter";
 import {
   ArrowRight, CheckCircle2, Zap, MessageSquare, Brain, Calendar,
   Users, Target, Shield, ChevronDown, Globe, Smartphone, Search,
-  Bot, Inbox, BarChart3, Layers, Send, Database, Sparkles, Mail
+  Bot, Inbox, BarChart3, Layers, Send, Database, Sparkles, Mail, Share2, Check
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { Helmet } from "react-helmet";
@@ -32,6 +32,13 @@ function FaqItem({ question, answer }: { question: string; answer: string }) {
 
 export function RealtorLanding() {
   const { user } = useAuth();
+  const [copied, setCopied] = useState(false);
+
+  const handleShare = () => {
+    navigator.clipboard.writeText(window.location.href);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   const workflowSteps = [
     { num: 1, icon: Globe, title: "Lead Arrives", desc: "From your website, ShowcaseIDX, Facebook ad, landing page, or any lead source." },
@@ -121,12 +128,16 @@ export function RealtorLanding() {
           </div>
           <div className="flex items-center gap-3">
             <Link href="/contact">
-              <span className="text-sm font-medium text-emerald-700 hover:text-emerald-900 underline underline-offset-2">Message us</span>
+              <span className="text-sm font-medium text-emerald-700 hover:text-emerald-900 underline underline-offset-2 cursor-pointer">Message us</span>
             </Link>
             <span className="text-emerald-300">|</span>
-            <Link href="/contact">
-              <span className="text-sm font-medium text-emerald-700 hover:text-emerald-900 underline underline-offset-2 cursor-pointer">Request early access</span>
-            </Link>
+            <button 
+              onClick={handleShare}
+              className="flex items-center gap-1.5 text-sm font-medium text-emerald-700 hover:text-emerald-900 underline underline-offset-2 cursor-pointer transition-colors"
+            >
+              {copied ? <Check className="h-3.5 w-3.5" /> : <Share2 className="h-3.5 w-3.5" />}
+              {copied ? "Link copied!" : "Share this automation with your network"}
+            </button>
           </div>
         </div>
       </div>
