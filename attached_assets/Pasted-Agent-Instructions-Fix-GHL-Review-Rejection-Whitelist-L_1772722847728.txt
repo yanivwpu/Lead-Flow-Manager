@@ -1,0 +1,168 @@
+Agent Instructions — Fix GHL Review Rejection (Whitelist + LeadConnector Integration)
+Goal
+
+Get WhachatCRM approved by HighLevel Marketplace review by:
+
+removing all GoHighLevel/GHL references (white-label compliance)
+
+adding a LeadConnector integration card + CTA inside WhachatCRM
+
+ensuring the install flow uses the white-labeled install link and works end-to-end
+
+A) Remove ALL “GoHighLevel / GHL” references (mandatory)
+1) Global text scan + replace
+
+Search the entire codebase (UI + server + emails + docs) for:
+
+GoHighLevel
+
+HighLevel (when referring to the platform name)
+
+GHL
+
+gohighlevel
+
+leadconnectorhq (only if it’s shown to users in UI text; code URLs can remain if required)
+
+Replace in user-facing UI text with:
+
+LeadConnector (preferred)
+
+“CRM Platform” / “CRM” (where appropriate)
+
+Never show “GoHighLevel” anywhere visible to users
+
+✅ Reviewer specifically said: the redirect page exposes GoHighLevel references.
+So pay extra attention to:
+
+post-install redirect page
+
+OAuth screens (connect/authorize)
+
+onboarding modal
+
+integration screen labels
+
+error pages / toast messages
+
+2) URLs
+
+If any user-facing links show gohighlevel.com directly (like help text), remove or change to neutral wording.
+
+If a backend OAuth endpoint requires LeadConnectorHQ URLs, that’s fine — just don’t show “GoHighLevel” wording in UI.
+
+B) Add “LeadConnector” integration card on Integrations page
+1) Where
+
+In WhachatCRM → Integrations (same page where Shopify/Google Sheets/HubSpot cards are shown).
+
+Add a new card at the top of the list:
+
+Card Title: LeadConnector
+Subtitle: Connect WhachatCRM with your LeadConnector account to sync leads and activity.
+
+2) Buttons / CTAs
+
+Add ONE primary CTA button:
+
+Button label: Install LeadConnector App
+Action: opens the official white-labeled install link in a new tab.
+
+Important:
+
+The integration name must be LeadConnector (reviewer required this exact name).
+
+Don’t label the button “Install on GHL” or “Install GoHighLevel”.
+
+3) Install link
+
+Use the app’s whitelabeled install URL from the HighLevel marketplace developer console.
+
+Implementation notes:
+
+Store it as an environment/config value (e.g., LEADCONNECTOR_INSTALL_URL) so it’s easy to change.
+
+Use the same link reviewers would use to install.
+
+C) Add “Connection Status” (strongly recommended for approval)
+
+After install, the reviewer expects a visible sign it’s connected.
+
+1) Status UI
+
+On the LeadConnector integration card, show:
+
+Status: Not Connected (default)
+
+Status: Connected ✅ (after successful auth/install handshake)
+
+2) How to determine connected
+
+Use any reliable method you already have, such as:
+
+stored location/agency token present
+
+stored OAuth access token valid
+
+successful test API call to LeadConnector
+
+3) Add secondary actions (optional but helpful)
+
+Check Connection (pings your backend / verifies token)
+
+If not connected: show helper text:
+Install the app in LeadConnector and return here to verify connection.
+
+D) Fix the post-install redirect page (this is what failed)
+
+The reviewer specifically said:
+
+after installing the app the redirect page is opened and the page is exposing GoHighLevel references
+
+1) Post-install redirect page content must be white-label safe
+
+Update the redirect page to say something like:
+
+Header: Connected to LeadConnector
+Body: Your LeadConnector account is now connected. You can return to WhachatCRM to start syncing and automations.
+Button: Back to WhachatCRM
+
+No mention of GoHighLevel anywhere.
+
+2) If you show “login with …”
+
+Use: Continue with LeadConnector or Connect LeadConnector
+
+E) Reviewer test flow (must work)
+
+Make sure this exact flow works:
+
+Reviewer opens your marketplace install link
+
+Installs app into their test location
+
+Redirect returns to WhachatCRM (no GoHighLevel words anywhere)
+
+Reviewer logs into WhachatCRM
+
+Goes to Integrations
+
+Sees LeadConnector card
+
+Clicks Install CTA (if needed) + sees Connected ✅ status after install
+
+F) Final QA checklist before resubmitting
+
+ No “GoHighLevel” visible anywhere in the UI (including tiny footers/help text)
+
+ No “GHL” visible anywhere in UI
+
+ Integrations page shows LeadConnector card
+
+ Button says Install LeadConnector App
+
+ Install button opens correct whitelabeled install link
+
+ Post-install redirect page is white-label compliant
+
+ Connection status can be verified (Connected / Not Connected)
