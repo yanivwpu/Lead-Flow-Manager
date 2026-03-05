@@ -1,0 +1,120 @@
+Task: Translate ONLY the public marketing page /realtor-growth-engine into Spanish + Hebrew (RTL) using our existing app language system.
+
+IMPORTANT: Do not “hardcode” translated strings inside JSX. Use the same i18n/translation mechanism already used in the app (language switcher). We must keep RTL safe for Hebrew.
+
+Scope:
+- Only: client/src/pages/RealtorLanding.tsx (route: /realtor-growth-engine)
+- Do NOT change: /app/templates/realtor-growth-engine or dashboard pages
+- No redesign. Only replace English copy with translation keys.
+
+--------------------------------------------
+1) Use translation keys (no inline strings)
+--------------------------------------------
+Create translation keys for every visible string on the page:
+- Hero title/subtitle
+- All workflow steps (titles + descriptions)
+- Done-for-you section
+- Pricing/requirements block
+- FAQ questions + answers
+- Button labels
+- Small notes (Meta fees, launch offer, etc.)
+
+Example:
+t("rge.hero.title")
+t("rge.hero.subtitle")
+t("rge.workflow.step1.title")
+t("rge.workflow.step1.body")
+...
+
+Deliverables:
+- en.json additions
+- es.json additions
+- he.json additions (Hebrew)
+
+--------------------------------------------
+2) RTL handling (Hebrew MUST be safe)
+--------------------------------------------
+Hebrew pages must render RTL properly.
+
+Rule A (direction):
+- When active language is Hebrew, set dir="rtl" on the top-level wrapper of the page.
+- When not Hebrew, dir="ltr".
+
+Example:
+<div dir={isHebrew ? "rtl" : "ltr"} className="...">
+
+Rule B (alignment):
+- Do NOT add hard-coded text-left / text-right in component classes.
+- Use conditional alignment only where necessary:
+  className={isHebrew ? "text-right" : "text-left"}
+- Prefer neutral layout classes (flex, gap, mx-auto, px) — no left/right positioning.
+
+Rule C (spacing):
+- Do NOT introduce ml- / mr- / pl- / pr- / left- / right- classes.
+- Use:
+  - px- / py- / mx-auto / gap-* / space-y-*
+- If you must support directional spacing, use conditional classes:
+  isHebrew ? "pr-..." : "pl-..."
+  but avoid if possible.
+
+Rule D (wrapping):
+- Do NOT use whitespace-nowrap on headings/subtitles/buttons.
+- Hebrew needs natural wrapping.
+
+Rule E (numbers + English words in Hebrew):
+- When Hebrew strings include English words like “WhatsApp”, “CRM”, “AI”, keep them as-is.
+- Ensure the text still reads naturally.
+- Avoid punctuation that breaks RTL (use simple sentences).
+
+--------------------------------------------
+3) Layout safety requirements
+--------------------------------------------
+- The workflow cards should not break in Hebrew:
+  - Keep title lengths short
+  - Allow descriptions to wrap
+  - Ensure card heights can grow
+- No fixed heights for text blocks.
+- Avoid fixed widths for text containers (use w-full + max-w).
+
+--------------------------------------------
+4) Font considerations for Hebrew
+--------------------------------------------
+Use the existing font stack (do NOT add a new font unless we already support it).
+If Hebrew looks cramped, increase line-height slightly only for Hebrew:
+- add conditional class: leading-relaxed on Hebrew
+
+Example:
+className={cn("...", isHebrew && "leading-relaxed")}
+
+--------------------------------------------
+5) SEO/OG tags per language (minimal)
+--------------------------------------------
+Keep OG image the same.
+But make title/description language-aware if our SEO module supports it:
+- og:title and og:description should reflect the active language.
+If that’s too risky now, keep OG tags in English for all languages (acceptable for launch).
+
+--------------------------------------------
+6) QA checklist (must be done before merging)
+--------------------------------------------
+Test these scenarios:
+
+A) English (LTR)
+- Desktop 1440 & 1920
+- Mobile
+
+B) Spanish (LTR)
+- Check long words don’t overflow buttons/cards
+
+C) Hebrew (RTL)
+- Confirm page flips direction properly
+- Headings align correctly (right)
+- Workflow cards look clean (no broken spacing)
+- No horizontal scrolling
+- No weird punctuation/order issues
+
+Also test language switching:
+- Switch EN → HE → EN and confirm layout returns correctly
+
+Commit message:
+“RGE landing: i18n Spanish + Hebrew (RTL safe)”

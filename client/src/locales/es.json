@@ -547,5 +547,159 @@
       "contact": "Contacto",
       "blog": "Blog"
     }
+  },
+  "rge": {
+    "nav": {
+      "pricing": "Precios",
+      "blog": "Blog",
+      "dashboard": "Panel de Control",
+      "startFree": "Empezar Gratis"
+    },
+    "banner": {
+      "curious": "¿Curioso de cómo funciona esto para tu mercado?",
+      "messageUs": "Envíanos un mensaje",
+      "linkCopied": "¡Enlace copiado!",
+      "share": "Comparte esta automatización con tu red"
+    },
+    "hero": {
+      "title": "Realtor Growth Engine",
+      "subtitle": "Convierte leads de bienes raíces en visitas automáticamente con automatización de WhatsApp impulsada por IA.",
+      "check1": "Responde al instante a cada nuevo lead",
+      "check2": "La IA califica a compradores y vendedores automáticamente",
+      "check3": "Agenda visitas directamente a través de WhatsApp",
+      "earlyAccess": "Obtén Acceso Anticipado",
+      "howItWorks": "Mira Cómo Funciona",
+      "launchOffer": "Oferta de lanzamiento: 50% de descuento en Concierge Setup para los primeros 5 agentes inmobiliarios."
+    },
+    "preview": {
+      "lead1Name": "Sarah M. — Puntuación: 92 (Caliente)",
+      "lead1Quote": "\"Me encantaría ver la propiedad de 3 recámaras en Oak St este fin de semana\"",
+      "lead1Tag": "CALIENTE",
+      "lead2Name": "James R. — Puntuación: 58 (Tibio)",
+      "lead2Quote": "\"¿Cuál es el rango de precios para los condominios en el centro?\"",
+      "lead2Tag": "TIBIO",
+      "lead3Name": "Maria L. — Puntuación: 25 (Nuevo)",
+      "lead3Quote": "\"Hola, vi tu propiedad en línea\"",
+      "lead3Tag": "NUEVO",
+      "aiAction": "Acción de IA Activada",
+      "aiDetail": "Enlace de reserva enviado a Sarah M. — Visita en Calendly programada para el sábado 2:00 PM"
+    },
+    "workflow": {
+      "title": "Cómo funciona el Realtor Growth Engine",
+      "subtitle": "Desde el nuevo lead hasta la visita agendada — automáticamente.",
+      "step": "Paso",
+      "tagline": "El sistema se encarga de la primera conversación, califica al lead y solo te envía compradores serios.",
+      "s1": {
+        "title": "Llega el Lead",
+        "desc": "Desde tu sitio web, listados IDX, anuncios de Facebook, páginas de destino o portales inmobiliarios."
+      },
+      "s2": {
+        "title": "Respuesta Instantánea por WhatsApp",
+        "desc": "El sistema responde automáticamente vía WhatsApp en cuestión de segundos."
+      },
+      "s3": {
+        "title": "IA Califica la Intención",
+        "desc": "La IA identifica compradores o vendedores serios automáticamente."
+      },
+      "s4": {
+        "title": "Leads Calientes Direccionados",
+        "desc": "Los leads de alta intención son marcados y direccionados directamente a ti."
+      },
+      "s5": {
+        "title": "Visita Programada",
+        "desc": "Los leads calificados reciben tu enlace de calendario y agendan visitas automáticamente."
+      },
+      "s6": {
+        "title": "Guardado en CRM",
+        "desc": "Los detalles del lead, puntuación e historial de conversación se almacenan en tu embudo."
+      }
+    },
+    "setup": {
+      "title": "Configuración Completamente Hecha Para Ti",
+      "desc": "No necesitas ningún conocimiento técnico. Nuestro equipo de conserjería se encarga de la configuración completa — desde el registro de la API hasta las pruebas del flujo de trabajo. Solo asiste a la llamada de incorporación.",
+      "item1": "Configuración de la API de WhatsApp Business",
+      "item2": "Asistencia en la verificación de Meta Business",
+      "item3": "Flujos de automatización configurados",
+      "item4": "Integración de reserva de calendario",
+      "item5": "Configuración del embudo del CRM",
+      "liveNote": "La mayoría de los agentes están operativos en pocos días."
+    },
+    "onboarding": {
+      "title": "Incorporación de Guante Blanco",
+      "b1": "Sesión de Zoom en vivo con nuestro especialista en configuración",
+      "b2": "Registro de WABA + verificación de Meta gestionados por ti",
+      "b3": "8 flujos de automatización preconfigurados y probados",
+      "b4": "Embudo de CRM de 9 etapas listo desde el primer día",
+      "b5": "Prueba del sistema de extremo a extremo antes de salir en vivo"
+    },
+    "platform": {
+      "title": "Construido sobre WhachatCRM",
+      "subtitle": "El Realtor Growth Engine se ejecuta sobre una plataforma de mensajería y automatización lista para producción.",
+      "f1": {
+        "title": "Bandeja de Mensajería Unificada",
+        "desc": "Todas las conversaciones en un solo lugar."
+      },
+      "f2": {
+        "title": "Calificación de Leads por IA",
+        "desc": "Más de 14 señales de intención califican a cada lead automáticamente."
+      },
+      "f3": {
+        "title": "Extracción de Datos de Leads",
+        "desc": "La IA extrae detalles clave de las conversaciones."
+      },
+      "f4": {
+        "title": "Herramientas de Colaboración en Equipo",
+        "desc": "Asigna leads, comparte notas, rastrea actividad."
+      },
+      "f5": {
+        "title": "Mensajería Multicanal",
+        "desc": "WhatsApp, Instagram, Facebook, SMS — todos conectados."
+      }
+    },
+    "pricing": {
+      "title": "Lo que necesitas para empezar",
+      "subtitle": "El Realtor Growth Engine es una configuración hecha para ti sobre WhachatCRM.",
+      "platform": "Plataforma",
+      "platformName": "WhachatCRM Pro",
+      "platformPrice": "$49/mo",
+      "addon": "Complemento",
+      "addonName": "AI Brain",
+      "addonPrice": "$29/mo",
+      "setup": "Configuración Única",
+      "setupName": "Concierge Setup",
+      "setupDiscount": "50% de descuento para las primeras 5 instalaciones",
+      "metaNote": "Las tarifas de mensajería de WhatsApp son facturadas directamente por Meta sin recargos.",
+      "viewPlans": "Ver Planes"
+    },
+    "faq": {
+      "title": "Preguntas Frecuentes",
+      "q1": "¿Necesito la API de WhatsApp Business?",
+      "a1": "Sí, pero no necesitas configurarla tú mismo. Nuestro equipo de conserjería se encarga de todo el registro de WABA y la verificación de Meta Business Manager como parte de la tarifa de configuración única.",
+      "q2": "¿Puedo usar mi número de teléfono actual?",
+      "a2": "En la mayoría de los casos, sí. Si tu número no está actualmente en la API de WhatsApp Business, podemos migrarlo. Si está en una cuenta personal de WhatsApp, te guiaremos a través del proceso de migración durante la incorporación.",
+      "q3": "¿Cuánto tiempo toma la configuración?",
+      "a3": "La mayoría de los agentes están completamente operativos en 3–5 días hábiles. La sesión de incorporación toma unos 45–60 minutos, y nosotros nos encargamos del resto tras bambalinas.",
+      "q4": "¿Funciona con leads de ShowcaseIDX o mi sitio web?",
+      "a4": "Sí. Los leads de ShowcaseIDX, tu sitio web, páginas de destino o cualquier fuente que active un mensaje de WhatsApp o envío de formulario web entrarán al sistema. Configuramos las conexiones durante la configuración.",
+      "q5": "¿Cobran por mensaje?",
+      "a5": "No. WhachatCRM no agrega ningún recargo a los mensajes. Las tarifas de mensajería de WhatsApp son facturadas directamente por Meta a sus tarifas estándar.",
+      "q6": "¿Pueden los equipos usar este sistema?",
+      "a6": "Absolutamente. El plan Pro incluye miembros de equipo ilimitados. Puedes asignar leads, compartir notas y colaborar desde una única bandeja unificada."
+    },
+    "cta": {
+      "title": "¿Listo para automatizar tu flujo de leads?",
+      "subtitle": "Únete a los primeros agentes en usar la automatización de WhatsApp impulsada por IA para bienes raíces."
+    },
+    "footer": {
+      "product": "Producto",
+      "solutions": "Soluciones",
+      "legal": "Legal",
+      "pricing": "Precios",
+      "whatsappCrm": "WhatsApp CRM",
+      "blog": "Blog",
+      "rge": "Realtor Growth Engine",
+      "privacy": "Privacidad",
+      "terms": "Términos"
+    }
   }
 }

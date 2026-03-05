@@ -632,5 +632,159 @@
         "a": "Yes. Plans are monthly, flexible, and update instantly."
       }
     }
+  },
+  "rge": {
+    "nav": {
+      "pricing": "Pricing",
+      "blog": "Blog",
+      "dashboard": "Dashboard",
+      "startFree": "Start Free"
+    },
+    "banner": {
+      "curious": "Curious how this works for your market?",
+      "messageUs": "Message us",
+      "linkCopied": "Link copied!",
+      "share": "Share this automation with your network"
+    },
+    "hero": {
+      "title": "Realtor Growth Engine",
+      "subtitle": "Turn real estate leads into showings automatically with AI-powered WhatsApp automation.",
+      "check1": "Instantly respond to every new lead",
+      "check2": "AI qualifies buyers and sellers automatically",
+      "check3": "Book showings directly through WhatsApp",
+      "earlyAccess": "Get Early Access",
+      "howItWorks": "See How It Works",
+      "launchOffer": "Launch offer: 50% off Concierge Setup for the first 5 real estate agents."
+    },
+    "preview": {
+      "lead1Name": "Sarah M. — Score: 92 (Hot)",
+      "lead1Quote": "\"I'd love to see the 3BR on Oak St this weekend\"",
+      "lead1Tag": "HOT",
+      "lead2Name": "James R. — Score: 58 (Warm)",
+      "lead2Quote": "\"What's the price range for condos downtown?\"",
+      "lead2Tag": "WARM",
+      "lead3Name": "Maria L. — Score: 25 (New)",
+      "lead3Quote": "\"Hi, I saw your listing online\"",
+      "lead3Tag": "NEW",
+      "aiAction": "AI Action Triggered",
+      "aiDetail": "Booking link sent to Sarah M. — Calendly showing scheduled for Saturday 2:00 PM"
+    },
+    "workflow": {
+      "title": "How the Realtor Growth Engine Works",
+      "subtitle": "From new lead to booked showing — automatically.",
+      "step": "Step",
+      "tagline": "The system handles the first conversation, qualifies the lead, and only sends you serious buyers.",
+      "s1": {
+        "title": "Lead Arrives",
+        "desc": "From your website, IDX listings, Facebook ads, landing pages, or property portals."
+      },
+      "s2": {
+        "title": "Instant WhatsApp Reply",
+        "desc": "System responds automatically via WhatsApp within seconds."
+      },
+      "s3": {
+        "title": "AI Qualifies Intent",
+        "desc": "AI identifies serious buyers or sellers automatically."
+      },
+      "s4": {
+        "title": "Hot Leads Routed",
+        "desc": "High-intent leads are flagged and routed directly to you."
+      },
+      "s5": {
+        "title": "Showing Scheduled",
+        "desc": "Qualified leads receive your calendar link and book showings automatically."
+      },
+      "s6": {
+        "title": "Saved in CRM",
+        "desc": "Lead details, score, and conversation history stored in your pipeline."
+      }
+    },
+    "setup": {
+      "title": "Fully Done-For-You Setup",
+      "desc": "You don't need any technical knowledge. Our concierge team handles the full configuration — from API registration to workflow testing. Just show up to the onboarding call.",
+      "item1": "WhatsApp Business API setup",
+      "item2": "Meta business verification assistance",
+      "item3": "Automation workflows configured",
+      "item4": "Calendar booking integration",
+      "item5": "CRM pipeline setup",
+      "liveNote": "Most agents are live within a few days."
+    },
+    "onboarding": {
+      "title": "White-Glove Onboarding",
+      "b1": "Live Zoom session with our setup specialist",
+      "b2": "WABA registration + Meta verification handled for you",
+      "b3": "8 automation workflows pre-configured and tested",
+      "b4": "9-stage CRM pipeline ready from day one",
+      "b5": "End-to-end system test before going live"
+    },
+    "platform": {
+      "title": "Built on WhachatCRM",
+      "subtitle": "The Realtor Growth Engine runs on top of a production-ready messaging and automation platform.",
+      "f1": {
+        "title": "Unified Messaging Inbox",
+        "desc": "All conversations in one place."
+      },
+      "f2": {
+        "title": "AI Lead Scoring",
+        "desc": "14+ intent signals score every lead automatically."
+      },
+      "f3": {
+        "title": "Lead Data Extraction",
+        "desc": "AI pulls key details from conversations."
+      },
+      "f4": {
+        "title": "Team Collaboration Tools",
+        "desc": "Assign leads, share notes, track activity."
+      },
+      "f5": {
+        "title": "Multi-Channel Messaging",
+        "desc": "WhatsApp, Instagram, Facebook, SMS — all connected."
+      }
+    },
+    "pricing": {
+      "title": "What You Need to Get Started",
+      "subtitle": "The Realtor Growth Engine is a done-for-you setup on top of WhachatCRM.",
+      "platform": "Platform",
+      "platformName": "WhachatCRM Pro",
+      "platformPrice": "$49/mo",
+      "addon": "Add-On",
+      "addonName": "AI Brain",
+      "addonPrice": "$29/mo",
+      "setup": "One-Time Setup",
+      "setupName": "Concierge Setup",
+      "setupDiscount": "50% off for the first 5 installs",
+      "metaNote": "WhatsApp messaging fees are billed directly by Meta with no markup.",
+      "viewPlans": "View Plans"
+    },
+    "faq": {
+      "title": "Frequently Asked Questions",
+      "q1": "Do I need WhatsApp Business API?",
+      "a1": "Yes, but you don't need to set it up yourself. Our concierge team handles the entire WABA registration and Meta Business Manager verification as part of the one-time setup fee.",
+      "q2": "Can I use my existing phone number?",
+      "a2": "In most cases, yes. If your number isn't currently on WhatsApp Business API, we can migrate it. If it's on a personal WhatsApp account, we'll walk you through the migration process during onboarding.",
+      "q3": "How long does setup take?",
+      "a3": "Most agents are fully live within 3–5 business days. The onboarding session takes about 45–60 minutes, and we handle the rest behind the scenes.",
+      "q4": "Does it work with leads from ShowcaseIDX or my website?",
+      "a4": "Yes. Leads from ShowcaseIDX, your website, landing pages, or any source that triggers a WhatsApp message or web form submission will feed into the system. We configure the connections during setup.",
+      "q5": "Do you charge per message?",
+      "a5": "No. WhachatCRM does not add any markup to messages. WhatsApp messaging fees are billed directly by Meta at their standard rates.",
+      "q6": "Can teams use this system?",
+      "a6": "Absolutely. The Pro plan includes unlimited team members. You can assign leads, share notes, and collaborate from a single unified inbox."
+    },
+    "cta": {
+      "title": "Ready to Automate Your Lead Flow?",
+      "subtitle": "Join the first agents to use AI-powered WhatsApp automation for real estate."
+    },
+    "footer": {
+      "product": "Product",
+      "solutions": "Solutions",
+      "legal": "Legal",
+      "pricing": "Pricing",
+      "whatsappCrm": "WhatsApp CRM",
+      "blog": "Blog",
+      "rge": "Realtor Growth Engine",
+      "privacy": "Privacy",
+      "terms": "Terms"
+    }
   }
 }
