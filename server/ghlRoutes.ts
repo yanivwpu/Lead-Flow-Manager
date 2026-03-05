@@ -297,8 +297,11 @@ router.get('/connection-status', async (req: Request, res: Response) => {
     );
 
     if (activeIntegration) {
+      const tokenExpired = activeIntegration.tokenExpiresAt && new Date(activeIntegration.tokenExpiresAt) < new Date();
+
       res.json({
-        connected: true,
+        connected: !tokenExpired,
+        tokenExpired: !!tokenExpired,
         locationId: (activeIntegration.config as any)?.locationId || null,
         companyId: (activeIntegration.config as any)?.companyId || null,
         installedAt: (activeIntegration.config as any)?.installedAt || null,
