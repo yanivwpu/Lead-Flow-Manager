@@ -95,7 +95,7 @@ export function RealtorLanding() {
   const arrowClassSm = isRTL ? "h-4 w-4 rotate-180" : "h-4 w-4";
 
   return (
-    <div dir={isRTL ? "rtl" : "ltr"} className="min-h-screen bg-white">
+    <div dir={isRTL ? "rtl" : "ltr"} className="min-h-screen bg-white overflow-x-hidden">
       <Helmet>
         <title>Realtor Growth Engine – Turn Real Estate Leads Into Showings | WhachatCRM</title>
         <meta name="description" content="AI-powered WhatsApp automation that qualifies leads and schedules showings automatically. Fully done-for-you setup for real estate agents." />
@@ -216,39 +216,39 @@ export function RealtorLanding() {
             transition={{ duration: 0.7, delay: 0.2 }}
             className="relative"
           >
-            <div className="bg-gradient-to-br from-emerald-50 via-white to-teal-50 rounded-3xl border border-emerald-100 p-6 md:p-8 shadow-xl">
+            <div className="bg-gradient-to-br from-emerald-50 via-white to-teal-50 rounded-2xl sm:rounded-3xl border border-emerald-100 p-4 sm:p-6 md:p-8 shadow-xl">
               <div className="space-y-4">
                 <div className="flex items-center gap-3 p-3 bg-white rounded-xl shadow-sm border border-gray-100">
                   <div className="h-10 w-10 rounded-full bg-red-100 flex items-center justify-center shrink-0">
                     <Target className="h-5 w-5 text-red-500" />
                   </div>
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <p className="font-semibold text-gray-900 text-sm">{t("rge.preview.lead1Name")}</p>
                     <p className="text-xs text-gray-500 truncate">{t("rge.preview.lead1Quote")}</p>
                   </div>
-                  <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-medium shrink-0">{t("rge.preview.lead1Tag")}</span>
+                  <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-medium shrink-0 hidden sm:inline md:inline">{t("rge.preview.lead1Tag")}</span>
                 </div>
 
                 <div className="flex items-center gap-3 p-3 bg-white rounded-xl shadow-sm border border-gray-100">
                   <div className="h-10 w-10 rounded-full bg-amber-100 flex items-center justify-center shrink-0">
                     <BarChart3 className="h-5 w-5 text-amber-500" />
                   </div>
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <p className="font-semibold text-gray-900 text-sm">{t("rge.preview.lead2Name")}</p>
                     <p className="text-xs text-gray-500 truncate">{t("rge.preview.lead2Quote")}</p>
                   </div>
-                  <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-medium shrink-0">{t("rge.preview.lead2Tag")}</span>
+                  <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-medium shrink-0 hidden sm:inline md:inline">{t("rge.preview.lead2Tag")}</span>
                 </div>
 
                 <div className="flex items-center gap-3 p-3 bg-white rounded-xl shadow-sm border border-gray-100">
                   <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center shrink-0">
                     <Sparkles className="h-5 w-5 text-blue-500" />
                   </div>
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <p className="font-semibold text-gray-900 text-sm">{t("rge.preview.lead3Name")}</p>
                     <p className="text-xs text-gray-500 truncate">{t("rge.preview.lead3Quote")}</p>
                   </div>
-                  <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium shrink-0">{t("rge.preview.lead3Tag")}</span>
+                  <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium shrink-0 hidden sm:inline md:inline">{t("rge.preview.lead3Tag")}</span>
                 </div>
 
                 <div className="mt-3 p-3 bg-emerald-50 rounded-xl border border-emerald-200">
@@ -276,7 +276,7 @@ export function RealtorLanding() {
           </div>
 
           <div className="relative">
-            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6 xl:gap-8 relative">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 xl:gap-8 relative">
               {workflowSteps.map((step) => {
                 const Icon = step.icon;
                 return (
@@ -286,15 +286,15 @@ export function RealtorLanding() {
                     whileInView={{ opacity: 1, y: 0 }}
                     viewport={{ once: true }}
                     transition={{ delay: step.num * 0.08 }}
-                    className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm hover:shadow-md transition-shadow relative z-10"
+                    className="bg-white rounded-2xl border border-gray-100 p-5 sm:p-6 shadow-sm hover:shadow-md transition-shadow relative z-10"
                   >
-                    <div className="flex items-start gap-4">
-                      <div className="h-12 w-12 bg-brand-green text-white rounded-xl flex items-center justify-center shrink-0 shadow-md">
-                        <Icon className="h-6 w-6" />
+                    <div className="flex flex-col sm:flex-row items-start gap-3 sm:gap-4">
+                      <div className="h-11 w-11 sm:h-12 sm:w-12 bg-brand-green text-white rounded-xl flex items-center justify-center shrink-0 shadow-md">
+                        <Icon className="h-5 w-5 sm:h-6 sm:w-6" />
                       </div>
-                      <div>
+                      <div className="w-full">
                         <span className="text-xs font-bold text-brand-green uppercase tracking-wider">{t("rge.workflow.step")} {step.num}</span>
-                        <h3 className="text-lg font-bold text-gray-900 mt-1 mb-1">{step.title}</h3>
+                        <h3 className="text-base sm:text-lg font-bold text-gray-900 mt-1 mb-1">{step.title}</h3>
                         <p className="text-sm text-gray-600">{step.desc}</p>
                       </div>
                     </div>
@@ -335,7 +335,7 @@ export function RealtorLanding() {
               </div>
               <p className="text-sm text-gray-500 mt-6">{t("rge.setup.liveNote")}</p>
             </div>
-            <div className="bg-gradient-to-br from-gray-900 to-gray-800 rounded-3xl p-8 text-white">
+            <div className="bg-gradient-to-br from-gray-900 to-gray-800 rounded-2xl sm:rounded-3xl p-5 sm:p-8 text-white">
               <div className="flex items-center gap-3 mb-6">
                 <Shield className="h-8 w-8 text-brand-green" />
                 <h3 className="text-xl font-bold">{t("rge.onboarding.title")}</h3>
@@ -378,11 +378,11 @@ export function RealtorLanding() {
             </p>
           </div>
 
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
+          <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3 sm:gap-6">
             {platformFeatures.map((item) => {
               const Icon = item.icon;
               return (
-                <div key={item.title} className="bg-white rounded-2xl border border-gray-100 p-6 text-center hover:shadow-md transition-shadow">
+                <div key={item.title} className="bg-white rounded-xl sm:rounded-2xl border border-gray-100 p-4 sm:p-6 text-center hover:shadow-md transition-shadow">
                   <div className="h-12 w-12 bg-emerald-100 rounded-xl flex items-center justify-center mx-auto mb-4">
                     <Icon className="h-6 w-6 text-emerald-600" />
                   </div>
@@ -397,7 +397,7 @@ export function RealtorLanding() {
 
       <section className="px-4 md:px-6 py-16 md:py-24 bg-white">
         <div className="max-w-4xl mx-auto">
-          <div className="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-3xl border border-emerald-100 p-8 md:p-12 text-center">
+          <div className="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-2xl sm:rounded-3xl border border-emerald-100 p-5 sm:p-8 md:p-12 text-center">
             <h2 className="text-2xl md:text-4xl xl:text-5xl font-display font-bold text-gray-900 mb-4" data-testid="text-pricing-title">
               {t("rge.pricing.title")}
             </h2>
@@ -405,18 +405,18 @@ export function RealtorLanding() {
               {t("rge.pricing.subtitle")}
             </p>
 
-            <div className="grid sm:grid-cols-3 gap-4 mb-8">
-              <div className="bg-white rounded-xl border border-gray-100 p-5 shadow-sm">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 mb-8">
+              <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-5 shadow-sm">
                 <div className="text-sm font-medium text-gray-500 mb-1">{t("rge.pricing.platform")}</div>
                 <div className="text-lg font-bold text-gray-900">{t("rge.pricing.platformName")}</div>
                 <div className="text-sm text-gray-500">{t("rge.pricing.platformPrice")}</div>
               </div>
-              <div className="bg-white rounded-xl border border-gray-100 p-5 shadow-sm">
+              <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-5 shadow-sm">
                 <div className="text-sm font-medium text-gray-500 mb-1">{t("rge.pricing.addon")}</div>
                 <div className="text-lg font-bold text-gray-900">{t("rge.pricing.addonName")}</div>
                 <div className="text-sm text-gray-500">{t("rge.pricing.addonPrice")}</div>
               </div>
-              <div className="bg-white rounded-xl border border-emerald-200 p-5 shadow-sm ring-2 ring-emerald-100">
+              <div className="bg-white rounded-xl border border-emerald-200 p-4 sm:p-5 shadow-sm ring-2 ring-emerald-100">
                 <div className="text-sm font-medium text-emerald-600 mb-1">{t("rge.pricing.setup")}</div>
                 <div className="text-lg font-bold text-gray-900">{t("rge.pricing.setupName")}</div>
                 <div className="text-base font-bold text-gray-900 mt-1">
@@ -431,17 +431,17 @@ export function RealtorLanding() {
               {t("rge.pricing.metaNote")}
             </p>
 
-            <div className="flex flex-col sm:flex-row gap-4 justify-center mb-4">
+            <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center mb-4">
               <button
                 onClick={handleCta}
-                className="h-14 px-10 bg-brand-green hover:bg-emerald-700 text-white font-semibold rounded-full inline-flex items-center justify-center gap-2 transition-all shadow-lg hover:shadow-xl text-lg cursor-pointer"
+                className="w-full sm:w-auto h-14 px-10 bg-brand-green hover:bg-emerald-700 text-white font-semibold rounded-full flex items-center justify-center gap-2 transition-all shadow-lg hover:shadow-xl text-base sm:text-lg cursor-pointer"
                 data-testid="button-pricing-early-access"
               >
                 {t("rge.hero.earlyAccess")}
                 <ArrowRight className={arrowClass} />
               </button>
-              <Link href="/pricing">
-                <button className="h-14 px-10 bg-white border border-gray-200 text-gray-700 font-medium rounded-full inline-flex items-center justify-center gap-2 hover:bg-gray-50 transition-colors text-lg" data-testid="button-pricing-plans">
+              <Link href="/pricing" className="w-full sm:w-auto">
+                <button className="w-full sm:w-auto h-14 px-10 bg-white border border-gray-200 text-gray-700 font-medium rounded-full flex items-center justify-center gap-2 hover:bg-gray-50 transition-colors text-base sm:text-lg" data-testid="button-pricing-plans">
                   <BarChart3 className="h-5 w-5" />
                   {t("rge.pricing.viewPlans")}
                 </button>
@@ -472,17 +472,17 @@ export function RealtorLanding() {
           <p className="text-gray-400 xl:text-lg mb-6">
             {t("rge.cta.subtitle")}
           </p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
+          <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center">
             <button
               onClick={handleCta}
-              className="h-12 px-8 bg-brand-green hover:bg-emerald-700 text-white font-semibold rounded-full inline-flex items-center justify-center gap-2 transition-all cursor-pointer"
+              className="w-full sm:w-auto h-12 px-8 bg-brand-green hover:bg-emerald-700 text-white font-semibold rounded-full flex items-center justify-center gap-2 transition-all cursor-pointer"
               data-testid="button-footer-cta"
             >
               {t("rge.hero.earlyAccess")}
               <ArrowRight className={arrowClassSm} />
             </button>
-            <Link href="/pricing">
-              <button className="h-12 px-8 bg-gray-800 border border-gray-700 text-gray-300 font-medium rounded-full inline-flex items-center justify-center gap-2 hover:bg-gray-700 transition-colors" data-testid="button-footer-plans">
+            <Link href="/pricing" className="w-full sm:w-auto">
+              <button className="w-full sm:w-auto h-12 px-8 bg-gray-800 border border-gray-700 text-gray-300 font-medium rounded-full flex items-center justify-center gap-2 hover:bg-gray-700 transition-colors" data-testid="button-footer-plans">
                 <BarChart3 className={arrowClassSm} />
                 {t("rge.pricing.viewPlans")}
               </button>
@@ -501,7 +501,7 @@ export function RealtorLanding() {
               <span className="font-display font-bold text-gray-900">WhachatCRM</span>
             </div>
 
-            <div className="flex flex-wrap gap-x-8 gap-y-4">
+            <div className="grid grid-cols-3 gap-x-6 sm:gap-x-8 gap-y-4 w-full md:w-auto">
               <div>
                 <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">{t("rge.footer.product")}</p>
                 <div className="flex flex-col gap-1.5 text-sm text-gray-500">
