@@ -562,7 +562,7 @@
       "share": "Comparte esta automatización con tu red"
     },
     "hero": {
-      "title": "Realtor Growth Engine",
+      "title": "Motor de Crecimiento Inmobiliario",
       "subtitle": "Convierte leads de bienes raíces en visitas automáticamente con automatización de WhatsApp impulsada por IA.",
       "check1": "Responde al instante a cada nuevo lead",
       "check2": "La IA califica a compradores y vendedores automáticamente",
@@ -585,7 +585,7 @@
       "aiDetail": "Enlace de reserva enviado a Sarah M. — Visita en Calendly programada para el sábado 2:00 PM"
     },
     "workflow": {
-      "title": "Cómo funciona el Realtor Growth Engine",
+      "title": "Cómo funciona el Motor de Crecimiento Inmobiliario",
       "subtitle": "Desde el nuevo lead hasta la visita agendada — automáticamente.",
       "step": "Paso",
       "tagline": "El sistema se encarga de la primera conversación, califica al lead y solo te envía compradores serios.",
@@ -634,7 +634,7 @@
     },
     "platform": {
       "title": "Construido sobre WhachatCRM",
-      "subtitle": "El Realtor Growth Engine se ejecuta sobre una plataforma de mensajería y automatización lista para producción.",
+      "subtitle": "El Motor de Crecimiento Inmobiliario se ejecuta sobre una plataforma de mensajería y automatización lista para producción.",
       "f1": {
         "title": "Bandeja de Mensajería Unificada",
         "desc": "Todas las conversaciones en un solo lugar."
@@ -658,7 +658,7 @@
     },
     "pricing": {
       "title": "Lo que necesitas para empezar",
-      "subtitle": "El Realtor Growth Engine es una configuración hecha para ti sobre WhachatCRM.",
+      "subtitle": "El Motor de Crecimiento Inmobiliario es una configuración hecha para ti sobre WhachatCRM.",
       "platform": "Plataforma",
       "platformName": "WhachatCRM Pro",
       "platformPrice": "$49/mo",
@@ -697,7 +697,7 @@
       "pricing": "Precios",
       "whatsappCrm": "WhatsApp CRM",
       "blog": "Blog",
-      "rge": "Realtor Growth Engine",
+      "rge": "Motor de Crecimiento Inmobiliario",
       "privacy": "Privacidad",
       "terms": "Términos"
     }
