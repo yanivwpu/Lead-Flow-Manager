@@ -397,12 +397,12 @@ export function RealtorLanding() {
                   <ArrowRight className="h-5 w-5" />
                 </button>
               </Link>
-              <a href="mailto:support@whachatcrm.com">
+              <Link href="/contact">
                 <button className="h-14 px-10 bg-white border border-gray-200 text-gray-700 font-medium rounded-full inline-flex items-center justify-center gap-2 hover:bg-gray-50 transition-colors text-lg" data-testid="button-pricing-contact">
                   <Mail className="h-5 w-5" />
                   Contact Us
                 </button>
-              </a>
+              </Link>
             </div>
           </div>
         </div>
@@ -436,12 +436,12 @@ export function RealtorLanding() {
                 <ArrowRight className="h-4 w-4" />
               </button>
             </Link>
-            <a href="mailto:support@whachatcrm.com">
+            <Link href="/contact">
               <button className="h-12 px-8 bg-gray-800 border border-gray-700 text-gray-300 font-medium rounded-full inline-flex items-center justify-center gap-2 hover:bg-gray-700 transition-colors" data-testid="button-footer-contact">
                 <Mail className="h-4 w-4" />
                 Contact Us
               </button>
-            </a>
+            </Link>
           </div>
         </div>
       </section>
