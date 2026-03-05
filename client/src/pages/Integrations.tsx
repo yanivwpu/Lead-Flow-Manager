@@ -19,6 +19,7 @@ import {
   Calendar, Mail, Facebook, Instagram, Link2
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
+import { toast } from "@/hooks/use-toast";
 
 const WEBHOOK_EVENTS = [
   { id: "new_chat", label: "New Conversation", description: "When a new chat is created" },
@@ -341,8 +342,9 @@ export function Integrations() {
   const [integrationForm, setIntegrationForm] = useState<Record<string, string>>({});
   const [selectedSyncOptions, setSelectedSyncOptions] = useState<string[]>([]);
   const [showShopifyInfo, setShowShopifyInfo] = useState(false);
+  const [checkingLcConnection, setCheckingLcConnection] = useState(false);
 
-  const { data: lcStatus, isLoading: lcStatusLoading, refetch: refetchLcStatus } = useQuery<{ connected: boolean; locationId?: string; installedAt?: string }>({
+  const { data: lcStatus, isLoading: lcStatusLoading, refetch: refetchLcStatus } = useQuery<{ connected: boolean; tokenExpired?: boolean; locationId?: string; installedAt?: string }>({
     queryKey: ["/api/ext/connection-status"],
     enabled: !!subscription?.limits?.integrationsEnabled,
   });
@@ -448,6 +450,25 @@ export function Integrations() {
       name: connectingIntegration.name,
       config: { ...integrationForm, syncOptions: selectedSyncOptions },
     });
+  };
+
+  const handleCheckLcConnection = async () => {
+    setCheckingLcConnection(true);
+    try {
+      const result = await refetchLcStatus();
+      const data = result.data;
+      if (data?.connected) {
+        toast({ title: "Connected", description: "LeadConnector is connected and active." });
+      } else if (data?.tokenExpired) {
+        toast({ title: "Token Expired", description: "Your LeadConnector token has expired. Please reinstall the app.", variant: "destructive" });
+      } else {
+        toast({ title: "Not Connected", description: "No active LeadConnector connection found. Install the app first.", variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "Error", description: "Could not check connection status. Please try again.", variant: "destructive" });
+    } finally {
+      setCheckingLcConnection(false);
+    }
   };
 
   const getConnectedIntegration = (type: string) => {
@@ -568,11 +589,12 @@ export function Integrations() {
                                 variant="ghost"
                                 size="sm"
                                 className="shrink-0 text-xs h-7"
-                                onClick={() => refetchLcStatus()}
+                                onClick={handleCheckLcConnection}
+                                disabled={checkingLcConnection}
                                 data-testid="button-check-leadconnector-connection"
                               >
-                                <RefreshCw className="h-3 w-3 mr-1" />
-                                Check
+                                <RefreshCw className={`h-3 w-3 mr-1 ${checkingLcConnection ? 'animate-spin' : ''}`} />
+                                {checkingLcConnection ? 'Checking...' : 'Check'}
                               </Button>
                             </div>
                           )}
@@ -581,11 +603,12 @@ export function Integrations() {
                               variant="outline"
                               size="sm"
                               className="w-full"
-                              onClick={() => refetchLcStatus()}
+                              onClick={handleCheckLcConnection}
+                              disabled={checkingLcConnection}
                               data-testid="button-verify-leadconnector"
                             >
-                              <RefreshCw className="h-3 w-3 mr-1" />
-                              Verify Connection
+                              <RefreshCw className={`h-3 w-3 mr-1 ${checkingLcConnection ? 'animate-spin' : ''}`} />
+                              {checkingLcConnection ? 'Verifying...' : 'Verify Connection'}
                             </Button>
                           )}
                         </div>
