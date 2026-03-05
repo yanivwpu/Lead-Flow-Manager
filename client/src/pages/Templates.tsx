@@ -126,7 +126,7 @@ function GrowthEnginesTab() {
               <div className="flex items-baseline gap-1 justify-center lg:justify-start">
                 <span className="text-2xl font-bold text-gray-900">$199</span>
               </div>
-              <p className="text-xs text-gray-500 mt-0.5">one-time onboarding</p>
+              <p className="text-xs text-gray-500 mt-0.5">one-time template license</p>
 
               <div className="mt-4 pt-3 border-t border-gray-200">
                 <div className="flex items-center gap-1.5 text-xs text-gray-600">
