@@ -136,7 +136,7 @@ export async function registerRoutes(
   // Shopify integration routes
   app.use('/api/shopify', shopifyRoutes);
 
-  // GoHighLevel integration routes
+  // LeadConnector integration routes
   app.use('/api/ext', ghlRoutes);
 
   // Contact form endpoint (public - no auth required)

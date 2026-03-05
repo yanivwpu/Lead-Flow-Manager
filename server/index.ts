@@ -125,7 +125,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
 
-// OIDC provider for GHL SSO (must be before auth middleware)
+// OIDC provider for LeadConnector SSO (must be before auth middleware)
 app.use(oidcRouter);
 
 // Setup authentication
@@ -245,7 +245,7 @@ app.use((req, res, next) => {
   
   await registerRoutes(httpServer, app);
 
-  // Ensure SSO user exists for GHL integration
+  // Ensure SSO user exists for LeadConnector integration
   try {
     const ssoUser = await storage.getUserByEmail('yaniv@whachatcrm.com');
     if (!ssoUser) {

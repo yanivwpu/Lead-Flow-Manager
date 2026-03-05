@@ -14,20 +14,20 @@ router.get('/callback', async (req: Request, res: Response) => {
     const { code, error, error_description } = req.query;
 
     if (error) {
-      console.error('[GHL] OAuth error:', error, error_description);
-      return res.status(400).send(`GoHighLevel authorization failed: ${error_description || error}`);
+      console.error('[LeadConnector] OAuth error:', error, error_description);
+      return res.status(400).send(`LeadConnector authorization failed: ${error_description || error}`);
     }
 
     if (!code || typeof code !== 'string') {
-      console.error('[GHL] No authorization code received. Query params:', req.query);
-      return res.status(400).send('Missing authorization code from GoHighLevel.');
+      console.error('[LeadConnector] No authorization code received. Query params:', req.query);
+      return res.status(400).send('Missing authorization code from LeadConnector.');
     }
 
-    console.log('[GHL] Received authorization code, exchanging for tokens...');
+    console.log('[LeadConnector] Received authorization code, exchanging for tokens...');
 
     if (!GHL_CLIENT_ID || !GHL_CLIENT_SECRET) {
-      console.error('[GHL] Missing GHL_CLIENT_ID or GHL_CLIENT_SECRET');
-      return res.status(500).send('GoHighLevel integration is not configured. Please set GHL_CLIENT_ID and GHL_CLIENT_SECRET.');
+      console.error('[LeadConnector] Missing GHL_CLIENT_ID or GHL_CLIENT_SECRET');
+      return res.status(500).send('LeadConnector integration is not configured. Please contact support.');
     }
 
     const params = new URLSearchParams({
@@ -38,7 +38,7 @@ router.get('/callback', async (req: Request, res: Response) => {
       redirect_uri: GHL_REDIRECT_URI,
     });
 
-    console.log('[GHL] Sending token request to:', GHL_TOKEN_URL);
+    console.log('[LeadConnector] Sending token request to:', GHL_TOKEN_URL);
 
     const tokenResponse = await fetch(GHL_TOKEN_URL, {
       method: 'POST',
@@ -54,16 +54,16 @@ router.get('/callback', async (req: Request, res: Response) => {
     try {
       tokenData = JSON.parse(tokenText);
     } catch (e) {
-      console.error('[GHL] Non-JSON token response:', tokenText.substring(0, 500));
-      return res.status(500).send('Unexpected response from GoHighLevel. Please try again.');
+      console.error('[LeadConnector] Non-JSON token response:', tokenText.substring(0, 500));
+      return res.status(500).send('Unexpected response from LeadConnector. Please try again.');
     }
 
     if (!tokenResponse.ok || !tokenData.access_token) {
-      console.error('[GHL] Token exchange failed:', tokenResponse.status, tokenData);
-      return res.status(400).send(`Failed to connect GoHighLevel account: ${tokenData.error_description || tokenData.error || 'Unknown error'}. Please try again.`);
+      console.error('[LeadConnector] Token exchange failed:', tokenResponse.status, tokenData);
+      return res.status(400).send(`Failed to connect LeadConnector account: ${tokenData.error_description || tokenData.error || 'Unknown error'}. Please try again.`);
     }
 
-    console.log('[GHL] Token exchange successful:', {
+    console.log('[LeadConnector] Token exchange successful:', {
       userType: tokenData.userType,
       locationId: tokenData.locationId,
       companyId: tokenData.companyId,
@@ -97,7 +97,7 @@ router.get('/callback', async (req: Request, res: Response) => {
         },
         lastSyncAt: new Date(),
       });
-      console.log('[GHL] Updated existing integration:', existing.id);
+      console.log('[LeadConnector] Updated existing integration:', existing.id);
     } else {
       const userId = (req as any).session?.userId;
 
@@ -112,7 +112,7 @@ router.get('/callback', async (req: Request, res: Response) => {
         const integration = await storage.createIntegration({
           userId: ownerUserId,
           type: 'gohighlevel',
-          name: `GoHighLevel - ${tokenData.userType === 'Location' ? 'Location' : 'Agency'} (${locationOrCompanyId})`,
+          name: `LeadConnector - ${tokenData.userType === 'Location' ? 'Location' : 'Agency'} (${locationOrCompanyId})`,
           accessToken: tokenData.access_token,
           refreshToken: tokenData.refresh_token,
           tokenExpiresAt,
@@ -125,9 +125,9 @@ router.get('/callback', async (req: Request, res: Response) => {
             installedAt: new Date().toISOString(),
           },
         });
-        console.log('[GHL] Created new integration:', integration.id, 'for user:', ownerUserId);
+        console.log('[LeadConnector] Created new integration:', integration.id, 'for user:', ownerUserId);
       } else {
-        console.error('[GHL] Could not find a user to associate integration with');
+        console.error('[LeadConnector] Could not find a user to associate integration with');
       }
     }
 
@@ -135,7 +135,7 @@ router.get('/callback', async (req: Request, res: Response) => {
       <!DOCTYPE html>
       <html>
       <head>
-        <title>GoHighLevel Connected</title>
+        <title>Connected to LeadConnector</title>
         <style>
           body { font-family: -apple-system, sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; background: #f8fafc; }
           .card { text-align: center; padding: 48px; background: white; border-radius: 16px; box-shadow: 0 4px 24px rgba(0,0,0,0.08); max-width: 400px; }
@@ -149,13 +149,13 @@ router.get('/callback', async (req: Request, res: Response) => {
       <body>
         <div class="card">
           <div class="check"><svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg></div>
-          <h1>Connected Successfully!</h1>
-          <p>Your GoHighLevel account has been linked to WhachatCRM. You can close this window.</p>
-          <a href="https://whachatcrm.com/settings" class="btn">Go to Settings</a>
+          <h1>Connected to LeadConnector</h1>
+          <p>Your LeadConnector account is now connected. You can return to WhachatCRM to start syncing and automations.</p>
+          <a href="https://whachatcrm.com/app/integrations" class="btn">Back to WhachatCRM</a>
         </div>
         <script>
           if (window.opener) {
-            window.opener.postMessage({ type: 'ghl_connected', success: true }, '*');
+            window.opener.postMessage({ type: 'leadconnector_connected', success: true }, '*');
           }
         </script>
       </body>
@@ -164,14 +164,14 @@ router.get('/callback', async (req: Request, res: Response) => {
 
     return res.send(successHtml);
   } catch (error) {
-    console.error('[GHL] Callback error:', error);
-    return res.status(500).send('An error occurred while connecting GoHighLevel. Please try again.');
+    console.error('[LeadConnector] Callback error:', error);
+    return res.status(500).send('An error occurred while connecting LeadConnector. Please try again.');
   }
 });
 
 router.post('/webhook', async (req: Request, res: Response) => {
   try {
-    console.log('[GHL Webhook] Received event:', JSON.stringify(req.body).substring(0, 500));
+    console.log('[LeadConnector Webhook] Received event:', JSON.stringify(req.body).substring(0, 500));
 
     const { type, locationId, ...data } = req.body;
 
@@ -179,31 +179,31 @@ router.post('/webhook', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Missing event type' });
     }
 
-    console.log(`[GHL Webhook] Event: ${type}, Location: ${locationId}`);
+    console.log(`[LeadConnector Webhook] Event: ${type}, Location: ${locationId}`);
 
     switch (type) {
       case 'ContactCreate':
       case 'ContactUpdate':
-        console.log('[GHL Webhook] Contact event:', data);
+        console.log('[LeadConnector Webhook] Contact event:', data);
         break;
 
       case 'OpportunityCreate':
       case 'OpportunityUpdate':
       case 'OpportunityStatusUpdate':
-        console.log('[GHL Webhook] Opportunity event:', data);
+        console.log('[LeadConnector Webhook] Opportunity event:', data);
         break;
 
       case 'InboundMessage':
       case 'OutboundMessage':
-        console.log('[GHL Webhook] Message event:', data);
+        console.log('[LeadConnector Webhook] Message event:', data);
         break;
 
       case 'AppInstall':
-        console.log('[GHL Webhook] App installed for location:', locationId);
+        console.log('[LeadConnector Webhook] App installed for location:', locationId);
         break;
 
       case 'AppUninstall':
-        console.log('[GHL Webhook] App uninstalled for location:', locationId);
+        console.log('[LeadConnector Webhook] App uninstalled for location:', locationId);
         if (locationId) {
           const integrations = await storage.getIntegrationsByType('gohighlevel');
           const match = integrations.find(
@@ -211,18 +211,18 @@ router.post('/webhook', async (req: Request, res: Response) => {
           );
           if (match) {
             await storage.updateIntegration(match.id, { isActive: false });
-            console.log('[GHL Webhook] Deactivated integration:', match.id);
+            console.log('[LeadConnector Webhook] Deactivated integration:', match.id);
           }
         }
         break;
 
       default:
-        console.log('[GHL Webhook] Unhandled event type:', type);
+        console.log('[LeadConnector Webhook] Unhandled event type:', type);
     }
 
     res.status(200).json({ received: true });
   } catch (error) {
-    console.error('[GHL Webhook] Error:', error);
+    console.error('[LeadConnector Webhook] Error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -263,7 +263,7 @@ router.post('/refresh-token', async (req: Request, res: Response) => {
     const tokenData = await tokenResponse.json() as any;
 
     if (!tokenResponse.ok) {
-      console.error('[GHL] Token refresh failed:', tokenData);
+      console.error('[LeadConnector] Token refresh failed:', tokenData);
       return res.status(400).json({ error: 'Failed to refresh token' });
     }
 
@@ -276,11 +276,33 @@ router.post('/refresh-token', async (req: Request, res: Response) => {
       lastSyncAt: new Date(),
     });
 
-    console.log('[GHL] Token refreshed for integration:', integrationId);
+    console.log('[LeadConnector] Token refreshed for integration:', integrationId);
     res.json({ success: true, expiresAt: tokenExpiresAt });
   } catch (error) {
-    console.error('[GHL] Token refresh error:', error);
+    console.error('[LeadConnector] Token refresh error:', error);
     res.status(500).json({ error: 'Failed to refresh token' });
+  }
+});
+
+router.get('/connection-status', async (req: Request, res: Response) => {
+  try {
+    const integrations = await storage.getIntegrationsByType('gohighlevel');
+    const activeIntegration = integrations.find((i: any) => i.isActive && i.accessToken);
+
+    if (activeIntegration) {
+      res.json({
+        connected: true,
+        locationId: (activeIntegration.config as any)?.locationId || null,
+        companyId: (activeIntegration.config as any)?.companyId || null,
+        installedAt: (activeIntegration.config as any)?.installedAt || null,
+        lastSyncAt: activeIntegration.lastSyncAt,
+      });
+    } else {
+      res.json({ connected: false });
+    }
+  } catch (error) {
+    console.error('[LeadConnector] Connection status check error:', error);
+    res.json({ connected: false });
   }
 });
 

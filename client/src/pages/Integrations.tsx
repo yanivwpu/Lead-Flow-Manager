@@ -16,7 +16,7 @@ import {
   Plug, Plus, Trash2, Copy, Check, ExternalLink, Zap, Lock,
   ShoppingCart, FileSpreadsheet, Users, CreditCard, Building2, Home,
   Webhook, Eye, EyeOff, RefreshCw, CheckCircle2, XCircle, Settings2,
-  Calendar, Mail, Facebook, Instagram
+  Calendar, Mail, Facebook, Instagram, Link2
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 
@@ -40,7 +40,21 @@ interface IntegrationConfig {
   syncOptions?: { id: string; label: string; description: string }[];
 }
 
+const LEADCONNECTOR_INSTALL_URL = import.meta.env.VITE_LEADCONNECTOR_INSTALL_URL || 'https://marketplace.leadconnectorhq.com/integrations/whachatcrm';
+
 const NATIVE_INTEGRATIONS: IntegrationConfig[] = [
+  { 
+    id: "leadconnector", 
+    name: "LeadConnector", 
+    icon: Link2, 
+    description: "Connect WhachatCRM with your LeadConnector account to sync leads and activity", 
+    color: "bg-indigo-600",
+    fields: [],
+    syncOptions: [
+      { id: "sync_contacts", label: "Sync Contacts", description: "Keep leads synced between platforms" },
+      { id: "sync_opportunities", label: "Sync Opportunities", description: "Sync deal and opportunity updates" },
+    ]
+  },
   { 
     id: "shopify", 
     name: "Shopify", 
@@ -328,6 +342,10 @@ export function Integrations() {
   const [selectedSyncOptions, setSelectedSyncOptions] = useState<string[]>([]);
   const [showShopifyInfo, setShowShopifyInfo] = useState(false);
 
+  const { data: lcStatus, isLoading: lcStatusLoading, refetch: refetchLcStatus } = useQuery<{ connected: boolean; locationId?: string; installedAt?: string }>({
+    queryKey: ["/api/ext/connection-status"],
+    enabled: !!subscription?.limits?.integrationsEnabled,
+  });
 
   const integrationsEnabled = subscription?.limits?.integrationsEnabled;
   const maxWebhooks = (subscription?.limits as any)?.maxWebhooks || 0;
@@ -493,7 +511,16 @@ export function Integrations() {
                 const connected = getConnectedIntegration(integration.id);
                 return (
                   <Card key={integration.id} className="relative overflow-hidden" data-testid={`integration-card-${integration.id}`}>
-                    {connected && (
+                    {integration.id === 'leadconnector' ? (
+                      lcStatus?.connected && (
+                        <div className="absolute top-2 right-2">
+                          <Badge className="bg-green-100 text-green-700 border-green-200">
+                            <CheckCircle2 className="h-3 w-3 mr-1" />
+                            Connected
+                          </Badge>
+                        </div>
+                      )
+                    ) : connected && (
                       <div className="absolute top-2 right-2">
                         <Badge className="bg-green-100 text-green-700 border-green-200">
                           <CheckCircle2 className="h-3 w-3 mr-1" />
@@ -513,7 +540,65 @@ export function Integrations() {
                       </div>
                     </CardHeader>
                     <CardContent>
-                      {connected ? (
+                      {integration.id === 'leadconnector' ? (
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="text-gray-500">Status</span>
+                            {lcStatusLoading ? (
+                              <RefreshCw className="h-3 w-3 animate-spin text-gray-400" />
+                            ) : lcStatus?.connected ? (
+                              <Badge className="bg-green-100 text-green-700 border-green-200">
+                                <CheckCircle2 className="h-3 w-3 mr-1" />
+                                Connected
+                              </Badge>
+                            ) : (
+                              <Badge variant="secondary" className="text-gray-500">
+                                <XCircle className="h-3 w-3 mr-1" />
+                                Not Connected
+                              </Badge>
+                            )}
+                          </div>
+                          <Button 
+                            variant="default" 
+                            size="sm" 
+                            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white"
+                            onClick={() => window.open(LEADCONNECTOR_INSTALL_URL, '_blank')}
+                            data-testid="button-install-leadconnector"
+                          >
+                            Install LeadConnector App
+                            <ExternalLink className="h-3 w-3 ml-2" />
+                          </Button>
+                          {!lcStatus?.connected && (
+                            <div className="flex items-center gap-2">
+                              <p className="text-xs text-gray-500 flex-1">
+                                Install the app in LeadConnector and return here to verify connection.
+                              </p>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="shrink-0 text-xs h-7"
+                                onClick={() => refetchLcStatus()}
+                                data-testid="button-check-leadconnector-connection"
+                              >
+                                <RefreshCw className="h-3 w-3 mr-1" />
+                                Check
+                              </Button>
+                            </div>
+                          )}
+                          {lcStatus?.connected && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="w-full"
+                              onClick={() => refetchLcStatus()}
+                              data-testid="button-verify-leadconnector"
+                            >
+                              <RefreshCw className="h-3 w-3 mr-1" />
+                              Verify Connection
+                            </Button>
+                          )}
+                        </div>
+                      ) : connected ? (
                         <div className="space-y-3">
                           <div className="flex items-center justify-between text-sm">
                             <span className="text-gray-500">Status</span>

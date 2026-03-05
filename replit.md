@@ -15,7 +15,26 @@ The application is a full multi-tenant SaaS implementation with:
 - Notification system for follow-up reminders (push & email)
 - PWA capabilities (installable, offline-first)
 
-## Recent Changes (March 3, 2026)
+## Recent Changes (March 5, 2026)
+- **LeadConnector White-Label Compliance (GHL Marketplace Review Fix)**:
+  - Removed all "GoHighLevel" / "GHL" references from user-facing UI, error messages, and server responses
+  - Post-install redirect page now says "Connected to LeadConnector" with white-label safe content
+  - OIDC sign-in page updated: "Sign in to continue to LeadConnector"
+  - Added LeadConnector integration card at top of Integrations page with:
+    - Connection status indicator (Connected / Not Connected)
+    - "Install LeadConnector App" primary CTA button (opens whitelabeled install link)
+    - "Check Connection" / "Verify Connection" buttons to confirm install
+    - Helper text for unconnected state
+  - Added `/api/ext/connection-status` endpoint to check LeadConnector connection state
+  - Install URL configurable via `VITE_LEADCONNECTOR_INSTALL_URL` env var (frontend) or defaults to marketplace URL
+  - Internal integration type remains `gohighlevel` in database for backward compatibility
+  - Key files modified:
+    - `server/ghlRoutes.ts`: All user-facing strings updated, added connection-status endpoint
+    - `server/oidc.ts`: Updated sign-in page text
+    - `server/routes.ts`, `server/index.ts`: Updated comments
+    - `client/src/pages/Integrations.tsx`: Added LeadConnector card with status UI
+
+## Previous Changes (March 3, 2026)
 - **Lead Scoring v2 — Tiered Signals + Decay + Daily Hot List**:
   - Upgraded from 3-tier (Hot/Warm/Unqualified) to 5-tier scoring: Hot (80+), Warm (50-79), New (20-49), Low Intent (1-19), Unqualified (0)
   - 14+ intent signals across 4 categories: High-Intent (+30-40), Medium-Intent (+15-25), Low-Intent (+5-10), Negative (-50 to -100)
