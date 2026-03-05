@@ -417,7 +417,6 @@ export function RealtorLanding() {
                 <div className="text-sm text-gray-500">{t("rge.pricing.addonPrice")}</div>
               </div>
               <div className="bg-white rounded-xl border border-emerald-200 p-4 sm:p-5 shadow-sm ring-2 ring-emerald-100">
-                <div className="text-sm font-medium text-emerald-600 mb-1">{t("rge.pricing.setup")}</div>
                 <div className="text-lg font-bold text-gray-900">{t("rge.pricing.setupName")}</div>
                 <div className="text-base font-bold text-gray-900 mt-1">
                   <span className="line-through text-gray-400 font-normal">{t("rge.pricing.setupOriginalPrice")}</span>{" "}
