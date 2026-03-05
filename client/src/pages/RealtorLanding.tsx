@@ -258,7 +258,6 @@ export function RealtorLanding() {
           </div>
 
           <div className="relative">
-            <div className="hidden lg:block absolute top-1/2 left-8 right-8 h-0.5 bg-gradient-to-r from-emerald-200 via-emerald-300 to-emerald-200 -translate-y-1/2 rounded-full" />
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6 xl:gap-8 relative">
               {workflowSteps.map((step) => {
                 const Icon = step.icon;
