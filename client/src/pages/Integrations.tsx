@@ -344,8 +344,16 @@ export function Integrations() {
   const [showShopifyInfo, setShowShopifyInfo] = useState(false);
   const [checkingLcConnection, setCheckingLcConnection] = useState(false);
 
-  const { data: lcStatus, isLoading: lcStatusLoading, refetch: refetchLcStatus } = useQuery<{ connected: boolean; tokenExpired?: boolean; locationId?: string; installedAt?: string }>({
-    queryKey: ["/api/ext/connection-status"],
+  const lcLocationId = integrations.find(i => i.type === 'gohighlevel')?.config?.locationId as string | undefined;
+
+  const { data: lcStatus, isLoading: lcStatusLoading, refetch: refetchLcStatus } = useQuery<{ connected: boolean; tokenExpired?: boolean; locationId?: string; companyId?: string; installedAt?: string }>({
+    queryKey: ["/api/ext/connection-status", lcLocationId],
+    queryFn: async () => {
+      const params = lcLocationId ? `?locationId=${encodeURIComponent(lcLocationId)}` : '';
+      const res = await fetch(`/api/ext/connection-status${params}`, { credentials: 'include' });
+      if (!res.ok) throw new Error('Failed to check connection status');
+      return res.json();
+    },
     enabled: !!subscription?.limits?.integrationsEnabled,
   });
 

@@ -291,10 +291,22 @@ router.get('/connection-status', async (req: Request, res: Response) => {
       return res.json({ connected: false });
     }
 
+    const queryLocationId = req.query.locationId as string | undefined;
+
     const userIntegrations = await storage.getIntegrations(userId);
-    const activeIntegration = userIntegrations.find(
+    const ghlIntegrations = userIntegrations.filter(
       (i: any) => i.type === 'gohighlevel' && i.isActive && i.accessToken
     );
+
+    let activeIntegration;
+
+    if (queryLocationId) {
+      activeIntegration = ghlIntegrations.find(
+        (i: any) => (i.config as any)?.locationId === queryLocationId
+      );
+    } else {
+      activeIntegration = ghlIntegrations[0];
+    }
 
     if (activeIntegration) {
       const tokenExpired = activeIntegration.tokenExpiresAt && new Date(activeIntegration.tokenExpiresAt) < new Date();
