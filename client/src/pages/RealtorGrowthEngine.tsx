@@ -327,7 +327,7 @@ export function RealtorGrowthEngine() {
             ) : status === 'locked' ? 'Start Onboarding' : status === 'purchased' ? 'Start Onboarding' : 'Onboarding Submitted'}
             {!isPaused && <ChevronRight className="ml-2 w-4 h-4" />}
           </Button>
-          <p className="text-[11px] text-muted-foreground mt-1.5">One-time onboarding $199 · Requires Pro + AI plan</p>
+          <p className="text-[11px] text-muted-foreground mt-1.5">One-time template license $199 · Requires Pro + AI plan</p>
         </div>
       </div>
 
@@ -498,7 +498,7 @@ export function RealtorGrowthEngine() {
             {status === 'locked' ? 'Start Onboarding' : status === 'purchased' ? 'Start Onboarding' : 'Onboarding Submitted'}
             <ChevronRight className="ml-2 w-4 h-4" />
           </Button>
-          <p className="text-[11px] text-muted-foreground mt-2">One-time onboarding $199 · Requires Pro + AI plan</p>
+          <p className="text-[11px] text-muted-foreground mt-2">One-time template license $199 · Requires Pro + AI plan</p>
         </CardContent>
       </Card>
     </div>
