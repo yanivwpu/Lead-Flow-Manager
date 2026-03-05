@@ -570,7 +570,7 @@
       "check3": "Agenda visitas directamente a través de WhatsApp",
       "earlyAccess": "Obtén Acceso Anticipado",
       "howItWorks": "Mira Cómo Funciona",
-      "launchOffer": "Oferta de lanzamiento: 50% de descuento en Concierge Setup para los primeros 5 agentes inmobiliarios."
+      "launchOffer": "Oferta de lanzamiento: 50% de descuento en la Licencia de Plantilla para los primeros 5 agentes inmobiliarios."
     },
     "preview": {
       "lead1Name": "Sarah M. — Puntuación: 92 (Caliente)",
@@ -659,25 +659,25 @@
     },
     "pricing": {
       "title": "Lo que necesitas para empezar",
-      "subtitle": "El Motor de Crecimiento Inmobiliario es una configuración hecha para ti sobre WhachatCRM.",
+      "subtitle": "El Motor de Crecimiento Inmobiliario es una plantilla de automatización hecha para ti sobre WhachatCRM.",
       "platform": "Plataforma",
       "platformName": "WhachatCRM Pro",
       "platformPrice": "$49/mo",
       "addon": "Complemento",
       "addonName": "AI Brain",
       "addonPrice": "$29/mo",
-      "setup": "Configuración Única",
-      "setupName": "Concierge Setup",
+      "setup": "Licencia de Plantilla Única",
+      "setupName": "Plantilla de Automatización",
       "setupOriginalPrice": "$199",
       "setupSalePrice": "$99 Acceso Anticipado",
-      "setupDiscount": "50% de descuento para las primeras 5 instalaciones",
+      "setupDiscount": "50% de descuento para las primeras 5 licencias",
       "metaNote": "Las tarifas de mensajería de WhatsApp son facturadas directamente por Meta sin recargos.",
       "viewPlans": "Ver Planes"
     },
     "faq": {
       "title": "Preguntas Frecuentes",
       "q1": "¿Necesito la API de WhatsApp Business?",
-      "a1": "Sí, pero no necesitas configurarla tú mismo. Nuestro equipo de conserjería se encarga de todo el registro de WABA y la verificación de Meta Business Manager como parte de la tarifa de configuración única.",
+      "a1": "Sí, pero no necesitas configurarla tú mismo. Nuestro equipo de conserjería se encarga de todo el registro de WABA y la verificación de Meta Business Manager como parte de la tarifa de licencia de plantilla única.",
       "q2": "¿Puedo usar mi número de teléfono actual?",
       "a2": "En la mayoría de los casos, sí. Si tu número no está actualmente en la API de WhatsApp Business, podemos migrarlo. Si está en una cuenta personal de WhatsApp, te guiaremos a través del proceso de migración durante la incorporación.",
       "q3": "¿Cuánto tiempo toma la configuración?",

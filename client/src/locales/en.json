@@ -655,7 +655,7 @@
       "check3": "Book showings directly through WhatsApp",
       "earlyAccess": "Get Early Access",
       "howItWorks": "See How It Works",
-      "launchOffer": "Launch offer: 50% off Concierge Setup for the first 5 real estate agents."
+      "launchOffer": "Launch offer: 50% off the Growth Engine Template for the first 5 real estate agents."
     },
     "preview": {
       "lead1Name": "Sarah M. — Score: 92 (Hot)",
@@ -744,25 +744,25 @@
     },
     "pricing": {
       "title": "What You Need to Get Started",
-      "subtitle": "The Realtor Growth Engine is a done-for-you setup on top of WhachatCRM.",
+      "subtitle": "The Realtor Growth Engine is a done-for-you automation template on top of WhachatCRM.",
       "platform": "Platform",
       "platformName": "WhachatCRM Pro",
       "platformPrice": "$49/mo",
       "addon": "Add-On",
       "addonName": "AI Brain",
       "addonPrice": "$29/mo",
-      "setup": "One-Time Setup",
-      "setupName": "Concierge Setup",
+      "setup": "One-Time Template License",
+      "setupName": "Automation Template",
       "setupOriginalPrice": "$199",
       "setupSalePrice": "$99 Early Access",
-      "setupDiscount": "50% off for the first 5 installs",
+      "setupDiscount": "50% off for the first 5 licenses",
       "metaNote": "WhatsApp messaging fees are billed directly by Meta with no markup.",
       "viewPlans": "View Plans"
     },
     "faq": {
       "title": "Frequently Asked Questions",
       "q1": "Do I need WhatsApp Business API?",
-      "a1": "Yes, but you don't need to set it up yourself. Our concierge team handles the entire WABA registration and Meta Business Manager verification as part of the one-time setup fee.",
+      "a1": "Yes, but you don't need to set it up yourself. Our concierge team handles the entire WABA registration and Meta Business Manager verification as part of the one-time template license fee.",
       "q2": "Can I use my existing phone number?",
       "a2": "In most cases, yes. If your number isn't currently on WhatsApp Business API, we can migrate it. If it's on a personal WhatsApp account, we'll walk you through the migration process during onboarding.",
       "q3": "How long does setup take?",
