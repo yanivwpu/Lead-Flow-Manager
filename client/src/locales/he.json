@@ -760,6 +760,8 @@
       "addonPrice": "$29/mo",
       "setup": "הקמה חד-פעמית",
       "setupName": "Concierge Setup",
+      "setupOriginalPrice": "$199",
+      "setupSalePrice": "$99 גישה מוקדמת",
       "setupDiscount": "50% הנחה ל-5 ההתקנות הראשונות",
       "metaNote": "עלויות הודעות WhatsApp מחוייבות ישירות על ידי Meta ללא תוספת מחיר.",
       "viewPlans": "צפה בתוכניות"

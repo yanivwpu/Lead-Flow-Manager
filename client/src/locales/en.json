@@ -753,6 +753,8 @@
       "addonPrice": "$29/mo",
       "setup": "One-Time Setup",
       "setupName": "Concierge Setup",
+      "setupOriginalPrice": "$199",
+      "setupSalePrice": "$99 Early Access",
       "setupDiscount": "50% off for the first 5 installs",
       "metaNote": "WhatsApp messaging fees are billed directly by Meta with no markup.",
       "viewPlans": "View Plans"

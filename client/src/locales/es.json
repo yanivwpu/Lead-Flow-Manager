@@ -668,6 +668,8 @@
       "addonPrice": "$29/mo",
       "setup": "Configuración Única",
       "setupName": "Concierge Setup",
+      "setupOriginalPrice": "$199",
+      "setupSalePrice": "$99 Acceso Anticipado",
       "setupDiscount": "50% de descuento para las primeras 5 instalaciones",
       "metaNote": "Las tarifas de mensajería de WhatsApp son facturadas directamente por Meta sin recargos.",
       "viewPlans": "Ver Planes"
