@@ -286,8 +286,15 @@ router.post('/refresh-token', async (req: Request, res: Response) => {
 
 router.get('/connection-status', async (req: Request, res: Response) => {
   try {
-    const integrations = await storage.getIntegrationsByType('gohighlevel');
-    const activeIntegration = integrations.find((i: any) => i.isActive && i.accessToken);
+    const userId = (req as any).user?.id;
+    if (!userId) {
+      return res.json({ connected: false });
+    }
+
+    const userIntegrations = await storage.getIntegrations(userId);
+    const activeIntegration = userIntegrations.find(
+      (i: any) => i.type === 'gohighlevel' && i.isActive && i.accessToken
+    );
 
     if (activeIntegration) {
       res.json({

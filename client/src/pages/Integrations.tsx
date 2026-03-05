@@ -511,16 +511,7 @@ export function Integrations() {
                 const connected = getConnectedIntegration(integration.id);
                 return (
                   <Card key={integration.id} className="relative overflow-hidden" data-testid={`integration-card-${integration.id}`}>
-                    {integration.id === 'leadconnector' ? (
-                      lcStatus?.connected && (
-                        <div className="absolute top-2 right-2">
-                          <Badge className="bg-green-100 text-green-700 border-green-200">
-                            <CheckCircle2 className="h-3 w-3 mr-1" />
-                            Connected
-                          </Badge>
-                        </div>
-                      )
-                    ) : connected && (
+                    {integration.id !== 'leadconnector' && connected && (
                       <div className="absolute top-2 right-2">
                         <Badge className="bg-green-100 text-green-700 border-green-200">
                           <CheckCircle2 className="h-3 w-3 mr-1" />
