@@ -124,7 +124,7 @@ export function RealtorLanding() {
               <span className="text-sm font-medium text-emerald-700 hover:text-emerald-900 underline underline-offset-2">Message us</span>
             </Link>
             <span className="text-emerald-300">|</span>
-            <Link href="/auth">
+            <Link href="/contact">
               <span className="text-sm font-medium text-emerald-700 hover:text-emerald-900 underline underline-offset-2 cursor-pointer">Request early access</span>
             </Link>
           </div>
@@ -161,7 +161,7 @@ export function RealtorLanding() {
             </div>
 
             <div className="flex flex-col sm:flex-row gap-3 mb-4">
-              <Link href="/auth">
+              <Link href="/contact">
                 <button className="w-full sm:w-auto h-14 px-8 bg-brand-green hover:bg-emerald-700 text-white font-semibold rounded-full flex items-center justify-center gap-2 transition-all shadow-lg hover:shadow-xl" data-testid="button-hero-early-access">
                   Get Early Access
                   <ArrowRight className="h-5 w-5" />
@@ -393,7 +393,7 @@ export function RealtorLanding() {
             </p>
 
             <div className="flex flex-col sm:flex-row gap-4 justify-center mb-4">
-              <Link href="/auth">
+              <Link href="/contact">
                 <button className="h-14 px-10 bg-brand-green hover:bg-emerald-700 text-white font-semibold rounded-full inline-flex items-center justify-center gap-2 transition-all shadow-lg hover:shadow-xl text-lg" data-testid="button-pricing-early-access">
                   Get Early Access
                   <ArrowRight className="h-5 w-5" />
@@ -432,7 +432,7 @@ export function RealtorLanding() {
             Join the first agents to use AI-powered WhatsApp automation for real estate.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link href="/auth">
+            <Link href="/contact">
               <button className="h-12 px-8 bg-brand-green hover:bg-emerald-700 text-white font-semibold rounded-full inline-flex items-center justify-center gap-2 transition-all" data-testid="button-footer-cta">
                 Get Early Access
                 <ArrowRight className="h-4 w-4" />
