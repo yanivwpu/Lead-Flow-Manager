@@ -992,17 +992,31 @@ export function RealtorGrowthEngine() {
                 className="bg-brand-green hover:bg-brand-green/90"
                 onClick={async () => {
                   try {
-                    const res = await fetch("/api/subscription/portal", {
-                      method: "POST",
-                      credentials: "include",
-                    });
-                    if (!res.ok) throw new Error("Failed to open billing portal");
-                    const data = await res.json();
-                    if (data.url) {
-                      window.location.href = data.url;
+                    if (!subscriptionGate.hasPro) {
+                      const res = await fetch("/api/subscription/checkout", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ planId: "pro" }),
+                        credentials: "include",
+                      });
+                      if (!res.ok) throw new Error("Failed to create checkout");
+                      const data = await res.json();
+                      if (data.url) {
+                        window.open(data.url, '_blank');
+                      }
+                    } else {
+                      const res = await fetch("/api/subscription/addon/ai-brain", {
+                        method: "POST",
+                        credentials: "include",
+                      });
+                      if (!res.ok) throw new Error("Failed to create checkout");
+                      const data = await res.json();
+                      if (data.url) {
+                        window.open(data.url, '_blank');
+                      }
                     }
                   } catch (err) {
-                    console.error("Portal error:", err);
+                    console.error("Checkout error:", err);
                   }
                 }}
                 data-testid="button-upgrade-plan"
