@@ -992,28 +992,17 @@ export function RealtorGrowthEngine() {
                 className="bg-brand-green hover:bg-brand-green/90"
                 onClick={async () => {
                   try {
-                    if (!subscriptionGate.hasPro) {
-                      const res = await fetch("/api/subscription/checkout", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ planId: "pro" }),
-                        credentials: "include",
-                      });
-                      if (!res.ok) throw new Error("Failed to create checkout");
-                      const data = await res.json();
-                      if (data.url) {
-                        window.open(data.url, '_blank');
-                      }
-                    } else {
-                      const res = await fetch("/api/subscription/addon/ai-brain", {
-                        method: "POST",
-                        credentials: "include",
-                      });
-                      if (!res.ok) throw new Error("Failed to create checkout");
-                      const data = await res.json();
-                      if (data.url) {
-                        window.open(data.url, '_blank');
-                      }
+                    const endpoint = !subscriptionGate.hasPro
+                      ? "/api/subscription/checkout/pro-ai"
+                      : "/api/subscription/addon/ai-brain";
+                    const res = await fetch(endpoint, {
+                      method: "POST",
+                      credentials: "include",
+                    });
+                    if (!res.ok) throw new Error("Failed to create checkout");
+                    const data = await res.json();
+                    if (data.url) {
+                      window.open(data.url, '_blank');
                     }
                   } catch (err) {
                     console.error("Checkout error:", err);

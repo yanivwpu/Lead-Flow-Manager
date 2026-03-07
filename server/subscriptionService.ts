@@ -202,6 +202,57 @@ class SubscriptionService {
     return { url: session.url };
   }
 
+  async createProPlusAICheckoutSession(userId: string, baseUrl: string): Promise<{ url: string }> {
+    const user = await storage.getUser(userId);
+    if (!user) throw new Error("User not found");
+
+    const stripe = await getUncachableStripeClient();
+
+    let customerId = user.stripeCustomerId;
+    if (!customerId) {
+      const customer = await stripe.customers.create({
+        email: user.email,
+        metadata: { userId },
+      });
+      await storage.updateUser(userId, { stripeCustomerId: customer.id });
+      customerId = customer.id;
+    }
+
+    const PRO_AMOUNT = 4900;
+    const AI_BRAIN_AMOUNT = 2900;
+
+    console.log(`Creating combined Pro + AI Brain checkout for user ${userId}`);
+    const stripePrices = await stripe.prices.list({ active: true, limit: 20 });
+    const proPrice = stripePrices.data.find(p => p.unit_amount === PRO_AMOUNT);
+    const aiPrice = stripePrices.data.find(p => p.unit_amount === AI_BRAIN_AMOUNT);
+
+    if (!proPrice) {
+      throw new Error("Pro plan price not found in Stripe. Please create a $49/month price.");
+    }
+    if (!aiPrice) {
+      throw new Error("AI Brain add-on price not found in Stripe. Please create a $29/month price.");
+    }
+
+    const session = await stripe.checkout.sessions.create({
+      customer: customerId,
+      payment_method_types: ['card'],
+      line_items: [
+        { price: proPrice.id, quantity: 1 },
+        { price: aiPrice.id, quantity: 1 },
+      ],
+      mode: 'subscription',
+      success_url: `${baseUrl}/app/templates/realtor-growth-engine?checkout=success`,
+      cancel_url: `${baseUrl}/app/templates/realtor-growth-engine?checkout=cancel`,
+      metadata: {
+        type: 'pro_plus_ai',
+        userId,
+      },
+    });
+
+    if (!session.url) throw new Error("Failed to create checkout session");
+    return { url: session.url };
+  }
+
   async createAddonCheckoutSession(userId: string, baseUrl: string): Promise<{ url: string }> {
     const user = await storage.getUser(userId);
     if (!user) throw new Error("User not found");
