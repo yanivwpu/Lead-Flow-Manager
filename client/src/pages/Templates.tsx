@@ -2,7 +2,7 @@ import { useState } from "react";
 
 function RealtorMark() {
   return (
-    <span className="inline">Realtor<span style={{ fontSize: '0.35em', verticalAlign: 'super', lineHeight: 0 }}>&reg;</span></span>
+    <span className="inline">Realtor<span style={{ fontSize: '0.35em', verticalAlign: 'super', lineHeight: 0, position: 'relative', top: '-0.15em' }}>&reg;</span></span>
   );
 }
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
