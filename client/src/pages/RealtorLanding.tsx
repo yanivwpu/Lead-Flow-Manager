@@ -13,8 +13,8 @@ import { getDirection } from "@/lib/i18n";
 
 function RealtorMark() {
   return (
-    <span className="relative inline-block">
-      Realtor<span className="absolute" style={{ fontSize: '0.22em', top: '0.12em', right: '-0.18em', lineHeight: 1 }}>&reg;</span>
+    <span className="relative inline-block" style={{ marginRight: '0.15em' }}>
+      Realtor<span className="absolute" style={{ fontSize: '0.22em', top: '0.05em', right: '-0.06em', lineHeight: 1 }}>&reg;</span>
     </span>
   );
 }
@@ -276,7 +276,7 @@ export function RealtorLanding() {
         <div className="max-w-6xl xl:max-w-[1440px] mx-auto">
           <div className="text-center mb-12 md:mb-16">
             <h2 className="text-2xl md:text-4xl xl:text-5xl font-display font-bold text-gray-900 mb-4" data-testid="text-workflow-title">
-              {t("rge.workflow.title")}
+              How the <RealtorMark /> Growth Engine Works
             </h2>
             <p className="text-base md:text-lg xl:text-xl text-gray-600 max-w-3xl mx-auto">
               {t("rge.workflow.subtitle")}
@@ -382,7 +382,7 @@ export function RealtorLanding() {
               {t("rge.platform.title")}
             </h2>
             <p className="text-base md:text-lg xl:text-xl text-gray-600 max-w-3xl mx-auto">
-              {t("rge.platform.subtitle")}
+              The <RealtorMark /> Growth Engine runs on top of a production-ready messaging and automation platform.
             </p>
           </div>
 
@@ -410,7 +410,7 @@ export function RealtorLanding() {
               {t("rge.pricing.title")}
             </h2>
             <p className="text-base md:text-lg text-gray-600 mb-8 max-w-2xl mx-auto">
-              {t("rge.pricing.subtitle")}
+              The <RealtorMark /> Growth Engine is a done-for-you automation template on top of WhachatCRM.
             </p>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 mb-8">

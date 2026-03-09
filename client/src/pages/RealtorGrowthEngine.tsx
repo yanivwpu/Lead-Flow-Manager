@@ -2,8 +2,8 @@ import React, { useState, useEffect } from "react";
 
 function RealtorMark() {
   return (
-    <span className="relative inline-block">
-      Realtor<span className="absolute" style={{ fontSize: '0.22em', top: '0.12em', right: '-0.18em', lineHeight: 1 }}>&reg;</span>
+    <span className="relative inline-block" style={{ marginRight: '0.15em' }}>
+      Realtor<span className="absolute" style={{ fontSize: '0.22em', top: '0.05em', right: '-0.06em', lineHeight: 1 }}>&reg;</span>
     </span>
   );
 }
@@ -231,7 +231,7 @@ export function RealtorGrowthEngine() {
       sessionStorage.removeItem("rge_reactivating");
       toast({
         title: "Subscription active",
-        description: "You can now continue your Realtor Growth Engine.",
+        description: "You can now continue your Realtor® Growth Engine.",
       });
     }
   }, [subscriptionActive]);

@@ -1,4 +1,12 @@
 import { useState } from "react";
+
+function RealtorMark() {
+  return (
+    <span className="relative inline-block" style={{ marginRight: '0.15em' }}>
+      Realtor<span className="absolute" style={{ fontSize: '0.22em', top: '0.05em', right: '-0.06em', lineHeight: 1 }}>&reg;</span>
+    </span>
+  );
+}
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSubscription } from "@/lib/subscription-context";
 import { Button } from "@/components/ui/button";
@@ -88,7 +96,7 @@ function GrowthEnginesTab() {
                 <div className="flex items-center gap-2 mb-1">
                   <Badge className="bg-gradient-to-r from-emerald-500 to-teal-500 text-white border-0 text-[10px] px-2 py-0">Premium</Badge>
                 </div>
-                <h3 className="text-lg font-bold text-gray-900" data-testid="text-engine-title">Realtor Growth Engine</h3>
+                <h3 className="text-lg font-bold text-gray-900" data-testid="text-engine-title"><RealtorMark /> Growth Engine</h3>
               </div>
               <div className="hidden sm:flex items-center justify-center w-10 h-10 rounded-lg bg-emerald-50">
                 <Rocket className="h-5 w-5 text-emerald-600" />
