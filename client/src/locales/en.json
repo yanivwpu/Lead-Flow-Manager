@@ -648,7 +648,7 @@
       "share": "Share this automation with your network"
     },
     "hero": {
-      "title": "Realtor Growth Engine",
+      "title": "Realtor® Growth Engine",
       "subtitle": "Turn real estate leads into showings automatically with AI-powered WhatsApp automation.",
       "check1": "Instantly respond to every new lead",
       "check2": "AI qualifies buyers and sellers automatically",
@@ -671,7 +671,7 @@
       "aiDetail": "Booking link sent to Sarah M. — Calendly showing scheduled for Saturday 2:00 PM"
     },
     "workflow": {
-      "title": "How the Realtor Growth Engine Works",
+      "title": "How the Realtor® Growth Engine Works",
       "subtitle": "From new lead to booked showing — automatically.",
       "step": "Step",
       "tagline": "The system handles the first conversation, qualifies the lead, and only sends you serious buyers.",
@@ -720,7 +720,7 @@
     },
     "platform": {
       "title": "Built on WhachatCRM",
-      "subtitle": "The Realtor Growth Engine runs on top of a production-ready messaging and automation platform.",
+      "subtitle": "The Realtor® Growth Engine runs on top of a production-ready messaging and automation platform.",
       "f1": {
         "title": "Unified Messaging Inbox",
         "desc": "All conversations in one place."
@@ -744,7 +744,7 @@
     },
     "pricing": {
       "title": "What You Need to Get Started",
-      "subtitle": "The Realtor Growth Engine is a done-for-you automation template on top of WhachatCRM.",
+      "subtitle": "The Realtor® Growth Engine is a done-for-you automation template on top of WhachatCRM.",
       "platform": "Platform",
       "platformName": "WhachatCRM Pro",
       "platformPrice": "$49/mo",
@@ -785,7 +785,7 @@
       "pricing": "Pricing",
       "whatsappCrm": "WhatsApp CRM",
       "blog": "Blog",
-      "rge": "Realtor Growth Engine",
+      "rge": "Realtor® Growth Engine",
       "privacy": "Privacy",
       "terms": "Terms"
     }
