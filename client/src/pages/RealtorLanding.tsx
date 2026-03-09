@@ -11,6 +11,14 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { getDirection } from "@/lib/i18n";
 
+function RealtorMark() {
+  return (
+    <span className="relative inline-block">
+      Realtor<span className="absolute" style={{ fontSize: '0.22em', top: '0.12em', right: '-0.18em', lineHeight: 1 }}>&reg;</span>
+    </span>
+  );
+}
+
 function FaqItem({ question, answer, isRTL }: { question: string; answer: string; isRTL: boolean }) {
   const [open, setOpen] = useState(false);
   return (
@@ -166,7 +174,7 @@ export function RealtorLanding() {
             transition={{ duration: 0.6 }}
           >
             <h1 className="text-3xl md:text-5xl lg:text-[3.25rem] xl:text-6xl font-display font-bold text-gray-900 leading-[1.1] mb-4 md:mb-5" data-testid="text-hero-headline">
-              Realtor<sup className="text-[0.35em]">®</sup> Growth Engine
+              <RealtorMark /> Growth Engine
             </h1>
             <p className="text-lg md:text-xl xl:text-2xl text-gray-600 mb-6 leading-relaxed">
               {t("rge.hero.subtitle")}
