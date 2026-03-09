@@ -166,7 +166,7 @@ export function RealtorLanding() {
             transition={{ duration: 0.6 }}
           >
             <h1 className="text-3xl md:text-5xl lg:text-[3.25rem] xl:text-6xl font-display font-bold text-gray-900 leading-[1.1] mb-4 md:mb-5" data-testid="text-hero-headline">
-              {t("rge.hero.title")}<sup className="text-[0.4em] align-super">®</sup>
+              {t("rge.hero.title")}
             </h1>
             <p className="text-lg md:text-xl xl:text-2xl text-gray-600 mb-6 leading-relaxed">
               {t("rge.hero.subtitle")}
