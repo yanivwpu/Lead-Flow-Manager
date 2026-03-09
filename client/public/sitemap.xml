@@ -84,6 +84,14 @@
     <priority>0.7</priority>
   </url>
   
+  <!-- Realtor Growth Engine -->
+  <url>
+    <loc>https://whachatcrm.com/realtor-growth-engine</loc>
+    <lastmod>2026-03-09</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+
   <!-- Help & Guide -->
   <url>
     <loc>https://whachatcrm.com/WhachatCRM-User-Guide.html</loc>
