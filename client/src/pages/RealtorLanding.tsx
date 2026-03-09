@@ -13,9 +13,7 @@ import { getDirection } from "@/lib/i18n";
 
 function RealtorMark() {
   return (
-    <span className="relative inline-block" style={{ marginRight: '0.15em' }}>
-      Realtor<span className="absolute" style={{ fontSize: '0.22em', top: '0.05em', right: '-0.06em', lineHeight: 1 }}>&reg;</span>
-    </span>
+    <span className="inline">Realtor<span style={{ fontSize: '0.35em', verticalAlign: 'super', lineHeight: 0 }}>&reg;</span></span>
   );
 }
 
