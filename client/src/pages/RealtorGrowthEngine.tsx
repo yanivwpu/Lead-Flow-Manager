@@ -340,7 +340,7 @@ export function RealtorGrowthEngine() {
             <div className="flex-1">
               <p className="font-semibold text-amber-900 text-sm">Growth Engine Paused</p>
               <p className="text-xs text-amber-800 mt-0.5">
-                Your Realtor Growth Engine requires an active Pro + AI plan to run automations and handle conversations.
+                Your Realtor<sup className="text-xs">®</sup> Growth Engine requires an active Pro + AI plan to run automations and handle conversations.
                 Reactivate your plan to resume your system instantly.
               </p>
               <p className="text-[11px] text-amber-700 mt-1">Your purchase and configuration are saved — nothing is lost.</p>
@@ -404,7 +404,7 @@ export function RealtorGrowthEngine() {
                   </span>
                   <h3 className="font-semibold text-sm leading-tight">Step 1 — Activate your system</h3>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    Purchase and unlock your Realtor Growth Engine.
+                    Purchase and unlock your Realtor<sup className="text-xs">®</sup> Growth Engine.
                   </p>
                 </li>
                 <li className="mb-6 ml-6">
@@ -488,7 +488,7 @@ export function RealtorGrowthEngine() {
       <Card className="mt-5">
         <CardContent className="px-5 py-6 text-center">
           <h3 className="text-lg font-bold text-gray-900 mb-1">Turn your WhatsApp into a lead-conversion machine.</h3>
-          <p className="text-sm text-muted-foreground mb-4">Launch your Realtor Growth Engine with our team and start capturing and converting leads automatically.</p>
+          <p className="text-sm text-muted-foreground mb-4">Launch your Realtor<sup className="text-xs">®</sup> Growth Engine with our team and start capturing and converting leads automatically.</p>
           <Button 
             className="bg-brand-green hover:bg-brand-green/90"
             onClick={handlePrimaryCta}
@@ -1357,7 +1357,7 @@ export function RealtorGrowthEngine() {
         <div className="flex items-center justify-between mb-8">
           <div>
             <Badge className="mb-2 bg-brand-green/10 text-brand-green border-brand-green/20">Active Engine</Badge>
-            <h1 className="text-3xl font-bold text-gray-900">Realtor Growth Engine</h1>
+            <h1 className="text-3xl font-bold text-gray-900">Realtor<sup className="text-xs">®</sup> Growth Engine</h1>
             <p className="text-muted-foreground">Your real estate automation system is active and running.</p>
           </div>
         </div>
