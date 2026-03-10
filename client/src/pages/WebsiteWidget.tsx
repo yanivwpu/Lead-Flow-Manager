@@ -347,19 +347,19 @@ export function WebsiteWidget() {
                     <Button
                       size="sm"
                       variant="secondary"
-                      className="absolute top-2 right-2 h-7 px-2 text-xs"
+                      className="absolute top-2 right-2 h-6 px-1.5 text-[10px]"
                       onClick={copyEmbedCode}
                       disabled={!embedCode}
                       data-testid="button-copy-embed"
                     >
                       {copied ? (
                         <>
-                          <Check className="w-3 h-3 mr-1 text-emerald-600" />
+                          <Check className="w-2.5 h-2.5 mr-0.5 text-emerald-600" />
                           Done
                         </>
                       ) : (
                         <>
-                          <Copy className="w-3 h-3 mr-1" />
+                          <Copy className="w-2.5 h-2.5 mr-0.5" />
                           Copy
                         </>
                       )}
@@ -388,7 +388,7 @@ export function WebsiteWidget() {
                         <Button
                           size="sm"
                           variant="secondary"
-                          className="absolute top-2 right-2 h-7 px-2 text-xs"
+                          className="absolute top-2 right-2 h-6 px-1.5 text-[10px]"
                           onClick={() => {
                             if (user) {
                               navigator.clipboard.writeText(`<iframe\n  src="${baseUrl}/widget-frame/${user.id}"\n  style="position:fixed;bottom:20px;right:20px;width:350px;height:500px;border:none;z-index:9999;"\n></iframe>`);
@@ -401,12 +401,12 @@ export function WebsiteWidget() {
                         >
                           {copiedType === "iframe-floating" ? (
                             <>
-                              <Check className="w-3 h-3 mr-1 text-emerald-600" />
+                              <Check className="w-2.5 h-2.5 mr-0.5 text-emerald-600" />
                               Done
                             </>
                           ) : (
                             <>
-                              <Copy className="w-3 h-3 mr-1" />
+                              <Copy className="w-2.5 h-2.5 mr-0.5" />
                               Copy
                             </>
                           )}
@@ -429,7 +429,7 @@ export function WebsiteWidget() {
                         <Button
                           size="sm"
                           variant="secondary"
-                          className="absolute top-2 right-2 h-7 px-2 text-xs"
+                          className="absolute top-2 right-2 h-6 px-1.5 text-[10px]"
                           onClick={() => {
                             if (user) {
                               navigator.clipboard.writeText(`<iframe\n  src="${baseUrl}/widget-frame/${user.id}"\n  width="350"\n  height="500"\n  style="border:none;"\n></iframe>`);
@@ -442,12 +442,12 @@ export function WebsiteWidget() {
                         >
                           {copiedType === "iframe-embedded" ? (
                             <>
-                              <Check className="w-3 h-3 mr-1 text-emerald-600" />
+                              <Check className="w-2.5 h-2.5 mr-0.5 text-emerald-600" />
                               Done
                             </>
                           ) : (
                             <>
-                              <Copy className="w-3 h-3 mr-1" />
+                              <Copy className="w-2.5 h-2.5 mr-0.5" />
                               Copy
                             </>
                           )}
@@ -480,7 +480,7 @@ export function WebsiteWidget() {
                     <Button
                       size="sm"
                       variant="secondary"
-                      className="absolute top-2 right-2 h-7 px-2 text-xs"
+                      className="absolute top-2 right-2 h-6 px-1.5 text-[10px]"
                       onClick={() => {
                         if (user) {
                           const url = leadSource ? `${baseUrl}/chat/${user.id}?source=${leadSource}` : `${baseUrl}/chat/${user.id}`;
@@ -494,12 +494,12 @@ export function WebsiteWidget() {
                     >
                       {copiedType === "hosted" ? (
                         <>
-                          <Check className="w-3 h-3 mr-1 text-emerald-600" />
+                          <Check className="w-2.5 h-2.5 mr-0.5 text-emerald-600" />
                           Done
                         </>
                       ) : (
                         <>
-                          <Copy className="w-3 h-3 mr-1" />
+                          <Copy className="w-2.5 h-2.5 mr-0.5" />
                           Copy
                         </>
                       )}
