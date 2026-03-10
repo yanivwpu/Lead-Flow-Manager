@@ -339,25 +339,25 @@ export function WebsiteWidget() {
                 </TabsList>
 
                 <TabsContent value="javascript" className="space-y-3 mt-3">
-                  <p className="text-xs text-gray-600">Embed as a floating button on your website</p>
-                  <div className="relative">
-                    <pre className="bg-gray-900 text-gray-100 p-3 pr-14 rounded-lg text-[10px] sm:text-xs overflow-x-auto font-mono leading-relaxed max-h-32 overflow-y-auto">
-                      {embedCode || 'Loading...'}
-                    </pre>
+                  <p className="text-xs text-gray-600 mb-2">Embed as a floating button on your website</p>
+                  <div className="relative bg-white rounded-t-lg border border-b-0 border-gray-200 px-3 py-2 flex justify-end">
                     <button
                       onClick={copyEmbedCode}
                       disabled={!embedCode}
                       title={copiedType === "javascript" ? "Copied!" : "Copy code"}
-                      className="absolute top-2 right-2 p-1.5 hover:bg-gray-700 rounded transition-colors text-gray-400 hover:text-gray-200"
+                      className="p-1.5 hover:bg-gray-100 rounded transition-colors text-gray-500 hover:text-gray-900"
                       data-testid="button-copy-embed"
                     >
                       {copiedType === "javascript" ? (
-                        <Check className="w-4 h-4 text-emerald-400" />
+                        <Check className="w-4 h-4 text-emerald-500" />
                       ) : (
                         <Copy className="w-4 h-4" />
                       )}
                     </button>
                   </div>
+                  <pre className="bg-gray-900 text-gray-100 p-3 rounded-b-lg text-[10px] sm:text-xs overflow-x-auto font-mono leading-relaxed max-h-32 overflow-y-auto border border-gray-200 border-t-0">
+                    {embedCode || 'Loading...'}
+                  </pre>
                   <div className="flex items-center gap-2 p-2 bg-blue-50 border border-blue-100 rounded-md text-blue-800">
                     <AlertCircle className="w-3 h-3 shrink-0" />
                     <p className="text-[10px] sm:text-xs">
@@ -371,13 +371,7 @@ export function WebsiteWidget() {
                     <div>
                       <p className="text-xs font-semibold text-gray-900 mb-1">A) Floating iframe widget</p>
                       <p className="text-[10px] text-gray-600 mb-2">Best for: sites that allow iframe and support floating placement</p>
-                      <div className="relative">
-                        <pre className="bg-gray-900 text-gray-100 p-3 pr-14 rounded-lg text-[10px] sm:text-xs overflow-x-auto font-mono leading-relaxed max-h-32 overflow-y-auto">
-{user ? `<iframe
-  src="${baseUrl}/widget-frame/${user.id}"
-  style="position:fixed;bottom:20px;right:20px;width:380px;height:620px;border:none;z-index:9999;"
-></iframe>` : 'Loading...'}
-                        </pre>
+                      <div className="relative bg-white rounded-t-lg border border-b-0 border-gray-200 px-3 py-2 flex justify-end">
                         <button
                           onClick={() => {
                             if (user) {
@@ -388,30 +382,28 @@ export function WebsiteWidget() {
                           }}
                           disabled={!user}
                           title={copiedType === "iframe-floating" ? "Copied!" : "Copy code"}
-                          className="absolute top-2 right-2 p-1.5 hover:bg-gray-700 rounded transition-colors text-gray-400 hover:text-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                          className="p-1.5 hover:bg-gray-100 rounded transition-colors text-gray-500 hover:text-gray-900 disabled:opacity-50 disabled:cursor-not-allowed"
                           data-testid="button-copy-iframe-floating"
                         >
                           {copiedType === "iframe-floating" ? (
-                            <Check className="w-4 h-4 text-emerald-400" />
+                            <Check className="w-4 h-4 text-emerald-500" />
                           ) : (
                             <Copy className="w-4 h-4" />
                           )}
                         </button>
                       </div>
+                      <pre className="bg-gray-900 text-gray-100 p-3 rounded-b-lg text-[10px] sm:text-xs overflow-x-auto font-mono leading-relaxed max-h-32 overflow-y-auto border border-gray-200 border-t-0">
+{user ? `<iframe
+  src="${baseUrl}/widget-frame/${user.id}"
+  style="position:fixed;bottom:20px;right:20px;width:380px;height:620px;border:none;z-index:9999;"
+></iframe>` : 'Loading...'}
+                      </pre>
                     </div>
 
                     <div className="border-t pt-3">
                       <p className="text-xs font-semibold text-gray-900 mb-1">B) Embedded iframe panel</p>
                       <p className="text-[10px] text-gray-600 mb-2">Best for: website builders and HTML blocks that allow iframe but do not support floating/fixed position</p>
-                      <div className="relative">
-                        <pre className="bg-gray-900 text-gray-100 p-3 pr-14 rounded-lg text-[10px] sm:text-xs overflow-x-auto font-mono leading-relaxed max-h-32 overflow-y-auto">
-{user ? `<iframe
-  src="${baseUrl}/widget-frame/${user.id}"
-  width="380"
-  height="620"
-  style="border:none;"
-></iframe>` : 'Loading...'}
-                        </pre>
+                      <div className="relative bg-white rounded-t-lg border border-b-0 border-gray-200 px-3 py-2 flex justify-end">
                         <button
                           onClick={() => {
                             if (user) {
@@ -422,24 +414,32 @@ export function WebsiteWidget() {
                           }}
                           disabled={!user}
                           title={copiedType === "iframe-embedded" ? "Copied!" : "Copy code"}
-                          className="absolute top-2 right-2 p-1.5 hover:bg-gray-700 rounded transition-colors text-gray-400 hover:text-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                          className="p-1.5 hover:bg-gray-100 rounded transition-colors text-gray-500 hover:text-gray-900 disabled:opacity-50 disabled:cursor-not-allowed"
                           data-testid="button-copy-iframe-embedded"
                         >
                           {copiedType === "iframe-embedded" ? (
-                            <Check className="w-4 h-4 text-emerald-400" />
+                            <Check className="w-4 h-4 text-emerald-500" />
                           ) : (
                             <Copy className="w-4 h-4" />
                           )}
                         </button>
                       </div>
+                      <pre className="bg-gray-900 text-gray-100 p-3 rounded-b-lg text-[10px] sm:text-xs overflow-x-auto font-mono leading-relaxed max-h-32 overflow-y-auto border border-gray-200 border-t-0">
+{user ? `<iframe
+  src="${baseUrl}/widget-frame/${user.id}"
+  width="380"
+  height="620"
+  style="border:none;"
+></iframe>` : 'Loading...'}
+                      </pre>
                     </div>
                   </div>
                 </TabsContent>
 
                 <TabsContent value="hosted" className="space-y-3 mt-3">
-                  <p className="text-xs text-gray-600">Full-page chat widget with optional lead source tracking</p>
+                  <p className="text-xs text-gray-600 mb-3">Full-page chat widget with optional lead source tracking</p>
                   
-                  <div className="space-y-2">
+                  <div className="space-y-2 mb-3">
                     <Label htmlFor="lead-source" className="text-xs font-semibold text-gray-600">Lead Source (optional)</Label>
                     <Input
                       id="lead-source"
@@ -452,10 +452,7 @@ export function WebsiteWidget() {
                     <p className="text-[10px] text-gray-500">Track where leads come from by adding a source parameter</p>
                   </div>
 
-                  <div className="relative">
-                    <pre className="bg-gray-900 text-gray-100 p-3 pr-14 rounded-lg text-[10px] sm:text-xs overflow-x-auto font-mono leading-relaxed max-h-32 overflow-y-auto">
-{user ? leadSource ? `${baseUrl}/chat/${user.id}?source=${leadSource}` : `${baseUrl}/chat/${user.id}` : 'Loading...'}
-                    </pre>
+                  <div className="relative bg-white rounded-t-lg border border-b-0 border-gray-200 px-3 py-2 flex justify-end">
                     <button
                       onClick={() => {
                         if (user) {
@@ -467,16 +464,19 @@ export function WebsiteWidget() {
                       }}
                       disabled={!user}
                       title={copiedType === "hosted" ? "Copied!" : "Copy code"}
-                      className="absolute top-2 right-2 p-1.5 hover:bg-gray-700 rounded transition-colors text-gray-400 hover:text-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="p-1.5 hover:bg-gray-100 rounded transition-colors text-gray-500 hover:text-gray-900 disabled:opacity-50 disabled:cursor-not-allowed"
                       data-testid="button-copy-hosted"
                     >
                       {copiedType === "hosted" ? (
-                        <Check className="w-4 h-4 text-emerald-400" />
+                        <Check className="w-4 h-4 text-emerald-500" />
                       ) : (
                         <Copy className="w-4 h-4" />
                       )}
                     </button>
                   </div>
+                  <pre className="bg-gray-900 text-gray-100 p-3 rounded-b-lg text-[10px] sm:text-xs overflow-x-auto font-mono leading-relaxed max-h-32 overflow-y-auto border border-gray-200 border-t-0">
+{user ? leadSource ? `${baseUrl}/chat/${user.id}?source=${leadSource}` : `${baseUrl}/chat/${user.id}` : 'Loading...'}
+                  </pre>
                   <div className="flex items-center gap-2 p-2 bg-blue-50 border border-blue-100 rounded-md text-blue-800">
                     <AlertCircle className="w-3 h-3 shrink-0" />
                     <p className="text-[10px] sm:text-xs">
