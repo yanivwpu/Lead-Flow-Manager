@@ -341,7 +341,7 @@ export function WebsiteWidget() {
                 <TabsContent value="javascript" className="space-y-3 mt-3">
                   <p className="text-xs text-gray-600">Embed as a floating button on your website</p>
                   <div className="relative">
-                    <pre className="bg-gray-900 text-gray-100 p-3 rounded-lg text-[10px] sm:text-xs overflow-x-auto font-mono leading-relaxed max-h-32 overflow-y-auto">
+                    <pre className="bg-gray-900 text-gray-100 p-3 pr-14 rounded-lg text-[10px] sm:text-xs overflow-x-auto font-mono leading-relaxed max-h-32 overflow-y-auto">
                       {embedCode || 'Loading...'}
                     </pre>
                     <Button
@@ -379,7 +379,7 @@ export function WebsiteWidget() {
                       <p className="text-xs font-semibold text-gray-900 mb-1">A) Floating iframe widget</p>
                       <p className="text-[10px] text-gray-600 mb-2">Best for: sites that allow iframe and support floating placement</p>
                       <div className="relative">
-                        <pre className="bg-gray-900 text-gray-100 p-3 rounded-lg text-[10px] sm:text-xs overflow-x-auto font-mono leading-relaxed max-h-32 overflow-y-auto">
+                        <pre className="bg-gray-900 text-gray-100 p-3 pr-14 rounded-lg text-[10px] sm:text-xs overflow-x-auto font-mono leading-relaxed max-h-32 overflow-y-auto">
 {user ? `<iframe
   src="${baseUrl}/widget-frame/${user.id}"
   style="position:fixed;bottom:20px;right:20px;width:350px;height:500px;border:none;z-index:9999;"
@@ -418,7 +418,7 @@ export function WebsiteWidget() {
                       <p className="text-xs font-semibold text-gray-900 mb-1">B) Embedded iframe panel</p>
                       <p className="text-[10px] text-gray-600 mb-2">Best for: website builders and HTML blocks that allow iframe but do not support floating/fixed position</p>
                       <div className="relative">
-                        <pre className="bg-gray-900 text-gray-100 p-3 rounded-lg text-[10px] sm:text-xs overflow-x-auto font-mono leading-relaxed max-h-32 overflow-y-auto">
+                        <pre className="bg-gray-900 text-gray-100 p-3 pr-14 rounded-lg text-[10px] sm:text-xs overflow-x-auto font-mono leading-relaxed max-h-32 overflow-y-auto">
 {user ? `<iframe
   src="${baseUrl}/widget-frame/${user.id}"
   width="350"
@@ -474,7 +474,7 @@ export function WebsiteWidget() {
                   </div>
 
                   <div className="relative">
-                    <pre className="bg-gray-900 text-gray-100 p-3 rounded-lg text-[10px] sm:text-xs overflow-x-auto font-mono leading-relaxed max-h-32 overflow-y-auto">
+                    <pre className="bg-gray-900 text-gray-100 p-3 pr-14 rounded-lg text-[10px] sm:text-xs overflow-x-auto font-mono leading-relaxed max-h-32 overflow-y-auto">
 {user ? leadSource ? `${baseUrl}/chat/${user.id}?source=${leadSource}` : `${baseUrl}/chat/${user.id}` : 'Loading...'}
                     </pre>
                     <Button
