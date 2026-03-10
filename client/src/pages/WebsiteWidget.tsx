@@ -344,26 +344,19 @@ export function WebsiteWidget() {
                     <pre className="bg-gray-900 text-gray-100 p-3 pr-14 rounded-lg text-[10px] sm:text-xs overflow-x-auto font-mono leading-relaxed max-h-32 overflow-y-auto">
                       {embedCode || 'Loading...'}
                     </pre>
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      className="absolute top-2 right-2 h-6 px-1.5 text-[10px]"
+                    <button
                       onClick={copyEmbedCode}
                       disabled={!embedCode}
+                      title={copiedType === "javascript" ? "Copied!" : "Copy code"}
+                      className="absolute top-2 right-2 p-1.5 hover:bg-gray-700 rounded transition-colors text-gray-400 hover:text-gray-200"
                       data-testid="button-copy-embed"
                     >
-                      {copied ? (
-                        <>
-                          <Check className="w-2.5 h-2.5 mr-0.5 text-emerald-600" />
-                          Done
-                        </>
+                      {copiedType === "javascript" ? (
+                        <Check className="w-4 h-4 text-emerald-400" />
                       ) : (
-                        <>
-                          <Copy className="w-2.5 h-2.5 mr-0.5" />
-                          Copy
-                        </>
+                        <Copy className="w-4 h-4" />
                       )}
-                    </Button>
+                    </button>
                   </div>
                   <div className="flex items-center gap-2 p-2 bg-blue-50 border border-blue-100 rounded-md text-blue-800">
                     <AlertCircle className="w-3 h-3 shrink-0" />
@@ -382,35 +375,28 @@ export function WebsiteWidget() {
                         <pre className="bg-gray-900 text-gray-100 p-3 pr-14 rounded-lg text-[10px] sm:text-xs overflow-x-auto font-mono leading-relaxed max-h-32 overflow-y-auto">
 {user ? `<iframe
   src="${baseUrl}/widget-frame/${user.id}"
-  style="position:fixed;bottom:20px;right:20px;width:350px;height:500px;border:none;z-index:9999;"
+  style="position:fixed;bottom:20px;right:20px;width:380px;height:620px;border:none;z-index:9999;"
 ></iframe>` : 'Loading...'}
                         </pre>
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          className="absolute top-2 right-2 h-6 px-1.5 text-[10px]"
+                        <button
                           onClick={() => {
                             if (user) {
-                              navigator.clipboard.writeText(`<iframe\n  src="${baseUrl}/widget-frame/${user.id}"\n  style="position:fixed;bottom:20px;right:20px;width:350px;height:500px;border:none;z-index:9999;"\n></iframe>`);
+                              navigator.clipboard.writeText(`<iframe\n  src="${baseUrl}/widget-frame/${user.id}"\n  style="position:fixed;bottom:20px;right:20px;width:380px;height:620px;border:none;z-index:9999;"\n></iframe>`);
                               setCopiedType("iframe-floating");
                               setTimeout(() => setCopiedType(null), 2000);
                             }
                           }}
                           disabled={!user}
+                          title={copiedType === "iframe-floating" ? "Copied!" : "Copy code"}
+                          className="absolute top-2 right-2 p-1.5 hover:bg-gray-700 rounded transition-colors text-gray-400 hover:text-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
                           data-testid="button-copy-iframe-floating"
                         >
                           {copiedType === "iframe-floating" ? (
-                            <>
-                              <Check className="w-2.5 h-2.5 mr-0.5 text-emerald-600" />
-                              Done
-                            </>
+                            <Check className="w-4 h-4 text-emerald-400" />
                           ) : (
-                            <>
-                              <Copy className="w-2.5 h-2.5 mr-0.5" />
-                              Copy
-                            </>
+                            <Copy className="w-4 h-4" />
                           )}
-                        </Button>
+                        </button>
                       </div>
                     </div>
 
@@ -421,37 +407,30 @@ export function WebsiteWidget() {
                         <pre className="bg-gray-900 text-gray-100 p-3 pr-14 rounded-lg text-[10px] sm:text-xs overflow-x-auto font-mono leading-relaxed max-h-32 overflow-y-auto">
 {user ? `<iframe
   src="${baseUrl}/widget-frame/${user.id}"
-  width="350"
-  height="500"
+  width="380"
+  height="620"
   style="border:none;"
 ></iframe>` : 'Loading...'}
                         </pre>
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          className="absolute top-2 right-2 h-6 px-1.5 text-[10px]"
+                        <button
                           onClick={() => {
                             if (user) {
-                              navigator.clipboard.writeText(`<iframe\n  src="${baseUrl}/widget-frame/${user.id}"\n  width="350"\n  height="500"\n  style="border:none;"\n></iframe>`);
+                              navigator.clipboard.writeText(`<iframe\n  src="${baseUrl}/widget-frame/${user.id}"\n  width="380"\n  height="620"\n  style="border:none;"\n></iframe>`);
                               setCopiedType("iframe-embedded");
                               setTimeout(() => setCopiedType(null), 2000);
                             }
                           }}
                           disabled={!user}
+                          title={copiedType === "iframe-embedded" ? "Copied!" : "Copy code"}
+                          className="absolute top-2 right-2 p-1.5 hover:bg-gray-700 rounded transition-colors text-gray-400 hover:text-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
                           data-testid="button-copy-iframe-embedded"
                         >
                           {copiedType === "iframe-embedded" ? (
-                            <>
-                              <Check className="w-2.5 h-2.5 mr-0.5 text-emerald-600" />
-                              Done
-                            </>
+                            <Check className="w-4 h-4 text-emerald-400" />
                           ) : (
-                            <>
-                              <Copy className="w-2.5 h-2.5 mr-0.5" />
-                              Copy
-                            </>
+                            <Copy className="w-4 h-4" />
                           )}
-                        </Button>
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -477,10 +456,7 @@ export function WebsiteWidget() {
                     <pre className="bg-gray-900 text-gray-100 p-3 pr-14 rounded-lg text-[10px] sm:text-xs overflow-x-auto font-mono leading-relaxed max-h-32 overflow-y-auto">
 {user ? leadSource ? `${baseUrl}/chat/${user.id}?source=${leadSource}` : `${baseUrl}/chat/${user.id}` : 'Loading...'}
                     </pre>
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      className="absolute top-2 right-2 h-6 px-1.5 text-[10px]"
+                    <button
                       onClick={() => {
                         if (user) {
                           const url = leadSource ? `${baseUrl}/chat/${user.id}?source=${leadSource}` : `${baseUrl}/chat/${user.id}`;
@@ -490,20 +466,16 @@ export function WebsiteWidget() {
                         }
                       }}
                       disabled={!user}
+                      title={copiedType === "hosted" ? "Copied!" : "Copy code"}
+                      className="absolute top-2 right-2 p-1.5 hover:bg-gray-700 rounded transition-colors text-gray-400 hover:text-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
                       data-testid="button-copy-hosted"
                     >
                       {copiedType === "hosted" ? (
-                        <>
-                          <Check className="w-2.5 h-2.5 mr-0.5 text-emerald-600" />
-                          Done
-                        </>
+                        <Check className="w-4 h-4 text-emerald-400" />
                       ) : (
-                        <>
-                          <Copy className="w-2.5 h-2.5 mr-0.5" />
-                          Copy
-                        </>
+                        <Copy className="w-4 h-4" />
                       )}
-                    </Button>
+                    </button>
                   </div>
                   <div className="flex items-center gap-2 p-2 bg-blue-50 border border-blue-100 rounded-md text-blue-800">
                     <AlertCircle className="w-3 h-3 shrink-0" />
