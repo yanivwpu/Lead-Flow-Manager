@@ -33,6 +33,8 @@ const SalesPortal = lazy(() => import("@/pages/SalesPortal").then(m => ({ defaul
 const PartnerPortal = lazy(() => import("@/pages/PartnerPortal").then(m => ({ default: m.PartnerPortal })));
 const RealtorGrowthEngine = lazy(() => import("@/pages/RealtorGrowthEngine").then(m => ({ default: m.RealtorGrowthEngine })));
 const RealtorLanding = lazy(() => import("@/pages/RealtorLanding").then(m => ({ default: m.RealtorLanding })));
+const WidgetFrame = lazy(() => import("@/pages/WidgetFrame").then(m => ({ default: m.WidgetFrame })));
+const WidgetChat = lazy(() => import("@/pages/WidgetChat").then(m => ({ default: m.WidgetChat })));
 const NotFound = lazy(() => import("@/pages/not-found"));
 import { ReferralCapture } from "@/components/ReferralCapture";
 
@@ -82,6 +84,8 @@ function Router() {
       <Route path="/sales-portal" component={SalesPortal} />
       <Route path="/partner-portal" component={PartnerPortal} />
       <Route path="/realtor-growth-engine" component={RealtorLanding} />
+      <Route path="/widget-frame/:widgetId" component={WidgetFrame} />
+      <Route path="/chat/:widgetId" component={WidgetChat} />
       
       {/* Protected Routes */}
       <Route path="/app/*?">

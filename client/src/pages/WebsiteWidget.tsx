@@ -324,43 +324,137 @@ export function WebsiteWidget() {
             <CardHeader className="p-3 sm:p-4 pb-2">
               <CardTitle className="text-base sm:text-lg font-bold flex items-center gap-2">
                 <Code2 className="w-4 h-4 text-gray-700" />
-                Installation Code
+                Installation Methods
               </CardTitle>
-              <CardDescription className="text-xs">Copy and paste into your website</CardDescription>
+              <CardDescription className="text-xs">Choose how to add the widget to your site</CardDescription>
             </CardHeader>
-            <CardContent className="p-3 sm:p-4 pt-0 space-y-3">
-              <div className="relative">
-                <pre className="bg-gray-900 text-gray-100 p-3 rounded-lg text-[10px] sm:text-xs overflow-x-auto font-mono leading-relaxed max-h-32 overflow-y-auto">
-                  {embedCode || 'Loading...'}
-                </pre>
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  className="absolute top-2 right-2 h-7 px-2 text-xs"
-                  onClick={copyEmbedCode}
-                  disabled={!embedCode}
-                  data-testid="button-copy-embed"
-                >
-                  {copied ? (
-                    <>
-                      <Check className="w-3 h-3 mr-1 text-emerald-600" />
-                      Done
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="w-3 h-3 mr-1" />
-                      Copy
-                    </>
-                  )}
-                </Button>
-              </div>
-              
-              <div className="flex items-center gap-2 p-2 bg-blue-50 border border-blue-100 rounded-md text-blue-800">
-                <AlertCircle className="w-3 h-3 shrink-0" />
-                <p className="text-[10px] sm:text-xs">
-                  Paste before <code className="bg-blue-100 px-1 rounded">&lt;/body&gt;</code> tag
-                </p>
-              </div>
+            <CardContent className="p-3 sm:p-4 pt-0 space-y-4">
+              <Tabs defaultValue="javascript" className="w-full">
+                <TabsList className="grid w-full grid-cols-3 bg-gray-100 p-1 h-auto">
+                  <TabsTrigger value="javascript" className="text-xs">JavaScript</TabsTrigger>
+                  <TabsTrigger value="iframe" className="text-xs">iframe</TabsTrigger>
+                  <TabsTrigger value="hosted" className="text-xs">Hosted Link</TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="javascript" className="space-y-3 mt-3">
+                  <p className="text-xs text-gray-600">Embed as a floating button on your website</p>
+                  <div className="relative">
+                    <pre className="bg-gray-900 text-gray-100 p-3 rounded-lg text-[10px] sm:text-xs overflow-x-auto font-mono leading-relaxed max-h-32 overflow-y-auto">
+                      {embedCode || 'Loading...'}
+                    </pre>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      className="absolute top-2 right-2 h-7 px-2 text-xs"
+                      onClick={copyEmbedCode}
+                      disabled={!embedCode}
+                      data-testid="button-copy-embed"
+                    >
+                      {copied ? (
+                        <>
+                          <Check className="w-3 h-3 mr-1 text-emerald-600" />
+                          Done
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3 h-3 mr-1" />
+                          Copy
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                  <div className="flex items-center gap-2 p-2 bg-blue-50 border border-blue-100 rounded-md text-blue-800">
+                    <AlertCircle className="w-3 h-3 shrink-0" />
+                    <p className="text-[10px] sm:text-xs">
+                      Paste before <code className="bg-blue-100 px-1 rounded">&lt;/body&gt;</code> tag
+                    </p>
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="iframe" className="space-y-3 mt-3">
+                  <p className="text-xs text-gray-600">Embed as a fixed widget box</p>
+                  <div className="relative">
+                    <pre className="bg-gray-900 text-gray-100 p-3 rounded-lg text-[10px] sm:text-xs overflow-x-auto font-mono leading-relaxed max-h-32 overflow-y-auto">
+{user ? `<iframe src="${baseUrl}/widget-frame/${user.id}"
+  style="position:fixed;bottom:20px;right:20px;width:350px;height:500px;border:none;z-index:9999;">
+</iframe>` : 'Loading...'}
+                    </pre>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      className="absolute top-2 right-2 h-7 px-2 text-xs"
+                      onClick={() => {
+                        if (user) {
+                          navigator.clipboard.writeText(`<iframe src="${baseUrl}/widget-frame/${user.id}"\n  style="position:fixed;bottom:20px;right:20px;width:350px;height:500px;border:none;z-index:9999;">\n</iframe>`);
+                          setCopied(true);
+                          setTimeout(() => setCopied(false), 2000);
+                        }
+                      }}
+                      disabled={!user}
+                      data-testid="button-copy-iframe"
+                    >
+                      {copied ? (
+                        <>
+                          <Check className="w-3 h-3 mr-1 text-emerald-600" />
+                          Done
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3 h-3 mr-1" />
+                          Copy
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                  <div className="flex items-center gap-2 p-2 bg-blue-50 border border-blue-100 rounded-md text-blue-800">
+                    <AlertCircle className="w-3 h-3 shrink-0" />
+                    <p className="text-[10px] sm:text-xs">
+                      Customize width/height in the style attribute
+                    </p>
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="hosted" className="space-y-3 mt-3">
+                  <p className="text-xs text-gray-600">Full-page chat widget</p>
+                  <div className="relative">
+                    <pre className="bg-gray-900 text-gray-100 p-3 rounded-lg text-[10px] sm:text-xs overflow-x-auto font-mono leading-relaxed max-h-32 overflow-y-auto">
+{user ? `${baseUrl}/chat/${user.id}` : 'Loading...'}
+                    </pre>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      className="absolute top-2 right-2 h-7 px-2 text-xs"
+                      onClick={() => {
+                        if (user) {
+                          navigator.clipboard.writeText(`${baseUrl}/chat/${user.id}`);
+                          setCopied(true);
+                          setTimeout(() => setCopied(false), 2000);
+                        }
+                      }}
+                      disabled={!user}
+                      data-testid="button-copy-hosted"
+                    >
+                      {copied ? (
+                        <>
+                          <Check className="w-3 h-3 mr-1 text-emerald-600" />
+                          Done
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3 h-3 mr-1" />
+                          Copy
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                  <div className="flex items-center gap-2 p-2 bg-blue-50 border border-blue-100 rounded-md text-blue-800">
+                    <AlertCircle className="w-3 h-3 shrink-0" />
+                    <p className="text-[10px] sm:text-xs">
+                      Share this link directly or embed in a button/menu
+                    </p>
+                  </div>
+                </TabsContent>
+              </Tabs>
             </CardContent>
           </Card>
           
