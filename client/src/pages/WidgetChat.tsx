@@ -5,9 +5,15 @@ import { Loader2 } from "lucide-react";
 export function WidgetChat() {
   const [match, params] = useRoute("/chat/:widgetId");
   const [isLoading, setIsLoading] = useState(true);
+  const [source, setSource] = useState<string | null>(null);
 
   useEffect(() => {
     if (params?.widgetId) {
+      const urlParams = new URLSearchParams(window.location.search);
+      const sourceParam = urlParams.get("source");
+      if (sourceParam) {
+        setSource(sourceParam);
+      }
       setIsLoading(false);
     }
   }, [params?.widgetId]);
@@ -68,7 +74,7 @@ export function WidgetChat() {
               js=d.createElement(s);fjs=d.getElementsByTagName(s)[0];
               js.id=o;js.src=f;js.async=1;fjs.parentNode.insertBefore(js,fjs);
             }(window,document,'script','wcw','${window.location.origin}/widget.js'));
-            wcw('init', '${params.widgetId}');
+            wcw('init', '${params.widgetId}'${source ? `, {source: '${source}'}` : ''});
           `
         }}
       />

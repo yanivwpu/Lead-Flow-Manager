@@ -1,0 +1,60 @@
+Please make these 2 small improvements to the Website Widget install page.
+
+IMPROVEMENT 1 — Add 2 iframe variants instead of only 1
+
+Right now we only show one iframe example using position:fixed. Some website builders may block or break fixed positioning, so we need to offer both versions.
+
+A) Floating iframe widget
+Label:
+Floating iframe widget
+Best for: sites that allow iframe and support floating placement
+
+Code example:
+<iframe
+  src="https://whachatcrm.com/widget-frame/USER_ID"
+  style="position:fixed;bottom:20px;right:20px;width:350px;height:500px;border:none;z-index:9999;"
+></iframe>
+
+B) Embedded iframe panel
+Label:
+Embedded iframe panel
+Best for: website builders and HTML blocks that allow iframe but do not support floating/fixed position
+
+Code example:
+<iframe
+  src="https://whachatcrm.com/widget-frame/USER_ID"
+  width="350"
+  height="500"
+  style="border:none;"
+></iframe>
+
+Requirements:
+- Keep both inside the iframe tab, or split into 2 sub-options if easier
+- Add separate copy buttons for both
+- Add a short note under each so the user knows when to use it
+- No need for major UI redesign, keep it simple and cheap
+
+IMPROVEMENT 2 — Add source tracking to Hosted Chat Link
+
+We need the hosted chat link to accept an optional source parameter so users can track where leads came from.
+
+Examples:
+https://whachatcrm.com/chat/USER_ID?source=website
+https://whachatcrm.com/chat/USER_ID?source=facebook
+https://whachatcrm.com/chat/USER_ID?source=instagram
+https://whachatcrm.com/chat/USER_ID?source=googleads
+
+Requirements:
+- On the Hosted Link tab, add a small optional input field called:
+  Lead Source
+- If the field is empty, the default link stays:
+  https://whachatcrm.com/chat/USER_ID
+- If the field has a value, generate:
+  https://whachatcrm.com/chat/USER_ID?source=VALUE
+- Add a copy button for the generated link
+- Store this source value with the lead when the chat starts, so we can see where the lead came from
+- Keep it lightweight, no heavy analytics build needed right now
+- Just save the source string on the lead/contact/conversation record if available
+
+Goal:
+Make iframe installs work on more website builders, and let users track leads from website / Facebook / Instagram / Google Ads without adding expensive new features.

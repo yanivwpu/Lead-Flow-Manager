@@ -202,7 +202,9 @@ function WidgetPreview({ settings }: { settings: WidgetSettings }) {
 export function WebsiteWidget() {
   const queryClient = useQueryClient();
   const [copied, setCopied] = useState(false);
+  const [copiedType, setCopiedType] = useState<string | null>(null);
   const [settings, setSettings] = useState<WidgetSettings>(DEFAULT_SETTINGS);
+  const [leadSource, setLeadSource] = useState("");
   const [expandedPlatform, setExpandedPlatform] = useState<string | null>(null);
   
   const { data: user } = useQuery<{ id: string }>({
@@ -371,54 +373,109 @@ export function WebsiteWidget() {
                   </div>
                 </TabsContent>
 
-                <TabsContent value="iframe" className="space-y-3 mt-3">
-                  <p className="text-xs text-gray-600">Embed as a fixed widget box</p>
-                  <div className="relative">
-                    <pre className="bg-gray-900 text-gray-100 p-3 rounded-lg text-[10px] sm:text-xs overflow-x-auto font-mono leading-relaxed max-h-32 overflow-y-auto">
-{user ? `<iframe src="${baseUrl}/widget-frame/${user.id}"
-  style="position:fixed;bottom:20px;right:20px;width:350px;height:500px;border:none;z-index:9999;">
-</iframe>` : 'Loading...'}
-                    </pre>
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      className="absolute top-2 right-2 h-7 px-2 text-xs"
-                      onClick={() => {
-                        if (user) {
-                          navigator.clipboard.writeText(`<iframe src="${baseUrl}/widget-frame/${user.id}"\n  style="position:fixed;bottom:20px;right:20px;width:350px;height:500px;border:none;z-index:9999;">\n</iframe>`);
-                          setCopied(true);
-                          setTimeout(() => setCopied(false), 2000);
-                        }
-                      }}
-                      disabled={!user}
-                      data-testid="button-copy-iframe"
-                    >
-                      {copied ? (
-                        <>
-                          <Check className="w-3 h-3 mr-1 text-emerald-600" />
-                          Done
-                        </>
-                      ) : (
-                        <>
-                          <Copy className="w-3 h-3 mr-1" />
-                          Copy
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                  <div className="flex items-center gap-2 p-2 bg-blue-50 border border-blue-100 rounded-md text-blue-800">
-                    <AlertCircle className="w-3 h-3 shrink-0" />
-                    <p className="text-[10px] sm:text-xs">
-                      Customize width/height in the style attribute
-                    </p>
+                <TabsContent value="iframe" className="space-y-4 mt-3">
+                  <div className="space-y-3">
+                    <div>
+                      <p className="text-xs font-semibold text-gray-900 mb-1">A) Floating iframe widget</p>
+                      <p className="text-[10px] text-gray-600 mb-2">Best for: sites that allow iframe and support floating placement</p>
+                      <div className="relative">
+                        <pre className="bg-gray-900 text-gray-100 p-3 rounded-lg text-[10px] sm:text-xs overflow-x-auto font-mono leading-relaxed max-h-32 overflow-y-auto">
+{user ? `<iframe
+  src="${baseUrl}/widget-frame/${user.id}"
+  style="position:fixed;bottom:20px;right:20px;width:350px;height:500px;border:none;z-index:9999;"
+></iframe>` : 'Loading...'}
+                        </pre>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          className="absolute top-2 right-2 h-7 px-2 text-xs"
+                          onClick={() => {
+                            if (user) {
+                              navigator.clipboard.writeText(`<iframe\n  src="${baseUrl}/widget-frame/${user.id}"\n  style="position:fixed;bottom:20px;right:20px;width:350px;height:500px;border:none;z-index:9999;"\n></iframe>`);
+                              setCopiedType("iframe-floating");
+                              setTimeout(() => setCopiedType(null), 2000);
+                            }
+                          }}
+                          disabled={!user}
+                          data-testid="button-copy-iframe-floating"
+                        >
+                          {copiedType === "iframe-floating" ? (
+                            <>
+                              <Check className="w-3 h-3 mr-1 text-emerald-600" />
+                              Done
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="w-3 h-3 mr-1" />
+                              Copy
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="border-t pt-3">
+                      <p className="text-xs font-semibold text-gray-900 mb-1">B) Embedded iframe panel</p>
+                      <p className="text-[10px] text-gray-600 mb-2">Best for: website builders and HTML blocks that allow iframe but do not support floating/fixed position</p>
+                      <div className="relative">
+                        <pre className="bg-gray-900 text-gray-100 p-3 rounded-lg text-[10px] sm:text-xs overflow-x-auto font-mono leading-relaxed max-h-32 overflow-y-auto">
+{user ? `<iframe
+  src="${baseUrl}/widget-frame/${user.id}"
+  width="350"
+  height="500"
+  style="border:none;"
+></iframe>` : 'Loading...'}
+                        </pre>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          className="absolute top-2 right-2 h-7 px-2 text-xs"
+                          onClick={() => {
+                            if (user) {
+                              navigator.clipboard.writeText(`<iframe\n  src="${baseUrl}/widget-frame/${user.id}"\n  width="350"\n  height="500"\n  style="border:none;"\n></iframe>`);
+                              setCopiedType("iframe-embedded");
+                              setTimeout(() => setCopiedType(null), 2000);
+                            }
+                          }}
+                          disabled={!user}
+                          data-testid="button-copy-iframe-embedded"
+                        >
+                          {copiedType === "iframe-embedded" ? (
+                            <>
+                              <Check className="w-3 h-3 mr-1 text-emerald-600" />
+                              Done
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="w-3 h-3 mr-1" />
+                              Copy
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    </div>
                   </div>
                 </TabsContent>
 
                 <TabsContent value="hosted" className="space-y-3 mt-3">
-                  <p className="text-xs text-gray-600">Full-page chat widget</p>
+                  <p className="text-xs text-gray-600">Full-page chat widget with optional lead source tracking</p>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="lead-source" className="text-xs font-semibold text-gray-600">Lead Source (optional)</Label>
+                    <Input
+                      id="lead-source"
+                      value={leadSource}
+                      onChange={(e) => setLeadSource(e.target.value)}
+                      placeholder="e.g., website, facebook, instagram, googleads"
+                      className="h-9 text-sm border-gray-200 rounded-lg"
+                      data-testid="input-lead-source"
+                    />
+                    <p className="text-[10px] text-gray-500">Track where leads come from by adding a source parameter</p>
+                  </div>
+
                   <div className="relative">
                     <pre className="bg-gray-900 text-gray-100 p-3 rounded-lg text-[10px] sm:text-xs overflow-x-auto font-mono leading-relaxed max-h-32 overflow-y-auto">
-{user ? `${baseUrl}/chat/${user.id}` : 'Loading...'}
+{user ? leadSource ? `${baseUrl}/chat/${user.id}?source=${leadSource}` : `${baseUrl}/chat/${user.id}` : 'Loading...'}
                     </pre>
                     <Button
                       size="sm"
@@ -426,15 +483,16 @@ export function WebsiteWidget() {
                       className="absolute top-2 right-2 h-7 px-2 text-xs"
                       onClick={() => {
                         if (user) {
-                          navigator.clipboard.writeText(`${baseUrl}/chat/${user.id}`);
-                          setCopied(true);
-                          setTimeout(() => setCopied(false), 2000);
+                          const url = leadSource ? `${baseUrl}/chat/${user.id}?source=${leadSource}` : `${baseUrl}/chat/${user.id}`;
+                          navigator.clipboard.writeText(url);
+                          setCopiedType("hosted");
+                          setTimeout(() => setCopiedType(null), 2000);
                         }
                       }}
                       disabled={!user}
                       data-testid="button-copy-hosted"
                     >
-                      {copied ? (
+                      {copiedType === "hosted" ? (
                         <>
                           <Check className="w-3 h-3 mr-1 text-emerald-600" />
                           Done
@@ -450,7 +508,7 @@ export function WebsiteWidget() {
                   <div className="flex items-center gap-2 p-2 bg-blue-50 border border-blue-100 rounded-md text-blue-800">
                     <AlertCircle className="w-3 h-3 shrink-0" />
                     <p className="text-[10px] sm:text-xs">
-                      Share this link directly or embed in a button/menu
+                      Share this link directly or embed in a button/menu. The source parameter is optional.
                     </p>
                   </div>
                 </TabsContent>
