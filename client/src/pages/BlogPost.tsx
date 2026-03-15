@@ -4,6 +4,7 @@ import { Helmet } from "react-helmet";
 import { Calendar, Clock, ArrowLeft, ArrowRight, Share2, Linkedin, MessageCircle, Copy, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { BLOG_POSTS } from "./Blog";
+import { SiteFooter } from "@/components/SiteFooter";
 
 const BLOG_CONTENT: Record<string, string> = {
   "whatsapp-crm-complete-guide-2025": `
@@ -1619,23 +1620,7 @@ export function BlogPost() {
           </div>
         )}
       </article>
-
-      <footer className="border-t border-gray-200 py-8">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <p className="text-sm text-gray-500">© 2025 WhachatCRM. All rights reserved.</p>
-          <div className="flex gap-6">
-            <Link href="/privacy-policy">
-              <a className="text-sm text-gray-500 hover:text-gray-900">Privacy</a>
-            </Link>
-            <Link href="/terms-of-use">
-              <a className="text-sm text-gray-500 hover:text-gray-900">Terms</a>
-            </Link>
-            <Link href="/blog">
-              <a className="text-sm text-gray-500 hover:text-gray-900">Blog</a>
-            </Link>
-          </div>
-        </div>
-      </footer>
+      <SiteFooter />
     </div>
   );
 }

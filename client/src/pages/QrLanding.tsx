@@ -5,6 +5,7 @@ import { Calendar, CheckCircle2, MessageSquare, Shield, Zap } from "lucide-react
 import { useTranslation } from "react-i18next";
 import { getDirection } from "@/lib/i18n";
 import { Helmet } from "react-helmet";
+import { SiteFooter } from "@/components/SiteFooter";
 
 export function QrLanding() {
   const [showDemoModal, setShowDemoModal] = useState(false);
@@ -87,12 +88,7 @@ export function QrLanding() {
           </div>
         </div>
       </main>
-
-      <footer className="py-12 bg-gray-50 border-t">
-        <div className="max-w-7xl mx-auto px-4 text-center text-gray-500 text-sm">
-          &copy; 2026 WhachatCRM. All rights reserved.
-        </div>
-      </footer>
+      <SiteFooter />
     </div>
   );
 }

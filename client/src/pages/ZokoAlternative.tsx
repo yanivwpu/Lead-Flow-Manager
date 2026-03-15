@@ -3,6 +3,7 @@ import { Link } from "wouter";
 import { ArrowRight, CheckCircle2, XCircle, ChevronRight, Brain, Zap, Shield, Sparkles, Users } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { Helmet } from "react-helmet";
+import { SiteFooter } from "@/components/SiteFooter";
 
 export function ZokoAlternative() {
   const { user } = useAuth();
@@ -216,29 +217,7 @@ export function ZokoAlternative() {
       </section>
 
       {/* Footer */}
-      <footer className="px-4 md:px-6 py-12 border-t border-gray-100">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-8">
-          <div className="flex flex-col gap-4">
-             <Link href="/">
-              <div className="flex items-center gap-2 cursor-pointer">
-                <div className="h-8 w-8 bg-brand-green rounded-lg flex items-center justify-center">
-                  <span className="text-white font-bold text-lg">W</span>
-                </div>
-                <span className="font-display font-bold text-xl text-gray-900">WhachatCRM</span>
-              </div>
-            </Link>
-            <p className="text-sm text-gray-500 max-w-xs">The fair-priced WhatsApp CRM for growing Shopify brands.</p>
-          </div>
-          <div className="flex items-center gap-6 text-sm text-gray-500 font-medium">
-            <Link href="/manychat-alternative"><span className="hover:text-brand-green cursor-pointer">Manychat Alternative</span></Link>
-            <Link href="/pricing"><span className="hover:text-brand-green cursor-pointer">Pricing</span></Link>
-            <Link href="/wati-alternative"><span className="hover:text-brand-green cursor-pointer">Wati Alternative</span></Link>
-            <Link href="/contact"><span className="hover:text-brand-green cursor-pointer">Contact</span></Link>
-            <Link href="/privacy-policy"><span className="hover:text-brand-green cursor-pointer">Privacy</span></Link>
-          </div>
-          <p className="text-sm text-gray-400">© 2025 WhachatCRM</p>
-        </div>
-      </footer>
+      <SiteFooter />
     </div>
   );
 }

@@ -94,10 +94,16 @@
 
   <!-- Help & Guide -->
   <url>
+    <loc>https://whachatcrm.com/help</loc>
+    <lastmod>2026-03-15</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
     <loc>https://whachatcrm.com/WhachatCRM-User-Guide.html</loc>
     <lastmod>2026-02-12</lastmod>
     <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
+    <priority>0.7</priority>
   </url>
 
   <!-- Legal Pages -->

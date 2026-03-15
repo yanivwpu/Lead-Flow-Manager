@@ -10,6 +10,7 @@ import { Helmet } from "react-helmet";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { getDirection } from "@/lib/i18n";
+import { SiteFooter } from "@/components/SiteFooter";
 
 function RealtorMark() {
   return (
@@ -496,44 +497,7 @@ export function RealtorLanding() {
         </div>
       </section>
 
-      <footer className="px-4 md:px-6 py-6 md:py-8 border-t border-gray-100">
-        <div className="max-w-7xl xl:max-w-[1440px] 2xl:max-w-[1536px] mx-auto">
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-            <div className="flex items-center gap-2">
-              <div className="h-6 w-6 bg-brand-green rounded-md flex items-center justify-center">
-                <span className="text-white font-bold text-sm">W</span>
-              </div>
-              <span className="font-display font-bold text-gray-900">WhachatCRM</span>
-            </div>
-
-            <div className="grid grid-cols-3 gap-x-6 sm:gap-x-8 gap-y-4 w-full md:w-auto">
-              <div>
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">{t("rge.footer.product")}</p>
-                <div className="flex flex-col gap-1.5 text-sm text-gray-500">
-                  <Link href="/pricing"><span className="hover:text-gray-900 cursor-pointer">{t("rge.footer.pricing")}</span></Link>
-                  <Link href="/whatsapp-crm"><span className="hover:text-gray-900 cursor-pointer">{t("rge.footer.whatsappCrm")}</span></Link>
-                  <Link href="/blog"><span className="hover:text-gray-900 cursor-pointer">{t("rge.footer.blog")}</span></Link>
-                </div>
-              </div>
-              <div>
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">{t("rge.footer.solutions")}</p>
-                <div className="flex flex-col gap-1.5 text-sm text-gray-500">
-                  <Link href="/realtor-growth-engine"><span className="hover:text-gray-900 cursor-pointer">{t("rge.footer.rge")}</span></Link>
-                </div>
-              </div>
-              <div>
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">{t("rge.footer.legal")}</p>
-                <div className="flex flex-col gap-1.5 text-sm text-gray-500">
-                  <Link href="/privacy-policy"><span className="hover:text-gray-900 cursor-pointer">{t("rge.footer.privacy")}</span></Link>
-                  <Link href="/terms-of-use"><span className="hover:text-gray-900 cursor-pointer">{t("rge.footer.terms")}</span></Link>
-                </div>
-              </div>
-            </div>
-
-            <p className="text-sm text-gray-400">© 2025 WhachatCRM</p>
-          </div>
-        </div>
-      </footer>
+      <SiteFooter />
     </div>
   );
 }

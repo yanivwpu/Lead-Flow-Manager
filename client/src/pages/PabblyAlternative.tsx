@@ -3,6 +3,7 @@ import { Link } from "wouter";
 import { ArrowRight, CheckCircle2, XCircle } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { Helmet } from "react-helmet";
+import { SiteFooter } from "@/components/SiteFooter";
 
 export function PabblyAlternative() {
   const { user } = useAuth();
@@ -200,26 +201,7 @@ export function PabblyAlternative() {
           </div>
         </div>
       </section>
-
-      <footer className="px-4 md:px-6 py-8 border-t border-gray-100">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
-          <Link href="/">
-            <div className="flex items-center gap-2 cursor-pointer">
-              <div className="h-6 w-6 bg-brand-green rounded-md flex items-center justify-center">
-                <span className="text-white font-bold text-sm">W</span>
-              </div>
-              <span className="font-display font-bold text-gray-900">WhachatCRM</span>
-            </div>
-          </Link>
-          <div className="flex items-center gap-6 text-sm text-gray-500">
-            <Link href="/pricing"><span className="hover:text-gray-900 cursor-pointer">Pricing</span></Link>
-            <Link href="/contact"><span className="hover:text-gray-900 cursor-pointer">Contact</span></Link>
-            <Link href="/privacy-policy"><span className="hover:text-gray-900 cursor-pointer">Privacy</span></Link>
-            <Link href="/terms-of-use"><span className="hover:text-gray-900 cursor-pointer">Terms</span></Link>
-          </div>
-          <p className="text-sm text-gray-400">© 2025 WhachatCRM</p>
-        </div>
-      </footer>
+      <SiteFooter />
     </div>
   );
 }

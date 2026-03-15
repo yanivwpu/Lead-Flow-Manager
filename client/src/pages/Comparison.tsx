@@ -2,6 +2,7 @@ import { Helmet } from "react-helmet";
 import { Check, Shield, Zap, Users, ArrowRight, BarChart3, MessageSquare, Info, Star, Target, Scale, Award } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
+import { SiteFooter } from "@/components/SiteFooter";
 
 export function Comparison() {
   const faqItems = [
@@ -295,19 +296,7 @@ export function Comparison() {
 
         </div>
       </main>
-
-      <footer className="bg-gray-900 py-16 text-center text-white border-t border-gray-800">
-        <div className="container mx-auto px-4 max-w-5xl">
-          <p className="text-gray-400 mb-6 uppercase tracking-widest text-xs font-bold">The Future of WhatsApp Sales</p>
-          <div className="flex flex-col md:flex-row items-center justify-center gap-6 mb-10">
-            <Link href="/" className="text-white hover:text-green-400 font-medium transition-colors">Home</Link>
-            <Link href="/pricing" className="text-white hover:text-green-400 font-medium transition-colors">Pricing</Link>
-            <Link href="/blog" className="text-white hover:text-green-400 font-medium transition-colors">Blog</Link>
-            <Link href="/auth" className="text-white hover:text-green-400 font-medium transition-colors">Login</Link>
-          </div>
-          <p className="text-gray-500 text-sm">© 2026 WhachatCRM. Built for Small Business Success.</p>
-        </div>
-      </footer>
+      <SiteFooter />
     </div>
   );
 }

@@ -35,6 +35,7 @@ const RealtorGrowthEngine = lazy(() => import("@/pages/RealtorGrowthEngine").the
 const RealtorLanding = lazy(() => import("@/pages/RealtorLanding").then(m => ({ default: m.RealtorLanding })));
 const WidgetFrame = lazy(() => import("@/pages/WidgetFrame").then(m => ({ default: m.WidgetFrame })));
 const WidgetChat = lazy(() => import("@/pages/WidgetChat").then(m => ({ default: m.WidgetChat })));
+const HelpCenter = lazy(() => import("@/pages/HelpCenter").then(m => ({ default: m.HelpCenter })));
 const NotFound = lazy(() => import("@/pages/not-found"));
 import { ReferralCapture } from "@/components/ReferralCapture";
 
@@ -86,6 +87,7 @@ function Router() {
       <Route path="/realtor-growth-engine" component={RealtorLanding} />
       <Route path="/widget-frame/:widgetId" component={WidgetFrame} />
       <Route path="/chat/:widgetId" component={WidgetChat} />
+      <Route path="/help" component={HelpCenter} />
       
       {/* Protected Routes */}
       <Route path="/app/*?">

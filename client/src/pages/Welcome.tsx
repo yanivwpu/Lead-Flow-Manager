@@ -25,6 +25,7 @@ import {
   Brain
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
+import { SiteFooter } from "@/components/SiteFooter";
 import { BookDemoModal } from "@/components/BookDemoModal";
 import { LanguageSelector } from "@/components/LanguageSelector";
 import { getDirection } from "@/lib/i18n";
@@ -527,60 +528,7 @@ export function Welcome() {
         </div>
       </section>
 
-      {/* Footer */}
-      <footer className="px-4 md:px-6 py-6 md:py-8 border-t border-gray-100">
-        <div className="max-w-7xl xl:max-w-[1440px] 2xl:max-w-[1536px] mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
-          <div className="flex items-center gap-2">
-            <div className="h-6 w-6 bg-brand-green rounded-md flex items-center justify-center">
-              <span className="text-white font-bold text-sm">W</span>
-            </div>
-            <span className="font-display font-bold text-gray-900">WhachatCRM</span>
-          </div>
-          
-          <div className="flex flex-wrap justify-center gap-4 md:gap-6 text-sm text-gray-500">
-            <Link href="/pricing">
-              <span className="hover:text-gray-900 cursor-pointer">Pricing</span>
-            </Link>
-            <Link href="/whatsapp-crm">
-              <span className="hover:text-gray-900 cursor-pointer">WhatsApp CRM</span>
-            </Link>
-            <Link href="/blog">
-              <span className="hover:text-gray-900 cursor-pointer">Blog</span>
-            </Link>
-            <Link href="/respond-io-alternative">
-              <span className="hover:text-gray-900 cursor-pointer">Respond.io Alternative</span>
-            </Link>
-            <Link href="/wati-alternative">
-              <span className="hover:text-gray-900 cursor-pointer">WATI Alternative</span>
-            </Link>
-            <Link href="/zoko-alternative">
-              <span className="hover:text-gray-900 cursor-pointer">Zoko Alternative</span>
-            </Link>
-            <Link href="/manychat-alternative">
-              <span className="hover:text-gray-900 cursor-pointer">Manychat Alternative</span>
-            </Link>
-            <Link href="/pabbly-alternative">
-              <span className="hover:text-gray-900 cursor-pointer">Pabbly Alternative</span>
-            </Link>
-            <Link href="/realtor-growth-engine">
-              <span className="hover:text-gray-900 cursor-pointer">{t('landing.realtorGrowthEngine')}</span>
-            </Link>
-            <Link href="/contact">
-              <span className="hover:text-gray-900 cursor-pointer">Contact</span>
-            </Link>
-            <Link href="/privacy-policy">
-              <span className="hover:text-gray-900 cursor-pointer">Privacy</span>
-            </Link>
-            <Link href="/terms-of-use">
-              <span className="hover:text-gray-900 cursor-pointer">Terms</span>
-            </Link>
-          </div>
-          
-          <p className="text-sm text-gray-400">
-            © 2025 WhachatCRM. All rights reserved.
-          </p>
-        </div>
-      </footer>
+      <SiteFooter />
     </div>
   );
 }

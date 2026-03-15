@@ -5,6 +5,7 @@ import { Calendar, Clock, ArrowRight, Search, Tag } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { SiteFooter } from "@/components/SiteFooter";
 
 interface BlogPost {
   slug: string;
@@ -297,35 +298,7 @@ export function Blog() {
           </Link>
         </div>
       </main>
-
-      <footer className="border-t border-gray-200 py-8 mt-12">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <p className="text-sm text-gray-500">© 2025 WhachatCRM. All rights reserved.</p>
-          <div className="flex flex-wrap justify-center gap-4 md:gap-6">
-            <Link href="/pricing">
-              <a className="text-sm text-gray-500 hover:text-gray-900">Pricing</a>
-            </Link>
-            <Link href="/whatsapp-crm">
-              <a className="text-sm text-gray-500 hover:text-gray-900">WhatsApp CRM</a>
-            </Link>
-            <Link href="/respond-io-alternative">
-              <a className="text-sm text-gray-500 hover:text-gray-900">Respond.io Alternative</a>
-            </Link>
-            <Link href="/wati-alternative">
-              <a className="text-sm text-gray-500 hover:text-gray-900">WATI Alternative</a>
-            </Link>
-            <Link href="/privacy-policy">
-              <a className="text-sm text-gray-500 hover:text-gray-900">Privacy</a>
-            </Link>
-            <Link href="/terms-of-use">
-              <a className="text-sm text-gray-500 hover:text-gray-900">Terms</a>
-            </Link>
-            <Link href="/contact">
-              <a className="text-sm text-gray-500 hover:text-gray-900">Contact</a>
-            </Link>
-          </div>
-        </div>
-      </footer>
+      <SiteFooter />
     </div>
   );
 }
