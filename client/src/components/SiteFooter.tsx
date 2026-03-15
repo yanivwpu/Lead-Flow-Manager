@@ -32,7 +32,7 @@ export function SiteFooter() {
           <div>
             <h3 className="text-xs font-semibold text-gray-900 uppercase tracking-wider mb-4">Resources</h3>
             <ul className="space-y-2.5 text-sm text-gray-500">
-              <li><Link href="/help"><span className="hover:text-gray-900 transition-colors cursor-pointer">Getting Started</span></Link></li>
+              <li><a href="/WhachatCRM-User-Guide.html"><span className="hover:text-gray-900 transition-colors cursor-pointer">Getting Started</span></a></li>
               <li><Link href="/help"><span className="hover:text-gray-900 transition-colors cursor-pointer">Help Center</span></Link></li>
               <li><Link href="/blog"><span className="hover:text-gray-900 transition-colors cursor-pointer">Blog</span></Link></li>
             </ul>
