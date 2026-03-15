@@ -4635,6 +4635,43 @@ export async function registerRoutes(
     }
   });
 
+  // ================== ADMIN GHL / LEADCONNECTOR ==================
+
+  app.get("/api/admin/ghl-integrations", requireAdmin, async (req, res) => {
+    try {
+      const ghlIntegrations = await storage.getIntegrationsByType('gohighlevel');
+      const allUsers = await storage.getAllUsers();
+      const userMap = new Map(allUsers.map(u => [u.id, u]));
+
+      const result = ghlIntegrations.map(integration => {
+        const user = userMap.get(integration.userId);
+        const config = (integration.config || {}) as any;
+        return {
+          id: integration.id,
+          userId: integration.userId,
+          userName: user?.name || 'Unknown',
+          userEmail: user?.email || 'Unknown',
+          userPlan: user?.subscriptionPlan || 'free',
+          isActive: integration.isActive,
+          locationId: config.locationId || null,
+          companyId: config.companyId || null,
+          userType: config.userType || null,
+          installedAt: config.installedAt || integration.createdAt,
+          tokenExpiresAt: integration.tokenExpiresAt,
+          lastSyncAt: integration.lastSyncAt,
+          createdAt: integration.createdAt,
+        };
+      });
+
+      result.sort((a, b) => new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime());
+
+      res.json(result);
+    } catch (error) {
+      console.error("Error fetching GHL integrations:", error);
+      res.status(500).json({ error: "Failed to fetch GHL integrations" });
+    }
+  });
+
   // ================== ADMIN PARTNER MANAGEMENT ==================
 
   // Admin: Get all partners
