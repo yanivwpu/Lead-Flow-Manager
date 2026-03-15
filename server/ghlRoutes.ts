@@ -170,60 +170,93 @@ router.get('/callback', async (req: Request, res: Response) => {
 });
 
 router.post('/webhook', async (req: Request, res: Response) => {
+  res.status(200).json({ received: true });
+
+  const timestamp = new Date().toISOString();
   try {
-    console.log('[LeadConnector Webhook] Received event:', JSON.stringify(req.body).substring(0, 500));
+    const body = req.body || {};
+    const type = body.type || 'UNKNOWN';
+    const locationId = body.locationId || null;
 
-    const { type, locationId, ...data } = req.body;
-
-    if (!type) {
-      return res.status(400).json({ error: 'Missing event type' });
-    }
-
-    console.log(`[LeadConnector Webhook] Event: ${type}, Location: ${locationId}`);
+    console.log(`[LeadConnector Webhook] ${timestamp} | Event: ${type} | Location: ${locationId || 'N/A'} | Payload: ${JSON.stringify(body).substring(0, 500)}`);
 
     switch (type) {
       case 'ContactCreate':
       case 'ContactUpdate':
-        console.log('[LeadConnector Webhook] Contact event:', data);
+      case 'ContactDelete':
+      case 'ContactDndUpdate':
+      case 'ContactTagUpdate':
+        console.log(`[LeadConnector Webhook] ${timestamp} | Contact event processed: ${type}`);
         break;
 
       case 'OpportunityCreate':
       case 'OpportunityUpdate':
+      case 'OpportunityDelete':
       case 'OpportunityStatusUpdate':
-        console.log('[LeadConnector Webhook] Opportunity event:', data);
+      case 'OpportunityStageUpdate':
+      case 'OpportunityMonetaryValueUpdate':
+      case 'OpportunityAssignedToUpdate':
+        console.log(`[LeadConnector Webhook] ${timestamp} | Opportunity event processed: ${type}`);
         break;
 
       case 'InboundMessage':
       case 'OutboundMessage':
-        console.log('[LeadConnector Webhook] Message event:', data);
+        console.log(`[LeadConnector Webhook] ${timestamp} | Message event processed: ${type}`);
+        break;
+
+      case 'ConversationUnreadUpdate':
+      case 'ConversationProviderUpdate':
+        console.log(`[LeadConnector Webhook] ${timestamp} | Conversation event processed: ${type}`);
+        break;
+
+      case 'NoteCreate':
+      case 'NoteUpdate':
+      case 'NoteDelete':
+        console.log(`[LeadConnector Webhook] ${timestamp} | Note event processed: ${type}`);
+        break;
+
+      case 'TaskCreate':
+      case 'TaskUpdate':
+      case 'TaskDelete':
+      case 'TaskCompleted':
+        console.log(`[LeadConnector Webhook] ${timestamp} | Task event processed: ${type}`);
+        break;
+
+      case 'AppointmentCreate':
+      case 'AppointmentUpdate':
+      case 'AppointmentDelete':
+        console.log(`[LeadConnector Webhook] ${timestamp} | Appointment event processed: ${type}`);
         break;
 
       case 'AppInstall':
-        console.log('[LeadConnector Webhook] App installed for location:', locationId);
+      case 'INSTALL':
+        console.log(`[LeadConnector Webhook] ${timestamp} | App installed for location: ${locationId}`);
         break;
 
       case 'AppUninstall':
-        console.log('[LeadConnector Webhook] App uninstalled for location:', locationId);
-        if (locationId) {
-          const integrations = await storage.getIntegrationsByType('gohighlevel');
-          const match = integrations.find(
-            (i: any) => i.config && (i.config as any).locationId === locationId
-          );
-          if (match) {
-            await storage.updateIntegration(match.id, { isActive: false });
-            console.log('[LeadConnector Webhook] Deactivated integration:', match.id);
+      case 'UNINSTALL':
+        console.log(`[LeadConnector Webhook] ${timestamp} | App uninstalled for location: ${locationId}`);
+        try {
+          if (locationId) {
+            const integrations = await storage.getIntegrationsByType('gohighlevel');
+            const match = integrations.find(
+              (i: any) => i.config && (i.config as any).locationId === locationId
+            );
+            if (match) {
+              await storage.updateIntegration(match.id, { isActive: false });
+              console.log(`[LeadConnector Webhook] ${timestamp} | Deactivated integration: ${match.id}`);
+            }
           }
+        } catch (uninstallErr) {
+          console.error(`[LeadConnector Webhook] ${timestamp} | Error handling uninstall:`, uninstallErr);
         }
         break;
 
       default:
-        console.log('[LeadConnector Webhook] Unhandled event type:', type);
+        console.log(`[LeadConnector Webhook] ${timestamp} | Acknowledged unhandled event type: ${type}`);
     }
-
-    res.status(200).json({ received: true });
   } catch (error) {
-    console.error('[LeadConnector Webhook] Error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    console.error(`[LeadConnector Webhook] ${timestamp} | Post-ack processing error:`, error);
   }
 });
 
