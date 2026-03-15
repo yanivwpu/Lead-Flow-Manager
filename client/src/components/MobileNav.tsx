@@ -35,6 +35,7 @@ export function MobileNav() {
     { label: t('nav.integrations', 'Integrations'), href: "/app/integrations", testId: "integrations" },
     { label: t('nav.aiFeatures', 'AI Features'), href: "/app/ai-brain", testId: "ai-features" },
     { label: t('nav.search', 'Search'), href: "/app/search", testId: "search" },
+    { label: t('nav.gettingStarted', 'Getting Started'), href: "/WhachatCRM-User-Guide.html", testId: "getting-started", external: true },
     { label: t('nav.help', 'Help'), href: "/app/help", testId: "help" },
   ];
 
@@ -79,21 +80,35 @@ export function MobileNav() {
               </SheetTitle>
             </SheetHeader>
             <div className="grid grid-cols-2 gap-2 mt-4 pb-4">
-              {moreNavItems.map((item) => (
-                <Link key={item.href} href={item.href}>
+              {moreNavItems.map((item: any) => (
+                item.external ? (
                   <a
+                    key={item.href}
+                    href={item.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
                     onClick={() => setOpen(false)}
                     data-testid={`mobile-menu-${item.testId}`}
-                    className={cn(
-                      "block p-3 rounded-lg text-center font-medium transition-colors",
-                      location.startsWith(item.href)
-                        ? "bg-brand-green/10 text-brand-green"
-                        : "bg-gray-50 text-gray-700 hover:bg-gray-100"
-                    )}
+                    className="block p-3 rounded-lg text-center font-medium transition-colors bg-gray-50 text-gray-700 hover:bg-gray-100"
                   >
                     {item.label}
                   </a>
-                </Link>
+                ) : (
+                  <Link key={item.href} href={item.href}>
+                    <a
+                      onClick={() => setOpen(false)}
+                      data-testid={`mobile-menu-${item.testId}`}
+                      className={cn(
+                        "block p-3 rounded-lg text-center font-medium transition-colors",
+                        location.startsWith(item.href)
+                          ? "bg-brand-green/10 text-brand-green"
+                          : "bg-gray-50 text-gray-700 hover:bg-gray-100"
+                      )}
+                    >
+                      {item.label}
+                    </a>
+                  </Link>
+                )
               ))}
               <Link href="/app/settings">
                 <a

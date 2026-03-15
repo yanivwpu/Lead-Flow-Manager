@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { MessageSquare, ListTodo, Search, LogOut, Settings, Zap, Plug, FileText, HelpCircle, Bot, Inbox, Globe, Brain, ChevronDown, ChevronRight } from "lucide-react";
+import { MessageSquare, ListTodo, Search, LogOut, Settings, Zap, Plug, FileText, HelpCircle, Bot, Inbox, Globe, Brain, ChevronDown, ChevronRight, BookOpen } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 import { useState } from "react";
@@ -52,6 +52,7 @@ export function Sidebar() {
       label: t('nav.support', 'Support'),
       items: [
         { icon: Settings, label: t('nav.settings', 'Settings'), href: "/app/settings", testId: "sidebar-settings" },
+        { icon: BookOpen, label: t('nav.gettingStarted', 'Getting Started'), href: "/WhachatCRM-User-Guide.html", testId: "sidebar-getting-started", external: true },
         { icon: HelpCircle, label: t('nav.help', 'Help'), href: "/app/help", testId: "sidebar-help" },
       ]
     }
@@ -83,25 +84,42 @@ export function Sidebar() {
               
               {!isCollapsed && (
                 <div className="flex flex-col gap-1">
-                  {category.items.map((item) => {
-                    const isActive = location.startsWith(item.href);
+                  {category.items.map((item: any) => {
+                    const isActive = !item.external && location.startsWith(item.href);
+                    const linkClasses = cn(
+                      "flex items-center p-2 rounded-lg transition-colors group relative w-full",
+                      isActive
+                        ? "bg-emerald-50 text-brand-green"
+                        : "text-gray-500 hover:bg-gray-50 hover:text-gray-900"
+                    );
+                    const iconClasses = cn(
+                      "h-5 w-5 shrink-0",
+                      isActive ? "text-brand-green" : "text-gray-400 group-hover:text-gray-600"
+                    );
+
+                    if (item.external) {
+                      return (
+                        <a
+                          key={item.href}
+                          href={item.href}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          data-testid={item.testId}
+                          className={linkClasses}
+                        >
+                          <item.icon className={iconClasses} />
+                          <span className="font-medium text-sm ms-3">{item.label}</span>
+                        </a>
+                      );
+                    }
+
                     return (
                       <Link key={item.href} href={item.href}>
                         <a
                           data-testid={item.testId}
-                          className={cn(
-                            "flex items-center p-2 rounded-lg transition-colors group relative w-full",
-                            isActive
-                              ? "bg-emerald-50 text-brand-green"
-                              : "text-gray-500 hover:bg-gray-50 hover:text-gray-900"
-                          )}
+                          className={linkClasses}
                         >
-                          <item.icon
-                            className={cn(
-                              "h-5 w-5 shrink-0",
-                              isActive ? "text-brand-green" : "text-gray-400 group-hover:text-gray-600"
-                            )}
-                          />
+                          <item.icon className={iconClasses} />
                           <span className="font-medium text-sm ms-3">{item.label}</span>
                         </a>
                       </Link>
