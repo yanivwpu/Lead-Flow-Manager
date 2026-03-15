@@ -543,10 +543,25 @@
     },
     "footer": {
       "copyright": "© 2025 WhachatCRM. Todos los derechos reservados.",
-      "privacy": "Privacidad",
-      "terms": "Términos de Uso",
+      "tagline": "El CRM de WhatsApp todo en uno para equipos que quieren vender más, responder más rápido y nunca perder un lead.",
+      "product": "Producto",
+      "resources": "Recursos",
+      "comparisons": "Comparaciones",
+      "legal": "Legal",
+      "pricing": "Precios",
+      "whatsappCrm": "WhatsApp CRM",
+      "realtorGrowthEngine": "Motor de Crecimiento Inmobiliario",
       "contact": "Contacto",
-      "blog": "Blog"
+      "gettingStarted": "Primeros Pasos",
+      "helpCenter": "Centro de Ayuda",
+      "blog": "Blog",
+      "respondAlt": "Alternativa a Respond.io",
+      "watiAlt": "Alternativa a WATI",
+      "zokoAlt": "Alternativa a Zoko",
+      "manychatAlt": "Alternativa a Manychat",
+      "pabblyAlt": "Alternativa a Pabbly",
+      "privacy": "Política de Privacidad",
+      "terms": "Términos de Uso"
     }
   },
   "rge": {
@@ -701,8 +716,10 @@
       "whatsappCrm": "WhatsApp CRM",
       "blog": "Blog",
       "rge": "Motor de Crecimiento Inmobiliario",
-      "privacy": "Privacidad",
-      "terms": "Términos"
+      "privacy": "Política de Privacidad",
+      "terms": "Términos de Uso",
+      "gettingStarted": "Primeros Pasos",
+      "helpCenter": "Centro de Ayuda"
     }
   }
 }

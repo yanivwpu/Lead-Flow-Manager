@@ -416,12 +416,25 @@
     },
     "footer": {
       "copyright": "© 2025 WhachatCRM. All rights reserved.",
+      "tagline": "The all-in-one WhatsApp CRM for teams that want to sell more, respond faster, and never lose a lead.",
+      "product": "Product",
+      "resources": "Resources",
+      "comparisons": "Comparisons",
+      "legal": "Legal",
+      "pricing": "Pricing",
       "whatsappCrm": "WhatsApp CRM",
+      "realtorGrowthEngine": "Realtor® Growth Engine",
+      "contact": "Contact",
+      "gettingStarted": "Getting Started",
+      "helpCenter": "Help Center",
+      "blog": "Blog",
       "respondAlt": "Respond.io Alternative",
       "watiAlt": "WATI Alternative",
-      "contact": "Contact",
-      "privacy": "Privacy",
-      "terms": "Terms"
+      "zokoAlt": "Zoko Alternative",
+      "manychatAlt": "Manychat Alternative",
+      "pabblyAlt": "Pabbly Alternative",
+      "privacy": "Privacy Policy",
+      "terms": "Terms of Use"
     }
   },
   "auth": {

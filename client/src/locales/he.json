@@ -423,12 +423,25 @@
     },
     "footer": {
       "copyright": "© 2025 WhachatCRM. כל הזכויות שמורות.",
+      "tagline": "מערכת ה-CRM המקיפה לווטסאפ לצוותים שרוצים למכור יותר, להגיב מהר יותר ולעולם לא לאבד ליד.",
+      "product": "מוצר",
+      "resources": "משאבים",
+      "comparisons": "השוואות",
+      "legal": "משפטי",
+      "pricing": "מחירון",
       "whatsappCrm": "WhatsApp CRM",
+      "realtorGrowthEngine": "מנוע צמיחה לסוכני נדל\"ן",
+      "contact": "צור קשר",
+      "gettingStarted": "מדריך התחלה",
+      "helpCenter": "מרכז עזרה",
+      "blog": "בלוג",
       "respondAlt": "אלטרנטיבה ל-Respond.io",
       "watiAlt": "אלטרנטיבה ל-WATI",
-      "contact": "צור קשר",
-      "privacy": "פרטיות",
-      "terms": "תנאים"
+      "zokoAlt": "אלטרנטיבה ל-Zoko",
+      "manychatAlt": "אלטרנטיבה ל-Manychat",
+      "pabblyAlt": "אלטרנטיבה ל-Pabbly",
+      "privacy": "מדיניות פרטיות",
+      "terms": "תנאי שימוש"
     }
   },
   "auth": {
@@ -793,8 +806,10 @@
       "whatsappCrm": "WhatsApp CRM",
       "blog": "בלוג",
       "rge": "מנוע צמיחה לסוכני נדל\"ן",
-      "privacy": "פרטיות",
-      "terms": "תנאים"
+      "privacy": "מדיניות פרטיות",
+      "terms": "תנאי שימוש",
+      "gettingStarted": "מדריך התחלה",
+      "helpCenter": "מרכז עזרה"
     }
   }
 }
