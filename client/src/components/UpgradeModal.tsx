@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Zap, MessageSquare, Users, Phone, Sparkles, Loader2, Check } from "lucide-react";
+import { Zap, MessageSquare, Users, Phone, Sparkles, Loader2, Check, Info } from "lucide-react";
 
 export type UpgradeReason = 
   | "conversation_limit" 
@@ -11,12 +11,19 @@ export type UpgradeReason =
   | "add_whatsapp_number"
   | "add_team_member";
 
+export interface ConversationLimitInfo {
+  limit: number;
+  used: number;
+  planName: string;
+  resetDate?: string | null;
+}
+
 interface UpgradeModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   reason: UpgradeReason;
   currentPlan?: string;
-  limitInfo?: { limit: number; used: number; planName: string };
+  limitInfo?: ConversationLimitInfo;
 }
 
 type TargetPlan = "starter" | "pro";
@@ -33,10 +40,10 @@ interface UpgradeContent {
 const UPGRADE_CONTENT: Record<UpgradeReason, UpgradeContent> = {
   conversation_limit: {
     icon: <MessageSquare className="h-8 w-8 text-amber-500" />,
-    title: "You've reached your conversation limit",
-    description: "Upgrade to continue connecting with more customers.",
+    title: "Conversation limit reached",
+    description: "You've reached your monthly conversation limit for this plan.\nUpgrade your plan to continue creating new conversations, or wait until your next billing cycle for access to reset.",
     targetPlan: "starter",
-    ctaText: "Upgrade to Starter",
+    ctaText: "Upgrade Plan",
     benefits: [
       "500 conversations/month",
       "Send messages to customers",
@@ -110,13 +117,41 @@ const PLAN_PRICES: Record<TargetPlan, string> = {
   pro: "$49",
 };
 
+function formatResetDate(dateStr: string): string {
+  const date = new Date(dateStr);
+  if (isNaN(date.getTime())) return "";
+  return date.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+}
+
+function buildConversationLimitDescription(limitInfo?: ConversationLimitInfo): React.ReactNode {
+  if (!limitInfo) {
+    return (
+      <>
+        <span className="block">You've reached your monthly conversation limit for this plan.</span>
+        <span className="block mt-2">Upgrade your plan to continue creating new conversations, or wait until your next billing cycle for access to reset.</span>
+      </>
+    );
+  }
+
+  const resetDateFormatted = limitInfo.resetDate ? formatResetDate(limitInfo.resetDate) : null;
+
+  return (
+    <>
+      <span className="block">Your {limitInfo.planName} plan includes {limitInfo.limit} conversations per month.</span>
+      <span className="block mt-1">You've used {limitInfo.used} of {limitInfo.limit} conversations for this billing cycle.</span>
+      <span className="block mt-2">To continue creating new conversations right away, upgrade your plan. Otherwise, you can wait until your next billing cycle for your conversation limit to reset.</span>
+      {resetDateFormatted && (
+        <span className="block mt-2 font-medium text-gray-700">Your allowance resets on {resetDateFormatted}.</span>
+      )}
+    </>
+  );
+}
+
 export function UpgradeModal({ open, onOpenChange, reason, currentPlan, limitInfo }: UpgradeModalProps) {
   const [isLoading, setIsLoading] = useState(false);
   const content = { ...UPGRADE_CONTENT[reason] };
 
-  if (reason === "conversation_limit" && limitInfo) {
-    content.description = `Your ${limitInfo.planName} plan includes ${limitInfo.limit} conversations per month. You've used ${limitInfo.used} of ${limitInfo.limit}. Upgrade your plan or wait until your next billing cycle.`;
-  }
+  const isConversationLimit = reason === "conversation_limit";
 
   const handleUpgrade = async () => {
     setIsLoading(true);
@@ -153,11 +188,13 @@ export function UpgradeModal({ open, onOpenChange, reason, currentPlan, limitInf
               {content.icon}
             </div>
           </div>
-          <DialogTitle className="text-xl font-bold text-gray-900">
+          <DialogTitle className="text-xl font-bold text-gray-900" data-testid="text-upgrade-title">
             {content.title}
           </DialogTitle>
-          <DialogDescription className="text-gray-600 mt-2">
-            {content.description}
+          <DialogDescription className="text-gray-600 mt-2 text-left" data-testid="text-upgrade-description">
+            {isConversationLimit
+              ? buildConversationLimitDescription(limitInfo)
+              : content.description}
           </DialogDescription>
         </DialogHeader>
 
@@ -199,9 +236,18 @@ export function UpgradeModal({ open, onOpenChange, reason, currentPlan, limitInf
             disabled={isLoading}
             data-testid="button-upgrade-modal-dismiss"
           >
-            Maybe later
+            Maybe Later
           </Button>
         </DialogFooter>
+
+        {isConversationLimit && (
+          <div className="flex items-start gap-2 px-1 pb-1">
+            <Info className="h-3.5 w-3.5 text-gray-400 mt-0.5 flex-shrink-0" />
+            <p className="text-xs text-gray-400" data-testid="text-upgrade-note">
+              Existing conversations will remain accessible. This limit only affects creating new conversations.
+            </p>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );

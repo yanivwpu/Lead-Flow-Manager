@@ -61,7 +61,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { UpgradeModal, type UpgradeReason } from "@/components/UpgradeModal";
+import { UpgradeModal, type UpgradeReason, type ConversationLimitInfo } from "@/components/UpgradeModal";
 import { useSubscription } from "@/lib/subscription-context";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
@@ -117,7 +117,7 @@ export function Chats() {
   const { toast } = useToast();
   const [upgradeModalOpen, setUpgradeModalOpen] = useState(false);
   const [upgradeReason, setUpgradeReason] = useState<UpgradeReason>("free_reply");
-  const [upgradeLimitInfo, setUpgradeLimitInfo] = useState<{ limit: number; used: number; planName: string } | undefined>();
+  const [upgradeLimitInfo, setUpgradeLimitInfo] = useState<ConversationLimitInfo | undefined>();
   const [demoMode, setDemoMode] = useState(false);
   const [demoChats, setDemoChats] = useState<DemoChat[]>(DEMO_CHATS);
   const [viewMode, setViewMode] = useState<"my" | "team">("my");
@@ -631,7 +631,8 @@ export function Chats() {
         setUpgradeLimitInfo({ 
           limit: subscription.limits.conversationsLimit, 
           used: subscription.limits.conversationsUsed, 
-          planName: subscription.limits.planName 
+          planName: subscription.limits.planName,
+          resetDate: subscription.subscription?.currentPeriodEnd || null,
         });
       }
       setUpgradeModalOpen(true);
@@ -657,7 +658,12 @@ export function Chats() {
         if (data.code === "CONVERSATION_LIMIT") {
           setUpgradeReason("conversation_limit");
           if (data.limit && data.used && data.planName) {
-            setUpgradeLimitInfo({ limit: data.limit, used: data.used, planName: data.planName });
+            setUpgradeLimitInfo({ 
+              limit: data.limit, 
+              used: data.used, 
+              planName: data.planName,
+              resetDate: subscription?.subscription?.currentPeriodEnd || null,
+            });
           }
           setUpgradeModalOpen(true);
           return;
