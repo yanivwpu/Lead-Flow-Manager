@@ -1788,13 +1788,6 @@ export async function registerRoutes(
         return res.status(500).send("Queue unavailable");
       }
 
-      // Track new conversation for monthly usage (inbound - always accept, just count)
-      if (isNewChat) {
-        subscriptionService.incrementConversationUsage(userId).catch(err =>
-          console.error("Conversation usage tracking error:", err)
-        );
-      }
-
       // Trigger workflow automations (Pro feature)
       const updatedChat = await storage.getChat(chat.id);
       if (updatedChat) {
@@ -2179,9 +2172,6 @@ export async function registerRoutes(
             await markMessageAsRead(user.id, incomingMessage.messageId);
 
             if (messages.length === 1) {
-              subscriptionService.incrementConversationUsage(user.id).catch(err =>
-                console.error("Conversation usage tracking error:", err)
-              );
               triggerNewChatWorkflows(user.id, chat).catch(err => console.error("New chat workflow error:", err));
             }
 
