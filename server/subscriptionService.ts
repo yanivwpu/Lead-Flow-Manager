@@ -388,6 +388,16 @@ class SubscriptionService {
 
   async trackConversationWindow(userId: string, _chatId: string | number, _whatsappPhone: string): Promise<void> {
   }
+
+  async incrementConversationUsage(userId: string): Promise<void> {
+    const user = await storage.getUser(userId);
+    if (!user) return;
+
+    await storage.updateUser(userId, {
+      monthlyConversations: (user.monthlyConversations || 0) + 1,
+      lifetimeConversations: (user.lifetimeConversations || 0) + 1
+    });
+  }
 }
 
 export const subscriptionService = new SubscriptionService();

@@ -1,4 +1,5 @@
 import { storage } from "./storage";
+import { subscriptionService } from "./subscriptionService";
 import { 
   type Contact, type Conversation, type Message, type Channel, 
   CHANNEL_INFO, CHANNELS 
@@ -85,6 +86,7 @@ class ChannelService {
         channel: targetChannel,
         status: 'open',
       });
+      await subscriptionService.incrementConversationUsage(userId);
     }
 
     const message = await storage.createMessage({
@@ -145,6 +147,7 @@ class ChannelService {
           channel: fallbackChannel,
           status: 'open',
         });
+        await subscriptionService.incrementConversationUsage(userId);
       }
 
       const fallbackResult = await this.dispatchMessage(userId, fallbackChannel, {
@@ -270,6 +273,7 @@ class ChannelService {
         windowActive: true,
         windowExpiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
       });
+      await subscriptionService.incrementConversationUsage(userId);
     } else {
       await storage.updateConversation(conversation.id, {
         windowActive: true,

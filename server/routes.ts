@@ -369,6 +369,7 @@ export async function registerRoutes(
             unread: 0,
             messages: [],
           });
+          await subscriptionService.incrementConversationUsage(req.user.id);
           imported++;
         } catch (err) {
           console.error("Error importing contact:", err);
@@ -463,6 +464,17 @@ export async function registerRoutes(
         ...req.body,
         userId: req.user.id,
       });
+
+      // Enforce monthly conversation limit before creating
+      const limitCheck = await subscriptionService.checkAndDecrementConversation(req.user.id);
+      if (!limitCheck.allowed) {
+        return res.status(429).json({ 
+          error: "Monthly conversation limit reached. Please upgrade your plan.",
+          remaining: 0,
+          upgradeRequired: true 
+        });
+      }
+
       const chat = await storage.createChat(validated);
       res.status(201).json(chat);
     } catch (error) {
@@ -1776,6 +1788,13 @@ export async function registerRoutes(
         return res.status(500).send("Queue unavailable");
       }
 
+      // Track new conversation for monthly usage (inbound - always accept, just count)
+      if (isNewChat) {
+        subscriptionService.incrementConversationUsage(userId).catch(err =>
+          console.error("Conversation usage tracking error:", err)
+        );
+      }
+
       // Trigger workflow automations (Pro feature)
       const updatedChat = await storage.getChat(chat.id);
       if (updatedChat) {
@@ -2160,6 +2179,9 @@ export async function registerRoutes(
             await markMessageAsRead(user.id, incomingMessage.messageId);
 
             if (messages.length === 1) {
+              subscriptionService.incrementConversationUsage(user.id).catch(err =>
+                console.error("Conversation usage tracking error:", err)
+              );
               triggerNewChatWorkflows(user.id, chat).catch(err => console.error("New chat workflow error:", err));
             }
 
