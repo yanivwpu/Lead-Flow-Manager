@@ -39,6 +39,22 @@ export class WebhookHandlers {
   }
 
   static async handlePaymentEvent(event: any): Promise<void> {
+    // Handle subscription renewal - reset monthly conversation counter
+    if (event.type === 'customer.subscription.updated' || event.type === 'customer.subscription.created') {
+      const subscription = event.data.object;
+      const customerId = subscription.customer;
+      
+      if (customerId) {
+        const user = await storage.getUserByStripeCustomerId(customerId);
+        if (user) {
+          // Reset monthly conversations counter on subscription renewal
+          // Keep lifetimeConversations for analytics, only reset the monthly counter
+          await storage.updateUser(user.id, { monthlyConversations: 0 });
+          console.log(`Reset monthlyConversations for user ${user.id} on subscription renewal`);
+        }
+      }
+    }
+
     if (event.type !== 'invoice.payment_succeeded') {
       return;
     }

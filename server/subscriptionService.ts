@@ -47,7 +47,17 @@ class SubscriptionService {
     const effectivePlan = isInTrial ? "pro" : storedPlan;
     const planLimits = PLAN_LIMITS[effectivePlan];
 
-    const conversationsUsed = user.lifetimeConversations || 0;
+    // MONTHLY RESET LOGIC: Reset conversations if billing period has ended
+    let conversationsUsed = user.monthlyConversations || 0;
+    const currentPeriodEnd = user.currentPeriodEnd ? new Date(user.currentPeriodEnd) : null;
+    
+    if (currentPeriodEnd && now > currentPeriodEnd) {
+      // Billing period has expired - reset the monthly counter
+      conversationsUsed = 0;
+      // Persist the reset to database
+      await storage.updateUser(userId, { monthlyConversations: 0 });
+    }
+    
     const conversationsLimit = planLimits.conversationsPerMonth;
     const conversationsRemaining = Math.max(0, conversationsLimit - conversationsUsed);
     const isAtLimit = conversationsRemaining <= 0;
@@ -69,7 +79,7 @@ class SubscriptionService {
       conversationsLimit: planLimits.conversationsPerMonth,
       conversationsUsed,
       conversationsRemaining,
-      isLifetimeLimit: true,
+      isLifetimeLimit: false,
       maxUsers: planLimits.maxUsers,
       maxWhatsappNumbers: planLimits.maxWhatsappNumbers,
       canSendMessages: !isAtLimit,
@@ -144,8 +154,15 @@ class SubscriptionService {
       return { allowed: false, remaining: 0 };
     }
 
+    const user = await storage.getUser(userId);
+    if (!user) return { allowed: false, remaining: 0 };
+    
+    // Increment BOTH counters:
+    // - monthlyConversations for monthly limit enforcement
+    // - lifetimeConversations for historical analytics only (not enforced)
     await storage.updateUser(userId, { 
-      lifetimeConversations: (await storage.getUser(userId))?.lifetimeConversations || 0 + 1 
+      monthlyConversations: (user.monthlyConversations || 0) + 1,
+      lifetimeConversations: (user.lifetimeConversations || 0) + 1
     });
     return { allowed: true, remaining: limits.conversationsRemaining - 1 };
   }
