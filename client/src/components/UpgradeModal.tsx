@@ -16,6 +16,7 @@ interface UpgradeModalProps {
   onOpenChange: (open: boolean) => void;
   reason: UpgradeReason;
   currentPlan?: string;
+  limitInfo?: { limit: number; used: number; planName: string };
 }
 
 type TargetPlan = "starter" | "pro";
@@ -109,9 +110,13 @@ const PLAN_PRICES: Record<TargetPlan, string> = {
   pro: "$49",
 };
 
-export function UpgradeModal({ open, onOpenChange, reason, currentPlan }: UpgradeModalProps) {
+export function UpgradeModal({ open, onOpenChange, reason, currentPlan, limitInfo }: UpgradeModalProps) {
   const [isLoading, setIsLoading] = useState(false);
-  const content = UPGRADE_CONTENT[reason];
+  const content = { ...UPGRADE_CONTENT[reason] };
+
+  if (reason === "conversation_limit" && limitInfo) {
+    content.description = `Your ${limitInfo.planName} plan includes ${limitInfo.limit} conversations per month. You've used ${limitInfo.used} of ${limitInfo.limit}. Upgrade your plan or wait until your next billing cycle.`;
+  }
 
   const handleUpgrade = async () => {
     setIsLoading(true);

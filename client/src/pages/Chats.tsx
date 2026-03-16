@@ -117,6 +117,7 @@ export function Chats() {
   const { toast } = useToast();
   const [upgradeModalOpen, setUpgradeModalOpen] = useState(false);
   const [upgradeReason, setUpgradeReason] = useState<UpgradeReason>("free_reply");
+  const [upgradeLimitInfo, setUpgradeLimitInfo] = useState<{ limit: number; used: number; planName: string } | undefined>();
   const [demoMode, setDemoMode] = useState(false);
   const [demoChats, setDemoChats] = useState<DemoChat[]>(DEMO_CHATS);
   const [viewMode, setViewMode] = useState<"my" | "team">("my");
@@ -626,6 +627,13 @@ export function Chats() {
     
     if (isAtLimit) {
       setUpgradeReason("conversation_limit");
+      if (subscription?.limits) {
+        setUpgradeLimitInfo({ 
+          limit: subscription.limits.conversationsLimit, 
+          used: subscription.limits.conversationsUsed, 
+          planName: subscription.limits.planName 
+        });
+      }
       setUpgradeModalOpen(true);
       return;
     }
@@ -648,6 +656,9 @@ export function Chats() {
         }
         if (data.code === "CONVERSATION_LIMIT") {
           setUpgradeReason("conversation_limit");
+          if (data.limit && data.used && data.planName) {
+            setUpgradeLimitInfo({ limit: data.limit, used: data.used, planName: data.planName });
+          }
           setUpgradeModalOpen(true);
           return;
         }
@@ -1584,9 +1595,13 @@ export function Chats() {
       
       <UpgradeModal
         open={upgradeModalOpen}
-        onOpenChange={setUpgradeModalOpen}
+        onOpenChange={(open) => {
+          setUpgradeModalOpen(open);
+          if (!open) setUpgradeLimitInfo(undefined);
+        }}
         reason={upgradeReason}
         currentPlan={subscription?.limits?.plan}
+        limitInfo={upgradeLimitInfo}
       />
       
       {/* Edit Chat Dialog */}

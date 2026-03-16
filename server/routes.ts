@@ -469,7 +469,12 @@ export async function registerRoutes(
       const limitCheck = await subscriptionService.checkAndDecrementConversation(req.user.id);
       if (!limitCheck.allowed) {
         return res.status(429).json({ 
-          error: "Monthly conversation limit reached. Please upgrade your plan.",
+          code: "CONVERSATION_LIMIT",
+          error: "You've reached your monthly conversation limit",
+          message: `Your ${limitCheck.planName} plan includes ${limitCheck.limit} conversations per month. Upgrade your plan or wait until your next billing cycle.`,
+          limit: limitCheck.limit,
+          used: limitCheck.used,
+          planName: limitCheck.planName,
           remaining: 0,
           upgradeRequired: true 
         });

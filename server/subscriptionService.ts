@@ -146,25 +146,40 @@ class SubscriptionService {
     }
   }
 
-  async checkAndDecrementConversation(userId: string): Promise<{ allowed: boolean; remaining: number }> {
+  async checkAndDecrementConversation(userId: string): Promise<{ 
+    allowed: boolean; 
+    remaining: number;
+    limit: number;
+    used: number;
+    planName: string;
+  }> {
     const limits = await this.getUserLimits(userId);
-    if (!limits) return { allowed: false, remaining: 0 };
+    if (!limits) return { allowed: false, remaining: 0, limit: 0, used: 0, planName: "free" };
 
     if (limits.isAtLimit) {
-      return { allowed: false, remaining: 0 };
+      return { 
+        allowed: false, 
+        remaining: 0, 
+        limit: limits.conversationsLimit, 
+        used: limits.conversationsUsed, 
+        planName: limits.planName 
+      };
     }
 
     const user = await storage.getUser(userId);
-    if (!user) return { allowed: false, remaining: 0 };
+    if (!user) return { allowed: false, remaining: 0, limit: 0, used: 0, planName: "free" };
     
-    // Increment BOTH counters:
-    // - monthlyConversations for monthly limit enforcement
-    // - lifetimeConversations for historical analytics only (not enforced)
     await storage.updateUser(userId, { 
       monthlyConversations: (user.monthlyConversations || 0) + 1,
       lifetimeConversations: (user.lifetimeConversations || 0) + 1
     });
-    return { allowed: true, remaining: limits.conversationsRemaining - 1 };
+    return { 
+      allowed: true, 
+      remaining: limits.conversationsRemaining - 1,
+      limit: limits.conversationsLimit,
+      used: limits.conversationsUsed + 1,
+      planName: limits.planName
+    };
   }
 
   async createCheckoutSession(userId: string, plan: SubscriptionPlan, baseUrl: string): Promise<{ url: string }> {
