@@ -61,11 +61,11 @@ export function Sidebar() {
   return (
     <div className={cn("hidden md:flex h-full w-[200px] bg-white flex-col items-stretch py-3 z-20", isRTL ? "border-is" : "border-ie")}>
       <div className="mb-4 px-6 flex items-center">
-        <div className="h-8 w-8 rounded-full bg-brand-green flex items-center justify-center text-white font-bold shrink-0">
-          C
+        <div className="h-7 w-7 rounded-full bg-brand-green flex items-center justify-center text-white text-sm font-bold shrink-0">
+          W
         </div>
-        <span className="font-display font-bold text-xl text-brand-teal ms-3">
-          ChatCRM
+        <span className="font-display font-bold text-lg text-gray-900 ms-2">
+          WhachatCRM
         </span>
       </div>
 
