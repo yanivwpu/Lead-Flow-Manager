@@ -73,8 +73,8 @@ export function MobileNav() {
           <SheetContent side="bottom" className="h-auto max-h-[70vh] rounded-t-2xl">
             <SheetHeader>
               <SheetTitle className="flex items-center gap-2">
-                <div className="h-6 w-6 rounded-full bg-brand-green flex items-center justify-center text-white text-xs font-bold">
-                  W
+                <div className="h-5 w-5 bg-brand-green rounded-md flex items-center justify-center">
+                  <span className="text-white font-bold text-xs">W</span>
                 </div>
                 <span className="font-display text-gray-900">WhachatCRM</span>
               </SheetTitle>
