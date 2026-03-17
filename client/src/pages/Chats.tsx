@@ -1425,7 +1425,7 @@ export function Chats() {
 
            {/* Desktop CRM Sidebar Panel */}
            <div 
-             className="hidden md:flex w-[320px] bg-white border-l border-gray-200 overflow-y-auto shrink-0 flex-col shadow-xl md:shadow-none z-10"
+             className="hidden md:flex w-[320px] bg-brand-green/5 border-l border-gray-200 overflow-y-auto shrink-0 flex-col shadow-xl md:shadow-none z-10"
              data-testid="panel-lead-details"
            >
               <div className="p-5 border-b border-gray-100 bg-brand-green/5">
@@ -1557,7 +1557,7 @@ export function Chats() {
                  </div>
               </div>
 
-              <div className="p-5 mt-auto bg-gray-50">
+              <div className="p-5 mt-auto">
                 <Button 
                   variant="outline" 
                   className="w-full text-red-600 hover:text-red-700 hover:bg-red-50 border-red-100"
