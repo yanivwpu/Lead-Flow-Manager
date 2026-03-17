@@ -200,7 +200,7 @@ export function ChannelSettings() {
 
   const disconnectMetaMutation = useMutation({
     mutationFn: async () => {
-      const res = await fetch("/api/user/meta/disconnect", {
+      const res = await fetch("/api/meta/disconnect", {
         method: "POST",
         credentials: "include",
       });
@@ -209,7 +209,12 @@ export function ChannelSettings() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
-      toast({ title: "Meta disconnected" });
+      queryClient.invalidateQueries({ queryKey: ["/api/meta/status"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/channels"] });
+      toast({ title: "Meta disconnected", description: "Your Meta WhatsApp Business API has been disconnected." });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to disconnect Meta. Please try again.", variant: "destructive" });
     },
   });
 
