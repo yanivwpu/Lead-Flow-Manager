@@ -1,0 +1,102 @@
+
+========================================
+  WHATSAPP ADAPTER ROUTING TEST SUITE
+========================================
+
+Channel adapters registered: whatsapp, sms, webchat, telegram, instagram, facebook, tiktok
+Test user: 4bef4f35-5940-4493-8c7e-dfd48e750346
+Test contact: 4ff1584d-3345-4220-bedc-bc53372ee59b
+Test conversation: d077ad81-c883-4564-a5cc-261922794069
+
+
+--- TEST 1: Meta Provider Routing ---
+[WhatsAppAdapter] Routing decision: provider=meta, metaConnected=true, twilioConnected=false, phone=+15551234567, contentType=text, hasMedia=false
+[WhatsAppAdapter] Dispatching via META API to +15551234567
+[MOCK] Meta Graph API called: https://graph.facebook.com/v19.0/1234567890/messages
+
+✅ [PASS] TEST 1: Meta provider routes to Meta API only
+   Meta API called: true, Twilio API called: false, Result: {"success":true,"channel":"whatsapp"}
+
+--- TEST 2: Twilio Provider Routing ---
+
+✅ [PASS] TEST 2: Twilio provider routes to Twilio only
+   Provider resolved to: twilio, metaConnected: false, twilioConnected: true. Twilio path selected: true, Meta path selected: false
+
+--- TEST 3: Provider Switch (Twilio → Meta) ---
+[WhatsAppAdapter] Routing decision: provider=meta, metaConnected=true, twilioConnected=true, phone=+15551234567, contentType=text, hasMedia=false
+[WhatsAppAdapter] Dispatching via META API to +15551234567
+[MOCK] Meta Graph API called: https://graph.facebook.com/v19.0/1234567890/messages
+
+✅ [PASS] TEST 3: Provider switch (twilio→meta) routes correctly
+   Before: twilio, After: meta. Meta called: true, Twilio called: false
+
+--- TEST 4: Media Message Routing ---
+[WhatsAppAdapter] Routing decision: provider=meta, metaConnected=true, twilioConnected=true, phone=+15551234567, contentType=image, hasMedia=true
+[WhatsAppAdapter] Dispatching via META API to +15551234567
+[MOCK] Meta Graph API called: https://graph.facebook.com/v19.0/1234567890/messages
+
+✅ [PASS] TEST 4: Media message routes via Meta with correct payload
+   Meta called: true, payload type: image, media link: https://example.com/photo.jpg
+
+--- TEST 5: UI Availability (isAvailable) ---
+Channel adapters registered: whatsapp, sms, webchat, telegram, instagram, facebook, tiktok
+[WhatsAppAdapter] isAvailable check: provider=meta, metaConnected=true, result=true
+[WhatsAppAdapter] isAvailable check: provider=meta, metaConnected=false, result=false
+[WhatsAppAdapter] isAvailable check: provider=twilio, hasClient=false, hasNumber=false, result=false
+
+✅ [PASS] TEST 5: UI availability reflects provider state
+   Meta connected → available: true, Meta disconnected → available: false, Twilio disconnected → available: false
+
+--- TEST 6: Meta Failure - No Fallback to Twilio ---
+[WhatsAppAdapter] Routing decision: provider=meta, metaConnected=true, twilioConnected=true, phone=+15551234567, contentType=text, hasMedia=false
+[WhatsAppAdapter] Dispatching via META API to +15551234567
+[MOCK] Meta Graph API called: https://graph.facebook.com/v19.0/1234567890/messages
+WhatsApp send error: Error: Mock Meta failure
+    at sendMetaWhatsAppMessage (/home/runner/workspace/server/userMeta.ts:227:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async WhatsAppAdapter.send (/home/runner/workspace/server/channelAdapters.ts:131:20)
+    at async ChannelService.sendMessage (/home/runner/workspace/server/channelService.ts:103:24)
+    at async test6_MetaFailureNoFallbackToTwilio (/home/runner/workspace/tests/whatsapp-adapter-routing.test.ts:336:18)
+    at async runAllTests (/home/runner/workspace/tests/whatsapp-adapter-routing.test.ts:428:5)
+
+✅ [PASS] TEST 6: Meta failure does NOT fallback to Twilio
+   Meta called: true (failed as expected), Twilio fallback used: false. Result success: false, error: Mock Meta failure
+
+--- TEST 7: Routing Logs Verification ---
+[WhatsAppAdapter] Routing decision: provider=meta, metaConnected=true, twilioConnected=true, phone=+15551234567, contentType=text, hasMedia=false
+[WhatsAppAdapter] Dispatching via META API to +15551234567
+[MOCK] Meta Graph API called: https://graph.facebook.com/v19.0/1234567890/messages
+
+✅ [PASS] TEST 7: Routing logs are emitted
+   Routing decision log: true, Dispatch log: true. Logs: [WhatsAppAdapter] Routing decision: provider=meta, metaConnected=true, twilioConnected=true, phone=+15551234567, contentType=text, hasMedia=false | [WhatsAppAdapter] Dispatching via META API to +15551234567
+
+
+========================================
+         TEST REPORT SUMMARY
+========================================
+
+✅ TEST 1: Meta provider routes to Meta API only
+   Meta API called: true, Twilio API called: false, Result: {"success":true,"channel":"whatsapp"}
+
+✅ TEST 2: Twilio provider routes to Twilio only
+   Provider resolved to: twilio, metaConnected: false, twilioConnected: true. Twilio path selected: true, Meta path selected: false
+
+✅ TEST 3: Provider switch (twilio→meta) routes correctly
+   Before: twilio, After: meta. Meta called: true, Twilio called: false
+
+✅ TEST 4: Media message routes via Meta with correct payload
+   Meta called: true, payload type: image, media link: https://example.com/photo.jpg
+
+✅ TEST 5: UI availability reflects provider state
+   Meta connected → available: true, Meta disconnected → available: false, Twilio disconnected → available: false
+
+✅ TEST 6: Meta failure does NOT fallback to Twilio
+   Meta called: true (failed as expected), Twilio fallback used: false. Result success: false, error: Mock Meta failure
+
+✅ TEST 7: Routing logs are emitted
+   Routing decision log: true, Dispatch log: true. Logs: [WhatsAppAdapter] Routing decision: provider=meta, metaConnected=true, twilioConnected=true, phone=+15551234567, contentType=text, hasMedia=false | [WhatsAppAdapter] Dispatching via META API to +15551234567
+
+----------------------------------------
+Total: 7 | Passed: 7 | Failed: 0
+----------------------------------------
+

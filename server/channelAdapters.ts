@@ -110,7 +110,10 @@ class WhatsAppAdapter implements ChannelAdapter {
       const user = await storage.getUser(conversation.userId);
       const activeProvider = user?.whatsappProvider || "twilio";
 
+      console.log(`[WhatsAppAdapter] Routing decision: provider=${activeProvider}, metaConnected=${user?.metaConnected}, twilioConnected=${user?.twilioConnected}, phone=${phone}, contentType=${params.contentType || 'text'}, hasMedia=${!!params.mediaUrl}`);
+
       if (activeProvider === "meta" && user?.metaConnected) {
+        console.log(`[WhatsAppAdapter] Dispatching via META API to ${phone}`);
         let result;
         if (params.mediaUrl && params.contentType !== 'text') {
           const mediaType = params.contentType === 'image' ? 'image' 
@@ -136,6 +139,7 @@ class WhatsAppAdapter implements ChannelAdapter {
           externalMessageId: result.messageId,
         };
       } else {
+        console.log(`[WhatsAppAdapter] Dispatching via TWILIO to ${phone}`);
         let result;
         if (params.mediaUrl && params.contentType !== 'text') {
           result = await sendUserWhatsAppMedia(
@@ -170,11 +174,15 @@ class WhatsAppAdapter implements ChannelAdapter {
     const activeProvider = user?.whatsappProvider || "twilio";
 
     if (activeProvider === "meta") {
-      return !!(user?.metaConnected);
+      const available = !!(user?.metaConnected);
+      console.log(`[WhatsAppAdapter] isAvailable check: provider=meta, metaConnected=${user?.metaConnected}, result=${available}`);
+      return available;
     }
     const client = await getUserTwilioClient(userId);
     const number = await getUserTwilioNumber(userId);
-    return !!(client && number);
+    const available = !!(client && number);
+    console.log(`[WhatsAppAdapter] isAvailable check: provider=twilio, hasClient=${!!client}, hasNumber=${!!number}, result=${available}`);
+    return available;
   }
 }
 
