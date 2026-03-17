@@ -234,7 +234,7 @@ WhachatCRM supports the official Meta WhatsApp Business API for better performan
 ## Webhook Configuration
 
 1. In Meta Developer Console, go to **WhatsApp** > **Configuration**
-2. Set the Callback URL to: \`https://your-app.replit.app/api/webhooks/meta\`
+2. Set the Callback URL to: \`https://your-app.replit.app/api/webhook/meta\`
 3. Set the Verify Token to the one provided in WhachatCRM
 4. Subscribe to **messages** under Webhook Fields
     `

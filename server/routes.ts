@@ -1415,7 +1415,7 @@ export async function registerRoutes(
         hasCredentials: !!(user.metaAccessToken && user.metaPhoneNumberId),
         activeProvider: user.whatsappProvider || "twilio",
         twilioConnected: user.twilioConnected || false,
-        webhookUrl: `${webhookBaseUrl}/api/webhooks/meta`,
+        webhookUrl: `${webhookBaseUrl}/api/webhook/meta`,
         webhookVerifyToken: user.metaConnected ? user.metaWebhookVerifyToken : null,
       });
     } catch (error) {
@@ -1462,7 +1462,7 @@ export async function registerRoutes(
         success: true, 
         message: "Meta WhatsApp Business API connected successfully!",
         phoneNumber: result.phoneNumber,
-        webhookUrl: `${webhookBaseUrl}/api/webhooks/meta`,
+        webhookUrl: `${webhookBaseUrl}/api/webhook/meta`,
         webhookVerifyToken: updatedUser?.metaWebhookVerifyToken || webhookVerifyToken,
       });
     } catch (error: any) {
