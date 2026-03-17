@@ -1425,10 +1425,10 @@ export function Chats() {
 
            {/* Desktop CRM Sidebar Panel */}
            <div 
-             className="hidden md:flex w-[320px] bg-brand-green/5 border-l border-gray-200 overflow-y-auto shrink-0 flex-col shadow-xl md:shadow-none z-10"
+             className="hidden md:flex w-[320px] bg-white border-l border-gray-200 overflow-y-auto shrink-0 flex-col shadow-xl md:shadow-none z-10"
              data-testid="panel-lead-details"
            >
-              <div className="p-5 border-b border-gray-100 bg-brand-green/5">
+              <div className="p-5 bg-brand-green/5 flex-1 flex flex-col">
                  <div className="flex items-center gap-2 mb-4">
                    <UserCheck className="h-5 w-5 text-brand-green" />
                    <h3 className="font-display font-bold text-gray-900">Lead Details</h3>
@@ -1555,19 +1555,19 @@ export function Chats() {
                      data-testid="textarea-notes"
                    />
                  </div>
-              </div>
 
-              <div className="p-5 mt-auto">
-                <Button 
-                  variant="outline" 
-                  className="w-full text-red-600 hover:text-red-700 hover:bg-red-50 border-red-100"
-                  onClick={handleDeleteChat}
-                  disabled={!demoMode && deleteChatMutation.isPending}
-                  data-testid="button-delete-chat"
-                >
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  {!demoMode && deleteChatMutation.isPending ? "Deleting..." : "Delete Chat"}
-                </Button>
+                 <div className="mt-auto pt-5">
+                   <Button 
+                     variant="outline" 
+                     className="w-full text-red-600 hover:text-red-700 hover:bg-red-50 border-red-100"
+                     onClick={handleDeleteChat}
+                     disabled={!demoMode && deleteChatMutation.isPending}
+                     data-testid="button-delete-chat"
+                   >
+                     <Trash2 className="h-4 w-4 mr-2" />
+                     {!demoMode && deleteChatMutation.isPending ? "Deleting..." : "Delete Chat"}
+                   </Button>
+                 </div>
               </div>
            </div>
         </div>
