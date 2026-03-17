@@ -59,8 +59,8 @@ export function Sidebar() {
   ];
 
   return (
-    <div className={cn("hidden md:flex h-full w-[200px] bg-white flex-col items-stretch py-3 z-20", isRTL ? "border-is" : "border-ie")}>
-      <div className="mb-4 px-6 flex items-center">
+    <div className={cn("hidden md:flex h-full w-[200px] bg-white flex-col items-stretch pt-5 pb-3 z-20", isRTL ? "border-is" : "border-ie")}>
+      <div className="mb-6 px-6 flex items-center">
         <div className="h-6 w-6 bg-brand-green rounded-md flex items-center justify-center shrink-0">
           <span className="text-white font-bold text-sm">W</span>
         </div>
