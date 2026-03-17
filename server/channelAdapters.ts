@@ -6,6 +6,10 @@ import {
   getUserTwilioClient,
   getUserTwilioNumber 
 } from "./userTwilio";
+import {
+  sendMetaWhatsAppMessage,
+  sendMetaWhatsAppMedia,
+} from "./userMeta";
 import type { Channel } from "@shared/schema";
 
 // Meta's 24-hour messaging window constants
@@ -103,26 +107,55 @@ class WhatsAppAdapter implements ChannelAdapter {
 
       const phone = contact.phone.startsWith("+") ? contact.phone : `+${contact.phone}`;
 
-      let result;
-      if (params.mediaUrl && params.contentType !== 'text') {
-        result = await sendUserWhatsAppMedia(
-          conversation.userId,
-          phone,
-          params.mediaUrl,
-          params.content
-        );
-      } else {
-        result = await sendUserWhatsAppMessage(
-          conversation.userId,
-          phone,
-          params.content
-        );
-      }
+      const user = await storage.getUser(conversation.userId);
+      const activeProvider = user?.whatsappProvider || "twilio";
 
-      return {
-        success: true,
-        externalMessageId: result.sid,
-      };
+      if (activeProvider === "meta" && user?.metaConnected) {
+        let result;
+        if (params.mediaUrl && params.contentType !== 'text') {
+          const mediaType = params.contentType === 'image' ? 'image' 
+            : params.contentType === 'video' ? 'video' 
+            : params.contentType === 'audio' ? 'audio' 
+            : 'document';
+          result = await sendMetaWhatsAppMedia(
+            conversation.userId,
+            phone,
+            params.mediaUrl,
+            mediaType as "image" | "video" | "audio" | "document",
+            params.content
+          );
+        } else {
+          result = await sendMetaWhatsAppMessage(
+            conversation.userId,
+            phone,
+            params.content
+          );
+        }
+        return {
+          success: true,
+          externalMessageId: result.messageId,
+        };
+      } else {
+        let result;
+        if (params.mediaUrl && params.contentType !== 'text') {
+          result = await sendUserWhatsAppMedia(
+            conversation.userId,
+            phone,
+            params.mediaUrl,
+            params.content
+          );
+        } else {
+          result = await sendUserWhatsAppMessage(
+            conversation.userId,
+            phone,
+            params.content
+          );
+        }
+        return {
+          success: true,
+          externalMessageId: result.sid,
+        };
+      }
     } catch (error: any) {
       console.error("WhatsApp send error:", error);
       return {
@@ -133,6 +166,12 @@ class WhatsAppAdapter implements ChannelAdapter {
   }
 
   async isAvailable(userId: string): Promise<boolean> {
+    const user = await storage.getUser(userId);
+    const activeProvider = user?.whatsappProvider || "twilio";
+
+    if (activeProvider === "meta") {
+      return !!(user?.metaConnected);
+    }
     const client = await getUserTwilioClient(userId);
     const number = await getUserTwilioNumber(userId);
     return !!(client && number);
