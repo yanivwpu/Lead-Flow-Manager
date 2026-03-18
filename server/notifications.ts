@@ -1,7 +1,7 @@
 import webPush from 'web-push';
 import cron from 'node-cron';
 import { storage } from './storage';
-import { sendUserWhatsAppMessage } from './userTwilio';
+import { sendWhatsAppMessage } from './whatsappService';
 import type { Chat, User } from '@shared/schema';
 
 // Generate VAPID keys if not set
@@ -132,7 +132,7 @@ async function processDripEnrollments() {
           continue;
         }
 
-        // Send the message via user's Twilio
+        // Send via the active WhatsApp provider (Twilio or Meta)
         const dripSend = await storage.createDripSend({
           enrollmentId: enrollment.id,
           stepId: currentStep.id,
@@ -140,15 +140,19 @@ async function processDripEnrollments() {
         });
 
         try {
-          const result = await sendUserWhatsAppMessage(
+          const result = await sendWhatsAppMessage(
             campaign.userId,
             chat.whatsappPhone,
             currentStep.messageContent
           );
 
+          if (!result.success) {
+            throw new Error(result.error || "Failed to send drip message");
+          }
+
           await storage.updateDripSend(dripSend.id, {
             status: "sent",
-            twilioSid: result.sid,
+            twilioSid: result.messageId,
           });
 
           // Record message in chat history

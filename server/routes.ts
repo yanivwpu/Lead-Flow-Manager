@@ -8,6 +8,7 @@ import { registerWebhookRoutes } from "./routes/webhooks";
 import {
   getWhatsAppAvailability,
   sendWhatsAppMessage,
+  sendWhatsAppMedia,
   disconnectWhatsAppProvider,
   getProviderStatus,
 } from "./whatsappService";
@@ -17,8 +18,6 @@ import { z } from "zod";
 import { getVapidPublicKey } from "./notifications";
 import {
   sendUserWhatsAppMessage,
-  sendUserWhatsAppMedia,
-  verifyUserTwilioConnection,
   parseIncomingWebhook,
   parseStatusWebhook,
   findOrCreateChatByPhone,
@@ -33,8 +32,6 @@ import {
 } from "./userTwilio";
 import {
   sendMetaWhatsAppMessage,
-  sendMetaWhatsAppMedia,
-  sendMetaWhatsAppTemplate,
   connectUserMeta,
   validateMetaCredentials,
   switchProvider,
@@ -1040,21 +1037,28 @@ export async function registerRoutes(
         });
       }
 
-      const isConnected = await verifyUserTwilioConnection(req.user.id);
-      if (!isConnected) {
+      const availability = await getWhatsAppAvailability(req.user.id);
+      if (!availability.available) {
         fs.unlinkSync(req.file.path);
-        return res.status(400).json({ 
-          error: "WhatsApp not connected. Please connect your Twilio account first.",
-          code: "TWILIO_NOT_CONNECTED"
+        return res.status(400).json({
+          error: availability.message || "WhatsApp not connected",
+          code: availability.provider === "meta" ? "META_NOT_CONNECTED" : "TWILIO_NOT_CONNECTED",
         });
       }
 
-      // For Twilio, we need a publicly accessible URL for the media
-      // Since we're on Replit, we can serve the file temporarily
+      // Serve the uploaded file at a publicly reachable URL
       const appUrl = process.env.APP_URL || process.env.HOST || 'https://whachatcrm.com';
       const mediaUrl = `${appUrl}/uploads/${path.basename(req.file.path)}`;
+      const mediaType = req.file.mimetype.startsWith('image/') ? "image"
+        : req.file.mimetype.startsWith('video/') ? "video"
+        : req.file.mimetype.startsWith('audio/') ? "audio"
+        : "document";
 
-      const result = await sendUserWhatsAppMedia(req.user.id, phone, mediaUrl);
+      const sendResult = await sendWhatsAppMedia(req.user.id, phone, mediaUrl, mediaType as any);
+      if (!sendResult.success) {
+        fs.unlinkSync(req.file.path);
+        return res.status(400).json({ error: sendResult.error, code: "SEND_FAILED" });
+      }
 
       // Track usage
       const mediaCost = 0.01; // Higher cost for media
@@ -1063,21 +1067,21 @@ export async function registerRoutes(
         userId: req.user.id,
         chatId: chat.id,
         direction: "outbound",
-        messageType: req.file.mimetype.startsWith('image/') ? "image" : "document",
-        twilioSid: result.sid,
+        messageType: mediaType,
+        twilioSid: sendResult.messageId,
         twilioCost: costs.twilioCost,
         markupPercent: costs.markupPercent,
         totalCost: costs.totalCost,
       });
 
       const newMessage: WhatsAppMessage = {
-        id: result.sid,
+        id: sendResult.messageId,
         text: req.file.mimetype.startsWith('image/') ? '[Image]' : `[File: ${req.file.originalname}]`,
         time: new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
         sent: true,
         sender: "me",
         status: "sent",
-        twilioSid: result.sid,
+        twilioSid: sendResult.messageId,
       };
 
       const messages = (chat.messages as WhatsAppMessage[]) || [];
@@ -1620,7 +1624,10 @@ export async function registerRoutes(
             autoReplyText = userSettings.autoReplyMessage || "Thanks for your message! We'll get back to you shortly.";
           }
 
-          // Send the auto-reply via user's Twilio account
+          // Auto-reply goes back through Twilio directly — this handler is the
+          // Twilio-specific webhook so we know the inbound channel is Twilio.
+          // Using sendWhatsAppMessage here would be wrong if the user has since
+          // switched providers; the reply must go back the same way it arrived.
           if (shouldSendAutoReply && autoReplyText && chat.whatsappPhone) {
             const delay = userSettings.autoReplyDelay || 0;
             setTimeout(async () => {
@@ -1968,6 +1975,10 @@ export async function registerRoutes(
               const delay = user.autoReplyDelay || 0;
               setTimeout(async () => {
                 try {
+                  // Auto-reply goes back through Meta directly — this handler is the
+                  // Meta-specific webhook so we know the inbound channel is Meta.
+                  // Using sendWhatsAppMessage would be wrong if the user had switched
+                  // providers; the reply must go back through the same channel.
                   await sendMetaWhatsAppMessage(user.id, incomingMessage.from, user.autoReplyMessage!);
                   const autoReplyMsg = {
                     id: `auto-${Date.now()}`,

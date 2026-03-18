@@ -1,13 +1,13 @@
 import { storage } from "./storage";
 import {
   sendUserWhatsAppMessage,
+  sendUserWhatsAppMedia,
   disconnectUserTwilio,
-  verifyUserTwilioConnection,
 } from "./userTwilio";
 import {
   sendMetaWhatsAppMessage,
+  sendMetaWhatsAppMedia,
   disconnectUserMeta,
-  verifyMetaConnection,
 } from "./userMeta";
 
 export type WhatsAppProvider = "meta" | "twilio";
@@ -22,6 +22,13 @@ export interface AvailabilityResult {
 }
 
 export interface SendResult {
+  success: boolean;
+  messageId: string;
+  provider: WhatsAppProvider;
+  error?: string;
+}
+
+export interface SendMediaResult {
   success: boolean;
   messageId: string;
   provider: WhatsAppProvider;
@@ -109,6 +116,37 @@ export async function sendWhatsAppMessage(
   }
 
   const result = await sendUserWhatsAppMessage(userId, to, text);
+  return { success: true, messageId: result.sid, provider: "twilio" };
+}
+
+/**
+ * Send a WhatsApp media message, routing to the correct provider automatically.
+ * mediaType defaults to "image" when not supplied (covers most send-media cases).
+ */
+export async function sendWhatsAppMedia(
+  userId: string,
+  to: string,
+  mediaUrl: string,
+  mediaType: "image" | "video" | "audio" | "document" = "image",
+  caption?: string
+): Promise<SendMediaResult> {
+  const availability = await getWhatsAppAvailability(userId);
+
+  if (!availability.available) {
+    return {
+      success: false,
+      messageId: "",
+      provider: availability.provider,
+      error: availability.reason,
+    };
+  }
+
+  if (availability.provider === "meta") {
+    const result = await sendMetaWhatsAppMedia(userId, to, mediaUrl, mediaType, caption);
+    return { success: true, messageId: result.messageId, provider: "meta" };
+  }
+
+  const result = await sendUserWhatsAppMedia(userId, to, mediaUrl, caption);
   return { success: true, messageId: result.sid, provider: "twilio" };
 }
 

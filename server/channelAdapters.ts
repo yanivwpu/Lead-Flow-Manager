@@ -1,15 +1,14 @@
 import { storage } from "./storage";
 import { channelService, ChannelAdapter } from "./channelService";
+import {
+  sendWhatsAppMessage,
+  sendWhatsAppMedia,
+  getWhatsAppAvailability,
+} from "./whatsappService";
 import { 
-  sendUserWhatsAppMessage, 
-  sendUserWhatsAppMedia,
   getUserTwilioClient,
   getUserTwilioNumber 
 } from "./userTwilio";
-import {
-  sendMetaWhatsAppMessage,
-  sendMetaWhatsAppMedia,
-} from "./userMeta";
 import type { Channel } from "@shared/schema";
 
 // Meta's 24-hour messaging window constants
@@ -106,83 +105,35 @@ class WhatsAppAdapter implements ChannelAdapter {
       }
 
       const phone = contact.phone.startsWith("+") ? contact.phone : `+${contact.phone}`;
+      const isMedia = !!(params.mediaUrl && params.contentType !== "text");
 
-      const user = await storage.getUser(conversation.userId);
-      const activeProvider = user?.whatsappProvider || "twilio";
-
-      console.log(`[WhatsAppAdapter] Routing decision: provider=${activeProvider}, metaConnected=${user?.metaConnected}, twilioConnected=${user?.twilioConnected}, phone=${phone}, contentType=${params.contentType || 'text'}, hasMedia=${!!params.mediaUrl}`);
-
-      if (activeProvider === "meta" && user?.metaConnected) {
-        console.log(`[WhatsAppAdapter] Dispatching via META API to ${phone}`);
-        let result;
-        if (params.mediaUrl && params.contentType !== 'text') {
-          const mediaType = params.contentType === 'image' ? 'image' 
-            : params.contentType === 'video' ? 'video' 
-            : params.contentType === 'audio' ? 'audio' 
-            : 'document';
-          result = await sendMetaWhatsAppMedia(
-            conversation.userId,
-            phone,
-            params.mediaUrl,
-            mediaType as "image" | "video" | "audio" | "document",
-            params.content
-          );
-        } else {
-          result = await sendMetaWhatsAppMessage(
-            conversation.userId,
-            phone,
-            params.content
-          );
-        }
-        return {
-          success: true,
-          externalMessageId: result.messageId,
-        };
-      } else {
-        console.log(`[WhatsAppAdapter] Dispatching via TWILIO to ${phone}`);
-        let result;
-        if (params.mediaUrl && params.contentType !== 'text') {
-          result = await sendUserWhatsAppMedia(
-            conversation.userId,
-            phone,
-            params.mediaUrl,
-            params.content
-          );
-        } else {
-          result = await sendUserWhatsAppMessage(
-            conversation.userId,
-            phone,
-            params.content
-          );
-        }
-        return {
-          success: true,
-          externalMessageId: result.sid,
-        };
+      if (isMedia) {
+        const mediaType = (params.contentType === "video" ? "video"
+          : params.contentType === "audio" ? "audio"
+          : params.contentType === "document" ? "document"
+          : "image") as "image" | "video" | "audio" | "document";
+        const result = await sendWhatsAppMedia(
+          conversation.userId, phone, params.mediaUrl!, mediaType, params.content
+        );
+        console.log(`[WhatsAppAdapter] media sent via ${result.provider} to ${phone}`);
+        if (!result.success) return { success: false, error: result.error };
+        return { success: true, externalMessageId: result.messageId };
       }
+
+      const result = await sendWhatsAppMessage(conversation.userId, phone, params.content);
+      console.log(`[WhatsAppAdapter] text sent via ${result.provider} to ${phone}`);
+      if (!result.success) return { success: false, error: result.error };
+      return { success: true, externalMessageId: result.messageId };
     } catch (error: any) {
       console.error("WhatsApp send error:", error);
-      return {
-        success: false,
-        error: error.message || "Failed to send WhatsApp message",
-      };
+      return { success: false, error: error.message || "Failed to send WhatsApp message" };
     }
   }
 
   async isAvailable(userId: string): Promise<boolean> {
-    const user = await storage.getUser(userId);
-    const activeProvider = user?.whatsappProvider || "twilio";
-
-    if (activeProvider === "meta") {
-      const available = !!(user?.metaConnected);
-      console.log(`[WhatsAppAdapter] isAvailable check: provider=meta, metaConnected=${user?.metaConnected}, result=${available}`);
-      return available;
-    }
-    const client = await getUserTwilioClient(userId);
-    const number = await getUserTwilioNumber(userId);
-    const available = !!(client && number);
-    console.log(`[WhatsAppAdapter] isAvailable check: provider=twilio, hasClient=${!!client}, hasNumber=${!!number}, result=${available}`);
-    return available;
+    const result = await getWhatsAppAvailability(userId);
+    console.log(`[WhatsAppAdapter] isAvailable: provider=${result.provider}, available=${result.available}`);
+    return result.available;
   }
 }
 
