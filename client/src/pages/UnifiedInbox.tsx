@@ -45,6 +45,7 @@ import { cn } from "@/lib/utils";
 import { format, formatDistanceToNow } from "date-fns";
 import { ChatAvatar } from "@/components/ChatAvatar";
 import { TAG_COLORS } from "@/lib/data";
+import { useToast } from "@/hooks/use-toast";
 
 type Channel = 'whatsapp' | 'instagram' | 'facebook' | 'sms' | 'webchat' | 'telegram' | 'tiktok';
 
@@ -109,6 +110,7 @@ export function UnifiedInbox() {
   const [, setLocation] = useLocation();
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const { toast } = useToast();
   
   const [searchQuery, setSearchQuery] = useState("");
   const [messageInput, setMessageInput] = useState("");
@@ -252,13 +254,21 @@ export function UnifiedInbox() {
         credentials: "include",
         body: JSON.stringify({ content: data.content }),
       });
-      if (!res.ok) throw new Error("Failed to send message");
-      return res.json();
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Failed to send message");
+      return json;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/inbox"] });
       queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
       setMessageInput("");
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Message not sent",
+        description: error.message,
+        variant: "destructive",
+      });
     },
   });
 
