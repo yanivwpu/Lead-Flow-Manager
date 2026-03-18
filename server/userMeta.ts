@@ -165,6 +165,11 @@ export async function disconnectUserMeta(userId: string): Promise<void> {
     twilioConnected: user?.twilioConnected,
   });
   
+  // Determine the provider after disconnect:
+  // - If Twilio is connected, switch to it
+  // - Otherwise, keep "twilio" as the default (but it won't be available)
+  const newProvider = "twilio";
+  
   await storage.updateUser(userId, {
     metaAccessToken: null,
     metaPhoneNumberId: null,
@@ -172,10 +177,11 @@ export async function disconnectUserMeta(userId: string): Promise<void> {
     metaAppSecret: null,
     metaWebhookVerifyToken: null,
     metaConnected: false,
-    whatsappProvider: "twilio",
+    whatsappProvider: newProvider,
   });
   
-  // Update channel settings to reflect disconnection
+  // Update channel settings to reflect connection state
+  // WhatsApp is "connected" only if Twilio is still connected after Meta disconnect
   try {
     await storage.upsertChannelSetting(userId, 'whatsapp', {
       isConnected: user?.twilioConnected || false,
@@ -185,7 +191,12 @@ export async function disconnectUserMeta(userId: string): Promise<void> {
     console.error('[disconnectUserMeta] Failed to update channel settings:', error);
   }
   
-  console.log('[disconnectUserMeta] Meta disconnected successfully');
+  console.log('[disconnectUserMeta] Meta disconnected successfully, new state:', {
+    whatsappProvider: newProvider,
+    metaConnected: false,
+    twilioConnected: user?.twilioConnected || false,
+    whatsappIsConnected: user?.twilioConnected || false,
+  });
 }
 
 export async function switchProvider(userId: string, provider: "twilio" | "meta"): Promise<{ success: boolean; error?: string }> {
