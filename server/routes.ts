@@ -1125,64 +1125,6 @@ export async function registerRoutes(
     }
   });
 
-  // Get automation templates
-  app.get("/api/automation-templates", async (req, res) => {
-    try {
-      if (!req.user) {
-        return res.status(401).json({ error: "Unauthorized" });
-      }
-      const { language, category, industry } = req.query;
-      const { getFilteredTemplates, CATEGORY_LABELS, INDUSTRY_LABELS } = await import("../shared/localizedTemplates");
-      
-      const templates = getFilteredTemplates(
-        language as any,
-        category as any,
-        industry as any
-      );
-      
-      res.json({
-        templates,
-        categoryLabels: CATEGORY_LABELS,
-        industryLabels: INDUSTRY_LABELS
-      });
-    } catch (error) {
-      console.error("Error fetching automation templates:", error);
-      res.status(500).json({ error: "Failed to fetch templates" });
-    }
-  });
-
-  // Get user's saved automation templates
-  app.get("/api/user-automation-templates", async (req, res) => {
-    try {
-      if (!req.user) {
-        return res.status(401).json({ error: "Unauthorized" });
-      }
-      const templates = await storage.getUserAutomationTemplates(req.user.id, req.query as any);
-      res.json(templates);
-    } catch (error) {
-      console.error("Error fetching user automation templates:", error);
-      res.status(500).json({ error: "Failed to fetch user templates" });
-    }
-  });
-
-  // Save a preset template to user's library
-  app.post("/api/user-automation-templates", async (req, res) => {
-    try {
-      if (!req.user) {
-        return res.status(401).json({ error: "Unauthorized" });
-      }
-      const template = await storage.createUserAutomationTemplate({
-        ...req.body,
-        userId: req.user.id,
-        isActive: req.body.isActive || false,
-      });
-      res.status(201).json(template);
-    } catch (error) {
-      console.error("Error saving automation template:", error);
-      res.status(500).json({ error: "Failed to save template" });
-    }
-  });
-
   // ============= Twilio Connection Endpoints =============
 
   // Get Twilio connection status
