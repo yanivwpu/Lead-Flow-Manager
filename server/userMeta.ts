@@ -158,6 +158,13 @@ export async function connectUserMeta(
 
 export async function disconnectUserMeta(userId: string): Promise<void> {
   const user = await storage.getUser(userId);
+  
+  console.log('[disconnectUserMeta] Starting disconnect for user:', userId, {
+    currentProvider: user?.whatsappProvider,
+    metaConnected: user?.metaConnected,
+    twilioConnected: user?.twilioConnected,
+  });
+  
   await storage.updateUser(userId, {
     metaAccessToken: null,
     metaPhoneNumberId: null,
@@ -165,8 +172,20 @@ export async function disconnectUserMeta(userId: string): Promise<void> {
     metaAppSecret: null,
     metaWebhookVerifyToken: null,
     metaConnected: false,
-    whatsappProvider: user?.twilioConnected ? "twilio" : "twilio",
+    whatsappProvider: "twilio",
   });
+  
+  // Update channel settings to reflect disconnection
+  try {
+    await storage.upsertChannelSetting(userId, 'whatsapp', {
+      isConnected: user?.twilioConnected || false,
+    });
+    console.log('[disconnectUserMeta] Channel settings updated, isConnected:', user?.twilioConnected || false);
+  } catch (error) {
+    console.error('[disconnectUserMeta] Failed to update channel settings:', error);
+  }
+  
+  console.log('[disconnectUserMeta] Meta disconnected successfully');
 }
 
 export async function switchProvider(userId: string, provider: "twilio" | "meta"): Promise<{ success: boolean; error?: string }> {
