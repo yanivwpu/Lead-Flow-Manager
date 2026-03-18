@@ -5,6 +5,12 @@ import { registerConversationRoutes } from "./routes/conversations";
 import { registerChannelRoutes } from "./routes/channels";
 import { registerTemplateRoutes } from "./routes/templates";
 import { registerWebhookRoutes } from "./routes/webhooks";
+import {
+  getWhatsAppAvailability,
+  sendWhatsAppMessage,
+  disconnectWhatsAppProvider,
+  getProviderStatus,
+} from "./whatsappService";
 import { storage } from "./storage";
 import { insertChatSchema, insertRegisteredPhoneSchema, insertSalespersonSchema, insertDemoBookingSchema, PLAN_LIMITS, type SubscriptionPlan } from "@shared/schema";
 import { z } from "zod";
@@ -18,7 +24,6 @@ import {
   findOrCreateChatByPhone,
   findUserByTwilioCredentials,
   connectUserTwilio,
-  disconnectUserTwilio,
   validateTwilioCredentials,
   encryptCredential,
   decryptCredential,
@@ -30,9 +35,7 @@ import {
   sendMetaWhatsAppMessage,
   sendMetaWhatsAppMedia,
   sendMetaWhatsAppTemplate,
-  verifyMetaConnection,
   connectUserMeta,
-  disconnectUserMeta,
   validateMetaCredentials,
   switchProvider,
   parseMetaIncomingWebhook,
@@ -919,42 +922,20 @@ export async function registerRoutes(
         });
       }
 
-      // Check which provider is active and verify connection
-      const user = await storage.getUser(req.user.id);
-      const activeProvider = user?.whatsappProvider || "twilio";
-      
-      if (activeProvider === "meta") {
-        const isMetaConnected = await verifyMetaConnection(req.user.id);
-        if (!isMetaConnected) {
-          return res.status(400).json({ 
-            error: "Meta WhatsApp not connected. Please connect your Meta WhatsApp Business API first.",
-            code: "META_NOT_CONNECTED"
-          });
-        }
-      } else {
-        const isTwilioConnected = await verifyUserTwilioConnection(req.user.id);
-        if (!isTwilioConnected) {
-          return res.status(400).json({ 
-            error: "WhatsApp not connected. Please connect your Twilio account first.",
-            code: "TWILIO_NOT_CONNECTED"
-          });
-        }
-      }
-
       const { message } = req.body;
       if (!message || typeof message !== "string") {
         return res.status(400).json({ error: "Message is required" });
       }
 
-      let messageId: string;
-      
-      if (activeProvider === "meta") {
-        const result = await sendMetaWhatsAppMessage(req.user.id, chat.whatsappPhone, message);
-        messageId = result.messageId;
-      } else {
-        const result = await sendUserWhatsAppMessage(req.user.id, chat.whatsappPhone, message);
-        messageId = result.sid;
+      // Route to the active provider via the central WhatsApp service
+      const sendResult = await sendWhatsAppMessage(req.user.id, chat.whatsappPhone, message);
+      if (!sendResult.success) {
+        return res.status(400).json({
+          error: sendResult.error,
+          code: sendResult.provider === "meta" ? "META_NOT_CONNECTED" : "TWILIO_NOT_CONNECTED",
+        });
       }
+      const messageId = sendResult.messageId;
 
       // Track conversation window (24-hour)
       await subscriptionService.trackConversationWindow(req.user.id, chat.id, chat.whatsappPhone);
@@ -1139,16 +1120,8 @@ export async function registerRoutes(
         return res.status(401).json({ error: "Unauthorized" });
       }
       
-      const user = await storage.getUser(req.user.id);
-      if (!user) {
-        return res.status(404).json({ error: "User not found" });
-      }
-
-      res.json({
-        connected: user.twilioConnected || false,
-        whatsappNumber: user.twilioWhatsappNumber || null,
-        hasCredentials: !!(user.twilioAccountSid && user.twilioAuthToken),
-      });
+      const status = await getProviderStatus(req.user.id);
+      res.json(status.twilio);
     } catch (error) {
       console.error("Error getting Twilio status:", error);
       res.status(500).json({ error: "Failed to get Twilio status" });
@@ -1205,7 +1178,7 @@ export async function registerRoutes(
         return res.status(401).json({ error: "Unauthorized" });
       }
 
-      await disconnectUserTwilio(req.user.id);
+      await disconnectWhatsAppProvider(req.user.id, "twilio");
       res.json({ success: true, message: "Twilio disconnected" });
     } catch (error: any) {
       console.error("Error disconnecting Twilio:", error);
@@ -1245,23 +1218,16 @@ export async function registerRoutes(
         return res.status(401).json({ error: "Unauthorized" });
       }
       
-      const user = await storage.getUser(req.user.id);
-      if (!user) {
-        return res.status(404).json({ error: "User not found" });
-      }
-
-      const webhookBaseUrl = process.env.APP_URL || `https://${process.env.REPLIT_DOMAINS?.split(',')[0]}`;
-      
+      const status = await getProviderStatus(req.user.id);
       res.json({
-        connected: user.metaConnected || false,
-        phoneNumber: user.metaPhoneNumberId ? `Meta ID: ${user.metaPhoneNumberId.slice(0, 10)}...` : null,
-        phoneNumberId: user.metaPhoneNumberId || null,
-        businessAccountId: user.metaBusinessAccountId || null,
-        hasCredentials: !!(user.metaAccessToken && user.metaPhoneNumberId),
-        activeProvider: user.whatsappProvider || "twilio",
-        twilioConnected: user.twilioConnected || false,
-        webhookUrl: `${webhookBaseUrl}/api/webhook/meta`,
-        webhookVerifyToken: user.metaConnected ? user.metaWebhookVerifyToken : null,
+        ...status.meta,
+        // legacy shape kept for backwards-compat with frontend
+        connected: status.meta.connected,
+        phoneNumber: status.meta.phoneNumberId
+          ? `Meta ID: ${status.meta.phoneNumberId.slice(0, 10)}...`
+          : null,
+        activeProvider: status.activeProvider,
+        twilioConnected: status.twilio.connected,
       });
     } catch (error) {
       console.error("Error getting Meta status:", error);
@@ -1323,7 +1289,7 @@ export async function registerRoutes(
         return res.status(401).json({ error: "Unauthorized" });
       }
 
-      await disconnectUserMeta(req.user.id);
+      await disconnectWhatsAppProvider(req.user.id, "meta");
       res.json({ success: true, message: "Meta WhatsApp disconnected" });
     } catch (error: any) {
       console.error("Error disconnecting Meta:", error);
@@ -1387,23 +1353,8 @@ export async function registerRoutes(
         return res.status(401).json({ error: "Unauthorized" });
       }
       
-      const user = await storage.getUser(req.user.id);
-      if (!user) {
-        return res.status(404).json({ error: "User not found" });
-      }
-
-      res.json({
-        activeProvider: user.whatsappProvider || "twilio",
-        twilio: {
-          connected: user.twilioConnected || false,
-          whatsappNumber: user.twilioWhatsappNumber || null,
-        },
-        meta: {
-          connected: user.metaConnected || false,
-          phoneNumberId: user.metaPhoneNumberId || null,
-          businessAccountId: user.metaBusinessAccountId || null,
-        },
-      });
+      const status = await getProviderStatus(req.user.id);
+      res.json(status);
     } catch (error) {
       console.error("Error getting provider status:", error);
       res.status(500).json({ error: "Failed to get provider status" });
