@@ -203,12 +203,36 @@ export function UnifiedInbox() {
         }]
       };
     }
+    console.log('[UnifiedInbox] Contact data loaded:', {
+      hasContactData: !!realContactData,
+      contactId: realContactData?.contact?.id,
+      contactName: realContactData?.contact?.name,
+      primaryChannel: realContactData?.contact?.primaryChannel,
+      conversationsCount: realContactData?.conversations?.length,
+      conversations: realContactData?.conversations?.map(c => ({ id: c.id, channel: c.channel })),
+    });
     return realContactData;
   }, [isDemoUser, selectedDemoChat, realContactData]);
 
   const primaryConversation = contactData?.conversations?.find(
     c => c.channel === (contactData?.contact?.primaryChannelOverride || contactData?.contact?.primaryChannel)
   ) || contactData?.conversations?.[0];
+
+  console.log('[UnifiedInbox] Primary conversation:', {
+    hasPrimaryConv: !!primaryConversation,
+    primaryConvId: primaryConversation?.id,
+    primaryConvChannel: primaryConversation?.channel,
+    detectedChannel: contactData?.contact?.primaryChannelOverride || contactData?.contact?.primaryChannel,
+  });
+
+  console.log('[UnifiedInbox] User provider state:', {
+    userEmail: user?.email,
+    metaConnected: user?.metaConnected,
+    twilioConnected: user?.twilioConnected,
+    whatsappProvider: user?.whatsappProvider,
+    selectedContactId,
+    hasContactData: !!contactData,
+  });
 
   const { data: realMessages = [] } = useQuery<Message[]>({
     queryKey: ["/api/conversations", primaryConversation?.id, "messages"],
@@ -565,7 +589,8 @@ export function UnifiedInbox() {
         "flex-1 flex flex-col min-w-0 overflow-hidden",
         selectedContactId ? "flex" : "hidden md:flex"
       )}>
-        {selectedContactId && contactData?.contact ? (
+        {selectedContactId ? (
+          contactData?.contact ? (
           <>
             <div className="p-2 md:p-4 border-b flex items-center gap-2">
               {/* Back button for mobile */}
@@ -794,9 +819,36 @@ export function UnifiedInbox() {
             </div>
           </>
         ) : (
+          <div className="flex-1 flex flex-col">
+            <div className="flex-1 flex items-center justify-center text-muted-foreground">
+              <div className="text-center">
+                <Loader2 className="w-12 h-12 mx-auto mb-4 opacity-50 animate-spin" />
+                <h3 className="text-lg font-medium mb-1">Loading contact...</h3>
+                <p className="text-sm">Please wait while we load the conversation</p>
+              </div>
+            </div>
+            <div className="p-4 border-t bg-white">
+              <div className="flex items-center gap-2">
+                <Textarea
+                  placeholder="Loading contact data..."
+                  className="min-h-[44px] max-h-32 resize-none"
+                  disabled
+                  data-testid="input-message-loading"
+                />
+                <Button disabled data-testid="button-send-message-loading">
+                  <Send className="w-4 h-4" />
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground mt-2">
+                Composer will be available once contact data loads
+              </p>
+            </div>
+          </div>
+        )
+        ) : (
           <div className="flex-1 flex items-center justify-center text-muted-foreground">
             <div className="text-center">
-              <MessageCircle className="w-16 h-16 mx-auto mb-4 opacity-30" />
+              <MessageCircle className="w-16 w-16 mx-auto mb-4 opacity-30" />
               <h3 className="text-lg font-medium mb-1">Select a contact</h3>
               <p className="text-sm">Choose a contact to view their conversation</p>
             </div>
