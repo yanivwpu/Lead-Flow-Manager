@@ -5225,6 +5225,48 @@ export async function registerRoutes(
     }
   });
 
+  // Check WhatsApp availability
+  app.get("/api/channels/whatsapp/availability", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      
+      const user = await storage.getUser(req.user.id);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      const activeProvider = user.whatsappProvider || "twilio";
+      
+      if (activeProvider === "meta") {
+        const isConnected = user.metaConnected || false;
+        return res.json({
+          available: isConnected,
+          provider: "meta",
+          reason: isConnected ? undefined : "Meta WhatsApp Business API not connected",
+          message: isConnected ? undefined : "Connect Meta WhatsApp in Settings to send messages",
+        });
+      }
+      
+      // Twilio
+      const isConnected = user.twilioConnected || false;
+      return res.json({
+        available: isConnected,
+        provider: "twilio",
+        reason: isConnected ? undefined : "Twilio WhatsApp connection not found",
+        message: isConnected ? undefined : "Connect Twilio in Settings to send messages",
+      });
+    } catch (error) {
+      console.error("Error checking WhatsApp availability:", error);
+      res.status(500).json({ 
+        available: false, 
+        reason: "Failed to check availability",
+        message: "Please try again or contact support",
+      });
+    }
+  });
+
   // Update channel setting
   app.patch("/api/channels/:channel", async (req, res) => {
     try {

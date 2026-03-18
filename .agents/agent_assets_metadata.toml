@@ -1,0 +1,20 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "5oQzg_5vMLQx-x-87Ku7W"
+uri = "file://whatsapp-availability-implementation.md"
+type = "text"
+title = "Technical Implementation Details"
+
+[[outputs]]
+id = "Rkm-9t1HPaWjzMl4JFhqN"
+uri = "file://whatsapp-availability-ui-states.md"
+type = "text"
+title = "Visual UI States Guide"
+
+[[outputs]]
+id = "KY8BAqq0YfXTfXk_wHJxq"
+uri = "file://IMPLEMENTATION_SUMMARY.md"
+type = "text"
+title = "Complete Implementation Summary"

@@ -270,6 +270,28 @@ export function UnifiedInbox() {
     refetchInterval: 60000, // Refresh every minute
   });
 
+  // WhatsApp availability check (for WhatsApp contacts)
+  interface WhatsAppAvailability {
+    available: boolean;
+    provider: "meta" | "twilio";
+    reason?: string;
+    message?: string;
+  }
+
+  const isWhatsAppContact = contactData?.contact?.primaryChannel === 'whatsapp' || 
+    contactData?.contact?.primaryChannelOverride === 'whatsapp';
+
+  const { data: whatsappAvailability } = useQuery<WhatsAppAvailability>({
+    queryKey: ["/api/channels/whatsapp/availability"],
+    enabled: isWhatsAppContact && !!selectedContactId,
+    refetchInterval: 30000, // Check every 30 seconds
+  });
+
+  console.log('[UnifiedInbox] WhatsApp availability:', {
+    isWhatsAppContact,
+    availability: whatsappAvailability,
+  });
+
   const sendMessageMutation = useMutation({
     mutationFn: async (data: { contactId: string; content: string }) => {
       const res = await fetch(`/api/contacts/${data.contactId}/send`, {
@@ -755,12 +777,30 @@ export function UnifiedInbox() {
                   </div>
                 </div>
               )}
+              {/* WhatsApp provider not connected warning */}
+              {isWhatsAppContact && whatsappAvailability && !whatsappAvailability.available && (
+                <div className="mb-3 mx-1 p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-2 shadow-sm">
+                  <AlertCircle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-amber-900 truncate">
+                      {whatsappAvailability.reason || "WhatsApp provider not connected"}
+                    </p>
+                    <p className="text-xs text-amber-600 mt-0.5 leading-normal">
+                      {whatsappAvailability.message || "Connect WhatsApp in Settings to send messages"}
+                    </p>
+                  </div>
+                </div>
+              )}
               <div className="flex items-center gap-2">
                 <Textarea
-                  placeholder={(windowStatus?.hasRestriction && !windowStatus?.isActive && 
-                    windowStatus.channel === (contactData?.contact?.primaryChannelOverride || contactData?.contact?.primaryChannel))
-                    ? "Cannot send - messaging window expired" 
-                    : "Type a message..."}
+                  placeholder={
+                    (windowStatus?.hasRestriction && !windowStatus?.isActive && 
+                      windowStatus.channel === (contactData?.contact?.primaryChannelOverride || contactData?.contact?.primaryChannel))
+                      ? "Cannot send - messaging window expired"
+                      : (isWhatsAppContact && whatsappAvailability && !whatsappAvailability.available)
+                      ? whatsappAvailability.message || "WhatsApp provider not connected"
+                      : "Type a message..."
+                  }
                   className="min-h-[44px] max-h-32 resize-none"
                   value={messageInput}
                   onChange={(e) => setMessageInput(e.target.value)}
@@ -770,8 +810,11 @@ export function UnifiedInbox() {
                       handleSendMessage();
                     }
                   }}
-                  disabled={windowStatus?.hasRestriction && !windowStatus?.isActive && 
-                    windowStatus.channel === (contactData?.contact?.primaryChannelOverride || contactData?.contact?.primaryChannel)}
+                  disabled={
+                    (windowStatus?.hasRestriction && !windowStatus?.isActive && 
+                      windowStatus.channel === (contactData?.contact?.primaryChannelOverride || contactData?.contact?.primaryChannel)) ||
+                    (isWhatsAppContact && whatsappAvailability && !whatsappAvailability.available)
+                  }
                   data-testid="input-message"
                 />
                 
@@ -794,9 +837,13 @@ export function UnifiedInbox() {
 
                 <Button
                   onClick={handleSendMessage}
-                  disabled={!messageInput.trim() || sendMessageMutation.isPending || 
+                  disabled={
+                    !messageInput.trim() || 
+                    sendMessageMutation.isPending || 
                     (windowStatus?.hasRestriction && !windowStatus?.isActive && 
-                     windowStatus.channel === (contactData?.contact?.primaryChannelOverride || contactData?.contact?.primaryChannel))}
+                      windowStatus.channel === (contactData?.contact?.primaryChannelOverride || contactData?.contact?.primaryChannel)) ||
+                    (isWhatsAppContact && whatsappAvailability && !whatsappAvailability.available)
+                  }
                   data-testid="button-send-message"
                 >
                   {sendMessageMutation.isPending ? (
@@ -809,6 +856,11 @@ export function UnifiedInbox() {
               <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
                 {getChannelIcon(contactData.contact.primaryChannelOverride as Channel || contactData.contact.primaryChannel)}
                 Sending via {CHANNEL_CONFIG[contactData.contact.primaryChannelOverride as Channel || contactData.contact.primaryChannel]?.label}
+                {isWhatsAppContact && whatsappAvailability?.available && (
+                  <span className="ml-2 text-emerald-600 text-[10px]">
+                    ({whatsappAvailability.provider === 'meta' ? 'Meta' : 'Twilio'})
+                  </span>
+                )}
                 {windowStatus?.hasRestriction && windowStatus?.isActive && windowStatus?.hoursRemaining && 
                  windowStatus.channel === (contactData?.contact?.primaryChannelOverride || contactData?.contact?.primaryChannel) && (
                   <span className="ml-2 text-amber-600">
