@@ -1530,9 +1530,22 @@ export async function registerRoutes(
 
       console.log(`[Twilio Webhook] User matched — userId: ${user.id} (email: ${user.email})`);
 
+      // Environment mode — drives strict vs. permissive behaviour
+      const isProduction = process.env.NODE_ENV === "production";
+
       // Validate Twilio request signature using the user's auth token
+      // In production: missing or invalid signature → 403 immediately
+      // In dev/staging: warn and allow through for easier local testing
       const twilioSignature = req.headers["x-twilio-signature"] as string;
-      if (twilioSignature && user.twilioAuthToken) {
+
+      if (!twilioSignature) {
+        if (isProduction) {
+          console.error(`[Twilio Webhook] REJECTED (production): Missing X-Twilio-Signature header — request refused`);
+          return res.status(403).send("Missing signature");
+        } else {
+          console.warn(`[Twilio Webhook] DEV BYPASS: No X-Twilio-Signature header — allowed in non-production. This would be rejected in production.`);
+        }
+      } else if (user.twilioAuthToken) {
         try {
           const twilioClient = (await import("twilio")).default;
           const authToken = isEncrypted(user.twilioAuthToken)
@@ -1541,18 +1554,32 @@ export async function registerRoutes(
           const webhookBaseUrl = `https://${process.env.REPLIT_DOMAINS?.split(",")[0]}`;
           const fullUrl = `${webhookBaseUrl}/api/webhook/twilio/incoming`;
           const isValid = twilioClient.validateRequest(authToken, twilioSignature, fullUrl, req.body);
+
           if (isValid) {
-            console.log(`[Twilio Webhook] Signature validation: PASSED`);
+            console.log(`[Twilio Webhook] Signature validation: PASSED ✓`);
           } else {
-            console.warn(`[Twilio Webhook] Signature validation: FAILED (URL used: ${fullUrl}) — proceeding anyway (dev mode)`);
+            if (isProduction) {
+              console.error(`[Twilio Webhook] REJECTED (production): Signature validation failed. URL used: ${fullUrl}`);
+              return res.status(403).send("Invalid signature");
+            } else {
+              console.warn(`[Twilio Webhook] DEV BYPASS: Signature validation failed (URL: ${fullUrl}) — allowed in non-production. This would be rejected in production.`);
+            }
           }
         } catch (sigErr: any) {
-          console.warn(`[Twilio Webhook] Signature validation error: ${sigErr.message} — proceeding anyway`);
+          if (isProduction) {
+            console.error(`[Twilio Webhook] REJECTED (production): Signature validation threw error: ${sigErr.message}`);
+            return res.status(403).send("Signature validation error");
+          } else {
+            console.warn(`[Twilio Webhook] DEV BYPASS: Signature validation error: ${sigErr.message} — allowed in non-production.`);
+          }
         }
-      } else if (!twilioSignature) {
-        console.warn(`[Twilio Webhook] No X-Twilio-Signature header present — skipping validation`);
       } else {
-        console.warn(`[Twilio Webhook] User has no auth token stored — skipping validation`);
+        if (isProduction) {
+          console.error(`[Twilio Webhook] REJECTED (production): User has no auth token stored — cannot validate signature`);
+          return res.status(403).send("Cannot validate signature");
+        } else {
+          console.warn(`[Twilio Webhook] DEV BYPASS: User has no auth token stored — skipping validation in non-production.`);
+        }
       }
 
       const userId = user.id;
@@ -1767,52 +1794,64 @@ export async function registerRoutes(
       console.log(`[Meta Webhook] Headers: x-hub-signature-256=${req.headers["x-hub-signature-256"] ? "present" : "MISSING"}, content-type=${req.headers["content-type"]}`);
       console.log(`[Meta Webhook] Raw payload preview: ${JSON.stringify(req.body).substring(0, 800)}`);
 
-      // Verify webhook signature for security - REQUIRED
+      // Environment mode — drives strict vs. permissive behaviour throughout this handler
+      const isProduction = process.env.NODE_ENV === "production";
+
+      // Check for signature header
       const signature = req.headers["x-hub-signature-256"] as string;
-      
-      // Reject requests without signature header (security requirement)
+
       if (!signature) {
-        console.warn("[Meta Webhook] REJECTED: Missing X-Hub-Signature-256 header");
-        return res.status(403).send("Missing signature");
+        if (isProduction) {
+          console.error(`[Meta Webhook] REJECTED (production): Missing X-Hub-Signature-256 header`);
+          return res.status(403).send("Missing signature");
+        } else {
+          console.warn(`[Meta Webhook] DEV BYPASS: No X-Hub-Signature-256 header — allowed in non-production. This would be rejected in production.`);
+          // Skip all signature checks and proceed directly to message processing
+        }
       }
-      
+
       // Use the captured raw body buffer for signature verification.
       // JSON.stringify(req.body) would re-serialize a parsed object and may differ
       // from the original bytes that Meta signed (whitespace, key order), causing
       // every webhook to fail verification. rawBody is set by the express.json verify
       // callback registered in index.ts for /api/webhook/meta.
       const rawBody = (req as any).rawBody?.toString() || JSON.stringify(req.body);
-      
-      // Check against global app secret first
+
+      // --- Signature resolution ---
+      // We track two flags separately:
+      //   signatureValid     — true only when a secret verified the HMAC successfully
+      //   hasSecretToVerify  — true when at least one secret was available to try
+      // In production: !signatureValid → 403 regardless of hasSecretToVerify
+      // In dev:        !signatureValid + !hasSecretToVerify → warn + allow
+      //                !signatureValid + hasSecretToVerify  → warn + allow (HMAC mismatch)
       const globalAppSecret = process.env.META_APP_SECRET;
       let signatureValid = false;
-      
+      let hasSecretToVerify = false;
+
       if (globalAppSecret) {
+        hasSecretToVerify = true;
         signatureValid = verifyMetaWebhookSignature(rawBody, signature, globalAppSecret);
-        console.log(`[Meta Webhook] Global app secret check: ${signatureValid ? "PASSED" : "failed"}`);
+        console.log(`[Meta Webhook] Global META_APP_SECRET check: ${signatureValid ? "PASSED" : "failed"}`);
       } else {
-        console.log("[Meta Webhook] No global META_APP_SECRET configured, trying user-level secrets");
+        console.log("[Meta Webhook] No global META_APP_SECRET — trying user-level secrets");
       }
-      
-      // If not valid with global secret, try to find user's app secret
+
+      // If global secret didn't verify, try user-level secrets
       if (!signatureValid) {
         const entry = req.body.entry?.[0];
         const phoneNumberId = entry?.changes?.[0]?.value?.metadata?.phone_number_id;
-        
+
         if (phoneNumberId) {
-          // WhatsApp: lookup by phone number ID
           const user = await findUserByMetaPhoneNumberId(phoneNumberId);
           if (user?.metaAppSecret) {
+            hasSecretToVerify = true;
             const userSecret = isMetaEncrypted(user.metaAppSecret)
               ? decryptMetaCredential(user.metaAppSecret)
               : user.metaAppSecret;
             signatureValid = verifyMetaWebhookSignature(rawBody, signature, userSecret);
             console.log(`[Meta Webhook] User (${user.id}) app secret check for phoneNumberId ${phoneNumberId}: ${signatureValid ? "PASSED" : "failed"}`);
           } else if (user) {
-            // User found but has no app secret stored — allow through with a warning
-            // (app secret is optional if the user didn't store it during setup)
-            console.warn(`[Meta Webhook] User ${user.id} has no metaAppSecret stored — allowing webhook without signature verification`);
-            signatureValid = true;
+            console.warn(`[Meta Webhook] User ${user.id} matched but has no metaAppSecret stored`);
           } else {
             console.warn(`[Meta Webhook] No user found for phoneNumberId: ${phoneNumberId}`);
           }
@@ -1825,20 +1864,21 @@ export async function registerRoutes(
             const { db: database } = await import("../drizzle/db");
             const { channelSettings: csTable } = await import("@shared/schema");
             const { eq: eqOp } = await import("drizzle-orm");
-            
+
             const allConnected = await database.select().from(csTable)
               .where(eqOp(csTable.isConnected, true));
-            
+
             for (const setting of allConnected) {
               const config = setting.config as any;
               if (config?.pageId === recipientId || config?.instagramAccountId === recipientId) {
                 if (config?.appSecret) {
+                  hasSecretToVerify = true;
                   signatureValid = verifyMetaWebhookSignature(rawBody, signature, config.appSecret);
                   if (signatureValid) break;
                 }
-                // Also check the user's Meta app secret
                 const settingUser = await storage.getUser(setting.userId);
                 if (settingUser?.metaAppSecret) {
+                  hasSecretToVerify = true;
                   const userSecret = isMetaEncrypted(settingUser.metaAppSecret)
                     ? decryptMetaCredential(settingUser.metaAppSecret)
                     : settingUser.metaAppSecret;
@@ -1850,16 +1890,27 @@ export async function registerRoutes(
           }
         }
       }
-      
-      if (!signatureValid) {
-        console.warn("[Meta Webhook] REJECTED: Signature verification failed for all secrets");
-        console.warn(`[Meta Webhook] Signature received: ${signature}`);
-        console.warn(`[Meta Webhook] Raw body used for verification (first 200 chars): ${rawBody.substring(0, 200)}`);
-        console.warn(`[Meta Webhook] rawBody came from: ${(req as any).rawBody ? "rawBody buffer (correct)" : "JSON.stringify fallback (may mismatch)"}`);
-        return res.status(403).send("Invalid signature");
-      }
 
-      console.log("[Meta Webhook] Signature verification: PASSED");
+      // --- Enforcement decision ---
+      if (!signatureValid) {
+        if (isProduction) {
+          if (!hasSecretToVerify) {
+            console.error(`[Meta Webhook] REJECTED (production): No app secret configured — cannot verify signature. Set META_APP_SECRET env var or store metaAppSecret on user account.`);
+          } else {
+            console.error(`[Meta Webhook] REJECTED (production): Signature verification failed. Signature: ${signature.substring(0, 30)}... Body source: ${(req as any).rawBody ? "rawBody buffer" : "JSON.stringify fallback"}`);
+          }
+          return res.status(403).send("Invalid signature");
+        } else {
+          // Dev/staging — allow through with clear warning
+          if (!hasSecretToVerify) {
+            console.warn(`[Meta Webhook] DEV BYPASS: No app secret configured — allowed in non-production. Set META_APP_SECRET for production.`);
+          } else {
+            console.warn(`[Meta Webhook] DEV BYPASS: Signature verification failed — allowed in non-production. This would be rejected in production.`);
+          }
+        }
+      } else {
+        console.log("[Meta Webhook] Signature verification: PASSED ✓");
+      }
 
       const incomingMessage = parseMetaIncomingWebhook(req.body);
       const statusUpdate = parseMetaStatusWebhook(req.body);
