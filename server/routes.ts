@@ -1551,7 +1551,12 @@ export async function registerRoutes(
           const authToken = isEncrypted(user.twilioAuthToken)
             ? decryptCredential(user.twilioAuthToken)
             : user.twilioAuthToken;
-          const webhookBaseUrl = `https://${process.env.REPLIT_DOMAINS?.split(",")[0]}`;
+          // IMPORTANT: must use the same base URL that was used when configuring
+          // the Twilio webhook (connectUserTwilio / configureWebhooks). That code
+          // uses APP_URL first, falling back to REPLIT_DOMAINS. The signature
+          // Twilio sends is computed against the URL they actually POST to, so
+          // any mismatch here causes every production signature check to fail.
+          const webhookBaseUrl = process.env.APP_URL || `https://${process.env.REPLIT_DOMAINS?.split(",")[0]}`;
           const fullUrl = `${webhookBaseUrl}/api/webhook/twilio/incoming`;
           const isValid = twilioClient.validateRequest(authToken, twilioSignature, fullUrl, req.body);
 

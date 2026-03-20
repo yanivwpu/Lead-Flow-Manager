@@ -192,13 +192,21 @@ export function ConnectMetaWizard({ open, onOpenChange, onSuccess, onStartTour }
               </div>
             </div>
             <div className="space-y-2">
-              <Label>App Secret (Optional - for signature verification)</Label>
+              <Label>
+                App Secret{" "}
+                <span className="text-xs text-amber-600 font-medium">
+                  (Required for webhook signature verification in production)
+                </span>
+              </Label>
               <Input
                 type="password"
                 placeholder="App Secret"
                 value={credentials.appSecret}
                 onChange={(e) => setCredentials({ ...credentials, appSecret: e.target.value })}
               />
+              <p className="text-xs text-muted-foreground">
+                Found in your Meta app dashboard under App Settings → Basic. Without this, inbound messages will be rejected in production.
+              </p>
             </div>
             {error && <Alert variant="destructive"><AlertCircle className="h-4 w-4" /><AlertDescription>{error}</AlertDescription></Alert>}
             <Button className="w-full" onClick={handleConnect} disabled={loading || !credentials.accessToken || !credentials.phoneNumberId} data-tour="test-connection-btn">
