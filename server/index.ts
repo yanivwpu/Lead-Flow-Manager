@@ -283,17 +283,21 @@ app.use((req, res, next) => {
   // Start cron jobs (trial check-in emails, etc.)
   startCronJobs();
 
-  // IndexNow: submit all public pages on first production startup
-  // Runs after a short delay so the server is fully ready before making outbound requests
+  // IndexNow: detect new/changed content and submit to search engines on startup.
+  // Uses a persisted state snapshot to submit only newly added blog posts and
+  // landing pages. Falls back to submitting all pages when no prior state exists
+  // (first deploy or ephemeral production filesystem after re-deploy).
+  // Runs only in production; in dev the state file persists so only genuine
+  // new additions trigger submissions.
   if (process.env.NODE_ENV === "production") {
     setTimeout(async () => {
       try {
-        const { submitAllPublicPages } = await import("./indexNow");
-        await submitAllPublicPages();
+        const { detectAndSubmitNewContent } = await import("./indexNow");
+        await detectAndSubmitNewContent();
       } catch (err: any) {
-        console.error("[IndexNow] Startup submission failed:", err.message);
+        console.error("[IndexNow] Startup content detection failed:", err.message);
       }
-    }, 10_000); // 10 second delay after startup
+    }, 10_000); // 10-second delay — lets server fully start before outbound requests
   }
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {

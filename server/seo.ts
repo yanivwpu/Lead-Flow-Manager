@@ -8,7 +8,7 @@ interface BlogPostMeta {
   featured?: boolean;
 }
 
-const BLOG_POSTS_META: BlogPostMeta[] = [
+export const BLOG_POSTS_META: BlogPostMeta[] = [
   {
     slug: "whatsapp-crm-complete-guide-2025",
     title: "WhatsApp CRM: The Complete Guide for Small Businesses in 2025",
@@ -211,7 +211,7 @@ interface PageMeta {
   ogImage?: string;
 }
 
-const PAGE_META: Record<string, PageMeta> = {
+export const PAGE_META: Record<string, PageMeta> = {
   "/pricing": {
     title: "Pricing – Free Forever | WhachatCRM",
     description: "Simple, transparent pricing for WhatsApp CRM. Free plan forever, Starter at $19/mo, Pro at $49/mo. No hidden fees, no message markup. Start free today.",
