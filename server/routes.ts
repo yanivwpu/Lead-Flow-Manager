@@ -1254,6 +1254,15 @@ export async function registerRoutes(
         });
       }
 
+      // In production, App Secret is required for webhook signature verification.
+      // Without it, every inbound webhook would be rejected with 403.
+      if (process.env.NODE_ENV === "production" && !appSecret) {
+        return res.status(400).json({
+          error: "App Secret is required in production. Find it in your Meta app dashboard under App Settings → Basic.",
+          field: "appSecret",
+        });
+      }
+
       const credentials: MetaCredentials = {
         accessToken,
         phoneNumberId,

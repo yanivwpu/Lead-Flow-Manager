@@ -193,23 +193,27 @@ export function ConnectMetaWizard({ open, onOpenChange, onSuccess, onStartTour }
             </div>
             <div className="space-y-2">
               <Label>
-                App Secret{" "}
-                <span className="text-xs text-amber-600 font-medium">
-                  (Required for webhook signature verification in production)
-                </span>
+                App Secret <span className="text-destructive">*</span>
               </Label>
               <Input
                 type="password"
                 placeholder="App Secret"
                 value={credentials.appSecret}
                 onChange={(e) => setCredentials({ ...credentials, appSecret: e.target.value })}
+                data-testid="input-meta-app-secret"
               />
               <p className="text-xs text-muted-foreground">
-                Found in your Meta app dashboard under App Settings → Basic. Without this, inbound messages will be rejected in production.
+                Found in your Meta app under App Settings → Basic. Required so inbound WhatsApp messages can be verified and delivered.
               </p>
             </div>
             {error && <Alert variant="destructive"><AlertCircle className="h-4 w-4" /><AlertDescription>{error}</AlertDescription></Alert>}
-            <Button className="w-full" onClick={handleConnect} disabled={loading || !credentials.accessToken || !credentials.phoneNumberId} data-tour="test-connection-btn">
+            <Button
+              className="w-full"
+              onClick={handleConnect}
+              disabled={loading || !credentials.accessToken || !credentials.phoneNumberId || !credentials.appSecret}
+              data-tour="test-connection-btn"
+              data-testid="button-meta-connect"
+            >
               {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Connect API
             </Button>
           </div>
