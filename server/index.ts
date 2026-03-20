@@ -13,6 +13,7 @@ import { WebhookHandlers } from "./webhookHandlers";
 import { setupPresenceServer } from "./presence";
 import { registerChannelAdapters } from "./channelAdapters";
 import { getQueue } from "./queue";
+import "./worker";
 import oidcRouter from "./oidc";
 import bcrypt from "bcryptjs";
 import { storage } from "./storage";

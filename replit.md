@@ -15,6 +15,13 @@ The application is a full multi-tenant SaaS implementation with:
 - Notification system for follow-up reminders (push & email)
 - PWA capabilities (installable, offline-first)
 
+## Recent Changes (March 20, 2026)
+- **Fixed inbound Meta/WhatsApp webhook — two bugs resolved**:
+  1. **Signature verification broken**: The POST handler used `JSON.stringify(req.body)` to reconstruct the raw payload for HMAC verification. After Express had already parsed the body, re-serialization produced different bytes than what Meta signed, causing every webhook to fail with 403 "Invalid signature". Fixed by capturing the raw body buffer via `express.json({ verify })` on the `/api/webhook/meta` route in `server/index.ts` (same pattern used for Shopify), then using `(req as any).rawBody?.toString()` in the handler.
+  2. **Worker never started**: `server/worker.ts` (BullMQ consumer) was never imported or started. Jobs were enqueued to Redis but nobody consumed them. Fixed by adding `import "./worker"` to `server/index.ts`.
+  - Added comprehensive `[Meta Webhook]` and `[Inbox Worker]` logging covering: webhook received, signature check result, parsed sender/type/messageId, user routing, job queue confirmation, contact match/create, conversation match/create, and message save confirmation.
+  - Key files: `server/index.ts`, `server/routes.ts`, `server/channelService.ts`
+
 ## Recent Changes (March 5, 2026)
 - **LeadConnector White-Label Compliance (GHL Marketplace Review Fix)**:
   - Removed all "GoHighLevel" / "GHL" references from user-facing UI, error messages, and server responses
