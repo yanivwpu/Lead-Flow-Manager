@@ -3498,6 +3498,20 @@ export async function registerRoutes(
     }
   });
 
+  // Admin: Trigger content-diff detection and targeted IndexNow submission
+  // Compares current blog posts / PAGE_META against stored snapshot, fires
+  // onBlogPostPublished / onLandingPageCreated / onPageUpdated for any changes.
+  app.post("/api/admin/indexnow/detect", requireAdmin, async (req, res) => {
+    try {
+      const { detectAndSubmitNewContent } = await import("./indexNow");
+      await detectAndSubmitNewContent();
+      res.json({ ok: true, message: "Content detection and targeted submission complete. Check server logs for details." });
+    } catch (error: any) {
+      console.error("[IndexNow] Admin detect error:", error);
+      res.status(500).json({ error: error.message || "Detection failed" });
+    }
+  });
+
   // Admin: Get all salespeople
   app.get("/api/admin/salespeople", requireAdmin, async (req, res) => {
     try {

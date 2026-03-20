@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import fs from "fs";
 import path from "path";
 import { BLOG_POSTS_META, PAGE_META } from "./seo";
@@ -10,10 +11,9 @@ const BASE_URL = `https://${HOST}`;
 const KEY_LOCATION = `${BASE_URL}/${INDEXNOW_KEY}.txt`;
 const INDEXNOW_API = "https://api.indexnow.org/indexnow";
 
-// Path to the lightweight JSON file that tracks what has been submitted.
-// In production (autoscale) the filesystem is ephemeral, so this file will not
-// exist after a fresh deploy — that is intentional: every deploy is treated as
-// a first-run and all new/changed content gets resubmitted.
+// Persists submission state between restarts. In production (autoscale) the
+// filesystem is ephemeral, so this file won't survive a fresh deploy — that is
+// intentional: every deploy falls back to a full resubmission.
 const STATE_FILE = path.resolve(process.cwd(), ".indexnow-state.json");
 
 // ─── State types ──────────────────────────────────────────────────────────────
@@ -22,12 +22,15 @@ interface IndexNowState {
   submittedAt: string;
   blogSlugs: string[];
   pageRoutes: string[];
+  // SHA-256 fingerprint of each page's metadata. Keyed by the URL path:
+  //   "/blog/my-slug" for blog posts, "/pricing" for PAGE_META routes.
+  contentHashes: Record<string, string>;
 }
 
 function loadState(): IndexNowState | null {
   try {
     if (fs.existsSync(STATE_FILE)) {
-      return JSON.parse(fs.readFileSync(STATE_FILE, "utf-8"));
+      return JSON.parse(fs.readFileSync(STATE_FILE, "utf-8")) as IndexNowState;
     }
   } catch {
     // Corrupt or missing — treat as first run
@@ -41,6 +44,45 @@ function saveState(state: IndexNowState): void {
   } catch (err: any) {
     console.warn(`[IndexNow] Could not save state file: ${err.message}`);
   }
+}
+
+// ─── Content fingerprinting ───────────────────────────────────────────────────
+// Deterministic SHA-256 hash of all SEO-relevant metadata fields for a page.
+// A hash change means the page's content or SEO data was edited and needs
+// resubmission to IndexNow.
+
+function sha256(input: string): string {
+  return crypto.createHash("sha256").update(input).digest("hex");
+}
+
+function computeContentHashes(): Record<string, string> {
+  const hashes: Record<string, string> = {};
+
+  // Hash each blog post's full metadata (title, excerpt, date, category, readTime, featured)
+  for (const post of BLOG_POSTS_META) {
+    const fingerprint = JSON.stringify({
+      title: post.title,
+      excerpt: post.excerpt,
+      date: post.date,
+      category: post.category,
+      readTime: post.readTime,
+      featured: post.featured ?? false,
+    });
+    hashes[`/blog/${post.slug}`] = sha256(fingerprint);
+  }
+
+  // Hash each PAGE_META route's full metadata (title, description, canonical, ogImage)
+  for (const [route, meta] of Object.entries(PAGE_META)) {
+    const fingerprint = JSON.stringify({
+      title: meta.title,
+      description: meta.description,
+      canonical: meta.canonical,
+      ogImage: meta.ogImage ?? "",
+    });
+    hashes[route] = sha256(fingerprint);
+  }
+
+  return hashes;
 }
 
 // ─── URL helpers ──────────────────────────────────────────────────────────────
@@ -139,7 +181,6 @@ export async function submitAllPublicPages(): Promise<{
 }
 
 // ─── Named event hooks ────────────────────────────────────────────────────────
-// Call these wherever the matching content event occurs.
 
 /** Call when a new blog post slug is added to BLOG_POSTS_META and deployed. */
 export function onBlogPostPublished(slug: string): void {
@@ -149,63 +190,103 @@ export function onBlogPostPublished(slug: string): void {
 }
 
 /** Call when a new route is added to PAGE_META (landing / feature / SEO page). */
-export function onLandingPageCreated(path: string): void {
-  const url = `${BASE_URL}${path.startsWith("/") ? path : "/" + path}`;
-  console.log(`[IndexNow] Landing page created: ${path}`);
+export function onLandingPageCreated(routePath: string): void {
+  const url = `${BASE_URL}${routePath.startsWith("/") ? routePath : "/" + routePath}`;
+  console.log(`[IndexNow] Landing page created: ${routePath}`);
   submitUrls([url]);
 }
 
-/** Call when existing page content or SEO metadata changes. */
-export function onPageUpdated(path: string): void {
-  const url = `${BASE_URL}${path.startsWith("/") ? path : "/" + path}`;
-  console.log(`[IndexNow] Page updated: ${path}`);
+/**
+ * Call when existing page content or SEO metadata changes.
+ * Wired automatically by detectAndSubmitNewContent() when it detects a
+ * fingerprint change on any blog post or PAGE_META route.
+ */
+export function onPageUpdated(routePath: string): void {
+  const url = `${BASE_URL}${routePath.startsWith("/") ? routePath : "/" + routePath}`;
+  console.log(`[IndexNow] Page updated: ${routePath}`);
   submitUrls([url]);
 }
 
-// ─── Startup diff-and-submit ───────────────────────────────────────────────────
-// Compares current content against the last persisted snapshot.
-// Calls the appropriate named hook for each new item found.
-// Falls back to submitting all pages when no prior state exists (first deploy).
+// ─── Startup diff-and-submit ──────────────────────────────────────────────────
+// Runs on every production startup (10s delay, called from server/index.ts).
+//
+// Detects three categories of change since the last saved snapshot:
+//   1. New blog post slug       → onBlogPostPublished(slug)
+//   2. New PAGE_META route      → onLandingPageCreated(route)
+//   3. Changed content/metadata → onPageUpdated(path)   ← covers edits to
+//      blog post title/excerpt/date/category/readTime/featured AND any
+//      PAGE_META route's title/description/canonical/ogImage
+//
+// If no prior snapshot exists (first deploy, or ephemeral production filesystem
+// after a fresh deploy) → submitAllPublicPages() and save a fresh snapshot.
 
 export async function detectAndSubmitNewContent(): Promise<void> {
   const currentSlugs = BLOG_POSTS_META.map((p) => p.slug);
   const currentRoutes = Object.keys(PAGE_META);
+  const currentHashes = computeContentHashes();
 
   const state = loadState();
 
   if (!state) {
-    // First run — no prior snapshot. Submit everything.
     console.log(
-      "[IndexNow] No prior state found — submitting all public pages (first deploy or ephemeral filesystem)."
+      "[IndexNow] No prior state — submitting all public pages (first deploy or ephemeral filesystem)."
     );
     await submitAllPublicPages();
   } else {
     const prevSlugs = new Set(state.blogSlugs);
     const prevRoutes = new Set(state.pageRoutes);
+    const prevHashes: Record<string, string> = state.contentHashes ?? {};
 
+    // ── 1. New blog posts ────────────────────────────────────────────────────
     const newSlugs = currentSlugs.filter((s) => !prevSlugs.has(s));
-    const newRoutes = currentRoutes.filter((r) => !prevRoutes.has(r));
-
-    if (newSlugs.length === 0 && newRoutes.length === 0) {
-      console.log("[IndexNow] No new blog posts or landing pages detected since last submission.");
-      return;
-    }
-
     if (newSlugs.length > 0) {
       console.log(
-        `[IndexNow] Detected ${newSlugs.length} new blog post(s): ${newSlugs.join(", ")}`
+        `[IndexNow] New blog post(s) detected: ${newSlugs.join(", ")}`
       );
       for (const slug of newSlugs) onBlogPostPublished(slug);
     }
 
+    // ── 2. New landing / SEO pages ───────────────────────────────────────────
+    const newRoutes = currentRoutes.filter((r) => !prevRoutes.has(r));
     if (newRoutes.length > 0) {
       console.log(
-        `[IndexNow] Detected ${newRoutes.length} new landing page(s): ${newRoutes.join(", ")}`
+        `[IndexNow] New landing page(s) detected: ${newRoutes.join(", ")}`
       );
       for (const route of newRoutes) onLandingPageCreated(route);
     }
 
-    // Wait for the debounce to flush before saving state
+    // ── 3. Edited content (fingerprint changed on existing pages) ────────────
+    const existingPaths = Object.keys(currentHashes).filter(
+      (p) =>
+        // Exclude pages that were just detected as "new" above
+        !newSlugs.some((s) => p === `/blog/${s}`) &&
+        !newRoutes.includes(p)
+    );
+
+    const changedPaths = existingPaths.filter(
+      (p) => prevHashes[p] !== undefined && prevHashes[p] !== currentHashes[p]
+    );
+
+    if (changedPaths.length > 0) {
+      console.log(
+        `[IndexNow] Edited page(s) detected (content/metadata changed): ${changedPaths.join(", ")}`
+      );
+      for (const p of changedPaths) onPageUpdated(p);
+    }
+
+    if (newSlugs.length === 0 && newRoutes.length === 0 && changedPaths.length === 0) {
+      console.log("[IndexNow] No content changes detected since last submission.");
+      // Save an updated snapshot (refreshes submittedAt) but don't submit anything.
+      saveState({
+        submittedAt: new Date().toISOString(),
+        blogSlugs: currentSlugs,
+        pageRoutes: currentRoutes,
+        contentHashes: currentHashes,
+      });
+      return;
+    }
+
+    // Wait for the debounce timer to flush all queued URLs before saving state.
     await new Promise<void>((resolve) => setTimeout(resolve, DEBOUNCE_MS + 1_000));
   }
 
@@ -213,6 +294,7 @@ export async function detectAndSubmitNewContent(): Promise<void> {
     submittedAt: new Date().toISOString(),
     blogSlugs: currentSlugs,
     pageRoutes: currentRoutes,
+    contentHashes: currentHashes,
   });
 
   console.log("[IndexNow] State snapshot saved.");
