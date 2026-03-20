@@ -3478,6 +3478,26 @@ export async function registerRoutes(
     next();
   };
 
+  // Admin: Manual IndexNow submission
+  app.post("/api/admin/indexnow/submit", requireAdmin, async (req, res) => {
+    try {
+      const { urls } = req.body;
+      const { submitNow, PUBLIC_PAGES } = await import("./indexNow");
+      const urlsToSubmit: string[] = Array.isArray(urls) && urls.length > 0
+        ? urls
+        : PUBLIC_PAGES;
+      const result = await submitNow(urlsToSubmit);
+      res.json({
+        submitted: urlsToSubmit,
+        count: urlsToSubmit.length,
+        result,
+      });
+    } catch (error: any) {
+      console.error("[IndexNow] Admin submit error:", error);
+      res.status(500).json({ error: error.message || "Submission failed" });
+    }
+  });
+
   // Admin: Get all salespeople
   app.get("/api/admin/salespeople", requireAdmin, async (req, res) => {
     try {

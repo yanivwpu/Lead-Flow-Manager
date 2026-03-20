@@ -15,6 +15,17 @@ The application is a full multi-tenant SaaS implementation with:
 - Notification system for follow-up reminders (push & email)
 - PWA capabilities (installable, offline-first)
 
+## Recent Changes (March 20, 2026) — IndexNow
+- **IndexNow implemented** (`server/indexNow.ts`):
+  - Key: `9726ec610d574c62b33130ba828766eb`
+  - Key file served at `https://whachatcrm.com/9726ec610d574c62b33130ba828766eb.txt` (static in `client/public/`)
+  - Service exports: `submitUrls(urls)` (debounced 5s), `submitNow(urls)` (immediate), `submitAllPublicPages()`
+  - 26 public pages covered: homepage, pricing, blog posts, marketing/SEO pages, alternatives
+  - Excluded: /admin, /dashboard, /login, /auth, /settings, /api/*
+  - Auto-submits all pages 10 seconds after production startup
+  - Admin endpoint: `POST /api/admin/indexnow/submit` (requires admin session) — body: `{ urls?: string[] }`, defaults to all public pages
+  - Live confirmed HTTP 202 from `https://api.indexnow.org/indexnow`
+
 ## Recent Changes (March 20, 2026)
 - **Fixed inbound Meta/WhatsApp webhook — two bugs resolved**:
   1. **Signature verification broken**: The POST handler used `JSON.stringify(req.body)` to reconstruct the raw payload for HMAC verification. After Express had already parsed the body, re-serialization produced different bytes than what Meta signed, causing every webhook to fail with 403 "Invalid signature". Fixed by capturing the raw body buffer via `express.json({ verify })` on the `/api/webhook/meta` route in `server/index.ts` (same pattern used for Shopify), then using `(req as any).rawBody?.toString()` in the handler.

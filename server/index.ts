@@ -283,6 +283,19 @@ app.use((req, res, next) => {
   // Start cron jobs (trial check-in emails, etc.)
   startCronJobs();
 
+  // IndexNow: submit all public pages on first production startup
+  // Runs after a short delay so the server is fully ready before making outbound requests
+  if (process.env.NODE_ENV === "production") {
+    setTimeout(async () => {
+      try {
+        const { submitAllPublicPages } = await import("./indexNow");
+        await submitAllPublicPages();
+      } catch (err: any) {
+        console.error("[IndexNow] Startup submission failed:", err.message);
+      }
+    }, 10_000); // 10 second delay after startup
+  }
+
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
