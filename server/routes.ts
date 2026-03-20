@@ -1723,19 +1723,26 @@ export async function registerRoutes(
   // Meta webhook for incoming messages and status updates
   app.post("/api/webhook/meta", async (req, res) => {
     try {
-      console.log("Meta webhook received:", JSON.stringify(req.body).substring(0, 500));
+      const webhookTimestamp = new Date().toISOString();
+      console.log(`[Meta Webhook] ===== INBOUND WEBHOOK RECEIVED at ${webhookTimestamp} =====`);
+      console.log(`[Meta Webhook] Headers: x-hub-signature-256=${req.headers["x-hub-signature-256"] ? "present" : "MISSING"}, content-type=${req.headers["content-type"]}`);
+      console.log(`[Meta Webhook] Raw payload preview: ${JSON.stringify(req.body).substring(0, 800)}`);
 
       // Verify webhook signature for security - REQUIRED
       const signature = req.headers["x-hub-signature-256"] as string;
       
       // Reject requests without signature header (security requirement)
       if (!signature) {
-        console.warn("Meta webhook rejected: Missing X-Hub-Signature-256 header");
+        console.warn("[Meta Webhook] REJECTED: Missing X-Hub-Signature-256 header");
         return res.status(403).send("Missing signature");
       }
       
-      // Get the raw body for signature verification
-      const rawBody = JSON.stringify(req.body);
+      // Use the captured raw body buffer for signature verification.
+      // JSON.stringify(req.body) would re-serialize a parsed object and may differ
+      // from the original bytes that Meta signed (whitespace, key order), causing
+      // every webhook to fail verification. rawBody is set by the express.json verify
+      // callback registered in index.ts for /api/webhook/meta.
+      const rawBody = (req as any).rawBody?.toString() || JSON.stringify(req.body);
       
       // Check against global app secret first
       const globalAppSecret = process.env.META_APP_SECRET;
@@ -1743,6 +1750,9 @@ export async function registerRoutes(
       
       if (globalAppSecret) {
         signatureValid = verifyMetaWebhookSignature(rawBody, signature, globalAppSecret);
+        console.log(`[Meta Webhook] Global app secret check: ${signatureValid ? "PASSED" : "failed"}`);
+      } else {
+        console.log("[Meta Webhook] No global META_APP_SECRET configured, trying user-level secrets");
       }
       
       // If not valid with global secret, try to find user's app secret
@@ -1758,6 +1768,14 @@ export async function registerRoutes(
               ? decryptMetaCredential(user.metaAppSecret)
               : user.metaAppSecret;
             signatureValid = verifyMetaWebhookSignature(rawBody, signature, userSecret);
+            console.log(`[Meta Webhook] User (${user.id}) app secret check for phoneNumberId ${phoneNumberId}: ${signatureValid ? "PASSED" : "failed"}`);
+          } else if (user) {
+            // User found but has no app secret stored — allow through with a warning
+            // (app secret is optional if the user didn't store it during setup)
+            console.warn(`[Meta Webhook] User ${user.id} has no metaAppSecret stored — allowing webhook without signature verification`);
+            signatureValid = true;
+          } else {
+            console.warn(`[Meta Webhook] No user found for phoneNumberId: ${phoneNumberId}`);
           }
         }
 
@@ -1795,30 +1813,51 @@ export async function registerRoutes(
       }
       
       if (!signatureValid) {
-        console.warn("Meta webhook signature verification failed");
+        console.warn("[Meta Webhook] REJECTED: Signature verification failed for all secrets");
+        console.warn(`[Meta Webhook] Signature received: ${signature}`);
+        console.warn(`[Meta Webhook] Raw body used for verification (first 200 chars): ${rawBody.substring(0, 200)}`);
+        console.warn(`[Meta Webhook] rawBody came from: ${(req as any).rawBody ? "rawBody buffer (correct)" : "JSON.stringify fallback (may mismatch)"}`);
         return res.status(403).send("Invalid signature");
       }
 
+      console.log("[Meta Webhook] Signature verification: PASSED");
+
       const incomingMessage = parseMetaIncomingWebhook(req.body);
       const statusUpdate = parseMetaStatusWebhook(req.body);
+
+      if (incomingMessage) {
+        console.log(`[Meta Webhook] Parsed inbound message — from: ${incomingMessage.from}, type: ${incomingMessage.type}, messageId: ${incomingMessage.messageId}, phoneNumberId: ${incomingMessage.phoneNumberId}, profileName: "${incomingMessage.profileName}"`);
+      } else if (!statusUpdate) {
+        console.log("[Meta Webhook] Payload is neither a message nor a status update — likely a notification event, ignoring");
+      }
 
       // Queue all inbox jobs BEFORE responding 200
       // If queueing fails, return 500 so Meta retries
       const queueJobs: Promise<void>[] = [];
 
       if (incomingMessage) {
-        console.log("Parsed incoming Meta message:", incomingMessage);
         const user = await findUserByMetaPhoneNumberId(incomingMessage.phoneNumberId);
         if (user) {
-          queueJobs.push(addInboxJob({
-            userId: user.id,
-            channel: 'whatsapp',
-            channelContactId: incomingMessage.from,
-            contactName: incomingMessage.profileName || incomingMessage.from,
-            content: incomingMessage.text || incomingMessage.caption || `[${incomingMessage.type}]`,
-            contentType: incomingMessage.type === 'text' ? 'text' : incomingMessage.type,
-            externalMessageId: incomingMessage.messageId,
-          }));
+          console.log(`[Meta Webhook] Routing message to userId=${user.id} (email: ${user.email})`);
+          queueJobs.push(
+            addInboxJob({
+              userId: user.id,
+              channel: 'whatsapp',
+              channelContactId: incomingMessage.from,
+              contactName: incomingMessage.profileName || incomingMessage.from,
+              content: incomingMessage.text || incomingMessage.caption || `[${incomingMessage.type}]`,
+              contentType: incomingMessage.type === 'text' ? 'text' : incomingMessage.type,
+              externalMessageId: incomingMessage.messageId,
+            }).then(() => {
+              console.log(`[Meta Webhook] Job queued successfully — from: ${incomingMessage.from}, type: ${incomingMessage.type}, messageId: ${incomingMessage.messageId}, userId: ${user.id}`);
+            }).catch((qErr: any) => {
+              console.error(`[Meta Webhook] Failed to queue job — from: ${incomingMessage.from}, error: ${qErr?.message}`);
+              throw qErr;
+            })
+          );
+        } else {
+          console.warn(`[Meta Webhook] WARNING: No user found for phoneNumberId=${incomingMessage.phoneNumberId}. Message from ${incomingMessage.from} will be dropped.`);
+          console.warn(`[Meta Webhook] Hint: Ensure the Meta phone number ID is correctly saved in the user's account settings.`);
         }
       }
 

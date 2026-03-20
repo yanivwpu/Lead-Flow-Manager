@@ -121,6 +121,14 @@ app.use('/api/shopify/webhooks', express.json({
   }
 }));
 
+// Capture raw body for Meta webhook HMAC verification
+// MUST be registered before the global express.json() middleware
+app.use('/api/webhook/meta', express.json({
+  verify: (req: any, _res, buf) => {
+    req.rawBody = buf;
+  }
+}));
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());

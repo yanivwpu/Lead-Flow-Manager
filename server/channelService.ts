@@ -236,9 +236,12 @@ class ChannelService {
   }): Promise<{ contact: Contact; conversation: Conversation; message: Message }> {
     const { userId, channel, channelContactId, contactName, content, contentType = 'text', mediaUrl, externalMessageId } = params;
 
+    console.log(`[Inbox Worker] Processing inbound message — channel: ${channel}, from: ${channelContactId}, userId: ${userId}, messageId: ${externalMessageId}`);
+
     let contact = await storage.getContactByChannelId(userId, channel, channelContactId);
     
     if (!contact) {
+      console.log(`[Inbox Worker] Contact not found for channelId=${channelContactId}, creating new contact`);
       const channelIdField = this.getChannelIdField(channel);
       contact = await storage.createContact({
         userId,
@@ -250,12 +253,14 @@ class ChannelService {
         lastIncomingAt: new Date(),
         source: channel,
       });
+      console.log(`[Inbox Worker] Contact created — contactId: ${contact.id}, name: "${contact.name}"`);
 
       await this.logActivity(userId, contact.id, undefined, 'lead_created', {
         source: channel,
         channelContactId,
       });
     } else {
+      console.log(`[Inbox Worker] Contact matched — contactId: ${contact.id}, name: "${contact.name}"`);
       await storage.updateContact(contact.id, {
         lastIncomingChannel: channel,
         lastIncomingAt: new Date(),
@@ -265,6 +270,7 @@ class ChannelService {
 
     let conversation = await storage.getConversationByContactAndChannel(contact.id, channel);
     if (!conversation) {
+      console.log(`[Inbox Worker] No existing conversation, creating new one for contactId=${contact.id}, channel=${channel}`);
       conversation = await storage.createConversation({
         userId,
         contactId: contact.id,
@@ -273,8 +279,10 @@ class ChannelService {
         windowActive: true,
         windowExpiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
       });
+      console.log(`[Inbox Worker] Conversation created — conversationId: ${conversation.id}`);
       await subscriptionService.incrementConversationUsage(userId);
     } else {
+      console.log(`[Inbox Worker] Existing conversation found — conversationId: ${conversation.id}`);
       await storage.updateConversation(conversation.id, {
         windowActive: true,
         windowExpiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
@@ -292,6 +300,8 @@ class ChannelService {
       status: 'delivered',
       externalMessageId,
     });
+
+    console.log(`[Inbox Worker] Message saved successfully — messageId: ${message.id}, conversationId: ${conversation.id}, contactId: ${contact.id}, preview: "${content.substring(0, 80)}"`);
 
     await storage.updateConversation(conversation.id, {
       lastMessageAt: new Date(),
