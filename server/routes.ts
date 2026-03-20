@@ -1507,21 +1507,60 @@ export async function registerRoutes(
   // Twilio webhook for incoming WhatsApp messages
   // Routes messages to the correct user based on Account SID + phone number
   app.post("/api/webhook/twilio/incoming", async (req, res) => {
-    console.log("=== TWILIO WEBHOOK HIT ===");
-    console.log("Request body:", JSON.stringify(req.body, null, 2));
+    const webhookTimestamp = new Date().toISOString();
+    console.log(`[Twilio Webhook] ===== INBOUND WEBHOOK RECEIVED at ${webhookTimestamp} =====`);
+    console.log(`[Twilio Webhook] Headers: x-twilio-signature=${req.headers["x-twilio-signature"] ? "present" : "MISSING"}, content-type=${req.headers["content-type"]}`);
+    console.log(`[Twilio Webhook] Raw body: ${JSON.stringify(req.body).substring(0, 600)}`);
+
     try {
       const parsed = parseIncomingWebhook(req.body);
-      console.log("Incoming WhatsApp message:", { from: parsed.from, to: parsed.to, accountSid: parsed.accountSid });
+      const isWhatsApp = req.body.From?.startsWith("whatsapp:");
+      const channel = isWhatsApp ? 'whatsapp' : 'sms';
+
+      console.log(`[Twilio Webhook] Parsed — from: ${parsed.from}, to: ${parsed.to}, accountSid: ${parsed.accountSid}, channel: ${channel}, messageSid: ${parsed.messageSid}`);
 
       // Find user by their Twilio Account SID and receiving phone number
       const user = await findUserByTwilioCredentials(parsed.accountSid, parsed.to);
       
       if (!user) {
-        console.log("No user found for incoming message:", { accountSid: parsed.accountSid, to: parsed.to });
+        console.warn(`[Twilio Webhook] WARNING: No user found — accountSid: ${parsed.accountSid}, to: ${parsed.to}. Message dropped.`);
+        console.warn(`[Twilio Webhook] Hint: Ensure the user has connected Twilio with matching Account SID and WhatsApp number.`);
         return res.status(200).send("");
       }
 
+      console.log(`[Twilio Webhook] User matched — userId: ${user.id} (email: ${user.email})`);
+
+      // Validate Twilio request signature using the user's auth token
+      const twilioSignature = req.headers["x-twilio-signature"] as string;
+      if (twilioSignature && user.twilioAuthToken) {
+        try {
+          const twilioClient = (await import("twilio")).default;
+          const authToken = isEncrypted(user.twilioAuthToken)
+            ? decryptCredential(user.twilioAuthToken)
+            : user.twilioAuthToken;
+          const webhookBaseUrl = `https://${process.env.REPLIT_DOMAINS?.split(",")[0]}`;
+          const fullUrl = `${webhookBaseUrl}/api/webhook/twilio/incoming`;
+          const isValid = twilioClient.validateRequest(authToken, twilioSignature, fullUrl, req.body);
+          if (isValid) {
+            console.log(`[Twilio Webhook] Signature validation: PASSED`);
+          } else {
+            console.warn(`[Twilio Webhook] Signature validation: FAILED (URL used: ${fullUrl}) — proceeding anyway (dev mode)`);
+          }
+        } catch (sigErr: any) {
+          console.warn(`[Twilio Webhook] Signature validation error: ${sigErr.message} — proceeding anyway`);
+        }
+      } else if (!twilioSignature) {
+        console.warn(`[Twilio Webhook] No X-Twilio-Signature header present — skipping validation`);
+      } else {
+        console.warn(`[Twilio Webhook] User has no auth token stored — skipping validation`);
+      }
+
       const userId = user.id;
+
+      // Normalize channelContactId: strip leading '+' so format matches Meta path (e.g. 15550001234)
+      const normalizedFrom = parsed.from.replace(/^\+/, "");
+      console.log(`[Twilio Webhook] Sender phone normalized: "${parsed.from}" → "${normalizedFrom}"`);
+
       const chat = await findOrCreateChatByPhone(userId, parsed.from, parsed.profileName);
 
       // Track conversation window (24-hour) for inbound messages too
@@ -1560,20 +1599,20 @@ export async function registerRoutes(
         unread: (chat.unread || 0) + 1,
       });
 
-      // Queue unified inbox write via BullMQ (guaranteed delivery)
-      const isWhatsApp = req.body.From?.startsWith("whatsapp:");
+      // Queue unified inbox write via BullMQ (same worker as Meta path)
       try {
         await addInboxJob({
           userId,
-          channel: isWhatsApp ? 'whatsapp' : 'sms',
-          channelContactId: parsed.from,
-          contactName: parsed.profileName || parsed.from,
+          channel,
+          channelContactId: normalizedFrom,
+          contactName: parsed.profileName || normalizedFrom,
           content: parsed.body,
           contentType: 'text',
           externalMessageId: parsed.messageSid,
         });
+        console.log(`[Twilio Webhook] Job queued successfully — from: ${normalizedFrom}, channel: ${channel}, messageSid: ${parsed.messageSid}, userId: ${userId}`);
       } catch (queueErr) {
-        console.error("[Queue] Failed to enqueue Twilio message:", queueErr);
+        console.error(`[Twilio Webhook] Failed to queue job — messageSid: ${parsed.messageSid}, error: ${(queueErr as any)?.message}`);
         return res.status(500).send("Queue unavailable");
       }
 

@@ -143,38 +143,42 @@ export function registerWebhookRoutes(app: Express): void {
     }
   });
 
-  // Unified inbox webhook for Twilio (routes to new inbox system)
+  // Unified inbox webhook for Twilio (secondary endpoint — primary is /api/webhook/twilio/incoming)
   app.post("/api/webhook/inbox/twilio", async (req, res) => {
     try {
       const parsed = parseIncomingWebhook(req.body);
-      console.log("Unified Inbox Twilio webhook:", { from: parsed.from, to: parsed.to });
+      const isWhatsApp = req.body.From?.startsWith("whatsapp:");
+      const channel = isWhatsApp ? 'whatsapp' : 'sms';
+      console.log(`[Twilio Webhook/inbox] Received — from: ${parsed.from}, to: ${parsed.to}, channel: ${channel}, messageSid: ${parsed.messageSid}`);
 
       const user = await findUserByTwilioCredentials(parsed.accountSid, parsed.to);
       if (!user) {
+        console.warn(`[Twilio Webhook/inbox] No user found — accountSid: ${parsed.accountSid}, to: ${parsed.to}`);
         return res.status(200).send("");
       }
 
-      const isWhatsApp = req.body.From?.startsWith("whatsapp:");
-      const channel = isWhatsApp ? 'whatsapp' : 'sms';
+      console.log(`[Twilio Webhook/inbox] User matched — userId: ${user.id}`);
+      const normalizedFrom = parsed.from.replace(/^\+/, "");
 
       try {
         await addInboxJob({
           userId: user.id,
           channel: channel as any,
-          channelContactId: parsed.from,
-          contactName: parsed.profileName || parsed.from,
+          channelContactId: normalizedFrom,
+          contactName: parsed.profileName || normalizedFrom,
           content: parsed.body,
           contentType: 'text',
           externalMessageId: parsed.messageSid,
         });
+        console.log(`[Twilio Webhook/inbox] Job queued — from: ${normalizedFrom}, messageSid: ${parsed.messageSid}`);
       } catch (queueErr) {
-        console.error("[Queue] Failed to enqueue unified inbox Twilio message:", queueErr);
+        console.error("[Twilio Webhook/inbox] Failed to enqueue:", queueErr);
         return res.status(500).send("Queue unavailable");
       }
 
       res.status(200).send("");
     } catch (error) {
-      console.error("Unified inbox Twilio webhook error:", error);
+      console.error("[Twilio Webhook/inbox] Error:", error);
       res.status(200).send("");
     }
   });
