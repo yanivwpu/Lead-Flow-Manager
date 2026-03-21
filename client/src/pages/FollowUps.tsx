@@ -21,6 +21,26 @@ interface Chat {
   notes: string;
   pipelineStage: string;
   messages: any[];
+  lastMessageDirection?: string;
+}
+
+interface InboxItem {
+  contact: {
+    id: string;
+    name: string;
+    avatar?: string;
+    tag: string;
+    pipelineStage: string;
+    notes?: string;
+    followUp?: string | null;
+    followUpDate?: string | null;
+  };
+  conversation?: {
+    lastMessageDirection?: string;
+  } | null;
+  lastMessage: string;
+  lastMessageAt: string | null;
+  unreadCount: number;
 }
 
 type ViewMode = 'list' | 'calendar' | 'pipeline';
@@ -41,9 +61,7 @@ function getTaskStatus(followUpDate: string | null): 'overdue' | 'today' | 'upco
 }
 
 function hasNeedsReply(chat: Chat): boolean {
-  const hasUnrepliedInbound = chat.messages?.length > 0 && 
-    chat.messages[chat.messages.length - 1]?.sender !== 'me';
-  return hasUnrepliedInbound || (chat.unread > 0);
+  return (chat.lastMessageDirection === 'inbound' && chat.unread > 0) || chat.unread > 0;
 }
 
 function KPIHeader({ chats, activeFilter, onFilterChange }: { 
@@ -594,104 +612,94 @@ export function FollowUps() {
   const [kpiFilter, setKpiFilter] = useState<KPIFilter>(null);
   const isMobile = useIsMobile();
 
-  const { data: chats = [], isLoading } = useQuery<Chat[]>({
+  const isDemoUser = user?.email === 'demo@whachat.com';
+
+  // Demo users: keep using /api/chats. Real users: use /api/inbox.
+  const { data: rawChats = [], isLoading: chatsLoading } = useQuery<Chat[]>({
     queryKey: ['/api/chats'],
-    enabled: !!user,
+    enabled: !!user && isDemoUser,
   });
 
+  const { data: inboxData = [], isLoading: inboxLoading } = useQuery<InboxItem[]>({
+    queryKey: ['/api/inbox'],
+    enabled: !!user && !isDemoUser,
+  });
+
+  const isLoading = isDemoUser ? chatsLoading : inboxLoading;
+
+  // Map /api/inbox items to the Chat shape used by this page
+  const chats = useMemo<Chat[]>(() => {
+    if (isDemoUser) return rawChats;
+    return inboxData.map(item => ({
+      id: item.contact.id,
+      name: item.contact.name,
+      avatar: item.contact.avatar || '',
+      lastMessage: item.lastMessage,
+      time: item.lastMessageAt || '',
+      unread: item.unreadCount,
+      tag: item.contact.tag,
+      followUp: item.contact.followUp ?? null,
+      followUpDate: item.contact.followUpDate
+        ? typeof item.contact.followUpDate === 'string'
+          ? item.contact.followUpDate
+          : new Date(item.contact.followUpDate as any).toISOString()
+        : null,
+      notes: item.contact.notes || '',
+      pipelineStage: item.contact.pipelineStage,
+      messages: [],
+      lastMessageDirection: item.conversation?.lastMessageDirection,
+    }));
+  }, [isDemoUser, rawChats, inboxData]);
+
+  const patchContact = async (contactId: string, fields: Record<string, unknown>) => {
+    const res = await fetch(`/api/contacts/${contactId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(fields),
+    });
+    if (!res.ok) throw new Error('Failed to update contact');
+    return res.json();
+  };
+
+  const patchChat = async (chatId: string, fields: Record<string, unknown>) => {
+    const res = await fetch(`/api/chats/${chatId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(fields),
+    });
+    if (!res.ok) throw new Error('Failed to update chat');
+    return res.json();
+  };
+
+  const invalidateAll = () => {
+    queryClient.invalidateQueries({ queryKey: ['/api/inbox'] });
+    queryClient.invalidateQueries({ queryKey: ['/api/chats'] });
+  };
+
   const clearFollowUpMutation = useMutation({
-    mutationFn: async (chatId: string) => {
-      const response = await fetch(`/api/chats/${chatId}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include',
-        body: JSON.stringify({
-          followUp: null,
-          followUpDate: null,
-        }),
-      });
-      if (!response.ok) throw new Error('Failed to clear follow-up');
-      return response.json();
+    mutationFn: async (contactId: string) => {
+      if (isDemoUser) return patchChat(contactId, { followUp: null, followUpDate: null });
+      return patchContact(contactId, { followUp: null, followUpDate: null });
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/chats'] });
-    },
+    onSuccess: invalidateAll,
   });
 
   const updateFollowUpDateMutation = useMutation({
     mutationFn: async ({ chatId, newDate }: { chatId: string; newDate: Date }) => {
-      const response = await fetch(`/api/chats/${chatId}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include',
-        body: JSON.stringify({
-          followUpDate: newDate.toISOString(),
-        }),
-      });
-      if (!response.ok) throw new Error('Failed to update follow-up date');
-      return response.json();
+      if (isDemoUser) return patchChat(chatId, { followUpDate: newDate.toISOString() });
+      return patchContact(chatId, { followUpDate: newDate.toISOString() });
     },
-    onMutate: async ({ chatId, newDate }) => {
-      await queryClient.cancelQueries({ queryKey: ['/api/chats'] });
-      const previousChats = queryClient.getQueryData<Chat[]>(['/api/chats']);
-      queryClient.setQueryData<Chat[]>(['/api/chats'], (old) => 
-        old?.map(chat => 
-          chat.id === chatId 
-            ? { ...chat, followUpDate: newDate.toISOString() }
-            : chat
-        ) ?? []
-      );
-      return { previousChats };
-    },
-    onError: (_err, _variables, context) => {
-      if (context?.previousChats) {
-        queryClient.setQueryData(['/api/chats'], context.previousChats);
-      }
-    },
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/chats'] });
-    },
+    onSuccess: invalidateAll,
   });
 
   const updatePipelineStageMutation = useMutation({
     mutationFn: async ({ chatId, newStage }: { chatId: string; newStage: string }) => {
-      const response = await fetch(`/api/chats/${chatId}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include',
-        body: JSON.stringify({
-          pipelineStage: newStage,
-        }),
-      });
-      if (!response.ok) throw new Error('Failed to update pipeline stage');
-      return response.json();
+      if (isDemoUser) return patchChat(chatId, { pipelineStage: newStage });
+      return patchContact(chatId, { pipelineStage: newStage });
     },
-    onMutate: async ({ chatId, newStage }) => {
-      await queryClient.cancelQueries({ queryKey: ['/api/chats'] });
-      const previousChats = queryClient.getQueryData<Chat[]>(['/api/chats']);
-      queryClient.setQueryData<Chat[]>(['/api/chats'], (old) => 
-        old?.map(chat => 
-          chat.id === chatId 
-            ? { ...chat, pipelineStage: newStage }
-            : chat
-        ) ?? []
-      );
-      return { previousChats };
-    },
-    onError: (_err, _variables, context) => {
-      if (context?.previousChats) {
-        queryClient.setQueryData(['/api/chats'], context.previousChats);
-      }
-    },
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/chats'] });
-    },
+    onSuccess: invalidateAll,
   });
 
   const filteredChats = useMemo(() => {
@@ -743,7 +751,7 @@ export function FollowUps() {
   };
 
   const handleRowClick = (chatId: string) => {
-    setLocation(`/app/chats/${chatId}`);
+    setLocation(`/app/inbox/${chatId}`);
   };
 
   const handleReschedule = (chatId: string, newDate: Date) => {
@@ -896,9 +904,9 @@ export function FollowUps() {
                     <Button 
                       className="mt-4 bg-brand-green hover:bg-emerald-700" 
                       data-testid="button-view-chats"
-                      onClick={() => setLocation('/app/chats')}
+                      onClick={() => setLocation('/app/inbox')}
                     >
-                      View All Chats
+                      Go to Inbox
                     </Button>
                   </div>
                 )}

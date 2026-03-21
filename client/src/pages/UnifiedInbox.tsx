@@ -28,6 +28,8 @@ import {
   History,
   Edit,
   X,
+  CheckCheck,
+  Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -79,6 +81,7 @@ interface Contact {
   followUp?: string | null;
   followUpDate?: string | null;
   assignedTo?: string | null;
+  source?: string;
   lastIncomingAt?: string;
   createdAt: string;
   whatsappId?: string;
@@ -173,6 +176,40 @@ const CONVERSATION_STATUSES = [
 
 const DEMO_CHANNELS: Channel[] = ['whatsapp', 'instagram', 'facebook', 'telegram', 'sms', 'webchat'];
 
+const SOURCE_LABELS: Record<string, string> = {
+  manual: 'Manual',
+  whatsapp: 'WhatsApp',
+  instagram: 'Instagram DM',
+  facebook: 'Facebook',
+  webchat: 'Website Widget',
+  import: 'CSV Import',
+  api: 'API',
+  tiktok: 'TikTok',
+  sms: 'SMS',
+  telegram: 'Telegram',
+};
+
+const SOURCE_OPTIONS = [
+  { value: 'manual', label: 'Manual' },
+  { value: 'whatsapp', label: 'WhatsApp' },
+  { value: 'instagram', label: 'Instagram DM' },
+  { value: 'facebook', label: 'Facebook' },
+  { value: 'webchat', label: 'Website Widget' },
+  { value: 'import', label: 'CSV Import' },
+  { value: 'api', label: 'API' },
+];
+
+function getFollowUpStatus(followUpDate: string | null | undefined): 'overdue' | 'today' | 'upcoming' | null {
+  if (!followUpDate) return null;
+  const due = new Date(followUpDate);
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const dueDay = new Date(due.getFullYear(), due.getMonth(), due.getDate());
+  if (dueDay < today) return 'overdue';
+  if (dueDay.getTime() === today.getTime()) return 'today';
+  return 'upcoming';
+}
+
 export function UnifiedInbox() {
   const [match, params] = useRoute("/app/inbox/:contactId");
   const [, setLocation] = useLocation();
@@ -190,6 +227,8 @@ export function UnifiedInbox() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [editContactForm, setEditContactForm] = useState({ name: "", phone: "", email: "" });
   const [localNotes, setLocalNotes] = useState("");
+  const [notesSaved, setNotesSaved] = useState(false);
+  const [notesActive, setNotesActive] = useState(false);
   const [calendarOpen, setCalendarOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -332,7 +371,9 @@ export function UnifiedInbox() {
   // Sync local notes when contact changes
   useEffect(() => {
     setLocalNotes(contactData?.contact?.notes || "");
-  }, [contactData?.contact?.id, contactData?.contact?.notes]);
+    setNotesSaved(false);
+    setNotesActive(false);
+  }, [contactData?.contact?.id]);
 
   // Scroll to bottom on new messages
   useEffect(() => {
@@ -611,13 +652,18 @@ export function UnifiedInbox() {
               <p className="text-sm">No conversations</p>
             </div>
           ) : (
-            filteredInbox.map(item => (
+            filteredInbox.map(item => {
+              const fuStatus = getFollowUpStatus(item.contact.followUpDate);
+              const needsReply = item.conversation?.lastMessageDirection === 'inbound' && item.unreadCount > 0;
+              const isOverdue = fuStatus === 'overdue';
+              return (
               <div
                 key={item.contact.id}
                 onClick={() => setLocation(`/app/inbox/${item.contact.id}`)}
                 className={cn(
                   "p-3 border-b cursor-pointer hover:bg-slate-50 transition-colors",
-                  selectedContactId === item.contact.id && "bg-emerald-50"
+                  selectedContactId === item.contact.id && "bg-emerald-50",
+                  isOverdue && "border-l-2 border-l-red-400"
                 )}
                 data-testid={`inbox-item-${item.contact.id}`}
               >
@@ -630,25 +676,52 @@ export function UnifiedInbox() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1 mb-0.5">
-                      <span className="font-medium text-sm truncate flex-1">{item.contact.name}</span>
+                      <span className={cn("font-medium text-sm truncate flex-1", needsReply && "font-semibold")}>{item.contact.name}</span>
                       <span className="text-[10px] text-muted-foreground flex-shrink-0">{formatTime(item.lastMessageAt)}</span>
                       {item.unreadCount > 0 && (
-                        <Badge className="ml-0.5 text-[10px] px-1.5 py-0 h-4 flex-shrink-0">{item.unreadCount}</Badge>
+                        <Badge className="ml-0.5 text-[10px] px-1.5 py-0 h-4 flex-shrink-0 bg-emerald-600">{item.unreadCount}</Badge>
                       )}
                     </div>
-                    <p className="text-xs text-muted-foreground truncate mb-1">{item.lastMessage || "No messages yet"}</p>
+                    <p className={cn("text-xs truncate mb-1", needsReply ? "text-gray-700 font-medium" : "text-muted-foreground")}>
+                      {item.lastMessage || "No messages yet"}
+                    </p>
                     <div className="flex items-center gap-1 flex-wrap">
-                      <span className={cn("text-[10px] px-1.5 py-0.5 rounded-full font-medium border", TAG_COLORS[item.contact.tag] || 'bg-blue-100 text-blue-700 border-blue-200')}>
-                        {item.contact.tag}
-                      </span>
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium border bg-slate-100 text-slate-600 border-slate-200">
-                        {item.contact.pipelineStage}
-                      </span>
+                      {needsReply && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold border bg-blue-50 text-blue-700 border-blue-200 flex items-center gap-0.5" data-testid={`badge-needs-reply-${item.contact.id}`}>
+                          <Zap className="w-2.5 h-2.5" />Needs Reply
+                        </span>
+                      )}
+                      {fuStatus === 'overdue' && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold border bg-red-50 text-red-600 border-red-200" data-testid={`badge-overdue-${item.contact.id}`}>
+                          ⏰ Overdue
+                        </span>
+                      )}
+                      {fuStatus === 'today' && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium border bg-amber-50 text-amber-600 border-amber-200" data-testid={`badge-today-${item.contact.id}`}>
+                          ⏰ Today
+                        </span>
+                      )}
+                      {fuStatus === 'upcoming' && !needsReply && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium border bg-slate-50 text-slate-500 border-slate-200" data-testid={`badge-upcoming-${item.contact.id}`}>
+                          ⏰ {item.contact.followUp}
+                        </span>
+                      )}
+                      {!needsReply && !fuStatus && (
+                        <span className={cn("text-[10px] px-1.5 py-0.5 rounded-full font-medium border", TAG_COLORS[item.contact.tag] || 'bg-blue-100 text-blue-700 border-blue-200')}>
+                          {item.contact.tag}
+                        </span>
+                      )}
+                      {item.contact.assignedTo && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium border bg-gray-50 text-gray-500 border-gray-200 flex items-center gap-0.5" data-testid={`badge-assigned-${item.contact.id}`}>
+                          <UserCheck className="w-2.5 h-2.5" />
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
               </div>
-            ))
+              );
+            })
           )}
         </div>
       </div>
@@ -667,16 +740,29 @@ export function UnifiedInbox() {
               </button>
               <ChatAvatar src={contact.avatar} name={contact.name} size="md" />
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1.5 flex-wrap">
                   <h3 className="font-semibold text-sm truncate">{contact.name}</h3>
                   {getChannelIcon(activeChannel)}
                   <span className={cn("text-[10px] px-1.5 py-0.5 rounded font-medium", statusConfig.color)}>
                     {statusConfig.label}
                   </span>
+                  {contact.tag && (
+                    <span className={cn("text-[10px] px-1.5 py-0.5 rounded-full font-medium border hidden sm:inline-flex", TAG_COLORS[contact.tag] || 'bg-blue-100 text-blue-700 border-blue-200')}>
+                      {contact.tag}
+                    </span>
+                  )}
                 </div>
-                <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
                   {contact.phone && <span className="flex items-center gap-1"><Phone className="w-3 h-3" />{contact.phone}</span>}
-                  {contact.email && <span className="flex items-center gap-1 hidden sm:flex"><Mail className="w-3 h-3" />{contact.email}</span>}
+                  {contact.assignedTo && (() => {
+                    const assignee = teamMembers.find((m: TeamMember) => (m.memberId || m.id) === contact.assignedTo);
+                    const name = assignee?.name || assignee?.email?.split('@')[0];
+                    return name ? (
+                      <span className="flex items-center gap-1 text-emerald-600 hidden sm:flex">
+                        <UserCheck className="w-3 h-3" />{name}
+                      </span>
+                    ) : null;
+                  })()}
                 </div>
               </div>
               <div className="flex items-center gap-1 flex-shrink-0">
@@ -882,6 +968,24 @@ export function UnifiedInbox() {
               </div>
             </div>
 
+            {/* Source */}
+            <div>
+              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2 block">Source</label>
+              <Select
+                value={(contact as Contact).source || 'manual'}
+                onValueChange={val => { if (!isDemoUser) updateContact({ source: val }); }}
+              >
+                <SelectTrigger className="h-8 text-sm bg-white" data-testid="select-source">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {SOURCE_OPTIONS.map(opt => (
+                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             {/* Conversation Status */}
             {primaryConversation && (
               <div>
@@ -978,7 +1082,27 @@ export function UnifiedInbox() {
 
             {/* Follow-up Reminder */}
             <div>
-              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2 block">Follow-up Reminder</label>
+              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2 block">Next Follow-up</label>
+              {contact.followUpDate ? (
+                <div className={cn(
+                  "flex items-center gap-2 px-3 py-2 rounded-lg mb-2 text-sm font-medium",
+                  getFollowUpStatus(contact.followUpDate) === 'overdue' ? "bg-red-50 text-red-700 border border-red-200" :
+                  getFollowUpStatus(contact.followUpDate) === 'today' ? "bg-amber-50 text-amber-700 border border-amber-200" :
+                  "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                )} data-testid="followup-date-display">
+                  <CalendarIcon className="w-4 h-4 flex-shrink-0" />
+                  <span>
+                    {getFollowUpStatus(contact.followUpDate) === 'overdue' && "Overdue · "}
+                    {getFollowUpStatus(contact.followUpDate) === 'today' && "Today · "}
+                    {format(new Date(contact.followUpDate), 'MMM d, yyyy')}
+                  </span>
+                  <button onClick={() => updateContact({ followUp: null, followUpDate: null })} className="ml-auto text-current opacity-50 hover:opacity-100" data-testid="button-clear-followup-top">
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ) : (
+                <p className="text-xs text-gray-400 italic mb-2">No follow-up scheduled</p>
+              )}
               <div className="grid grid-cols-4 gap-1.5">
                 {(['Tomorrow', '3 days', '1 week'] as const).map(time => (
                   <button
@@ -1027,30 +1151,45 @@ export function UnifiedInbox() {
                   </PopoverContent>
                 </Popover>
               </div>
-              {contact.followUp && (
-                <div className="mt-1.5 flex items-center justify-between text-xs">
-                  <span className="text-gray-500">
-                    Reminder: <span className="font-medium text-gray-700">{contact.followUp}</span>
-                    {contact.followUpDate && (
-                      <span className="ml-1 text-gray-400">({format(new Date(contact.followUpDate), 'MMM d, yyyy')})</span>
-                    )}
-                  </span>
-                  <button onClick={() => updateContact({ followUp: null, followUpDate: null })} className="text-red-500 hover:text-red-700" data-testid="button-clear-followup">Clear</button>
-                </div>
-              )}
             </div>
 
             {/* Notes */}
             <div>
-              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2 block">Notes</label>
-              <textarea
-                className="w-full h-28 bg-yellow-50 border border-yellow-200 rounded-lg p-2.5 text-sm text-gray-700 focus:outline-none focus:ring-1 focus:ring-yellow-400 resize-none"
-                placeholder="Add a note..."
-                value={localNotes}
-                onChange={e => setLocalNotes(e.target.value)}
-                onBlur={() => { if (!isDemoUser) updateContact({ notes: localNotes }); }}
-                data-testid="textarea-notes"
-              />
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Notes</label>
+                {notesSaved && (
+                  <span className="text-[10px] text-emerald-600 flex items-center gap-0.5 animate-pulse" data-testid="text-notes-saved">
+                    <CheckCheck className="w-3 h-3" /> Saved
+                  </span>
+                )}
+              </div>
+              {!localNotes && !notesActive ? (
+                <div
+                  className="w-full h-20 bg-yellow-50 border border-yellow-200 border-dashed rounded-lg p-2.5 flex flex-col items-center justify-center cursor-text"
+                  onClick={() => setNotesActive(true)}
+                  data-testid="notes-empty-state"
+                >
+                  <p className="text-xs text-gray-400 italic">No notes yet</p>
+                  <p className="text-[10px] text-gray-300 mt-0.5">Click to add a note</p>
+                </div>
+              ) : (
+                <textarea
+                  autoFocus={notesActive && !localNotes}
+                  className="w-full h-28 bg-yellow-50 border border-yellow-200 rounded-lg p-2.5 text-sm text-gray-700 focus:outline-none focus:ring-1 focus:ring-yellow-400 resize-none"
+                  placeholder="Write a note about this contact..."
+                  value={localNotes}
+                  onChange={e => { setLocalNotes(e.target.value); setNotesSaved(false); }}
+                  onBlur={() => {
+                    setNotesActive(false);
+                    if (!isDemoUser) {
+                      updateContact({ notes: localNotes });
+                      setNotesSaved(true);
+                      setTimeout(() => setNotesSaved(false), 2500);
+                    }
+                  }}
+                  data-testid="textarea-notes"
+                />
+              )}
             </div>
 
             {/* Delete */}

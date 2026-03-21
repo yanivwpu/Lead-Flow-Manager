@@ -1,0 +1,140 @@
+We need to connect Inbox, CRM, and Follow-ups into one unified operating model using the existing Inbox data model as the single source of truth.
+
+Important guardrails:
+- Do NOT change Meta / Twilio webhooks
+- Do NOT change Shopify / GHL integrations
+- Do NOT change API keys / auth / callback URLs
+- Do NOT change queue / worker logic
+- Do NOT change whatsappService.ts
+- Do NOT change channel adapters
+- Do NOT change inbound/outbound messaging flow
+
+This is a UX/data-flow update only.
+
+GOAL
+Inbox = where agents work
+Follow-ups = task view of the same Inbox data
+CRM panel = context/edit panel for the same contact/conversation
+
+REQUIREMENTS
+
+1. Single source of truth
+Use only:
+- contacts
+- conversations
+- messages
+
+Do not create or use any separate chat system.
+
+2. Inbox list
+Each conversation row should show:
+- contact name
+- channel icon
+- last message preview
+- timestamp
+- unread count
+- primary tag/status if available
+- follow-up badge if due or upcoming
+- assignment indicator if useful
+
+Examples:
+- Hot
+- Warm
+- Needs Reply
+- ⏰ Tomorrow
+
+3. Inbox header
+In the active conversation header, show:
+- contact name
+- channel
+- conversation status
+- assigned user
+- one clear primary state if available (ex: Hot, Warm, Needs Reply)
+
+4. CRM panel
+Keep the right CRM panel and bind it only to the Inbox data model.
+
+Fields:
+- Contact info
+- Source
+- Status
+- Assigned to
+- Pipeline stage
+- Status tag(s)
+- Next follow-up
+- Notes
+
+Important:
+- show the current next follow-up clearly, not only action buttons
+- source should be separate from channel
+- examples of source: Instagram DM, Facebook, Website Widget, API, Manual
+
+5. Follow-ups integration
+The Follow-ups page must be a filtered task view of the same Inbox contact/conversation data.
+
+When a user sets a follow-up in Inbox:
+- it appears in the CRM panel immediately
+- it appears in the Inbox list as a badge when relevant
+- it appears in Follow-ups page automatically
+
+When a follow-up is completed:
+- it updates consistently across Inbox and Follow-ups page
+
+6. Notes behavior
+Notes are CRM context, not chat messages.
+
+Requirements:
+- notes editable from the CRM panel in Inbox
+- notes save to the contact record
+- notes persist consistently anywhere that contact is opened
+- do not create a separate notes system
+- do not mix notes with customer-visible messages
+- show empty state: “No notes yet”
+- save reliably with clear saved feedback
+
+Keep notes contact-level only for now.
+
+7. Data ownership
+Unless current schema needs minor adjustment, use:
+- contact owns:
+  - source
+  - assigned user
+  - pipeline stage
+  - tags
+  - notes
+- conversation owns:
+  - status
+  - next follow-up
+  - unread / last activity / reply-needed state
+
+If current schema fits better slightly differently, keep it simple and explain before implementing.
+
+8. Priority visibility
+Improve visibility of urgency in Inbox:
+- needs reply
+- overdue follow-up
+- unread
+- hot/high priority
+
+These should be visible in the Inbox list and/or header, not buried only in the CRM panel.
+
+DELIVERABLES
+Please update:
+- Inbox list
+- Inbox header
+- CRM panel
+- Follow-ups page integration
+
+Please confirm:
+- what files were changed
+- what fields are stored on contacts vs conversations
+- that no integration/infrastructure logic was touched
+
+SUCCESS CRITERIA
+A user should be able to:
+- see what needs attention directly from Inbox
+- open a conversation and understand the lead quickly
+- set or complete follow-ups from Inbox
+- see those same follow-ups in the Follow-ups page
+- edit CRM details in the right panel
+- trust that Inbox, CRM, and Follow-ups are all reading/writing the same underlying records
