@@ -11,7 +11,6 @@ import {
   UserCheck,
   X,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -68,18 +67,18 @@ const CONVERSATION_STATUSES = [
   { value: 'closed', label: 'Closed', color: 'border-gray-300 text-gray-600' },
 ];
 
-const SOURCE_OPTIONS = [
-  { value: 'manual', label: 'Manual' },
-  { value: 'whatsapp', label: 'WhatsApp' },
-  { value: 'instagram', label: 'Instagram DM' },
-  { value: 'facebook', label: 'Facebook' },
-  { value: 'webchat', label: 'Website Widget' },
-  { value: 'import', label: 'CSV Import' },
-  { value: 'api', label: 'API' },
-  { value: 'tiktok', label: 'TikTok' },
-  { value: 'sms', label: 'SMS' },
-  { value: 'telegram', label: 'Telegram' },
-];
+const SOURCE_LABELS: Record<string, string> = {
+  manual: 'Manual',
+  whatsapp: 'WhatsApp',
+  instagram: 'Instagram DM',
+  facebook: 'Facebook',
+  webchat: 'Website Widget',
+  import: 'CSV Import',
+  api: 'API',
+  tiktok: 'TikTok',
+  sms: 'SMS',
+  telegram: 'Telegram',
+};
 
 function getFollowUpStatus(followUpDate: string | null | undefined): 'overdue' | 'today' | 'upcoming' | null {
   if (!followUpDate) return null;
@@ -195,19 +194,12 @@ export function InboxLeadDetailsPanel({
         {/* 2. SOURCE */}
         <div>
           <SectionLabel>Source</SectionLabel>
-          <Select
-            value={contact.source || "manual"}
-            onValueChange={val => onUpdateContact({ source: val })}
+          <div
+            className="h-8 flex items-center px-3 rounded-lg border border-gray-100 bg-gray-50 text-sm text-gray-500 select-none"
+            data-testid="text-source"
           >
-            <SelectTrigger className="h-8 text-sm bg-white" data-testid="select-source">
-              <SelectValue placeholder="Select source" />
-            </SelectTrigger>
-            <SelectContent>
-              {SOURCE_OPTIONS.map(opt => (
-                <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            {SOURCE_LABELS[contact.source || 'manual'] || contact.source || 'Manual'}
+          </div>
         </div>
 
         {/* 3. STATUS */}
