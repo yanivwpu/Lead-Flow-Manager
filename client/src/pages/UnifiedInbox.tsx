@@ -426,7 +426,11 @@ export function UnifiedInbox() {
   const updateContactMutation = useMutation({
     mutationFn: async (data: Record<string, unknown> & { contactId: string }) => {
       const { contactId, ...body } = data;
-      const res = await fetch(`/api/contacts/${contactId}`, {
+      // Demo contacts live in the chats table, not contacts table
+      const url = isDemoUser
+        ? `/api/chats/${contactId}`
+        : `/api/contacts/${contactId}`;
+      const res = await fetch(url, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -438,13 +442,18 @@ export function UnifiedInbox() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/contacts"] });
       queryClient.invalidateQueries({ queryKey: ["/api/inbox"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/chats"] });
       setShowEditContact(false);
     },
   });
 
   const updateConversationMutation = useMutation({
     mutationFn: async (data: { conversationId: string; status: string }) => {
-      const res = await fetch(`/api/conversations/${data.conversationId}`, {
+      // Demo conversations are chat records — update via chats endpoint
+      const url = isDemoUser
+        ? `/api/chats/${data.conversationId}`
+        : `/api/conversations/${data.conversationId}`;
+      const res = await fetch(url, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -456,6 +465,7 @@ export function UnifiedInbox() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/contacts"] });
       queryClient.invalidateQueries({ queryKey: ["/api/inbox"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/chats"] });
     },
   });
 
@@ -973,7 +983,7 @@ export function UnifiedInbox() {
               <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2 block">Source</label>
               <Select
                 value={(contact as Contact).source || 'manual'}
-                onValueChange={val => { if (!isDemoUser) updateContact({ source: val }); }}
+                onValueChange={val => updateContact({ source: val })}
               >
                 <SelectTrigger className="h-8 text-sm bg-white" data-testid="select-source">
                   <SelectValue />
@@ -993,7 +1003,7 @@ export function UnifiedInbox() {
                 <Select
                   value={convStatus}
                   onValueChange={val => {
-                    if (!isDemoUser && primaryConversation) {
+                    if (primaryConversation) {
                       updateConversationMutation.mutate({ conversationId: primaryConversation.id, status: val });
                     }
                   }}
@@ -1018,7 +1028,7 @@ export function UnifiedInbox() {
               <Select
                 value={contact.assignedTo || "unassigned"}
                 onValueChange={val => {
-                  if (!isDemoUser) updateContact({ assignedTo: val === 'unassigned' ? null : val });
+                  updateContact({ assignedTo: val === 'unassigned' ? null : val });
                 }}
               >
                 <SelectTrigger className="h-8 text-sm bg-white" data-testid="select-assigned-user">
@@ -1181,11 +1191,9 @@ export function UnifiedInbox() {
                   onChange={e => { setLocalNotes(e.target.value); setNotesSaved(false); }}
                   onBlur={() => {
                     setNotesActive(false);
-                    if (!isDemoUser) {
-                      updateContact({ notes: localNotes });
-                      setNotesSaved(true);
-                      setTimeout(() => setNotesSaved(false), 2500);
-                    }
+                    updateContact({ notes: localNotes });
+                    setNotesSaved(true);
+                    setTimeout(() => setNotesSaved(false), 2500);
                   }}
                   data-testid="textarea-notes"
                 />
