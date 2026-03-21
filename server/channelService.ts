@@ -261,11 +261,18 @@ class ChannelService {
       });
     } else {
       console.log(`[Inbox Worker] Contact matched — contactId: ${contact.id}, name: "${contact.name}"`);
-      await storage.updateContact(contact.id, {
+      const contactUpdates: Partial<Contact> = {
         lastIncomingChannel: channel,
         lastIncomingAt: new Date(),
         primaryChannel: channel,
-      });
+      };
+      // If this contact was matched via the phone fallback (whatsappId was null),
+      // backfill the whatsappId now so subsequent inbound lookups hit the fast path.
+      if (channel === 'whatsapp' && !contact.whatsappId) {
+        contactUpdates.whatsappId = channelContactId;
+        console.log(`[Inbox Worker] Backfilling whatsappId=${channelContactId} on contact ${contact.id} (matched via phone fallback)`);
+      }
+      await storage.updateContact(contact.id, contactUpdates);
     }
 
     let conversation = await storage.getConversationByContactAndChannel(contact.id, channel);

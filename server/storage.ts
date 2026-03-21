@@ -1269,9 +1269,29 @@ export class DbStorage implements IStorage {
   async getContactByChannelId(userId: string, channel: Channel, channelId: string): Promise<Contact | undefined> {
     let whereClause;
     switch (channel) {
-      case 'whatsapp':
+      case 'whatsapp': {
+        // Primary lookup: exact whatsappId match.
         whereClause = and(eq(contacts.userId, userId), eq(contacts.whatsappId, channelId));
-        break;
+        const primary = await db.select().from(contacts).where(whereClause);
+        if (primary[0]) return primary[0];
+
+        // Fallback: phone number match for manually-created contacts whose
+        // whatsappId was never set. Normalise both sides to digits-only so
+        // "+923364127888" matches "923364127888" and vice-versa.
+        const digits = channelId.replace(/\D/g, '');
+        const withPlus = `+${digits}`;
+        const phoneFallback = await db.select().from(contacts).where(
+          and(
+            eq(contacts.userId, userId),
+            or(
+              eq(contacts.phone, digits),
+              eq(contacts.phone, withPlus),
+              eq(contacts.phone, channelId),
+            )
+          )
+        );
+        return phoneFallback[0];
+      }
       case 'instagram':
         whereClause = and(eq(contacts.userId, userId), eq(contacts.instagramId, channelId));
         break;

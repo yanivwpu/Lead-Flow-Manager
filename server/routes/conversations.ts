@@ -60,8 +60,11 @@ export function registerConversationRoutes(app: Express): void {
         return res.status(403).json({ error: "Forbidden" });
       }
 
-      const metaChannels = ['instagram', 'facebook'];
-      if (!metaChannels.includes(conversation.channel)) {
+      // WhatsApp also enforces a 24-hour messaging window, same as Instagram/Facebook.
+      // Channels without any window restriction (SMS, Telegram, webchat, etc.) can
+      // always send; we return isActive:true with no restriction for those.
+      const windowChannels = ['whatsapp', 'instagram', 'facebook'];
+      if (!windowChannels.includes(conversation.channel)) {
         return res.json({
           isActive: true,
           hasRestriction: false,
