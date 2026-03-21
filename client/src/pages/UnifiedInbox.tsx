@@ -8,8 +8,6 @@ import {
   Plus,
   User,
   Phone,
-  Mail,
-  Clock,
   MessageCircle,
   Instagram,
   Facebook,
@@ -22,13 +20,11 @@ import {
   AlertCircle,
   AlertTriangle,
   UserCheck,
-  Calendar as CalendarIcon,
   FileText,
   Trash2,
   History,
   Edit,
   X,
-  CheckCheck,
   Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -55,14 +51,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Calendar } from "@/components/ui/calendar";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { ChatAvatar } from "@/components/ChatAvatar";
-import { TAG_COLORS, PIPELINE_STAGES } from "@/lib/data";
+import { TAG_COLORS } from "@/lib/data";
 import { useToast } from "@/hooks/use-toast";
+import { InboxLeadDetailsPanel } from "@/components/InboxLeadDetailsPanel";
 
 type Channel = 'whatsapp' | 'instagram' | 'facebook' | 'sms' | 'webchat' | 'telegram' | 'tiktok';
 type FilterTab = 'all' | 'unread' | 'mine';
@@ -226,10 +221,6 @@ export function UnifiedInbox() {
   const [showTimeline, setShowTimeline] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [editContactForm, setEditContactForm] = useState({ name: "", phone: "", email: "" });
-  const [localNotes, setLocalNotes] = useState("");
-  const [notesSaved, setNotesSaved] = useState(false);
-  const [notesActive, setNotesActive] = useState(false);
-  const [calendarOpen, setCalendarOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const selectedContactId = match ? params?.contactId : null;
@@ -368,12 +359,6 @@ export function UnifiedInbox() {
     enabled: !!selectedContactId && showTimeline,
   });
 
-  // Sync local notes when contact changes
-  useEffect(() => {
-    setLocalNotes(contactData?.contact?.notes || "");
-    setNotesSaved(false);
-    setNotesActive(false);
-  }, [contactData?.contact?.id]);
 
   // Scroll to bottom on new messages
   useEffect(() => {
@@ -508,20 +493,6 @@ export function UnifiedInbox() {
     if (!selectedContactId) return;
     updateContactMutation.mutate({ contactId: selectedContactId, ...fields });
   }, [selectedContactId, updateContactMutation]);
-
-  const handleFollowUp = (label: string | null) => {
-    if (!label) {
-      updateContact({ followUp: null, followUpDate: null });
-      return;
-    }
-    const now = new Date();
-    let date: Date;
-    if (label === 'Tomorrow') { date = new Date(now); date.setDate(date.getDate() + 1); }
-    else if (label === '3 days') { date = new Date(now); date.setDate(date.getDate() + 3); }
-    else if (label === '1 week') { date = new Date(now); date.setDate(date.getDate() + 7); }
-    else { date = now; }
-    updateContact({ followUp: label, followUpDate: date.toISOString() });
-  };
 
   const handleSendMessage = () => {
     if (!messageInput.trim() || !selectedContactId) return;
@@ -940,258 +911,19 @@ export function UnifiedInbox() {
 
       {/* ── RIGHT COLUMN: CRM Panel ── */}
       {selectedContactId && contact && (
-        <div className="hidden lg:flex w-72 xl:w-80 flex-col border-l bg-white overflow-y-auto flex-shrink-0">
-
-          {/* Header */}
-          <div className="px-4 py-3 border-b flex items-center gap-2 flex-shrink-0 bg-white">
-            <User className="w-4 h-4 text-emerald-600" />
-            <h3 className="font-semibold text-sm text-gray-800">Lead Details</h3>
-            <button
-              onClick={handleEditContact}
-              className="ml-auto text-gray-400 hover:text-gray-600 p-1 rounded transition-colors"
-              data-testid="button-edit-contact-panel"
-            >
-              <Edit className="w-3.5 h-3.5" />
-            </button>
-          </div>
-
-          <div className="px-4 py-3 space-y-4">
-
-            {/* CONTACT INFO */}
-            <div>
-              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Contact Info</p>
-              <div className="space-y-1">
-                {contact.phone && (
-                  <div className="flex items-center gap-2 text-sm text-gray-700">
-                    <Phone className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
-                    <span>{contact.phone}</span>
-                  </div>
-                )}
-                {contact.email && (
-                  <div className="flex items-center gap-2 text-sm text-gray-700">
-                    <Mail className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
-                    <span className="truncate">{contact.email}</span>
-                  </div>
-                )}
-                {!contact.phone && !contact.email && (
-                  <p className="text-xs text-gray-400 italic">No contact info</p>
-                )}
-              </div>
-            </div>
-
-            {/* STATUS */}
-            {primaryConversation && (
-              <div>
-                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Status</p>
-                <Select
-                  value={convStatus}
-                  onValueChange={val => {
-                    if (primaryConversation) {
-                      updateConversationMutation.mutate({ conversationId: primaryConversation.id, status: val });
-                    }
-                  }}
-                >
-                  <SelectTrigger
-                    className={cn(
-                      "h-9 text-sm font-medium",
-                      convStatus === 'open' ? "border-emerald-500 text-emerald-600 bg-white" :
-                      convStatus === 'pending' ? "border-amber-400 text-amber-600 bg-white" :
-                      convStatus === 'resolved' ? "border-blue-400 text-blue-600 bg-white" :
-                      "border-gray-300 text-gray-600 bg-white"
-                    )}
-                    data-testid="select-conversation-status"
-                  >
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {CONVERSATION_STATUSES.map(s => (
-                      <SelectItem key={s.value} value={s.value}>
-                        <span className={cn("font-medium", s.color.split(' ').find(c => c.startsWith('text-')))}>{s.label}</span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-
-            {/* ASSIGNED TO */}
-            <div>
-              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Assigned To</p>
-              <Select
-                value={contact.assignedTo || "unassigned"}
-                onValueChange={val => {
-                  updateContact({ assignedTo: val === 'unassigned' ? null : val });
-                }}
-              >
-                <SelectTrigger className="h-9 text-sm bg-white" data-testid="select-assigned-user">
-                  <SelectValue placeholder="Unassigned" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="unassigned">
-                    <span className="flex items-center gap-1.5 text-gray-500"><User className="w-3 h-3" /> Unassigned</span>
-                  </SelectItem>
-                  {teamMembers.filter((m: TeamMember) => m.status === 'active').map((member: TeamMember) => (
-                    <SelectItem key={member.id} value={member.memberId || member.id}>
-                      <span className="flex items-center gap-1.5">
-                        <UserCheck className="w-3 h-3 text-emerald-600" />
-                        {member.name || member.email.split('@')[0]}
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* PIPELINE STAGE */}
-            <div>
-              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Pipeline Stage</p>
-              <Select
-                value={contact.pipelineStage}
-                onValueChange={val => updateContact({ pipelineStage: val })}
-              >
-                <SelectTrigger className="h-9 text-sm bg-white" data-testid="select-pipeline">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {PIPELINE_STAGES.map(stage => (
-                    <SelectItem key={stage} value={stage}>{stage}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* STATUS TAG */}
-            <div>
-              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Status Tag</p>
-              <div className="flex flex-wrap gap-1.5">
-                {Object.keys(TAG_COLORS).map(tag => (
-                  <button
-                    key={tag}
-                    onClick={() => updateContact({ tag })}
-                    className={cn(
-                      "text-[11px] px-2.5 py-0.5 rounded-full border transition-all",
-                      contact.tag === tag
-                        ? TAG_COLORS[tag] || 'bg-blue-100 text-blue-700 border-blue-300'
-                        : "bg-white text-gray-500 border-gray-200 hover:border-gray-300"
-                    )}
-                    data-testid={`button-tag-${tag.toLowerCase().replace(/\s+/g, '-')}`}
-                  >
-                    {tag}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* FOLLOW-UP REMINDER */}
-            <div>
-              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Follow-up Reminder</p>
-              {contact.followUpDate && (
-                <div className={cn(
-                  "flex items-center gap-2 px-3 py-1.5 rounded-lg mb-2 text-xs font-medium",
-                  getFollowUpStatus(contact.followUpDate) === 'overdue' ? "bg-red-50 text-red-700 border border-red-200" :
-                  getFollowUpStatus(contact.followUpDate) === 'today' ? "bg-amber-50 text-amber-700 border border-amber-200" :
-                  "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                )} data-testid="followup-date-display">
-                  <CalendarIcon className="w-3.5 h-3.5 flex-shrink-0" />
-                  <span>
-                    {getFollowUpStatus(contact.followUpDate) === 'overdue' && "Overdue · "}
-                    {getFollowUpStatus(contact.followUpDate) === 'today' && "Today · "}
-                    {format(new Date(contact.followUpDate), 'MMM d, yyyy')}
-                  </span>
-                  <button onClick={() => updateContact({ followUp: null, followUpDate: null })} className="ml-auto opacity-60 hover:opacity-100" data-testid="button-clear-followup-top">
-                    <X className="w-3 h-3" />
-                  </button>
-                </div>
-              )}
-              <div className="grid grid-cols-4 gap-1.5">
-                {(['Tomorrow', '3 days', '1 week'] as const).map(time => (
-                  <button
-                    key={time}
-                    onClick={() => handleFollowUp(contact.followUp === time ? null : time)}
-                    className={cn(
-                      "text-[10px] py-2 rounded-lg border text-center transition-colors flex flex-col items-center gap-1",
-                      contact.followUp === time
-                        ? "bg-emerald-50 text-emerald-700 border-emerald-300 font-medium"
-                        : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"
-                    )}
-                    data-testid={`button-followup-${time.replace(' ', '-').toLowerCase()}`}
-                  >
-                    <Clock className="w-3.5 h-3.5" />
-                    {time}
-                  </button>
-                ))}
-                <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
-                  <PopoverTrigger asChild>
-                    <button
-                      className={cn(
-                        "text-[10px] py-2 rounded-lg border text-center transition-colors flex flex-col items-center gap-1",
-                        contact.followUp && !['Tomorrow', '3 days', '1 week'].includes(contact.followUp)
-                          ? "bg-emerald-50 text-emerald-700 border-emerald-300 font-medium"
-                          : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"
-                      )}
-                      data-testid="button-followup-custom"
-                    >
-                      <CalendarIcon className="w-3.5 h-3.5" />
-                      Custom
-                    </button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar
-                      mode="single"
-                      selected={contact.followUpDate ? new Date(contact.followUpDate) : undefined}
-                      onSelect={date => {
-                        if (date) {
-                          updateContact({ followUp: format(date, 'MMM d'), followUpDate: date.toISOString() });
-                          setCalendarOpen(false);
-                        }
-                      }}
-                      disabled={date => date < new Date()}
-                      initialFocus
-                    />
-                  </PopoverContent>
-                </Popover>
-              </div>
-            </div>
-
-            {/* NOTES */}
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Notes</p>
-                {notesSaved && (
-                  <span className="text-[10px] text-emerald-600 flex items-center gap-0.5" data-testid="text-notes-saved">
-                    <CheckCheck className="w-3 h-3" /> Saved
-                  </span>
-                )}
-              </div>
-              <textarea
-                className="w-full h-20 bg-yellow-50 border border-yellow-200 rounded-lg p-2.5 text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-yellow-300 resize-none"
-                placeholder="Add a note..."
-                value={localNotes}
-                onChange={e => { setLocalNotes(e.target.value); setNotesSaved(false); }}
-                onBlur={() => {
-                  updateContact({ notes: localNotes });
-                  setNotesSaved(true);
-                  setTimeout(() => setNotesSaved(false), 2500);
-                }}
-                data-testid="textarea-notes"
-              />
-            </div>
-
-            {/* Delete */}
-            <div className="pb-2">
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-full text-red-500 hover:text-red-600 hover:bg-red-50 border-red-100 text-xs"
-                onClick={() => setShowDeleteConfirm(true)}
-                data-testid="button-delete-contact"
-              >
-                <Trash2 className="w-3.5 h-3.5 mr-1.5" /> Delete Contact
-              </Button>
-            </div>
-
-          </div>
-        </div>
+        <InboxLeadDetailsPanel
+          contact={contact}
+          primaryConversation={primaryConversation}
+          teamMembers={teamMembers}
+          onUpdateContact={updateContact}
+          onUpdateConversationStatus={status => {
+            if (primaryConversation) {
+              updateConversationMutation.mutate({ conversationId: primaryConversation.id, status });
+            }
+          }}
+          onEditContact={handleEditContact}
+          onDeleteContact={() => setShowDeleteConfirm(true)}
+        />
       )}
 
       {/* ── DIALOGS ── */}
