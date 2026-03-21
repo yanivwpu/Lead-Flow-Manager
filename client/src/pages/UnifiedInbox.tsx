@@ -307,7 +307,7 @@ export function UnifiedInbox() {
 
   const { data: windowStatus } = useQuery<WindowStatus>({
     queryKey: ["/api/conversations", primaryConversation?.id, "window-status"],
-    enabled: !!primaryConversation?.id,
+    enabled: !!primaryConversation?.id && !isDemoUser,
     refetchInterval: 60000,
   });
 
@@ -756,13 +756,13 @@ export function UnifiedInbox() {
 
             {/* Messages area */}
             <div
-              className="flex-1 overflow-y-auto p-3 space-y-1.5"
+              className="flex-1 overflow-y-auto relative"
               style={{ backgroundImage: 'url("https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png")', backgroundRepeat: 'repeat', backgroundSize: '400px' }}
             >
               <div className="absolute inset-0 bg-[#efeae2]/90 pointer-events-none" />
-              <div className="relative z-10 space-y-1.5">
+              <div className="relative z-10 p-3 flex flex-col gap-1.5 min-h-full justify-end">
                 {messages.length === 0 ? (
-                  <div className="text-center text-gray-500 py-8">
+                  <div className="text-center text-gray-500 py-8 self-center">
                     <MessageCircle className="w-10 h-10 mx-auto mb-2 opacity-30" />
                     <p className="text-sm">No messages yet</p>
                   </div>
