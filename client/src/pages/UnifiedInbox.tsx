@@ -941,161 +941,175 @@ export function UnifiedInbox() {
       {/* ── RIGHT COLUMN: CRM Panel ── */}
       {selectedContactId && contact && (
         <div className="hidden lg:flex w-72 xl:w-80 flex-col border-l bg-gray-50 overflow-y-auto flex-shrink-0">
-          <div className="p-4 border-b bg-white">
-            <div className="flex items-center gap-2 mb-1">
-              <UserCheck className="w-4 h-4 text-emerald-600" />
-              <h3 className="font-semibold text-sm">Lead Details</h3>
+
+          {/* Contact Summary Card */}
+          <div className="p-4 bg-white border-b flex-shrink-0">
+            <div className="flex items-start gap-3">
+              <ChatAvatar src={contact.avatar} name={contact.name} size="lg" />
+              <div className="flex-1 min-w-0">
+                <h3 className="font-semibold text-sm text-gray-900 truncate">{contact.name}</h3>
+                {contact.phone && (
+                  <p className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
+                    <Phone className="w-3 h-3 flex-shrink-0" />{contact.phone}
+                  </p>
+                )}
+                {contact.email && !contact.phone && (
+                  <p className="text-xs text-gray-500 flex items-center gap-1 mt-0.5 truncate">
+                    <Mail className="w-3 h-3 flex-shrink-0" />{contact.email}
+                  </p>
+                )}
+                <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                  {contact.tag && (
+                    <span className={cn("text-[10px] px-1.5 py-0.5 rounded-full font-medium border", TAG_COLORS[contact.tag] || 'bg-blue-100 text-blue-700 border-blue-200')}>
+                      {contact.tag}
+                    </span>
+                  )}
+                  <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium border bg-gray-100 text-gray-500 border-gray-200">
+                    {contact.pipelineStage}
+                  </span>
+                </div>
+              </div>
+              <button
+                onClick={handleEditContact}
+                className="text-gray-400 hover:text-gray-600 p-1 rounded transition-colors flex-shrink-0"
+                data-testid="button-edit-contact-panel"
+              >
+                <Edit className="w-3.5 h-3.5" />
+              </button>
             </div>
           </div>
 
           <div className="p-4 space-y-5 flex-1">
 
-            {/* Contact Info */}
-            <div>
-              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2 block">Contact Info</label>
-              <div className="space-y-1.5">
-                {contact.phone && (
-                  <div className="flex items-center gap-2 text-sm text-gray-600">
-                    <Phone className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
-                    <span>{contact.phone}</span>
-                  </div>
-                )}
-                {contact.email && (
-                  <div className="flex items-center gap-2 text-sm text-gray-600">
-                    <Mail className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
-                    <span className="truncate">{contact.email}</span>
-                  </div>
-                )}
-                {(contact as Contact).whatsappId && (
-                  <div className="flex items-center gap-2 text-sm text-gray-600">
-                    <MessageCircle className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
-                    <span className="text-xs">{(contact as Contact).whatsappId}</span>
-                  </div>
-                )}
-                {!contact.phone && !contact.email && !(contact as Contact).whatsappId && (
-                  <p className="text-xs text-gray-400 italic">No contact info</p>
-                )}
-              </div>
-            </div>
+            {/* ── CONVERSATION section ── */}
+            <div className="space-y-3">
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Conversation</p>
 
-            {/* Source */}
-            <div>
-              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2 block">Source</label>
-              <Select
-                value={(contact as Contact).source || 'manual'}
-                onValueChange={val => updateContact({ source: val })}
-              >
-                <SelectTrigger className="h-8 text-sm bg-white" data-testid="select-source">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {SOURCE_OPTIONS.map(opt => (
-                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+              {/* Status */}
+              {primaryConversation && (
+                <div>
+                  <label className="text-[10px] text-gray-500 mb-1 block">Status</label>
+                  <Select
+                    value={convStatus}
+                    onValueChange={val => {
+                      if (primaryConversation) {
+                        updateConversationMutation.mutate({ conversationId: primaryConversation.id, status: val });
+                      }
+                    }}
+                  >
+                    <SelectTrigger className="h-8 text-sm bg-white" data-testid="select-conversation-status">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {CONVERSATION_STATUSES.map(s => (
+                        <SelectItem key={s.value} value={s.value}>
+                          <span className={cn("px-1.5 py-0.5 rounded text-xs font-medium", s.color)}>{s.label}</span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
 
-            {/* Conversation Status */}
-            {primaryConversation && (
+              {/* Assigned User */}
               <div>
-                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2 block">Status</label>
+                <label className="text-[10px] text-gray-500 mb-1 block">Assigned To</label>
                 <Select
-                  value={convStatus}
+                  value={contact.assignedTo || "unassigned"}
                   onValueChange={val => {
-                    if (primaryConversation) {
-                      updateConversationMutation.mutate({ conversationId: primaryConversation.id, status: val });
-                    }
+                    updateContact({ assignedTo: val === 'unassigned' ? null : val });
                   }}
                 >
-                  <SelectTrigger className="h-8 text-sm bg-white" data-testid="select-conversation-status">
-                    <SelectValue />
+                  <SelectTrigger className="h-8 text-sm bg-white" data-testid="select-assigned-user">
+                    <SelectValue placeholder="Unassigned" />
                   </SelectTrigger>
                   <SelectContent>
-                    {CONVERSATION_STATUSES.map(s => (
-                      <SelectItem key={s.value} value={s.value}>
-                        <span className={cn("px-1.5 py-0.5 rounded text-xs font-medium", s.color)}>{s.label}</span>
+                    <SelectItem value="unassigned">
+                      <span className="flex items-center gap-1.5 text-gray-500"><User className="w-3 h-3" /> Unassigned</span>
+                    </SelectItem>
+                    {teamMembers.filter((m: TeamMember) => m.status === 'active').map((member: TeamMember) => (
+                      <SelectItem key={member.id} value={member.memberId || member.id}>
+                        <span className="flex items-center gap-1.5">
+                          <UserCheck className="w-3 h-3 text-emerald-600" />
+                          {member.name || member.email.split('@')[0]}
+                        </span>
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
-            )}
-
-            {/* Assigned User */}
-            <div>
-              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2 block">Assigned To</label>
-              <Select
-                value={contact.assignedTo || "unassigned"}
-                onValueChange={val => {
-                  updateContact({ assignedTo: val === 'unassigned' ? null : val });
-                }}
-              >
-                <SelectTrigger className="h-8 text-sm bg-white" data-testid="select-assigned-user">
-                  <SelectValue placeholder="Unassigned" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="unassigned">
-                    <span className="flex items-center gap-1.5 text-gray-500"><User className="w-3 h-3" /> Unassigned</span>
-                  </SelectItem>
-                  {teamMembers.filter((m: TeamMember) => m.status === 'active').map((member: TeamMember) => (
-                    <SelectItem key={member.id} value={member.memberId || member.id}>
-                      <span className="flex items-center gap-1.5">
-                        <UserCheck className="w-3 h-3 text-emerald-600" />
-                        {member.name || member.email.split('@')[0]}
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
             </div>
 
-            {/* Pipeline Stage */}
-            <div>
-              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2 block">Pipeline Stage</label>
-              <Select
-                value={contact.pipelineStage}
-                onValueChange={val => updateContact({ pipelineStage: val })}
-              >
-                <SelectTrigger className="h-8 text-sm bg-white" data-testid="select-pipeline">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {PIPELINE_STAGES.map(stage => (
-                    <SelectItem key={stage} value={stage}>{stage}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            {/* ── CRM section ── */}
+            <div className="space-y-3">
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">CRM</p>
 
-            {/* Tags */}
-            <div>
-              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2 block">Status Tag</label>
-              <div className="flex flex-wrap gap-1.5">
-                {Object.keys(TAG_COLORS).map(tag => (
-                  <button
-                    key={tag}
-                    onClick={() => updateContact({ tag })}
-                    className={cn(
-                      "text-[11px] px-2 py-0.5 rounded-full border transition-all",
-                      contact.tag === tag
-                        ? (TAG_COLORS[tag] || 'bg-blue-100 text-blue-700 border-blue-200') + " ring-1 ring-offset-1 ring-gray-300"
-                        : "bg-white text-gray-500 border-gray-200 hover:border-gray-300"
-                    )}
-                    data-testid={`button-tag-${tag.toLowerCase().replace(/\s+/g, '-')}`}
-                  >
-                    {tag}
-                  </button>
-                ))}
+              {/* Pipeline Stage */}
+              <div>
+                <label className="text-[10px] text-gray-500 mb-1 block">Pipeline Stage</label>
+                <Select
+                  value={contact.pipelineStage}
+                  onValueChange={val => updateContact({ pipelineStage: val })}
+                >
+                  <SelectTrigger className="h-8 text-sm bg-white" data-testid="select-pipeline">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PIPELINE_STAGES.map(stage => (
+                      <SelectItem key={stage} value={stage}>{stage}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Source */}
+              <div>
+                <label className="text-[10px] text-gray-500 mb-1 block">Source</label>
+                <Select
+                  value={(contact as Contact).source || 'manual'}
+                  onValueChange={val => updateContact({ source: val })}
+                >
+                  <SelectTrigger className="h-8 text-sm bg-white" data-testid="select-source">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {SOURCE_OPTIONS.map(opt => (
+                      <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Tags */}
+              <div>
+                <label className="text-[10px] text-gray-500 mb-1.5 block">Status Tag</label>
+                <div className="flex flex-wrap gap-1.5">
+                  {Object.keys(TAG_COLORS).map(tag => (
+                    <button
+                      key={tag}
+                      onClick={() => updateContact({ tag })}
+                      className={cn(
+                        "text-[11px] px-2 py-0.5 rounded-full border transition-all",
+                        contact.tag === tag
+                          ? (TAG_COLORS[tag] || 'bg-blue-100 text-blue-700 border-blue-200') + " ring-1 ring-offset-1 ring-gray-300"
+                          : "bg-white text-gray-500 border-gray-200 hover:border-gray-300"
+                      )}
+                      data-testid={`button-tag-${tag.toLowerCase().replace(/\s+/g, '-')}`}
+                    >
+                      {tag}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
 
-            {/* Follow-up Reminder */}
-            <div>
-              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2 block">Next Follow-up</label>
+            {/* ── FOLLOW-UP section ── */}
+            <div className="space-y-2">
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Next Follow-up</p>
+
               {contact.followUpDate ? (
                 <div className={cn(
-                  "flex items-center gap-2 px-3 py-2 rounded-lg mb-2 text-sm font-medium",
+                  "flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium",
                   getFollowUpStatus(contact.followUpDate) === 'overdue' ? "bg-red-50 text-red-700 border border-red-200" :
                   getFollowUpStatus(contact.followUpDate) === 'today' ? "bg-amber-50 text-amber-700 border border-amber-200" :
                   "bg-emerald-50 text-emerald-700 border border-emerald-200"
@@ -1111,8 +1125,9 @@ export function UnifiedInbox() {
                   </button>
                 </div>
               ) : (
-                <p className="text-xs text-gray-400 italic mb-2">No follow-up scheduled</p>
+                <p className="text-xs text-gray-400 italic">No follow-up scheduled</p>
               )}
+
               <div className="grid grid-cols-4 gap-1.5">
                 {(['Tomorrow', '3 days', '1 week'] as const).map(time => (
                   <button
@@ -1163,12 +1178,12 @@ export function UnifiedInbox() {
               </div>
             </div>
 
-            {/* Notes */}
+            {/* ── NOTES section ── */}
             <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Notes</label>
+              <div className="flex items-center justify-between mb-1.5">
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Notes</p>
                 {notesSaved && (
-                  <span className="text-[10px] text-emerald-600 flex items-center gap-0.5 animate-pulse" data-testid="text-notes-saved">
+                  <span className="text-[10px] text-emerald-600 flex items-center gap-0.5" data-testid="text-notes-saved">
                     <CheckCheck className="w-3 h-3" /> Saved
                   </span>
                 )}
@@ -1201,17 +1216,18 @@ export function UnifiedInbox() {
             </div>
 
             {/* Delete */}
-            <div className="pt-2">
+            <div className="pt-1 pb-2">
               <Button
                 variant="outline"
                 size="sm"
-                className="w-full text-red-600 hover:text-red-700 hover:bg-red-50 border-red-100 text-xs"
+                className="w-full text-red-500 hover:text-red-600 hover:bg-red-50 border-red-100 text-xs"
                 onClick={() => setShowDeleteConfirm(true)}
                 data-testid="button-delete-contact"
               >
                 <Trash2 className="w-3.5 h-3.5 mr-1.5" /> Delete Contact
               </Button>
             </div>
+
           </div>
         </div>
       )}
