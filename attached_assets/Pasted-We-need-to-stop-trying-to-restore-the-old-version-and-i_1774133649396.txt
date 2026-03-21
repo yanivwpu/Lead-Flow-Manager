@@ -1,0 +1,102 @@
+We need to stop trying to restore the old version and instead rebuild the right-side CRM panel for Unified Inbox from scratch.
+
+This is a UI-only task.
+
+DO NOT:
+- import or reuse anything from the old Chats page
+- change backend, API, data model, integrations, AI logic, or messaging flow
+
+GOAL
+Create a clean right-side CRM panel component specifically for Unified Inbox.
+
+BUILD A NEW COMPONENT
+Create a new dedicated component for Unified Inbox right panel, for example:
+- InboxLeadDetailsPanel
+or similar
+
+Do not reuse legacy Chats components.
+
+FIELDS TO SHOW IN THIS PANEL
+In this order:
+
+1. Contact Info
+- phone
+- email if available
+
+2. Source
+- dropdown or display field
+
+3. Status
+- dropdown
+- use current conversation/contact status logic already in Inbox
+
+4. Assigned To
+- dropdown
+
+5. Pipeline Stage
+- dropdown
+
+6. Status Tags
+- tag buttons/chips
+- editable
+- keep current tag behavior
+
+7. Next Follow-up
+- show current follow-up clearly as text/date
+- keep quick action buttons:
+  - Tomorrow
+  - 3 days
+  - 1 week
+  - Custom
+
+8. Notes
+- textarea
+- save reliably
+- show existing saved note
+
+9. Delete Contact
+- simple danger action at bottom
+
+DESIGN REQUIREMENTS
+- clean and minimal like the new Unified Inbox style
+- no old Chats styling
+- no old card layout
+- no bulky padding from legacy panel
+- consistent spacing between sections
+- section labels in small muted uppercase style
+- inputs full width
+- tags compact and wrapped nicely
+- follow-up section should show current scheduled reminder clearly
+
+LAYOUT REQUIREMENTS
+- right panel should feel lighter and more modern than old Chats
+- use the current Unified Inbox visual language
+- keep the panel width consistent with current Inbox layout
+- no visual duplication of the same information already shown in header unless needed for editing
+
+IMPORTANT INFORMATION HIERARCHY
+- Header shows conversation context
+- Left list shows priority/scan signals
+- Right panel is for CRM editing and details
+
+So:
+- do not repeat the same status/tag excessively
+- keep right panel focused on editable CRM fields
+
+FILES / IMPLEMENTATION
+Please:
+1. create the new right panel component
+2. wire it into UnifiedInbox only
+3. remove any dependency on old Chats right-panel code
+4. tell me exactly which files were changed
+
+ACCEPTANCE CRITERIA
+When done, the Unified Inbox right panel should:
+- look clean and modern
+- match the new Inbox layout
+- not resemble the old Chats panel
+- allow editing of source, status, assignee, pipeline, tags, follow-up, notes
+- preserve existing save behavior
+- not touch integrations or messaging logic
+
+Please do this as a fresh component rebuild, not a restore attempt.
