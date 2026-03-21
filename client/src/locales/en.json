@@ -526,8 +526,7 @@
       "csvImport": "CSV import contacts",
       "notifications": "Email & push notifications",
       "webhooks3": "3 webhook integrations",
-      "aiAssistFree": "AI Assist included (10 AI reply suggestions/month)",
-      "aiAssistBasic": "AI Assist included (500 AI reply suggestions/month)",
+      "aiAssistBasic": "AI Assist included (basic reply suggestions & sentiment detection – up to 50/month)",
       "aiBrainAddon": "Full AI Brain add-on available (+$29/mo)",
       "everythingStarter": "Everything in Starter, plus:",
       "fiveNumbers": "Up to 5 WhatsApp Business numbers",
@@ -538,7 +537,7 @@
       "templateMessaging": "Template messaging & retargeting",
       "webhooks10": "10 webhook + native integrations",
       "prioritySupport": "Priority support",
-      "aiAssistEnhanced": "Enhanced AI Assist included (2,000 AI reply suggestions/month)"
+      "aiAssistEnhanced": "Enhanced AI Assist included (higher limits – up to 200/month)"
     },
     "aiBrain": {
       "title": "Full AI Brain",

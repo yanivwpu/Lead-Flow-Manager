@@ -533,8 +533,7 @@
       "csvImport": "ייבוא אנשי קשר מ-CSV",
       "notifications": "התראות אימייל ו-push",
       "webhooks3": "3 אינטגרציות webhook",
-      "aiAssistFree": "AI Assist כלול (10 הצעות תגובה ב-AI לחודש)",
-      "aiAssistBasic": "AI Assist כלול (500 הצעות תגובה ב-AI לחודש)",
+      "aiAssistBasic": "AI Assist כלול (הצעות תגובה בסיסיות וזיהוי סנטימנט – עד 50/חודש)",
       "aiBrainAddon": "תוסף AI Brain מלא זמין (+$29/חודש)",
       "everythingStarter": "הכל בסטארטר, פלוס:",
       "fiveNumbers": "עד 5 מספרי WhatsApp Business",
@@ -545,7 +544,7 @@
       "templateMessaging": "הודעות תבנית ורי-טרגטינג",
       "webhooks10": "10 webhook + אינטגרציות מקוריות",
       "prioritySupport": "תמיכה בעדיפות",
-      "aiAssistEnhanced": "AI Assist משופר כלול (2,000 הצעות תגובה ב-AI לחודש)"
+      "aiAssistEnhanced": "AI Assist משופר כלול (מגבלות גבוהות יותר – עד 200/חודש)"
     },
     "aiBrain": {
       "title": "AI Brain מלא",

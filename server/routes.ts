@@ -4815,76 +4815,19 @@ export async function registerRoutes(
   });
 
   // Get AI reply suggestions for a conversation
-  // Per-plan AI reply limits (replies per billing period)
-  const PLAN_AI_LIMITS: Record<string, number> = {
-    free: 10,
-    starter: 500,
-    pro: Infinity,
-    growth: Infinity,
-    enterprise: Infinity,
-  };
-
-  // Check plan-based AI reply limit (used by suggest-reply endpoint)
-  const checkPlanAiLimit = async (userId: string): Promise<{
-    allowed: boolean;
-    plan: string;
-    limit: number;
-    used: number;
-    remaining: number;
-    limitReached: boolean;
-  }> => {
-    const user = await storage.getUser(userId);
-    const plan = user?.subscriptionPlan || 'free';
-    const limit = PLAN_AI_LIMITS[plan] ?? 10;
-    const usage = await storage.getCurrentAiUsage(userId);
-    const used = usage?.repliesSuggested || 0;
-    const limitIsInfinite = limit === Infinity;
-    const remaining = limitIsInfinite ? -1 : Math.max(0, limit - used);
-    const limitReached = !limitIsInfinite && used >= limit;
-    return {
-      allowed: !limitReached,
-      plan,
-      limit: limitIsInfinite ? -1 : limit,
-      used,
-      remaining,
-      limitReached,
-    };
-  };
-
-  // GET /api/ai/usage-status — returns current AI reply usage for the UI counter
-  app.get("/api/ai/usage-status", async (req, res) => {
-    try {
-      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
-      const status = await checkPlanAiLimit(req.user.id);
-      res.json(status);
-    } catch (error) {
-      console.error("AI usage-status error:", error);
-      res.status(500).json({ error: "Failed to fetch usage status" });
-    }
-  });
-
   app.post("/api/ai/suggest-reply", async (req, res) => {
     try {
       if (!req.user) {
         return res.status(401).json({ error: "Unauthorized" });
       }
       const userId = req.user.id;
-
-      // Check per-plan AI reply limit (covers free, starter, pro, etc.)
-      const planLimit = await checkPlanAiLimit(userId);
-      if (planLimit.limitReached) {
-        return res.status(403).json({
-          error: "AI reply limit reached for your plan.",
-          needsUpgrade: true,
-          limitReached: true,
-          plan: planLimit.plan,
-          limit: planLimit.limit,
-          used: planLimit.used,
-          remaining: 0,
-        });
+      
+      // Check access and usage limits
+      const access = await checkAiBrainAccess(userId);
+      if (!access.hasAccess) {
+        return res.status(403).json({ error: access.reason, needsUpgrade: true });
       }
       
-      // For Pro/Enterprise also run fair-use behavior check
       const fairUse = await checkFairUseBehavior(userId);
       if (!fairUse.canProceed) {
         return res.status(429).json({ 
@@ -4915,10 +4858,10 @@ export async function registerRoutes(
       const validTones = ["neutral", "friendly", "professional", "sales"];
       const selectedTone = validTones.includes(tone) ? tone : undefined;
       
-      // If an explicit language was sent, use it; otherwise pass undefined so the AI auto-detects from the conversation
+      // Use explicit language override from request, fall back to user's preferred language
       const validLanguages = ["en", "he", "es", "ar"];
       const requestLanguage = req.body.language;
-      const aiLanguage = (validLanguages.includes(requestLanguage) ? requestLanguage : undefined) as "en" | "he" | "es" | "ar" | undefined;
+      const aiLanguage = (validLanguages.includes(requestLanguage) ? requestLanguage : req.user.language) as "en" | "he" | "es" | "ar" | undefined;
       
       const suggestion = await aiService.suggestReply(
         userId,
@@ -4932,19 +4875,11 @@ export async function registerRoutes(
       
       // Track usage
       await storage.incrementAiUsage(userId, 'repliesSuggested');
-
-      // Compute updated remaining after increment
-      const updatedUsed = planLimit.used + 1;
-      const updatedRemaining = planLimit.limit === -1 ? -1 : Math.max(0, planLimit.limit - updatedUsed);
       
       res.json({ 
         ...suggestion, 
         status: fairUse.status,
-        shouldDowngradeToSuggestOnly: fairUse.shouldDowngradeToSuggestOnly,
-        plan: planLimit.plan,
-        limit: planLimit.limit,
-        used: updatedUsed,
-        remaining: updatedRemaining,
+        shouldDowngradeToSuggestOnly: fairUse.shouldDowngradeToSuggestOnly
       });
     } catch (error) {
       console.error("Reply suggestion error:", error);

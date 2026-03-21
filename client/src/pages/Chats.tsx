@@ -131,7 +131,6 @@ export function Chats() {
   const [aiTone, setAiTone] = useState<"neutral" | "friendly" | "professional" | "sales">("neutral");
   const [aiLanguage, setAiLanguage] = useState<"auto" | "en" | "he" | "es" | "ar">("auto");
   const [leadUpdateHint, setLeadUpdateHint] = useState(false);
-  const [aiUsageStatus, setAiUsageStatus] = useState<{ plan: string; limit: number; used: number; remaining: number; limitReached: boolean } | null>(null);
   
   // Contact menu state (Edit, Timeline, Delete)
   const [showEditChat, setShowEditChat] = useState(false);
@@ -178,21 +177,21 @@ export function Chats() {
     enabled: !!user && hasAssignment,
   });
 
-  // All plans get AI (server enforces per-plan limits: free=10, starter=500, pro=unlimited)
+  // Check plan levels for AI access
   const plan = subscription?.limits?.plan || "free";
   const isPro = plan === "pro" || plan === "enterprise";
   const isStarter = plan === "starter";
-  const hasAIAssist = true; // All plans can use AI; limits enforced server-side
+  const hasAIAssist = isStarter || isPro;
   // Get add-on status from subscription data (checked via Stripe)
   const hasAIBrainAddon = (subscription?.limits as any)?.hasAIBrainAddon ?? false;
-  const hasFullAIBrain = hasAIBrainAddon && (isStarter || isPro);
+  const hasFullAIBrain = hasAIBrainAddon && hasAIAssist;
   
   const { data: aiSettings } = useQuery({
     queryKey: ["/api/ai/settings"],
-    enabled: !!user && (isStarter || isPro || hasFullAIBrain),
+    enabled: !!user && (hasAIAssist || hasFullAIBrain),
   });
   
-  const aiEnabled = !demoMode && (hasFullAIBrain ? (aiSettings && (aiSettings as any).aiMode !== "off") : true);
+  const aiEnabled = (hasAIAssist || hasFullAIBrain) && (hasFullAIBrain ? (aiSettings && (aiSettings as any).aiMode !== "off") : true);
   
   // Timeline interface and query
   interface TimelineEvent {
@@ -306,24 +305,10 @@ export function Chats() {
 
   // Client-side cooldown for AI suggestions (3 seconds)
   const [aiCooldown, setAiCooldown] = useState(false);
-
-  // Fetch AI usage status on mount
-  useEffect(() => {
-    if (!user || demoMode) return;
-    fetch('/api/ai/usage-status', { credentials: 'include' })
-      .then(r => r.ok ? r.json() : null)
-      .then(data => { if (data) setAiUsageStatus(data); })
-      .catch(() => {});
-  }, [user, demoMode]);
   
   // Get AI suggestion for current conversation
   const fetchAiSuggestion = useCallback(async () => {
     if (!selectedChat || !aiEnabled || demoMode || aiCooldown) return;
-    // If we already know the limit is reached, show panel without API call
-    if (aiUsageStatus?.limitReached) {
-      setShowAiSuggestion(true);
-      return;
-    }
     
     setAiSuggestionLoading(true);
     setShowAiSuggestion(true);
@@ -354,18 +339,13 @@ export function Chats() {
       if (response.ok) {
         const data = await response.json();
         setAiSuggestion(data.suggestion || null);
-        // Update counter from response
-        if (data.limit !== undefined) {
-          setAiUsageStatus({ plan: data.plan, limit: data.limit, used: data.used, remaining: data.remaining, limitReached: data.remaining <= 0 });
-        }
+        
         // Silently extract lead data in background
         extractLeadData(selectedChat.id, conversationHistory);
       } else {
         setAiSuggestion(null);
         const errorData = await response.json();
-        if (errorData.limitReached) {
-          setAiUsageStatus(prev => prev ? { ...prev, limitReached: true, remaining: 0 } : { plan: errorData.plan || plan, limit: errorData.limit || 10, used: errorData.used || errorData.limit || 10, remaining: 0, limitReached: true });
-        } else if (errorData.status === "paused" || errorData.status === "limited") {
+        if (errorData.status === "paused" || errorData.status === "limited") {
           toast({
             title: "AI Limited",
             description: errorData.error || "AI assistance is temporarily limited.",
@@ -379,7 +359,7 @@ export function Chats() {
     } finally {
       setAiSuggestionLoading(false);
     }
-  }, [selectedChat, aiEnabled, demoMode, toast, aiCooldown, aiTone, aiLanguage, aiUsageStatus, plan]);
+  }, [selectedChat, aiEnabled, demoMode, toast, aiCooldown, aiTone, aiLanguage]);
   
   // Silent lead extraction with frequency limiting
   const lastExtractionRef = useRef<Record<string, number>>({});
@@ -1166,55 +1146,45 @@ export function Chats() {
 
               {/* AI Suggestion Panel */}
               {aiEnabled && showAiSuggestion && (
-                <div className={cn("px-4 py-3 border-t", aiUsageStatus?.limitReached ? "bg-amber-50 border-amber-100" : "bg-gradient-to-r from-purple-50 to-blue-50 border-purple-100")}>
+                <div className="bg-gradient-to-r from-purple-50 to-blue-50 px-4 py-3 border-t border-purple-100">
                   <div className="flex items-start gap-3">
-                    <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center shrink-0", aiUsageStatus?.limitReached ? "bg-amber-100" : "bg-purple-100")}>
-                      <Sparkles className={cn("w-4 h-4", aiUsageStatus?.limitReached ? "text-amber-600" : "text-purple-600")} />
+                    <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center shrink-0">
+                      <Sparkles className="w-4 h-4 text-purple-600" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-2 mb-2">
                         <div className="flex items-center gap-2">
-                          <span className={cn("text-xs font-semibold", aiUsageStatus?.limitReached ? "text-amber-700" : "text-purple-700")}>AI Suggestion</span>
-                          {/* Usage counter */}
-                          {aiUsageStatus && aiUsageStatus.limit !== -1 && !aiUsageStatus.limitReached && (
-                            <span className={cn("text-[10px] font-medium px-1.5 py-0.5 rounded-full", aiUsageStatus.remaining <= 2 ? "bg-red-100 text-red-600" : aiUsageStatus.remaining <= 5 ? "bg-amber-100 text-amber-600" : "bg-purple-100 text-purple-600")}>
-                              {aiUsageStatus.remaining} left
-                            </span>
-                          )}
-                          {leadUpdateHint && !aiUsageStatus?.limitReached && (
+                          <span className="text-xs font-semibold text-purple-700">AI Suggestion</span>
+                          {leadUpdateHint && (
                             <span className="text-xs text-emerald-600 animate-pulse">Lead details updated</span>
                           )}
                         </div>
                         <div className="flex items-center gap-2">
-                          {!aiUsageStatus?.limitReached && (
-                            <>
-                              {/* Language selector */}
-                              <select
-                                value={aiLanguage}
-                                onChange={(e) => setAiLanguage(e.target.value as typeof aiLanguage)}
-                                className="text-xs px-2 py-1 rounded border border-purple-200 bg-white text-purple-700 focus:outline-none focus:ring-1 focus:ring-purple-300"
-                                data-testid="select-ai-language"
-                              >
-                                <option value="auto">Auto</option>
-                                <option value="en">English</option>
-                                <option value="he">עברית</option>
-                                <option value="es">Español</option>
-                                <option value="ar">العربية</option>
-                              </select>
-                              {/* Tone selector */}
-                              <select
-                                value={aiTone}
-                                onChange={(e) => setAiTone(e.target.value as typeof aiTone)}
-                                className="text-xs px-2 py-1 rounded border border-purple-200 bg-white text-purple-700 focus:outline-none focus:ring-1 focus:ring-purple-300"
-                                data-testid="select-ai-tone"
-                              >
-                                <option value="neutral">Neutral</option>
-                                <option value="friendly">Friendly</option>
-                                <option value="professional">Professional</option>
-                                <option value="sales">Sales-focused</option>
-                              </select>
-                            </>
-                          )}
+                          {/* Language selector */}
+                          <select
+                            value={aiLanguage}
+                            onChange={(e) => setAiLanguage(e.target.value as typeof aiLanguage)}
+                            className="text-xs px-2 py-1 rounded border border-purple-200 bg-white text-purple-700 focus:outline-none focus:ring-1 focus:ring-purple-300"
+                            data-testid="select-ai-language"
+                          >
+                            <option value="auto">Auto</option>
+                            <option value="en">English</option>
+                            <option value="he">עברית</option>
+                            <option value="es">Español</option>
+                            <option value="ar">العربية</option>
+                          </select>
+                          {/* Tone selector */}
+                          <select
+                            value={aiTone}
+                            onChange={(e) => setAiTone(e.target.value as typeof aiTone)}
+                            className="text-xs px-2 py-1 rounded border border-purple-200 bg-white text-purple-700 focus:outline-none focus:ring-1 focus:ring-purple-300"
+                            data-testid="select-ai-tone"
+                          >
+                            <option value="neutral">Neutral</option>
+                            <option value="friendly">Friendly</option>
+                            <option value="professional">Professional</option>
+                            <option value="sales">Sales-focused</option>
+                          </select>
                           <button
                             onClick={() => setShowAiSuggestion(false)}
                             className="text-gray-400 hover:text-gray-600"
@@ -1224,21 +1194,7 @@ export function Chats() {
                           </button>
                         </div>
                       </div>
-                      {/* Limit reached — upgrade prompt */}
-                      {aiUsageStatus?.limitReached ? (
-                        <div className="text-center py-1">
-                          <p className="text-xs text-amber-700 font-medium mb-2">
-                            You've used all {aiUsageStatus.limit} {aiUsageStatus.plan === 'free' ? 'free' : aiUsageStatus.plan === 'starter' ? 'Starter' : ''} AI replies this month.
-                          </p>
-                          <a
-                            href="/pricing"
-                            className="inline-block text-xs px-4 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-full transition-colors font-medium"
-                            data-testid="link-upgrade-ai"
-                          >
-                            Upgrade plan →
-                          </a>
-                        </div>
-                      ) : aiSuggestionLoading ? (
+                      {aiSuggestionLoading ? (
                         <div className="space-y-3">
                           <div className="flex items-center gap-2 text-sm text-purple-600 font-medium">
                             <Loader2 className="w-4 h-4 animate-spin" />

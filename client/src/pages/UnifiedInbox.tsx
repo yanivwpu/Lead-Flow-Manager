@@ -30,9 +30,6 @@ import {
   X,
   CheckCheck,
   Zap,
-  Brain,
-  Sparkles,
-  RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -179,6 +176,28 @@ const CONVERSATION_STATUSES = [
 
 const DEMO_CHANNELS: Channel[] = ['whatsapp', 'instagram', 'facebook', 'telegram', 'sms', 'webchat'];
 
+const SOURCE_LABELS: Record<string, string> = {
+  manual: 'Manual',
+  whatsapp: 'WhatsApp',
+  instagram: 'Instagram DM',
+  facebook: 'Facebook',
+  webchat: 'Website Widget',
+  import: 'CSV Import',
+  api: 'API',
+  tiktok: 'TikTok',
+  sms: 'SMS',
+  telegram: 'Telegram',
+};
+
+const SOURCE_OPTIONS = [
+  { value: 'manual', label: 'Manual' },
+  { value: 'whatsapp', label: 'WhatsApp' },
+  { value: 'instagram', label: 'Instagram DM' },
+  { value: 'facebook', label: 'Facebook' },
+  { value: 'webchat', label: 'Website Widget' },
+  { value: 'import', label: 'CSV Import' },
+  { value: 'api', label: 'API' },
+];
 
 function getFollowUpStatus(followUpDate: string | null | undefined): 'overdue' | 'today' | 'upcoming' | null {
   if (!followUpDate) return null;
@@ -212,17 +231,6 @@ export function UnifiedInbox() {
   const [notesActive, setNotesActive] = useState(false);
   const [calendarOpen, setCalendarOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-
-  // AI suggestion state
-  const [aiSuggestion, setAiSuggestion] = useState<string | null>(null);
-  const [aiSuggestionLoading, setAiSuggestionLoading] = useState(false);
-  const [showAiSuggestion, setShowAiSuggestion] = useState(false);
-  const [aiCooldown, setAiCooldown] = useState(false);
-  const [aiLanguage, setAiLanguage] = useState<'auto' | 'en' | 'es' | 'he' | 'ar'>('auto');
-  const [aiLimitReached, setAiLimitReached] = useState(false);
-  const [aiUsageStatus, setAiUsageStatus] = useState<{
-    plan: string; limit: number; used: number; remaining: number; limitReached: boolean;
-  } | null>(null);
 
   const selectedContactId = match ? params?.contactId : null;
 
@@ -372,19 +380,6 @@ export function UnifiedInbox() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // Reset AI panel when switching contacts
-  useEffect(() => {
-    setShowAiSuggestion(false);
-    setAiSuggestion(null);
-    setAiSuggestionLoading(false);
-    setAiLimitReached(false);
-  }, [selectedContactId]);
-
-  // Fetch AI usage status on mount
-  useEffect(() => {
-    fetchAiUsageStatus();
-  }, [fetchAiUsageStatus]);
-
   // --- Mutations ---
 
   const sendMessageMutation = useMutation({
@@ -532,91 +527,6 @@ export function UnifiedInbox() {
     if (!messageInput.trim() || !selectedContactId) return;
     sendMessageMutation.mutate({ contactId: selectedContactId, content: messageInput });
   };
-
-  // RTL detection for Hebrew and Arabic — covers both forced language and auto-detected text
-  const isRTL = (lang: string) => lang === 'he' || lang === 'ar';
-  const textIsRTL = (text: string) => /[\u0590-\u05FF\u0600-\u06FF]/.test(text);
-  const suggestionIsRTL = aiLanguage !== 'auto'
-    ? isRTL(aiLanguage)
-    : aiSuggestion ? textIsRTL(aiSuggestion) : false;
-  const inputIsRTL = messageInput ? textIsRTL(messageInput) : (aiLanguage !== 'auto' && isRTL(aiLanguage));
-
-  // Fetch current AI usage status from backend
-  const fetchAiUsageStatus = useCallback(async () => {
-    if (isDemoUser) return;
-    try {
-      const res = await fetch('/api/ai/usage-status', { credentials: 'include' });
-      if (res.ok) {
-        const data = await res.json();
-        setAiUsageStatus(data);
-        setAiLimitReached(data.limitReached);
-      }
-    } catch { /* silent */ }
-  }, [isDemoUser]);
-
-  // Fetch AI reply suggestion
-  const fetchAiSuggestion = useCallback(async () => {
-    if (!selectedContactId || isDemoUser || aiCooldown) return;
-
-    // If we already know the limit is reached, just open the panel with upgrade prompt
-    if (aiUsageStatus?.limitReached) {
-      setAiLimitReached(true);
-      setShowAiSuggestion(true);
-      return;
-    }
-
-    setAiSuggestionLoading(true);
-    setShowAiSuggestion(true);
-    setAiCooldown(true);
-    setAiSuggestion(null);
-    setAiLimitReached(false);
-    setTimeout(() => setAiCooldown(false), 3000);
-
-    try {
-      const conversationHistory = messages.slice(-10).map((msg: Message) => ({
-        role: msg.direction === 'inbound' ? 'user' : 'assistant',
-        content: msg.content || '',
-      }));
-
-      const body: Record<string, unknown> = {
-        chatId: selectedContactId,
-        conversationHistory,
-      };
-      if (aiLanguage !== 'auto') body.language = aiLanguage;
-
-      const res = await fetch('/api/ai/suggest-reply', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify(body),
-      });
-
-      const data = await res.json().catch(() => ({}));
-
-      if (res.ok) {
-        setAiSuggestion(data.suggestion || null);
-        // Update usage counter from response
-        if (data.plan !== undefined) {
-          setAiUsageStatus({ plan: data.plan, limit: data.limit, used: data.used, remaining: data.remaining, limitReached: false });
-        }
-      } else if (res.status === 403 && data.limitReached) {
-        setAiLimitReached(true);
-        setAiSuggestion(null);
-        if (data.plan !== undefined) {
-          setAiUsageStatus({ plan: data.plan, limit: data.limit, used: data.used, remaining: 0, limitReached: true });
-        }
-      } else {
-        setAiSuggestion(null);
-        if (data.status === 'paused' || data.status === 'limited') {
-          toast({ title: "AI Limited", description: data.error || "AI assistance is temporarily limited.", variant: "destructive" });
-        }
-      }
-    } catch {
-      setAiSuggestion(null);
-    } finally {
-      setAiSuggestionLoading(false);
-    }
-  }, [selectedContactId, isDemoUser, aiCooldown, aiLanguage, messages, toast, aiUsageStatus]);
 
   const handleEditContact = () => {
     if (contactData?.contact) {
@@ -846,6 +756,11 @@ export function UnifiedInbox() {
                   <span className={cn("text-[10px] px-1.5 py-0.5 rounded font-medium", statusConfig.color)}>
                     {statusConfig.label}
                   </span>
+                  {contact.tag && (
+                    <span className={cn("text-[10px] px-1.5 py-0.5 rounded-full font-medium border hidden sm:inline-flex", TAG_COLORS[contact.tag] || 'bg-blue-100 text-blue-700 border-blue-200')}>
+                      {contact.tag}
+                    </span>
+                  )}
                 </div>
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
                   {contact.phone && <span className="flex items-center gap-1"><Phone className="w-3 h-3" />{contact.phone}</span>}
@@ -986,159 +901,15 @@ export function UnifiedInbox() {
               </div>
             </div>
 
-            {/* AI Suggestion Panel */}
-            {showAiSuggestion && (
-              <div className={cn(
-                "px-4 py-3 border-t flex-shrink-0",
-                aiLimitReached
-                  ? "bg-gradient-to-r from-amber-50 to-orange-50 border-amber-100"
-                  : "bg-gradient-to-r from-purple-50 to-blue-50 border-purple-100"
-              )}>
-                <div className="flex items-start gap-3">
-                  <div className={cn(
-                    "w-7 h-7 rounded-lg flex items-center justify-center shrink-0 mt-0.5",
-                    aiLimitReached ? "bg-amber-100" : "bg-purple-100"
-                  )}>
-                    <Sparkles className={cn("w-3.5 h-3.5", aiLimitReached ? "text-amber-600" : "text-purple-600")} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between gap-2 mb-2">
-                      <div className="flex items-center gap-2">
-                        <span className={cn("text-xs font-semibold", aiLimitReached ? "text-amber-700" : "text-purple-700")}>
-                          AI Suggestion
-                        </span>
-                        {/* Usage counter for free/starter plans */}
-                        {aiUsageStatus && aiUsageStatus.limit !== -1 && !aiLimitReached && (
-                          <span className={cn(
-                            "text-[10px] px-1.5 py-0.5 rounded-full font-medium",
-                            aiUsageStatus.remaining <= 2
-                              ? "bg-red-100 text-red-700"
-                              : aiUsageStatus.remaining <= 5
-                              ? "bg-amber-100 text-amber-700"
-                              : "bg-purple-100 text-purple-600"
-                          )} data-testid="text-ai-remaining">
-                            {aiUsageStatus.remaining} left
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        {/* Language selector — only when not limit-reached */}
-                        {!aiLimitReached && (
-                          <select
-                            value={aiLanguage}
-                            onChange={e => setAiLanguage(e.target.value as typeof aiLanguage)}
-                            className="text-xs px-1.5 py-0.5 rounded border border-purple-200 bg-white text-purple-700 focus:outline-none focus:ring-1 focus:ring-purple-300"
-                            data-testid="select-ai-language"
-                          >
-                            <option value="auto">Auto</option>
-                            <option value="en">English</option>
-                            <option value="es">Español</option>
-                            <option value="he">עברית</option>
-                            <option value="ar">العربية</option>
-                          </select>
-                        )}
-                        <button
-                          onClick={() => { setShowAiSuggestion(false); setAiSuggestion(null); setAiLimitReached(false); }}
-                          className="text-gray-400 hover:text-gray-600"
-                          data-testid="button-dismiss-ai"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Limit reached — upgrade prompt */}
-                    {aiLimitReached ? (
-                      <div data-testid="ai-limit-reached">
-                        <p className="text-sm text-amber-800 font-medium mb-1">
-                          {aiUsageStatus?.plan === 'free'
-                            ? `You've used all ${aiUsageStatus.limit} free AI replies this month.`
-                            : `You've reached your ${aiUsageStatus?.limit} reply limit for the Starter plan this month.`}
-                        </p>
-                        <p className="text-xs text-amber-700 mb-2">
-                          Upgrade to get more AI replies and unlock the full AI Brain.
-                        </p>
-                        <a
-                          href="/pricing"
-                          className="inline-block text-xs px-3 py-1 bg-amber-600 text-white rounded-full hover:bg-amber-700 transition-colors font-medium"
-                          data-testid="link-upgrade-plan"
-                        >
-                          Upgrade plan →
-                        </a>
-                      </div>
-                    ) : aiSuggestionLoading ? (
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-2 text-sm text-purple-600 font-medium">
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                          <span>Thinking...</span>
-                        </div>
-                        <div className="space-y-1.5">
-                          <div className="h-2 bg-purple-100 rounded animate-pulse w-3/4" />
-                          <div className="h-2 bg-purple-100 rounded animate-pulse w-1/2" />
-                        </div>
-                      </div>
-                    ) : aiSuggestion ? (
-                      <div>
-                        <p
-                          className="text-sm text-gray-700 mb-2 leading-relaxed"
-                          dir={suggestionIsRTL ? 'rtl' : 'ltr'}
-                          style={suggestionIsRTL ? { textAlign: 'right', fontFamily: 'inherit' } : {}}
-                          data-testid="text-ai-suggestion"
-                        >
-                          {aiSuggestion}
-                        </p>
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => { setMessageInput(aiSuggestion); setShowAiSuggestion(false); setAiSuggestion(null); }}
-                            className="text-xs px-3 py-1 bg-purple-600 text-white rounded-full hover:bg-purple-700 transition-colors"
-                            data-testid="button-use-ai-suggestion"
-                          >
-                            Use this reply
-                          </button>
-                          <button
-                            onClick={fetchAiSuggestion}
-                            disabled={aiCooldown}
-                            className="text-xs px-3 py-1 bg-white text-purple-600 border border-purple-200 rounded-full hover:bg-purple-50 transition-colors flex items-center gap-1 disabled:opacity-50"
-                            data-testid="button-regenerate-ai"
-                          >
-                            <RefreshCw className={cn("w-3 h-3", aiCooldown && "animate-spin")} />
-                            {aiCooldown ? "Wait..." : "Regenerate"}
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <p className="text-sm text-gray-500">No suggestion available. Try again later.</p>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-
             {/* Composer */}
             <div className="p-3 border-t flex-shrink-0">
               <div className="flex items-end gap-2">
-                {/* AI Brain button */}
-                {!isDemoUser && !showAiSuggestion && (
-                  <button
-                    onClick={fetchAiSuggestion}
-                    disabled={aiCooldown}
-                    title={aiCooldown ? "Please wait..." : "Get AI suggestion"}
-                    className={cn(
-                      "text-purple-500 hover:text-purple-600 disabled:opacity-50 flex-shrink-0 mb-1.5",
-                      aiCooldown && "cursor-not-allowed"
-                    )}
-                    data-testid="button-ai-suggest"
-                  >
-                    <Brain className={cn("w-5 h-5", aiCooldown && "animate-pulse")} />
-                  </button>
-                )}
                 <Textarea
                   placeholder="Type a message..."
                   className="min-h-[40px] max-h-[120px] resize-none text-sm"
                   value={messageInput}
                   onChange={e => setMessageInput(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(); } }}
-                  dir={inputIsRTL ? 'rtl' : 'ltr'}
                   data-testid="textarea-message-input"
                 />
                 <Button
@@ -1205,6 +976,24 @@ export function UnifiedInbox() {
                   <p className="text-xs text-gray-400 italic">No contact info</p>
                 )}
               </div>
+            </div>
+
+            {/* Source */}
+            <div>
+              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2 block">Source</label>
+              <Select
+                value={(contact as Contact).source || 'manual'}
+                onValueChange={val => updateContact({ source: val })}
+              >
+                <SelectTrigger className="h-8 text-sm bg-white" data-testid="select-source">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {SOURCE_OPTIONS.map(opt => (
+                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             {/* Conversation Status */}
