@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { MessageSquare, ListTodo, Search, LogOut, Settings, Zap, Plug, FileText, HelpCircle, Bot, Inbox, Globe, Brain, ChevronDown, ChevronRight, BookOpen } from "lucide-react";
+import { ListTodo, Search, LogOut, Settings, Zap, Plug, FileText, HelpCircle, Bot, Inbox, Globe, Brain, ChevronDown, ChevronRight, BookOpen } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 import { useState } from "react";
@@ -27,7 +27,6 @@ export function Sidebar() {
       label: t('nav.main', 'Main'),
       items: [
         { icon: Inbox, label: t('nav.inbox', 'Inbox'), href: "/app/inbox", testId: "sidebar-inbox" },
-        { icon: MessageSquare, label: t('nav.chats', 'Chats'), href: "/app/chats", testId: "sidebar-chats" },
         { icon: ListTodo, label: t('nav.followups', 'Follow-ups'), href: "/app/followups", testId: "sidebar-followups" },
       ]
     },

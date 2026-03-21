@@ -25,6 +25,32 @@ export function registerConversationRoutes(app: Express): void {
     }
   });
 
+  // Update conversation (status, etc.)
+  app.patch("/api/conversations/:id", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const conversation = await storage.getConversation(req.params.id);
+      if (!conversation) {
+        return res.status(404).json({ error: "Conversation not found" });
+      }
+      if (conversation.userId !== req.user.id) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+      const allowed = ['status'];
+      const updates: Record<string, unknown> = {};
+      for (const key of allowed) {
+        if (req.body[key] !== undefined) updates[key] = req.body[key];
+      }
+      const updated = await storage.updateConversation(req.params.id, updates);
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating conversation:", error);
+      res.status(500).json({ error: "Failed to update conversation" });
+    }
+  });
+
   // Mark conversation as read
   app.post("/api/conversations/:id/read", async (req, res) => {
     try {
