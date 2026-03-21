@@ -241,6 +241,10 @@ export function UnifiedInbox() {
   const [showAiSuggestion, setShowAiSuggestion] = useState(false);
   const [aiCooldown, setAiCooldown] = useState(false);
   const [aiLanguage, setAiLanguage] = useState<'auto' | 'en' | 'es' | 'he' | 'ar'>('auto');
+  const [aiLimitReached, setAiLimitReached] = useState(false);
+  const [aiUsageStatus, setAiUsageStatus] = useState<{
+    plan: string; limit: number; used: number; remaining: number; limitReached: boolean;
+  } | null>(null);
 
   const selectedContactId = match ? params?.contactId : null;
 
@@ -395,7 +399,13 @@ export function UnifiedInbox() {
     setShowAiSuggestion(false);
     setAiSuggestion(null);
     setAiSuggestionLoading(false);
+    setAiLimitReached(false);
   }, [selectedContactId]);
+
+  // Fetch AI usage status on mount
+  useEffect(() => {
+    fetchAiUsageStatus();
+  }, [fetchAiUsageStatus]);
 
   // --- Mutations ---
 
@@ -553,14 +563,35 @@ export function UnifiedInbox() {
     : aiSuggestion ? textIsRTL(aiSuggestion) : false;
   const inputIsRTL = messageInput ? textIsRTL(messageInput) : (aiLanguage !== 'auto' && isRTL(aiLanguage));
 
+  // Fetch current AI usage status from backend
+  const fetchAiUsageStatus = useCallback(async () => {
+    if (isDemoUser) return;
+    try {
+      const res = await fetch('/api/ai/usage-status', { credentials: 'include' });
+      if (res.ok) {
+        const data = await res.json();
+        setAiUsageStatus(data);
+        setAiLimitReached(data.limitReached);
+      }
+    } catch { /* silent */ }
+  }, [isDemoUser]);
+
   // Fetch AI reply suggestion
   const fetchAiSuggestion = useCallback(async () => {
     if (!selectedContactId || isDemoUser || aiCooldown) return;
+
+    // If we already know the limit is reached, just open the panel with upgrade prompt
+    if (aiUsageStatus?.limitReached) {
+      setAiLimitReached(true);
+      setShowAiSuggestion(true);
+      return;
+    }
 
     setAiSuggestionLoading(true);
     setShowAiSuggestion(true);
     setAiCooldown(true);
     setAiSuggestion(null);
+    setAiLimitReached(false);
     setTimeout(() => setAiCooldown(false), 3000);
 
     try {
@@ -582,14 +613,24 @@ export function UnifiedInbox() {
         body: JSON.stringify(body),
       });
 
+      const data = await res.json().catch(() => ({}));
+
       if (res.ok) {
-        const data = await res.json();
         setAiSuggestion(data.suggestion || null);
-      } else {
-        const err = await res.json().catch(() => ({}));
+        // Update usage counter from response
+        if (data.plan !== undefined) {
+          setAiUsageStatus({ plan: data.plan, limit: data.limit, used: data.used, remaining: data.remaining, limitReached: false });
+        }
+      } else if (res.status === 403 && data.limitReached) {
+        setAiLimitReached(true);
         setAiSuggestion(null);
-        if (err.status === 'paused' || err.status === 'limited') {
-          toast({ title: "AI Limited", description: err.error || "AI assistance is temporarily limited.", variant: "destructive" });
+        if (data.plan !== undefined) {
+          setAiUsageStatus({ plan: data.plan, limit: data.limit, used: data.used, remaining: 0, limitReached: true });
+        }
+      } else {
+        setAiSuggestion(null);
+        if (data.status === 'paused' || data.status === 'limited') {
+          toast({ title: "AI Limited", description: data.error || "AI assistance is temporarily limited.", variant: "destructive" });
         }
       }
     } catch {
@@ -597,7 +638,7 @@ export function UnifiedInbox() {
     } finally {
       setAiSuggestionLoading(false);
     }
-  }, [selectedContactId, isDemoUser, aiCooldown, aiLanguage, messages, toast]);
+  }, [selectedContactId, isDemoUser, aiCooldown, aiLanguage, messages, toast, aiUsageStatus]);
 
   const handleEditContact = () => {
     if (contactData?.contact) {
@@ -969,30 +1010,57 @@ export function UnifiedInbox() {
 
             {/* AI Suggestion Panel */}
             {showAiSuggestion && (
-              <div className="bg-gradient-to-r from-purple-50 to-blue-50 px-4 py-3 border-t border-purple-100 flex-shrink-0">
+              <div className={cn(
+                "px-4 py-3 border-t flex-shrink-0",
+                aiLimitReached
+                  ? "bg-gradient-to-r from-amber-50 to-orange-50 border-amber-100"
+                  : "bg-gradient-to-r from-purple-50 to-blue-50 border-purple-100"
+              )}>
                 <div className="flex items-start gap-3">
-                  <div className="w-7 h-7 bg-purple-100 rounded-lg flex items-center justify-center shrink-0 mt-0.5">
-                    <Sparkles className="w-3.5 h-3.5 text-purple-600" />
+                  <div className={cn(
+                    "w-7 h-7 rounded-lg flex items-center justify-center shrink-0 mt-0.5",
+                    aiLimitReached ? "bg-amber-100" : "bg-purple-100"
+                  )}>
+                    <Sparkles className={cn("w-3.5 h-3.5", aiLimitReached ? "text-amber-600" : "text-purple-600")} />
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-2 mb-2">
-                      <span className="text-xs font-semibold text-purple-700">AI Suggestion</span>
+                      <div className="flex items-center gap-2">
+                        <span className={cn("text-xs font-semibold", aiLimitReached ? "text-amber-700" : "text-purple-700")}>
+                          AI Suggestion
+                        </span>
+                        {/* Usage counter for free/starter plans */}
+                        {aiUsageStatus && aiUsageStatus.limit !== -1 && !aiLimitReached && (
+                          <span className={cn(
+                            "text-[10px] px-1.5 py-0.5 rounded-full font-medium",
+                            aiUsageStatus.remaining <= 2
+                              ? "bg-red-100 text-red-700"
+                              : aiUsageStatus.remaining <= 5
+                              ? "bg-amber-100 text-amber-700"
+                              : "bg-purple-100 text-purple-600"
+                          )} data-testid="text-ai-remaining">
+                            {aiUsageStatus.remaining} left
+                          </span>
+                        )}
+                      </div>
                       <div className="flex items-center gap-1.5">
-                        {/* Language selector */}
-                        <select
-                          value={aiLanguage}
-                          onChange={e => setAiLanguage(e.target.value as typeof aiLanguage)}
-                          className="text-xs px-1.5 py-0.5 rounded border border-purple-200 bg-white text-purple-700 focus:outline-none focus:ring-1 focus:ring-purple-300"
-                          data-testid="select-ai-language"
-                        >
-                          <option value="auto">Auto</option>
-                          <option value="en">English</option>
-                          <option value="es">Español</option>
-                          <option value="he">עברית</option>
-                          <option value="ar">العربية</option>
-                        </select>
+                        {/* Language selector — only when not limit-reached */}
+                        {!aiLimitReached && (
+                          <select
+                            value={aiLanguage}
+                            onChange={e => setAiLanguage(e.target.value as typeof aiLanguage)}
+                            className="text-xs px-1.5 py-0.5 rounded border border-purple-200 bg-white text-purple-700 focus:outline-none focus:ring-1 focus:ring-purple-300"
+                            data-testid="select-ai-language"
+                          >
+                            <option value="auto">Auto</option>
+                            <option value="en">English</option>
+                            <option value="es">Español</option>
+                            <option value="he">עברית</option>
+                            <option value="ar">العربية</option>
+                          </select>
+                        )}
                         <button
-                          onClick={() => { setShowAiSuggestion(false); setAiSuggestion(null); }}
+                          onClick={() => { setShowAiSuggestion(false); setAiSuggestion(null); setAiLimitReached(false); }}
                           className="text-gray-400 hover:text-gray-600"
                           data-testid="button-dismiss-ai"
                         >
@@ -1000,7 +1068,27 @@ export function UnifiedInbox() {
                         </button>
                       </div>
                     </div>
-                    {aiSuggestionLoading ? (
+
+                    {/* Limit reached — upgrade prompt */}
+                    {aiLimitReached ? (
+                      <div data-testid="ai-limit-reached">
+                        <p className="text-sm text-amber-800 font-medium mb-1">
+                          {aiUsageStatus?.plan === 'free'
+                            ? `You've used all ${aiUsageStatus.limit} free AI replies this month.`
+                            : `You've reached your ${aiUsageStatus?.limit} reply limit for the Starter plan this month.`}
+                        </p>
+                        <p className="text-xs text-amber-700 mb-2">
+                          Upgrade to get more AI replies and unlock the full AI Brain.
+                        </p>
+                        <a
+                          href="/pricing"
+                          className="inline-block text-xs px-3 py-1 bg-amber-600 text-white rounded-full hover:bg-amber-700 transition-colors font-medium"
+                          data-testid="link-upgrade-plan"
+                        >
+                          Upgrade plan →
+                        </a>
+                      </div>
+                    ) : aiSuggestionLoading ? (
                       <div className="space-y-2">
                         <div className="flex items-center gap-2 text-sm text-purple-600 font-medium">
                           <Loader2 className="w-3.5 h-3.5 animate-spin" />
