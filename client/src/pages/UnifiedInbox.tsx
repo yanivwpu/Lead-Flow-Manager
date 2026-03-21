@@ -943,8 +943,8 @@ export function UnifiedInbox() {
         <div className="hidden lg:flex w-72 xl:w-80 flex-col border-l bg-white overflow-y-auto flex-shrink-0">
 
           {/* Header */}
-          <div className="px-4 py-3 border-b flex items-center gap-2 flex-shrink-0">
-            <UserCheck className="w-4 h-4 text-gray-500" />
+          <div className="px-4 py-3 border-b flex items-center gap-2 flex-shrink-0 bg-white">
+            <User className="w-4 h-4 text-emerald-600" />
             <h3 className="font-semibold text-sm text-gray-800">Lead Details</h3>
             <button
               onClick={handleEditContact}
@@ -955,12 +955,12 @@ export function UnifiedInbox() {
             </button>
           </div>
 
-          <div className="p-4 space-y-5">
+          <div className="px-4 py-3 space-y-4">
 
             {/* CONTACT INFO */}
             <div>
-              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-2">Contact Info</p>
-              <div className="space-y-1.5">
+              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Contact Info</p>
+              <div className="space-y-1">
                 {contact.phone && (
                   <div className="flex items-center gap-2 text-sm text-gray-700">
                     <Phone className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
@@ -982,7 +982,7 @@ export function UnifiedInbox() {
             {/* STATUS */}
             {primaryConversation && (
               <div>
-                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-2">Status</p>
+                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Status</p>
                 <Select
                   value={convStatus}
                   onValueChange={val => {
@@ -993,10 +993,10 @@ export function UnifiedInbox() {
                 >
                   <SelectTrigger
                     className={cn(
-                      "h-9 text-sm font-medium border-2",
-                      convStatus === 'open' ? "border-emerald-500 text-emerald-700 bg-white" :
-                      convStatus === 'pending' ? "border-amber-400 text-amber-700 bg-white" :
-                      convStatus === 'resolved' ? "border-blue-400 text-blue-700 bg-white" :
+                      "h-9 text-sm font-medium",
+                      convStatus === 'open' ? "border-emerald-500 text-emerald-600 bg-white" :
+                      convStatus === 'pending' ? "border-amber-400 text-amber-600 bg-white" :
+                      convStatus === 'resolved' ? "border-blue-400 text-blue-600 bg-white" :
                       "border-gray-300 text-gray-600 bg-white"
                     )}
                     data-testid="select-conversation-status"
@@ -1016,14 +1016,14 @@ export function UnifiedInbox() {
 
             {/* ASSIGNED TO */}
             <div>
-              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-2">Assigned To</p>
+              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Assigned To</p>
               <Select
                 value={contact.assignedTo || "unassigned"}
                 onValueChange={val => {
                   updateContact({ assignedTo: val === 'unassigned' ? null : val });
                 }}
               >
-                <SelectTrigger className="h-9 text-sm bg-white border border-gray-200" data-testid="select-assigned-user">
+                <SelectTrigger className="h-9 text-sm bg-white" data-testid="select-assigned-user">
                   <SelectValue placeholder="Unassigned" />
                 </SelectTrigger>
                 <SelectContent>
@@ -1044,12 +1044,12 @@ export function UnifiedInbox() {
 
             {/* PIPELINE STAGE */}
             <div>
-              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-2">Pipeline Stage</p>
+              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Pipeline Stage</p>
               <Select
                 value={contact.pipelineStage}
                 onValueChange={val => updateContact({ pipelineStage: val })}
               >
-                <SelectTrigger className="h-9 text-sm bg-white border border-gray-200" data-testid="select-pipeline">
+                <SelectTrigger className="h-9 text-sm bg-white" data-testid="select-pipeline">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -1062,17 +1062,17 @@ export function UnifiedInbox() {
 
             {/* STATUS TAG */}
             <div>
-              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-2">Status Tag</p>
+              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Status Tag</p>
               <div className="flex flex-wrap gap-1.5">
                 {Object.keys(TAG_COLORS).map(tag => (
                   <button
                     key={tag}
                     onClick={() => updateContact({ tag })}
                     className={cn(
-                      "text-[11px] px-2.5 py-0.5 rounded-full border transition-all font-medium",
+                      "text-[11px] px-2.5 py-0.5 rounded-full border transition-all",
                       contact.tag === tag
                         ? TAG_COLORS[tag] || 'bg-blue-100 text-blue-700 border-blue-300'
-                        : "bg-white text-gray-500 border-gray-200 hover:border-gray-300 hover:text-gray-700"
+                        : "bg-white text-gray-500 border-gray-200 hover:border-gray-300"
                     )}
                     data-testid={`button-tag-${tag.toLowerCase().replace(/\s+/g, '-')}`}
                   >
@@ -1084,10 +1084,10 @@ export function UnifiedInbox() {
 
             {/* FOLLOW-UP REMINDER */}
             <div>
-              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-2">Follow-up Reminder</p>
+              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Follow-up Reminder</p>
               {contact.followUpDate && (
                 <div className={cn(
-                  "flex items-center gap-2 px-3 py-2 rounded-lg mb-2 text-xs font-medium",
+                  "flex items-center gap-2 px-3 py-1.5 rounded-lg mb-2 text-xs font-medium",
                   getFollowUpStatus(contact.followUpDate) === 'overdue' ? "bg-red-50 text-red-700 border border-red-200" :
                   getFollowUpStatus(contact.followUpDate) === 'today' ? "bg-amber-50 text-amber-700 border border-amber-200" :
                   "bg-emerald-50 text-emerald-700 border border-emerald-200"
@@ -1155,8 +1155,8 @@ export function UnifiedInbox() {
 
             {/* NOTES */}
             <div>
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">Notes</p>
+              <div className="flex items-center justify-between mb-1.5">
+                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Notes</p>
                 {notesSaved && (
                   <span className="text-[10px] text-emerald-600 flex items-center gap-0.5" data-testid="text-notes-saved">
                     <CheckCheck className="w-3 h-3" /> Saved
@@ -1164,7 +1164,7 @@ export function UnifiedInbox() {
                 )}
               </div>
               <textarea
-                className="w-full h-24 bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-yellow-300 resize-none"
+                className="w-full h-20 bg-yellow-50 border border-yellow-200 rounded-lg p-2.5 text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-yellow-300 resize-none"
                 placeholder="Add a note..."
                 value={localNotes}
                 onChange={e => { setLocalNotes(e.target.value); setNotesSaved(false); }}
