@@ -4858,10 +4858,10 @@ export async function registerRoutes(
       const validTones = ["neutral", "friendly", "professional", "sales"];
       const selectedTone = validTones.includes(tone) ? tone : undefined;
       
-      // Use explicit language override from request, fall back to user's preferred language
+      // If an explicit language was sent, use it; otherwise pass undefined so the AI auto-detects from the conversation
       const validLanguages = ["en", "he", "es", "ar"];
       const requestLanguage = req.body.language;
-      const aiLanguage = (validLanguages.includes(requestLanguage) ? requestLanguage : req.user.language) as "en" | "he" | "es" | "ar" | undefined;
+      const aiLanguage = (validLanguages.includes(requestLanguage) ? requestLanguage : undefined) as "en" | "he" | "es" | "ar" | undefined;
       
       const suggestion = await aiService.suggestReply(
         userId,

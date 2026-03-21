@@ -30,6 +30,9 @@ import {
   X,
   CheckCheck,
   Zap,
+  Brain,
+  Sparkles,
+  RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -232,6 +235,13 @@ export function UnifiedInbox() {
   const [calendarOpen, setCalendarOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  // AI suggestion state
+  const [aiSuggestion, setAiSuggestion] = useState<string | null>(null);
+  const [aiSuggestionLoading, setAiSuggestionLoading] = useState(false);
+  const [showAiSuggestion, setShowAiSuggestion] = useState(false);
+  const [aiCooldown, setAiCooldown] = useState(false);
+  const [aiLanguage, setAiLanguage] = useState<'auto' | 'en' | 'es' | 'he' | 'ar'>('auto');
+
   const selectedContactId = match ? params?.contactId : null;
 
   const isDemoUser = user?.email === "demo@whachat.com";
@@ -380,6 +390,13 @@ export function UnifiedInbox() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  // Reset AI panel when switching contacts
+  useEffect(() => {
+    setShowAiSuggestion(false);
+    setAiSuggestion(null);
+    setAiSuggestionLoading(false);
+  }, [selectedContactId]);
+
   // --- Mutations ---
 
   const sendMessageMutation = useMutation({
@@ -527,6 +544,60 @@ export function UnifiedInbox() {
     if (!messageInput.trim() || !selectedContactId) return;
     sendMessageMutation.mutate({ contactId: selectedContactId, content: messageInput });
   };
+
+  // RTL detection for Hebrew and Arabic — covers both forced language and auto-detected text
+  const isRTL = (lang: string) => lang === 'he' || lang === 'ar';
+  const textIsRTL = (text: string) => /[\u0590-\u05FF\u0600-\u06FF]/.test(text);
+  const suggestionIsRTL = aiLanguage !== 'auto'
+    ? isRTL(aiLanguage)
+    : aiSuggestion ? textIsRTL(aiSuggestion) : false;
+  const inputIsRTL = messageInput ? textIsRTL(messageInput) : (aiLanguage !== 'auto' && isRTL(aiLanguage));
+
+  // Fetch AI reply suggestion
+  const fetchAiSuggestion = useCallback(async () => {
+    if (!selectedContactId || isDemoUser || aiCooldown) return;
+
+    setAiSuggestionLoading(true);
+    setShowAiSuggestion(true);
+    setAiCooldown(true);
+    setAiSuggestion(null);
+    setTimeout(() => setAiCooldown(false), 3000);
+
+    try {
+      const conversationHistory = messages.slice(-10).map((msg: Message) => ({
+        role: msg.direction === 'inbound' ? 'user' : 'assistant',
+        content: msg.content || '',
+      }));
+
+      const body: Record<string, unknown> = {
+        chatId: selectedContactId,
+        conversationHistory,
+      };
+      if (aiLanguage !== 'auto') body.language = aiLanguage;
+
+      const res = await fetch('/api/ai/suggest-reply', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(body),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setAiSuggestion(data.suggestion || null);
+      } else {
+        const err = await res.json().catch(() => ({}));
+        setAiSuggestion(null);
+        if (err.status === 'paused' || err.status === 'limited') {
+          toast({ title: "AI Limited", description: err.error || "AI assistance is temporarily limited.", variant: "destructive" });
+        }
+      }
+    } catch {
+      setAiSuggestion(null);
+    } finally {
+      setAiSuggestionLoading(false);
+    }
+  }, [selectedContactId, isDemoUser, aiCooldown, aiLanguage, messages, toast]);
 
   const handleEditContact = () => {
     if (contactData?.contact) {
@@ -896,15 +967,112 @@ export function UnifiedInbox() {
               </div>
             </div>
 
+            {/* AI Suggestion Panel */}
+            {showAiSuggestion && (
+              <div className="bg-gradient-to-r from-purple-50 to-blue-50 px-4 py-3 border-t border-purple-100 flex-shrink-0">
+                <div className="flex items-start gap-3">
+                  <div className="w-7 h-7 bg-purple-100 rounded-lg flex items-center justify-center shrink-0 mt-0.5">
+                    <Sparkles className="w-3.5 h-3.5 text-purple-600" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-2 mb-2">
+                      <span className="text-xs font-semibold text-purple-700">AI Suggestion</span>
+                      <div className="flex items-center gap-1.5">
+                        {/* Language selector */}
+                        <select
+                          value={aiLanguage}
+                          onChange={e => setAiLanguage(e.target.value as typeof aiLanguage)}
+                          className="text-xs px-1.5 py-0.5 rounded border border-purple-200 bg-white text-purple-700 focus:outline-none focus:ring-1 focus:ring-purple-300"
+                          data-testid="select-ai-language"
+                        >
+                          <option value="auto">Auto</option>
+                          <option value="en">English</option>
+                          <option value="es">Español</option>
+                          <option value="he">עברית</option>
+                          <option value="ar">العربية</option>
+                        </select>
+                        <button
+                          onClick={() => { setShowAiSuggestion(false); setAiSuggestion(null); }}
+                          className="text-gray-400 hover:text-gray-600"
+                          data-testid="button-dismiss-ai"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    </div>
+                    {aiSuggestionLoading ? (
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2 text-sm text-purple-600 font-medium">
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          <span>Thinking...</span>
+                        </div>
+                        <div className="space-y-1.5">
+                          <div className="h-2 bg-purple-100 rounded animate-pulse w-3/4" />
+                          <div className="h-2 bg-purple-100 rounded animate-pulse w-1/2" />
+                        </div>
+                      </div>
+                    ) : aiSuggestion ? (
+                      <div>
+                        <p
+                          className="text-sm text-gray-700 mb-2 leading-relaxed"
+                          dir={suggestionIsRTL ? 'rtl' : 'ltr'}
+                          style={suggestionIsRTL ? { textAlign: 'right', fontFamily: 'inherit' } : {}}
+                          data-testid="text-ai-suggestion"
+                        >
+                          {aiSuggestion}
+                        </p>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => { setMessageInput(aiSuggestion); setShowAiSuggestion(false); setAiSuggestion(null); }}
+                            className="text-xs px-3 py-1 bg-purple-600 text-white rounded-full hover:bg-purple-700 transition-colors"
+                            data-testid="button-use-ai-suggestion"
+                          >
+                            Use this reply
+                          </button>
+                          <button
+                            onClick={fetchAiSuggestion}
+                            disabled={aiCooldown}
+                            className="text-xs px-3 py-1 bg-white text-purple-600 border border-purple-200 rounded-full hover:bg-purple-50 transition-colors flex items-center gap-1 disabled:opacity-50"
+                            data-testid="button-regenerate-ai"
+                          >
+                            <RefreshCw className={cn("w-3 h-3", aiCooldown && "animate-spin")} />
+                            {aiCooldown ? "Wait..." : "Regenerate"}
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-gray-500">No suggestion available. Try again later.</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Composer */}
             <div className="p-3 border-t flex-shrink-0">
               <div className="flex items-end gap-2">
+                {/* AI Brain button */}
+                {!isDemoUser && !showAiSuggestion && (
+                  <button
+                    onClick={fetchAiSuggestion}
+                    disabled={aiCooldown}
+                    title={aiCooldown ? "Please wait..." : "Get AI suggestion"}
+                    className={cn(
+                      "text-purple-500 hover:text-purple-600 disabled:opacity-50 flex-shrink-0 mb-1.5",
+                      aiCooldown && "cursor-not-allowed"
+                    )}
+                    data-testid="button-ai-suggest"
+                  >
+                    <Brain className={cn("w-5 h-5", aiCooldown && "animate-pulse")} />
+                  </button>
+                )}
                 <Textarea
                   placeholder="Type a message..."
                   className="min-h-[40px] max-h-[120px] resize-none text-sm"
                   value={messageInput}
                   onChange={e => setMessageInput(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(); } }}
+                  dir={inputIsRTL ? 'rtl' : 'ltr'}
                   data-testid="textarea-message-input"
                 />
                 <Button
