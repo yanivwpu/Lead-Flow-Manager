@@ -25,6 +25,7 @@ const PLAN_FEATURE_KEYS = {
     "awayMessages",
     "exportConversations",
     "communitySupport",
+    "aiAssistFree",
   ],
   starter: [
     "everythingFree",
