@@ -179,28 +179,6 @@ const CONVERSATION_STATUSES = [
 
 const DEMO_CHANNELS: Channel[] = ['whatsapp', 'instagram', 'facebook', 'telegram', 'sms', 'webchat'];
 
-const SOURCE_LABELS: Record<string, string> = {
-  manual: 'Manual',
-  whatsapp: 'WhatsApp',
-  instagram: 'Instagram DM',
-  facebook: 'Facebook',
-  webchat: 'Website Widget',
-  import: 'CSV Import',
-  api: 'API',
-  tiktok: 'TikTok',
-  sms: 'SMS',
-  telegram: 'Telegram',
-};
-
-const SOURCE_OPTIONS = [
-  { value: 'manual', label: 'Manual' },
-  { value: 'whatsapp', label: 'WhatsApp' },
-  { value: 'instagram', label: 'Instagram DM' },
-  { value: 'facebook', label: 'Facebook' },
-  { value: 'webchat', label: 'Website Widget' },
-  { value: 'import', label: 'CSV Import' },
-  { value: 'api', label: 'API' },
-];
 
 function getFollowUpStatus(followUpDate: string | null | undefined): 'overdue' | 'today' | 'upcoming' | null {
   if (!followUpDate) return null;
@@ -1227,24 +1205,6 @@ export function UnifiedInbox() {
                   <p className="text-xs text-gray-400 italic">No contact info</p>
                 )}
               </div>
-            </div>
-
-            {/* Source */}
-            <div>
-              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2 block">Source</label>
-              <Select
-                value={(contact as Contact).source || 'manual'}
-                onValueChange={val => updateContact({ source: val })}
-              >
-                <SelectTrigger className="h-8 text-sm bg-white" data-testid="select-source">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {SOURCE_OPTIONS.map(opt => (
-                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
             </div>
 
             {/* Conversation Status */}
