@@ -178,6 +178,7 @@ export interface IStorage {
   createContact(contact: InsertContact): Promise<Contact>;
   updateContact(id: string, updates: Partial<Contact>): Promise<Contact | undefined>;
   deleteContact(id: string): Promise<void>;
+  mergeContacts(targetId: string, sourceId: string): Promise<Contact>;
   searchContacts(userId: string, query: string, limit?: number): Promise<Contact[]>;
   
   // Conversation methods
@@ -1323,6 +1324,62 @@ export class DbStorage implements IStorage {
 
   async deleteContact(id: string): Promise<void> {
     await db.delete(contacts).where(eq(contacts.id, id));
+  }
+
+  /**
+   * Merge `sourceId` into `targetId`.
+   * - All conversations, messages, and activity events are re-parented to target.
+   * - Any channel IDs (whatsappId, instagramId, etc.) present on source but
+   *   missing from target are copied over.
+   * - Source contact is then deleted.
+   * Returns the updated target contact.
+   */
+  async mergeContacts(targetId: string, sourceId: string): Promise<Contact> {
+    const [target, source] = await Promise.all([
+      this.getContact(targetId),
+      this.getContact(sourceId),
+    ]);
+    if (!target) throw new Error(`Target contact ${targetId} not found`);
+    if (!source) throw new Error(`Source contact ${sourceId} not found`);
+    if (target.userId !== source.userId) throw new Error('Contacts belong to different users');
+
+    await db.transaction(async (tx) => {
+      // Re-parent conversations
+      await tx.update(conversations)
+        .set({ contactId: targetId })
+        .where(eq(conversations.contactId, sourceId));
+
+      // Re-parent messages
+      await tx.update(messages)
+        .set({ contactId: targetId })
+        .where(eq(messages.contactId, sourceId));
+
+      // Re-parent activity events
+      await tx.update(activityEvents)
+        .set({ contactId: targetId })
+        .where(eq(activityEvents.contactId, sourceId));
+
+      // Backfill missing channel IDs from source onto target
+      const channelUpdates: Partial<Contact> = {};
+      if (!target.whatsappId && source.whatsappId)   channelUpdates.whatsappId   = source.whatsappId;
+      if (!target.instagramId && source.instagramId) channelUpdates.instagramId  = source.instagramId;
+      if (!target.facebookId && source.facebookId)   channelUpdates.facebookId   = source.facebookId;
+      if (!target.telegramId && source.telegramId)   channelUpdates.telegramId   = source.telegramId;
+      if (!target.phone && source.phone)             channelUpdates.phone        = source.phone;
+      if (!target.email && source.email)             channelUpdates.email        = source.email;
+      if (Object.keys(channelUpdates).length > 0) {
+        await tx.update(contacts)
+          .set({ ...channelUpdates, updatedAt: new Date() })
+          .where(eq(contacts.id, targetId));
+      }
+
+      // Delete the source contact (cascades messages/convs that weren't re-parented,
+      // but we've already moved them all above)
+      await tx.delete(contacts).where(eq(contacts.id, sourceId));
+    });
+
+    const updated = await this.getContact(targetId);
+    return updated!;
   }
 
   async searchContacts(userId: string, query: string, limit: number = 50): Promise<Contact[]> {

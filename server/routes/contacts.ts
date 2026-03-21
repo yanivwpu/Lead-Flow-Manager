@@ -114,6 +114,40 @@ export function registerContactRoutes(app: Express): void {
     }
   });
 
+  // Merge two contacts: POST /api/contacts/:id/merge { sourceId }
+  // :id = target (kept), sourceId = duplicate (deleted after all data moved to target)
+  app.post("/api/contacts/:id/merge", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const { sourceId } = req.body;
+      if (!sourceId || typeof sourceId !== "string") {
+        return res.status(400).json({ error: "sourceId is required" });
+      }
+      const targetId = req.params.id;
+      if (targetId === sourceId) {
+        return res.status(400).json({ error: "target and source must be different contacts" });
+      }
+
+      const [target, source] = await Promise.all([
+        storage.getContact(targetId),
+        storage.getContact(sourceId),
+      ]);
+      if (!target) return res.status(404).json({ error: "Target contact not found" });
+      if (!source) return res.status(404).json({ error: "Source contact not found" });
+      if (target.userId !== req.user.id || source.userId !== req.user.id) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+
+      const merged = await storage.mergeContacts(targetId, sourceId);
+      res.json(merged);
+    } catch (error) {
+      console.error("Error merging contacts:", error);
+      res.status(500).json({ error: "Failed to merge contacts" });
+    }
+  });
+
   // Switch primary channel for a contact
   app.patch("/api/contacts/:id/channel", async (req, res) => {
     try {
