@@ -666,37 +666,28 @@ export function UnifiedInbox() {
                     <p className={cn("text-xs truncate mb-1", needsReply ? "text-gray-700 font-medium" : "text-muted-foreground")}>
                       {item.lastMessage || "No messages yet"}
                     </p>
-                    <div className="flex items-center gap-1 flex-wrap">
-                      {needsReply && (
+                    <div className="flex items-center gap-1">
+                      {needsReply ? (
                         <span className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold border bg-blue-50 text-blue-700 border-blue-200 flex items-center gap-0.5" data-testid={`badge-needs-reply-${item.contact.id}`}>
                           <Zap className="w-2.5 h-2.5" />Needs Reply
                         </span>
-                      )}
-                      {fuStatus === 'overdue' && (
+                      ) : fuStatus === 'overdue' ? (
                         <span className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold border bg-red-50 text-red-600 border-red-200" data-testid={`badge-overdue-${item.contact.id}`}>
                           ⏰ Overdue
                         </span>
-                      )}
-                      {fuStatus === 'today' && (
+                      ) : fuStatus === 'today' ? (
                         <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium border bg-amber-50 text-amber-600 border-amber-200" data-testid={`badge-today-${item.contact.id}`}>
                           ⏰ Today
                         </span>
-                      )}
-                      {fuStatus === 'upcoming' && !needsReply && (
+                      ) : fuStatus === 'upcoming' ? (
                         <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium border bg-slate-50 text-slate-500 border-slate-200" data-testid={`badge-upcoming-${item.contact.id}`}>
                           ⏰ {item.contact.followUp}
                         </span>
-                      )}
-                      {!needsReply && !fuStatus && (
+                      ) : item.contact.tag ? (
                         <span className={cn("text-[10px] px-1.5 py-0.5 rounded-full font-medium border", TAG_COLORS[item.contact.tag] || 'bg-blue-100 text-blue-700 border-blue-200')}>
                           {item.contact.tag}
                         </span>
-                      )}
-                      {item.contact.assignedTo && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium border bg-gray-50 text-gray-500 border-gray-200 flex items-center gap-0.5" data-testid={`badge-assigned-${item.contact.id}`}>
-                          <UserCheck className="w-2.5 h-2.5" />
-                        </span>
-                      )}
+                      ) : null}
                     </div>
                   </div>
                 </div>
@@ -727,11 +718,6 @@ export function UnifiedInbox() {
                   <span className={cn("text-[10px] px-1.5 py-0.5 rounded font-medium", statusConfig.color)}>
                     {statusConfig.label}
                   </span>
-                  {contact.tag && (
-                    <span className={cn("text-[10px] px-1.5 py-0.5 rounded-full font-medium border hidden sm:inline-flex", TAG_COLORS[contact.tag] || 'bg-blue-100 text-blue-700 border-blue-200')}>
-                      {contact.tag}
-                    </span>
-                  )}
                 </div>
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
                   {contact.phone && <span className="flex items-center gap-1"><Phone className="w-3 h-3" />{contact.phone}</span>}
