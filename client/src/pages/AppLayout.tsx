@@ -1,10 +1,9 @@
 import { useState, useEffect, lazy, Suspense } from "react";
-import { Switch, Route } from "wouter";
+import { Switch, Route, Redirect } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { Sidebar } from "@/components/Sidebar";
 import { MobileNav } from "@/components/MobileNav";
-import { Chats } from "./Chats";
 import { FollowUps } from "./FollowUps";
 import { UsageWarningBanner } from "@/components/UsageWarningBanner";
 import { TrialBanner } from "@/components/TrialBanner";
@@ -80,8 +79,8 @@ function AppContent() {
             <Switch>
               <Route path="/app/inbox/:contactId" component={UnifiedInbox} />
               <Route path="/app/inbox" component={UnifiedInbox} />
-              <Route path="/app/chats/:id" component={Chats} />
-              <Route path="/app/chats" component={Chats} />
+              <Route path="/app/chats/:id"><Redirect to="/app/inbox" /></Route>
+              <Route path="/app/chats"><Redirect to="/app/inbox" /></Route>
               <Route path="/app/followups" component={FollowUps} />
               <Route path="/app/workflows" component={Workflows} />
               <Route path="/app/chatbot" component={ChatbotBuilder} />
