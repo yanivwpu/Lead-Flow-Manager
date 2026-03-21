@@ -1,0 +1,178 @@
+UNIFIED INBOX + CRM — IMPLEMENTATION SPEC (PHASE 1)
+🎯 Objective
+
+Unify the product into a single Inbox-based system where messaging and CRM live together.
+
+The Inbox becomes the only source of truth for:
+
+conversations
+contacts
+CRM data (tags, notes, pipeline, follow-ups)
+
+The legacy Chats system is deprecated immediately (no migration required at this stage).
+
+⚠️ CRITICAL GUARDRAILS (DO NOT VIOLATE)
+
+This is NOT a backend/integration refactor.
+
+DO NOT change or touch:
+
+Meta / Twilio webhook endpoints
+Shopify integration
+GHL integration
+API keys / authentication / callback URLs
+queue / worker logic (BullMQ)
+whatsappService.ts
+channel adapters
+inbound/outbound messaging flow
+
+👉 This task is strictly:
+UI + data model unification only
+
+🧠 SOURCE OF TRUTH
+
+Use ONLY the Inbox system:
+
+contacts
+conversations
+messages
+
+All CRM functionality must attach to:
+👉 contact and/or conversation
+
+🧩 UI IMPLEMENTATION (RESPOND.IO STYLE)
+Layout: 3 Columns
+LEFT — Conversations List
+list from Inbox (conversations)
+search
+filters:
+All
+Unread
+Assigned to me
+show:
+contact name
+last message preview
+timestamp
+channel icon
+CENTER — Conversation View
+message history (messages)
+header:
+contact name
+channel
+assigned user (if exists)
+composer:
+text
+media
+NO changes to send logic
+RIGHT — CRM PANEL (REUSE FROM CHATS UI)
+
+Reuse existing UI components from Chats:
+
+Pipeline stage
+Tags
+Notes
+Follow-up reminders
+Assigned user
+Contact info (phone, email, channel IDs)
+
+BUT:
+👉 bind all of these to Inbox data model
+👉 NOT the legacy chats table
+
+🧱 DATA MODEL REQUIREMENTS
+Contact-level fields (contacts)
+
+Store:
+
+tags
+pipeline stage
+notes
+assigned user
+Conversation-level fields (conversations)
+
+Store:
+
+status (open / closed)
+follow-up reminder
+last activity (if needed)
+⚙️ FUNCTIONAL REQUIREMENTS
+1. Tagging
+add/remove tags
+persist to contact
+reflect immediately in UI
+2. Pipeline Stage
+editable dropdown
+persist to contact
+3. Notes
+add/edit notes
+persist to contact
+4. Follow-Up Reminders
+set reminder (date/time)
+persist to conversation or contact
+5. Assignment
+assign contact/conversation to user
+persist accordingly
+6. Messaging (UNCHANGED)
+inbound messages continue working
+outbound messages continue working
+no changes to messaging logic
+🧠 CONTACT MATCHING (IMPORTANT)
+
+Keep existing logic:
+
+primary: whatsappId
+fallback: normalized phone match
+
+Ensure:
+
+inbound always attaches to correct contact
+no new duplicates created
+🚫 LEGACY CHATS (DEPRECATED)
+remove Chats page from sidebar
+stop ALL writes to chats table
+do not reference legacy chats anywhere in UI
+🧪 TESTING CHECKLIST
+
+Verify:
+
+inbound message appears in Inbox ✔️
+reply appears in same conversation ✔️
+tags save and reload ✔️
+notes persist ✔️
+pipeline stage updates ✔️
+follow-up reminder saves ✔️
+no webhook failures ✔️
+no integration changes ✔️
+🚀 DELIVERABLES
+unified Inbox UI (3-column layout)
+CRM panel integrated into Inbox
+CRM actions working on Inbox data
+Chats removed from sidebar
+no backend/integration changes
+❗ DO NOT DO
+no integration refactor
+no endpoint changes
+no webhook changes
+no queue/worker changes
+no data migration yet
+no architecture rewrite
+🎯 SUCCESS CRITERIA
+
+The product should behave like:
+
+👉 one unified Inbox where messaging + CRM live together
+
+No duplicate systems
+No confusion
+Cleaner UX
+Stable integrations
+
+🧠 BEFORE STARTING
+
+Confirm:
+
+where CRM fields will live (contacts vs conversations)
+which Chats UI components will be reused
+that no integration code will be modified
+
+END OF SPEC
