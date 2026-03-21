@@ -756,11 +756,6 @@ export function UnifiedInbox() {
                   <span className={cn("text-[10px] px-1.5 py-0.5 rounded font-medium", statusConfig.color)}>
                     {statusConfig.label}
                   </span>
-                  {contact.tag && (
-                    <span className={cn("text-[10px] px-1.5 py-0.5 rounded-full font-medium border hidden sm:inline-flex", TAG_COLORS[contact.tag] || 'bg-blue-100 text-blue-700 border-blue-200')}>
-                      {contact.tag}
-                    </span>
-                  )}
                 </div>
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
                   {contact.phone && <span className="flex items-center gap-1"><Phone className="w-3 h-3" />{contact.phone}</span>}
