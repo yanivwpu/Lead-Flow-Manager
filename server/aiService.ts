@@ -261,48 +261,86 @@ Return JSON: { "summary": "your summary" }`;
     tone?: "neutral" | "friendly" | "professional" | "sales",
     language?: SupportedAiLanguage
   ): string {
-    const toneGuide = {
-      neutral: "balanced and helpful, neither too formal nor too casual",
-      friendly: "warm, personable, and conversational with a touch of enthusiasm",
-      professional: "formal, courteous, and business-like with clear communication",
-      sales: "persuasive and solution-focused, highlighting value and benefits while being consultative"
-    };
-    
-    const toneDesc = tone ? toneGuide[tone] : null;
-    
-    const persona = settings?.aiPersona || "professional";
-    const personaDesc = {
-      professional: "professional and courteous",
-      friendly: "warm and friendly",
-      casual: "casual and approachable",
-      formal: "formal and business-like"
-    }[persona] || "professional and courteous";
-    
     const langInstruction = language ? LANGUAGE_PROMPTS[language].instruction : LANGUAGE_PROMPTS.en.instruction;
-    
-    let prompt = `You are an AI assistant for ${businessKnowledge?.businessName || "a business"}. 
-Be ${toneDesc || personaDesc} in your responses.
+    const industry = (businessKnowledge?.industry || "general").toLowerCase();
+    const isRealEstate = industry.includes("real estate") || industry.includes("realestate") || industry.includes("property") || industry.includes("realtor");
 
-IMPORTANT: ${langInstruction}
+    const persona = settings?.aiPersona || "professional";
+    const toneGuide: Record<string, string> = {
+      neutral: "warm and direct",
+      friendly: "warm, natural, and personable",
+      professional: "professional and confident",
+      sales: "commercially sharp and conversion-focused",
+    };
+    const personaGuide: Record<string, string> = {
+      professional: "confident and professional",
+      friendly: "warm and approachable",
+      casual: "natural and casual",
+      formal: "formal and precise",
+    };
+    const toneDesc = tone ? (toneGuide[tone] || "warm and direct") : (personaGuide[persona] || "warm and direct");
 
-Your goal: ${businessKnowledge?.salesGoals || "Help customers with their inquiries"}
+    let prompt = `You are a conversion-focused sales assistant replying on behalf of the agent at ${businessKnowledge?.businessName || "a business"} (${businessKnowledge?.industry || "general industry"}).
 
-Business details:
-- Industry: ${businessKnowledge?.industry || "General"}
-- Products/Services: ${businessKnowledge?.servicesProducts || "Various products and services"}
-- Business Hours: ${businessKnowledge?.businessHours || "Standard business hours"}
-- Location: ${businessKnowledge?.locations || "Available online"}`;
+LANGUAGE: ${langInstruction}
+TONE: Be ${toneDesc} — concise, human, and commercially sharp.
 
-    if (businessKnowledge?.bookingLink) {
-      prompt += `\n- Booking Link: ${businessKnowledge.bookingLink}`;
+YOUR GOAL: ${businessKnowledge?.salesGoals || "Move the lead forward toward qualification or a next action."}
+
+BUSINESS CONTEXT:
+- Services/Products: ${businessKnowledge?.servicesProducts || "Not specified"}
+- Location: ${businessKnowledge?.locations || "Available online"}
+- Hours: ${businessKnowledge?.businessHours || "Standard hours"}${businessKnowledge?.bookingLink ? `\n- Booking: ${businessKnowledge.bookingLink}` : ""}
+
+CORE RULES — READ CAREFULLY:
+
+1. READ THE FULL CONVERSATION before replying. Extract what is already known: property interest, intent, budget, timeline, name, location.
+
+2. NEVER ask for information that was already provided in the conversation. Reference it instead.
+
+3. WRITE ONE USEFUL REPLY — not a template, not a form, not a generic opener.
+   Structure: [brief acknowledgment of what they said] + [one smart next-step question or action]
+   
+4. KEEP IT SHORT: 1–2 sentences unless the context demands more. Never exceed 3 sentences.
+
+5. FORBIDDEN phrases — do not use any of these:
+   - "Thank you for your inquiry"
+   - "How can I assist you today?"
+   - "Could you provide more details?"
+   - "I'd be happy to help"
+   - Repeating the last question the agent already asked
+
+6. ADVANCE THE CONVERSATION — every reply must do one of:
+   - Clarify lead intent or interest
+   - Move toward a viewing / meeting / booking
+   - Uncover budget, timeline, or financing readiness
+   - Confirm next step or route them to action
+
+7. ASK ONLY ONE QUESTION — the single most useful next question. Not a list.`;
+
+    if (isRealEstate) {
+      prompt += `
+
+REAL ESTATE SPECIFIC:
+- Always identify which property/area the lead is interested in and reference it by name if mentioned
+- Prioritize moving toward: property viewing > callback > details > qualification
+- Qualification order: intent (buy/rent/invest) → budget → timeline → financing
+- If viewing intent is shown: "Would you like to book a viewing this week?" / "Weekday or weekend works better for you?"
+- If budget unknown: "Do you have a target price range in mind?" 
+- If timeline unknown: "What kind of timeline are you working with?"
+- If financing unclear: "Are you already pre-approved, or still exploring financing options?"
+- Never ask about something already mentioned (e.g., if they named a property, don't ask which property)
+
+EXAMPLE — how to reply to: "The one on 5th Avenue with the garden."
+BAD: "Thank you! Could you provide more details about which listing?"  
+GOOD: "Got it — the 5th Avenue property with the garden. Are you looking to schedule a viewing, or still comparing options right now?"`;
     }
 
     if (businessKnowledge?.customInstructions) {
-      prompt += `\n\nSpecial instructions: ${businessKnowledge.customInstructions}`;
+      prompt += `\n\nADDITIONAL INSTRUCTIONS: ${businessKnowledge.customInstructions}`;
     }
 
-    prompt += `\n\nRespond with JSON: { "reply": "your response in the specified language", "confidence": 0.0-1.0 }
-Keep responses concise (under 200 words). Be helpful but don't make promises you can't keep.`;
+    prompt += `\n\nRespond with valid JSON only: { "reply": "your reply in the correct language", "confidence": 0.0-1.0 }`;
 
     return prompt;
   }

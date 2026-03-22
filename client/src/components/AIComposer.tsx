@@ -44,8 +44,8 @@ const AUTO_STATUS_MESSAGES = [
   "AI sent a message just now",
 ];
 
-const MIN_TEXTAREA_HEIGHT = 64;
-const MAX_TEXTAREA_HEIGHT = 180;
+const MIN_TEXTAREA_HEIGHT = 58;
+const MAX_TEXTAREA_HEIGHT = 160;
 
 export function AIComposer({
   value,
@@ -116,7 +116,7 @@ export function AIComposer({
         credentials: "include",
         body: JSON.stringify({
           chatId: conversationId,
-          conversationHistory: messages.slice(-10),
+          conversationHistory: messages.slice(-12),
         }),
       });
       if (res.ok) {
@@ -183,18 +183,18 @@ export function AIComposer({
   return (
     <div className={cn("border-t border-gray-200 bg-white shrink-0", className)}>
 
-      {/* AI status line */}
+      {/* Subtle AI status line */}
       {aiEnabled && statusLineText && (
-        <div className="px-4 py-1.5 flex items-center gap-1.5 bg-gray-50/80 border-b border-gray-100">
-          <Sparkles className="w-3 h-3 text-purple-400 shrink-0" />
-          <span className="text-[11px] text-gray-400 italic">{statusLineText}</span>
-          {isDrafting && <Loader2 className="w-3 h-3 text-purple-400 animate-spin ml-0.5 shrink-0" />}
+        <div className="px-4 py-1 flex items-center gap-1.5 bg-gray-50/60 border-b border-gray-100">
+          <Sparkles className="w-2.5 h-2.5 text-purple-400 shrink-0" />
+          <span className="text-[10px] text-gray-400 italic tracking-wide">{statusLineText}</span>
+          {isDrafting && <Loader2 className="w-2.5 h-2.5 text-purple-400 animate-spin ml-0.5 shrink-0" />}
         </div>
       )}
 
-      <div className="px-3 pt-2 pb-2 flex flex-col gap-2">
+      <div className="px-3 pt-1.5 pb-2 flex flex-col gap-1.5">
 
-        {/* Row 1: AI mode selector */}
+        {/* Row 1: AI mode pills */}
         {aiEnabled && (
           <div className="flex items-center gap-1" data-testid="ai-mode-selector">
             {(["manual", "suggest", "auto"] as AIMode[]).map((mode) => {
@@ -207,13 +207,13 @@ export function AIComposer({
                   onClick={() => handleModeChange(mode)}
                   data-testid={`composer-ai-mode-${mode}`}
                   className={cn(
-                    "flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium transition-all",
+                    "flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium transition-all",
                     active
                       ? "bg-purple-600 text-white shadow-sm"
-                      : "text-gray-400 hover:text-gray-600 hover:bg-gray-100 border border-gray-200"
+                      : "text-gray-400 hover:text-gray-600 hover:bg-gray-100 border border-gray-200 bg-white"
                   )}
                 >
-                  <Icon className="w-3 h-3 shrink-0" />
+                  <Icon className="w-2.5 h-2.5 shrink-0" />
                   {label}
                 </button>
               );
@@ -226,20 +226,25 @@ export function AIComposer({
           <div
             onClick={handleAutoOverride}
             data-testid="auto-mode-passive-input"
-            className="flex items-center gap-2 w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-4 text-sm text-gray-400 cursor-pointer select-none min-h-[64px]"
+            className="flex items-center gap-2 w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-3 text-sm text-gray-400 cursor-pointer select-none"
+            style={{ minHeight: MIN_TEXTAREA_HEIGHT }}
           >
-            <Zap className="w-4 h-4 text-purple-400 shrink-0" />
-            <span className="italic flex-1 leading-relaxed">AI is handling this conversation…</span>
-            <span className="text-[11px] text-purple-500 not-italic font-medium whitespace-nowrap">Click to take over</span>
+            <Zap className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+            <span className="italic flex-1 leading-relaxed text-[13px]">AI is handling this conversation…</span>
+            <span className="text-[10px] text-purple-500 not-italic font-medium whitespace-nowrap opacity-80">Click to take over</span>
           </div>
         ) : (
           <textarea
             ref={textareaRef}
-            placeholder={isSuggestMode && isDrafting ? "AI is drafting…" : "Type a message… (Enter to send, Shift+Enter for new line)"}
+            placeholder={
+              isSuggestMode && isDrafting
+                ? "AI is drafting…"
+                : "Type a message… (Enter to send, Shift+Enter for new line)"
+            }
             className={cn(
-              "w-full border rounded-xl px-4 py-3 text-sm leading-relaxed focus:outline-none transition-colors resize-none overflow-y-auto",
+              "w-full border rounded-xl px-3.5 py-2.5 text-[13px] leading-relaxed focus:outline-none transition-colors resize-none overflow-y-auto",
               isSuggestMode && (isDrafting || aiDraft)
-                ? "bg-purple-50/50 border-purple-200 focus:border-purple-400 text-gray-800"
+                ? "bg-violet-50/30 border-purple-200/70 focus:border-purple-300 text-gray-800"
                 : "bg-white border-gray-200 focus:border-brand-green text-gray-800"
             )}
             style={{ minHeight: MIN_TEXTAREA_HEIGHT, maxHeight: MAX_TEXTAREA_HEIGHT }}
@@ -255,14 +260,14 @@ export function AIComposer({
         {/* Row 3: Actions */}
         <div className="flex items-center justify-between">
           {/* Left: emoji + attach */}
-          <div className="flex items-center gap-2 text-gray-400">
+          <div className="flex items-center gap-1 text-gray-400">
             <Popover open={emojiPickerOpen} onOpenChange={setEmojiPickerOpen}>
               <PopoverTrigger asChild>
                 <button
-                  className="p-1.5 rounded-lg hover:bg-gray-100 hover:text-gray-600 transition-colors"
+                  className="p-1.5 rounded-md hover:bg-gray-100 hover:text-gray-600 transition-colors"
                   data-testid="button-emoji"
                 >
-                  <Smile className="h-4.5 w-4.5" />
+                  <Smile className="h-4 w-4" />
                 </button>
               </PopoverTrigger>
               <PopoverContent className="w-auto p-0 border-0" align="start" side="top">
@@ -279,10 +284,10 @@ export function AIComposer({
               <>
                 <button
                   onClick={() => fileInputRef.current?.click()}
-                  className="p-1.5 rounded-lg hover:bg-gray-100 hover:text-gray-600 transition-colors"
+                  className="p-1.5 rounded-md hover:bg-gray-100 hover:text-gray-600 transition-colors"
                   data-testid="button-attach-file"
                 >
-                  <Paperclip className="h-4.5 w-4.5" />
+                  <Paperclip className="h-4 w-4" />
                 </button>
                 <input
                   ref={fileInputRef}
@@ -302,19 +307,19 @@ export function AIComposer({
                 <button
                   onClick={fetchSuggestion}
                   disabled={aiCooldown}
-                  className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg text-gray-400 hover:text-purple-600 hover:bg-purple-50 border border-gray-200 hover:border-purple-200 transition-colors disabled:opacity-40"
+                  className="flex items-center gap-1 text-[11px] text-gray-400 hover:text-purple-500 transition-colors disabled:opacity-30"
                   data-testid="button-regenerate-ai"
                 >
-                  <RefreshCw className={cn("w-3.5 h-3.5", aiCooldown && "animate-spin")} />
+                  <RefreshCw className={cn("w-3 h-3", aiCooldown && "animate-spin")} />
                   Regenerate
                 </button>
               )}
               <button
                 onClick={onSend}
-                className="h-9 px-4 bg-brand-green hover:bg-emerald-700 rounded-lg flex items-center gap-1.5 text-white text-sm font-medium transition-colors shadow-sm"
+                className="h-8 px-3.5 bg-brand-green hover:bg-emerald-700 rounded-lg flex items-center gap-1.5 text-white text-xs font-semibold transition-colors shadow-sm"
                 data-testid="button-send-message"
               >
-                <Send className="h-3.5 w-3.5" />
+                <Send className="h-3 w-3" />
                 Send
               </button>
             </div>

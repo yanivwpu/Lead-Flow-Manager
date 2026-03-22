@@ -1,0 +1,271 @@
+FINAL POLISH + AI QUALITY PASS
+
+We are very close. Do NOT redesign the composer again. Keep the current structure and behavior. This is now a refinement pass only.
+
+PART 1 — FINAL DESIGN CORRECTIONS (COMPOSER POLISH)
+
+Keep:
+- Manual / Suggest / Auto modes
+- Multi-line textarea
+- AI auto-fill in Suggest mode
+- Passive Auto mode with take-over
+- Regenerate + Send actions
+- Status line above composer
+
+Make these final UI corrections only:
+
+1. Reduce overall composer vertical bulk slightly
+- Reduce top and bottom padding by around 10–15%
+- Keep it comfortable, but less tall/heavy
+
+2. Tighten spacing between mode selector and textarea
+- Manual / Suggest / Auto should sit closer to the input
+- Composer should feel like one unit, not separate blocks
+
+3. Make the status line more subtle
+- Smaller font
+- Lighter visual weight
+- It should feel like helper context, not a heading
+
+4. Make “Regenerate” less button-heavy
+- Use lighter styling, closer to a text action / subtle secondary action
+- It should not visually compete with Send
+
+5. Ensure Send button aligns cleanly with composer layout
+- Vertically balanced with textarea and action row
+- Keep strong CTA styling
+
+6. Slightly soften the purple AI-draft tint
+- Keep the drafted state visible
+- Make it more premium/subtle, less saturated
+
+7. Auto mode container
+- Slightly reduce its height/padding
+- Keep it elegant and passive
+- “Click to take over” should remain visible but slightly less dominant
+
+8. Keep layout stable across laptop widths
+- Composer must feel comfortable on 13–14” screens
+- Avoid cramped action spacing
+- Textarea width must remain prioritized
+
+IMPORTANT:
+- No new rows
+- No new settings controls
+- No dropdowns in composer
+- No new feature additions in this pass
+- Only polish spacing, alignment, hierarchy, and readability
+
+--------------------------------------------------
+PART 2 — MAKE AI REPLIES FEEL SMART, CONTEXTUAL, AND CONVERSION-LEVEL
+--------------------------------------------------
+
+The current AI replies are too generic. We need them to feel aware, useful, and commercially intelligent.
+
+GOAL:
+AI replies should feel like a trained sales/qualification assistant that:
+- understands the actual conversation context
+- references what the lead already said
+- moves the conversation forward
+- qualifies naturally without sounding robotic
+- increases conversion instead of giving bland support replies
+
+CORE RULES FOR AI REPLY GENERATION
+
+1. ALWAYS USE CONVERSATION CONTEXT
+Do not generate generic replies like:
+- “Thank you for your inquiry”
+- “Could you provide more details?”
+- “How can I assist you?”
+
+Instead, AI must reference the actual message history.
+
+Example:
+If lead says:
+“The one on 5th Avenue with the garden.”
+
+Bad:
+“Thank you for your inquiry! Could you provide more details?”
+
+Good:
+“Got it — the 5th Avenue property with the garden. Are you looking to schedule a viewing, or are you still comparing options?”
+
+2. REPLY SHOULD ADVANCE THE CONVERSATION
+Every reply should do one of these:
+- clarify property/intent
+- move toward booking
+- uncover budget/timeline
+- confirm readiness
+- route to next step
+
+Do not generate neutral filler.
+
+3. ASK SMART NEXT-BEST QUESTION
+Use one useful next question, not multiple vague questions.
+
+Examples:
+- “Are you looking to book a viewing this week?”
+- “Is this for your own move or as an investment?”
+- “Do you already have a budget range in mind?”
+- “Are you already pre-approved, or still exploring financing?”
+
+4. BE CONTEXT-SPECIFIC
+If the lead has already mentioned:
+- property
+- location
+- budget
+- timing
+- financing
+then do not ask again unnecessarily.
+
+Instead build on what is already known.
+
+5. SOUND NATURAL, CONFIDENT, AND HUMAN
+Tone should be:
+- concise
+- warm
+- helpful
+- commercially sharp
+
+Avoid:
+- robotic support tone
+- corporate fluff
+- excessive politeness
+- repetitive intros
+
+6. DEFAULT TO HIGH-CONVERSION SALES ASSISTANT STYLE
+For lead-facing replies:
+- acknowledge context briefly
+- answer directly if needed
+- move toward action
+
+Suggested structure:
+[brief acknowledgment] + [useful next step question]
+
+Examples:
+- “Yes, it’s still available. Would you like me to share more details or help you book a viewing?”
+- “Got it — are you mainly looking for a primary home or an investment?”
+- “That area is in high demand. What kind of timeline are you working with?”
+
+7. QUALIFY NATURALLY, NOT LIKE A FORM
+Do not interrogate.
+Do not stack 3–4 questions.
+Do not sound like a survey.
+
+The AI should gather:
+- intent
+- budget
+- timeline
+- financing/readiness
+gradually and conversationally.
+
+8. PRIORITIZE CONVERSION PATHS
+If lead shows buying/viewing intent:
+- steer toward viewing / appointment / callback / next action
+
+If lead is early-stage:
+- clarify need and qualification gently
+
+If lead is unclear:
+- narrow the context quickly
+
+9. REPLIES MUST DIFFER BY MODE
+- Suggest mode: draft best reply for human review, polished and strong
+- Auto mode: same quality, but shorter and safer
+- Manual mode: no AI reply generation unless user explicitly switches modes
+
+10. MULTI-LANGUAGE QUALITY
+When the lead writes in another language:
+- respond in that language
+- maintain the same contextual/conversion style
+- do not become generic when language changes
+
+--------------------------------------------------
+PART 3 — REAL ESTATE-SPECIFIC SMART REPLY LOGIC
+--------------------------------------------------
+
+When business type / template is real estate, replies should prioritize:
+
+A. Identify property interest
+- which property / area / listing
+
+B. Identify intent
+- buying, renting, investing, just browsing
+
+C. Move toward qualification
+- budget
+- timeline
+- financing / approval / cash
+
+D. Move toward action
+- viewing
+- callback
+- sending details
+- assigning agent
+
+EXAMPLE IMPROVEMENTS
+
+Conversation:
+Lead: “Hi, I’m interested in the property listing I saw on Instagram.”
+Agent: “Which property was it?”
+Lead: “The one on 5th Avenue with the garden.”
+
+DO NOT WRITE:
+“Thank you for your inquiry! Could you provide more details or a link to the specific listing?”
+
+WRITE SOMETHING LIKE:
+- “Got it — the 5th Avenue property with the garden. Are you looking to schedule a viewing, or are you still comparing homes right now?”
+- “Thanks — I know which one you mean. Is this for your own move, or are you looking at it as an investment?”
+- “That one has been getting strong interest. Would you like me to share the latest details, or help you line up a viewing?”
+
+If viewing intent is strong:
+- “Great — I can help with that. What day works better for you, weekday or weekend?”
+- “Perfect. Are you looking to view it this week?”
+
+If financing should be qualified:
+- “Before we line things up, are you already pre-approved or still exploring financing options?”
+- “Do you already have a target budget range in mind?”
+
+--------------------------------------------------
+PART 4 — IMPLEMENTATION GUIDANCE
+--------------------------------------------------
+
+Update the AI prompt / generation logic so that:
+
+1. It consumes recent conversation history
+2. It extracts known facts before generating
+3. It avoids repeating already-known questions
+4. It chooses one strong next-best action/question
+5. It generates short, context-aware replies
+6. It prioritizes conversion outcomes over generic politeness
+
+Add simple guardrails:
+- no generic canned intros unless necessary
+- no asking for “more details” if details are already present
+- no repeating the last assistant question in different words
+- no more than 2 sentences by default unless context requires more
+
+--------------------------------------------------
+ACCEPTANCE CRITERIA
+--------------------------------------------------
+
+DESIGN:
+- Composer feels tighter and more premium
+- Status line is subtle
+- Regenerate is lighter
+- Input remains readable and dominant
+- Works well on laptop widths
+
+AI QUALITY:
+- Replies clearly reference conversation context
+- Replies do not sound generic
+- Replies move the lead toward qualification or booking
+- Replies feel like a trained real estate conversion assistant
+- Suggest drafts are noticeably smarter than before
+
+IMPORTANT:
+Do not rewrite the whole composer.
+Do not change working behavior.
+This pass is:
+1. visual polish
+2. AI reply intelligence upgrade
