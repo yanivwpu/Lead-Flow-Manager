@@ -911,6 +911,7 @@ export function UnifiedInbox() {
           contact={contact}
           primaryConversation={primaryConversation}
           teamMembers={teamMembers}
+          messages={messages.map(m => ({ direction: m.direction, content: m.content || '' }))}
           onUpdateContact={updateContact}
           onUpdateConversationStatus={status => {
             if (primaryConversation) {

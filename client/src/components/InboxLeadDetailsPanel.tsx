@@ -31,6 +31,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { cn } from "@/lib/utils";
 import { format, parseISO } from "date-fns";
 import { TAG_COLORS, PIPELINE_STAGES } from "@/lib/data";
+import { analyzeConversation, type ConversationMessage } from "@/lib/conversationIntelligence";
 
 type Channel = 'whatsapp' | 'instagram' | 'facebook' | 'sms' | 'webchat' | 'telegram' | 'tiktok';
 
@@ -113,50 +114,19 @@ function formatFollowUpDisplay(isoString: string): string {
   }
 }
 
-// ── AI derivations ────────────────────────────────────────────────────────────
-function deriveLeadScore(tag: string) {
-  const t = (tag || '').toLowerCase();
-  if (t.includes('hot') || t.includes('vip'))           return { label: 'Hot',    color: 'text-red-600',     dot: 'bg-red-500' };
-  if (t.includes('warm') || t.includes('investor'))     return { label: 'Warm',   color: 'text-amber-600',   dot: 'bg-amber-400' };
-  if (t.includes('qualified') || t.includes('active'))  return { label: 'Strong', color: 'text-emerald-600', dot: 'bg-emerald-500' };
-  return { label: 'Cold', color: 'text-blue-500', dot: 'bg-blue-400' };
-}
-
-function deriveAiState(stage: string, status: string) {
-  const s = (stage || '').toLowerCase();
-  if (s.includes('closed') || status === 'resolved')       return 'Closed';
-  if (s.includes('negotiation') || s.includes('proposal')) return 'Ready';
-  if (s.includes('qualified'))                              return 'Qualifying';
-  if (s.includes('lead') || s.includes('contacted'))       return 'Engaging';
-  return 'Waiting';
-}
-
-function deriveIntent(stage: string) {
-  const s = (stage || '').toLowerCase();
-  if (s.includes('closed won'))  return 'Buyer ✓';
-  if (s.includes('negotiation')) return 'Buyer';
-  if (s.includes('proposal'))    return 'High Intent';
-  if (s.includes('qualified'))   return 'Interested';
-  return 'Browsing';
-}
-
-function parseQualification(notes: string) {
-  const n = (notes || '').toLowerCase();
-  return {
-    budget:    /\$[\d,]+|budget|\dk\b|price|afford/.test(n),
-    timeline:  /week|month|asap|urgent|soon|timeline|days|year/.test(n),
-    financing: /pre.?approv|financ|mortgage|cash|loan/.test(n),
-  };
-}
-
-function QualBadge({ ok, label }: { ok: boolean; label: string }) {
+// ── QualBadge — shows extracted value when available, label+check otherwise ──
+function QualBadge({ ok, label, value }: { ok: boolean; label: string; value?: string | null }) {
+  const display = ok && value ? value : label;
   return (
-    <span className={cn(
-      "inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded font-medium leading-none",
-      ok ? "bg-emerald-50 text-emerald-700" : "bg-gray-100 text-gray-400"
-    )}>
-      {ok ? <CheckCircle2 className="w-2.5 h-2.5" /> : <Circle className="w-2.5 h-2.5" />}
-      {label}
+    <span
+      className={cn(
+        "inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded font-medium leading-none max-w-[80px] truncate",
+        ok ? "bg-emerald-50 text-emerald-700" : "bg-gray-100 text-gray-400"
+      )}
+      title={ok && value ? `${label}: ${value}` : label}
+    >
+      {ok ? <CheckCircle2 className="w-2.5 h-2.5 shrink-0" /> : <Circle className="w-2.5 h-2.5 shrink-0" />}
+      <span className="truncate">{display}</span>
     </span>
   );
 }
@@ -166,6 +136,7 @@ interface InboxLeadDetailsPanelProps {
   contact: Contact;
   primaryConversation?: Conversation;
   teamMembers: TeamMember[];
+  messages?: ConversationMessage[];
   onUpdateContact: (fields: Record<string, unknown>) => void;
   onUpdateConversationStatus: (status: string) => void;
   onEditContact: () => void;
@@ -184,6 +155,7 @@ export function InboxLeadDetailsPanel({
   contact,
   primaryConversation,
   teamMembers,
+  messages = [],
   onUpdateContact,
   onUpdateConversationStatus,
   onEditContact,
@@ -265,10 +237,8 @@ export function InboxLeadDetailsPanel({
   const statusCls  = CONVERSATION_STATUSES.find(s => s.value === convStatus)?.color || 'border-gray-200 text-gray-500';
   const followUpSt = getFollowUpStatus(contact.followUpDate);
 
-  const score   = useMemo(() => deriveLeadScore(contact.tag), [contact.tag]);
-  const aiState = useMemo(() => deriveAiState(contact.pipelineStage, convStatus), [contact.pipelineStage, convStatus]);
-  const intent  = useMemo(() => deriveIntent(contact.pipelineStage), [contact.pipelineStage]);
-  const qual    = useMemo(() => parseQualification(contact.notes || ''), [contact.notes]);
+  // ── Conversation intelligence — re-runs whenever messages change ──
+  const intel = useMemo(() => analyzeConversation(messages), [messages]);
 
   const activeMembers  = teamMembers.filter(m => m.status === 'active');
   const assignedMember = activeMembers.find(m => (m.memberId || m.id) === contact.assignedTo);
@@ -301,18 +271,18 @@ export function InboxLeadDetailsPanel({
         </div>
 
         <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
-          <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", score.dot)} />
-          <span className={cn("text-[11px] font-semibold", score.color)}>{score.label} Lead</span>
+          <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", intel.leadScore.dot)} />
+          <span className={cn("text-[11px] font-semibold", intel.leadScore.color)}>{intel.leadScore.label} Lead</span>
           <span className="text-gray-300 text-[10px]">·</span>
-          <span className="text-[11px] text-gray-500">{aiState}</span>
+          <span className="text-[11px] text-gray-500">{intel.aiState}</span>
           <span className="text-gray-300 text-[10px]">·</span>
-          <span className="text-[11px] text-gray-500">{intent}</span>
+          <span className="text-[11px] text-gray-500">{intel.intent}</span>
         </div>
 
         <div className="flex items-center gap-1 flex-wrap">
-          <QualBadge ok={qual.budget}    label="Budget" />
-          <QualBadge ok={qual.timeline}  label="Timeline" />
-          <QualBadge ok={qual.financing} label="Financing" />
+          <QualBadge ok={intel.hasBudget}    label="Budget"    value={intel.budget} />
+          <QualBadge ok={intel.hasTimeline}  label="Timeline"  value={intel.timeline} />
+          <QualBadge ok={intel.hasFinancing} label="Financing" value={intel.financing} />
         </div>
       </div>
 
