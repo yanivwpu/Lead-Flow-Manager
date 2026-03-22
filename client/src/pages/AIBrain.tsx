@@ -556,7 +556,7 @@ function AIBrainContent() {
               
               <div className="grid gap-3">
                 {[
-                  { value: "off", label: "Off", desc: "AI features are disabled", icon: X },
+                  { value: "off", label: "Off", desc: "AI Copilot and Autopilot are paused", icon: X },
                   { value: "suggest_only", label: "Suggest Only", desc: "AI suggests replies, you send them", icon: Lightbulb },
                   { value: "full_auto", label: "Full Auto", desc: "AI responds automatically (with guardrails)", icon: Sparkles },
                 ].map(mode => (
@@ -1082,7 +1082,7 @@ function AIBrainContent() {
                         aiHealth.status === "limited" && "text-yellow-600",
                         aiHealth.status === "paused" && "text-red-600"
                       )}>
-                        {aiHealth.status === "healthy" && "All AI features are working normally."}
+                        {aiHealth.status === "healthy" && "AI Copilot and Autopilot are working normally."}
                         {aiHealth.status === "limited" && (aiHealth.message || "AI assistance is temporarily limited to protect deliverability.")}
                         {aiHealth.status === "paused" && (aiHealth.message || "AI assistance is temporarily limited to protect deliverability.")}
                       </p>

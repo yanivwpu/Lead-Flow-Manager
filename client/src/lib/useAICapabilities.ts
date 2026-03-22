@@ -58,15 +58,15 @@ export interface AICapabilities {
   isLoading:        boolean;
 }
 
-// Plan display names
+// Plan display names with AI capability descriptions
 const PLAN_NAMES: Record<string, string> = {
   free:       "Free",
-  starter:    "Starter",
-  pro:        "Pro",
+  starter:    "Starter — AI Assist (Limited)",
+  pro:        "Pro — AI Assist (Advanced)",
   enterprise: "Enterprise",
 };
 
-// What each plan should upgrade to
+// What each plan should upgrade to (with outcome language)
 const UPGRADE_PATHS: Record<string, string | null> = {
   free:       "Starter",
   starter:    "Pro",

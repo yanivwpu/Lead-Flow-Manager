@@ -46,7 +46,7 @@ export function AIUpgradePrompt({
       <Lock className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />
       <div className="min-w-0 flex-1">
         <p className="text-[11px] font-semibold text-amber-800 leading-snug">
-          {feature} requires {requiredPlan}
+          Unlock {feature}
         </p>
         {reason && (
           <p className="text-[10px] text-amber-700 leading-snug mt-0.5">{reason}</p>
@@ -56,7 +56,7 @@ export function AIUpgradePrompt({
           className="mt-1 inline-flex items-center gap-0.5 text-[10px] font-semibold text-amber-700 hover:text-amber-900 transition-colors"
           data-testid="button-upgrade-cta"
         >
-          Upgrade plan <ArrowUpRight className="w-2.5 h-2.5" />
+          Upgrade to {requiredPlan} <ArrowUpRight className="w-2.5 h-2.5" />
         </button>
       </div>
     </div>

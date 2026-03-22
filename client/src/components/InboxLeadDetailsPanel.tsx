@@ -337,9 +337,9 @@ export function InboxLeadDetailsPanel({
           </>
         ) : (
           <AIUpgradePrompt
-            feature="Copilot intelligence"
+            feature="AI Copilot"
             requiredPlan={copilotUpgradeTo}
-            reason="Automatically extracts budget, timeline, financing, and intent from conversations."
+            reason="AI reads conversations and auto-extracts budget, timeline, financing, and lead intent to help you qualify leads faster."
             size="md"
             className="mt-1"
           />
@@ -349,9 +349,9 @@ export function InboxLeadDetailsPanel({
         {canSeeCopilot && !canSeeWorkflow && (
           <div className="mt-2 pt-1.5 border-t border-purple-100">
             <AIUpgradePrompt
-              feature="Workflow recommendations"
+              feature="AI Autopilot"
               requiredPlan={workflowUpgradeTo}
-              reason="One-click action chips: assign agents, book appointments, trigger follow-ups, and move pipeline stages automatically."
+              reason="AI suggests and automates actions: assign leads, book appointments, schedule follow-ups, and advance pipeline stages with one click."
               size="md"
               className="mt-0.5"
             />

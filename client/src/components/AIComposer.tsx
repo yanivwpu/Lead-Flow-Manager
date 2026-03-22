@@ -345,11 +345,11 @@ export function AIComposer({
 
               const lockReason =
                 !modeEnabled && mode === "suggest" && capabilities?.plan === "free"
-                  ? "Starter plan required"
+                  ? "Unlock AI Assist to draft replies"
                   : !modeEnabled && mode === "auto" && capabilities?.plan === "starter"
-                  ? "Pro plan required"
+                  ? "Unlock AI Autopilot to reply automatically"
                   : !modeEnabled && (capabilities?.isExhausted)
-                  ? "AI credits exhausted — upgrade plan"
+                  ? "AI replies exhausted this month — upgrade for more"
                   : !modeEnabled
                   ? "Upgrade to unlock"
                   : null;
@@ -395,9 +395,9 @@ export function AIComposer({
         {/* Upgrade prompt — shown when credits are exhausted and user needs AI */}
         {capabilities?.isExhausted && capabilities.upgradePlan && (
           <AIUpgradePrompt
-            feature="AI reply generation"
+            feature="unlimited AI replies"
             requiredPlan={capabilities.upgradePlan}
-            reason={`You've used all ${capabilities.monthlyLimit} AI credits for this month.`}
+            reason={`You've used all ${capabilities.monthlyLimit} AI replies for this month. More credits reset on your billing cycle.`}
             size="sm"
             className="mt-0.5"
           />

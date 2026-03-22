@@ -111,7 +111,7 @@ Available for **Starter and Pro plan** users at **$29/month** under Fair Use.
 AI Brain is designed to be your comprehensive business assistant, handling everything from first contact to closing.
 
 ### 🧠 Unlimited Intelligence
-Unlike the base AI Assist (which has monthly limits), AI Brain gives you **unlimited** access to all AI features. No quotas, no interruptions.
+Unlike the base AI Assist (which has monthly limits), the AI Autopilot add-on gives you **unlimited** replies, auto-responses, and automations. No quotas, no interruptions.
 
 ### 📝 Smart Reply Suggestions
 The AI reads the full conversation context and suggests professional, on-brand replies. You can review, edit, or send them with one click.
