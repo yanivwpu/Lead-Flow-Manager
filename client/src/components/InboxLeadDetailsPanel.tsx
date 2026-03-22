@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   Phone,
   Mail,
@@ -12,14 +12,12 @@ import {
   TrendingUp,
   CheckCircle2,
   Circle,
-  Minus,
   Bell,
   PauseCircle,
   PlayCircle,
   User,
   Clock,
-  MapPin,
-  ChevronDown,
+  ArrowLeft,
 } from "lucide-react";
 import {
   Select,
@@ -31,7 +29,7 @@ import {
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-import { format } from "date-fns";
+import { format, parseISO } from "date-fns";
 import { TAG_COLORS, PIPELINE_STAGES } from "@/lib/data";
 
 type Channel = 'whatsapp' | 'instagram' | 'facebook' | 'sms' | 'webchat' | 'telegram' | 'tiktok';
@@ -83,6 +81,15 @@ const SOURCE_LABELS: Record<string, string> = {
   api: 'API', tiktok: 'TikTok', sms: 'SMS', telegram: 'Telegram',
 };
 
+const TIME_SLOTS = ['08:00','09:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00'];
+
+function formatTime24to12(t: string) {
+  const [h, m] = t.split(':').map(Number);
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  const h12  = h % 12 || 12;
+  return `${h12}:${String(m).padStart(2,'0')} ${ampm}`;
+}
+
 function getFollowUpStatus(d: string | null | undefined): 'overdue' | 'today' | 'upcoming' | null {
   if (!d) return null;
   const due   = new Date(d);
@@ -92,6 +99,18 @@ function getFollowUpStatus(d: string | null | undefined): 'overdue' | 'today' | 
   if (dueDay < today) return 'overdue';
   if (dueDay.getTime() === today.getTime()) return 'today';
   return 'upcoming';
+}
+
+function formatFollowUpDisplay(isoString: string): string {
+  try {
+    const d = parseISO(isoString);
+    const hasTime = d.getHours() !== 0 || d.getMinutes() !== 0;
+    return hasTime
+      ? format(d, "MMM d 'at' h:mm a")
+      : format(d, 'MMM d, yyyy');
+  } catch {
+    return isoString;
+  }
 }
 
 // ── AI derivations ────────────────────────────────────────────────────────────
@@ -105,19 +124,19 @@ function deriveLeadScore(tag: string) {
 
 function deriveAiState(stage: string, status: string) {
   const s = (stage || '').toLowerCase();
-  if (s.includes('closed') || status === 'resolved')            return 'Closed';
-  if (s.includes('negotiation') || s.includes('proposal'))      return 'Ready';
-  if (s.includes('qualified'))                                   return 'Qualifying';
-  if (s.includes('lead') || s.includes('contacted'))            return 'Engaging';
+  if (s.includes('closed') || status === 'resolved')       return 'Closed';
+  if (s.includes('negotiation') || s.includes('proposal')) return 'Ready';
+  if (s.includes('qualified'))                              return 'Qualifying';
+  if (s.includes('lead') || s.includes('contacted'))       return 'Engaging';
   return 'Waiting';
 }
 
 function deriveIntent(stage: string) {
   const s = (stage || '').toLowerCase();
-  if (s.includes('closed won'))    return 'Buyer ✓';
-  if (s.includes('negotiation'))   return 'Buyer';
-  if (s.includes('proposal'))      return 'High Intent';
-  if (s.includes('qualified'))     return 'Interested';
+  if (s.includes('closed won'))  return 'Buyer ✓';
+  if (s.includes('negotiation')) return 'Buyer';
+  if (s.includes('proposal'))    return 'High Intent';
+  if (s.includes('qualified'))   return 'Interested';
   return 'Browsing';
 }
 
@@ -136,16 +155,13 @@ function QualBadge({ ok, label }: { ok: boolean; label: string }) {
       "inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded font-medium leading-none",
       ok ? "bg-emerald-50 text-emerald-700" : "bg-gray-100 text-gray-400"
     )}>
-      {ok
-        ? <CheckCircle2 className="w-2.5 h-2.5" />
-        : <Circle className="w-2.5 h-2.5" />
-      }
+      {ok ? <CheckCircle2 className="w-2.5 h-2.5" /> : <Circle className="w-2.5 h-2.5" />}
       {label}
     </span>
   );
 }
 
-// ── Component ─────────────────────────────────────────────────────────────────
+// ── Props ─────────────────────────────────────────────────────────────────────
 interface InboxLeadDetailsPanelProps {
   contact: Contact;
   primaryConversation?: Conversation;
@@ -173,48 +189,70 @@ export function InboxLeadDetailsPanel({
   onEditContact,
   onDeleteContact,
 }: InboxLeadDetailsPanelProps) {
-  const [localNotes, setLocalNotes]   = useState(contact.notes || "");
-  const [notesSaved, setNotesSaved]   = useState(false);
-  const [calendarOpen, setCalendarOpen] = useState(false);
-  const [aiPaused, setAiPaused]       = useState(false);
+  const [localNotes, setLocalNotes] = useState(contact.notes || "");
+  const [notesSaved, setNotesSaved] = useState(false);
+  const [aiPaused,   setAiPaused]   = useState(false);
 
-  // Copilot action popovers — each has exactly one responsibility
-  const [assignOpen, setAssignOpen]   = useState(false);
-  const [followOpen, setFollowOpen]   = useState(false);
-  const [bookOpen,   setBookOpen]     = useState(false);
+  // Copilot action popovers
+  const [assignOpen, setAssignOpen] = useState(false);
+  const [followOpen, setFollowOpen] = useState(false);
+  const [bookOpen,   setBookOpen]   = useState(false);
+
+  // Follow popover: 'quick' shows the quick options; 'custom' shows date+time picker
+  const [followView,       setFollowView]       = useState<'quick' | 'custom'>('quick');
+  const [customFollowDate, setCustomFollowDate] = useState<Date | undefined>(undefined);
+  const [customFollowTime, setCustomFollowTime] = useState('09:00');
 
   // Booking placeholder state
-  const [bookingDate, setBookingDate] = useState<Date | undefined>(undefined);
-  const [bookingTime, setBookingTime] = useState("10:00");
-  const [bookingType, setBookingType] = useState("Viewing");
+  const [bookingDate,      setBookingDate]      = useState<Date | undefined>(undefined);
+  const [bookingTime,      setBookingTime]      = useState("10:00");
+  const [bookingType,      setBookingType]      = useState("Viewing");
   const [bookingConfirmed, setBookingConfirmed] = useState(false);
-
-  const followRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setLocalNotes(contact.notes || "");
     setNotesSaved(false);
   }, [contact.id, contact.notes]);
 
-  const handleFollowUp = (label: string | null) => {
-    if (!label) { onUpdateContact({ followUp: null, followUpDate: null }); return; }
-    const now = new Date();
-    let date: Date;
-    if (label === '24h')    { date = new Date(now); date.setDate(date.getDate() + 1); }
-    else if (label === '3 days') { date = new Date(now); date.setDate(date.getDate() + 3); }
-    else if (label === '1 week') { date = new Date(now); date.setDate(date.getDate() + 7); }
-    else { date = now; }
-    onUpdateContact({ followUp: label, followUpDate: date.toISOString() });
+  // Reset follow popover state when it closes
+  useEffect(() => {
+    if (!followOpen) {
+      setFollowView('quick');
+      setCustomFollowDate(undefined);
+      setCustomFollowTime('09:00');
+    }
+  }, [followOpen]);
+
+  // Build a date+time ISO from date + "HH:mm" time string
+  const buildDateTimeISO = (date: Date, time: string): string => {
+    const [h, m] = time.split(':').map(Number);
+    const d = new Date(date);
+    d.setHours(h, m, 0, 0);
+    return d.toISOString();
   };
 
-  // Legacy label mapping for existing follow-up buttons
-  const handleFollowUpFull = (label: 'Tomorrow' | '3 days' | '1 week') => {
+  // Quick follow-up: sets 9am on the target day
+  const setQuickFollowUp = (label: string) => {
     const now = new Date();
-    let date: Date = new Date(now);
-    if (label === 'Tomorrow') date.setDate(date.getDate() + 1);
-    else if (label === '3 days') date.setDate(date.getDate() + 3);
-    else if (label === '1 week') date.setDate(date.getDate() + 7);
-    onUpdateContact({ followUp: label, followUpDate: date.toISOString() });
+    const d   = new Date(now);
+    if      (label === '24h')    d.setDate(d.getDate() + 1);
+    else if (label === '3 days') d.setDate(d.getDate() + 3);
+    else if (label === '1 week') d.setDate(d.getDate() + 7);
+    d.setHours(9, 0, 0, 0);
+    onUpdateContact({ followUp: label, followUpDate: d.toISOString() });
+  };
+
+  const confirmCustomFollowUp = () => {
+    if (!customFollowDate) return;
+    const iso = buildDateTimeISO(customFollowDate, customFollowTime);
+    const label = format(customFollowDate, 'MMM d') + ' at ' + formatTime24to12(customFollowTime);
+    onUpdateContact({ followUp: label, followUpDate: iso });
+    setFollowOpen(false);
+  };
+
+  const clearFollowUp = () => {
+    onUpdateContact({ followUp: null, followUpDate: null });
+    setFollowOpen(false);
   };
 
   const saveNotes = () => {
@@ -223,16 +261,16 @@ export function InboxLeadDetailsPanel({
     setTimeout(() => setNotesSaved(false), 2500);
   };
 
-  const convStatus  = primaryConversation?.status || 'open';
-  const statusCls   = CONVERSATION_STATUSES.find(s => s.value === convStatus)?.color || 'border-gray-200 text-gray-500';
-  const followUpSt  = getFollowUpStatus(contact.followUpDate);
+  const convStatus = primaryConversation?.status || 'open';
+  const statusCls  = CONVERSATION_STATUSES.find(s => s.value === convStatus)?.color || 'border-gray-200 text-gray-500';
+  const followUpSt = getFollowUpStatus(contact.followUpDate);
 
   const score   = useMemo(() => deriveLeadScore(contact.tag), [contact.tag]);
   const aiState = useMemo(() => deriveAiState(contact.pipelineStage, convStatus), [contact.pipelineStage, convStatus]);
   const intent  = useMemo(() => deriveIntent(contact.pipelineStage), [contact.pipelineStage]);
   const qual    = useMemo(() => parseQualification(contact.notes || ''), [contact.notes]);
 
-  const activeMembers = teamMembers.filter(m => m.status === 'active');
+  const activeMembers  = teamMembers.filter(m => m.status === 'active');
   const assignedMember = activeMembers.find(m => (m.memberId || m.id) === contact.assignedTo);
   const assignedLabel  = assignedMember
     ? (assignedMember.name || assignedMember.email.split('@')[0])
@@ -243,8 +281,6 @@ export function InboxLeadDetailsPanel({
 
       {/* ══ 1. AI COPILOT HEADER ══════════════════════════════════════════ */}
       <div className="px-3 pt-2.5 pb-2 border-b border-gray-100 bg-white sticky top-0 z-10">
-
-        {/* Title row */}
         <div className="flex items-center justify-between mb-1.5">
           <div className="flex items-center gap-1.5">
             <Sparkles className="w-3 h-3 text-purple-500" />
@@ -264,7 +300,6 @@ export function InboxLeadDetailsPanel({
           </button>
         </div>
 
-        {/* Lead score · state · intent */}
         <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
           <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", score.dot)} />
           <span className={cn("text-[11px] font-semibold", score.color)}>{score.label} Lead</span>
@@ -274,7 +309,6 @@ export function InboxLeadDetailsPanel({
           <span className="text-[11px] text-gray-500">{intent}</span>
         </div>
 
-        {/* Qualification badges */}
         <div className="flex items-center gap-1 flex-wrap">
           <QualBadge ok={qual.budget}    label="Budget" />
           <QualBadge ok={qual.timeline}  label="Timeline" />
@@ -286,7 +320,7 @@ export function InboxLeadDetailsPanel({
       <div className="px-3 py-2 border-b border-gray-100">
         <div className="grid grid-cols-4 gap-1">
 
-          {/* ── BOOK: schedule appointment — NOT follow-up ── */}
+          {/* ── BOOK ── */}
           <Popover open={bookOpen} onOpenChange={setBookOpen}>
             <PopoverTrigger asChild>
               <button
@@ -304,14 +338,13 @@ export function InboxLeadDetailsPanel({
                   <X className="w-3.5 h-3.5" />
                 </button>
               </div>
-
               {bookingConfirmed ? (
                 <div className="flex flex-col items-center gap-1.5 py-3">
                   <CheckCircle2 className="w-5 h-5 text-emerald-500" />
                   <p className="text-[12px] font-medium text-emerald-700">Appointment saved</p>
                   {bookingDate && (
                     <p className="text-[11px] text-gray-500">
-                      {format(bookingDate, 'MMM d')} at {bookingTime} · {bookingType}
+                      {format(bookingDate, 'MMM d')} at {formatTime24to12(bookingTime)} · {bookingType}
                     </p>
                   )}
                   <button
@@ -323,7 +356,6 @@ export function InboxLeadDetailsPanel({
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {/* Booking type */}
                   <div>
                     <p className="text-[10px] text-gray-400 mb-1 uppercase tracking-wide font-semibold">Type</p>
                     <div className="flex gap-1 flex-wrap">
@@ -337,14 +369,10 @@ export function InboxLeadDetailsPanel({
                               ? "bg-purple-50 text-purple-700 border-purple-300"
                               : "bg-white text-gray-500 border-gray-200 hover:border-gray-300"
                           )}
-                        >
-                          {t}
-                        </button>
+                        >{t}</button>
                       ))}
                     </div>
                   </div>
-
-                  {/* Date picker */}
                   <div>
                     <p className="text-[10px] text-gray-400 mb-1 uppercase tracking-wide font-semibold">Date</p>
                     <Calendar
@@ -356,12 +384,10 @@ export function InboxLeadDetailsPanel({
                       initialFocus
                     />
                   </div>
-
-                  {/* Time */}
                   <div>
                     <p className="text-[10px] text-gray-400 mb-1 uppercase tracking-wide font-semibold">Time</p>
                     <div className="flex gap-1 flex-wrap">
-                      {['09:00','10:00','11:00','13:00','14:00','15:00','16:00'].map(t => (
+                      {TIME_SLOTS.map(t => (
                         <button
                           key={t}
                           onClick={() => setBookingTime(t)}
@@ -371,18 +397,13 @@ export function InboxLeadDetailsPanel({
                               ? "bg-purple-50 text-purple-700 border-purple-300 font-semibold"
                               : "bg-white text-gray-500 border-gray-200 hover:border-gray-300"
                           )}
-                        >
-                          {t}
-                        </button>
+                        >{formatTime24to12(t)}</button>
                       ))}
                     </div>
                   </div>
-
                   <button
                     disabled={!bookingDate}
-                    onClick={() => {
-                      if (bookingDate) setBookingConfirmed(true);
-                    }}
+                    onClick={() => { if (bookingDate) setBookingConfirmed(true); }}
                     className={cn(
                       "w-full mt-1 py-1.5 rounded-lg text-[11px] font-semibold transition-colors",
                       bookingDate
@@ -398,7 +419,7 @@ export function InboxLeadDetailsPanel({
             </PopoverContent>
           </Popover>
 
-          {/* ── ASSIGN: ownership — opens agent picker popover ── */}
+          {/* ── ASSIGN ── */}
           <Popover open={assignOpen} onOpenChange={setAssignOpen}>
             <PopoverTrigger asChild>
               <button
@@ -425,9 +446,7 @@ export function InboxLeadDetailsPanel({
                 onClick={() => { onUpdateContact({ assignedTo: null }); setAssignOpen(false); }}
                 className={cn(
                   "w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-[11px] transition-colors",
-                  !contact.assignedTo
-                    ? "bg-gray-100 text-gray-600 font-medium"
-                    : "text-gray-500 hover:bg-gray-50"
+                  !contact.assignedTo ? "bg-gray-100 text-gray-600 font-medium" : "text-gray-500 hover:bg-gray-50"
                 )}
                 data-testid="assign-option-unassigned"
               >
@@ -435,8 +454,8 @@ export function InboxLeadDetailsPanel({
                 Unassigned
               </button>
               {activeMembers.map(m => {
-                const val  = m.memberId || m.id;
-                const name = m.name || m.email.split('@')[0];
+                const val      = m.memberId || m.id;
+                const name     = m.name || m.email.split('@')[0];
                 const isActive = contact.assignedTo === val;
                 return (
                   <button
@@ -444,9 +463,7 @@ export function InboxLeadDetailsPanel({
                     onClick={() => { onUpdateContact({ assignedTo: val }); setAssignOpen(false); }}
                     className={cn(
                       "w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-[11px] transition-colors",
-                      isActive
-                        ? "bg-emerald-50 text-emerald-700 font-medium"
-                        : "text-gray-700 hover:bg-gray-50"
+                      isActive ? "bg-emerald-50 text-emerald-700 font-medium" : "text-gray-700 hover:bg-gray-50"
                     )}
                     data-testid={`assign-option-${val}`}
                   >
@@ -459,7 +476,7 @@ export function InboxLeadDetailsPanel({
             </PopoverContent>
           </Popover>
 
-          {/* ── FOLLOW: follow-up scheduling — quick options popover ── */}
+          {/* ── FOLLOW: opens popover with quick opts + custom picker ── */}
           <Popover open={followOpen} onOpenChange={setFollowOpen}>
             <PopoverTrigger asChild>
               <button
@@ -478,43 +495,125 @@ export function InboxLeadDetailsPanel({
                 </span>
               </button>
             </PopoverTrigger>
-            <PopoverContent className="w-44 p-1.5" align="start" side="bottom">
-              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide px-1.5 pb-1">Follow-up in</p>
-              {[
-                { label: '24h',    display: 'Tomorrow (24h)' },
-                { label: '3 days', display: '3 days' },
-                { label: '1 week', display: '1 week' },
-              ].map(({ label, display }) => (
-                <button
-                  key={label}
-                  onClick={() => {
-                    handleFollowUp(label);
-                    setFollowOpen(false);
-                  }}
-                  className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-[11px] text-gray-700 hover:bg-amber-50 hover:text-amber-700 transition-colors"
-                  data-testid={`followup-quick-${label.replace(' ', '-')}`}
-                >
-                  <Clock className="w-3 h-3 text-gray-400" />
-                  {display}
-                </button>
-              ))}
-              {contact.followUpDate && (
+
+            <PopoverContent className="w-52 p-1.5" align="start" side="bottom" onInteractOutside={() => setFollowOpen(false)}>
+
+              {/* ─ QUICK OPTIONS VIEW ─ */}
+              {followView === 'quick' && (
                 <>
-                  <div className="border-t border-gray-100 my-1" />
+                  <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide px-1.5 pb-1">
+                    Follow-up in
+                  </p>
+                  {[
+                    { label: '24h',    display: 'Tomorrow (24h)',  },
+                    { label: '3 days', display: '3 days'           },
+                    { label: '1 week', display: '1 week'           },
+                  ].map(({ label, display }) => (
+                    <button
+                      key={label}
+                      onClick={() => { setQuickFollowUp(label); setFollowOpen(false); }}
+                      className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-[11px] text-gray-700 hover:bg-amber-50 hover:text-amber-700 transition-colors"
+                      data-testid={`followup-quick-${label.replace(' ', '-')}`}
+                    >
+                      <Clock className="w-3 h-3 text-gray-400" />
+                      {display}
+                    </button>
+                  ))}
+
+                  {/* Custom date & time option */}
                   <button
-                    onClick={() => { onUpdateContact({ followUp: null, followUpDate: null }); setFollowOpen(false); }}
-                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-[11px] text-red-400 hover:bg-red-50 hover:text-red-600 transition-colors"
-                    data-testid="followup-quick-clear"
+                    onClick={() => setFollowView('custom')}
+                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-[11px] text-gray-700 hover:bg-amber-50 hover:text-amber-700 transition-colors"
+                    data-testid="followup-custom-open"
                   >
-                    <X className="w-3 h-3" />
-                    Clear follow-up
+                    <CalendarIcon className="w-3 h-3 text-gray-400" />
+                    Custom date &amp; time…
                   </button>
+
+                  {contact.followUpDate && (
+                    <>
+                      <div className="border-t border-gray-100 my-1" />
+                      <button
+                        onClick={clearFollowUp}
+                        className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-[11px] text-red-400 hover:bg-red-50 hover:text-red-600 transition-colors"
+                        data-testid="followup-quick-clear"
+                      >
+                        <X className="w-3 h-3" />
+                        Clear follow-up
+                      </button>
+                    </>
+                  )}
                 </>
+              )}
+
+              {/* ─ CUSTOM DATE & TIME VIEW ─ */}
+              {followView === 'custom' && (
+                <div className="space-y-2">
+                  {/* Back button */}
+                  <button
+                    onClick={() => setFollowView('quick')}
+                    className="flex items-center gap-1 text-[10px] text-gray-400 hover:text-gray-600 transition-colors mb-1"
+                    data-testid="followup-custom-back"
+                  >
+                    <ArrowLeft className="w-3 h-3" />
+                    Back
+                  </button>
+
+                  {/* Date picker */}
+                  <div>
+                    <p className="text-[10px] text-gray-400 mb-1 uppercase tracking-wide font-semibold">Date</p>
+                    <Calendar
+                      mode="single"
+                      selected={customFollowDate}
+                      onSelect={setCustomFollowDate}
+                      disabled={d => d < new Date()}
+                      className="rounded-lg border border-gray-100 p-1 [&_.rdp]:m-0"
+                      initialFocus
+                    />
+                  </div>
+
+                  {/* Time picker */}
+                  <div>
+                    <p className="text-[10px] text-gray-400 mb-1 uppercase tracking-wide font-semibold">Time</p>
+                    <div className="flex flex-wrap gap-1">
+                      {TIME_SLOTS.map(t => (
+                        <button
+                          key={t}
+                          onClick={() => setCustomFollowTime(t)}
+                          className={cn(
+                            "text-[10px] px-1.5 py-0.5 rounded border transition-colors",
+                            customFollowTime === t
+                              ? "bg-amber-50 text-amber-700 border-amber-300 font-semibold"
+                              : "bg-white text-gray-500 border-gray-200 hover:border-gray-300"
+                          )}
+                          data-testid={`followup-time-${t}`}
+                        >
+                          {formatTime24to12(t)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Confirm */}
+                  <button
+                    disabled={!customFollowDate}
+                    onClick={confirmCustomFollowUp}
+                    className={cn(
+                      "w-full py-1.5 rounded-lg text-[11px] font-semibold transition-colors",
+                      customFollowDate
+                        ? "bg-amber-500 text-white hover:bg-amber-600"
+                        : "bg-gray-100 text-gray-400 cursor-not-allowed"
+                    )}
+                    data-testid="followup-custom-confirm"
+                  >
+                    Set Follow-up
+                  </button>
+                </div>
               )}
             </PopoverContent>
           </Popover>
 
-          {/* ── PAUSE: AI on/off ── */}
+          {/* ── PAUSE ── */}
           <button
             onClick={() => setAiPaused(p => !p)}
             className={cn(
@@ -524,7 +623,6 @@ export function InboxLeadDetailsPanel({
                 : "border-gray-100 bg-gray-50 hover:bg-gray-100 hover:border-gray-200"
             )}
             data-testid="button-ai-pause"
-            title={aiPaused ? "Resume AI" : "Pause AI"}
           >
             {aiPaused
               ? <PlayCircle className="w-3 h-3 text-gray-500" />
@@ -540,7 +638,7 @@ export function InboxLeadDetailsPanel({
       <div className="flex-1 overflow-y-auto">
         <div className="px-3 py-3 space-y-3">
 
-          {/* ── 3. CONTACT INFO ──────────────────────────────────────── */}
+          {/* ── CONTACT INFO ─────────────────────────────────────────── */}
           <div>
             <div className="flex items-center justify-between mb-1">
               <RowLabel>Contact</RowLabel>
@@ -577,7 +675,7 @@ export function InboxLeadDetailsPanel({
             </div>
           </div>
 
-          {/* ── 4. STATUS + PIPELINE (side-by-side) ──────────────── */}
+          {/* ── STATUS + PIPELINE (side-by-side) ─────────────────────── */}
           {primaryConversation && (
             <div>
               <RowLabel>Status · Stage</RowLabel>
@@ -617,7 +715,7 @@ export function InboxLeadDetailsPanel({
             </div>
           )}
 
-          {/* ── 5. STATUS TAGS ────────────────────────────────────── */}
+          {/* ── STATUS TAGS ──────────────────────────────────────────── */}
           <div>
             <RowLabel>Tag</RowLabel>
             <div className="flex flex-wrap gap-1 mt-1">
@@ -639,19 +737,15 @@ export function InboxLeadDetailsPanel({
             </div>
           </div>
 
-          {/* ── 6. FOLLOW-UP (main scheduling UI) ────────────────── */}
-          <div ref={followRef}>
-            <div className="flex items-center justify-between mb-1">
-              <RowLabel>Follow-up</RowLabel>
-              {!contact.followUpDate && (
-                <span className="text-[9px] text-purple-400 italic">AI suggests 24h</span>
-              )}
-            </div>
-
-            {contact.followUpDate && (
-              <div
+          {/* ── FOLLOW-UP: display only — click to reopen Follow popup ── */}
+          <div>
+            <RowLabel>Follow-up</RowLabel>
+            {contact.followUpDate ? (
+              /* Clickable display chip — opens the Follow popover */
+              <button
+                onClick={() => setFollowOpen(true)}
                 className={cn(
-                  "flex items-center gap-1.5 px-2 py-1.5 rounded-lg mb-1.5 text-[11px] font-medium border",
+                  "mt-1 w-full flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-[11px] font-medium border text-left transition-opacity hover:opacity-80",
                   followUpSt === 'overdue' ? "bg-red-50 text-red-700 border-red-200" :
                   followUpSt === 'today'   ? "bg-amber-50 text-amber-700 border-amber-200" :
                                              "bg-emerald-50 text-emerald-700 border-emerald-200"
@@ -659,71 +753,24 @@ export function InboxLeadDetailsPanel({
                 data-testid="followup-date-display"
               >
                 <CalendarIcon className="w-3 h-3 shrink-0" />
-                <span>
-                  {followUpSt === 'overdue' && 'Overdue · '}
-                  {followUpSt === 'today'   && 'Today · '}
-                  {format(new Date(contact.followUpDate), 'MMM d, yyyy')}
+                <span className="truncate">
+                  {followUpSt === 'overdue' && <span className="font-semibold">Overdue · </span>}
+                  {followUpSt === 'today'   && <span className="font-semibold">Today · </span>}
+                  {formatFollowUpDisplay(contact.followUpDate)}
                 </span>
-                <button
-                  onClick={() => onUpdateContact({ followUp: null, followUpDate: null })}
-                  className="ml-auto opacity-50 hover:opacity-100 transition-opacity"
-                  data-testid="button-clear-followup"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </div>
+              </button>
+            ) : (
+              <p className="mt-1 text-[11px] text-gray-400 italic">
+                Not set · <button
+                  onClick={() => setFollowOpen(true)}
+                  className="underline hover:text-gray-600 transition-colors"
+                  data-testid="followup-not-set-link"
+                >Schedule</button>
+              </p>
             )}
-
-            <div className="flex gap-1">
-              {(['Tomorrow', '3 days', '1 week'] as const).map(t => (
-                <button
-                  key={t}
-                  onClick={() => handleFollowUpFull(t)}
-                  className={cn(
-                    "flex-1 text-[10px] py-1.5 rounded-lg border text-center transition-colors",
-                    contact.followUp === t
-                      ? "bg-emerald-50 text-emerald-700 border-emerald-300 font-semibold"
-                      : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"
-                  )}
-                  data-testid={`button-followup-${t.replace(' ', '-').toLowerCase()}`}
-                >
-                  {t}
-                </button>
-              ))}
-
-              <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
-                <PopoverTrigger asChild>
-                  <button
-                    className={cn(
-                      "flex-1 text-[10px] py-1.5 rounded-lg border text-center transition-colors",
-                      contact.followUp && !['Tomorrow', '3 days', '1 week'].includes(contact.followUp)
-                        ? "bg-emerald-50 text-emerald-700 border-emerald-300 font-semibold"
-                        : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"
-                    )}
-                    data-testid="button-followup-custom"
-                  >
-                    Custom
-                  </button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="end">
-                  <Calendar
-                    mode="single"
-                    selected={contact.followUpDate ? new Date(contact.followUpDate) : undefined}
-                    onSelect={date => {
-                      if (date) {
-                        onUpdateContact({ followUp: format(date, 'MMM d'), followUpDate: date.toISOString() });
-                        setCalendarOpen(false);
-                      }
-                    }}
-                    disabled={d => d < new Date()}
-                    initialFocus
-                  />
-                </PopoverContent>
-              </Popover>
-            </div>
           </div>
 
-          {/* ── 7. NOTES / AI MEMORY ──────────────────────────────── */}
+          {/* ── NOTES / AI MEMORY ────────────────────────────────────── */}
           <div>
             <div className="flex items-center justify-between mb-1">
               <RowLabel>Notes</RowLabel>
@@ -754,7 +801,7 @@ export function InboxLeadDetailsPanel({
             />
           </div>
 
-          {/* ── 8. DELETE CONTACT ─────────────────────────────────── */}
+          {/* ── DELETE CONTACT ────────────────────────────────────────── */}
           <div className="pb-2">
             <button
               onClick={onDeleteContact}
