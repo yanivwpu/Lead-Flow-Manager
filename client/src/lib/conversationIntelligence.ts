@@ -306,3 +306,332 @@ export function analyzeConversation(messages: ConversationMessage[]): CopilotInt
     signalCount, isUrgent, messageCount, lastDirection,
   };
 }
+
+// ══════════════════════════════════════════════════════════════════════════════
+// WORKFLOW LAYER — Triggered actions, suggestions, soft automations
+// ══════════════════════════════════════════════════════════════════════════════
+
+export type WorkflowActionType =
+  | 'assign'   // Assign an agent to this lead
+  | 'book'     // Book an appointment / viewing
+  | 'follow'   // Schedule follow-up reminder
+  | 'qualify'  // Ask next qualifying question
+  | 'nurture'  // Continue low-touch nurturing
+  | 'tag'      // Apply a tag
+  | 'stage';   // Move to next pipeline stage
+
+export interface WorkflowAction {
+  type: WorkflowActionType;
+  label: string;
+  priority: 'high' | 'medium' | 'low';
+  reason: string;
+  value?: string; // payload (e.g. tag name, stage name, question text)
+}
+
+export interface WorkflowResult {
+  actions: WorkflowAction[];     // Priority-sorted recommended actions
+  tagSuggestion: string | null;  // Tag to suggest
+  tagAutoApply: boolean;         // true = apply immediately (strong signal + neutral current tag)
+  stageSuggestion: string | null;
+  nextQuestion: string | null;   // Best qualifying question to ask next
+  followUpDue: boolean;          // Outbound last + no follow-up set
+}
+
+const STAGES = ['Lead', 'Contacted', 'Proposal', 'Negotiation', 'Closed'];
+
+// Intent → best matching tag
+const INTENT_TAG_MAP: Record<string, string> = {
+  Investor: 'Investor',
+  Buyer:    'Warm Lead',
+  Seller:   'Quoted',
+  Renter:   'Customer',
+};
+
+// Tags considered "neutral" (not yet meaningfully classified by a human)
+const NEUTRAL_TAGS = new Set(['New', '', 'new']);
+
+export function computeWorkflow(
+  intel: CopilotIntelligence,
+  contact: {
+    tag: string;
+    pipelineStage: string;
+    followUpDate?: string | null;
+    assignedTo?: string | null;
+  },
+): WorkflowResult {
+  const actions: WorkflowAction[] = [];
+
+  // ── 1. Lead scoring actions ──────────────────────────────────────────────
+  if (intel.leadScore.label === 'Hot') {
+    if (!contact.assignedTo) {
+      actions.push({
+        type: 'assign',
+        label: 'Assign agent',
+        priority: 'high',
+        reason: 'Hot lead — needs immediate personal attention',
+      });
+    }
+    if (intel.hasTimeline || intel.aiState === 'Ready') {
+      actions.push({
+        type: 'book',
+        label: 'Book appointment',
+        priority: 'high',
+        reason: 'Lead is qualified and timeline is known — schedule a viewing',
+      });
+    }
+  } else if (intel.leadScore.label === 'Warm') {
+    actions.push({
+      type: 'follow',
+      label: 'Schedule follow-up',
+      priority: 'medium',
+      reason: 'Warm lead — continue qualification with a timely follow-up',
+    });
+  } else {
+    actions.push({
+      type: 'nurture',
+      label: 'Continue nurturing',
+      priority: 'low',
+      reason: 'Cold lead — keep warm with periodic value-add check-ins',
+    });
+  }
+
+  // ── 2. Qualification triggers — next missing field ───────────────────────
+  let nextQuestion: string | null = null;
+  const missing = [
+    !intel.hasBudget    && 'budget',
+    !intel.hasTimeline  && 'timeline',
+    !intel.hasFinancing && 'financing',
+  ].filter(Boolean) as string[];
+
+  if (intel.messageCount > 0) {
+    if (missing.length === 3) {
+      nextQuestion = "What's your budget range and ideal timeline for making a move?";
+    } else if (missing.includes('financing')) {
+      nextQuestion = "Have you been pre-approved for financing, or are you planning to pay cash?";
+    } else if (missing.includes('budget')) {
+      nextQuestion = "What's your budget range for this?";
+    } else if (missing.includes('timeline')) {
+      nextQuestion = "What's your ideal timeline for making a move?";
+    }
+
+    if (nextQuestion) {
+      actions.push({
+        type: 'qualify',
+        label: 'Ask qualifying question',
+        priority: intel.signalCount === 0 ? 'high' : 'medium',
+        reason: `Missing: ${missing.join(', ')} — ask to complete lead profile`,
+        value: nextQuestion,
+      });
+    }
+  }
+
+  // ── 3. Follow-up trigger ─────────────────────────────────────────────────
+  const followUpDue =
+    intel.lastDirection === 'outbound' &&
+    !contact.followUpDate &&
+    intel.messageCount >= 2;
+
+  if (followUpDue) {
+    actions.push({
+      type: 'follow',
+      label: 'Set follow-up reminder',
+      priority: 'medium',
+      reason: "You sent the last message — remind yourself to follow up if they don't reply",
+    });
+  }
+
+  // ── 4. Tag suggestion ────────────────────────────────────────────────────
+  let tagSuggestion: string | null = null;
+  let tagAutoApply = false;
+  const isNeutralTag = NEUTRAL_TAGS.has(contact.tag || '');
+
+  // Hot lead overrides to Hot Lead tag
+  if (intel.leadScore.label === 'Hot' && contact.tag !== 'Hot Lead') {
+    tagSuggestion = 'Hot Lead';
+    tagAutoApply = isNeutralTag || contact.tag === 'Warm Lead';
+  } else if (intel.intent !== 'Browsing') {
+    const suggestedByIntent = INTENT_TAG_MAP[intel.intent];
+    if (suggestedByIntent && contact.tag !== suggestedByIntent) {
+      tagSuggestion = suggestedByIntent;
+      // Auto-apply for Investor (high specificity) and neutral current tags
+      tagAutoApply = (intel.intent === 'Investor' && isNeutralTag) ||
+                     (intel.intent !== 'Investor' && isNeutralTag);
+    }
+  }
+
+  // ── 5. Stage suggestion ──────────────────────────────────────────────────
+  let stageSuggestion: string | null = null;
+  const currentStageIdx = STAGES.indexOf(contact.pipelineStage);
+
+  if (intel.aiState === 'Engaging' && currentStageIdx <= 0) {
+    stageSuggestion = 'Contacted';
+  } else if (intel.aiState === 'Ready' && currentStageIdx <= 1) {
+    stageSuggestion = 'Proposal';
+  } else if (intel.leadScore.label === 'Hot' && intel.aiState === 'Qualifying' && currentStageIdx <= 1) {
+    stageSuggestion = 'Proposal';
+  } else if (intel.signalCount >= 2 && currentStageIdx === 0) {
+    stageSuggestion = 'Contacted';
+  }
+
+  // Sort actions: high → medium → low, deduplicate follow types
+  const priorityOrder: Record<string, number> = { high: 0, medium: 1, low: 2 };
+  actions.sort((a, b) => priorityOrder[a.priority] - priorityOrder[b.priority]);
+
+  // Deduplicate: keep highest-priority of each type
+  const seen = new Set<WorkflowActionType>();
+  const dedupedActions = actions.filter(a => {
+    if (seen.has(a.type)) return false;
+    seen.add(a.type);
+    return true;
+  });
+
+  return {
+    actions: dedupedActions,
+    tagSuggestion,
+    tagAutoApply,
+    stageSuggestion,
+    nextQuestion,
+    followUpDue,
+  };
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// VERIFICATION UTILITY — proves extraction + workflow against test conversations
+// ══════════════════════════════════════════════════════════════════════════════
+
+export interface VerificationCase {
+  name: string;
+  messages: ConversationMessage[];
+  contact: { tag: string; pipelineStage: string; followUpDate?: string | null; assignedTo?: string | null };
+  expected: {
+    budget?: string | null;
+    timeline?: string | null;
+    financing?: string | null;
+    intent?: string;
+    score?: string;
+    aiState?: string;
+    tagSuggestion?: string | null;
+    stageSuggestion?: string | null;
+  };
+}
+
+export const VERIFICATION_CASES: VerificationCase[] = [
+  {
+    name: 'Hot Buyer — Full Qualification',
+    messages: [
+      { direction: 'inbound',  content: "Hi! I'm looking to buy a home ASAP. My budget is around $550k-$600k." },
+      { direction: 'outbound', content: "Great! Do you have a preferred timeline?" },
+      { direction: 'inbound',  content: "I need to move within 2 months, already pre-approved for a mortgage." },
+      { direction: 'outbound', content: "Perfect! Would you like to schedule a viewing?" },
+      { direction: 'inbound',  content: "Yes! Interested in a 3BR in downtown." },
+    ],
+    contact: { tag: 'New', pipelineStage: 'Lead' },
+    expected: {
+      budget: '$550k-$600k',
+      timeline: '2 months',
+      financing: 'Pre-approved',
+      intent: 'Buyer',
+      score: 'Hot',
+      aiState: 'Ready',
+      tagSuggestion: 'Hot Lead',
+      stageSuggestion: 'Proposal',
+    },
+  },
+  {
+    name: 'Investor — Auto Tag',
+    messages: [
+      { direction: 'inbound',  content: "I'm looking for investment properties with good ROI and rental income." },
+      { direction: 'outbound', content: "What's your target budget for the investment?" },
+      { direction: 'inbound',  content: "Around $800k for a multi-unit property. Cash purchase." },
+    ],
+    contact: { tag: 'New', pipelineStage: 'Lead' },
+    expected: {
+      budget: '$800k',
+      financing: 'Cash buyer',
+      intent: 'Investor',
+      score: 'Hot',
+      tagSuggestion: 'Investor',
+      stageSuggestion: 'Contacted',
+    },
+  },
+  {
+    name: 'Cold Lead — Browsing, No Signals',
+    messages: [
+      { direction: 'inbound',  content: "Hi, just browsing. What areas do you cover?" },
+      { direction: 'outbound', content: "We cover all of downtown and the suburbs. Are you looking to buy?" },
+    ],
+    contact: { tag: 'New', pipelineStage: 'Lead' },
+    expected: {
+      budget: null,
+      timeline: null,
+      financing: null,
+      score: 'Cold',
+      aiState: 'Waiting',
+      stageSuggestion: null,
+    },
+  },
+  {
+    name: 'Warm Lead — Missing Financing',
+    messages: [
+      { direction: 'inbound',  content: "Looking to buy a home by summer. Budget is $450k." },
+      { direction: 'outbound', content: "Great! Have you looked into financing?" },
+      { direction: 'inbound',  content: "Not yet, still exploring options." },
+    ],
+    contact: { tag: 'Warm Lead', pipelineStage: 'Contacted' },
+    expected: {
+      budget: '$450k',
+      timeline: 'This Summer',
+      financing: 'Exploring',
+      intent: 'Buyer',
+      score: 'Warm',
+      aiState: 'Qualifying',
+    },
+  },
+  {
+    name: 'Follow-up Due — Last Message Outbound',
+    messages: [
+      { direction: 'inbound',  content: "I'm interested in properties in the $500k range." },
+      { direction: 'outbound', content: "I'll send you some listings. Let me know what you think!" },
+    ],
+    contact: { tag: 'Warm Lead', pipelineStage: 'Contacted', followUpDate: null },
+    expected: {
+      score: 'Warm',
+      aiState: 'Waiting',
+    },
+  },
+];
+
+export function runVerification(): void {
+  console.group('🤖 Copilot Intelligence Verification');
+  for (const tc of VERIFICATION_CASES) {
+    const intel    = analyzeConversation(tc.messages);
+    const workflow = computeWorkflow(intel, tc.contact);
+    const pass = (
+      (tc.expected.score     == null || intel.leadScore.label === tc.expected.score) &&
+      (tc.expected.aiState   == null || intel.aiState         === tc.expected.aiState) &&
+      (tc.expected.intent    == null || intel.intent          === tc.expected.intent) &&
+      (tc.expected.budget    === undefined || intel.budget    === tc.expected.budget) &&
+      (tc.expected.timeline  === undefined || intel.timeline?.toLowerCase().includes(tc.expected.timeline?.toLowerCase() ?? '') !== false) &&
+      (tc.expected.financing === undefined || intel.financing === tc.expected.financing)
+    );
+    console.groupCollapsed(`${pass ? '✅' : '❌'} ${tc.name}`);
+    console.table({
+      Budget:    { extracted: intel.budget,           expected: tc.expected.budget },
+      Timeline:  { extracted: intel.timeline,         expected: tc.expected.timeline },
+      Financing: { extracted: intel.financing,        expected: tc.expected.financing },
+      Intent:    { extracted: intel.intent,           expected: tc.expected.intent },
+      Score:     { extracted: intel.leadScore.label,  expected: tc.expected.score },
+      AIState:   { extracted: intel.aiState,          expected: tc.expected.aiState },
+    });
+    console.log('Workflow:', {
+      topAction:      workflow.actions[0]?.label,
+      tagSuggestion:  workflow.tagSuggestion,
+      tagAutoApply:   workflow.tagAutoApply,
+      stageSuggestion: workflow.stageSuggestion,
+      nextQuestion:   workflow.nextQuestion,
+      followUpDue:    workflow.followUpDue,
+    });
+    console.groupEnd();
+  }
+  console.groupEnd();
+}

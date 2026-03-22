@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import {
   Phone,
   Mail,
@@ -31,7 +31,12 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { cn } from "@/lib/utils";
 import { format, parseISO } from "date-fns";
 import { TAG_COLORS, PIPELINE_STAGES } from "@/lib/data";
-import { analyzeConversation, type ConversationMessage } from "@/lib/conversationIntelligence";
+import {
+  analyzeConversation,
+  computeWorkflow,
+  runVerification,
+  type ConversationMessage,
+} from "@/lib/conversationIntelligence";
 
 type Channel = 'whatsapp' | 'instagram' | 'facebook' | 'sms' | 'webchat' | 'telegram' | 'tiktok';
 
@@ -240,6 +245,31 @@ export function InboxLeadDetailsPanel({
   // ── Conversation intelligence — re-runs whenever messages change ──
   const intel = useMemo(() => analyzeConversation(messages), [messages]);
 
+  // ── Workflow layer — computes recommended actions from intel + contact state ──
+  const workflow = useMemo(() => computeWorkflow(intel, {
+    tag:           contact.tag || '',
+    pipelineStage: contact.pipelineStage || 'Lead',
+    followUpDate:  contact.followUpDate,
+    assignedTo:    contact.assignedTo,
+  }), [intel, contact.tag, contact.pipelineStage, contact.followUpDate, contact.assignedTo]);
+
+  // ── Auto-tag: apply tag automatically when signal is strong + current tag is neutral ──
+  const autoTagAppliedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!workflow.tagAutoApply || !workflow.tagSuggestion) return;
+    const key = `${contact.id}:${workflow.tagSuggestion}`;
+    if (autoTagAppliedRef.current === key) return;
+    autoTagAppliedRef.current = key;
+    onUpdateContact({ tag: workflow.tagSuggestion });
+  }, [workflow.tagAutoApply, workflow.tagSuggestion, contact.id, onUpdateContact]);
+
+  // ── Dev helper: expose verification runner to browser console ──
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      (window as any).__runCopilotVerification = runVerification;
+    }
+  }, []);
+
   const activeMembers  = teamMembers.filter(m => m.status === 'active');
   const assignedMember = activeMembers.find(m => (m.memberId || m.id) === contact.assignedTo);
   const assignedLabel  = assignedMember
@@ -284,6 +314,80 @@ export function InboxLeadDetailsPanel({
           <QualBadge ok={intel.hasTimeline}  label="Timeline"  value={intel.timeline} />
           <QualBadge ok={intel.hasFinancing} label="Financing" value={intel.financing} />
         </div>
+
+        {/* ── Workflow recommendations strip ─────────────────────────── */}
+        {(workflow.actions.length > 0 || workflow.tagSuggestion || workflow.stageSuggestion) && (
+          <div className="mt-2 pt-1.5 border-t border-purple-100">
+            <div className="flex items-center gap-0.5 mb-1">
+              <span className="text-[9px] font-bold text-purple-400 uppercase tracking-widest">Copilot suggests</span>
+            </div>
+            <div className="flex items-center gap-1 flex-wrap">
+              {workflow.actions.slice(0, 2).map(action => {
+                const actionHandlers: Record<string, () => void> = {
+                  assign: () => setAssignOpen(true),
+                  book:   () => setBookOpen(true),
+                  follow: () => setFollowOpen(true),
+                };
+                const handler = actionHandlers[action.type];
+                const colorCls = action.priority === 'high'
+                  ? 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100'
+                  : action.priority === 'medium'
+                  ? 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'
+                  : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100';
+                return (
+                  <button
+                    key={action.type}
+                    onClick={handler}
+                    disabled={!handler}
+                    title={action.reason}
+                    data-testid={`workflow-action-${action.type}`}
+                    className={cn(
+                      "text-[10px] font-medium px-1.5 py-0.5 rounded border transition-colors leading-none",
+                      colorCls,
+                      !handler && "opacity-60 cursor-default"
+                    )}
+                  >
+                    {action.label}
+                  </button>
+                );
+              })}
+
+              {/* Tag suggestion chip — only shows when NOT auto-applying */}
+              {workflow.tagSuggestion && !workflow.tagAutoApply && (
+                <button
+                  onClick={() => onUpdateContact({ tag: workflow.tagSuggestion! })}
+                  title={`AI suggests: Tag as "${workflow.tagSuggestion}"`}
+                  data-testid="workflow-tag-suggestion"
+                  className="text-[10px] font-medium px-1.5 py-0.5 rounded border bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 transition-colors leading-none"
+                >
+                  Tag: {workflow.tagSuggestion} ↗
+                </button>
+              )}
+
+              {/* Stage suggestion chip */}
+              {workflow.stageSuggestion && (
+                <button
+                  onClick={() => onUpdateContact({ pipelineStage: workflow.stageSuggestion! })}
+                  title={`AI suggests moving to ${workflow.stageSuggestion} stage`}
+                  data-testid="workflow-stage-suggestion"
+                  className="text-[10px] font-medium px-1.5 py-0.5 rounded border bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 transition-colors leading-none"
+                >
+                  → {workflow.stageSuggestion}
+                </button>
+              )}
+            </div>
+
+            {/* Next qualifying question hint */}
+            {workflow.nextQuestion && intel.messageCount > 0 && (
+              <p
+                className="mt-1 text-[10px] text-gray-400 leading-snug truncate"
+                title={`Next question: ${workflow.nextQuestion}`}
+              >
+                💬 {workflow.nextQuestion}
+              </p>
+            )}
+          </div>
+        )}
       </div>
 
       {/* ══ 2. COPILOT QUICK ACTIONS ══════════════════════════════════════ */}
