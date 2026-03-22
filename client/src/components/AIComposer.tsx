@@ -8,12 +8,15 @@ import {
   Sparkles,
   Zap,
   User,
+  CheckCircle2,
+  Clock,
 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import EmojiPicker from "emoji-picker-react";
 import { cn } from "@/lib/utils";
 
 type AIMode = "manual" | "suggest" | "auto";
+type AutoPhase = "idle" | "typing" | "replied" | "waiting";
 
 export interface AIComposerMessage {
   role: "user" | "assistant";
@@ -24,6 +27,8 @@ export interface AIComposerProps {
   value: string;
   onChange: (val: string) => void;
   onSend: () => void;
+  /** Direct send callback for Auto mode — bypasses controlled state */
+  onAutoSend?: (message: string) => void;
   aiEnabled: boolean;
   hasFullAIBrain?: boolean;
   conversationId: string | null;
@@ -36,14 +41,6 @@ export interface AIComposerProps {
   className?: string;
 }
 
-const AUTO_STATUS_MESSAGES = [
-  "AI is qualifying this lead…",
-  "Preparing follow-up…",
-  "AI is analyzing the conversation…",
-  "Waiting for response…",
-  "AI sent a message just now",
-];
-
 const MIN_TEXTAREA_HEIGHT = 58;
 const MAX_TEXTAREA_HEIGHT = 160;
 
@@ -51,6 +48,7 @@ export function AIComposer({
   value,
   onChange,
   onSend,
+  onAutoSend,
   aiEnabled,
   hasFullAIBrain = false,
   conversationId,
@@ -67,10 +65,12 @@ export function AIComposer({
   const [isDrafting, setIsDrafting] = useState(false);
   const [aiDraft, setAiDraft] = useState<string | null>(null);
   const [aiCooldown, setAiCooldown] = useState(false);
-  const [autoStatusIndex, setAutoStatusIndex] = useState(0);
+  const [autoPhase, setAutoPhase] = useState<AutoPhase>("idle");
   const [autoOverride, setAutoOverride] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const prevIdRef = useRef<string | null>(null);
+  const lastAutoReplyKeyRef = useRef<string>("");
+  const autoReplyInFlightRef = useRef(false);
 
   // Auto-resize textarea
   useEffect(() => {
@@ -88,18 +88,72 @@ export function AIComposer({
       setAiDraft(null);
       setIsDrafting(false);
       setAutoOverride(false);
+      setAutoPhase("idle");
+      lastAutoReplyKeyRef.current = "";
+      autoReplyInFlightRef.current = false;
     }
   }, [conversationId]);
 
-  // Rotate auto status text
-  useEffect(() => {
-    if (aiMode === "auto" && !autoOverride) {
-      const interval = setInterval(() => {
-        setAutoStatusIndex((i) => (i + 1) % AUTO_STATUS_MESSAGES.length);
-      }, 4000);
-      return () => clearInterval(interval);
+  // ─── Auto-reply engine ───────────────────────────────────────────────────
+  const executeAutoReply = useCallback(async (history: AIComposerMessage[]) => {
+    if (!conversationId || !aiEnabled || autoReplyInFlightRef.current) return;
+    autoReplyInFlightRef.current = true;
+    setAutoPhase("typing");
+
+    // Natural human-like delay before "typing"
+    await new Promise((r) => setTimeout(r, 1200 + Math.random() * 800));
+
+    try {
+      const res = await fetch("/api/ai/suggest-reply", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          chatId: conversationId,
+          conversationHistory: history.slice(-12),
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        const suggestion: string = data.suggestion || "";
+        if (suggestion.trim()) {
+          if (onAutoSend) {
+            onAutoSend(suggestion);
+          } else {
+            // Fallback: set value + send via parent
+            onChange(suggestion);
+            setTimeout(onSend, 80);
+          }
+          setAutoPhase("replied");
+          setTimeout(() => setAutoPhase("waiting"), 5000);
+        } else {
+          setAutoPhase("waiting");
+        }
+      } else {
+        setAutoPhase("waiting");
+      }
+    } catch {
+      setAutoPhase("waiting");
+    } finally {
+      autoReplyInFlightRef.current = false;
     }
-  }, [aiMode, autoOverride]);
+  }, [conversationId, aiEnabled, onAutoSend, onChange, onSend]);
+
+  // Watch messages: when in auto mode and last message is from lead → auto-reply
+  const lastMsg = messages[messages.length - 1];
+  const lastMsgKey = messages.length > 0 ? `${messages.length}::${lastMsg?.content ?? ""}` : "";
+  const lastMsgIsFromLead = lastMsg?.role === "user";
+
+  useEffect(() => {
+    if (aiMode !== "auto" || autoOverride) return;
+    if (!lastMsgIsFromLead) return;
+    if (lastMsgKey === lastAutoReplyKeyRef.current) return; // already handled
+
+    lastAutoReplyKeyRef.current = lastMsgKey;
+    executeAutoReply(messages);
+  }, [aiMode, autoOverride, lastMsgKey, lastMsgIsFromLead, messages, executeAutoReply]);
+  // ─────────────────────────────────────────────────────────────────────────
 
   const fetchSuggestion = useCallback(async () => {
     if (!conversationId || !aiEnabled || demoMode || aiCooldown) return;
@@ -140,8 +194,15 @@ export function AIComposer({
     setIsDrafting(false);
     setAutoOverride(false);
     onChange("");
+
     if (mode === "suggest" && aiEnabled) fetchSuggestion();
-    if (mode === "auto") setAutoStatusIndex(0);
+
+    if (mode === "auto") {
+      setAutoPhase("idle");
+      // Reset key so the effect will fire for the current last message
+      lastAutoReplyKeyRef.current = "";
+      autoReplyInFlightRef.current = false;
+    }
   };
 
   const handleTextareaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -170,15 +231,38 @@ export function AIComposer({
   const isAutoPassive = aiMode === "auto" && !autoOverride;
   const isSuggestMode = aiMode === "suggest" && aiEnabled;
 
+  // ─── Status line text ────────────────────────────────────────────────────
   const statusLineText = (() => {
     if (isSuggestMode) {
       if (isDrafting) return "AI is drafting a reply…";
       if (aiDraft) return "AI reply ready — edit or send";
       return "Switching to AI Suggest…";
     }
-    if (isAutoPassive) return AUTO_STATUS_MESSAGES[autoStatusIndex];
+    if (isAutoPassive) {
+      if (autoPhase === "typing") return "AI is typing…";
+      if (autoPhase === "replied") return "AI replied — waiting for customer response";
+      return "Waiting for customer response…";
+    }
     return null;
   })();
+
+  const statusIsSpinning = isDrafting || (isAutoPassive && autoPhase === "typing");
+
+  // ─── Auto-passive icon & label ───────────────────────────────────────────
+  const AutoIcon = autoPhase === "typing"
+    ? Loader2
+    : autoPhase === "replied"
+    ? CheckCircle2
+    : Clock;
+
+  const autoLabel =
+    autoPhase === "typing"
+      ? "AI is typing a reply…"
+      : autoPhase === "replied"
+      ? "AI replied — waiting for response"
+      : autoPhase === "idle"
+      ? "AI is ready to respond"
+      : "Waiting for customer response…";
 
   return (
     <div className={cn("border-t border-gray-200 bg-white shrink-0", className)}>
@@ -188,7 +272,9 @@ export function AIComposer({
         <div className="px-4 py-1 flex items-center gap-1.5 bg-gray-50/60 border-b border-gray-100">
           <Sparkles className="w-2.5 h-2.5 text-purple-400 shrink-0" />
           <span className="text-[10px] text-gray-400 italic tracking-wide">{statusLineText}</span>
-          {isDrafting && <Loader2 className="w-2.5 h-2.5 text-purple-400 animate-spin ml-0.5 shrink-0" />}
+          {statusIsSpinning && (
+            <Loader2 className="w-2.5 h-2.5 text-purple-400 animate-spin ml-0.5 shrink-0" />
+          )}
         </div>
       )}
 
@@ -221,17 +307,40 @@ export function AIComposer({
           </div>
         )}
 
-        {/* Row 2: Textarea or Auto-passive */}
+        {/* Row 2: Auto-passive panel or Textarea */}
         {isAutoPassive ? (
           <div
             onClick={handleAutoOverride}
             data-testid="auto-mode-passive-input"
-            className="flex items-center gap-2 w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-3 text-sm text-gray-400 cursor-pointer select-none"
+            className={cn(
+              "flex items-center gap-2.5 w-full rounded-xl px-3.5 py-3 cursor-pointer select-none transition-colors",
+              autoPhase === "typing"
+                ? "bg-purple-50 border border-purple-200"
+                : "bg-gray-50 border border-gray-200 hover:bg-gray-100/60"
+            )}
             style={{ minHeight: MIN_TEXTAREA_HEIGHT }}
           >
-            <Zap className="w-3.5 h-3.5 text-purple-400 shrink-0" />
-            <span className="italic flex-1 leading-relaxed text-[13px]">AI is handling this conversation…</span>
-            <span className="text-[10px] text-purple-500 not-italic font-medium whitespace-nowrap opacity-80">Click to take over</span>
+            <AutoIcon
+              className={cn(
+                "w-4 h-4 shrink-0",
+                autoPhase === "typing"
+                  ? "text-purple-500 animate-spin"
+                  : autoPhase === "replied"
+                  ? "text-emerald-500"
+                  : "text-gray-400"
+              )}
+            />
+            <span
+              className={cn(
+                "italic flex-1 leading-relaxed text-[13px]",
+                autoPhase === "typing" ? "text-purple-600" : "text-gray-500"
+              )}
+            >
+              {autoLabel}
+            </span>
+            <span className="text-[10px] text-purple-400 not-italic font-medium whitespace-nowrap opacity-70">
+              Click to take over
+            </span>
           </div>
         ) : (
           <textarea
@@ -300,7 +409,7 @@ export function AIComposer({
             )}
           </div>
 
-          {/* Right: regenerate + send */}
+          {/* Right: regenerate + send (hidden in auto passive) */}
           {!isAutoPassive && (
             <div className="flex items-center gap-2">
               {isSuggestMode && !isDrafting && aiDraft && (

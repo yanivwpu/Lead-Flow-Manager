@@ -512,6 +512,11 @@ export function UnifiedInbox() {
     sendMessageMutation.mutate({ contactId: selectedContactId, content: messageInput });
   };
 
+  const handleAutoSend = useCallback((message: string) => {
+    if (!message.trim() || !selectedContactId) return;
+    sendMessageMutation.mutate({ contactId: selectedContactId, content: message });
+  }, [selectedContactId, sendMessageMutation]);
+
   const handleEditContact = () => {
     if (contactData?.contact) {
       setEditContactForm({
@@ -876,6 +881,7 @@ export function UnifiedInbox() {
               value={messageInput}
               onChange={setMessageInput}
               onSend={handleSendMessage}
+              onAutoSend={handleAutoSend}
               aiEnabled={aiEnabled}
               hasFullAIBrain={hasFullAIBrain}
               conversationId={primaryConversation?.id ?? selectedContactId}
