@@ -338,7 +338,7 @@ export function UnifiedInbox() {
     if (isDemoUser && selectedDemoChat) {
       return selectedDemoChat.messages.map((m: any, i: number) => ({
         id: m.id || `demo-msg-${i}`,
-        direction: (m.sender === 'me' || m.sender === 'agent' ? 'outbound' : 'inbound') as 'outbound' | 'inbound',
+        direction: (m.role === 'assistant' || m.sender === 'me' || m.sender === 'agent' ? 'outbound' : 'inbound') as 'outbound' | 'inbound',
         content: m.text || m.content,
         contentType: 'text',
         status: 'sent',
@@ -878,12 +878,11 @@ export function UnifiedInbox() {
               onSend={handleSendMessage}
               aiEnabled={aiEnabled}
               hasFullAIBrain={hasFullAIBrain}
-              conversationId={selectedContactId}
+              conversationId={primaryConversation?.id ?? selectedContactId}
               messages={messages.map((m) => ({
                 role: m.direction === 'inbound' ? 'user' : 'assistant',
                 content: m.content || '',
               }))}
-              demoMode={isDemoUser}
             />
           </>
         ) : (
