@@ -4763,27 +4763,6 @@ export async function registerRoutes(
     }
   });
 
-  // Get AI usage
-  app.get("/api/ai/usage", async (req, res) => {
-    try {
-      if (!req.user) {
-        return res.status(401).json({ error: "Unauthorized" });
-      }
-      const userId = req.user.id;
-      const usage = await storage.getCurrentAiUsage(userId);
-      res.json(usage || {
-        messagesGenerated: 0,
-        repliesSuggested: 0,
-        leadsQualified: 0,
-        periodStart: new Date().toISOString(),
-        periodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-      });
-    } catch (error) {
-      console.error("AI usage fetch error:", error);
-      res.status(500).json({ error: "Failed to fetch AI usage" });
-    }
-  });
-
   // Get AI health status (no numeric details exposed)
   app.get("/api/ai/health", async (req, res) => {
     try {
@@ -4897,7 +4876,7 @@ export async function registerRoutes(
       }
       const userId = req.user.id;
 
-      const { chatId, conversationHistory, tone, aiMode: requestedMode } = req.body;
+      const { chatId, conversationHistory, tone, aiMode: requestedMode, contactContext } = req.body;
 
       // Check access and plan eligibility (pass mode to enforce Auto=Pro-only)
       const access = await checkAiBrainAccess(userId, requestedMode === 'auto' ? 'auto' : 'suggest');
@@ -4961,7 +4940,8 @@ export async function registerRoutes(
         knowledge || undefined,
         settings || undefined,
         selectedTone,
-        aiLanguage
+        aiLanguage,
+        contactContext || undefined
       );
       
       // Track usage

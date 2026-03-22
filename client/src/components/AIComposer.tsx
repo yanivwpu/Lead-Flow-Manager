@@ -26,6 +26,18 @@ export interface AIComposerMessage {
   content: string;
 }
 
+export interface ContactContext {
+  name?: string;
+  tag?: string;
+  pipelineStage?: string;
+  notes?: string;
+  budget?: string;
+  timeline?: string;
+  financing?: string;
+  intent?: string;
+  leadScore?: string;
+}
+
 export interface AIComposerProps {
   value: string;
   onChange: (val: string) => void;
@@ -36,6 +48,8 @@ export interface AIComposerProps {
   hasFullAIBrain?: boolean;
   /** Full capability object from useAICapabilities — drives gating & credit display */
   capabilities?: AICapabilities;
+  /** CRM context injected into AI prompt to improve reply quality */
+  contactContext?: ContactContext;
   conversationId: string | null;
   messages: AIComposerMessage[];
   demoMode?: boolean;
@@ -49,6 +63,16 @@ export interface AIComposerProps {
 const MIN_TEXTAREA_HEIGHT = 58;
 const MAX_TEXTAREA_HEIGHT = 160;
 
+// Canned demo replies for when demoMode=true (no real API call)
+const DEMO_SUGGESTIONS = [
+  "Got it — I'll pull up the best matches for your criteria. Are you flexible on location or is it a hard requirement?",
+  "That sounds like a great fit. Would a weekday or weekend viewing work better for you?",
+  "Understood. Based on that budget, I have a few strong options ready. Want me to send over the details?",
+  "Perfect — that timeline works well. Are you pre-approved, or would you like me to recommend a lender?",
+  "Great choice. Shall I book a quick call with our specialist to walk you through the options?",
+];
+let _demoCycleIdx = 0;
+
 export function AIComposer({
   value,
   onChange,
@@ -57,6 +81,7 @@ export function AIComposer({
   aiEnabled,
   hasFullAIBrain = false,
   capabilities,
+  contactContext,
   conversationId,
   messages,
   demoMode = false,
@@ -121,6 +146,8 @@ export function AIComposer({
         body: JSON.stringify({
           chatId: conversationId,
           conversationHistory: history.slice(-12),
+          aiMode: 'auto',
+          ...(contactContext ? { contactContext } : {}),
         }),
       });
 
@@ -148,7 +175,7 @@ export function AIComposer({
     } finally {
       autoReplyInFlightRef.current = false;
     }
-  }, [conversationId, aiEnabled, onAutoSend, onChange, onSend]);
+  }, [conversationId, aiEnabled, contactContext, onAutoSend, onChange, onSend]);
 
   // Watch messages: when in auto mode and last message is from lead → auto-reply
   const lastMsg = messages[messages.length - 1];
@@ -166,12 +193,23 @@ export function AIComposer({
   // ─────────────────────────────────────────────────────────────────────────
 
   const fetchSuggestion = useCallback(async () => {
-    if (!conversationId || !aiEnabled || demoMode || aiCooldown) return;
+    if (!conversationId || !aiEnabled || aiCooldown) return;
     setIsDrafting(true);
     setAiDraft(null);
     onChange("");
     setAiCooldown(true);
     setTimeout(() => setAiCooldown(false), 3000);
+
+    // Demo mode: simulate a realistic reply without a real API call
+    if (demoMode) {
+      await new Promise(r => setTimeout(r, 900 + Math.random() * 600));
+      const demo = DEMO_SUGGESTIONS[_demoCycleIdx % DEMO_SUGGESTIONS.length];
+      _demoCycleIdx++;
+      setAiDraft(demo);
+      onChange(demo);
+      setIsDrafting(false);
+      return;
+    }
 
     try {
       const res = await fetch("/api/ai/suggest-reply", {
@@ -181,6 +219,7 @@ export function AIComposer({
         body: JSON.stringify({
           chatId: conversationId,
           conversationHistory: messages.slice(-12),
+          ...(contactContext ? { contactContext } : {}),
         }),
       });
       if (res.ok) {
@@ -196,7 +235,7 @@ export function AIComposer({
     } finally {
       setIsDrafting(false);
     }
-  }, [conversationId, aiEnabled, demoMode, aiCooldown, messages, onChange]);
+  }, [conversationId, aiEnabled, demoMode, aiCooldown, messages, contactContext, onChange]);
 
   const handleModeChange = (mode: AIMode) => {
     setAiMode(mode);

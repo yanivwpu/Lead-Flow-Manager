@@ -60,6 +60,8 @@ import { TAG_COLORS } from "@/lib/data";
 import { useToast } from "@/hooks/use-toast";
 import { InboxLeadDetailsPanel } from "@/components/InboxLeadDetailsPanel";
 import { useAICapabilities } from "@/lib/useAICapabilities";
+import { analyzeConversation } from "@/lib/conversationIntelligence";
+import type { ContactContext } from "@/components/AIComposer";
 
 type Channel = 'whatsapp' | 'instagram' | 'facebook' | 'sms' | 'webchat' | 'telegram' | 'tiktok';
 type FilterTab = 'all' | 'unread' | 'mine';
@@ -228,6 +230,24 @@ export function UnifiedInbox() {
 
   // Unified AI capabilities from plan + usage data
   const capabilities = useAICapabilities();
+
+  // Build contact context for AI reply quality improvement
+  const contactContext: ContactContext | undefined = useMemo(() => {
+    if (!contact) return undefined;
+    const msgList = messages.map(m => ({ direction: m.direction, content: m.content || '' }));
+    const intel = msgList.length > 0 ? analyzeConversation(msgList) : null;
+    return {
+      name:          contact.name,
+      tag:           contact.tag || undefined,
+      pipelineStage: contact.pipelineStage || undefined,
+      notes:         contact.notes || undefined,
+      budget:        intel?.budget ?? undefined,
+      timeline:      intel?.timeline ?? undefined,
+      financing:     intel?.financing ?? undefined,
+      intent:        intel?.intent,
+      leadScore:     intel?.leadScore?.label,
+    };
+  }, [contact, messages]);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [filterTab, setFilterTab] = useState<FilterTab>('all');
@@ -889,6 +909,7 @@ export function UnifiedInbox() {
               aiEnabled={aiEnabled}
               hasFullAIBrain={hasFullAIBrain}
               capabilities={capabilities}
+              contactContext={contactContext}
               conversationId={primaryConversation?.id ?? selectedContactId}
               messages={messages.map((m) => ({
                 role: m.direction === 'inbound' ? 'user' : 'assistant',
@@ -918,6 +939,7 @@ export function UnifiedInbox() {
           teamMembers={teamMembers}
           messages={messages.map(m => ({ direction: m.direction, content: m.content || '' }))}
           capabilities={capabilities}
+          onInsertMessage={text => setMessageInput(text)}
           onUpdateContact={updateContact}
           onUpdateConversationStatus={status => {
             if (primaryConversation) {

@@ -18,7 +18,9 @@ import {
   User,
   Clock,
   ArrowLeft,
+  ClipboardCopy,
 } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 import {
   Select,
   SelectContent,
@@ -149,6 +151,8 @@ interface InboxLeadDetailsPanelProps {
   onUpdateConversationStatus: (status: string) => void;
   onEditContact: () => void;
   onDeleteContact: () => void;
+  /** Called when a qualifying question is clicked — inserts it into the composer */
+  onInsertMessage?: (text: string) => void;
 }
 
 function RowLabel({ children }: { children: React.ReactNode }) {
@@ -169,7 +173,9 @@ export function InboxLeadDetailsPanel({
   onUpdateConversationStatus,
   onEditContact,
   onDeleteContact,
+  onInsertMessage,
 }: InboxLeadDetailsPanelProps) {
+  const { toast } = useToast();
   // Default to full access if no capabilities provided (backward compat)
   const canSeeCopilot    = capabilities ? capabilities.canUseCopilotIntelligence    : true;
   const canSeeWorkflow   = capabilities ? capabilities.canUseWorkflowRecommendations : true;
@@ -345,8 +351,8 @@ export function InboxLeadDetailsPanel({
             <AIUpgradePrompt
               feature="Workflow recommendations"
               requiredPlan={workflowUpgradeTo}
-              reason="Automated action suggestions, tag triggers, and stage recommendations."
-              size="sm"
+              reason="One-click action chips: assign agents, book appointments, trigger follow-ups, and move pipeline stages automatically."
+              size="md"
               className="mt-0.5"
             />
           </div>
@@ -359,9 +365,20 @@ export function InboxLeadDetailsPanel({
             <div className="flex items-center gap-1 flex-wrap">
               {workflow.actions.slice(0, 2).map(action => {
                 const actionHandlers: Record<string, () => void> = {
-                  assign: () => setAssignOpen(true),
-                  book:   () => setBookOpen(true),
-                  follow: () => setFollowOpen(true),
+                  assign:  () => setAssignOpen(true),
+                  book:    () => setBookOpen(true),
+                  follow:  () => setFollowOpen(true),
+                  qualify: action.value ? () => {
+                    if (onInsertMessage && action.value) {
+                      onInsertMessage(action.value);
+                    } else if (action.value) {
+                      navigator.clipboard.writeText(action.value).catch(() => {});
+                      toast({ title: "Copied to clipboard", description: action.value, duration: 2500 });
+                    }
+                  } : undefined as unknown as () => void,
+                  nurture: () => {
+                    toast({ title: "Added to nurture queue", description: "This lead will receive a check-in in 7 days.", duration: 3000 });
+                  },
                 };
                 const handler = actionHandlers[action.type];
                 const colorCls = action.priority === 'high'
@@ -412,14 +429,25 @@ export function InboxLeadDetailsPanel({
               )}
             </div>
 
-            {/* Next qualifying question hint */}
+            {/* Next qualifying question hint — click to insert into composer */}
             {workflow.nextQuestion && intel.messageCount > 0 && (
-              <p
-                className="mt-1 text-[10px] text-gray-400 leading-snug truncate"
-                title={`Next question: ${workflow.nextQuestion}`}
+              <button
+                className="mt-1 flex items-start gap-1 text-left group w-full"
+                title="Click to insert into composer"
+                onClick={() => {
+                  if (onInsertMessage) {
+                    onInsertMessage(workflow.nextQuestion!);
+                  } else {
+                    navigator.clipboard.writeText(workflow.nextQuestion!).catch(() => {});
+                    toast({ title: "Copied to clipboard", description: workflow.nextQuestion!, duration: 2500 });
+                  }
+                }}
               >
-                💬 {workflow.nextQuestion}
-              </p>
+                <ClipboardCopy className="w-2.5 h-2.5 text-purple-300 group-hover:text-purple-500 shrink-0 mt-0.5 transition-colors" />
+                <span className="text-[10px] text-gray-400 group-hover:text-purple-600 leading-snug transition-colors line-clamp-2">
+                  {workflow.nextQuestion}
+                </span>
+              </button>
             )}
           </div>
         )}
@@ -512,7 +540,13 @@ export function InboxLeadDetailsPanel({
                   </div>
                   <button
                     disabled={!bookingDate}
-                    onClick={() => { if (bookingDate) setBookingConfirmed(true); }}
+                    onClick={() => {
+                    if (bookingDate) {
+                      setBookingConfirmed(true);
+                      const dateStr = format(bookingDate, 'MMM d') + ' at ' + formatTime24to12(bookingTime);
+                      toast({ title: `${bookingType} booked`, description: `${contact.name} · ${dateStr}`, duration: 3500 });
+                    }
+                  }}
                     className={cn(
                       "w-full mt-1 py-1.5 rounded-lg text-[11px] font-semibold transition-colors",
                       bookingDate

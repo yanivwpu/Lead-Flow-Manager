@@ -37,11 +37,22 @@ export class AIService {
     businessKnowledge?: AiBusinessKnowledge,
     settings?: AiSettings,
     tone?: "neutral" | "friendly" | "professional" | "sales",
-    language?: SupportedAiLanguage
+    language?: SupportedAiLanguage,
+    contactContext?: {
+      name?: string;
+      tag?: string;
+      pipelineStage?: string;
+      notes?: string;
+      budget?: string;
+      timeline?: string;
+      financing?: string;
+      intent?: string;
+      leadScore?: string;
+    }
   ): Promise<{ suggestion: string; confidence: number }> {
     const lastMessage = conversationHistory[conversationHistory.length - 1]?.content || "";
     const detectedLanguage = language || await this.detectMessageLanguage(lastMessage);
-    const systemPrompt = this.buildSystemPrompt(businessKnowledge, settings, tone, detectedLanguage);
+    const systemPrompt = this.buildSystemPrompt(businessKnowledge, settings, tone, detectedLanguage, contactContext);
     
     try {
       const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
@@ -259,7 +270,18 @@ Return JSON: { "summary": "your summary" }`;
     businessKnowledge?: AiBusinessKnowledge, 
     settings?: AiSettings,
     tone?: "neutral" | "friendly" | "professional" | "sales",
-    language?: SupportedAiLanguage
+    language?: SupportedAiLanguage,
+    contactContext?: {
+      name?: string;
+      tag?: string;
+      pipelineStage?: string;
+      notes?: string;
+      budget?: string;
+      timeline?: string;
+      financing?: string;
+      intent?: string;
+      leadScore?: string;
+    }
   ): string {
     const langInstruction = language ? LANGUAGE_PROMPTS[language].instruction : LANGUAGE_PROMPTS.en.instruction;
     const industry = (businessKnowledge?.industry || "general").toLowerCase();
@@ -292,7 +314,16 @@ BUSINESS CONTEXT:
 - Location: ${businessKnowledge?.locations || "Available online"}
 - Hours: ${businessKnowledge?.businessHours || "Standard hours"}${businessKnowledge?.bookingLink ? `\n- Booking: ${businessKnowledge.bookingLink}` : ""}
 
-CORE RULES — READ CAREFULLY:
+${contactContext ? `LEAD CRM CONTEXT (use this to personalize your reply):
+${contactContext.name ? `- Lead name: ${contactContext.name}` : ''}
+${contactContext.pipelineStage ? `- Pipeline stage: ${contactContext.pipelineStage}` : ''}
+${contactContext.leadScore ? `- Lead score: ${contactContext.leadScore}` : ''}
+${contactContext.intent ? `- Detected intent: ${contactContext.intent}` : ''}
+${contactContext.budget ? `- Budget (already mentioned): ${contactContext.budget} — DO NOT ask for budget again` : ''}
+${contactContext.timeline ? `- Timeline (already mentioned): ${contactContext.timeline} — DO NOT ask for timeline again` : ''}
+${contactContext.financing ? `- Financing (already mentioned): ${contactContext.financing} — DO NOT ask about financing again` : ''}
+${contactContext.notes ? `- Agent notes: ${contactContext.notes}` : ''}
+` : ''}CORE RULES — READ CAREFULLY:
 
 1. READ THE FULL CONVERSATION before replying. Extract what is already known: property interest, intent, budget, timeline, name, location.
 
