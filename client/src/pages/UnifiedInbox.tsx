@@ -2,6 +2,8 @@ import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useRoute, useLocation } from "wouter";
 import { useAuth } from "@/lib/auth-context";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useSubscription } from "@/lib/subscription-context";
+import { AIComposer } from "@/components/AIComposer";
 import {
   Search,
   Send,
@@ -29,7 +31,6 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu,
@@ -211,6 +212,18 @@ export function UnifiedInbox() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { data: subscription } = useSubscription();
+
+  // AI access flags
+  const plan = (subscription?.limits as any)?.plan || "free";
+  const hasAIAssist = plan === "starter" || plan === "pro" || plan === "enterprise";
+  const hasAIBrainAddon = (subscription?.limits as any)?.hasAIBrainAddon ?? false;
+  const hasFullAIBrain = hasAIBrainAddon && hasAIAssist;
+  const { data: aiSettings } = useQuery({
+    queryKey: ["/api/ai/settings"],
+    enabled: !!user && hasAIAssist,
+  });
+  const aiEnabled = hasAIAssist && (hasFullAIBrain ? ((aiSettings as any)?.aiMode !== "off") : true);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [filterTab, setFilterTab] = useState<FilterTab>('all');
@@ -859,27 +872,19 @@ export function UnifiedInbox() {
             </div>
 
             {/* Composer */}
-            <div className="p-3 border-t flex-shrink-0">
-              <div className="flex items-end gap-2">
-                <Textarea
-                  placeholder="Type a message..."
-                  className="min-h-[40px] max-h-[120px] resize-none text-sm"
-                  value={messageInput}
-                  onChange={e => setMessageInput(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(); } }}
-                  data-testid="textarea-message-input"
-                />
-                <Button
-                  size="sm"
-                  onClick={handleSendMessage}
-                  disabled={!messageInput.trim() || sendMessageMutation.isPending}
-                  className="h-10 px-3 flex-shrink-0"
-                  data-testid="button-send-message"
-                >
-                  {sendMessageMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                </Button>
-              </div>
-            </div>
+            <AIComposer
+              value={messageInput}
+              onChange={setMessageInput}
+              onSend={handleSendMessage}
+              aiEnabled={aiEnabled}
+              hasFullAIBrain={hasFullAIBrain}
+              conversationId={selectedContactId}
+              messages={messages.map((m) => ({
+                role: m.direction === 'inbound' ? 'user' : 'assistant',
+                content: m.content || '',
+              }))}
+              demoMode={isDemoUser}
+            />
           </>
         ) : (
           /* Empty state */

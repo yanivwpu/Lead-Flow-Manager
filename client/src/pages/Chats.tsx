@@ -1025,14 +1025,18 @@ export function Chats() {
               )}
 
               <AIComposer
-                newMessage={newMessage}
-                setNewMessage={setNewMessage}
-                handleSendMessage={handleSendMessage}
+                value={newMessage}
+                onChange={setNewMessage}
+                onSend={handleSendMessage}
                 setTyping={setTyping}
                 typingTimeoutRef={typingTimeoutRef}
                 aiEnabled={aiEnabled}
                 hasFullAIBrain={hasFullAIBrain}
-                selectedChat={selectedChat ?? null}
+                conversationId={selectedChat?.id ?? null}
+                messages={(selectedChat?.messages ?? []).map((m: any) => ({
+                  role: m.direction === 'incoming' ? 'user' : 'assistant',
+                  content: m.text || '',
+                }))}
                 demoMode={demoMode}
                 fileInputRef={fileInputRef}
                 handleFileSelect={handleFileSelect}
