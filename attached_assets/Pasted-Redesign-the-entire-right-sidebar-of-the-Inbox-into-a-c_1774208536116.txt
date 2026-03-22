@@ -1,0 +1,197 @@
+Redesign the entire right sidebar of the Inbox into a compact, high-density, Stripe/Linear-style layout while preserving all existing functionality and adding the new AI Copilot layer.
+
+IMPORTANT SCOPE
+- Only redesign the right sidebar
+- Do NOT redesign the left conversation list
+- Do NOT redesign the main chat thread
+- Do NOT redesign the top bar
+- Preserve all existing data and functionality already present in the sidebar
+- Integrate AI Copilot cleanly at the top
+- Optimize for minimal vertical space, fast scanning, and clear actions
+
+GOAL
+Turn the right sidebar from a stacked form into a compact decision panel that combines:
+1. AI Copilot intelligence
+2. Lead management controls
+3. Follow-up actions
+4. Notes / memory
+All in one clean, tight layout with minimal wasted space.
+
+DESIGN PRINCIPLES
+- Compact and premium, like Stripe / Linear
+- Reduce vertical height of current form controls
+- Replace bulky full-width dropdown rows with compact inline controls
+- Keep most important information visible without excessive scrolling
+- Avoid large empty paddings, oversized labels, and full-width inputs when not necessary
+- Use collapsible sections only for secondary information, not key data
+- No nested cards inside cards unless necessary
+- Prioritize scanability in under 2 seconds
+
+FINAL SIDEBAR LAYOUT (TOP TO BOTTOM)
+
+1. AI COPILOT HEADER (NEW)
+Create a compact header section at the very top of the sidebar with:
+- Title: AI Copilot
+- Small AI status indicator on same row:
+  - Active
+  - Paused
+  - Suggest Mode
+  - Auto Mode
+- Small AI toggle or mode badge on right side
+- Optional small usage counter if available:
+  - Example: AI 12/50
+This section must be compact, single-header style, not a large card.
+
+2. LEAD INTELLIGENCE SNAPSHOT (NEW)
+Directly under AI Copilot header, add a tight lead snapshot block:
+- Lead score: Hot / Warm / Cold
+- AI state: Qualifying / Waiting / Ready / Stalled
+- Intent: Buyer / Seller / Renter / Investor / Customer
+- Qualification snapshot in compact 2-column format:
+  - Budget
+  - Timeline
+  - Financing
+  - Interest / Intent
+Use plain text rows or small compact chips, not large cards.
+
+Example structure:
+- Hot Lead • Qualifying
+- Budget: $500k–$600k
+- Timeline: Missing
+- Financing: Missing
+- Intent: Buyer
+
+3. QUALIFICATION PROGRESS (NEW)
+Add a very compact progress row showing what AI has already captured:
+- Budget
+- Timeline
+- Financing
+Display this inline using compact indicators:
+- complete
+- missing
+- partial
+Example:
+[✓ Budget] [~ Timeline] [ ] Financing]
+This should take one row if possible.
+
+4. AI QUICK ACTIONS (NEW)
+Add a compact action row or 2x2 button grid:
+- Book
+- Assign
+- Follow-up
+- Pause AI
+These should be small modern buttons/chips, not large full-width buttons.
+Actions must be easy to tap/click and always visible near the top half of the sidebar.
+
+5. COMPACT LEAD MANAGEMENT CONTROLS (REDESIGN EXISTING)
+Preserve existing lead management fields but redesign them tightly.
+
+Required fields to preserve:
+- Contact info
+- Source
+- Status
+- Assigned to
+- Pipeline stage
+- Status tags
+
+Layout rules:
+- Contact info remains visible, but compact
+- Source can stay as a simple compact read-only field
+- Status and Pipeline Stage must be displayed side-by-side in one row using compact inline selectors or chip-style dropdowns
+  Example:
+  [ Pending ▾ ]   [ Negotiation ▾ ]
+- Assigned to should be compact, not oversized
+- Avoid labels consuming full rows unless necessary
+- Labels should be small/subtle
+- Inputs/selectors should be reduced in height
+
+Do NOT keep the current bulky stacked dropdown style if a tighter layout can be used.
+
+6. STATUS TAGS (PRESERVE, TIGHTEN)
+Keep status tags but redesign spacing to be tighter and cleaner.
+- Maintain existing tags functionality
+- Use compact pill spacing
+- Ensure no excessive vertical gaps
+- Tags should wrap neatly
+This section should remain below lead management controls.
+
+7. NEXT FOLLOW-UP SECTION (ENHANCE)
+Keep existing follow-up buttons:
+- Tomorrow
+- 3 days
+- 1 week
+- Custom
+
+But redesign them into a compact horizontal button group or compact chip row.
+Add AI recommendation text above or below:
+- AI Recommended: Follow up in 24h
+This section should remain lightweight and fast to scan.
+
+8. NOTES / AI MEMORY (ENHANCE)
+Preserve the notes section, but make it smarter and tighter.
+This section should support:
+- Manual notes
+- AI-extracted memory / summary
+Examples:
+- Interested in 3BR condo downtown
+- Budget $500k–$600k
+- Saturday 11am preferred
+If possible, visually distinguish manual notes from AI memory in a subtle way.
+Do not make notes overly tall by default.
+
+9. DELETE CONTACT (PRESERVE)
+Keep delete contact action at bottom
+- Secondary/destructive style
+- Not oversized
+- Leave at bottom of sidebar
+
+VISUAL / UX REQUIREMENTS
+- Sidebar should feel like a compact operating panel, not a long settings form
+- Key information should appear above the fold:
+  - AI Copilot
+  - Lead score/status
+  - Qualification info
+  - Actions
+  - Status/stage
+- Keep spacing tight but breathable
+- Use typography hierarchy:
+  - Small muted labels
+  - Strong readable values
+- Prefer inline layouts over stacked layouts where possible
+- Use compact chips/selectors for frequently edited properties
+- Avoid giant dropdown boxes for one-word values
+- Avoid unnecessary separators if spacing already defines sections well
+
+COPILOT-SPECIFIC REQUIREMENTS
+- AI Copilot must feel integrated, not bolted on
+- It should sit above the traditional CRM fields
+- It must show:
+  - Lead score
+  - AI state
+  - Qualification data
+  - Progress tracker
+  - Quick actions
+- This is the decision layer of the product and must be immediately useful
+
+DO NOT
+- Do not remove existing lead management functionality
+- Do not create a huge card that pushes everything down
+- Do not use bulky full-width form controls unless unavoidable
+- Do not hide critical information behind accordions
+- Do not turn the sidebar into a complex builder or settings page
+- Do not modify unrelated inbox areas
+
+IMPLEMENTATION SAFETY
+- Build the new sidebar as a clean component or carefully refactor the existing sidebar
+- Preserve current data bindings and business logic
+- Only improve layout, hierarchy, and AI Copilot integration
+- Keep component changes localized to the sidebar
+
+ACCEPTANCE CRITERIA
+- Sidebar is visibly tighter and more premium
+- AI Copilot appears at the top and feels native
+- Status + Pipeline Stage are compact and side-by-side
+- Key lead intelligence is visible without excessive scrolling
+- Existing CRM controls still work
+- Notes and follow-up remain present
+- Overall result feels like a compact decision panel, not a stacked form
