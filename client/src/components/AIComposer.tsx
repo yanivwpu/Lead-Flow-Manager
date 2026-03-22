@@ -21,27 +21,18 @@ export interface AIComposerMessage {
 }
 
 export interface AIComposerProps {
-  /** Controlled value of the message input */
   value: string;
   onChange: (val: string) => void;
-  /** Called when the user triggers a send (Enter or Send button) */
   onSend: () => void;
-  /** Whether AI features are enabled for this user */
   aiEnabled: boolean;
   hasFullAIBrain?: boolean;
-  /** ID of the current conversation / chat / contact */
   conversationId: string | null;
-  /** Flattened message history for AI context */
   messages: AIComposerMessage[];
-  /** If true, suppress AI features even if aiEnabled is true */
   demoMode?: boolean;
-  /** Optional: called on keydown to update a typing indicator */
   setTyping?: (typing: boolean) => void;
   typingTimeoutRef?: React.MutableRefObject<NodeJS.Timeout | null>;
-  /** Optional: file attachment support */
   fileInputRef?: React.RefObject<HTMLInputElement>;
   handleFileSelect?: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  /** Extra class on the outer wrapper */
   className?: string;
 }
 
@@ -75,12 +66,10 @@ export function AIComposer({
   const [aiCooldown, setAiCooldown] = useState(false);
   const [autoStatusIndex, setAutoStatusIndex] = useState(0);
   const [autoOverride, setAutoOverride] = useState(false);
-  const [aiTone, setAiTone] = useState<"neutral" | "friendly" | "professional" | "sales">("neutral");
-  const [aiLanguage, setAiLanguage] = useState<"auto" | "en" | "he" | "es" | "ar">("auto");
   const inputRef = useRef<HTMLInputElement>(null);
   const prevIdRef = useRef<string | null>(null);
 
-  // Reset state when conversation changes
+  // Reset when conversation changes
   useEffect(() => {
     if (conversationId !== prevIdRef.current) {
       prevIdRef.current = conversationId;
@@ -109,20 +98,17 @@ export function AIComposer({
     setTimeout(() => setAiCooldown(false), 3000);
 
     try {
-      const response = await fetch("/api/ai/suggest-reply", {
+      const res = await fetch("/api/ai/suggest-reply", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({
           chatId: conversationId,
           conversationHistory: messages.slice(-10),
-          tone: aiTone,
-          ...(aiLanguage !== "auto" ? { language: aiLanguage } : {}),
         }),
       });
-
-      if (response.ok) {
-        const data = await response.json();
+      if (res.ok) {
+        const data = await res.json();
         const suggestion = data.suggestion || null;
         setAiDraft(suggestion);
         if (suggestion) onChange(suggestion);
@@ -132,7 +118,7 @@ export function AIComposer({
     } finally {
       setIsDrafting(false);
     }
-  }, [conversationId, aiEnabled, demoMode, aiCooldown, aiTone, aiLanguage, messages, onChange]);
+  }, [conversationId, aiEnabled, demoMode, aiCooldown, messages, onChange]);
 
   const handleModeChange = (mode: AIMode) => {
     setAiMode(mode);
@@ -140,13 +126,8 @@ export function AIComposer({
     setIsDrafting(false);
     setAutoOverride(false);
     onChange("");
-
-    if (mode === "suggest" && aiEnabled) {
-      fetchSuggestion();
-    }
-    if (mode === "auto") {
-      setAutoStatusIndex(0);
-    }
+    if (mode === "suggest" && aiEnabled) fetchSuggestion();
+    if (mode === "auto") setAutoStatusIndex(0);
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -154,9 +135,7 @@ export function AIComposer({
     if (setTyping) {
       setTyping(true);
       if (typingTimeoutRef?.current) clearTimeout(typingTimeoutRef.current);
-      if (typingTimeoutRef) {
-        typingTimeoutRef.current = setTimeout(() => setTyping(false), 2000);
-      }
+      if (typingTimeoutRef) typingTimeoutRef.current = setTimeout(() => setTyping(false), 2000);
     }
   };
 
@@ -165,11 +144,6 @@ export function AIComposer({
       if (setTyping) setTyping(false);
       onSend();
     }
-  };
-
-  const handleEmojiSelect = (emojiData: EmojiClickData) => {
-    onChange(value + emojiData.emoji);
-    setEmojiPickerOpen(false);
   };
 
   const handleAutoOverride = () => {
@@ -184,8 +158,8 @@ export function AIComposer({
   const statusLineText = (() => {
     if (isSuggestMode) {
       if (isDrafting) return "AI is drafting a reply…";
-      if (aiDraft) return "AI reply ready — review, edit, or send";
-      return "AI Suggest active";
+      if (aiDraft) return "AI reply ready — edit or send";
+      return "Switching to AI Suggest…";
     }
     if (isAutoPassive) return AUTO_STATUS_MESSAGES[autoStatusIndex];
     return null;
@@ -193,28 +167,27 @@ export function AIComposer({
 
   return (
     <div className={cn("border-t border-gray-200 bg-white shrink-0", className)}>
-      {/* Subtle AI status line */}
+
+      {/* AI status line — subtle, above the input */}
       {aiEnabled && statusLineText && (
         <div className="px-4 py-1 flex items-center gap-1.5 bg-gray-50/80 border-b border-gray-100">
           <Sparkles className="w-3 h-3 text-purple-400 shrink-0" />
           <span className="text-[11px] text-gray-400 italic">{statusLineText}</span>
-          {isDrafting && (
-            <Loader2 className="w-3 h-3 text-purple-400 animate-spin ml-0.5 shrink-0" />
-          )}
+          {isDrafting && <Loader2 className="w-3 h-3 text-purple-400 animate-spin ml-0.5 shrink-0" />}
         </div>
       )}
 
-      {/* Main composer row */}
+      {/* Single composer row: [Mode] [Emoji] [Attach] [Input ............] [Regenerate] [Send] */}
       <div className="flex items-center gap-2 px-2 sm:px-3 py-2">
-        {/* AI mode selector — left side, desktop only */}
+
+        {/* AI mode selector */}
         {aiEnabled && (
           <div
             className="hidden sm:flex items-center rounded-md border border-gray-200 bg-gray-50 overflow-hidden shrink-0"
             data-testid="ai-mode-selector"
           >
             {(["manual", "suggest", "auto"] as AIMode[]).map((mode) => {
-              const label =
-                mode === "manual" ? "Manual" : mode === "suggest" ? "Suggest" : "Auto";
+              const label = mode === "manual" ? "Manual" : mode === "suggest" ? "Suggest" : "Auto";
               const Icon = mode === "manual" ? User : mode === "suggest" ? Sparkles : Zap;
               const active = aiMode === mode;
               return (
@@ -224,9 +197,7 @@ export function AIComposer({
                   data-testid={`composer-ai-mode-${mode}`}
                   className={cn(
                     "flex items-center gap-1 px-2 py-1 text-[11px] font-medium transition-colors",
-                    active
-                      ? "bg-purple-600 text-white"
-                      : "text-gray-400 hover:text-gray-600 hover:bg-gray-100"
+                    active ? "bg-purple-600 text-white" : "text-gray-400 hover:text-gray-600 hover:bg-gray-100"
                   )}
                 >
                   <Icon className="w-3 h-3 shrink-0" />
@@ -237,19 +208,16 @@ export function AIComposer({
           </div>
         )}
 
-        {/* Emoji + optional file attachment — desktop only */}
+        {/* Emoji + file attachment */}
         <div className="hidden sm:flex items-center gap-2 text-gray-400 shrink-0">
           <Popover open={emojiPickerOpen} onOpenChange={setEmojiPickerOpen}>
             <PopoverTrigger asChild>
-              <button
-                className="hover:text-gray-600 transition-colors"
-                data-testid="button-emoji"
-              >
+              <button className="hover:text-gray-600 transition-colors" data-testid="button-emoji">
                 <Smile className="h-5 w-5" />
               </button>
             </PopoverTrigger>
             <PopoverContent className="w-auto p-0 border-0" align="start" side="top">
-              <EmojiPicker onEmojiClick={handleEmojiSelect} />
+              <EmojiPicker onEmojiClick={(d) => { onChange(value + d.emoji); setEmojiPickerOpen(false); }} />
             </PopoverContent>
           </Popover>
 
@@ -273,30 +241,26 @@ export function AIComposer({
           )}
         </div>
 
-        {/* Message input */}
+        {/* Input field or Auto-passive placeholder */}
         <div className="flex-1 min-w-0">
           {isAutoPassive ? (
             <div
-              className="flex items-center gap-2 w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-400 cursor-pointer select-none"
               onClick={handleAutoOverride}
               data-testid="auto-mode-passive-input"
+              className="flex items-center gap-2 w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-400 cursor-pointer select-none"
             >
               <Zap className="w-3.5 h-3.5 text-purple-400 shrink-0" />
               <span className="italic flex-1">AI is handling this conversation…</span>
-              <span className="text-[11px] text-purple-500 not-italic font-medium whitespace-nowrap">
-                Click to take over
-              </span>
+              <span className="text-[11px] text-purple-500 not-italic font-medium whitespace-nowrap">Click to take over</span>
             </div>
           ) : (
             <input
               ref={inputRef}
               type="text"
-              placeholder={
-                isSuggestMode && isDrafting ? "AI is drafting…" : "Type a message"
-              }
+              placeholder={isSuggestMode && isDrafting ? "AI is drafting…" : "Type a message"}
               className={cn(
                 "w-full border rounded-lg px-3 sm:px-4 py-2 text-sm focus:outline-none transition-colors",
-                isSuggestMode && aiDraft
+                isSuggestMode && (isDrafting || aiDraft)
                   ? "bg-purple-50/40 border-purple-200 focus:border-purple-400"
                   : "bg-white border-gray-200 focus:border-brand-green"
               )}
@@ -310,7 +274,7 @@ export function AIComposer({
           )}
         </div>
 
-        {/* Suggest mode: Regenerate button */}
+        {/* Regenerate — minimal, only when draft is ready in Suggest mode */}
         {isSuggestMode && !isDrafting && aiDraft && (
           <button
             onClick={fetchSuggestion}
@@ -323,7 +287,7 @@ export function AIComposer({
           </button>
         )}
 
-        {/* Send button */}
+        {/* Send */}
         {!isAutoPassive && (
           <button
             onClick={onSend}
@@ -334,40 +298,6 @@ export function AIComposer({
           </button>
         )}
       </div>
-
-      {/* Suggest mode: tone + language controls */}
-      {isSuggestMode && (
-        <div className="px-3 pb-1.5 flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <select
-              value={aiLanguage}
-              onChange={(e) => setAiLanguage(e.target.value as typeof aiLanguage)}
-              className="text-[10px] px-1.5 py-0.5 rounded border border-gray-200 bg-white text-gray-500 focus:outline-none"
-              data-testid="select-ai-language"
-            >
-              <option value="auto">Auto language</option>
-              <option value="en">English</option>
-              <option value="he">עברית</option>
-              <option value="es">Español</option>
-              <option value="ar">العربية</option>
-            </select>
-            <select
-              value={aiTone}
-              onChange={(e) => setAiTone(e.target.value as typeof aiTone)}
-              className="text-[10px] px-1.5 py-0.5 rounded border border-gray-200 bg-white text-gray-500 focus:outline-none"
-              data-testid="select-ai-tone"
-            >
-              <option value="neutral">Neutral</option>
-              <option value="friendly">Friendly</option>
-              <option value="professional">Professional</option>
-              <option value="sales">Sales-focused</option>
-            </select>
-          </div>
-          <span className="text-[10px] text-gray-400">
-            {hasFullAIBrain ? "Full AI Brain" : "AI Suggest"}
-          </span>
-        </div>
-      )}
     </div>
   );
 }

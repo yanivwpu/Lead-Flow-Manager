@@ -1,0 +1,136 @@
+FIX CHATGPT-STYLE COMPOSER (FINAL BEHAVIOR CORRECTION)
+
+The current implementation is still incorrect. It behaves like an AI tool, not a ChatGPT-style composer.
+
+We need to fix the behavior and simplify the UI.
+
+GOAL:
+The AI must feel like it is writing inside the input — not something the user has to trigger.
+
+---
+
+1. SUGGEST MODE MUST AUTO-GENERATE
+
+When user switches to Suggest mode:
+
+- Immediately generate an AI reply
+- Automatically place it inside the input field
+- No extra clicks
+- No "generate" button
+- Input must NEVER be empty in Suggest mode
+
+This is the most important fix.
+
+---
+
+2. INPUT FIELD IS THE CENTER OF EVERYTHING
+
+The input must behave like ChatGPT:
+
+- AI writes directly inside the input
+- User can edit the message
+- User clicks Send
+
+There should NOT be:
+- Separate suggestion panels
+- Detached AI UI
+- Multi-step generation flows
+
+---
+
+3. REMOVE EXTRA CONTROLS BELOW INPUT
+
+Remove:
+- Language dropdown ("Auto language")
+- Tone dropdown ("Neutral")
+- Any extra control row under the composer
+
+These break the ChatGPT-style UX.
+
+The composer must stay clean and minimal.
+
+---
+
+4. ADD AI STATUS LINE ABOVE INPUT
+
+Add a subtle status line above the input:
+
+Examples:
+- "AI is drafting a reply…"
+- "AI is qualifying this lead…"
+- "Waiting for response…"
+
+This makes the AI feel alive.
+
+---
+
+5. AUTO MODE BEHAVIOR (NOT JUST A BUTTON)
+
+When Auto mode is selected:
+
+- Input becomes passive (disabled typing state)
+- Show placeholder like:
+  "AI is handling this conversation…"
+- Show status updates rotating or static
+- Clicking the input switches back to Manual mode instantly
+
+Auto mode must change behavior, not just highlight a button.
+
+---
+
+6. REMOVE TOOL-LIKE INTERACTION
+
+Do NOT require:
+- Clicking Suggest → then clicking something else
+- Clicking regenerate before first draft
+- Any secondary trigger to get AI response
+
+AI should act automatically once Suggest mode is active.
+
+---
+
+7. KEEP MODE SELECTOR SIMPLE
+
+Keep:
+- Manual / Suggest / Auto toggle
+
+But:
+- It should control behavior of the input
+- Not act as separate feature buttons
+
+---
+
+8. CLEAN VISUAL STRUCTURE
+
+Final structure should feel like:
+
+[ AI Mode ]  [ AI-filled input field .................... ]  [ Send ]
+
+NOT:
+
+[ Buttons ] + [ Empty input ] + [ Settings rows ]
+
+---
+
+9. DO NOT TOUCH OTHER AREAS
+
+- Do NOT modify right sidebar
+- Do NOT reintroduce old AI Suggest panel
+- Do NOT add modals or popups
+
+Focus only on fixing composer behavior.
+
+---
+
+ACCEPTANCE CRITERIA:
+
+- Switching to Suggest mode instantly fills the input with an AI-generated message
+- Input is never empty in Suggest mode
+- No extra control rows under the input
+- Auto mode disables input and shows AI handling state
+- Composer feels like ChatGPT (AI inside the input, not outside it)
+- No multi-step interaction required to generate a reply
+
+---
+
+This is a behavior fix, not a UI decoration. The AI must act automatically, not wait for user actions.
