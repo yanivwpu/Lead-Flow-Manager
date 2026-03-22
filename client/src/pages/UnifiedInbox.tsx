@@ -59,6 +59,7 @@ import { ChatAvatar } from "@/components/ChatAvatar";
 import { TAG_COLORS } from "@/lib/data";
 import { useToast } from "@/hooks/use-toast";
 import { InboxLeadDetailsPanel } from "@/components/InboxLeadDetailsPanel";
+import { useAICapabilities } from "@/lib/useAICapabilities";
 
 type Channel = 'whatsapp' | 'instagram' | 'facebook' | 'sms' | 'webchat' | 'telegram' | 'tiktok';
 type FilterTab = 'all' | 'unread' | 'mine';
@@ -214,7 +215,7 @@ export function UnifiedInbox() {
   const { toast } = useToast();
   const { data: subscription } = useSubscription();
 
-  // AI access flags
+  // AI access flags (legacy — kept for backward compat with other components)
   const plan = (subscription?.limits as any)?.plan || "free";
   const hasAIAssist = plan === "starter" || plan === "pro" || plan === "enterprise";
   const hasAIBrainAddon = (subscription?.limits as any)?.hasAIBrainAddon ?? false;
@@ -224,6 +225,9 @@ export function UnifiedInbox() {
     enabled: !!user && hasAIAssist,
   });
   const aiEnabled = hasAIAssist && (hasFullAIBrain ? ((aiSettings as any)?.aiMode !== "off") : true);
+
+  // Unified AI capabilities from plan + usage data
+  const capabilities = useAICapabilities();
 
   const [searchQuery, setSearchQuery] = useState("");
   const [filterTab, setFilterTab] = useState<FilterTab>('all');
@@ -884,6 +888,7 @@ export function UnifiedInbox() {
               onAutoSend={handleAutoSend}
               aiEnabled={aiEnabled}
               hasFullAIBrain={hasFullAIBrain}
+              capabilities={capabilities}
               conversationId={primaryConversation?.id ?? selectedContactId}
               messages={messages.map((m) => ({
                 role: m.direction === 'inbound' ? 'user' : 'assistant',
@@ -912,6 +917,7 @@ export function UnifiedInbox() {
           primaryConversation={primaryConversation}
           teamMembers={teamMembers}
           messages={messages.map(m => ({ direction: m.direction, content: m.content || '' }))}
+          capabilities={capabilities}
           onUpdateContact={updateContact}
           onUpdateConversationStatus={status => {
             if (primaryConversation) {

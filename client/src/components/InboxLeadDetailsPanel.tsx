@@ -37,6 +37,8 @@ import {
   runVerification,
   type ConversationMessage,
 } from "@/lib/conversationIntelligence";
+import { AIUpgradePrompt } from "./AIUpgradePrompt";
+import type { AICapabilities } from "@/lib/useAICapabilities";
 
 type Channel = 'whatsapp' | 'instagram' | 'facebook' | 'sms' | 'webchat' | 'telegram' | 'tiktok';
 
@@ -142,6 +144,7 @@ interface InboxLeadDetailsPanelProps {
   primaryConversation?: Conversation;
   teamMembers: TeamMember[];
   messages?: ConversationMessage[];
+  capabilities?: AICapabilities;
   onUpdateContact: (fields: Record<string, unknown>) => void;
   onUpdateConversationStatus: (status: string) => void;
   onEditContact: () => void;
@@ -161,11 +164,17 @@ export function InboxLeadDetailsPanel({
   primaryConversation,
   teamMembers,
   messages = [],
+  capabilities,
   onUpdateContact,
   onUpdateConversationStatus,
   onEditContact,
   onDeleteContact,
 }: InboxLeadDetailsPanelProps) {
+  // Default to full access if no capabilities provided (backward compat)
+  const canSeeCopilot    = capabilities ? capabilities.canUseCopilotIntelligence    : true;
+  const canSeeWorkflow   = capabilities ? capabilities.canUseWorkflowRecommendations : true;
+  const copilotUpgradeTo = capabilities?.upgradePlan ?? "Starter";
+  const workflowUpgradeTo = capabilities?.upgradePlan ?? "Pro";
   const [localNotes, setLocalNotes] = useState(contact.notes || "");
   const [notesSaved, setNotesSaved] = useState(false);
   const [aiPaused,   setAiPaused]   = useState(false);
@@ -286,37 +295,63 @@ export function InboxLeadDetailsPanel({
             <Sparkles className="w-3 h-3 text-purple-500" />
             <span className="text-[11px] font-semibold text-gray-700 tracking-wide">AI Copilot</span>
           </div>
-          <button
-            onClick={() => setAiPaused(p => !p)}
-            className={cn(
-              "text-[10px] font-medium px-1.5 py-0.5 rounded-full border transition-colors leading-none",
-              aiPaused
-                ? "bg-gray-100 text-gray-400 border-gray-200 hover:bg-gray-200"
-                : "bg-purple-50 text-purple-600 border-purple-200 hover:bg-purple-100"
-            )}
-            data-testid="button-ai-toggle"
-          >
-            {aiPaused ? "Paused" : "Active"}
-          </button>
+          {canSeeCopilot ? (
+            <button
+              onClick={() => setAiPaused(p => !p)}
+              className={cn(
+                "text-[10px] font-medium px-1.5 py-0.5 rounded-full border transition-colors leading-none",
+                aiPaused
+                  ? "bg-gray-100 text-gray-400 border-gray-200 hover:bg-gray-200"
+                  : "bg-purple-50 text-purple-600 border-purple-200 hover:bg-purple-100"
+              )}
+              data-testid="button-ai-toggle"
+            >
+              {aiPaused ? "Paused" : "Active"}
+            </button>
+          ) : (
+            <span className="text-[10px] text-gray-300 font-medium">{copilotUpgradeTo}+</span>
+          )}
         </div>
 
-        <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
-          <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", intel.leadScore.dot)} />
-          <span className={cn("text-[11px] font-semibold", intel.leadScore.color)}>{intel.leadScore.label} Lead</span>
-          <span className="text-gray-300 text-[10px]">·</span>
-          <span className="text-[11px] text-gray-500">{intel.aiState}</span>
-          <span className="text-gray-300 text-[10px]">·</span>
-          <span className="text-[11px] text-gray-500">{intel.intent}</span>
-        </div>
-
-        <div className="flex items-center gap-1 flex-wrap">
-          <QualBadge ok={intel.hasBudget}    label="Budget"    value={intel.budget} />
-          <QualBadge ok={intel.hasTimeline}  label="Timeline"  value={intel.timeline} />
-          <QualBadge ok={intel.hasFinancing} label="Financing" value={intel.financing} />
-        </div>
+        {canSeeCopilot ? (
+          <>
+            <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
+              <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", intel.leadScore.dot)} />
+              <span className={cn("text-[11px] font-semibold", intel.leadScore.color)}>{intel.leadScore.label} Lead</span>
+              <span className="text-gray-300 text-[10px]">·</span>
+              <span className="text-[11px] text-gray-500">{intel.aiState}</span>
+              <span className="text-gray-300 text-[10px]">·</span>
+              <span className="text-[11px] text-gray-500">{intel.intent}</span>
+            </div>
+            <div className="flex items-center gap-1 flex-wrap">
+              <QualBadge ok={intel.hasBudget}    label="Budget"    value={intel.budget} />
+              <QualBadge ok={intel.hasTimeline}  label="Timeline"  value={intel.timeline} />
+              <QualBadge ok={intel.hasFinancing} label="Financing" value={intel.financing} />
+            </div>
+          </>
+        ) : (
+          <AIUpgradePrompt
+            feature="Copilot intelligence"
+            requiredPlan={copilotUpgradeTo}
+            reason="Automatically extracts budget, timeline, financing, and intent from conversations."
+            size="md"
+            className="mt-1"
+          />
+        )}
 
         {/* ── Workflow recommendations strip ─────────────────────────── */}
-        {(workflow.actions.length > 0 || workflow.tagSuggestion || workflow.stageSuggestion) && (
+        {canSeeCopilot && !canSeeWorkflow && (
+          <div className="mt-2 pt-1.5 border-t border-purple-100">
+            <AIUpgradePrompt
+              feature="Workflow recommendations"
+              requiredPlan={workflowUpgradeTo}
+              reason="Automated action suggestions, tag triggers, and stage recommendations."
+              size="sm"
+              className="mt-0.5"
+            />
+          </div>
+        )}
+        {canSeeCopilot && canSeeWorkflow && (workflow.actions.length > 0 || workflow.tagSuggestion || workflow.stageSuggestion) && (
           <div className="mt-2 pt-1.5 border-t border-purple-100">
             <div className="flex items-center gap-0.5 mb-1">
               <span className="text-[9px] font-bold text-purple-400 uppercase tracking-widest">Copilot suggests</span>

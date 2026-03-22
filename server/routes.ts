@@ -4533,18 +4533,55 @@ export async function registerRoutes(
   // ==========================================
 
   // Helper: Check if user has AI Brain access (Pro plan with add-on)
-  const checkAiBrainAccess = async (userId: string): Promise<{ hasAccess: boolean; reason?: string }> => {
+  // Per-plan monthly AI credit allowances
+  const AI_MONTHLY_CREDITS: Record<string, number> = {
+    free:       0,
+    starter:   50,
+    pro:       300,
+    enterprise: 500,
+  };
+  const AI_BRAIN_ADDON_BONUS = 700; // Pro+Brain = 300 + 700 = 1000 credits/month
+
+  const checkAiBrainAccess = async (
+    userId: string,
+    mode?: 'suggest' | 'auto'
+  ): Promise<{ hasAccess: boolean; reason?: string; plan: string; monthlyLimit: number; hasAIBrain: boolean }> => {
     const user = await storage.getUser(userId);
-    if (!user) return { hasAccess: false, reason: "User not found" };
-    
-    // Check if user is on Pro or Enterprise plan
-    const proPlans = ['pro', 'enterprise'];
-    if (!proPlans.includes(user.subscriptionPlan || 'free')) {
-      return { hasAccess: false, reason: "AI Brain requires Pro plan" };
+    if (!user) return { hasAccess: false, reason: "User not found", plan: 'free', monthlyLimit: 0, hasAIBrain: false };
+
+    const now = new Date();
+    const isInTrial  = user.trialEndsAt ? new Date(user.trialEndsAt) > now : false;
+    const isDemoUser = user.email === 'demo@whachat.com';
+    const storedPlan = user.subscriptionPlan || 'free';
+    const effectivePlan = (isInTrial || isDemoUser) ? 'pro' : storedPlan;
+
+    // Check AI Brain add-on (trial and demo always have it)
+    let hasAIBrain = false;
+    if (isInTrial || isDemoUser) {
+      hasAIBrain = true;
+    } else if (user.stripeCustomerId) {
+      try {
+        const limits = await subscriptionService.getUserLimits(userId);
+        hasAIBrain = limits?.hasAIBrainAddon ?? false;
+      } catch { hasAIBrain = false; }
     }
-    
-    // For now, all Pro users have access (in production, check for $29/mo add-on)
-    return { hasAccess: true };
+
+    const baseLimit  = AI_MONTHLY_CREDITS[effectivePlan] ?? 0;
+    const monthlyLimit = hasAIBrain && effectivePlan === 'pro'
+      ? baseLimit + AI_BRAIN_ADDON_BONUS
+      : baseLimit;
+
+    // Free users: no AI access
+    if (effectivePlan === 'free') {
+      return { hasAccess: false, reason: "AI features require a Starter or Pro plan", plan: effectivePlan, monthlyLimit: 0, hasAIBrain };
+    }
+
+    // Auto mode requires Pro
+    if (mode === 'auto' && effectivePlan === 'starter') {
+      return { hasAccess: false, reason: "Auto mode requires a Pro plan. Upgrade to unlock.", plan: effectivePlan, monthlyLimit, hasAIBrain };
+    }
+
+    return { hasAccess: true, plan: effectivePlan, monthlyLimit, hasAIBrain };
   };
 
   // Behavioral fair-use controls (internal only - no numbers exposed to users)
@@ -4814,6 +4851,44 @@ export async function registerRoutes(
     }
   });
 
+  // Get current AI usage summary for the billing period
+  app.get("/api/ai/usage", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+      const userId = req.user.id;
+
+      const access = await checkAiBrainAccess(userId);
+      const usage  = await storage.getCurrentAiUsage(userId);
+      const fairUse = await checkFairUseBehavior(userId);
+
+      const creditsUsed     = (usage?.repliesSuggested || 0) + (usage?.messagesGenerated || 0);
+      const monthlyLimit    = access.monthlyLimit;
+      const creditsRemaining = Math.max(0, monthlyLimit - creditsUsed);
+      const creditPercent   = monthlyLimit > 0 ? Math.round((creditsUsed / monthlyLimit) * 100) : 0;
+
+      res.json({
+        plan:              access.plan,
+        hasAIBrain:        access.hasAIBrain,
+        creditsUsed,
+        monthlyLimit,
+        creditsRemaining,
+        creditPercent,
+        fairUseStatus:     fairUse.status,
+        usageLimitReached: usage?.usageLimitReached || false,
+        periodStart:       usage?.periodStart,
+        periodEnd:         usage?.periodEnd,
+        // Feature access flags (for frontend capability hook)
+        canUseSuggest:     access.plan !== 'free',
+        canUseAuto:        access.plan === 'pro' || access.plan === 'enterprise',
+        canUseWorkflowRecommendations: access.plan === 'pro' || access.plan === 'enterprise',
+        canUseCopilotIntelligence:     access.plan !== 'free',
+      });
+    } catch (error) {
+      console.error("AI usage fetch error:", error);
+      res.status(500).json({ error: "Failed to fetch AI usage" });
+    }
+  });
+
   // Get AI reply suggestions for a conversation
   app.post("/api/ai/suggest-reply", async (req, res) => {
     try {
@@ -4821,13 +4896,31 @@ export async function registerRoutes(
         return res.status(401).json({ error: "Unauthorized" });
       }
       const userId = req.user.id;
-      
-      // Check access and usage limits
-      const access = await checkAiBrainAccess(userId);
+
+      const { chatId, conversationHistory, tone, aiMode: requestedMode } = req.body;
+
+      // Check access and plan eligibility (pass mode to enforce Auto=Pro-only)
+      const access = await checkAiBrainAccess(userId, requestedMode === 'auto' ? 'auto' : 'suggest');
       if (!access.hasAccess) {
-        return res.status(403).json({ error: access.reason, needsUpgrade: true });
+        return res.status(403).json({ error: access.reason, needsUpgrade: true, plan: access.plan });
       }
-      
+
+      // Enforce per-plan monthly credit limits
+      if (access.monthlyLimit > 0) {
+        const usage      = await storage.getCurrentAiUsage(userId);
+        const creditsUsed = (usage?.repliesSuggested || 0) + (usage?.messagesGenerated || 0);
+        if (creditsUsed >= access.monthlyLimit) {
+          return res.status(429).json({
+            error:        "Monthly AI credit limit reached. Upgrade your plan for more credits.",
+            status:       "credits_exhausted",
+            creditsUsed,
+            monthlyLimit: access.monthlyLimit,
+            needsUpgrade: access.plan === 'starter',
+            plan:         access.plan,
+          });
+        }
+      }
+
       const fairUse = await checkFairUseBehavior(userId);
       if (!fairUse.canProceed) {
         return res.status(429).json({ 
@@ -4835,8 +4928,6 @@ export async function registerRoutes(
           status: fairUse.status
         });
       }
-      
-      const { chatId, conversationHistory, tone } = req.body;
       
       // Rate limiting per conversation
       if (chatId && !checkConversationRateLimit(chatId)) {

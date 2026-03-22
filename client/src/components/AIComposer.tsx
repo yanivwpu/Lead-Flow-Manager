@@ -10,10 +10,13 @@ import {
   User,
   CheckCircle2,
   Clock,
+  Lock,
 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import EmojiPicker from "emoji-picker-react";
 import { cn } from "@/lib/utils";
+import { AICreditBadge, AIUpgradePrompt } from "./AIUpgradePrompt";
+import type { AICapabilities } from "@/lib/useAICapabilities";
 
 type AIMode = "manual" | "suggest" | "auto";
 type AutoPhase = "idle" | "typing" | "replied" | "waiting";
@@ -31,6 +34,8 @@ export interface AIComposerProps {
   onAutoSend?: (message: string) => void;
   aiEnabled: boolean;
   hasFullAIBrain?: boolean;
+  /** Full capability object from useAICapabilities — drives gating & credit display */
+  capabilities?: AICapabilities;
   conversationId: string | null;
   messages: AIComposerMessage[];
   demoMode?: boolean;
@@ -51,6 +56,7 @@ export function AIComposer({
   onAutoSend,
   aiEnabled,
   hasFullAIBrain = false,
+  capabilities,
   conversationId,
   messages,
   demoMode = false,
@@ -60,6 +66,10 @@ export function AIComposer({
   handleFileSelect,
   className,
 }: AIComposerProps) {
+  // Resolve effective access from capabilities (falls back to legacy aiEnabled prop)
+  const effectiveCanSuggest = capabilities ? capabilities.canUseSuggest : aiEnabled;
+  const effectiveCanAuto    = capabilities ? capabilities.canUseAuto    : (aiEnabled && hasFullAIBrain);
+  const showAIModes         = aiEnabled || (capabilities && capabilities.plan !== 'free');
   const [aiMode, setAiMode] = useState<AIMode>("manual");
   const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
   const [isDrafting, setIsDrafting] = useState(false);
@@ -280,31 +290,78 @@ export function AIComposer({
 
       <div className="px-3 pt-1.5 pb-2 flex flex-col gap-1.5">
 
-        {/* Row 1: AI mode pills */}
-        {aiEnabled && (
-          <div className="flex items-center gap-1" data-testid="ai-mode-selector">
+        {/* Row 1: AI mode pills + credit badge */}
+        {showAIModes && (
+          <div className="flex items-center gap-1 flex-wrap" data-testid="ai-mode-selector">
             {(["manual", "suggest", "auto"] as AIMode[]).map((mode) => {
-              const label = mode === "manual" ? "Manual" : mode === "suggest" ? "Suggest" : "Auto";
-              const Icon = mode === "manual" ? User : mode === "suggest" ? Sparkles : Zap;
+              const label  = mode === "manual" ? "Manual" : mode === "suggest" ? "Suggest" : "Auto";
+              const Icon   = mode === "manual" ? User : mode === "suggest" ? Sparkles : Zap;
               const active = aiMode === mode;
+
+              // Capability gate
+              const modeEnabled =
+                mode === "manual"  ? true :
+                mode === "suggest" ? effectiveCanSuggest :
+                effectiveCanAuto;
+
+              const lockReason =
+                !modeEnabled && mode === "suggest" && capabilities?.plan === "free"
+                  ? "Starter plan required"
+                  : !modeEnabled && mode === "auto" && capabilities?.plan === "starter"
+                  ? "Pro plan required"
+                  : !modeEnabled && (capabilities?.isExhausted)
+                  ? "AI credits exhausted — upgrade plan"
+                  : !modeEnabled
+                  ? "Upgrade to unlock"
+                  : null;
+
               return (
                 <button
                   key={mode}
-                  onClick={() => handleModeChange(mode)}
+                  onClick={() => modeEnabled ? handleModeChange(mode) : undefined}
+                  disabled={!modeEnabled}
+                  title={lockReason ?? undefined}
                   data-testid={`composer-ai-mode-${mode}`}
                   className={cn(
                     "flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium transition-all",
-                    active
+                    active && modeEnabled
                       ? "bg-purple-600 text-white shadow-sm"
-                      : "text-gray-400 hover:text-gray-600 hover:bg-gray-100 border border-gray-200 bg-white"
+                      : modeEnabled
+                      ? "text-gray-400 hover:text-gray-600 hover:bg-gray-100 border border-gray-200 bg-white"
+                      : "text-gray-300 border border-gray-100 bg-gray-50 cursor-not-allowed opacity-60"
                   )}
                 >
-                  <Icon className="w-2.5 h-2.5 shrink-0" />
+                  {!modeEnabled ? (
+                    <Lock className="w-2.5 h-2.5 shrink-0 text-gray-300" />
+                  ) : (
+                    <Icon className="w-2.5 h-2.5 shrink-0" />
+                  )}
                   {label}
                 </button>
               );
             })}
+
+            {/* Credit badge — shown when >75% used */}
+            {capabilities && (
+              <AICreditBadge
+                creditsRemaining={capabilities.creditsRemaining}
+                monthlyLimit={capabilities.monthlyLimit}
+                creditPercent={capabilities.creditPercent}
+                planName={capabilities.planName}
+              />
+            )}
           </div>
+        )}
+
+        {/* Upgrade prompt — shown when credits are exhausted and user needs AI */}
+        {capabilities?.isExhausted && capabilities.upgradePlan && (
+          <AIUpgradePrompt
+            feature="AI reply generation"
+            requiredPlan={capabilities.upgradePlan}
+            reason={`You've used all ${capabilities.monthlyLimit} AI credits for this month.`}
+            size="sm"
+            className="mt-0.5"
+          />
         )}
 
         {/* Row 2: Auto-passive panel or Textarea */}
