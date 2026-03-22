@@ -231,24 +231,6 @@ export function UnifiedInbox() {
   // Unified AI capabilities from plan + usage data
   const capabilities = useAICapabilities();
 
-  // Build contact context for AI reply quality improvement
-  const contactContext: ContactContext | undefined = useMemo(() => {
-    if (!contact) return undefined;
-    const msgList = messages.map(m => ({ direction: m.direction, content: m.content || '' }));
-    const intel = msgList.length > 0 ? analyzeConversation(msgList) : null;
-    return {
-      name:          contact.name,
-      tag:           contact.tag || undefined,
-      pipelineStage: contact.pipelineStage || undefined,
-      notes:         contact.notes || undefined,
-      budget:        intel?.budget ?? undefined,
-      timeline:      intel?.timeline ?? undefined,
-      financing:     intel?.financing ?? undefined,
-      intent:        intel?.intent,
-      leadScore:     intel?.leadScore?.label,
-    };
-  }, [contact, messages]);
-
   const [searchQuery, setSearchQuery] = useState("");
   const [filterTab, setFilterTab] = useState<FilterTab>('all');
   const [messageInput, setMessageInput] = useState("");
@@ -590,6 +572,25 @@ export function UnifiedInbox() {
   };
 
   const contact = contactData?.contact;
+
+  // Build contact context for AI reply quality improvement (must be after contact + messages are declared)
+  const contactContext: ContactContext | undefined = useMemo(() => {
+    if (!contact) return undefined;
+    const msgList = messages.map(m => ({ direction: m.direction, content: m.content || '' }));
+    const intel = msgList.length > 0 ? analyzeConversation(msgList) : null;
+    return {
+      name:          contact.name,
+      tag:           contact.tag || undefined,
+      pipelineStage: contact.pipelineStage || undefined,
+      notes:         contact.notes || undefined,
+      budget:        intel?.budget ?? undefined,
+      timeline:      intel?.timeline ?? undefined,
+      financing:     intel?.financing ?? undefined,
+      intent:        intel?.intent,
+      leadScore:     intel?.leadScore?.label,
+    };
+  }, [contact, messages]);
+
   const activeChannel = contact?.primaryChannelOverride as Channel || contact?.primaryChannel as Channel;
   const convStatus = primaryConversation?.status || 'open';
   const statusConfig = CONVERSATION_STATUSES.find(s => s.value === convStatus) || CONVERSATION_STATUSES[0];
