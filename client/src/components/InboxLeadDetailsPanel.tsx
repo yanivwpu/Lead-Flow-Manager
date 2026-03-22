@@ -1,9 +1,7 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import {
   Phone,
   Mail,
-  Clock,
-  User,
   Calendar as CalendarIcon,
   Trash2,
   Edit,
@@ -11,14 +9,17 @@ import {
   UserCheck,
   X,
   Sparkles,
-  Zap,
   TrendingUp,
   CheckCircle2,
   Circle,
   Minus,
-  BookOpen,
   Bell,
   PauseCircle,
+  PlayCircle,
+  User,
+  Clock,
+  MapPin,
+  ChevronDown,
 } from "lucide-react";
 import {
   Select,
@@ -70,10 +71,10 @@ interface TeamMember {
 }
 
 const CONVERSATION_STATUSES = [
-  { value: 'open', label: 'Open', color: 'border-emerald-400 text-emerald-600' },
-  { value: 'pending', label: 'Pending', color: 'border-amber-400 text-amber-600' },
+  { value: 'open',     label: 'Open',     color: 'border-emerald-400 text-emerald-600' },
+  { value: 'pending',  label: 'Pending',  color: 'border-amber-400 text-amber-600' },
   { value: 'resolved', label: 'Resolved', color: 'border-blue-400 text-blue-600' },
-  { value: 'closed', label: 'Closed', color: 'border-gray-300 text-gray-500' },
+  { value: 'closed',   label: 'Closed',   color: 'border-gray-300 text-gray-500' },
 ];
 
 const SOURCE_LABELS: Record<string, string> = {
@@ -84,8 +85,8 @@ const SOURCE_LABELS: Record<string, string> = {
 
 function getFollowUpStatus(d: string | null | undefined): 'overdue' | 'today' | 'upcoming' | null {
   if (!d) return null;
-  const due = new Date(d);
-  const now = new Date();
+  const due   = new Date(d);
+  const now   = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const dueDay = new Date(due.getFullYear(), due.getMonth(), due.getDate());
   if (dueDay < today) return 'overdue';
@@ -93,56 +94,58 @@ function getFollowUpStatus(d: string | null | undefined): 'overdue' | 'today' | 
   return 'upcoming';
 }
 
-// ── AI intelligence derivations ──────────────────────────────────────────────
-function deriveLeadScore(tag: string): { label: string; color: string; dot: string } {
-  const t = tag?.toLowerCase() || '';
-  if (t.includes('hot') || t.includes('vip')) return { label: 'Hot', color: 'text-red-600', dot: 'bg-red-500' };
-  if (t.includes('warm') || t.includes('investor')) return { label: 'Warm', color: 'text-amber-600', dot: 'bg-amber-400' };
-  if (t.includes('qualified') || t.includes('active')) return { label: 'Strong', color: 'text-emerald-600', dot: 'bg-emerald-500' };
+// ── AI derivations ────────────────────────────────────────────────────────────
+function deriveLeadScore(tag: string) {
+  const t = (tag || '').toLowerCase();
+  if (t.includes('hot') || t.includes('vip'))           return { label: 'Hot',    color: 'text-red-600',     dot: 'bg-red-500' };
+  if (t.includes('warm') || t.includes('investor'))     return { label: 'Warm',   color: 'text-amber-600',   dot: 'bg-amber-400' };
+  if (t.includes('qualified') || t.includes('active'))  return { label: 'Strong', color: 'text-emerald-600', dot: 'bg-emerald-500' };
   return { label: 'Cold', color: 'text-blue-500', dot: 'bg-blue-400' };
 }
 
-function deriveAiState(stage: string, status: string): string {
+function deriveAiState(stage: string, status: string) {
   const s = (stage || '').toLowerCase();
-  if (s.includes('closed') || status === 'resolved') return 'Closed';
-  if (s.includes('negotiation') || s.includes('proposal')) return 'Ready';
-  if (s.includes('qualified')) return 'Qualifying';
-  if (s.includes('lead') || s.includes('contacted')) return 'Engaging';
+  if (s.includes('closed') || status === 'resolved')            return 'Closed';
+  if (s.includes('negotiation') || s.includes('proposal'))      return 'Ready';
+  if (s.includes('qualified'))                                   return 'Qualifying';
+  if (s.includes('lead') || s.includes('contacted'))            return 'Engaging';
   return 'Waiting';
 }
 
-function deriveIntent(stage: string): string {
+function deriveIntent(stage: string) {
   const s = (stage || '').toLowerCase();
-  if (s.includes('closed won')) return 'Buyer ✓';
-  if (s.includes('negotiation')) return 'Buyer';
-  if (s.includes('proposal')) return 'High Intent';
-  if (s.includes('qualified')) return 'Interested';
+  if (s.includes('closed won'))    return 'Buyer ✓';
+  if (s.includes('negotiation'))   return 'Buyer';
+  if (s.includes('proposal'))      return 'High Intent';
+  if (s.includes('qualified'))     return 'Interested';
   return 'Browsing';
 }
 
 function parseQualification(notes: string) {
   const n = (notes || '').toLowerCase();
-  const hasBudget = /\$[\d,]+|budget|k\b|price|afford/.test(n);
-  const hasTimeline = /week|month|asap|urgent|soon|timeline|days|year/.test(n);
-  const hasFinancing = /pre.?approv|financ|mortgage|cash|loan/.test(n);
-  return { budget: hasBudget, timeline: hasTimeline, financing: hasFinancing };
+  return {
+    budget:    /\$[\d,]+|budget|\dk\b|price|afford/.test(n),
+    timeline:  /week|month|asap|urgent|soon|timeline|days|year/.test(n),
+    financing: /pre.?approv|financ|mortgage|cash|loan/.test(n),
+  };
 }
 
-function QualBadge({ ok, label }: { ok: boolean | 'partial'; label: string }) {
+function QualBadge({ ok, label }: { ok: boolean; label: string }) {
   return (
     <span className={cn(
-      "inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded font-medium",
-      ok === true ? "bg-emerald-50 text-emerald-700" :
-      ok === 'partial' ? "bg-amber-50 text-amber-700" :
-      "bg-gray-100 text-gray-400"
+      "inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded font-medium leading-none",
+      ok ? "bg-emerald-50 text-emerald-700" : "bg-gray-100 text-gray-400"
     )}>
-      {ok === true ? <CheckCircle2 className="w-2.5 h-2.5" /> : ok === 'partial' ? <Minus className="w-2.5 h-2.5" /> : <Circle className="w-2.5 h-2.5" />}
+      {ok
+        ? <CheckCircle2 className="w-2.5 h-2.5" />
+        : <Circle className="w-2.5 h-2.5" />
+      }
       {label}
     </span>
   );
 }
 
-// ── Props ─────────────────────────────────────────────────────────────────────
+// ── Component ─────────────────────────────────────────────────────────────────
 interface InboxLeadDetailsPanelProps {
   contact: Contact;
   primaryConversation?: Conversation;
@@ -153,9 +156,12 @@ interface InboxLeadDetailsPanelProps {
   onDeleteContact: () => void;
 }
 
-// ── Row label ─────────────────────────────────────────────────────────────────
 function RowLabel({ children }: { children: React.ReactNode }) {
-  return <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide shrink-0">{children}</span>;
+  return (
+    <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide shrink-0">
+      {children}
+    </span>
+  );
 }
 
 export function InboxLeadDetailsPanel({
@@ -167,10 +173,23 @@ export function InboxLeadDetailsPanel({
   onEditContact,
   onDeleteContact,
 }: InboxLeadDetailsPanelProps) {
-  const [localNotes, setLocalNotes] = useState(contact.notes || "");
-  const [notesSaved, setNotesSaved] = useState(false);
+  const [localNotes, setLocalNotes]   = useState(contact.notes || "");
+  const [notesSaved, setNotesSaved]   = useState(false);
   const [calendarOpen, setCalendarOpen] = useState(false);
-  const [aiPaused, setAiPaused] = useState(false);
+  const [aiPaused, setAiPaused]       = useState(false);
+
+  // Copilot action popovers — each has exactly one responsibility
+  const [assignOpen, setAssignOpen]   = useState(false);
+  const [followOpen, setFollowOpen]   = useState(false);
+  const [bookOpen,   setBookOpen]     = useState(false);
+
+  // Booking placeholder state
+  const [bookingDate, setBookingDate] = useState<Date | undefined>(undefined);
+  const [bookingTime, setBookingTime] = useState("10:00");
+  const [bookingType, setBookingType] = useState("Viewing");
+  const [bookingConfirmed, setBookingConfirmed] = useState(false);
+
+  const followRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setLocalNotes(contact.notes || "");
@@ -181,10 +200,20 @@ export function InboxLeadDetailsPanel({
     if (!label) { onUpdateContact({ followUp: null, followUpDate: null }); return; }
     const now = new Date();
     let date: Date;
-    if (label === 'Tomorrow') { date = new Date(now); date.setDate(date.getDate() + 1); }
+    if (label === '24h')    { date = new Date(now); date.setDate(date.getDate() + 1); }
     else if (label === '3 days') { date = new Date(now); date.setDate(date.getDate() + 3); }
     else if (label === '1 week') { date = new Date(now); date.setDate(date.getDate() + 7); }
     else { date = now; }
+    onUpdateContact({ followUp: label, followUpDate: date.toISOString() });
+  };
+
+  // Legacy label mapping for existing follow-up buttons
+  const handleFollowUpFull = (label: 'Tomorrow' | '3 days' | '1 week') => {
+    const now = new Date();
+    let date: Date = new Date(now);
+    if (label === 'Tomorrow') date.setDate(date.getDate() + 1);
+    else if (label === '3 days') date.setDate(date.getDate() + 3);
+    else if (label === '1 week') date.setDate(date.getDate() + 7);
     onUpdateContact({ followUp: label, followUpDate: date.toISOString() });
   };
 
@@ -194,87 +223,320 @@ export function InboxLeadDetailsPanel({
     setTimeout(() => setNotesSaved(false), 2500);
   };
 
-  const convStatus = primaryConversation?.status || 'open';
-  const statusCls = CONVERSATION_STATUSES.find(s => s.value === convStatus)?.color || 'border-gray-200 text-gray-500';
-  const followUpStatus = getFollowUpStatus(contact.followUpDate);
+  const convStatus  = primaryConversation?.status || 'open';
+  const statusCls   = CONVERSATION_STATUSES.find(s => s.value === convStatus)?.color || 'border-gray-200 text-gray-500';
+  const followUpSt  = getFollowUpStatus(contact.followUpDate);
 
-  // AI derivations
-  const score = useMemo(() => deriveLeadScore(contact.tag), [contact.tag]);
+  const score   = useMemo(() => deriveLeadScore(contact.tag), [contact.tag]);
   const aiState = useMemo(() => deriveAiState(contact.pipelineStage, convStatus), [contact.pipelineStage, convStatus]);
-  const intent = useMemo(() => deriveIntent(contact.pipelineStage), [contact.pipelineStage]);
-  const qual = useMemo(() => parseQualification(contact.notes || ''), [contact.notes]);
+  const intent  = useMemo(() => deriveIntent(contact.pipelineStage), [contact.pipelineStage]);
+  const qual    = useMemo(() => parseQualification(contact.notes || ''), [contact.notes]);
 
-  const assignedMember = teamMembers.find(m => (m.memberId || m.id) === contact.assignedTo);
-  const assignedLabel = assignedMember ? (assignedMember.name || assignedMember.email.split('@')[0]) : null;
+  const activeMembers = teamMembers.filter(m => m.status === 'active');
+  const assignedMember = activeMembers.find(m => (m.memberId || m.id) === contact.assignedTo);
+  const assignedLabel  = assignedMember
+    ? (assignedMember.name || assignedMember.email.split('@')[0])
+    : null;
 
   return (
-    <div className="hidden lg:flex w-[260px] xl:w-72 flex-col border-l border-gray-100 bg-white overflow-y-auto flex-shrink-0">
+    <div className="hidden lg:flex w-[260px] xl:w-[272px] flex-col border-l border-gray-100 bg-white overflow-y-auto flex-shrink-0">
 
-      {/* ── 1. AI COPILOT HEADER ─────────────────────────────────────────── */}
-      <div className="px-3 pt-2.5 pb-2 border-b border-gray-100">
+      {/* ══ 1. AI COPILOT HEADER ══════════════════════════════════════════ */}
+      <div className="px-3 pt-2.5 pb-2 border-b border-gray-100 bg-white sticky top-0 z-10">
+
+        {/* Title row */}
         <div className="flex items-center justify-between mb-1.5">
           <div className="flex items-center gap-1.5">
             <Sparkles className="w-3 h-3 text-purple-500" />
             <span className="text-[11px] font-semibold text-gray-700 tracking-wide">AI Copilot</span>
           </div>
-          <div className="flex items-center gap-1.5">
-            <button
-              onClick={() => setAiPaused(p => !p)}
-              className={cn(
-                "text-[10px] font-medium px-1.5 py-0.5 rounded-full border transition-colors",
-                aiPaused
-                  ? "bg-gray-100 text-gray-400 border-gray-200"
-                  : "bg-purple-50 text-purple-600 border-purple-200"
-              )}
-              data-testid="button-ai-toggle"
-              title={aiPaused ? "Resume AI" : "Pause AI"}
-            >
-              {aiPaused ? "Paused" : "Active"}
-            </button>
-          </div>
+          <button
+            onClick={() => setAiPaused(p => !p)}
+            className={cn(
+              "text-[10px] font-medium px-1.5 py-0.5 rounded-full border transition-colors leading-none",
+              aiPaused
+                ? "bg-gray-100 text-gray-400 border-gray-200 hover:bg-gray-200"
+                : "bg-purple-50 text-purple-600 border-purple-200 hover:bg-purple-100"
+            )}
+            data-testid="button-ai-toggle"
+          >
+            {aiPaused ? "Paused" : "Active"}
+          </button>
         </div>
 
-        {/* Lead score row */}
-        <div className="flex items-center gap-1.5 mb-1">
+        {/* Lead score · state · intent */}
+        <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
           <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", score.dot)} />
           <span className={cn("text-[11px] font-semibold", score.color)}>{score.label} Lead</span>
-          <span className="text-gray-300">·</span>
+          <span className="text-gray-300 text-[10px]">·</span>
           <span className="text-[11px] text-gray-500">{aiState}</span>
-          <span className="text-gray-300">·</span>
+          <span className="text-gray-300 text-[10px]">·</span>
           <span className="text-[11px] text-gray-500">{intent}</span>
         </div>
 
-        {/* Qualification progress badges */}
+        {/* Qualification badges */}
         <div className="flex items-center gap-1 flex-wrap">
-          <QualBadge ok={qual.budget} label="Budget" />
-          <QualBadge ok={qual.timeline} label="Timeline" />
+          <QualBadge ok={qual.budget}    label="Budget" />
+          <QualBadge ok={qual.timeline}  label="Timeline" />
           <QualBadge ok={qual.financing} label="Financing" />
         </div>
       </div>
 
-      {/* ── 2. AI QUICK ACTIONS ──────────────────────────────────────────── */}
+      {/* ══ 2. COPILOT QUICK ACTIONS ══════════════════════════════════════ */}
       <div className="px-3 py-2 border-b border-gray-100">
         <div className="grid grid-cols-4 gap-1">
-          {[
-            { icon: CalendarIcon, label: 'Book', onClick: () => setCalendarOpen(true), testId: 'button-ai-book' },
-            { icon: UserCheck, label: 'Assign', onClick: () => {}, testId: 'button-ai-assign' },
-            { icon: Bell, label: 'Follow', onClick: () => handleFollowUp('Tomorrow'), testId: 'button-ai-followup' },
-            { icon: PauseCircle, label: aiPaused ? 'Resume' : 'Pause', onClick: () => setAiPaused(p => !p), testId: 'button-ai-pause' },
-          ].map(({ icon: Icon, label, onClick, testId }) => (
-            <button
-              key={label}
-              onClick={onClick}
-              data-testid={testId}
-              className="flex flex-col items-center gap-0.5 py-1.5 rounded-lg border border-gray-100 bg-gray-50 hover:bg-gray-100 hover:border-gray-200 transition-colors"
-            >
-              <Icon className="w-3 h-3 text-gray-500" />
-              <span className="text-[9px] text-gray-500 font-medium">{label}</span>
-            </button>
-          ))}
+
+          {/* ── BOOK: schedule appointment — NOT follow-up ── */}
+          <Popover open={bookOpen} onOpenChange={setBookOpen}>
+            <PopoverTrigger asChild>
+              <button
+                className="flex flex-col items-center gap-0.5 py-1.5 rounded-lg border border-gray-100 bg-gray-50 hover:bg-gray-100 hover:border-gray-200 transition-colors"
+                data-testid="button-ai-book"
+              >
+                <CalendarIcon className="w-3 h-3 text-gray-500" />
+                <span className="text-[9px] text-gray-500 font-medium">Book</span>
+              </button>
+            </PopoverTrigger>
+            <PopoverContent className="w-64 p-3" align="start" side="bottom">
+              <div className="mb-2 flex items-center justify-between">
+                <span className="text-[11px] font-semibold text-gray-700">Schedule Appointment</span>
+                <button onClick={() => setBookOpen(false)} className="text-gray-300 hover:text-gray-500">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              {bookingConfirmed ? (
+                <div className="flex flex-col items-center gap-1.5 py-3">
+                  <CheckCircle2 className="w-5 h-5 text-emerald-500" />
+                  <p className="text-[12px] font-medium text-emerald-700">Appointment saved</p>
+                  {bookingDate && (
+                    <p className="text-[11px] text-gray-500">
+                      {format(bookingDate, 'MMM d')} at {bookingTime} · {bookingType}
+                    </p>
+                  )}
+                  <button
+                    className="mt-1 text-[10px] text-gray-400 hover:text-gray-600 underline"
+                    onClick={() => { setBookingConfirmed(false); setBookingDate(undefined); }}
+                  >
+                    Schedule another
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {/* Booking type */}
+                  <div>
+                    <p className="text-[10px] text-gray-400 mb-1 uppercase tracking-wide font-semibold">Type</p>
+                    <div className="flex gap-1 flex-wrap">
+                      {['Viewing', 'Consultation', 'Call', 'Meeting'].map(t => (
+                        <button
+                          key={t}
+                          onClick={() => setBookingType(t)}
+                          className={cn(
+                            "text-[10px] px-2 py-0.5 rounded-full border transition-colors font-medium",
+                            bookingType === t
+                              ? "bg-purple-50 text-purple-700 border-purple-300"
+                              : "bg-white text-gray-500 border-gray-200 hover:border-gray-300"
+                          )}
+                        >
+                          {t}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Date picker */}
+                  <div>
+                    <p className="text-[10px] text-gray-400 mb-1 uppercase tracking-wide font-semibold">Date</p>
+                    <Calendar
+                      mode="single"
+                      selected={bookingDate}
+                      onSelect={setBookingDate}
+                      disabled={d => d < new Date()}
+                      className="rounded-lg border border-gray-100 p-1 [&_.rdp]:m-0"
+                      initialFocus
+                    />
+                  </div>
+
+                  {/* Time */}
+                  <div>
+                    <p className="text-[10px] text-gray-400 mb-1 uppercase tracking-wide font-semibold">Time</p>
+                    <div className="flex gap-1 flex-wrap">
+                      {['09:00','10:00','11:00','13:00','14:00','15:00','16:00'].map(t => (
+                        <button
+                          key={t}
+                          onClick={() => setBookingTime(t)}
+                          className={cn(
+                            "text-[10px] px-1.5 py-0.5 rounded border transition-colors",
+                            bookingTime === t
+                              ? "bg-purple-50 text-purple-700 border-purple-300 font-semibold"
+                              : "bg-white text-gray-500 border-gray-200 hover:border-gray-300"
+                          )}
+                        >
+                          {t}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <button
+                    disabled={!bookingDate}
+                    onClick={() => {
+                      if (bookingDate) setBookingConfirmed(true);
+                    }}
+                    className={cn(
+                      "w-full mt-1 py-1.5 rounded-lg text-[11px] font-semibold transition-colors",
+                      bookingDate
+                        ? "bg-purple-600 text-white hover:bg-purple-700"
+                        : "bg-gray-100 text-gray-400 cursor-not-allowed"
+                    )}
+                    data-testid="button-confirm-booking"
+                  >
+                    Confirm Appointment
+                  </button>
+                </div>
+              )}
+            </PopoverContent>
+          </Popover>
+
+          {/* ── ASSIGN: ownership — opens agent picker popover ── */}
+          <Popover open={assignOpen} onOpenChange={setAssignOpen}>
+            <PopoverTrigger asChild>
+              <button
+                className={cn(
+                  "flex flex-col items-center gap-0.5 py-1.5 rounded-lg border transition-colors",
+                  assignedLabel
+                    ? "border-emerald-200 bg-emerald-50 hover:bg-emerald-100"
+                    : "border-gray-100 bg-gray-50 hover:bg-gray-100 hover:border-gray-200"
+                )}
+                data-testid="button-ai-assign"
+                title={assignedLabel ? `Assigned: ${assignedLabel}` : "Assign agent"}
+              >
+                <UserCheck className={cn("w-3 h-3", assignedLabel ? "text-emerald-600" : "text-gray-500")} />
+                <span className={cn("text-[9px] font-medium truncate max-w-[44px] text-center leading-tight",
+                  assignedLabel ? "text-emerald-700" : "text-gray-500"
+                )}>
+                  {assignedLabel ? assignedLabel.split(' ')[0] : "Assign"}
+                </span>
+              </button>
+            </PopoverTrigger>
+            <PopoverContent className="w-48 p-1.5" align="start" side="bottom">
+              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide px-1.5 pb-1">Assign to</p>
+              <button
+                onClick={() => { onUpdateContact({ assignedTo: null }); setAssignOpen(false); }}
+                className={cn(
+                  "w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-[11px] transition-colors",
+                  !contact.assignedTo
+                    ? "bg-gray-100 text-gray-600 font-medium"
+                    : "text-gray-500 hover:bg-gray-50"
+                )}
+                data-testid="assign-option-unassigned"
+              >
+                <User className="w-3 h-3 text-gray-400" />
+                Unassigned
+              </button>
+              {activeMembers.map(m => {
+                const val  = m.memberId || m.id;
+                const name = m.name || m.email.split('@')[0];
+                const isActive = contact.assignedTo === val;
+                return (
+                  <button
+                    key={m.id}
+                    onClick={() => { onUpdateContact({ assignedTo: val }); setAssignOpen(false); }}
+                    className={cn(
+                      "w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-[11px] transition-colors",
+                      isActive
+                        ? "bg-emerald-50 text-emerald-700 font-medium"
+                        : "text-gray-700 hover:bg-gray-50"
+                    )}
+                    data-testid={`assign-option-${val}`}
+                  >
+                    <UserCheck className={cn("w-3 h-3", isActive ? "text-emerald-500" : "text-gray-400")} />
+                    {name}
+                    {isActive && <CheckCircle2 className="w-3 h-3 ml-auto text-emerald-500" />}
+                  </button>
+                );
+              })}
+            </PopoverContent>
+          </Popover>
+
+          {/* ── FOLLOW: follow-up scheduling — quick options popover ── */}
+          <Popover open={followOpen} onOpenChange={setFollowOpen}>
+            <PopoverTrigger asChild>
+              <button
+                className={cn(
+                  "flex flex-col items-center gap-0.5 py-1.5 rounded-lg border transition-colors",
+                  contact.followUpDate
+                    ? "border-amber-200 bg-amber-50 hover:bg-amber-100"
+                    : "border-gray-100 bg-gray-50 hover:bg-gray-100 hover:border-gray-200"
+                )}
+                data-testid="button-ai-followup"
+                title="Schedule follow-up"
+              >
+                <Bell className={cn("w-3 h-3", contact.followUpDate ? "text-amber-600" : "text-gray-500")} />
+                <span className={cn("text-[9px] font-medium", contact.followUpDate ? "text-amber-700" : "text-gray-500")}>
+                  {contact.followUpDate ? "Set" : "Follow"}
+                </span>
+              </button>
+            </PopoverTrigger>
+            <PopoverContent className="w-44 p-1.5" align="start" side="bottom">
+              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide px-1.5 pb-1">Follow-up in</p>
+              {[
+                { label: '24h',    display: 'Tomorrow (24h)' },
+                { label: '3 days', display: '3 days' },
+                { label: '1 week', display: '1 week' },
+              ].map(({ label, display }) => (
+                <button
+                  key={label}
+                  onClick={() => {
+                    handleFollowUp(label);
+                    setFollowOpen(false);
+                  }}
+                  className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-[11px] text-gray-700 hover:bg-amber-50 hover:text-amber-700 transition-colors"
+                  data-testid={`followup-quick-${label.replace(' ', '-')}`}
+                >
+                  <Clock className="w-3 h-3 text-gray-400" />
+                  {display}
+                </button>
+              ))}
+              {contact.followUpDate && (
+                <>
+                  <div className="border-t border-gray-100 my-1" />
+                  <button
+                    onClick={() => { onUpdateContact({ followUp: null, followUpDate: null }); setFollowOpen(false); }}
+                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-[11px] text-red-400 hover:bg-red-50 hover:text-red-600 transition-colors"
+                    data-testid="followup-quick-clear"
+                  >
+                    <X className="w-3 h-3" />
+                    Clear follow-up
+                  </button>
+                </>
+              )}
+            </PopoverContent>
+          </Popover>
+
+          {/* ── PAUSE: AI on/off ── */}
+          <button
+            onClick={() => setAiPaused(p => !p)}
+            className={cn(
+              "flex flex-col items-center gap-0.5 py-1.5 rounded-lg border transition-colors",
+              aiPaused
+                ? "border-gray-200 bg-gray-100 hover:bg-gray-200"
+                : "border-gray-100 bg-gray-50 hover:bg-gray-100 hover:border-gray-200"
+            )}
+            data-testid="button-ai-pause"
+            title={aiPaused ? "Resume AI" : "Pause AI"}
+          >
+            {aiPaused
+              ? <PlayCircle className="w-3 h-3 text-gray-500" />
+              : <PauseCircle className="w-3 h-3 text-gray-500" />
+            }
+            <span className="text-[9px] text-gray-500 font-medium">{aiPaused ? "Resume" : "Pause"}</span>
+          </button>
+
         </div>
       </div>
 
-      {/* ── Body ─────────────────────────────────────────────────────────── */}
+      {/* ══ Body ════════════════════════════════════════════════════════════ */}
       <div className="flex-1 overflow-y-auto">
         <div className="px-3 py-3 space-y-3">
 
@@ -293,13 +555,13 @@ export function InboxLeadDetailsPanel({
             <div className="space-y-1">
               {contact.phone && (
                 <div className="flex items-center gap-1.5 text-[12px] text-gray-600" data-testid="text-contact-phone">
-                  <Phone className="w-3 h-3 text-gray-350 shrink-0" />
+                  <Phone className="w-3 h-3 text-gray-400 shrink-0" />
                   {contact.phone}
                 </div>
               )}
               {contact.email && (
                 <div className="flex items-center gap-1.5 text-[12px] text-gray-600" data-testid="text-contact-email">
-                  <Mail className="w-3 h-3 text-gray-350 shrink-0" />
+                  <Mail className="w-3 h-3 text-gray-400 shrink-0" />
                   <span className="truncate">{contact.email}</span>
                 </div>
               )}
@@ -330,13 +592,18 @@ export function InboxLeadDetailsPanel({
                   <SelectContent>
                     {CONVERSATION_STATUSES.map(s => (
                       <SelectItem key={s.value} value={s.value}>
-                        <span className={cn("text-[11px] font-medium", s.color.split(' ').find(c => c.startsWith('text-')))}>{s.label}</span>
+                        <span className={cn("text-[11px] font-medium", s.color.split(' ').find(c => c.startsWith('text-')))}>
+                          {s.label}
+                        </span>
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
 
-                <Select value={contact.pipelineStage} onValueChange={val => onUpdateContact({ pipelineStage: val })}>
+                <Select
+                  value={contact.pipelineStage}
+                  onValueChange={val => onUpdateContact({ pipelineStage: val })}
+                >
                   <SelectTrigger className="h-7 text-[11px] flex-1 bg-white px-2" data-testid="select-pipeline">
                     <SelectValue />
                   </SelectTrigger>
@@ -350,40 +617,7 @@ export function InboxLeadDetailsPanel({
             </div>
           )}
 
-          {/* ── 5. ASSIGNED TO ───────────────────────────────────── */}
-          <div>
-            <RowLabel>Assigned To</RowLabel>
-            <Select
-              value={contact.assignedTo || "unassigned"}
-              onValueChange={val => onUpdateContact({ assignedTo: val === 'unassigned' ? null : val })}
-            >
-              <SelectTrigger className="h-7 text-[11px] bg-white mt-1 px-2" data-testid="select-assigned-user">
-                <SelectValue>
-                  <span className="flex items-center gap-1">
-                    {assignedLabel
-                      ? <><UserCheck className="w-3 h-3 text-emerald-500" />{assignedLabel}</>
-                      : <><User className="w-3 h-3 text-gray-400" />Unassigned</>
-                    }
-                  </span>
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="unassigned">
-                  <span className="flex items-center gap-1.5 text-[11px] text-gray-500"><User className="w-3 h-3" />Unassigned</span>
-                </SelectItem>
-                {teamMembers.filter(m => m.status === 'active').map(m => (
-                  <SelectItem key={m.id} value={m.memberId || m.id}>
-                    <span className="flex items-center gap-1.5 text-[11px]">
-                      <UserCheck className="w-3 h-3 text-emerald-600" />
-                      {m.name || m.email.split('@')[0]}
-                    </span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* ── 6. STATUS TAGS ────────────────────────────────────── */}
+          {/* ── 5. STATUS TAGS ────────────────────────────────────── */}
           <div>
             <RowLabel>Tag</RowLabel>
             <div className="flex flex-wrap gap-1 mt-1">
@@ -405,12 +639,12 @@ export function InboxLeadDetailsPanel({
             </div>
           </div>
 
-          {/* ── 7. NEXT FOLLOW-UP ─────────────────────────────────── */}
-          <div>
+          {/* ── 6. FOLLOW-UP (main scheduling UI) ────────────────── */}
+          <div ref={followRef}>
             <div className="flex items-center justify-between mb-1">
               <RowLabel>Follow-up</RowLabel>
               {!contact.followUpDate && (
-                <span className="text-[9px] text-purple-400 italic">AI: suggest 24h</span>
+                <span className="text-[9px] text-purple-400 italic">AI suggests 24h</span>
               )}
             </div>
 
@@ -418,16 +652,16 @@ export function InboxLeadDetailsPanel({
               <div
                 className={cn(
                   "flex items-center gap-1.5 px-2 py-1.5 rounded-lg mb-1.5 text-[11px] font-medium border",
-                  followUpStatus === 'overdue' ? "bg-red-50 text-red-700 border-red-200" :
-                  followUpStatus === 'today' ? "bg-amber-50 text-amber-700 border-amber-200" :
-                  "bg-emerald-50 text-emerald-700 border-emerald-200"
+                  followUpSt === 'overdue' ? "bg-red-50 text-red-700 border-red-200" :
+                  followUpSt === 'today'   ? "bg-amber-50 text-amber-700 border-amber-200" :
+                                             "bg-emerald-50 text-emerald-700 border-emerald-200"
                 )}
                 data-testid="followup-date-display"
               >
                 <CalendarIcon className="w-3 h-3 shrink-0" />
                 <span>
-                  {followUpStatus === 'overdue' && 'Overdue · '}
-                  {followUpStatus === 'today' && 'Today · '}
+                  {followUpSt === 'overdue' && 'Overdue · '}
+                  {followUpSt === 'today'   && 'Today · '}
                   {format(new Date(contact.followUpDate), 'MMM d, yyyy')}
                 </span>
                 <button
@@ -444,7 +678,7 @@ export function InboxLeadDetailsPanel({
               {(['Tomorrow', '3 days', '1 week'] as const).map(t => (
                 <button
                   key={t}
-                  onClick={() => handleFollowUp(contact.followUp === t ? null : t)}
+                  onClick={() => handleFollowUpFull(t)}
                   className={cn(
                     "flex-1 text-[10px] py-1.5 rounded-lg border text-center transition-colors",
                     contact.followUp === t
@@ -489,7 +723,7 @@ export function InboxLeadDetailsPanel({
             </div>
           </div>
 
-          {/* ── 8. NOTES / AI MEMORY ──────────────────────────────── */}
+          {/* ── 7. NOTES / AI MEMORY ──────────────────────────────── */}
           <div>
             <div className="flex items-center justify-between mb-1">
               <RowLabel>Notes</RowLabel>
@@ -500,7 +734,6 @@ export function InboxLeadDetailsPanel({
               )}
             </div>
 
-            {/* AI memory summary — parsed from notes */}
             {contact.notes && (
               <div className="mb-1.5 px-2 py-1.5 bg-purple-50/60 border border-purple-100 rounded-lg">
                 <div className="flex items-center gap-1 mb-0.5">
@@ -521,7 +754,7 @@ export function InboxLeadDetailsPanel({
             />
           </div>
 
-          {/* ── 9. DELETE CONTACT ─────────────────────────────────── */}
+          {/* ── 8. DELETE CONTACT ─────────────────────────────────── */}
           <div className="pb-2">
             <button
               onClick={onDeleteContact}
