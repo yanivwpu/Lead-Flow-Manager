@@ -1,0 +1,67 @@
+Rebuild the message composer into a ChatGPT-style AI input bar.
+
+IMPORTANT SCOPE RULES
+- Only change the message input/composer area at the bottom of the conversation view
+- Do NOT modify the new inbox layout
+- Do NOT modify the right sidebar layout, sections, spacing, or logic
+- Do NOT restore any old AI Suggest components, popups, floating panels, or legacy buttons
+- Remove old AI Suggest UI completely and cleanly from the composer area only
+- Preserve existing message rendering, thread layout, notes panel, and right sidebar behavior
+
+GOAL
+Replace the old AI Suggest experience with a native ChatGPT-style composer where AI is built directly into the input flow.
+
+NEW COMPOSER UX
+1. Add a compact AI mode control on the left side of the message bar:
+   - Manual
+   - Suggest
+   - Auto
+
+2. The input behavior must change by mode:
+   - Manual: normal typing experience
+   - Suggest: AI pre-drafts the reply directly inside the input field for user review/edit/send
+   - Auto: input becomes passive with status text like “AI is handling this conversation...”, while still allowing human override
+
+3. Add a subtle AI status line above the composer:
+   - examples:
+     - AI is qualifying this lead…
+     - Waiting for response…
+     - Preparing follow-up…
+     - AI sent message just now
+
+4. In Suggest mode, add only minimal inline actions:
+   - Regenerate
+   - Edit
+   - Send
+   No modals, no popups, no large secondary panels
+
+5. In Auto mode:
+   - show AI activity inline
+   - allow instant human takeover by clicking into the input or switching mode
+   - human override must pause AI safely
+
+REMOVE OLD COMPONENTS
+- Remove legacy “AI Suggest” button/panel behavior
+- Remove any old generate-reply widget, popup, expandable composer tools, or split-layout AI composer remnants
+- Do not leave dead code paths or duplicate controls in the composer
+
+PROTECTION RULES
+- Right sidebar must remain untouched
+- Do not change the sidebar DOM structure or component props unless absolutely required
+- If shared components are currently coupled, duplicate/refactor the composer logic instead of risking sidebar regressions
+- Keep all AI Copilot panel sections exactly as they are
+
+IMPLEMENTATION SAFETY
+- Build this as a new composer component if needed, then swap it in after verification
+- Keep old composer code isolated until the new composer is fully working
+- Do not do a broad refactor across the conversation page
+- Limit changes to the composer container, its local state, and its AI interaction hooks
+
+ACCEPTANCE CRITERIA
+- No old AI Suggest UI remains visible
+- Composer feels native and minimal like ChatGPT
+- Suggest mode drafts directly in the input
+- Auto mode shows live AI handling state
+- Manual mode works normally
+- Right sidebar remains visually and functionally unchanged
+- No regressions to notes, lead panel, or inbox layout
