@@ -8,9 +8,6 @@ import { usePresence } from "@/lib/usePresence";
 import { 
   Search, 
   MoreVertical, 
-  Smile, 
-  Paperclip, 
-  Send,
   Clock,
   Smartphone,
   Lock,
@@ -27,10 +24,6 @@ import {
   Image as ImageIcon,
   FileText,
   Download,
-  Loader2,
-  Sparkles,
-  Brain,
-  RefreshCw,
   Edit,
   History
 } from "lucide-react";
@@ -65,8 +58,8 @@ import { UpgradeModal, type UpgradeReason, type ConversationLimitInfo } from "@/
 import { useSubscription } from "@/lib/subscription-context";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
-import EmojiPicker, { EmojiClickData } from "emoji-picker-react";
 import { ChatAvatar } from "@/components/ChatAvatar";
+import { AIComposer } from "@/components/AIComposer";
 
 interface TeamMember {
   id: string;
@@ -124,13 +117,6 @@ export function Chats() {
   const [conversationSearch, setConversationSearch] = useState("");
   const [showConversationSearch, setShowConversationSearch] = useState(false);
   
-  // AI Suggestion state
-  const [aiSuggestion, setAiSuggestion] = useState<string | null>(null);
-  const [aiSuggestionLoading, setAiSuggestionLoading] = useState(false);
-  const [showAiSuggestion, setShowAiSuggestion] = useState(false);
-  const [aiTone, setAiTone] = useState<"neutral" | "friendly" | "professional" | "sales">("neutral");
-  const [aiLanguage, setAiLanguage] = useState<"auto" | "en" | "he" | "es" | "ar">("auto");
-  const [leadUpdateHint, setLeadUpdateHint] = useState(false);
   
   // Contact menu state (Edit, Timeline, Delete)
   const [showEditChat, setShowEditChat] = useState(false);
@@ -303,106 +289,6 @@ export function Chats() {
     return chatsToSearch.find(c => String(c.id) === String(selectedChatId));
   }, [demoMode, demoChats, activeChats, selectedChatId]);
 
-  // Client-side cooldown for AI suggestions (3 seconds)
-  const [aiCooldown, setAiCooldown] = useState(false);
-  
-  // Get AI suggestion for current conversation
-  const fetchAiSuggestion = useCallback(async () => {
-    if (!selectedChat || !aiEnabled || demoMode || aiCooldown) return;
-    
-    setAiSuggestionLoading(true);
-    setShowAiSuggestion(true);
-    setAiCooldown(true);
-    setAiSuggestion(null); // Clear previous suggestion immediately
-    
-    // Reset cooldown after 3 seconds
-    setTimeout(() => setAiCooldown(false), 3000);
-    
-    try {
-      const conversationHistory = selectedChat.messages.slice(-10).map((msg: any) => ({
-        role: msg.direction === 'incoming' ? 'user' : 'assistant',
-        content: msg.text || ''
-      }));
-      
-      const response = await fetch('/api/ai/suggest-reply', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          chatId: selectedChat.id,
-          conversationHistory,
-          tone: aiTone,
-          ...(aiLanguage !== 'auto' ? { language: aiLanguage } : {})
-        })
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        setAiSuggestion(data.suggestion || null);
-        
-        // Silently extract lead data in background
-        extractLeadData(selectedChat.id, conversationHistory);
-      } else {
-        setAiSuggestion(null);
-        const errorData = await response.json();
-        if (errorData.status === "paused" || errorData.status === "limited") {
-          toast({
-            title: "AI Limited",
-            description: errorData.error || "AI assistance is temporarily limited.",
-            variant: "destructive"
-          });
-        }
-      }
-    } catch (error) {
-      console.error("AI suggestion error:", error);
-      setAiSuggestion(null);
-    } finally {
-      setAiSuggestionLoading(false);
-    }
-  }, [selectedChat, aiEnabled, demoMode, toast, aiCooldown, aiTone, aiLanguage]);
-  
-  // Silent lead extraction with frequency limiting
-  const lastExtractionRef = useRef<Record<string, number>>({});
-  
-  const extractLeadData = useCallback(async (chatId: string, conversationHistory: any[]) => {
-    // Optimization: Only extract every 3 messages per chat to save costs
-    const lastCount = lastExtractionRef.current[chatId] || 0;
-    if (conversationHistory.length > 0 && conversationHistory.length - lastCount < 3) {
-      return;
-    }
-    lastExtractionRef.current[chatId] = conversationHistory.length;
-
-    try {
-      const response = await fetch('/api/ai/extract-lead', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ chatId, conversationHistory })
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        // Only show hint if we actually extracted meaningful data
-        if (data.name || data.email || data.phone || data.budget) {
-          setLeadUpdateHint(true);
-          setTimeout(() => setLeadUpdateHint(false), 3000);
-        }
-      }
-    } catch (error) {
-      // Silently fail - lead extraction is secondary
-      console.error("Lead extraction error:", error);
-    }
-  }, []);
-
-  // Use AI suggestion
-  const useAiSuggestion = useCallback(() => {
-    if (aiSuggestion) {
-      setNewMessage(aiSuggestion);
-      setShowAiSuggestion(false);
-      setAiSuggestion(null);
-    }
-  }, [aiSuggestion]);
-
   const sortedChats = useMemo(() => {
     const chatsToSort = demoMode ? demoChats : activeChats;
     return [...chatsToSort].sort((a, b) => {
@@ -460,17 +346,11 @@ export function Chats() {
   const [localNotes, setLocalNotes] = useState("");
   const [mobileCalendarOpen, setMobileCalendarOpen] = useState(false);
   const [desktopCalendarOpen, setDesktopCalendarOpen] = useState(false);
-  const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [filePreview, setFilePreview] = useState<string | null>(null);
   const [isUploadingFile, setIsUploadingFile] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-
-  const handleEmojiClick = (emojiData: EmojiClickData) => {
-    setNewMessage(prev => prev + emojiData.emoji);
-    setEmojiPickerOpen(false);
-  };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -1144,176 +1024,19 @@ export function Chats() {
                 </div>
               )}
 
-              {/* AI Suggestion Panel */}
-              {aiEnabled && showAiSuggestion && (
-                <div className="bg-gradient-to-r from-purple-50 to-blue-50 px-4 py-3 border-t border-purple-100">
-                  <div className="flex items-start gap-3">
-                    <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center shrink-0">
-                      <Sparkles className="w-4 h-4 text-purple-600" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between gap-2 mb-2">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-semibold text-purple-700">AI Suggestion</span>
-                          {leadUpdateHint && (
-                            <span className="text-xs text-emerald-600 animate-pulse">Lead details updated</span>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2">
-                          {/* Language selector */}
-                          <select
-                            value={aiLanguage}
-                            onChange={(e) => setAiLanguage(e.target.value as typeof aiLanguage)}
-                            className="text-xs px-2 py-1 rounded border border-purple-200 bg-white text-purple-700 focus:outline-none focus:ring-1 focus:ring-purple-300"
-                            data-testid="select-ai-language"
-                          >
-                            <option value="auto">Auto</option>
-                            <option value="en">English</option>
-                            <option value="he">עברית</option>
-                            <option value="es">Español</option>
-                            <option value="ar">العربية</option>
-                          </select>
-                          {/* Tone selector */}
-                          <select
-                            value={aiTone}
-                            onChange={(e) => setAiTone(e.target.value as typeof aiTone)}
-                            className="text-xs px-2 py-1 rounded border border-purple-200 bg-white text-purple-700 focus:outline-none focus:ring-1 focus:ring-purple-300"
-                            data-testid="select-ai-tone"
-                          >
-                            <option value="neutral">Neutral</option>
-                            <option value="friendly">Friendly</option>
-                            <option value="professional">Professional</option>
-                            <option value="sales">Sales-focused</option>
-                          </select>
-                          <button
-                            onClick={() => setShowAiSuggestion(false)}
-                            className="text-gray-400 hover:text-gray-600"
-                            data-testid="button-dismiss-ai"
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
-                        </div>
-                      </div>
-                      {aiSuggestionLoading ? (
-                        <div className="space-y-3">
-                          <div className="flex items-center gap-2 text-sm text-purple-600 font-medium">
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                            <span>Thinking...</span>
-                          </div>
-                          <div className="space-y-2">
-                            <div className="h-2 bg-purple-100 rounded animate-pulse w-3/4" />
-                            <div className="h-2 bg-purple-100 rounded animate-pulse w-1/2" />
-                          </div>
-                        </div>
-                      ) : aiSuggestion ? (
-                        <div>
-                          <p className="text-sm text-gray-700 mb-2">{aiSuggestion}</p>
-                          <div className="flex items-center justify-between gap-2">
-                            <div className="flex gap-2">
-                              <button
-                                onClick={useAiSuggestion}
-                                className="text-xs px-3 py-1 bg-purple-600 text-white rounded-full hover:bg-purple-700 transition-colors"
-                                data-testid="button-use-ai-suggestion"
-                              >
-                                Use this reply
-                              </button>
-                              <button
-                                onClick={fetchAiSuggestion}
-                                disabled={aiCooldown}
-                                className="text-xs px-3 py-1 bg-white text-purple-600 border border-purple-200 rounded-full hover:bg-purple-50 transition-colors flex items-center gap-1 disabled:opacity-50"
-                                data-testid="button-regenerate-ai"
-                              >
-                                <RefreshCw className={cn("w-3 h-3", aiCooldown && "animate-spin")} />
-                                {aiCooldown ? "Wait..." : "Regenerate"}
-                              </button>
-                            </div>
-                            <a 
-                              href="/pricing" 
-                              className="text-[10px] text-purple-500 hover:text-purple-700 hover:underline"
-                            >
-                              {hasFullAIBrain ? "Full AI Brain Active" : "Powered by AI Assist – Upgrade to Full AI Brain ($29/mo)"}
-                            </a>
-                          </div>
-                        </div>
-                      ) : (
-                        <p className="text-sm text-gray-500">No suggestion available. Try again later.</p>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Input Area */}
-              <div className="bg-gray-50 px-2 sm:px-4 py-2 sm:py-3 border-t border-gray-200 flex items-center gap-2 sm:gap-3 shrink-0">
-                 <div className="hidden sm:flex gap-4 text-gray-500">
-                    {/* AI Suggestion Button */}
-                    {aiEnabled && !showAiSuggestion && (
-                      <button
-                        onClick={fetchAiSuggestion}
-                        disabled={aiCooldown}
-                        className={cn(
-                          "text-purple-500 hover:text-purple-600 disabled:opacity-50",
-                          aiCooldown && "cursor-not-allowed"
-                        )}
-                        title={aiCooldown ? "Please wait..." : "Get AI suggestion"}
-                        data-testid="button-ai-suggest"
-                      >
-                        <Brain className={cn("h-6 w-6", aiCooldown && "animate-pulse")} />
-                      </button>
-                    )}
-                    <Popover open={emojiPickerOpen} onOpenChange={setEmojiPickerOpen}>
-                      <PopoverTrigger asChild>
-                        <button className="hover:text-gray-700" data-testid="button-emoji">
-                          <Smile className="h-6 w-6 cursor-pointer" />
-                        </button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0 border-0" align="start" side="top">
-                        <EmojiPicker onEmojiClick={handleEmojiClick} />
-                      </PopoverContent>
-                    </Popover>
-                    <button 
-                      onClick={() => fileInputRef.current?.click()} 
-                      className="hover:text-gray-700"
-                      data-testid="button-attach-file"
-                    >
-                      <Paperclip className="h-6 w-6 cursor-pointer" />
-                    </button>
-                    <input 
-                      ref={fileInputRef}
-                      type="file" 
-                      className="hidden" 
-                      accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx"
-                      onChange={handleFileSelect}
-                    />
-                 </div>
-                 <input 
-                   type="text" 
-                   placeholder="Type a message" 
-                   className="flex-1 min-w-0 bg-white border border-gray-200 rounded-lg px-3 sm:px-4 py-2 text-sm focus:outline-none focus:border-brand-green"
-                   value={newMessage}
-                   onChange={(e) => {
-                     setNewMessage(e.target.value);
-                     setTyping(true);
-                     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-                     typingTimeoutRef.current = setTimeout(() => setTyping(false), 2000);
-                   }}
-                   onKeyDown={(e) => {
-                     if (e.key === 'Enter') {
-                       setTyping(false);
-                       handleSendMessage();
-                     }
-                   }}
-                   onBlur={() => setTyping(false)}
-                   data-testid="input-message"
-                 />
-                 <button 
-                   onClick={handleSendMessage}
-                   className="h-10 w-10 bg-brand-green hover:bg-emerald-700 rounded-full flex items-center justify-center text-white transition-colors shadow-sm shrink-0"
-                   data-testid="button-send-message"
-                 >
-                   <Send className="h-5 w-5 ml-0.5" />
-                 </button>
-              </div>
+              <AIComposer
+                newMessage={newMessage}
+                setNewMessage={setNewMessage}
+                handleSendMessage={handleSendMessage}
+                setTyping={setTyping}
+                typingTimeoutRef={typingTimeoutRef}
+                aiEnabled={aiEnabled}
+                hasFullAIBrain={hasFullAIBrain}
+                selectedChat={selectedChat ?? null}
+                demoMode={demoMode}
+                fileInputRef={fileInputRef}
+                handleFileSelect={handleFileSelect}
+              />
            </div>
 
            {/* Mobile Lead Details Panel - Compact version for mobile */}
