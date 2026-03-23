@@ -381,7 +381,7 @@ export function InboxLeadDetailsPanel({
             const completeAction = (actionType: string, toastMsg: string) => {
               setFadingAction(actionType);
               setTimeout(() => {
-                setCompletedActions(prev => new Set([...prev, actionType]));
+                setCompletedActions(prev => new Set([...Array.from(prev), actionType]));
                 setFadingAction(null);
               }, 150);
               toast({ title: toastMsg, duration: 2500 });
@@ -1009,67 +1009,99 @@ export function InboxLeadDetailsPanel({
 
             {/* Team Notes tab */}
             {notesTab === 'team' && (
-              <div className="space-y-2">
-                {localNotes && (
-                  <div className="p-2 bg-blue-50/60 border border-blue-100 rounded-lg text-[11px] text-blue-900 line-clamp-3">
-                    {localNotes}
+              <button
+                onClick={() => {
+                  setExpandedNotes(localNotes);
+                  setExpandedNotesOpen(true);
+                }}
+                className="w-full group text-left transition-all"
+                data-testid="button-expand-notes"
+              >
+                {localNotes ? (
+                  <div className="p-2.5 bg-blue-50/40 border border-blue-100 rounded-lg hover:bg-blue-50/60 transition-colors">
+                    <p className="text-[11px] text-blue-900 leading-relaxed line-clamp-4">{localNotes}</p>
+                    <p className="text-[9px] text-blue-400 mt-1.5 opacity-0 group-hover:opacity-100 transition-opacity">Click to edit</p>
+                  </div>
+                ) : (
+                  <div className="p-2.5 border border-dashed border-gray-200 rounded-lg hover:border-gray-300 hover:bg-gray-50/40 transition-all">
+                    <p className="text-[11px] text-gray-400">Add a note about this lead…</p>
                   </div>
                 )}
-                <button
-                  onClick={() => {
-                    setExpandedNotes(localNotes);
-                    setExpandedNotesOpen(true);
-                  }}
-                  className="w-full py-1.5 px-2 text-[11px] font-semibold text-blue-600 hover:text-blue-700 border border-blue-200 rounded-lg hover:bg-blue-50 transition-colors flex items-center justify-center gap-1"
-                  data-testid="button-expand-notes"
-                >
-                  <Edit className="w-3 h-3" />
-                  {localNotes ? 'Edit Note' : 'Add Note'}
-                </button>
-              </div>
+              </button>
             )}
           </div>
 
-          {/* ── EXPANDED NOTE EDITOR MODAL ───────────────────────────────── */}
+          {/* ── NOTES EDITOR MODAL (MODERN DESIGN) ───────────────────────────────── */}
           {expandedNotesOpen && (
             <div 
-              className="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
+              className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 animate-in fade-in duration-150"
               onClick={() => setExpandedNotesOpen(false)}
               data-testid="modal-overlay-expanded-notes"
             >
               <div 
-                className="bg-white rounded-xl shadow-2xl w-[90%] max-w-xl max-h-[90vh] flex flex-col"
+                className="bg-white rounded-2xl shadow-lg w-[90%] max-w-[520px] flex flex-col transform transition-all duration-150 scale-100 animate-in zoom-in-95"
                 onClick={e => e.stopPropagation()}
               >
                 {/* Header */}
-                <div className="flex items-center justify-between p-4 border-b border-gray-200">
-                  <h2 className="text-[14px] font-bold text-gray-900">Team Notes</h2>
+                <div className="px-6 pt-6 pb-3 border-b border-gray-100 flex items-start justify-between">
+                  <div className="flex-1">
+                    <h2 className="text-[15px] font-semibold text-gray-900">Notes</h2>
+                    <p className="text-[12px] text-gray-400 mt-0.5">Internal notes — not visible to customer</p>
+                  </div>
                   <button
                     onClick={() => setExpandedNotesOpen(false)}
-                    className="p-1 hover:bg-gray-100 rounded transition-colors"
+                    className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors flex-shrink-0"
                     data-testid="button-close-notes-modal"
                   >
-                    <X className="w-4 h-4 text-gray-600" />
+                    <X className="w-4 h-4 text-gray-400" />
                   </button>
                 </div>
 
                 {/* Content */}
-                <div className="flex-1 overflow-y-auto p-4">
+                <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3">
                   <textarea
-                    className="w-full h-full bg-gray-50 border border-gray-200 rounded-lg p-3 text-[13px] text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400 resize-none font-sans"
-                    placeholder="Write your notes here…"
+                    className="w-full min-h-40 bg-white border border-gray-200 rounded-xl p-4 text-[13px] text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-blue-400 focus:border-transparent resize-none font-sans leading-relaxed"
+                    placeholder="Add notes about this lead… (preferences, objections, context)"
                     value={expandedNotes}
                     onChange={e => setExpandedNotes(e.target.value)}
                     autoFocus
                     data-testid="textarea-expanded-notes"
                   />
+                  
+                  {/* AI Helper Actions */}
+                  <div className="flex gap-1.5 flex-wrap pt-1">
+                    <button
+                      onClick={() => {}}
+                      className="text-[11px] px-2.5 py-1.5 rounded-lg bg-purple-50 text-purple-600 border border-purple-100 hover:bg-purple-100 transition-colors font-medium"
+                      title="AI will summarize the notes"
+                      data-testid="button-ai-summarize"
+                    >
+                      ✨ Summarize
+                    </button>
+                    <button
+                      onClick={() => {}}
+                      className="text-[11px] px-2.5 py-1.5 rounded-lg bg-purple-50 text-purple-600 border border-purple-100 hover:bg-purple-100 transition-colors font-medium"
+                      title="AI will improve the phrasing"
+                      data-testid="button-ai-improve"
+                    >
+                      ✨ Improve
+                    </button>
+                    <button
+                      onClick={() => {}}
+                      className="text-[11px] px-2.5 py-1.5 rounded-lg bg-purple-50 text-purple-600 border border-purple-100 hover:bg-purple-100 transition-colors font-medium"
+                      title="AI will extract key information"
+                      data-testid="button-ai-extract"
+                    >
+                      ✨ Extract key info
+                    </button>
+                  </div>
                 </div>
 
                 {/* Footer */}
-                <div className="flex gap-2 p-4 border-t border-gray-200 bg-gray-50">
+                <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-end gap-2">
                   <button
                     onClick={() => setExpandedNotesOpen(false)}
-                    className="flex-1 py-2 px-3 text-[11px] font-semibold text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-100 transition-colors"
+                    className="py-2 px-4 text-[12px] font-semibold text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
                     data-testid="button-cancel-notes"
                   >
                     Cancel
@@ -1082,11 +1114,10 @@ export function InboxLeadDetailsPanel({
                       setTimeout(() => setNotesSaved(false), 2000);
                       setExpandedNotesOpen(false);
                     }}
-                    className="flex-1 py-2 px-3 text-[11px] font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors flex items-center justify-center gap-1"
+                    className="py-2 px-4 text-[12px] font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition-colors"
                     data-testid="button-save-notes"
                   >
-                    <Save className="w-3 h-3" />
-                    Save
+                    Save Note
                   </button>
                 </div>
               </div>
