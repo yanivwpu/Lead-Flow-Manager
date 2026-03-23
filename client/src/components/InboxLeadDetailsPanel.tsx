@@ -1062,14 +1062,19 @@ export function InboxLeadDetailsPanel({
                 {/* Content */}
                 <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3">
                   <textarea
-                    className="w-full min-h-40 bg-white border border-gray-200 rounded-xl p-4 text-[13px] text-gray-700 placeholder-gray-400 resize-none font-sans leading-relaxed focus:border-indigo-300 focus:outline-none transition-all duration-150"
+                    className="w-full min-h-40 bg-white border border-gray-200 rounded-xl p-4 text-[13px] text-gray-700 placeholder-gray-400 resize-none font-sans leading-relaxed"
                     style={{
-                      boxShadow: 'none'
+                      outline: 'none',
+                      boxShadow: 'none',
+                      borderColor: '#E5E7EB',
+                      transition: 'all 0.15s ease'
                     }}
                     onFocus={(e) => {
+                      e.currentTarget.style.borderColor = '#A78BFA';
                       e.currentTarget.style.boxShadow = '0 0 0 2px rgba(99, 102, 241, 0.15)';
                     }}
                     onBlur={(e) => {
+                      e.currentTarget.style.borderColor = '#E5E7EB';
                       e.currentTarget.style.boxShadow = 'none';
                     }}
                     placeholder="Add notes about this lead… (preferences, objections, context)"
