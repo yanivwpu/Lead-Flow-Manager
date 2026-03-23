@@ -70,7 +70,19 @@
   input,
   select {
     outline: none !important;
+    box-shadow: none;
   }
+}
+
+/* Notes textarea — zero focus ring, zero glow, zero outline */
+.notes-textarea,
+.notes-textarea:focus,
+.notes-textarea:active,
+.notes-textarea:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+  border-color: #E5E7EB !important;
+  -webkit-appearance: none !important;
 }
 
 /* Custom Scrollbar for Chat List */
