@@ -998,18 +998,34 @@ export function InboxLeadDetailsPanel({
               </button>
             </div>
 
-            {/* AI Memory tab - read-only */}
-            {notesTab === 'ai' && (
-              <div className="p-3 bg-purple-50/60 border border-purple-100 rounded-lg min-h-20 flex flex-col justify-start">
-                {contact.notes ? (
-                  <p className="text-[11px] text-purple-900 leading-relaxed">{contact.notes}</p>
-                ) : (
-                  <p className="text-[11px] text-gray-400 italic">AI Memory will appear here as the conversation develops.</p>
-                )}
-              </div>
-            )}
+            {/* AI Memory tab - read-only, sourced from conversation analysis */}
+            {notesTab === 'ai' && (() => {
+              const hasIntel = intel.budget || intel.timeline || intel.intent || intel.financing || intel.leadScore?.label;
+              const intelItems: { label: string; value: string }[] = [
+                intel.leadScore?.label     ? { label: 'Lead Score', value: intel.leadScore.label }   : null,
+                intel.intent               ? { label: 'Intent',     value: intel.intent }             : null,
+                intel.budget               ? { label: 'Budget',     value: intel.budget }             : null,
+                intel.timeline             ? { label: 'Timeline',   value: intel.timeline }           : null,
+                intel.financing            ? { label: 'Financing',  value: intel.financing }          : null,
+              ].filter(Boolean) as { label: string; value: string }[];
 
-            {/* Team Notes tab */}
+              return (
+                <div className="p-3 bg-purple-50/60 border border-purple-100 rounded-lg min-h-20 flex flex-col justify-start gap-1.5">
+                  {hasIntel ? (
+                    intelItems.map(item => (
+                      <div key={item.label} className="flex items-start gap-2">
+                        <span className="text-[9px] font-semibold uppercase tracking-wide text-purple-400 shrink-0 w-16 pt-0.5">{item.label}</span>
+                        <span className="text-[11px] text-purple-900 leading-relaxed">{item.value}</span>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-[11px] text-gray-400 italic">AI Memory will appear here as the conversation develops.</p>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* Team Notes tab - sourced ONLY from manual localNotes, never AI content */}
             {notesTab === 'team' && (
               <button
                 onClick={() => {
@@ -1026,7 +1042,7 @@ export function InboxLeadDetailsPanel({
                   </div>
                 ) : (
                   <div className="p-2.5 border border-dashed border-gray-200 rounded-lg hover:border-gray-300 hover:bg-gray-50/40 transition-all">
-                    <p className="text-[11px] text-gray-400">Add a note about this lead…</p>
+                    <p className="text-[11px] text-gray-400">Add a private note…</p>
                   </div>
                 )}
               </button>
