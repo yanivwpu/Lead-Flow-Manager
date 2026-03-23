@@ -196,6 +196,8 @@ export function InboxLeadDetailsPanel({
   const [bookOpen,   setBookOpen]   = useState(false);
   const [completedActions, setCompletedActions] = useState<Set<string>>(new Set());
   const [fadingAction, setFadingAction] = useState<string | null>(null);
+  const [notesSaveStatus, setNotesSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
+  const notesSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Follow popover: 'quick' shows the quick options; 'custom' shows date+time picker
   const [followView,       setFollowView]       = useState<'quick' | 'custom'>('quick');
@@ -1063,62 +1065,78 @@ export function InboxLeadDetailsPanel({
                     className="w-full min-h-40 bg-white border border-gray-200 rounded-xl p-4 text-[13px] text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-blue-400 focus:border-transparent resize-none font-sans leading-relaxed"
                     placeholder="Add notes about this lead… (preferences, objections, context)"
                     value={expandedNotes}
-                    onChange={e => setExpandedNotes(e.target.value)}
+                    onChange={e => {
+                      setExpandedNotes(e.target.value);
+                      setNotesSaveStatus('saving');
+                      
+                      // Clear existing timer
+                      if (notesSaveTimerRef.current) {
+                        clearTimeout(notesSaveTimerRef.current);
+                      }
+                      
+                      // Set new debounce timer (600ms)
+                      notesSaveTimerRef.current = setTimeout(() => {
+                        setLocalNotes(e.target.value);
+                        onUpdateContact({ notes: e.target.value });
+                        setNotesSaveStatus('saved');
+                        setTimeout(() => setNotesSaveStatus('idle'), 1500);
+                      }, 600);
+                    }}
                     autoFocus
                     data-testid="textarea-expanded-notes"
                   />
                   
-                  {/* AI Helper Actions */}
-                  <div className="flex gap-1.5 flex-wrap pt-1">
-                    <button
-                      onClick={() => {}}
-                      className="text-[11px] px-2.5 py-1.5 rounded-lg bg-purple-50 text-purple-600 border border-purple-100 hover:bg-purple-100 transition-colors font-medium"
-                      title="AI will summarize the notes"
-                      data-testid="button-ai-summarize"
-                    >
-                      ✨ Summarize
-                    </button>
-                    <button
-                      onClick={() => {}}
-                      className="text-[11px] px-2.5 py-1.5 rounded-lg bg-purple-50 text-purple-600 border border-purple-100 hover:bg-purple-100 transition-colors font-medium"
-                      title="AI will improve the phrasing"
-                      data-testid="button-ai-improve"
-                    >
-                      ✨ Improve
-                    </button>
-                    <button
-                      onClick={() => {}}
-                      className="text-[11px] px-2.5 py-1.5 rounded-lg bg-purple-50 text-purple-600 border border-purple-100 hover:bg-purple-100 transition-colors font-medium"
-                      title="AI will extract key information"
-                      data-testid="button-ai-extract"
-                    >
-                      ✨ Extract key info
-                    </button>
-                  </div>
                 </div>
 
                 {/* Footer */}
-                <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-end gap-2">
-                  <button
-                    onClick={() => setExpandedNotesOpen(false)}
-                    className="py-2 px-4 text-[12px] font-semibold text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
-                    data-testid="button-cancel-notes"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={() => {
-                      setLocalNotes(expandedNotes);
-                      onUpdateContact({ notes: expandedNotes });
-                      setNotesSaved(true);
-                      setTimeout(() => setNotesSaved(false), 2000);
-                      setExpandedNotesOpen(false);
-                    }}
-                    className="py-2 px-4 text-[12px] font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition-colors"
-                    data-testid="button-save-notes"
-                  >
-                    Save Note
-                  </button>
+                <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-between">
+                  <div className="text-[11px] font-medium h-5 flex items-center">
+                    {notesSaveStatus === 'saving' && (
+                      <span className="text-gray-500">Saving…</span>
+                    )}
+                    {notesSaveStatus === 'saved' && (
+                      <span className="text-emerald-600">Saved ✓</span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => {
+                        // Clear any pending save timer
+                        if (notesSaveTimerRef.current) {
+                          clearTimeout(notesSaveTimerRef.current);
+                        }
+                        // Auto-save any unsaved changes before closing
+                        if (notesSaveStatus === 'saving') {
+                          setLocalNotes(expandedNotes);
+                          onUpdateContact({ notes: expandedNotes });
+                        }
+                        setExpandedNotesOpen(false);
+                      }}
+                      className="py-2 px-4 text-[12px] font-semibold text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+                      data-testid="button-cancel-notes"
+                    >
+                      Close
+                    </button>
+                    <button
+                      onClick={() => {
+                        // Clear any pending save timer and save immediately
+                        if (notesSaveTimerRef.current) {
+                          clearTimeout(notesSaveTimerRef.current);
+                        }
+                        setLocalNotes(expandedNotes);
+                        onUpdateContact({ notes: expandedNotes });
+                        setNotesSaveStatus('saved');
+                        setTimeout(() => {
+                          setNotesSaveStatus('idle');
+                          setExpandedNotesOpen(false);
+                        }, 800);
+                      }}
+                      className="py-2 px-4 text-[12px] font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition-colors"
+                      data-testid="button-save-notes"
+                    >
+                      Save Note
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
