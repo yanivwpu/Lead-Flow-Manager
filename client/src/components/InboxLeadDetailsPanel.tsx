@@ -194,6 +194,8 @@ export function InboxLeadDetailsPanel({
   const [followOpen, setFollowOpen] = useState(false);
   const [useFollowModal, setUseFollowModal] = useState(false);
   const [bookOpen,   setBookOpen]   = useState(false);
+  const [completedActions, setCompletedActions] = useState<Set<string>>(new Set());
+  const [fadingAction, setFadingAction] = useState<string | null>(null);
 
   // Follow popover: 'quick' shows the quick options; 'custom' shows date+time picker
   const [followView,       setFollowView]       = useState<'quick' | 'custom'>('quick');
@@ -210,6 +212,7 @@ export function InboxLeadDetailsPanel({
     setLocalNotes(contact.notes || "");
     setExpandedNotes(contact.notes || "");
     setNotesSaved(false);
+    setCompletedActions(new Set()); // Reset completed actions when contact changes
   }, [contact.id, contact.notes]);
 
   // Reset follow popover state when it closes
@@ -363,99 +366,129 @@ export function InboxLeadDetailsPanel({
             />
           </div>
         )}
-        {canSeeCopilot && canSeeWorkflow && (workflow.actions.length > 0 || workflow.tagSuggestion || workflow.stageSuggestion) && (
-          <div className="mt-2 pt-1.5 border-t border-purple-100">
-            <div className="flex items-center gap-0.5 mb-1">
-              <span className="text-[9px] font-bold text-purple-400 uppercase tracking-widest">Copilot suggests</span>
-            </div>
-            <div className="flex items-center gap-1 flex-wrap">
-              {workflow.actions.slice(0, 2).map(action => {
-                const actionHandlers: Record<string, () => void> = {
-                  assign:  () => setAssignOpen(true),
-                  book:    () => setBookOpen(true),
-                  follow:  () => setFollowOpen(true),
-                  qualify: action.value ? () => {
-                    if (onInsertMessage && action.value) {
-                      onInsertMessage(action.value);
-                    } else if (action.value) {
-                      navigator.clipboard.writeText(action.value).catch(() => {});
-                      toast({ title: "Copied to clipboard", description: action.value, duration: 2500 });
-                    }
-                  } : undefined as unknown as () => void,
-                  nurture: () => {
-                    toast({ title: "Added to nurture queue", description: "This lead will receive a check-in in 7 days.", duration: 3000 });
-                  },
-                };
-                const handler = actionHandlers[action.type];
-                const colorCls = action.priority === 'high'
-                  ? 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100'
-                  : action.priority === 'medium'
-                  ? 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'
-                  : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100';
-                return (
-                  <button
-                    key={action.type}
-                    onClick={handler}
-                    disabled={!handler}
-                    title={action.reason}
-                    data-testid={`workflow-action-${action.type}`}
-                    className={cn(
-                      "text-[10px] font-medium px-1.5 py-0.5 rounded border transition-colors leading-none",
-                      colorCls,
-                      !handler && "opacity-60 cursor-default"
-                    )}
-                  >
-                    {action.label}
-                  </button>
-                );
-              })}
+        {/* ── COPILOT ACTION SUGGESTIONS ──────────────────────────────── */}
+        {canSeeCopilot && canSeeWorkflow && (
+          (() => {
+            // Filter out completed actions
+            const activeActions = workflow.actions.filter(a => !completedActions.has(a.type));
+            const hasTagSuggestion = workflow.tagSuggestion && !workflow.tagAutoApply && !completedActions.has('tag');
+            const hasStageSuggestion = workflow.stageSuggestion && !completedActions.has('stage');
+            const hasAnyActions = activeActions.length > 0 || hasTagSuggestion || hasStageSuggestion;
 
-              {/* Tag suggestion chip — only shows when NOT auto-applying */}
-              {workflow.tagSuggestion && !workflow.tagAutoApply && (
-                <button
-                  onClick={() => onUpdateContact({ tag: workflow.tagSuggestion! })}
-                  title={`AI suggests: Tag as "${workflow.tagSuggestion}"`}
-                  data-testid="workflow-tag-suggestion"
-                  className="text-[10px] font-medium px-1.5 py-0.5 rounded border bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 transition-colors leading-none"
-                >
-                  Tag: {workflow.tagSuggestion} ↗
-                </button>
-              )}
+            if (!hasAnyActions) return null;
 
-              {/* Stage suggestion chip */}
-              {workflow.stageSuggestion && (
-                <button
-                  onClick={() => onUpdateContact({ pipelineStage: workflow.stageSuggestion! })}
-                  title={`AI suggests moving to ${workflow.stageSuggestion} stage`}
-                  data-testid="workflow-stage-suggestion"
-                  className="text-[10px] font-medium px-1.5 py-0.5 rounded border bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 transition-colors leading-none"
-                >
-                  → {workflow.stageSuggestion}
-                </button>
-              )}
-            </div>
+            // Helper to mark action as completed with fade-out and toast
+            const completeAction = (actionType: string, toastMsg: string) => {
+              setFadingAction(actionType);
+              setTimeout(() => {
+                setCompletedActions(prev => new Set([...prev, actionType]));
+                setFadingAction(null);
+              }, 150);
+              toast({ title: toastMsg, duration: 2500 });
+            };
 
-            {/* Next qualifying question hint — click to insert into composer */}
-            {workflow.nextQuestion && intel.messageCount > 0 && (
-              <button
-                className="mt-1 flex items-start gap-1 text-left group w-full"
-                title="Click to insert into composer"
-                onClick={() => {
-                  if (onInsertMessage) {
-                    onInsertMessage(workflow.nextQuestion!);
-                  } else {
-                    navigator.clipboard.writeText(workflow.nextQuestion!).catch(() => {});
-                    toast({ title: "Copied to clipboard", description: workflow.nextQuestion!, duration: 2500 });
-                  }
-                }}
-              >
-                <ClipboardCopy className="w-2.5 h-2.5 text-purple-300 group-hover:text-purple-500 shrink-0 mt-0.5 transition-colors" />
-                <span className="text-[10px] text-gray-400 group-hover:text-purple-600 leading-snug transition-colors line-clamp-2">
-                  {workflow.nextQuestion}
-                </span>
-              </button>
-            )}
-          </div>
+            return (
+              <div className="mt-2 pt-1.5 border-t border-purple-100">
+                <div className="flex items-center gap-0.5 mb-1">
+                  <span className="text-[9px] font-bold text-purple-400 uppercase tracking-widest">Copilot suggests</span>
+                </div>
+                <div className="flex items-center gap-1 flex-wrap">
+                  {activeActions.slice(0, 2).map(action => {
+                    const actionHandlers: Record<string, () => void> = {
+                      assign:  () => {
+                        setAssignOpen(true);
+                        completeAction(action.type, "Lead assigned");
+                      },
+                      book:    () => {
+                        setBookOpen(true);
+                        completeAction(action.type, "Follow-up scheduled");
+                      },
+                      follow:  () => {
+                        setFollowOpen(true);
+                        completeAction(action.type, "Follow-up scheduled");
+                      },
+                      qualify: action.value ? () => {
+                        if (onInsertMessage && action.value) {
+                          onInsertMessage(action.value);
+                        } else if (action.value) {
+                          navigator.clipboard.writeText(action.value).catch(() => {});
+                        }
+                        completeAction(action.type, "Message inserted");
+                      } : undefined as unknown as () => void,
+                      nurture: () => {
+                        completeAction(action.type, "Added to nurture queue");
+                      },
+                    };
+                    const handler = actionHandlers[action.type];
+                    const colorCls = action.priority === 'high'
+                      ? 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100'
+                      : action.priority === 'medium'
+                      ? 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'
+                      : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100';
+                    
+                    return (
+                      <button
+                        key={action.type}
+                        onClick={handler}
+                        disabled={!handler}
+                        title={action.reason}
+                        data-testid={`workflow-action-${action.type}`}
+                        className={cn(
+                          "text-[10px] font-medium px-1.5 py-0.5 rounded border transition-all leading-none",
+                          colorCls,
+                          !handler && "opacity-60 cursor-default",
+                          fadingAction === action.type && "opacity-0 scale-95"
+                        )}
+                      >
+                        {action.label}
+                      </button>
+                    );
+                  })}
+
+                  {/* Tag suggestion chip — only shows when NOT auto-applying and NOT completed */}
+                  {hasTagSuggestion && (
+                    <button
+                      onClick={() => {
+                        onUpdateContact({ tag: workflow.tagSuggestion! });
+                        completeAction('tag', `Tagged as "${workflow.tagSuggestion}"`);
+                      }}
+                      title={`AI suggests: Tag as "${workflow.tagSuggestion}"`}
+                      data-testid="workflow-tag-suggestion"
+                      className={cn(
+                        "text-[10px] font-medium px-1.5 py-0.5 rounded border bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 transition-all leading-none",
+                        fadingAction === 'tag' && "opacity-0 scale-95"
+                      )}
+                    >
+                      Tag: {workflow.tagSuggestion} ↗
+                    </button>
+                  )}
+
+                  {/* Stage suggestion chip */}
+                  {hasStageSuggestion && (
+                    <button
+                      onClick={() => {
+                        onUpdateContact({ pipelineStage: workflow.stageSuggestion! });
+                        completeAction('stage', `Moved to ${workflow.stageSuggestion}`);
+                      }}
+                      title={`AI suggests moving to ${workflow.stageSuggestion} stage`}
+                      data-testid="workflow-stage-suggestion"
+                      className={cn(
+                        "text-[10px] font-medium px-1.5 py-0.5 rounded border bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 transition-all leading-none",
+                        fadingAction === 'stage' && "opacity-0 scale-95"
+                      )}
+                    >
+                      → {workflow.stageSuggestion}
+                    </button>
+                  )}
+                </div>
+
+                {/* Empty state when all actions are completed */}
+                {!hasAnyActions && (
+                  <p className="text-[10px] text-gray-400 italic mt-1">No actions needed — you're on track</p>
+                )}
+              </div>
+            );
+          })()
         )}
       </div>
 
