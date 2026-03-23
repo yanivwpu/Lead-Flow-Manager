@@ -998,26 +998,20 @@ export function InboxLeadDetailsPanel({
               </button>
             </div>
 
-            {/* AI Memory tab - read-only, sourced from conversation analysis */}
+            {/* AI Memory tab - read-only natural-language summary from conversation */}
             {notesTab === 'ai' && (() => {
-              const hasIntel = intel.budget || intel.timeline || intel.intent || intel.financing || intel.leadScore?.label;
-              const intelItems: { label: string; value: string }[] = [
-                intel.leadScore?.label     ? { label: 'Lead Score', value: intel.leadScore.label }   : null,
-                intel.intent               ? { label: 'Intent',     value: intel.intent }             : null,
-                intel.budget               ? { label: 'Budget',     value: intel.budget }             : null,
-                intel.timeline             ? { label: 'Timeline',   value: intel.timeline }           : null,
-                intel.financing            ? { label: 'Financing',  value: intel.financing }          : null,
-              ].filter(Boolean) as { label: string; value: string }[];
+              // Build a natural-language summary from intel — NO raw field labels
+              const parts: string[] = [];
+              if (intel.intent)    parts.push(`Interested in ${intel.intent}.`);
+              if (intel.budget)    parts.push(`Budget around ${intel.budget}.`);
+              if (intel.timeline)  parts.push(`Timeline: ${intel.timeline}.`);
+              if (intel.financing) parts.push(`${intel.financing} financing.`);
+              const summary = parts.join(' ');
 
               return (
-                <div className="p-3 bg-purple-50/60 border border-purple-100 rounded-lg min-h-20 flex flex-col justify-start gap-1.5">
-                  {hasIntel ? (
-                    intelItems.map(item => (
-                      <div key={item.label} className="flex items-start gap-2">
-                        <span className="text-[9px] font-semibold uppercase tracking-wide text-purple-400 shrink-0 w-16 pt-0.5">{item.label}</span>
-                        <span className="text-[11px] text-purple-900 leading-relaxed">{item.value}</span>
-                      </div>
-                    ))
+                <div className="p-3 bg-purple-50/60 border border-purple-100 rounded-lg min-h-20">
+                  {summary ? (
+                    <p className="text-[11px] text-purple-900 leading-relaxed">{summary}</p>
                   ) : (
                     <p className="text-[11px] text-gray-400 italic">AI Memory will appear here as the conversation develops.</p>
                   )}
