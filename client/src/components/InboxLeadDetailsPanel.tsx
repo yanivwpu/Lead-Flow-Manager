@@ -19,6 +19,7 @@ import {
   Clock,
   ArrowLeft,
   ClipboardCopy,
+  Save,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -183,6 +184,9 @@ export function InboxLeadDetailsPanel({
   const workflowUpgradeTo = capabilities?.upgradePlan ?? "Pro";
   const [localNotes, setLocalNotes] = useState(contact.notes || "");
   const [notesSaved, setNotesSaved] = useState(false);
+  const [notesTab, setNotesTab] = useState<'ai' | 'team'>('team');
+  const [expandedNotesOpen, setExpandedNotesOpen] = useState(false);
+  const [expandedNotes, setExpandedNotes] = useState(contact.notes || "");
   const [aiPaused,   setAiPaused]   = useState(false);
 
   // Copilot action popovers
@@ -203,6 +207,7 @@ export function InboxLeadDetailsPanel({
 
   useEffect(() => {
     setLocalNotes(contact.notes || "");
+    setExpandedNotes(contact.notes || "");
     setNotesSaved(false);
   }, [contact.id, contact.notes]);
 
@@ -913,36 +918,136 @@ export function InboxLeadDetailsPanel({
             )}
           </div>
 
-          {/* ── NOTES / AI MEMORY ────────────────────────────────────── */}
+          {/* ── NOTES & MEMORY (TABBED) ──────────────────────────────── */}
           <div>
-            <div className="flex items-center justify-between mb-1">
-              <RowLabel>Notes</RowLabel>
-              {notesSaved && (
-                <span className="text-[10px] text-emerald-600 flex items-center gap-0.5" data-testid="text-notes-saved">
-                  <CheckCheck className="w-3 h-3" />Saved
-                </span>
-              )}
+            <div className="mb-1.5">
+              <RowLabel>Notes & Memory</RowLabel>
+            </div>
+            
+            {/* Tab navigation */}
+            <div className="flex gap-1 mb-2 border-b border-gray-200">
+              <button
+                onClick={() => setNotesTab('ai')}
+                className={cn(
+                  "px-2 py-1 text-[11px] font-semibold transition-colors border-b-2",
+                  notesTab === 'ai'
+                    ? 'text-purple-600 border-purple-400'
+                    : 'text-gray-500 border-transparent hover:text-gray-700'
+                )}
+                data-testid="button-tab-ai-memory"
+              >
+                AI Memory
+              </button>
+              <button
+                onClick={() => setNotesTab('team')}
+                className={cn(
+                  "px-2 py-1 text-[11px] font-semibold transition-colors border-b-2",
+                  notesTab === 'team'
+                    ? 'text-blue-600 border-blue-400'
+                    : 'text-gray-500 border-transparent hover:text-gray-700'
+                )}
+                data-testid="button-tab-team-notes"
+              >
+                Team Notes
+              </button>
             </div>
 
-            {contact.notes && (
-              <div className="mb-1.5 px-2 py-1.5 bg-purple-50/60 border border-purple-100 rounded-lg">
-                <div className="flex items-center gap-1 mb-0.5">
-                  <Sparkles className="w-2.5 h-2.5 text-purple-400" />
-                  <span className="text-[9px] font-semibold text-purple-500 uppercase tracking-wide">AI Memory</span>
-                </div>
-                <p className="text-[11px] text-purple-800 leading-relaxed line-clamp-3">{contact.notes}</p>
+            {/* AI Memory tab - read-only */}
+            {notesTab === 'ai' && (
+              <div className="p-3 bg-purple-50/60 border border-purple-100 rounded-lg min-h-20 flex flex-col justify-start">
+                {contact.notes ? (
+                  <p className="text-[11px] text-purple-900 leading-relaxed">{contact.notes}</p>
+                ) : (
+                  <p className="text-[11px] text-gray-400 italic">AI Memory will appear here as the conversation develops.</p>
+                )}
               </div>
             )}
 
-            <textarea
-              className="w-full h-16 bg-white border border-gray-200 rounded-lg p-2 text-[12px] text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-300 resize-none"
-              placeholder="Add a note…"
-              value={localNotes}
-              onChange={e => { setLocalNotes(e.target.value); setNotesSaved(false); }}
-              onBlur={saveNotes}
-              data-testid="textarea-notes"
-            />
+            {/* Team Notes tab */}
+            {notesTab === 'team' && (
+              <div className="space-y-2">
+                {localNotes && (
+                  <div className="p-2 bg-blue-50/60 border border-blue-100 rounded-lg text-[11px] text-blue-900 line-clamp-3">
+                    {localNotes}
+                  </div>
+                )}
+                <button
+                  onClick={() => {
+                    setExpandedNotes(localNotes);
+                    setExpandedNotesOpen(true);
+                  }}
+                  className="w-full py-1.5 px-2 text-[11px] font-semibold text-blue-600 hover:text-blue-700 border border-blue-200 rounded-lg hover:bg-blue-50 transition-colors flex items-center justify-center gap-1"
+                  data-testid="button-expand-notes"
+                >
+                  <Edit className="w-3 h-3" />
+                  {localNotes ? 'Edit Note' : 'Add Note'}
+                </button>
+              </div>
+            )}
           </div>
+
+          {/* ── EXPANDED NOTE EDITOR MODAL ───────────────────────────────── */}
+          {expandedNotesOpen && (
+            <div 
+              className="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
+              onClick={() => setExpandedNotesOpen(false)}
+              data-testid="modal-overlay-expanded-notes"
+            >
+              <div 
+                className="bg-white rounded-xl shadow-2xl w-[90%] max-w-xl max-h-[90vh] flex flex-col"
+                onClick={e => e.stopPropagation()}
+              >
+                {/* Header */}
+                <div className="flex items-center justify-between p-4 border-b border-gray-200">
+                  <h2 className="text-[14px] font-bold text-gray-900">Team Notes</h2>
+                  <button
+                    onClick={() => setExpandedNotesOpen(false)}
+                    className="p-1 hover:bg-gray-100 rounded transition-colors"
+                    data-testid="button-close-notes-modal"
+                  >
+                    <X className="w-4 h-4 text-gray-600" />
+                  </button>
+                </div>
+
+                {/* Content */}
+                <div className="flex-1 overflow-y-auto p-4">
+                  <textarea
+                    className="w-full h-full bg-gray-50 border border-gray-200 rounded-lg p-3 text-[13px] text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400 resize-none font-sans"
+                    placeholder="Write your notes here…"
+                    value={expandedNotes}
+                    onChange={e => setExpandedNotes(e.target.value)}
+                    autoFocus
+                    data-testid="textarea-expanded-notes"
+                  />
+                </div>
+
+                {/* Footer */}
+                <div className="flex gap-2 p-4 border-t border-gray-200 bg-gray-50">
+                  <button
+                    onClick={() => setExpandedNotesOpen(false)}
+                    className="flex-1 py-2 px-3 text-[11px] font-semibold text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-100 transition-colors"
+                    data-testid="button-cancel-notes"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => {
+                      setLocalNotes(expandedNotes);
+                      onUpdateContact({ notes: expandedNotes });
+                      setNotesSaved(true);
+                      setTimeout(() => setNotesSaved(false), 2000);
+                      setExpandedNotesOpen(false);
+                    }}
+                    className="flex-1 py-2 px-3 text-[11px] font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors flex items-center justify-center gap-1"
+                    data-testid="button-save-notes"
+                  >
+                    <Save className="w-3 h-3" />
+                    Save
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* ── DELETE CONTACT ────────────────────────────────────────── */}
           <div className="pb-2">
