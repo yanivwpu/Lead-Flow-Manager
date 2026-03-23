@@ -192,6 +192,7 @@ export function InboxLeadDetailsPanel({
   // Copilot action popovers
   const [assignOpen, setAssignOpen] = useState(false);
   const [followOpen, setFollowOpen] = useState(false);
+  const [useFollowModal, setUseFollowModal] = useState(false);
   const [bookOpen,   setBookOpen]   = useState(false);
 
   // Follow popover: 'quick' shows the quick options; 'custom' shows date+time picker
@@ -644,7 +645,12 @@ export function InboxLeadDetailsPanel({
               </button>
             </PopoverTrigger>
 
-            <PopoverContent className="w-52 p-1.5" align="start" side="bottom" onInteractOutside={() => setFollowOpen(false)}>
+            <PopoverContent 
+              className="w-52 p-1.5 max-h-[70vh] overflow-y-auto flex flex-col" 
+              align="start" 
+              side={followView === 'custom' ? 'top' : 'bottom'}
+              onInteractOutside={() => setFollowOpen(false)}
+            >
 
               {/* ─ QUICK OPTIONS VIEW ─ */}
               {followView === 'quick' && (
@@ -696,66 +702,71 @@ export function InboxLeadDetailsPanel({
 
               {/* ─ CUSTOM DATE & TIME VIEW ─ */}
               {followView === 'custom' && (
-                <div className="space-y-2">
-                  {/* Back button */}
-                  <button
-                    onClick={() => setFollowView('quick')}
-                    className="flex items-center gap-1 text-[10px] text-gray-400 hover:text-gray-600 transition-colors mb-1"
-                    data-testid="followup-custom-back"
-                  >
-                    <ArrowLeft className="w-3 h-3" />
-                    Back
-                  </button>
+                <div className="flex flex-col h-full">
+                  {/* Scrollable content area */}
+                  <div className="flex-1 overflow-y-auto pr-1 space-y-2 min-h-0">
+                    {/* Back button */}
+                    <button
+                      onClick={() => setFollowView('quick')}
+                      className="flex items-center gap-1 text-[10px] text-gray-400 hover:text-gray-600 transition-colors mb-1"
+                      data-testid="followup-custom-back"
+                    >
+                      <ArrowLeft className="w-3 h-3" />
+                      Back
+                    </button>
 
-                  {/* Date picker */}
-                  <div>
-                    <p className="text-[10px] text-gray-400 mb-1 uppercase tracking-wide font-semibold">Date</p>
-                    <Calendar
-                      mode="single"
-                      selected={customFollowDate}
-                      onSelect={setCustomFollowDate}
-                      disabled={d => d < new Date()}
-                      className="rounded-lg border border-gray-100 p-1 [&_.rdp]:m-0"
-                      initialFocus
-                    />
-                  </div>
+                    {/* Date picker */}
+                    <div>
+                      <p className="text-[10px] text-gray-400 mb-1 uppercase tracking-wide font-semibold">Date</p>
+                      <Calendar
+                        mode="single"
+                        selected={customFollowDate}
+                        onSelect={setCustomFollowDate}
+                        disabled={d => d < new Date()}
+                        className="rounded-lg border border-gray-100 p-1 [&_.rdp]:m-0"
+                        initialFocus
+                      />
+                    </div>
 
-                  {/* Time picker */}
-                  <div>
-                    <p className="text-[10px] text-gray-400 mb-1 uppercase tracking-wide font-semibold">Time</p>
-                    <div className="flex flex-wrap gap-1">
-                      {TIME_SLOTS.map(t => (
-                        <button
-                          key={t}
-                          onClick={() => setCustomFollowTime(t)}
-                          className={cn(
-                            "text-[10px] px-1.5 py-0.5 rounded border transition-colors",
-                            customFollowTime === t
-                              ? "bg-amber-50 text-amber-700 border-amber-300 font-semibold"
-                              : "bg-white text-gray-500 border-gray-200 hover:border-gray-300"
-                          )}
-                          data-testid={`followup-time-${t}`}
-                        >
-                          {formatTime24to12(t)}
-                        </button>
-                      ))}
+                    {/* Time picker */}
+                    <div>
+                      <p className="text-[10px] text-gray-400 mb-1 uppercase tracking-wide font-semibold">Time</p>
+                      <div className="flex flex-wrap gap-1">
+                        {TIME_SLOTS.map(t => (
+                          <button
+                            key={t}
+                            onClick={() => setCustomFollowTime(t)}
+                            className={cn(
+                              "text-[10px] px-1.5 py-0.5 rounded border transition-colors",
+                              customFollowTime === t
+                                ? "bg-amber-50 text-amber-700 border-amber-300 font-semibold"
+                                : "bg-white text-gray-500 border-gray-200 hover:border-gray-300"
+                            )}
+                            data-testid={`followup-time-${t}`}
+                          >
+                            {formatTime24to12(t)}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   </div>
 
-                  {/* Confirm */}
-                  <button
-                    disabled={!customFollowDate}
-                    onClick={confirmCustomFollowUp}
-                    className={cn(
-                      "w-full py-1.5 rounded-lg text-[11px] font-semibold transition-colors",
-                      customFollowDate
-                        ? "bg-amber-500 text-white hover:bg-amber-600"
-                        : "bg-gray-100 text-gray-400 cursor-not-allowed"
-                    )}
-                    data-testid="followup-custom-confirm"
-                  >
-                    Set Follow-up
-                  </button>
+                  {/* Sticky confirm button at bottom */}
+                  <div className="mt-2 pt-2 border-t border-gray-100 flex-shrink-0">
+                    <button
+                      disabled={!customFollowDate}
+                      onClick={confirmCustomFollowUp}
+                      className={cn(
+                        "w-full py-1.5 rounded-lg text-[11px] font-semibold transition-colors",
+                        customFollowDate
+                          ? "bg-amber-500 text-white hover:bg-amber-600"
+                          : "bg-gray-100 text-gray-400 cursor-not-allowed"
+                      )}
+                      data-testid="followup-custom-confirm"
+                    >
+                      Set Follow-up
+                    </button>
+                  </div>
                 </div>
               )}
             </PopoverContent>
