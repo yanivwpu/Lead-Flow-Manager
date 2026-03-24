@@ -400,14 +400,79 @@ export function UnifiedInbox() {
       if (!res.ok) throw new Error(json.error || "Failed to send message");
       return json;
     },
-    onSuccess: () => {
-      console.log("[Debug] Outgoing message sent — invalidating inbox and conversation queries");
-      queryClient.invalidateQueries({ queryKey: ["/api/inbox"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
+    onMutate: async (data) => {
+      const now = new Date().toISOString();
+      const conversationId = primaryConversation?.id;
+      const messagesKey = ["/api/conversations", conversationId, "messages"];
+      const inboxKey = ["/api/inbox"];
+
+      // Cancel in-flight refetches so they don't overwrite our optimistic state
+      await queryClient.cancelQueries({ queryKey: messagesKey });
+      await queryClient.cancelQueries({ queryKey: inboxKey });
+
+      // Snapshot for rollback on error
+      const previousMessages = queryClient.getQueryData<Message[]>(messagesKey);
+      const previousInbox = queryClient.getQueryData<InboxItem[]>(inboxKey);
+
+      // Optimistically append message to the conversation thread
+      if (conversationId) {
+        const optimisticMessage: Message = {
+          id: `optimistic-${Date.now()}`,
+          direction: 'outbound',
+          content: data.content,
+          contentType: 'text',
+          status: 'sending',
+          createdAt: now,
+        };
+        queryClient.setQueryData<Message[]>(messagesKey, (old) => [
+          ...(old ?? []),
+          optimisticMessage,
+        ]);
+      }
+
+      // Optimistically update inbox: refresh preview, timestamp, and move thread to top
+      queryClient.setQueryData<InboxItem[]>(inboxKey, (old) => {
+        if (!old) return old;
+        const list = old.map((item) =>
+          item.contact.id === data.contactId
+            ? { ...item, lastMessage: data.content, lastMessageAt: now, unreadCount: 0 }
+            : item
+        );
+        const idx = list.findIndex((item) => item.contact.id === data.contactId);
+        if (idx > 0) {
+          const [moved] = list.splice(idx, 1);
+          list.unshift(moved);
+        }
+        return list;
+      });
+
+      // Clear input immediately — message is "in flight"
       setMessageInput("");
+
+      return { previousMessages, previousInbox, conversationId };
     },
-    onError: (error: Error) => {
+    onError: (error: Error, data, context) => {
+      // Roll back optimistic updates and restore the unsent text
+      if (context?.conversationId && context.previousMessages !== undefined) {
+        queryClient.setQueryData(
+          ["/api/conversations", context.conversationId, "messages"],
+          context.previousMessages
+        );
+      }
+      if (context?.previousInbox !== undefined) {
+        queryClient.setQueryData(["/api/inbox"], context.previousInbox);
+      }
+      setMessageInput(data.content);
       toast({ title: "Message not sent", description: error.message, variant: "destructive" });
+    },
+    onSettled: (_data, _error, _vars, context) => {
+      // Sync with server regardless of success/failure — polling remains as safety net
+      queryClient.invalidateQueries({ queryKey: ["/api/inbox"] });
+      if (context?.conversationId) {
+        queryClient.invalidateQueries({
+          queryKey: ["/api/conversations", context.conversationId, "messages"],
+        });
+      }
     },
   });
 

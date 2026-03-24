@@ -39,27 +39,40 @@ export function createRedisConnection(): IORedis {
   console.log(`[Queue] Connecting to Redis at ${redisUrl.replace(/:[^:@]+@/, ':***@')}`);
 
   const useTls = redisUrl.startsWith("rediss://") || redisUrl.includes("upstash.io");
+
+  // Persistent counter that survives across reconnect cycles.
+  // IORedis resets `times` to 0 after every successful TCP connect (even when
+  // AUTH is immediately rejected), so retryStrategy(times) alone can never
+  // accumulate enough delay. We count quota errors independently via the
+  // 'error' listener and stop all retries once the threshold is reached.
+  let quotaFailures = 0;
+  const MAX_QUOTA_FAILURES = 10;
+
   const connection = new IORedis(redisUrl, {
     maxRetriesPerRequest: null,
     enableReadyCheck: false,
     tls: useTls ? {} : undefined,
-    // Exponential backoff capped at 5 minutes — prevents hammering Upstash
-    // quota when the database is at its request limit. After ~10 attempts the
-    // delay stays at 5 minutes per reconnect, burning far fewer requests.
     retryStrategy(times: number) {
-      if (times > 30) {
-        // After 30 failed attempts stop retrying entirely to save quota
-        console.error(`[Queue] Redis: ${times} consecutive failures — giving up retrying to preserve quota`);
-        return null;
+      if (quotaFailures >= MAX_QUOTA_FAILURES) {
+        console.error(`[Queue] Redis quota exceeded ${quotaFailures} times — stopping reconnects to preserve Upstash limit`);
+        return null; // tell IORedis to give up
       }
-      const delay = Math.min(1000 * Math.pow(2, times - 1), 300000); // cap at 5 min
-      console.log(`[Queue] Redis reconnecting in ${Math.round(delay / 1000)}s (attempt ${times})`);
+      // Exponential backoff: 1 s → 2 s → 4 s … capped at 30 s
+      const delay = Math.min(1000 * Math.pow(2, times - 1), 30000);
+      console.log(`[Queue] Redis reconnecting in ${Math.round(delay / 1000)}s (attempt ${times}, quota failures: ${quotaFailures})`);
       return delay;
     },
   });
 
   connection.on("error", (err) => {
-    console.error("[Queue] Redis connection error:", err.message);
+    if (err.message?.includes("max requests limit exceeded")) {
+      quotaFailures++;
+      if (quotaFailures < MAX_QUOTA_FAILURES) {
+        console.warn(`[Queue] Upstash quota error #${quotaFailures}/${MAX_QUOTA_FAILURES}: ${err.message}`);
+      }
+    } else {
+      console.error("[Queue] Redis connection error:", err.message);
+    }
   });
 
   connection.on("connect", () => {
