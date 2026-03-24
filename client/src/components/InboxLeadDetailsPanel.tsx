@@ -183,6 +183,131 @@ function RowLabel({ children }: { children: React.ReactNode }) {
   );
 }
 
+// ── ADD NOTE MODAL ────────────────────────────────────────────────────────────
+// Isolated component with its own state so the textarea is completely immune
+// to parent re-renders (AI polling, message updates, etc.).
+interface AddNoteModalProps {
+  contactId: string;
+  contactNotesList: ContactNote[];
+  onSave: (note: ContactNote) => void;
+  onClose: () => void;
+}
+function AddNoteModal({ contactId, contactNotesList, onSave, onClose }: AddNoteModalProps) {
+  const { toast } = useToast();
+  const [noteText, setNoteText] = useState('');
+  const [saving,   setSaving]   = useState(false);
+
+  const handleSave = async () => {
+    if (!noteText.trim()) {
+      toast({ title: "Note is empty", description: "Please type something before saving.", variant: "destructive" });
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/contacts/${contactId}/notes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: noteText.trim() }),
+      });
+      if (res.ok) {
+        const saved: ContactNote = await res.json();
+        onSave(saved);
+        onClose();
+        toast({ title: "Note saved", duration: 2000 });
+      } else {
+        let errMsg = "Failed to save note. Please try again.";
+        try { const b = await res.json(); if (b?.error) errMsg = b.error; } catch {}
+        toast({ title: "Save failed", description: errMsg, variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "Save failed", description: "Network error — please check your connection and try again.", variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 animate-in fade-in duration-150"
+      onClick={onClose}
+      data-testid="modal-overlay-add-note"
+    >
+      <div
+        className="bg-white rounded-2xl shadow-lg w-[90%] max-w-[480px] flex flex-col animate-in zoom-in-95 duration-150"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="px-5 pt-5 pb-3 border-b border-gray-100 flex items-start justify-between">
+          <div>
+            <h2 className="text-[15px] font-semibold text-gray-900">Add Team Note</h2>
+            <p className="text-[11px] text-gray-400 mt-0.5">Visible to all team members — not shown to customer</p>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
+            data-testid="button-close-note-modal"
+          >
+            <X className="w-4 h-4 text-gray-400" />
+          </button>
+        </div>
+
+        {/* Existing notes history */}
+        {contactNotesList.length > 0 && (
+          <div className="px-5 pt-4 pb-2 flex flex-col gap-3 max-h-[240px] overflow-y-auto" data-testid="modal-notes-history">
+            {contactNotesList.map(note => (
+              <div key={note.id} className="flex flex-col gap-0.5" data-testid={`modal-note-${note.id}`}>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] text-gray-400">{note.createdByName || 'Team member'}</span>
+                  <span className="text-[10px] text-gray-400">·</span>
+                  <span className="text-[10px] text-gray-400">
+                    {note.createdAt
+                      ? new Date(note.createdAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+                      : ''}
+                  </span>
+                </div>
+                <p className="text-[12px] text-gray-800 leading-relaxed whitespace-pre-wrap">{note.content}</p>
+              </div>
+            ))}
+            <div className="border-t border-gray-100 mt-1" />
+          </div>
+        )}
+
+        {/* Textarea — completely isolated state */}
+        <div className="px-5 py-4">
+          <textarea
+            className="notes-textarea w-full min-h-[120px] bg-white rounded-xl p-3 text-[13px] text-gray-700 placeholder-gray-400 resize-none font-sans leading-relaxed"
+            style={{ outline: 'none', boxShadow: 'none', border: '1px solid #E5E7EB' }}
+            placeholder="Add context, objections, preferences…"
+            value={noteText}
+            onChange={e => setNoteText(e.target.value)}
+            autoFocus
+            data-testid="textarea-new-note"
+          />
+        </div>
+
+        {/* Footer */}
+        <div className="px-5 pb-5 flex items-center justify-end gap-2">
+          <button
+            onClick={onClose}
+            className="py-2 px-4 text-[12px] font-semibold text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+            data-testid="button-cancel-note"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={!noteText.trim() || saving}
+            className="py-2 px-4 text-[12px] font-semibold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors"
+            data-testid="button-save-note"
+          >
+            {saving ? 'Saving…' : 'Save Note'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function InboxLeadDetailsPanel({
   contact,
   primaryConversation,
@@ -208,8 +333,6 @@ export function InboxLeadDetailsPanel({
   const [contactNotesList, setContactNotesList] = useState<ContactNote[]>([]);
   const [notesLoading, setNotesLoading] = useState(false);
   const [addNoteOpen, setAddNoteOpen] = useState(false);
-  const [newNoteText, setNewNoteText] = useState('');
-  const [notesSaving, setNotesSaving] = useState(false);
   // Snapshot of lastViewedAt taken when this contact was first opened — used to compute badge
   const [notesViewedAt, setNotesViewedAt] = useState<Date | null>(null);
 
@@ -1231,115 +1354,12 @@ export function InboxLeadDetailsPanel({
 
           {/* ── ADD NOTE MODAL ──────────────────────────────────────────── */}
           {addNoteOpen && (
-            <div
-              className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 animate-in fade-in duration-150"
-              onClick={() => setAddNoteOpen(false)}
-              data-testid="modal-overlay-add-note"
-            >
-              <div
-                className="bg-white rounded-2xl shadow-lg w-[90%] max-w-[480px] flex flex-col animate-in zoom-in-95 duration-150"
-                onClick={e => e.stopPropagation()}
-              >
-                {/* Header */}
-                <div className="px-5 pt-5 pb-3 border-b border-gray-100 flex items-start justify-between">
-                  <div>
-                    <h2 className="text-[15px] font-semibold text-gray-900">Add Team Note</h2>
-                    <p className="text-[11px] text-gray-400 mt-0.5">Visible to all team members — not shown to customer</p>
-                  </div>
-                  <button
-                    onClick={() => setAddNoteOpen(false)}
-                    className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
-                    data-testid="button-close-note-modal"
-                  >
-                    <X className="w-4 h-4 text-gray-400" />
-                  </button>
-                </div>
-
-                {/* Existing notes */}
-                {contactNotesList.length > 0 && (
-                  <div className="px-5 pt-4 pb-2 flex flex-col gap-3 max-h-[240px] overflow-y-auto" data-testid="modal-notes-history">
-                    {contactNotesList.map(note => (
-                      <div key={note.id} className="flex flex-col gap-0.5" data-testid={`modal-note-${note.id}`}>
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-[11px] text-gray-400">{note.createdByName || 'Team member'}</span>
-                          <span className="text-[10px] text-gray-400">·</span>
-                          <span className="text-[10px] text-gray-400">
-                            {note.createdAt
-                              ? new Date(note.createdAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
-                              : ''}
-                          </span>
-                        </div>
-                        <p className="text-[12px] text-gray-800 leading-relaxed whitespace-pre-wrap">{note.content}</p>
-                      </div>
-                    ))}
-                    <div className="border-t border-gray-100 mt-1" />
-                  </div>
-                )}
-
-                {/* Body — new note input */}
-                <div className="px-5 py-4">
-                  <textarea
-                    className="notes-textarea w-full min-h-[120px] bg-white rounded-xl p-3 text-[13px] text-gray-700 placeholder-gray-400 resize-none font-sans leading-relaxed"
-                    style={{ outline: 'none', boxShadow: 'none', border: '1px solid #E5E7EB' }}
-                    placeholder="Add context, objections, preferences…"
-                    value={newNoteText}
-                    onChange={e => setNewNoteText(e.target.value)}
-                    autoFocus
-                    data-testid="textarea-new-note"
-                  />
-                </div>
-
-                {/* Footer */}
-                <div className="px-5 pb-5 flex items-center justify-end gap-2">
-                  <button
-                    onClick={() => setAddNoteOpen(false)}
-                    className="py-2 px-4 text-[12px] font-semibold text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
-                    data-testid="button-cancel-note"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={async () => {
-                      if (!newNoteText.trim()) {
-                        toast({ title: "Note is empty", description: "Please type something before saving.", variant: "destructive" });
-                        return;
-                      }
-                      setNotesSaving(true);
-                      try {
-                        const res = await fetch(`/api/contacts/${contact.id}/notes`, {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ content: newNoteText.trim() }),
-                        });
-                        if (res.ok) {
-                          const saved: ContactNote = await res.json();
-                          setContactNotesList(prev => [saved, ...prev]);
-                          setAddNoteOpen(false);
-                          setNewNoteText('');
-                          toast({ title: "Note saved", duration: 2000 });
-                        } else {
-                          let errMsg = "Failed to save note. Please try again.";
-                          try {
-                            const errBody = await res.json();
-                            if (errBody?.error) errMsg = errBody.error;
-                          } catch {}
-                          toast({ title: "Save failed", description: errMsg, variant: "destructive" });
-                        }
-                      } catch (err) {
-                        toast({ title: "Save failed", description: "Network error — please check your connection and try again.", variant: "destructive" });
-                      } finally {
-                        setNotesSaving(false);
-                      }
-                    }}
-                    disabled={!newNoteText.trim() || notesSaving}
-                    className="py-2 px-4 text-[12px] font-semibold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors"
-                    data-testid="button-save-note"
-                  >
-                    {notesSaving ? 'Saving…' : 'Save Note'}
-                  </button>
-                </div>
-              </div>
-            </div>
+            <AddNoteModal
+              contactId={contact.id}
+              contactNotesList={contactNotesList}
+              onSave={saved => setContactNotesList(prev => [saved, ...prev])}
+              onClose={() => setAddNoteOpen(false)}
+            />
           )}
 
           {/* ── DELETE CONTACT ────────────────────────────────────────── */}
