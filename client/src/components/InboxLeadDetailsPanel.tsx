@@ -381,16 +381,25 @@ export function InboxLeadDetailsPanel({
     <div className="hidden lg:flex w-[260px] xl:w-[272px] flex-col border-l border-gray-100 bg-white overflow-y-auto flex-shrink-0">
 
       {/* ══ COPILOT STICKY HEADER ════════════════════════════════════════ */}
-      <div className="px-3 pt-2.5 pb-2 border-b border-gray-100 bg-white sticky top-0 z-10">
-        <div className="flex items-center justify-between">
+      <div className={cn(
+        "bg-white sticky top-0 z-10 transition-colors",
+        copilotExpanded ? "border-b border-gray-200" : "border-b border-gray-100"
+      )}>
+        {/* Full-width clickable header row */}
+        <div
+          onClick={() => setCopilotExpanded(p => !p)}
+          className="px-3 pt-2.5 pb-2 flex items-center justify-between cursor-pointer hover:bg-gray-50 transition-colors select-none"
+          data-testid="button-copilot-collapse"
+        >
           <div className="flex items-center gap-1.5">
             <Sparkles className="w-3 h-3 text-purple-500" />
             <span className="text-[11px] font-semibold text-gray-700 tracking-wide">Copilot</span>
           </div>
-          <div className="flex items-center gap-1.5">
+
+          <div className="flex items-center gap-2">
             {canSeeCopilot ? (
               <button
-                onClick={() => setAiPaused(p => !p)}
+                onClick={e => { e.stopPropagation(); setAiPaused(p => !p); }}
                 className={cn(
                   "text-[10px] font-medium px-1.5 py-0.5 rounded-full border transition-colors leading-none",
                   aiPaused
@@ -404,22 +413,25 @@ export function InboxLeadDetailsPanel({
             ) : (
               <span className="text-[10px] text-gray-300 font-medium">{copilotUpgradeTo}+</span>
             )}
-            <button
-              onClick={() => setCopilotExpanded(p => !p)}
-              className="p-0.5 text-gray-300 hover:text-gray-500 transition-colors rounded"
-              data-testid="button-copilot-collapse"
-            >
+
+            <div className="flex items-center gap-0.5 text-gray-400/70">
               {copilotExpanded
-                ? <ChevronUp className="w-3.5 h-3.5" />
-                : <ChevronDown className="w-3.5 h-3.5" />
+                ? <ChevronUp className="w-[18px] h-[18px]" />
+                : <ChevronDown className="w-[18px] h-[18px]" />
               }
-            </button>
+              <span className="text-[10px] font-medium">
+                {copilotExpanded ? "Collapse" : "Expand"}
+              </span>
+            </div>
           </div>
         </div>
 
-        {/* Collapsed summary — just lead + state + suggestion count */}
+        {/* Collapsed summary — click anywhere to expand */}
         {!copilotExpanded && canSeeCopilot && (
-          <div className="mt-1.5 flex items-center justify-between">
+          <div
+            onClick={() => setCopilotExpanded(true)}
+            className="px-3 pb-2 flex items-center justify-between cursor-pointer"
+          >
             <div className="flex items-center gap-1.5">
               <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", intel.leadScore.dot)} />
               <span className={cn("text-[11px] font-semibold", intel.leadScore.color)}>
@@ -776,7 +788,7 @@ export function InboxLeadDetailsPanel({
 
           {/* ══ COPILOT EXPANDED PANEL ══════════════════════════════════ */}
           {copilotExpanded && (
-            <div className="pb-3 border-b border-gray-100 space-y-3">
+            <div className="pb-3 border-b border-gray-100 space-y-3 animate-in fade-in slide-in-from-top-1 duration-200">
 
               {!canSeeCopilot ? (
                 <AIUpgradePrompt
