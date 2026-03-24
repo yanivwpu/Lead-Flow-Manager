@@ -1,0 +1,203 @@
+Please update /realtor-growth-engine to make it clearer, more productized, and more conversion-focused.
+
+Important goals:
+- Remove all launch/discount language
+- Make the page feel like a real installable product, not a promo page
+- Keep the language simple and benefit-driven
+- Move “Done-for-you” higher
+- Do NOT add technical/dev jargon
+- Keep CTA flow: if logged in -> /app/templates/realtor-growth-engine ; if not logged in -> /signup?redirect=/app/templates/realtor-growth-engine
+
+--------------------------------------------------
+1) HERO SECTION
+--------------------------------------------------
+Replace the hero content with:
+
+Headline:
+Turn Real Estate Conversations Into Booked Showings Automatically
+
+Subheadline:
+AI-powered WhatsApp automation that responds instantly, qualifies leads, and schedules showings for you.
+
+Add a one-line clarity statement directly under the subheadline:
+A fully pre-built automation system installed inside your CRM — ready to run.
+
+Primary CTA:
+Install Realtor Growth Engine
+
+CTA behavior:
+- If user is logged in -> /app/templates/realtor-growth-engine
+- If user is not logged in -> /signup?redirect=/app/templates/realtor-growth-engine
+
+Secondary CTA:
+See How It Works
+-> scroll to workflow section
+
+--------------------------------------------------
+2) MOVE “DONE-FOR-YOU SETUP” UP
+--------------------------------------------------
+Move the Done-for-You section directly under the hero.
+
+Use this section title:
+Fully Done-For-You Setup
+
+Use this copy / bullet direction:
+- WhatsApp Business API setup
+- Meta verification assistance
+- Automation workflows installed
+- CRM pipeline configured
+- Calendar integration included
+
+Add this supporting line:
+No technical setup required. Live in days.
+
+Important:
+This section should come BEFORE the workflow / feature explanation.
+
+--------------------------------------------------
+3) REPLACE FEATURES SECTION
+--------------------------------------------------
+Rename the current feature-style section to:
+
+What the Growth Engine Does
+
+Use benefit-focused copy, not technical jargon.
+
+Include points like:
+- Responds instantly to every inquiry
+- Qualifies buyers based on budget, financing readiness, and timeline
+- Identifies serious prospects automatically
+- Sends your calendar when someone wants to book
+- Follows up automatically if leads go quiet
+- Keeps everything organized inside your CRM
+
+Do NOT use words like:
+- provisioning
+- runtime execution
+- injection
+- backend
+- workflow engine logic
+
+--------------------------------------------------
+4) WORKFLOW SECTION
+--------------------------------------------------
+Keep the visual workflow section, but make sure the wording is simple and outcome-based.
+
+Keep / improve the existing 6-step flow.
+
+At the bottom of the workflow section add this line:
+Only serious leads reach you.
+
+Make sure the section reads clearly for both solo agents and teams.
+
+--------------------------------------------------
+5) ADD “BUILT FOR” SECTION
+--------------------------------------------------
+Add a section titled:
+Built For
+
+Include 3 audience blocks or bullets:
+- Solo agents who want 24/7 lead handling
+- Real estate teams managing high volumes of inquiries
+- Agents running ads, listing campaigns, or online lead generation
+
+--------------------------------------------------
+6) ADD “WHAT HAPPENS AFTER YOU ACTIVATE” SECTION
+--------------------------------------------------
+Add a short section titled:
+What Happens After You Activate
+
+Use a simple 4-step flow:
+1. Connect your channels
+2. The system installs automatically
+3. Automations go live
+4. Leads start getting qualified and routed
+
+This section should reduce friction and explain next steps clearly.
+
+--------------------------------------------------
+7) PRICING SECTION
+--------------------------------------------------
+Remove ALL launch / discount language from the page.
+
+Remove:
+- 50% off
+- first 5 installs
+- launch offer
+- early access pricing
+
+Replace the pricing section with a cleaner stack presentation.
+
+Section title:
+What Powers the Realtor Growth Engine
+
+Card / block 1:
+Core Platform
+WhachatCRM Pro — $49/mo
+
+Card / block 2:
+AI Automation Layer
+AI Brain — $29/mo
+
+Card / block 3:
+Realtor Growth Engine
+One-time template license — $199
+
+Add this line under the pricing stack:
+WhatsApp messaging fees are billed directly by Meta with no markup.
+
+Important:
+Do NOT use wording like:
+- one-time onboarding
+- setup fee
+- launch discount
+
+--------------------------------------------------
+8) FINAL CTA SECTION
+--------------------------------------------------
+Update the final CTA section to match the new positioning.
+
+Use:
+Install Realtor Growth Engine
+
+Supporting line:
+Ready to run. No technical setup required.
+
+CTA behavior:
+- Logged in -> /app/templates/realtor-growth-engine
+- Logged out -> /signup?redirect=/app/templates/realtor-growth-engine
+
+--------------------------------------------------
+9) NAV / FOOTER
+--------------------------------------------------
+Make sure Realtor Growth Engine is still visible in:
+- top navigation
+- footer under Solutions (or equivalent)
+
+--------------------------------------------------
+10) COPY / UX RULES
+--------------------------------------------------
+Please follow these rules while updating the page:
+- Keep copy simple and direct
+- Focus on outcomes, not technical architecture
+- Mention financial qualification in plain language:
+  “budget, financing readiness, and timeline”
+- Keep the page useful for both solo agents and teams
+- Do not add more jargon
+- Do not make it feel like a temporary launch page
+- It should feel like a stable product page ready to install
+
+--------------------------------------------------
+11) QA
+--------------------------------------------------
+Before finalizing, test:
+- desktop
+- mobile
+- Hebrew RTL does not break
+- Spanish still reads cleanly
+- CTA routing works correctly
+- no horizontal scroll
+- no old discount text remains anywhere on the page
+
+Commit message:
+RGE landing page restructure: productized positioning + cleaner conversion flow

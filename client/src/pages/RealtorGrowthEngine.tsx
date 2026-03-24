@@ -50,7 +50,10 @@ import {
   Settings,
   Eye,
   X,
-  Loader2
+  Loader2,
+  Lightbulb,
+  TrendingUp,
+  PhoneOff
 } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -312,36 +315,45 @@ export function RealtorGrowthEngine() {
   );
 
   const DetailPage = () => (
-    <div className="max-w-5xl mx-auto px-4 py-5">
-      <div className="flex items-start justify-between mb-3">
-        <div>
-          <Badge variant="secondary" className="mb-1.5 bg-amber-100 text-amber-800 border-amber-200">
-            <ShieldCheck className="w-3 h-3 mr-1" />
-            Premium Template
-          </Badge>
-          <h1 className="text-2xl font-bold tracking-tight text-gray-900">Convert your WhatsApp inquiries into qualified buyers & booked showings — automatically.</h1>
-          <p className="text-base text-muted-foreground mt-1">
-            Capture, qualify, and follow up with every lead — without missing opportunities.
-          </p>
+    <div className="max-w-5xl mx-auto px-4 py-8">
+      {/* HERO SECTION */}
+      <div className="text-center mb-12">
+        <h1 className="text-4xl md:text-5xl font-bold tracking-tight text-gray-900 mb-4">
+          Turn Real Estate Conversations Into Booked Showings Automatically
+        </h1>
+        <p className="text-lg text-gray-600 mb-3">
+          AI-powered WhatsApp automation that responds instantly, qualifies leads, and schedules showings for you.
+        </p>
+        <p className="text-base text-gray-500 mb-6">
+          A fully pre-built automation system installed inside your CRM — ready to run.
+        </p>
+        <div className="flex flex-col sm:flex-row gap-3 justify-center">
           <Button 
-            className={cn("mt-3", isPaused ? "bg-amber-600 hover:bg-amber-700" : "bg-brand-green hover:bg-brand-green/90")}
+            className={cn("bg-brand-green hover:bg-brand-green/90 text-white", isPaused ? "opacity-50 cursor-not-allowed" : "")}
             onClick={handlePrimaryCta}
             disabled={purchaseMutation.isPending || status === 'submitted' || status === 'installed' || isPaused}
             data-testid="button-hero-cta"
           >
-            {isPaused ? (
-              <><PauseCircle className="mr-2 w-4 h-4" /> Paused — Subscription Required</>
-            ) : status === 'locked' ? 'Start Onboarding' : status === 'purchased' ? 'Start Onboarding' : 'Onboarding Submitted'}
+            Install Realtor Growth Engine
             {!isPaused && <ChevronRight className="ml-2 w-4 h-4" />}
           </Button>
-          <p className="text-[11px] text-muted-foreground mt-1.5">One-time template license $199 · Requires Pro + AI plan</p>
+          <Button 
+            variant="outline"
+            onClick={() => {
+              const workflowSection = document.getElementById("workflow-section");
+              if (workflowSection) workflowSection.scrollIntoView({ behavior: 'smooth' });
+            }}
+            data-testid="button-see-how"
+          >
+            See How It Works
+          </Button>
         </div>
       </div>
 
       {renderStepper()}
 
       {isPaused && (
-        <Card className="border-amber-300 bg-amber-50 mb-4" data-testid="banner-subscription-paused">
+        <Card className="border-amber-300 bg-amber-50 mb-8" data-testid="banner-subscription-paused">
           <CardContent className="flex items-start gap-3 py-4 px-5">
             <PauseCircle className="w-5 h-5 text-amber-600 mt-0.5 shrink-0" />
             <div className="flex-1">
@@ -368,144 +380,262 @@ export function RealtorGrowthEngine() {
         </Card>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-        <div className="md:col-span-2 space-y-5">
-          <Card>
-            <CardHeader className="pb-2 pt-4 px-5">
-              <CardTitle className="text-base">What you get</CardTitle>
-              <CardDescription className="text-xs">Everything you need to capture, qualify, and convert real estate leads on WhatsApp — fully set up for you by our concierge team.</CardDescription>
-            </CardHeader>
-            <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 px-5 pb-3">
-              {[
-                { icon: Rocket, title: "High-Converting Lead Workflows", desc: "From first inquiry to booked showing and follow-up." },
-                { icon: Zap, title: "AI Lead Qualification & Scoring", desc: "Instantly identify serious buyers and sellers with tiered intent signals." },
-                { icon: Clock, title: "Smart Lead Nurturing", desc: "Automated multi-day sequences keep your cold leads engaged for months." },
-                { icon: MessageSquare, title: "AI Suggested Replies", desc: "Get smart reply suggestions based on the lead's unique score and intent." },
-                { icon: Calendar, title: "Automated Showing Bookings", desc: "Sync your Calendly/TidyCal to let leads book tours 24/7." },
-                { icon: Handshake, title: "White-Glove Concierge Setup", desc: "We handle everything: WABA setup, Meta verification, and channel sync." },
-                { icon: Users, title: "Full Channel Integration", desc: "We connect your WhatsApp, Instagram, FB, and SMS for a unified inbox." },
-                { icon: Target, title: "Daily 'Hot List' Notifications", desc: "Get your top 5 ready-to-close leads delivered to your inbox at 8 AM." },
-              ].map((item, idx) => (
-                <div key={idx} className="flex space-x-2.5">
-                  <div className="mt-0.5 bg-brand-green/10 p-1.5 rounded-md">
-                    <item.icon className="w-4 h-4 text-brand-green" />
-                  </div>
-                  <div>
-                    <h4 className="font-semibold text-sm leading-tight">{item.title}</h4>
-                    <p className="text-xs text-muted-foreground">{item.desc}</p>
-                  </div>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
+      {/* DONE-FOR-YOU SETUP SECTION */}
+      <Card className="mb-8 border-green-100 bg-green-50/50">
+        <CardHeader className="pb-2 pt-5 px-5">
+          <CardTitle className="text-xl font-bold text-gray-900">Fully Done-For-You Setup</CardTitle>
+          <CardDescription className="text-sm mt-1">No technical setup required. Live in days.</CardDescription>
+        </CardHeader>
+        <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-3 px-5 pb-5">
+          <div className="flex items-start space-x-3">
+            <CheckCircle2 className="w-5 h-5 text-brand-green mt-0.5 shrink-0" />
+            <div>
+              <p className="font-medium text-sm text-gray-900">WhatsApp Business API setup</p>
+            </div>
+          </div>
+          <div className="flex items-start space-x-3">
+            <CheckCircle2 className="w-5 h-5 text-brand-green mt-0.5 shrink-0" />
+            <div>
+              <p className="font-medium text-sm text-gray-900">Meta verification assistance</p>
+            </div>
+          </div>
+          <div className="flex items-start space-x-3">
+            <CheckCircle2 className="w-5 h-5 text-brand-green mt-0.5 shrink-0" />
+            <div>
+              <p className="font-medium text-sm text-gray-900">Automation workflows installed</p>
+            </div>
+          </div>
+          <div className="flex items-start space-x-3">
+            <CheckCircle2 className="w-5 h-5 text-brand-green mt-0.5 shrink-0" />
+            <div>
+              <p className="font-medium text-sm text-gray-900">CRM pipeline configured</p>
+            </div>
+          </div>
+          <div className="flex items-start space-x-3 sm:col-span-2">
+            <CheckCircle2 className="w-5 h-5 text-brand-green mt-0.5 shrink-0" />
+            <div>
+              <p className="font-medium text-sm text-gray-900">Calendar integration included</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
-          <Card>
-            <CardHeader className="pb-2 pt-4 px-5">
-              <CardTitle className="text-base">How it works</CardTitle>
-            </CardHeader>
-            <CardContent className="px-5 pb-4">
-              <ol className="relative border-l border-gray-200 ml-3 space-y-4">
-                <li className="mb-6 ml-6">
-                  <span className="absolute flex items-center justify-center w-7 h-7 bg-brand-green rounded-full -left-3.5 ring-4 ring-white">
-                    <Zap className="w-3.5 h-3.5 text-white" />
-                  </span>
-                  <h3 className="font-semibold text-sm leading-tight">Step 1 — Activate your system</h3>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    Purchase and unlock your <RealtorMark /> Growth Engine.
-                  </p>
-                </li>
-                <li className="mb-6 ml-6">
-                  <span className="absolute flex items-center justify-center w-7 h-7 bg-brand-green rounded-full -left-3.5 ring-4 ring-white">
-                    <ClipboardCheck className="w-3.5 h-3.5 text-white" />
-                  </span>
-                  <h3 className="font-semibold text-sm leading-tight">Step 2 — Complete onboarding form</h3>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    Provide your business, WhatsApp, and CRM details so we can configure everything properly.
-                  </p>
-                </li>
-                <li className="mb-6 ml-6">
-                  <span className="absolute flex items-center justify-center w-7 h-7 bg-brand-green rounded-full -left-3.5 ring-4 ring-white">
-                    <Video className="w-3.5 h-3.5 text-white" />
-                  </span>
-                  <h3 className="font-semibold text-sm leading-tight">Step 3 — Live setup session</h3>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    We connect with you on Zoom and complete your WhatsApp + CRM setup together.
-                  </p>
-                </li>
-                <li className="ml-6">
-                  <span className="absolute flex items-center justify-center w-7 h-7 bg-brand-green rounded-full -left-3.5 ring-4 ring-white">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-white" />
-                  </span>
-                  <h3 className="font-semibold text-sm leading-tight">Step 4 — Go live</h3>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    Your automation system is fully active and ready to capture and convert leads automatically.
-                  </p>
-                </li>
-              </ol>
-            </CardContent>
-          </Card>
-        </div>
+      {/* WHAT IT DOES SECTION */}
+      <Card className="mb-8">
+        <CardHeader className="pb-2 pt-5 px-5">
+          <CardTitle className="text-xl font-bold text-gray-900">What the Growth Engine Does</CardTitle>
+        </CardHeader>
+        <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4 px-5 pb-5">
+          {[
+            { icon: Zap, title: "Responds instantly to every inquiry", desc: "Buyers reach you 24/7 — no missed conversations." },
+            { icon: Target, title: "Qualifies buyers automatically", desc: "Identifies serious prospects based on budget, financing readiness, and timeline." },
+            { icon: Lightbulb, title: "Identifies serious prospects", desc: "Surfaces ready-to-close leads so you focus on who matters most." },
+            { icon: Calendar, title: "Sends your calendar when they want to book", desc: "Leads schedule their own showings into your availability." },
+            { icon: Clock, title: "Follows up automatically if leads go quiet", desc: "Never lose a warm lead to silence — multi-day sequences keep them engaged." },
+            { icon: LayoutGrid, title: "Keeps everything organized in your CRM", desc: "Leads flow through your pipeline with scores and stage tags automatically." },
+          ].map((item, idx) => (
+            <div key={idx} className="flex space-x-3">
+              <div className="mt-0.5 bg-brand-green/10 p-2 rounded-md h-fit">
+                <item.icon className="w-4 h-4 text-brand-green" />
+              </div>
+              <div>
+                <h4 className="font-semibold text-sm text-gray-900">{item.title}</h4>
+                <p className="text-sm text-gray-600 mt-0.5">{item.desc}</p>
+              </div>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
 
-        <div className="space-y-4">
-          <Card>
-            <CardHeader className="pb-2 pt-4 px-5">
-              <CardTitle className="text-sm">Requirements</CardTitle>
-              <CardDescription className="text-xs">To activate your WhatsApp automation system, you'll need:</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-2 px-5 pb-4">
-              <div className="flex items-start space-x-2">
-                <CheckCircle2 className="w-3.5 h-3.5 text-brand-green mt-0.5" />
-                <span className="text-xs">Registered business entity (LLC / Corp / Ltd)</span>
-              </div>
-              <div className="flex items-start space-x-2">
-                <CheckCircle2 className="w-3.5 h-3.5 text-brand-green mt-0.5" />
-                <span className="text-xs">Access to your Meta (Facebook) Business Manager</span>
-              </div>
-              <div className="flex items-start space-x-2">
-                <CheckCircle2 className="w-3.5 h-3.5 text-brand-green mt-0.5" />
-                <span className="text-xs">WhatsApp Business API eligibility (we guide you through this)</span>
-              </div>
-              <div className="flex items-start space-x-2">
-                <CheckCircle2 className="w-3.5 h-3.5 text-brand-green mt-0.5" />
-                <span className="text-xs">Active WhachatCRM Pro + AI plan</span>
-              </div>
-              <p className="text-[11px] text-muted-foreground pt-1">Our team will guide you through each step during onboarding.</p>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-brand-green/5 border-brand-green/20">
-            <CardHeader className="pb-1 pt-3 px-5">
-              <CardTitle className="text-sm flex items-center">
-                <Clock className="w-3.5 h-3.5 mr-1.5 text-brand-green" />
-                Limited Availability
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="px-5 pb-3">
-              <p className="text-xs text-muted-foreground">
-                To ensure high-quality onboarding and personalized setup support, we onboard a limited number of real estate agents each month.
+      {/* WORKFLOW SECTION */}
+      <Card className="mb-8" id="workflow-section">
+        <CardHeader className="pb-2 pt-5 px-5">
+          <CardTitle className="text-xl font-bold text-gray-900">How Your System Works</CardTitle>
+        </CardHeader>
+        <CardContent className="px-5 pb-5">
+          <ol className="relative border-l border-gray-200 ml-3 space-y-6">
+            <li className="mb-6 ml-6">
+              <span className="absolute flex items-center justify-center w-7 h-7 bg-brand-green rounded-full -left-3.5 ring-4 ring-white">
+                <MessageSquare className="w-3.5 h-3.5 text-white" />
+              </span>
+              <h3 className="font-semibold text-sm text-gray-900">Lead sends a message on WhatsApp</h3>
+              <p className="text-sm text-gray-600 mt-1">
+                Inquiry arrives from a buyer or seller. Your system immediately springs to life.
               </p>
-              <p className="text-xs font-medium text-brand-green mt-1.5">
-                Secure your activation slot today.
+            </li>
+            <li className="mb-6 ml-6">
+              <span className="absolute flex items-center justify-center w-7 h-7 bg-brand-green rounded-full -left-3.5 ring-4 ring-white">
+                <Zap className="w-3.5 h-3.5 text-white" />
+              </span>
+              <h3 className="font-semibold text-sm text-gray-900">Instant automated response goes out</h3>
+              <p className="text-sm text-gray-600 mt-1">
+                Lead gets a personalized greeting within seconds — no waiting.
               </p>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
+            </li>
+            <li className="mb-6 ml-6">
+              <span className="absolute flex items-center justify-center w-7 h-7 bg-brand-green rounded-full -left-3.5 ring-4 ring-white">
+                <Target className="w-3.5 h-3.5 text-white" />
+              </span>
+              <h3 className="font-semibold text-sm text-gray-900">AI qualifies the lead in real-time</h3>
+              <p className="text-sm text-gray-600 mt-1">
+                Conversation is analyzed for budget, intent, and seriousness. Lead gets scored automatically.
+              </p>
+            </li>
+            <li className="mb-6 ml-6">
+              <span className="absolute flex items-center justify-center w-7 h-7 bg-brand-green rounded-full -left-3.5 ring-4 ring-white">
+                <Calendar className="w-3.5 h-3.5 text-white" />
+              </span>
+              <h3 className="font-semibold text-sm text-gray-900">Booking link is sent automatically</h3>
+              <p className="text-sm text-gray-600 mt-1">
+                When they ask to schedule, your calendar opens directly in the chat. They book their own showing.
+              </p>
+            </li>
+            <li className="mb-6 ml-6">
+              <span className="absolute flex items-center justify-center w-7 h-7 bg-brand-green rounded-full -left-3.5 ring-4 ring-white">
+                <Users className="w-3.5 h-3.5 text-white" />
+              </span>
+              <h3 className="font-semibold text-sm text-gray-900">You get a handoff with the lead pre-qualified</h3>
+              <p className="text-sm text-gray-600 mt-1">
+                Serious leads flow into your CRM with full context. Your time is spent on high-probability deals.
+              </p>
+            </li>
+            <li className="ml-6">
+              <span className="absolute flex items-center justify-center w-7 h-7 bg-brand-green rounded-full -left-3.5 ring-4 ring-white">
+                <TrendingUp className="w-3.5 h-3.5 text-white" />
+              </span>
+              <h3 className="font-semibold text-sm text-gray-900">Cold leads get nurtured automatically</h3>
+              <p className="text-sm text-gray-600 mt-1">
+                Leads who go quiet get follow-ups on day 1, 3, and 7. Your CRM keeps track of everything.
+              </p>
+            </li>
+          </ol>
+          <div className="mt-8 text-center">
+            <p className="text-lg font-semibold text-gray-900">Only serious leads reach you.</p>
+          </div>
+        </CardContent>
+      </Card>
 
-      <Card className="mt-5">
-        <CardContent className="px-5 py-6 text-center">
-          <h3 className="text-lg font-bold text-gray-900 mb-1">Turn your WhatsApp into a lead-conversion machine.</h3>
-          <p className="text-sm text-muted-foreground mb-4">Launch your <RealtorMark /> Growth Engine with our team and start capturing and converting leads automatically.</p>
+      {/* BUILT FOR SECTION */}
+      <Card className="mb-8 bg-gray-50/50 border-gray-200">
+        <CardHeader className="pb-2 pt-5 px-5">
+          <CardTitle className="text-xl font-bold text-gray-900">Built For</CardTitle>
+        </CardHeader>
+        <CardContent className="grid grid-cols-1 sm:grid-cols-3 gap-4 px-5 pb-5">
+          <div className="flex flex-col gap-2">
+            <div className="bg-brand-green/10 p-3 rounded-lg h-fit w-fit">
+              <PhoneOff className="w-5 h-5 text-brand-green" />
+            </div>
+            <h4 className="font-semibold text-gray-900">Solo agents who want 24/7 lead handling</h4>
+            <p className="text-sm text-gray-600">Never miss a lead again. Your system works while you sleep.</p>
+          </div>
+          <div className="flex flex-col gap-2">
+            <div className="bg-brand-green/10 p-3 rounded-lg h-fit w-fit">
+              <Users className="w-5 h-5 text-brand-green" />
+            </div>
+            <h4 className="font-semibold text-gray-900">Real estate teams managing high volumes</h4>
+            <p className="text-sm text-gray-600">Scale lead handling without hiring more staff.</p>
+          </div>
+          <div className="flex flex-col gap-2">
+            <div className="bg-brand-green/10 p-3 rounded-lg h-fit w-fit">
+              <TrendingUp className="w-5 h-5 text-brand-green" />
+            </div>
+            <h4 className="font-semibold text-gray-900">Agents running ads and lead generation campaigns</h4>
+            <p className="text-sm text-gray-600">Turn ad spend into booked showings faster.</p>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* WHAT HAPPENS AFTER SECTION */}
+      <Card className="mb-8">
+        <CardHeader className="pb-2 pt-5 px-5">
+          <CardTitle className="text-xl font-bold text-gray-900">What Happens After You Activate</CardTitle>
+        </CardHeader>
+        <CardContent className="px-5 pb-5">
+          <div className="space-y-4">
+            <div className="flex gap-4">
+              <div className="flex-shrink-0 flex items-center justify-center h-8 w-8 rounded-full bg-brand-green text-white font-semibold text-sm">
+                1
+              </div>
+              <div>
+                <h4 className="font-semibold text-gray-900">Connect your channels</h4>
+                <p className="text-sm text-gray-600 mt-0.5">Authenticate your WhatsApp and calendar integrations.</p>
+              </div>
+            </div>
+            <div className="flex gap-4">
+              <div className="flex-shrink-0 flex items-center justify-center h-8 w-8 rounded-full bg-brand-green text-white font-semibold text-sm">
+                2
+              </div>
+              <div>
+                <h4 className="font-semibold text-gray-900">The system installs automatically</h4>
+                <p className="text-sm text-gray-600 mt-0.5">All workflows, automations, and CRM pipelines deploy in your account.</p>
+              </div>
+            </div>
+            <div className="flex gap-4">
+              <div className="flex-shrink-0 flex items-center justify-center h-8 w-8 rounded-full bg-brand-green text-white font-semibold text-sm">
+                3
+              </div>
+              <div>
+                <h4 className="font-semibold text-gray-900">Automations go live</h4>
+                <p className="text-sm text-gray-600 mt-0.5">Your system is ready to capture and handle incoming messages.</p>
+              </div>
+            </div>
+            <div className="flex gap-4">
+              <div className="flex-shrink-0 flex items-center justify-center h-8 w-8 rounded-full bg-brand-green text-white font-semibold text-sm">
+                4
+              </div>
+              <div>
+                <h4 className="font-semibold text-gray-900">Leads start getting qualified and routed</h4>
+                <p className="text-sm text-gray-600 mt-0.5">First message arrives and your automation starts working immediately.</p>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* WHAT POWERS IT SECTION */}
+      <Card className="mb-8">
+        <CardHeader className="pb-2 pt-5 px-5">
+          <CardTitle className="text-xl font-bold text-gray-900">What Powers the Realtor Growth Engine</CardTitle>
+        </CardHeader>
+        <CardContent className="px-5 pb-5">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="border rounded-lg p-4 text-center">
+              <p className="text-sm font-semibold text-gray-600 mb-1">Core Platform</p>
+              <p className="text-lg font-bold text-gray-900">WhachatCRM Pro</p>
+              <p className="text-sm text-gray-600 mt-1">$49/mo</p>
+            </div>
+            <div className="border rounded-lg p-4 text-center">
+              <p className="text-sm font-semibold text-gray-600 mb-1">AI Automation Layer</p>
+              <p className="text-lg font-bold text-gray-900">AI Brain</p>
+              <p className="text-sm text-gray-600 mt-1">$29/mo</p>
+            </div>
+            <div className="border rounded-lg p-4 text-center bg-brand-green/5 border-brand-green/30">
+              <p className="text-sm font-semibold text-gray-600 mb-1">Realtor Growth Engine</p>
+              <p className="text-lg font-bold text-gray-900">Template License</p>
+              <p className="text-sm text-brand-green font-semibold mt-1">$199</p>
+            </div>
+          </div>
+          <p className="text-sm text-gray-600 text-center mt-4">
+            WhatsApp messaging fees are billed directly by Meta with no markup.
+          </p>
+        </CardContent>
+      </Card>
+
+      {/* FINAL CTA SECTION */}
+      <Card className="border-brand-green/30 bg-brand-green/5">
+        <CardContent className="px-5 py-8 text-center">
+          <h3 className="text-2xl font-bold text-gray-900 mb-2">Ready to turn leads into sales?</h3>
+          <p className="text-base text-gray-600 mb-6">Install Realtor Growth Engine and start automatically qualifying buyers today.</p>
           <Button 
-            className="bg-brand-green hover:bg-brand-green/90"
+            className="bg-brand-green hover:bg-brand-green/90 text-white text-base px-8"
             onClick={handlePrimaryCta}
             disabled={purchaseMutation.isPending || status === 'submitted' || status === 'installed'}
             data-testid="button-bottom-cta"
           >
-            {status === 'locked' ? 'Start Onboarding' : status === 'purchased' ? 'Start Onboarding' : 'Onboarding Submitted'}
-            <ChevronRight className="ml-2 w-4 h-4" />
+            Install Realtor Growth Engine
+            <ChevronRight className="ml-2 w-5 h-5" />
           </Button>
-          <p className="text-[11px] text-muted-foreground mt-2">One-time template license $199 · Requires Pro + AI plan</p>
+          <p className="text-xs text-gray-500 mt-4">Ready to run. No technical setup required.</p>
         </CardContent>
       </Card>
     </div>
@@ -524,507 +654,563 @@ export function RealtorGrowthEngine() {
 
     const prevStep = () => setStep(s => Math.max(s - 1, 1));
 
-    const getFieldsForStep = (s: number) => {
-      switch(s) {
-        case 1: return ["isRegisteredEntity"];
-        case 2: return ["legalName", "country", "website"];
-        case 3: return ["desiredNumber", "isNumberActive", "willingToMigrate", "hasSmsAccess"];
-        case 4: return ["hasMetaBM", "bmEmail", "bmId"];
-        case 5: return ["teamType", "estimatedSeats", "notificationsEnabled"];
-        case 6: return ["leadSources", "primaryGoal"];
-        case 7: return ["timezone", "preferredCallWindows"];
-        case 8: return ["additionalNotes"];
-        default: return [];
-      }
+    const getFieldsForStep = (stepNum: number): string[] => {
+      const stepFields: Record<number, string[]> = {
+        1: ["isRegisteredEntity"],
+        2: ["legalName", "country", "website"],
+        3: ["desiredNumber", "isNumberActive", "willingToMigrate", "hasSmsAccess"],
+        4: ["hasMetaBM", "bmEmail", "bmId"],
+        5: ["teamType", "estimatedSeats", "notificationsEnabled"],
+        6: ["leadSources", "primaryGoal"],
+        7: ["timezone", "preferredCallWindows"],
+        8: ["additionalNotes"],
+      };
+      return stepFields[stepNum] || [];
+    };
+
+    const onSubmit = (values: OnboardingValues) => {
+      submitOnboardingMutation.mutate(values);
+    };
+
+    const closeAndResetModal = () => {
+      setEligibilityOpen(false);
+      setEligibilityAnswer("");
+      setEligibilityBlocked(false);
     };
 
     return (
-      <div className="max-w-2xl mx-auto px-4 py-8">
-        <div className="mb-8">
-          <div className="flex items-center justify-between mb-2">
-            <h2 className="text-2xl font-bold">Onboarding Form</h2>
-            <span className="text-sm font-medium text-muted-foreground">Step {step} of {totalSteps}</span>
-          </div>
-          <Progress value={(step / totalSteps) * 100} className="h-2" />
-        </div>
-
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit((v) => submitOnboardingMutation.mutate(v))} className="space-y-6">
-            {step === 1 && (
-              <div className="space-y-4">
-                <FormField
-                  control={form.control}
-                  name="isRegisteredEntity"
-                  render={({ field }) => (
-                    <FormItem className="space-y-3">
-                      <FormLabel>Is your real estate business a registered legal entity?</FormLabel>
-                      <FormDescription>Necessary for Meta Business verification.</FormDescription>
-                      <FormControl>
-                        <RadioGroup
-                          onValueChange={field.onChange}
-                          defaultValue={field.value}
-                          className="flex flex-col space-y-1"
-                        >
-                          <FormItem className="flex items-center space-x-3 space-y-0">
-                            <FormControl>
-                              <RadioGroupItem value="yes" />
-                            </FormControl>
-                            <FormLabel className="font-normal">Yes, we are registered</FormLabel>
-                          </FormItem>
-                          <FormItem className="flex items-center space-x-3 space-y-0">
-                            <FormControl>
-                              <RadioGroupItem value="no" />
-                            </FormControl>
-                            <FormLabel className="font-normal">No, I operate as an individual</FormLabel>
-                          </FormItem>
-                        </RadioGroup>
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                {isEligibilityBlocked && (
-                  <div className="mt-4 p-4 rounded-lg bg-red-50 border border-red-200 flex items-start gap-3" data-testid="eligibility-block">
-                    <AlertCircle className="w-5 h-5 text-red-500 mt-0.5 shrink-0" />
-                    <div>
-                      <p className="font-semibold text-red-800 text-sm">Cannot proceed</p>
-                      <p className="text-red-700 text-sm mt-1">
-                        A registered business entity is required for WhatsApp Business API access. Meta requires business verification before provisioning an official WhatsApp number.
-                      </p>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {step === 2 && (
-              <div className="space-y-4">
-                <FormField
-                  control={form.control}
-                  name="legalName"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Legal Business Name</FormLabel>
-                      <FormControl>
-                        <Input {...field} placeholder="e.g. Skyline Realty LLC" data-testid="input-legal-name" />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="country"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Business Country</FormLabel>
-                      <FormControl>
-                        <Input {...field} placeholder="e.g. USA" />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="website"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Business Website</FormLabel>
-                      <FormControl>
-                        <Input {...field} placeholder="https://example.com" />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-            )}
-
-            {step === 3 && (
-              <div className="space-y-4">
-                <FormField
-                  control={form.control}
-                  name="desiredNumber"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Desired WhatsApp Number</FormLabel>
-                      <FormControl>
-                        <Input {...field} placeholder="+1234567890" />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="isNumberActive"
-                  render={({ field }) => (
-                    <FormItem className="space-y-3">
-                      <FormLabel>Is this number currently used for WhatsApp?</FormLabel>
-                      <FormControl>
-                        <RadioGroup onValueChange={field.onChange} defaultValue={field.value} className="flex flex-col space-y-1">
-                          <FormItem className="flex items-center space-x-3 space-y-0">
-                            <FormControl><RadioGroupItem value="yes" /></FormControl>
-                            <FormLabel className="font-normal">Yes</FormLabel>
-                          </FormItem>
-                          <FormItem className="flex items-center space-x-3 space-y-0">
-                            <FormControl><RadioGroupItem value="no" /></FormControl>
-                            <FormLabel className="font-normal">No</FormLabel>
-                          </FormItem>
-                        </RadioGroup>
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="willingToMigrate"
-                  render={({ field }) => (
-                    <FormItem className="space-y-3">
-                      <FormLabel>Are you willing to migrate this number to the Official API?</FormLabel>
-                      <FormDescription>Existing chat history in standard WhatsApp will be lost.</FormDescription>
-                      <FormControl>
-                        <RadioGroup onValueChange={field.onChange} defaultValue={field.value} className="flex flex-col space-y-1">
-                          <FormItem className="flex items-center space-x-3 space-y-0">
-                            <FormControl><RadioGroupItem value="yes" /></FormControl>
-                            <FormLabel className="font-normal">Yes, I understand</FormLabel>
-                          </FormItem>
-                          <FormItem className="flex items-center space-x-3 space-y-0">
-                            <FormControl><RadioGroupItem value="no" /></FormControl>
-                            <FormLabel className="font-normal">No, I'll use a new number</FormLabel>
-                          </FormItem>
-                        </RadioGroup>
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-            )}
-
-            {step === 4 && (
-              <div className="space-y-4">
-                <FormField
-                  control={form.control}
-                  name="hasMetaBM"
-                  render={({ field }) => (
-                    <FormItem className="space-y-3">
-                      <FormLabel>Do you have a Meta Business Manager?</FormLabel>
-                      <FormControl>
-                        <RadioGroup onValueChange={field.onChange} defaultValue={field.value} className="flex flex-col space-y-1">
-                          <FormItem className="flex items-center space-x-3 space-y-0">
-                            <FormControl><RadioGroupItem value="yes" /></FormControl>
-                            <FormLabel className="font-normal">Yes</FormLabel>
-                          </FormItem>
-                          <FormItem className="flex items-center space-x-3 space-y-0">
-                            <FormControl><RadioGroupItem value="no" /></FormControl>
-                            <FormLabel className="font-normal">No</FormLabel>
-                          </FormItem>
-                        </RadioGroup>
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="bmEmail"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>BM Admin Email</FormLabel>
-                      <FormControl>
-                        <Input {...field} placeholder="admin@example.com" />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="bmId"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>BM ID (Optional)</FormLabel>
-                      <FormControl>
-                        <Input {...field} placeholder="1234567890" />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
-              </div>
-            )}
-
-            {step === 5 && (
-              <div className="space-y-4">
-                <FormField
-                  control={form.control}
-                  name="teamType"
-                  render={({ field }) => (
-                    <FormItem className="space-y-3">
-                      <FormLabel>Are you a solo agent or a team?</FormLabel>
-                      <FormControl>
-                        <RadioGroup onValueChange={field.onChange} defaultValue={field.value} className="flex flex-col space-y-1">
-                          <FormItem className="flex items-center space-x-3 space-y-0">
-                            <FormControl><RadioGroupItem value="solo" /></FormControl>
-                            <FormLabel className="font-normal">Solo Agent</FormLabel>
-                          </FormItem>
-                          <FormItem className="flex items-center space-x-3 space-y-0">
-                            <FormControl><RadioGroupItem value="team" /></FormControl>
-                            <FormLabel className="font-normal">Real Estate Team / Agency</FormLabel>
-                          </FormItem>
-                        </RadioGroup>
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="estimatedSeats"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Estimated number of seats needed</FormLabel>
-                      <FormControl>
-                        <Input {...field} type="number" />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
-              </div>
-            )}
-
-            {step === 6 && (
-              <div className="space-y-4">
-                <FormField
-                  control={form.control}
-                  name="leadSources"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Lead Sources</FormLabel>
-                      <FormDescription>Where do your leads come from? (e.g. Zillow, Facebook Ads, Referrals)</FormDescription>
-                      <FormControl>
-                        <Textarea {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="primaryGoal"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Primary Goal with WhatsApp Automation</FormLabel>
-                      <FormControl>
-                        <Textarea {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-            )}
-
-            {step === 7 && (
-              <div className="space-y-4">
-                <FormField
-                  control={form.control}
-                  name="timezone"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Your Timezone</FormLabel>
-                      <FormControl>
-                        <Input {...field} />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="preferredCallWindows"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Preferred Windows for Onboarding Call</FormLabel>
-                      <FormDescription>We'll schedule a 30-min strategy call.</FormDescription>
-                      <FormControl>
-                        <Textarea {...field} placeholder="e.g. Mon-Fri 10am-12pm EST" />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-            )}
-
-            {step === 8 && (
-              <div className="space-y-4">
-                <FormField
-                  control={form.control}
-                  name="additionalNotes"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Additional Notes</FormLabel>
-                      <FormControl>
-                        <Textarea {...field} placeholder="Any specific requirements or questions?" />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
-                <Card className="bg-amber-50 border-amber-200">
-                  <CardContent className="pt-4 flex items-start space-x-3">
-                    <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5" />
-                    <p className="text-sm text-amber-800">
-                      By submitting this form, you authorize WhachatCRM to initiate the WhatsApp Business API setup on your behalf.
-                    </p>
-                  </CardContent>
-                </Card>
-              </div>
-            )}
-
-            <div className="flex justify-between pt-4 border-t">
-              <Button type="button" variant="outline" onClick={prevStep} disabled={step === 1}>
-                <ChevronLeft className="mr-2 w-4 h-4" />
-                Back
-              </Button>
-              {step < totalSteps ? (
-                <Button type="button" onClick={nextStep} disabled={isEligibilityBlocked} data-testid="button-next-step">
-                  Next
-                  <ChevronRight className="ml-2 w-4 h-4" />
-                </Button>
-              ) : (
-                <Button 
-                  type="submit" 
-                  className="bg-brand-green hover:bg-brand-green/90" 
-                  disabled={submitOnboardingMutation.isPending}
-                  data-testid="button-submit-onboarding"
-                >
-                  Submit Onboarding
-                  <Rocket className="ml-2 w-4 h-4" />
-                </Button>
-              )}
+      <div className="max-w-3xl mx-auto px-4 py-8">
+        {status === 'purchased' && (
+          <div className="mb-8">
+            <div className="text-center mb-6">
+              <Badge className="mb-4 bg-brand-green/10 text-brand-green border-brand-green/20">Step {step} of {totalSteps}</Badge>
+              <h2 className="text-2xl font-bold text-gray-900">Complete Your Onboarding</h2>
             </div>
-          </form>
-        </Form>
+            <Progress value={(step / totalSteps) * 100} className="mb-8" />
+
+            <Form {...form}>
+              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+                {step === 1 && (
+                  <Card>
+                    <CardHeader><CardTitle>Business Eligibility</CardTitle></CardHeader>
+                    <CardContent className="space-y-4">
+                      <FormField
+                        control={form.control}
+                        name="isRegisteredEntity"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Is your real estate business a registered legal entity?</FormLabel>
+                            <FormControl>
+                              <RadioGroup value={field.value} onValueChange={field.onChange} className="flex flex-col space-y-2 mt-2">
+                                <div className="flex items-center space-x-3">
+                                  <RadioGroupItem value="yes" id="reg-yes" data-testid="radio-registered-yes" />
+                                  <Label htmlFor="reg-yes" className="font-normal cursor-pointer">Yes, registered (LLC / Corp / Ltd)</Label>
+                                </div>
+                                <div className="flex items-center space-x-3">
+                                  <RadioGroupItem value="no" id="reg-no" data-testid="radio-registered-no" />
+                                  <Label htmlFor="reg-no" className="font-normal cursor-pointer">No, I operate as an individual</Label>
+                                </div>
+                              </RadioGroup>
+                            </FormControl>
+                            <FormDescription>Required for WhatsApp Business API approval with Meta.</FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </CardContent>
+                  </Card>
+                )}
+
+                {step === 2 && (
+                  <Card>
+                    <CardHeader><CardTitle>Business Details</CardTitle></CardHeader>
+                    <CardContent className="space-y-4">
+                      <FormField
+                        control={form.control}
+                        name="legalName"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Legal Business Name</FormLabel>
+                            <FormControl>
+                              <Input placeholder="Your business legal name" {...field} data-testid="input-legal-name" />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="country"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Country</FormLabel>
+                            <FormControl>
+                              <Input placeholder="Your country" {...field} data-testid="input-country" />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="website"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Business Website</FormLabel>
+                            <FormControl>
+                              <Input placeholder="https://yourwebsite.com" {...field} data-testid="input-website" />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </CardContent>
+                  </Card>
+                )}
+
+                {step === 3 && (
+                  <Card>
+                    <CardHeader><CardTitle>WhatsApp Setup</CardTitle></CardHeader>
+                    <CardContent className="space-y-4">
+                      <FormField
+                        control={form.control}
+                        name="desiredNumber"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Desired WhatsApp Number</FormLabel>
+                            <FormControl>
+                              <Input placeholder="+1 (555) 123-4567" {...field} data-testid="input-desired-number" />
+                            </FormControl>
+                            <FormDescription>The phone number you want to use for WhatsApp Business</FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="isNumberActive"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Is this number currently active on WhatsApp?</FormLabel>
+                            <FormControl>
+                              <RadioGroup value={field.value} onValueChange={field.onChange} className="flex space-x-4 mt-2">
+                                <div className="flex items-center space-x-2">
+                                  <RadioGroupItem value="yes" id="num-active-yes" data-testid="radio-num-active-yes" />
+                                  <Label htmlFor="num-active-yes" className="font-normal cursor-pointer">Yes</Label>
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                  <RadioGroupItem value="no" id="num-active-no" data-testid="radio-num-active-no" />
+                                  <Label htmlFor="num-active-no" className="font-normal cursor-pointer">No</Label>
+                                </div>
+                              </RadioGroup>
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="willingToMigrate"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Are you willing to migrate your WhatsApp business account?</FormLabel>
+                            <FormControl>
+                              <RadioGroup value={field.value} onValueChange={field.onChange} className="flex space-x-4 mt-2">
+                                <div className="flex items-center space-x-2">
+                                  <RadioGroupItem value="yes" id="migrate-yes" data-testid="radio-migrate-yes" />
+                                  <Label htmlFor="migrate-yes" className="font-normal cursor-pointer">Yes</Label>
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                  <RadioGroupItem value="no" id="migrate-no" data-testid="radio-migrate-no" />
+                                  <Label htmlFor="migrate-no" className="font-normal cursor-pointer">No</Label>
+                                </div>
+                              </RadioGroup>
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="hasSmsAccess"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Do you have access to SMS for this number?</FormLabel>
+                            <FormControl>
+                              <RadioGroup value={field.value} onValueChange={field.onChange} className="flex space-x-4 mt-2">
+                                <div className="flex items-center space-x-2">
+                                  <RadioGroupItem value="yes" id="sms-yes" data-testid="radio-sms-yes" />
+                                  <Label htmlFor="sms-yes" className="font-normal cursor-pointer">Yes</Label>
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                  <RadioGroupItem value="no" id="sms-no" data-testid="radio-sms-no" />
+                                  <Label htmlFor="sms-no" className="font-normal cursor-pointer">No</Label>
+                                </div>
+                              </RadioGroup>
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </CardContent>
+                  </Card>
+                )}
+
+                {step === 4 && (
+                  <Card>
+                    <CardHeader><CardTitle>Meta Business Manager</CardTitle></CardHeader>
+                    <CardContent className="space-y-4">
+                      <FormField
+                        control={form.control}
+                        name="hasMetaBM"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Do you have a Meta Business Manager account?</FormLabel>
+                            <FormControl>
+                              <RadioGroup value={field.value} onValueChange={field.onChange} className="flex space-x-4 mt-2">
+                                <div className="flex items-center space-x-2">
+                                  <RadioGroupItem value="yes" id="bm-yes" data-testid="radio-bm-yes" />
+                                  <Label htmlFor="bm-yes" className="font-normal cursor-pointer">Yes</Label>
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                  <RadioGroupItem value="no" id="bm-no" data-testid="radio-bm-no" />
+                                  <Label htmlFor="bm-no" className="font-normal cursor-pointer">No</Label>
+                                </div>
+                              </RadioGroup>
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="bmEmail"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>BM Admin Email</FormLabel>
+                            <FormControl>
+                              <Input type="email" placeholder="admin@example.com" {...field} data-testid="input-bm-email" />
+                            </FormControl>
+                            <FormDescription>Primary email with Business Manager admin access</FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="bmId"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Business Manager ID (optional)</FormLabel>
+                            <FormControl>
+                              <Input placeholder="Your BM ID if you know it" {...field} data-testid="input-bm-id" />
+                            </FormControl>
+                            <FormDescription>Found in Business Manager settings, not required</FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </CardContent>
+                  </Card>
+                )}
+
+                {step === 5 && (
+                  <Card>
+                    <CardHeader><CardTitle>CRM & Team</CardTitle></CardHeader>
+                    <CardContent className="space-y-4">
+                      <FormField
+                        control={form.control}
+                        name="teamType"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Team Structure</FormLabel>
+                            <FormControl>
+                              <RadioGroup value={field.value} onValueChange={field.onChange} className="flex space-x-4 mt-2">
+                                <div className="flex items-center space-x-2">
+                                  <RadioGroupItem value="solo" id="team-solo" data-testid="radio-team-solo" />
+                                  <Label htmlFor="team-solo" className="font-normal cursor-pointer">Solo agent</Label>
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                  <RadioGroupItem value="team" id="team-team" data-testid="radio-team-team" />
+                                  <Label htmlFor="team-team" className="font-normal cursor-pointer">Team</Label>
+                                </div>
+                              </RadioGroup>
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="estimatedSeats"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Estimated Team Seats</FormLabel>
+                            <FormControl>
+                              <Select value={field.value} onValueChange={field.onChange}>
+                                <SelectTrigger data-testid="select-estimated-seats">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="1">1</SelectItem>
+                                  <SelectItem value="2-5">2-5</SelectItem>
+                                  <SelectItem value="6-10">6-10</SelectItem>
+                                  <SelectItem value="10+">10+</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="notificationsEnabled"
+                        render={({ field }) => (
+                          <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                            <div className="space-y-0.5">
+                              <FormLabel className="text-base">Enable notifications</FormLabel>
+                              <FormDescription>Receive alerts about important leads and activity</FormDescription>
+                            </div>
+                            <FormControl>
+                              <Checkbox checked={field.value} onCheckedChange={field.onChange} data-testid="checkbox-notifications" />
+                            </FormControl>
+                          </FormItem>
+                        )}
+                      />
+                    </CardContent>
+                  </Card>
+                )}
+
+                {step === 6 && (
+                  <Card>
+                    <CardHeader><CardTitle>Lead Sources & Goals</CardTitle></CardHeader>
+                    <CardContent className="space-y-4">
+                      <FormField
+                        control={form.control}
+                        name="leadSources"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Where do your leads come from?</FormLabel>
+                            <FormControl>
+                              <Textarea placeholder="e.g., Facebook ads, referrals, website inquiries, directory listings..." {...field} data-testid="textarea-lead-sources" />
+                            </FormControl>
+                            <FormDescription>Help us understand your lead generation channels</FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="primaryGoal"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>What's your primary goal with this system?</FormLabel>
+                            <FormControl>
+                              <Textarea placeholder="e.g., Sell more listings, qualify leads faster, reduce response time..." {...field} data-testid="textarea-primary-goal" />
+                            </FormControl>
+                            <FormDescription>What would success look like for you?</FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </CardContent>
+                  </Card>
+                )}
+
+                {step === 7 && (
+                  <Card>
+                    <CardHeader><CardTitle>Scheduling & Availability</CardTitle></CardHeader>
+                    <CardContent className="space-y-4">
+                      <FormField
+                        control={form.control}
+                        name="timezone"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Your Timezone</FormLabel>
+                            <FormControl>
+                              <Select value={field.value} onValueChange={field.onChange}>
+                                <SelectTrigger data-testid="select-timezone">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="America/New_York">Eastern Time</SelectItem>
+                                  <SelectItem value="America/Chicago">Central Time</SelectItem>
+                                  <SelectItem value="America/Denver">Mountain Time</SelectItem>
+                                  <SelectItem value="America/Los_Angeles">Pacific Time</SelectItem>
+                                  <SelectItem value="America/Anchorage">Alaska Time</SelectItem>
+                                  <SelectItem value="Pacific/Honolulu">Hawaii Time</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="preferredCallWindows"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Preferred Call/Video Windows</FormLabel>
+                            <FormControl>
+                              <Textarea placeholder="e.g., Mon-Fri 2-4 PM, Saturday 10 AM-1 PM..." {...field} data-testid="textarea-call-windows" />
+                            </FormControl>
+                            <FormDescription>When can our team reach you for setup?</FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </CardContent>
+                  </Card>
+                )}
+
+                {step === 8 && (
+                  <Card>
+                    <CardHeader><CardTitle>Additional Notes</CardTitle></CardHeader>
+                    <CardContent className="space-y-4">
+                      <FormField
+                        control={form.control}
+                        name="additionalNotes"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Anything else we should know?</FormLabel>
+                            <FormControl>
+                              <Textarea placeholder="Special requests, questions, or context..." {...field} data-testid="textarea-additional-notes" />
+                            </FormControl>
+                            <FormDescription>Optional — anything to help us set you up for success</FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </CardContent>
+                  </Card>
+                )}
+
+                <div className="flex gap-3 justify-between pt-4">
+                  <Button 
+                    type="button"
+                    variant="outline" 
+                    onClick={prevStep}
+                    disabled={step === 1}
+                    data-testid="button-prev-step"
+                  >
+                    <ChevronLeft className="mr-1 w-4 h-4" /> Previous
+                  </Button>
+                  {step < totalSteps ? (
+                    <Button 
+                      type="button"
+                      className="bg-brand-green hover:bg-brand-green/90"
+                      onClick={nextStep}
+                      data-testid="button-next-step"
+                    >
+                      Next <ChevronRight className="ml-1 w-4 h-4" />
+                    </Button>
+                  ) : (
+                    <Button 
+                      type="submit"
+                      className="bg-brand-green hover:bg-brand-green/90"
+                      disabled={submitOnboardingMutation.isPending}
+                      data-testid="button-submit-onboarding"
+                    >
+                      {submitOnboardingMutation.isPending ? (
+                        <><Loader2 className="mr-2 w-4 h-4 animate-spin" /> Submitting...</>
+                      ) : (
+                        <>Submit Onboarding</>
+                      )}
+                    </Button>
+                  )}
+                </div>
+              </form>
+            </Form>
+          </div>
+        )}
+
+        {status === 'submitted' && (
+          <Card className="border-green-200 bg-green-50">
+            <CardContent className="py-8 text-center">
+              <CheckCircle2 className="w-12 h-12 text-brand-green mx-auto mb-4" />
+              <h3 className="text-xl font-bold text-gray-900 mb-2">Onboarding Submitted!</h3>
+              <p className="text-gray-600 mb-4">Our team will review your details and set up a call within 24 hours.</p>
+              <p className="text-sm text-gray-500">Check your email for next steps.</p>
+            </CardContent>
+          </Card>
+        )}
       </div>
     );
   };
 
-  const StatusPage = () => (
-    <div className="max-w-2xl mx-auto px-4 py-12 text-center">
-      <div className="mb-8 flex justify-center">
-        <div className="w-20 h-20 bg-brand-green/10 rounded-full flex items-center justify-center">
-          <ClipboardCheck className="w-10 h-10 text-brand-green" />
-        </div>
-      </div>
-      <h2 className="text-3xl font-bold mb-4">Onboarding in Review</h2>
-      <p className="text-lg text-muted-foreground mb-8">
-        Thank you for submitting your onboarding details. Our team is currently reviewing your application and preparing your workspace.
-      </p>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-left mb-8">
-        <Card>
-          <CardContent className="pt-6">
-            <h4 className="font-semibold text-sm flex items-center mb-2">
-              <Calendar className="w-4 h-4 mr-2 text-brand-green" />
-              Next Steps
-            </h4>
-            <ul className="text-xs space-y-2 text-muted-foreground">
-              <li>• Technical review of Meta BM (24h)</li>
-              <li>• WhatsApp Number provisioning</li>
-              <li>• Onboarding call scheduling</li>
+  const SubscriptionGateDialog = () => (
+    <Dialog open={subscriptionGate.show} onOpenChange={(open) => { if (!open) setSubscriptionGate({ ...subscriptionGate, show: false }); }}>
+      <DialogContent className="max-w-sm" data-testid="dialog-subscription-gate">
+        <DialogHeader>
+          <DialogTitle>Pro + AI Plan Required</DialogTitle>
+          <DialogDescription>
+            The <RealtorMark /> Growth Engine requires both our Pro plan and AI Brain add-on to run.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3 py-4">
+          <div className="p-3 bg-gray-50 rounded-lg">
+            <p className="text-sm font-semibold text-gray-900">What you'll get:</p>
+            <ul className="text-xs text-gray-600 mt-2 space-y-1">
+              <li>✓ WhachatCRM Pro platform ($49/mo)</li>
+              <li>✓ AI Brain automation layer ($29/mo)</li>
+              <li>✓ All workflows + templates included</li>
             </ul>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <h4 className="font-semibold text-sm flex items-center mb-2">
-              <ShieldCheck className="w-4 h-4 mr-2 text-brand-green" />
-              Support
-            </h4>
-            <p className="text-xs text-muted-foreground">
-              Have questions? Reach out to us at <span className="font-medium text-brand-green">support@whachatcrm.com</span> or via the help center.
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-
-      <Button variant="outline" onClick={() => setLocation("/app/templates")}>
-        Back to Templates
-      </Button>
-    </div>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button 
+            variant="outline" 
+            onClick={() => setSubscriptionGate({ ...subscriptionGate, show: false })}
+            data-testid="button-subscription-cancel"
+          >
+            Cancel
+          </Button>
+          <Button
+            className="bg-brand-green hover:bg-brand-green/90"
+            onClick={async () => {
+              try {
+                const endpoint = !subscriptionGate.hasPro
+                  ? "/api/subscription/checkout/pro-ai"
+                  : "/api/subscription/addon/ai-brain";
+                const res = await fetch(endpoint, {
+                  method: "POST",
+                  credentials: "include",
+                });
+                if (!res.ok) throw new Error("Failed to create checkout");
+                const data = await res.json();
+                if (data.url) {
+                  window.open(data.url, '_blank');
+                }
+              } catch (err) {
+                console.error("Checkout error:", err);
+              }
+            }}
+            data-testid="button-upgrade-plan"
+          >
+            {!subscriptionGate.hasPro ? "Upgrade to Pro + AI" : "Enable AI Add-on"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 
-  // --- Eligibility Modal ---
+  const EligibilityDialog = () => {
+    const closeAndResetModal = () => {
+      setEligibilityOpen(false);
+      setEligibilityAnswer("");
+      setEligibilityBlocked(false);
+    };
 
-  const closeAndResetModal = () => {
-    setEligibilityOpen(false);
-    setEligibilityBlocked(false);
-    setSubscriptionGate({ show: false, hasPro: true, hasAI: true });
-  };
-
-  const eligibilityModalContent = (
-    <Dialog open={eligibilityOpen} onOpenChange={(open) => { if (!open) closeAndResetModal(); }}>
-      <DialogContent className="max-w-[520px]" data-testid="eligibility-modal">
+    return (
+      <Dialog open={eligibilityOpen} onOpenChange={(open) => { if (!open) closeAndResetModal(); }} data-testid="dialog-eligibility">
         {subscriptionGate.show ? (
-          <>
-            <DialogHeader>
-              <DialogTitle>Subscription Upgrade Required</DialogTitle>
-              <DialogDescription>
-                The <RealtorMark /> Growth Engine requires a Pro plan with the AI Brain add-on to operate.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="py-2 space-y-3">
-              {!subscriptionGate.hasPro && (
-                <div className="p-3 rounded-lg bg-amber-50 border border-amber-200">
-                  <p className="text-sm font-medium text-amber-800">Pro + AI plan required</p>
-                  <p className="text-xs text-amber-700 mt-1">
-                    Upgrade to Pro with the AI Brain add-on to unlock lead scoring, automated workflows, and smart reply suggestions.
-                  </p>
-                </div>
-              )}
-              {subscriptionGate.hasPro && !subscriptionGate.hasAI && (
-                <div className="p-3 rounded-lg bg-blue-50 border border-blue-200">
-                  <p className="text-sm font-medium text-blue-800">AI Brain add-on required</p>
-                  <p className="text-xs text-blue-700 mt-1">
-                    You're on Pro — great! Now enable the AI Brain add-on to power automated lead qualification and smart routing.
-                  </p>
-                </div>
-              )}
-            </div>
-            <DialogFooter className="flex gap-2">
-              <Button variant="outline" onClick={closeAndResetModal} data-testid="button-subscription-dismiss">
-                Close
-              </Button>
-              <Button
-                className="bg-brand-green hover:bg-brand-green/90"
-                onClick={async () => {
-                  try {
-                    const endpoint = !subscriptionGate.hasPro
-                      ? "/api/subscription/checkout/pro-ai"
-                      : "/api/subscription/addon/ai-brain";
-                    const res = await fetch(endpoint, {
-                      method: "POST",
-                      credentials: "include",
-                    });
-                    if (!res.ok) throw new Error("Failed to create checkout");
-                    const data = await res.json();
-                    if (data.url) {
-                      window.open(data.url, '_blank');
-                    }
-                  } catch (err) {
-                    console.error("Checkout error:", err);
-                  }
-                }}
-                data-testid="button-upgrade-plan"
-              >
-                {!subscriptionGate.hasPro ? "Upgrade to Pro + AI" : "Enable AI Add-on"}
-              </Button>
-            </DialogFooter>
-          </>
+          <SubscriptionGateDialog />
         ) : !eligibilityBlocked ? (
-          <>
+          <DialogContent data-testid="dialog-eligibility-check">
             <DialogHeader>
-              <DialogTitle>Quick Eligibility Check (30 seconds)</DialogTitle>
+              <DialogTitle>Quick Eligibility Check</DialogTitle>
               <DialogDescription>
                 Is your real estate business a registered legal entity (LLC / Corp / Ltd)?
               </DialogDescription>
@@ -1051,9 +1237,9 @@ export function RealtorGrowthEngine() {
                 {checkingSubscription ? "Checking..." : purchaseMutation.isPending ? "Processing..." : "Continue"}
               </Button>
             </DialogFooter>
-          </>
+          </DialogContent>
         ) : (
-          <>
+          <DialogContent data-testid="dialog-eligibility-blocked">
             <DialogHeader>
               <DialogTitle>Business Eligibility Required</DialogTitle>
             </DialogHeader>
@@ -1074,11 +1260,11 @@ export function RealtorGrowthEngine() {
                 Got it — I'll return after registering
               </Button>
             </DialogFooter>
-          </>
+          </DialogContent>
         )}
-      </DialogContent>
-    </Dialog>
-  );
+      </Dialog>
+    );
+  };
 
   const WORKFLOW_DESCRIPTIONS: Record<string, { summary: string; triggers: string; timing: string }> = {
     W1: {
@@ -1510,62 +1696,45 @@ export function RealtorGrowthEngine() {
                     </p>
                   </div>
 
-                  {selectedWf && getWorkflowTemplates(selectedWf).length > 0 && (
+                  {getWorkflowTemplates(selectedWf).length > 0 && (
                     <div>
                       <h4 className="text-sm font-semibold text-gray-800 mb-2">Message Templates Used</h4>
                       <div className="space-y-2">
-                        {getWorkflowTemplates(selectedWf).map((tpl: any) => (
-                          <div key={tpl.key} className="border rounded-lg p-3 bg-gray-50/50">
-                            <p className="text-xs font-medium text-gray-700 mb-1">{tpl.title}</p>
-                            <p className="text-xs text-muted-foreground whitespace-pre-line leading-relaxed">{tpl.body}</p>
+                        {getWorkflowTemplates(selectedWf).map((template: any, idx: number) => (
+                          <div key={idx} className="p-2 bg-gray-50 rounded border border-gray-200">
+                            <p className="text-xs font-mono text-muted-foreground">{template.key}</p>
+                            <p className="text-sm text-gray-700 mt-1">{template.friendlyName || template.name}</p>
                           </div>
                         ))}
                       </div>
                     </div>
                   )}
-
-                  <div>
-                    <h4 className="text-sm font-semibold text-gray-800 mb-1">Actions</h4>
-                    <div className="space-y-1.5">
-                      {selectedWf?.actions?.map((action: any, i: number) => (
-                        <div key={i} className="flex items-center gap-2 text-xs text-muted-foreground">
-                          <div className="w-1 h-1 rounded-full bg-brand-green" />
-                          <span>{action.type.replace(/_/g, ' ')}{action.tag ? `: ${action.tag}` : ''}{action.stage ? `: ${action.stage}` : ''}{action.templateKey ? `: ${action.templateKey}` : ''}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
                 </TabsContent>
 
                 <TabsContent value="customize" className="px-6 pb-4 mt-0">
-                  <div className="pt-3">
-                    <p className="text-xs text-muted-foreground mb-4">
-                      Adjust preferences below. Core workflow logic cannot be changed — only safe customization fields are shown.
-                    </p>
+                  <div className="space-y-4">
                     {renderGlobalFields()}
-                    {selectedWf && renderWorkflowFields(selectedWf.key)}
+                    {hasWorkflowSpecificFields(selectedWf?.key) && renderWorkflowFields(selectedWf?.key)}
                   </div>
                 </TabsContent>
               </div>
             </Tabs>
 
-            <div className="flex items-center justify-between px-6 py-4 border-t bg-gray-50/50 shrink-0">
+            <div className="border-t px-6 py-3 flex gap-2 justify-end shrink-0">
+              <Button variant="outline" onClick={() => setSelectedWf(null)} data-testid="button-modal-cancel">
+                Close
+              </Button>
               {modalTab === "customize" && (
-                <Button variant="ghost" size="sm" className="text-xs text-muted-foreground" onClick={handleRestore} data-testid="button-restore-defaults">
-                  <RotateCcw className="w-3 h-3 mr-1" /> Restore Defaults
-                </Button>
-              )}
-              {modalTab !== "customize" && <div />}
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={() => setSelectedWf(null)} data-testid="button-modal-close">
-                  Close
-                </Button>
-                {modalTab === "customize" && (
-                  <Button size="sm" className="bg-brand-green hover:bg-brand-green/90" onClick={handleSave} disabled={saving} data-testid="button-save-settings">
-                    {saving ? <><Loader2 className="w-3 h-3 mr-1 animate-spin" /> Saving...</> : "Save Settings"}
+                <>
+                  <Button variant="outline" onClick={handleRestore} data-testid="button-restore-defaults">
+                    <RotateCcw className="w-4 h-4 mr-1.5" /> Restore Defaults
                   </Button>
-                )}
-              </div>
+                  <Button className="bg-brand-green hover:bg-brand-green/90" onClick={handleSave} disabled={saving} data-testid="button-save-preferences">
+                    {saving ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <CheckCircle2 className="w-4 h-4 mr-1.5" />}
+                    Save Changes
+                  </Button>
+                </>
+              )}
             </div>
           </DialogContent>
         </Dialog>
@@ -1573,32 +1742,12 @@ export function RealtorGrowthEngine() {
     );
   };
 
-  // --- Router Logic ---
-
-  if (location === "/app/templates/realtor-growth-engine/onboarding") {
-    if (status === 'locked' || isPaused) return <Redirect to="/app/templates/realtor-growth-engine" />;
-    if (status === 'submitted' || status === 'installed') return <Redirect to="/app/templates/realtor-growth-engine/status" />;
-    return <OnboardingForm />;
-  }
-
-  if (location === "/app/templates/realtor-growth-engine/status") {
-    if (status === 'locked' || status === 'purchased') return <Redirect to="/app/templates/realtor-growth-engine" />;
-    if (status === 'installed') return <DashboardView />;
-    return <StatusPage />;
-  }
+  // --- Main Render ---
 
   return (
     <>
-      {eligibilityModalContent}
       {status === 'installed' ? <DashboardView /> : <DetailPage />}
+      <EligibilityDialog />
     </>
   );
-}
-
-function Redirect({ to }: { to: string }) {
-  const [, setLocation] = useLocation();
-  React.useEffect(() => {
-    setLocation(to);
-  }, [to]);
-  return null;
 }
