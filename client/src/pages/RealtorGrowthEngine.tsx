@@ -1556,6 +1556,7 @@ export function RealtorGrowthEngine() {
     const msgTemplates = assetsData?.assets?.find((a: any) => a.assetType === 'message_templates')?.definition?.templates || [];
 
     const getWorkflowTemplates = (wf: any) => {
+      if (!wf) return [];
       const templateKeys = (wf.actions || [])
         .filter((a: any) => a.type === 'send_message_template')
         .map((a: any) => a.templateKey);
