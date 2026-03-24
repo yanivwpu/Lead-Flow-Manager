@@ -253,7 +253,7 @@ export function Pricing() {
                 <p className="text-xs text-gray-400 mt-4 mb-4">Upgrade when you need more users, more conversations, and built-in AI assistance.</p>
                 <Button
                   className="w-full bg-gray-100 text-gray-700 hover:bg-gray-200"
-                  onClick={() => !user ? setLocation("/auth") : undefined}
+                  onClick={() => setLocation(user ? "/app/chats" : "/auth")}
                   disabled={isCurrentPlan}
                   data-testid="button-upgrade-free"
                 >
@@ -502,7 +502,7 @@ export function Pricing() {
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
             <Button
               className="h-12 px-8 bg-brand-green hover:bg-emerald-700 text-white font-semibold rounded-full"
-              onClick={() => !user ? setLocation("/auth") : undefined}
+              onClick={() => setLocation(user ? "/app/chats" : "/auth")}
               data-testid="button-cta-start-free"
             >
               Start Free
