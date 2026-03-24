@@ -198,9 +198,9 @@ export function RealtorLanding() {
               <button
                 onClick={handleCta}
                 className="w-full sm:w-auto h-14 px-8 bg-brand-green hover:bg-emerald-700 text-white font-semibold rounded-full flex items-center justify-center gap-2 transition-all shadow-lg hover:shadow-xl cursor-pointer"
-                data-testid="button-hero-early-access"
+                data-testid="button-hero-install"
               >
-                {t("rge.hero.earlyAccess")}
+                Install Realtor Growth Engine
                 <ArrowRight className={arrowClass} />
               </button>
               <button
@@ -211,10 +211,6 @@ export function RealtorLanding() {
                 {t("rge.hero.howItWorks")}
               </button>
             </div>
-
-            <p className="text-sm text-emerald-600 font-medium">
-              {t("rge.hero.launchOffer")}
-            </p>
           </motion.div>
 
           <motion.div
@@ -441,9 +437,9 @@ export function RealtorLanding() {
               <button
                 onClick={handleCta}
                 className="w-full sm:w-auto h-14 px-10 bg-brand-green hover:bg-emerald-700 text-white font-semibold rounded-full flex items-center justify-center gap-2 transition-all shadow-lg hover:shadow-xl text-base sm:text-lg cursor-pointer"
-                data-testid="button-pricing-early-access"
+                data-testid="button-pricing-install"
               >
-                {t("rge.hero.earlyAccess")}
+                Install Realtor Growth Engine
                 <ArrowRight className={arrowClass} />
               </button>
               <Link href="/pricing" className="w-full sm:w-auto">
@@ -484,7 +480,7 @@ export function RealtorLanding() {
               className="w-full sm:w-auto h-12 px-8 bg-brand-green hover:bg-emerald-700 text-white font-semibold rounded-full flex items-center justify-center gap-2 transition-all cursor-pointer"
               data-testid="button-footer-cta"
             >
-              {t("rge.hero.earlyAccess")}
+              Install Realtor Growth Engine
               <ArrowRight className={arrowClassSm} />
             </button>
             <Link href="/pricing" className="w-full sm:w-auto">
