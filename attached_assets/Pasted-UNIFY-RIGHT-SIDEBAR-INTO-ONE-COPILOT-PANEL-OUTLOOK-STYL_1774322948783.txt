@@ -1,0 +1,273 @@
+UNIFY RIGHT SIDEBAR INTO ONE COPILOT PANEL (OUTLOOK-STYLE, REPLIT-SAFE)
+
+Goal:
+Merge the current top intelligence area, suggestions area, and AI memory/summary into ONE clean "Copilot" panel with expandable behavior.
+This should reduce duplication, reduce clutter, and make the sidebar feel premium and first-class.
+
+IMPORTANT SCOPE
+- Only refactor the right sidebar layout/structure
+- Do NOT redesign the chat thread
+- Do NOT redesign the composer
+- Do NOT redesign the left inbox list
+- Preserve existing working logic, actions, and plan gating
+- This is a layout consolidation + naming cleanup, not a logic rewrite
+
+--------------------------------------------------
+1. SINGLE PANEL: "Copilot"
+--------------------------------------------------
+
+Replace separate sections like:
+- AI Copilot
+- Copilot Suggestions
+- AI Memory
+
+With one single section only:
+
+Header:
+Copilot
+
+No "AI" prefix anywhere in this panel.
+
+--------------------------------------------------
+2. COLLAPSED / EXPANDED BEHAVIOR
+--------------------------------------------------
+
+The Copilot panel should be expandable/collapsible like Outlook-style progressive disclosure.
+
+DEFAULT STATE:
+- Expanded on desktop
+- Can be manually collapsed by user
+
+COLLAPSED VIEW should show only:
+- Copilot
+- Lead level (e.g. Warm Lead)
+- One-line state summary
+  Examples:
+  - "Collecting details"
+  - "Ready to convert"
+  - "Waiting for reply"
+- Small suggestion count if available
+  Example:
+  "2 suggestions"
+
+EXPANDED VIEW should reveal structured content in this order:
+
+A. Snapshot
+B. Suggestions / Actions
+C. Suggested message (if available)
+D. Summary
+E. Existing CRM sections below
+
+--------------------------------------------------
+3. PANEL CONTENT ORDER (EXPANDED VIEW)
+--------------------------------------------------
+
+Inside ONE Copilot panel, render in this order:
+
+SECTION A — SNAPSHOT
+- Lead level (Warm / Hot / Cold)
+- Intent (Buyer / Investor / Seller / Renter / Inquiry)
+- State (Collecting details / Ready to convert / Waiting for reply / New conversation / etc.)
+- Qualification indicators for:
+  - Budget
+  - Timeline
+  - Financing
+
+IMPORTANT:
+- Use clean hierarchy
+- Primary line:
+  Warm Lead
+- Secondary line:
+  Buyer • Collecting details
+
+Do NOT cram everything into one line.
+Use 2 lines with clear spacing.
+
+Qualification indicators should be readable and calm, not tiny/cluttered.
+
+--------------------------------------------------
+SECTION B — SUGGESTIONS / ACTIONS
+--------------------------------------------------
+
+Under the snapshot, include the current working suggestion/action chips.
+
+Examples:
+- Ask qualifying question
+- Schedule follow-up
+- Tag suggestion
+- Assign / Book / Follow if applicable
+
+RULES:
+- Remove the separate "Copilot Suggestions" title completely
+- Keep only relevant actionable chips
+- Suggestions should remain ephemeral:
+  - after user acts, that chip disappears
+  - new suggestions can appear later
+
+--------------------------------------------------
+SECTION C — SUGGESTED MESSAGE
+--------------------------------------------------
+
+If a suggested message / next question exists, show it here inside the same Copilot panel.
+
+Examples:
+- "What's your budget range and timeline?"
+- "Would you like to schedule a viewing?"
+
+Behavior:
+- Clicking it should continue to inject/copy into composer as already implemented
+- Keep styling subtle
+- This is not a new section title if it can be avoided; just a compact message suggestion block
+
+--------------------------------------------------
+SECTION D — SUMMARY
+--------------------------------------------------
+
+Move AI Memory into Copilot and rename it:
+
+"Summary"
+
+Do NOT call it AI Memory.
+
+Rules:
+- Read-only
+- Natural-language summary only
+- 1–2 short sentences max
+- No raw labels like:
+  - LEAD SCORE
+  - INTENT
+  - BUDGET
+- No duplication with Team Notes
+
+Examples:
+- "Investor looking for multi-family properties."
+- "Interested in the downtown condo listing and asked about availability."
+- "Looking to buy around $500k with a timeline of about 2 months."
+
+This summary belongs inside Copilot because it is AI-generated intelligence, not team notes.
+
+--------------------------------------------------
+4. TEAM NOTES SEPARATION
+--------------------------------------------------
+
+After Copilot panel, keep a separate section for:
+
+Team Notes
+
+Rules:
+- Human-only notes
+- No AI-generated content
+- No Summary / AI Memory tab here anymore
+- Keep edit/open modal behavior already working
+- Empty state:
+  "Add a private note…"
+
+This section must stay separate from Copilot.
+
+--------------------------------------------------
+5. REMOVE DUPLICATION
+--------------------------------------------------
+
+After this change, the following must be true:
+
+- No separate "Copilot Suggestions" section
+- No separate "AI Memory" section/tab
+- No duplicate labels or summaries in multiple places
+- No AI-generated summary inside Team Notes
+- No duplicated suggestion chips after action is taken
+
+Single source of truth:
+- Copilot = all AI intelligence + suggestions
+- Team Notes = all human notes
+
+--------------------------------------------------
+6. CLEAN LABELING (PREMIUM UI)
+--------------------------------------------------
+
+Remove "AI" wording from the sidebar UI.
+
+Rename:
+- "AI Copilot" → "Copilot"
+- "AI Memory" → "Summary"
+
+Status text examples:
+- "AI is qualifying this lead" → "Collecting details"
+- "AI reply ready" → "Draft ready"
+- "AI is handling this conversation" → "Handling conversation"
+
+Keep the product calm and premium.
+Do not over-label everything as AI.
+
+--------------------------------------------------
+7. SPACING / HIERARCHY (STRIPE-LEVEL)
+--------------------------------------------------
+
+Use clean spacing and hierarchy:
+
+- Add breathing room between Snapshot, Actions, Suggested Message, and Summary
+- Use smaller muted labels and stronger values
+- Avoid stacking too many pills/chips tightly
+- Do not make the panel feel cramped
+- Avoid unnecessary borders if spacing already separates sections well
+
+Visual intent:
+- confident
+- minimal
+- calm
+- high-end SaaS
+
+Do NOT make it feel like a cluttered dashboard.
+
+--------------------------------------------------
+8. KEEP EXISTING CRM AREAS BELOW
+--------------------------------------------------
+
+Below Copilot, keep existing CRM sections like:
+- Contact
+- Status / Stage
+- Tags
+- Follow-up
+- Team Notes
+- Delete Contact
+
+Do not remove their functionality.
+Only ensure Copilot sits above them as the decision/intelligence layer.
+
+--------------------------------------------------
+9. IMPLEMENTATION SAFETY (IMPORTANT)
+--------------------------------------------------
+
+This must be a safe refactor.
+
+Recommended approach:
+- Reuse existing logic and data sources
+- Only reorganize rendering/layout
+- Do not rewrite working extraction/workflow/plan logic
+- Do not touch composer or chat behavior
+
+Do not attempt a broad sidebar rewrite from scratch if not necessary.
+Prefer moving existing sub-sections into one unified Copilot container.
+
+--------------------------------------------------
+10. ACCEPTANCE CRITERIA
+--------------------------------------------------
+
+Done = all of the following are true:
+
+1. There is only ONE Copilot panel in the sidebar
+2. Snapshot, suggestions, suggested message, and summary all live inside it
+3. "Copilot Suggestions" title is removed
+4. "AI Memory" is removed as a separate section/tab
+5. Team Notes remains separate and human-only
+6. No duplicated summary / notes / suggestions
+7. Panel feels cleaner and less cramped than before
+8. Layout works on laptop-sized screens (13–14")
+9. Existing suggestion actions still work
+10. No browser errors, regressions, or broken plan-gating states
+
+FINAL UX GOAL:
+One intelligent Copilot panel that tells the user:
+- what this lead is
+- what’s missing
+- what to do next
+all in one clean expandable area.

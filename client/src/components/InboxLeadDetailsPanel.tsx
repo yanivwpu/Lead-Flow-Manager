@@ -20,6 +20,8 @@ import {
   ArrowLeft,
   ClipboardCopy,
   Save,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -184,8 +186,6 @@ export function InboxLeadDetailsPanel({
   const copilotUpgradeTo = capabilities?.upgradePlan ?? "Starter";
   const workflowUpgradeTo = capabilities?.upgradePlan ?? "Pro";
   const [localNotes, setLocalNotes] = useState(contact.notes || "");
-  const [notesSaved, setNotesSaved] = useState(false);
-  const [notesTab, setNotesTab] = useState<'ai' | 'team'>('team');
   const [expandedNotesOpen, setExpandedNotesOpen] = useState(false);
   const [expandedNotes, setExpandedNotes] = useState(contact.notes || "");
   const [aiPaused,   setAiPaused]   = useState(false);
@@ -216,11 +216,11 @@ export function InboxLeadDetailsPanel({
   const [bookingTime,      setBookingTime]      = useState("10:00");
   const [bookingType,      setBookingType]      = useState("Viewing");
   const [bookingConfirmed, setBookingConfirmed] = useState(false);
+  const [copilotExpanded, setCopilotExpanded]   = useState(true);
 
   useEffect(() => {
     setLocalNotes(contact.notes || "");
     setExpandedNotes(contact.notes || "");
-    setNotesSaved(false);
     setCompletedActions(new Set()); // Reset completed actions when contact changes
   }, [contact.id, contact.notes]);
 
@@ -263,12 +263,6 @@ export function InboxLeadDetailsPanel({
   const clearFollowUp = () => {
     onUpdateContact({ followUp: null, followUpDate: null });
     setFollowOpen(false);
-  };
-
-  const saveNotes = () => {
-    onUpdateContact({ notes: localNotes });
-    setNotesSaved(true);
-    setTimeout(() => setNotesSaved(false), 2500);
   };
 
   const convStatus = primaryConversation?.status || 'open';
@@ -357,195 +351,88 @@ export function InboxLeadDetailsPanel({
     ? (assignedMember.name || assignedMember.email.split('@')[0])
     : null;
 
+  // ─── Copilot computed values ───────────────────────────────────────────────
+  const AI_STATE_LABELS: Record<string, string> = {
+    Ready:     "Ready to convert",
+    Qualifying:"Collecting details",
+    Engaging:  "Engaging",
+    Waiting:   "Waiting for reply",
+    Stalled:   "Stalled",
+  };
+  const aiStateLabel = AI_STATE_LABELS[intel.aiState] ?? intel.aiState;
+
+  const completeAction = (actionType: string, toastMsg: string) => {
+    setFadingAction(actionType);
+    setTimeout(() => {
+      setCompletedActions(prev => new Set([...Array.from(prev), actionType]));
+      setFadingAction(null);
+    }, 150);
+    toast({ title: toastMsg, duration: 2500 });
+  };
+
+  const qualifyAction     = canSeeWorkflow ? workflow.actions.find(a => a.type === 'qualify' && !completedActions.has('qualify')) : undefined;
+  const activeChipActions = canSeeWorkflow ? workflow.actions.filter(a => a.type !== 'qualify' && !completedActions.has(a.type)) : [];
+  const hasTagSuggestion  = canSeeWorkflow && !!workflow.tagSuggestion && !workflow.tagAutoApply && !completedActions.has('tag');
+  const hasStageSuggestion = canSeeWorkflow && !!workflow.stageSuggestion && !completedActions.has('stage');
+  const hasAnyChips       = activeChipActions.length > 0 || hasTagSuggestion || hasStageSuggestion;
+  const activeSuggestionCount = (hasAnyChips ? 1 : 0) + (qualifyAction ? 1 : 0);
+
   return (
     <div className="hidden lg:flex w-[260px] xl:w-[272px] flex-col border-l border-gray-100 bg-white overflow-y-auto flex-shrink-0">
 
-      {/* ══ 1. AI COPILOT HEADER ══════════════════════════════════════════ */}
+      {/* ══ COPILOT STICKY HEADER ════════════════════════════════════════ */}
       <div className="px-3 pt-2.5 pb-2 border-b border-gray-100 bg-white sticky top-0 z-10">
-        <div className="flex items-center justify-between mb-1.5">
+        <div className="flex items-center justify-between">
           <div className="flex items-center gap-1.5">
             <Sparkles className="w-3 h-3 text-purple-500" />
             <span className="text-[11px] font-semibold text-gray-700 tracking-wide">Copilot</span>
           </div>
-          {canSeeCopilot ? (
+          <div className="flex items-center gap-1.5">
+            {canSeeCopilot ? (
+              <button
+                onClick={() => setAiPaused(p => !p)}
+                className={cn(
+                  "text-[10px] font-medium px-1.5 py-0.5 rounded-full border transition-colors leading-none",
+                  aiPaused
+                    ? "bg-gray-100 text-gray-400 border-gray-200 hover:bg-gray-200"
+                    : "bg-purple-50 text-purple-600 border-purple-200 hover:bg-purple-100"
+                )}
+                data-testid="button-ai-toggle"
+              >
+                {aiPaused ? "Paused" : "Active"}
+              </button>
+            ) : (
+              <span className="text-[10px] text-gray-300 font-medium">{copilotUpgradeTo}+</span>
+            )}
             <button
-              onClick={() => setAiPaused(p => !p)}
-              className={cn(
-                "text-[10px] font-medium px-1.5 py-0.5 rounded-full border transition-colors leading-none",
-                aiPaused
-                  ? "bg-gray-100 text-gray-400 border-gray-200 hover:bg-gray-200"
-                  : "bg-purple-50 text-purple-600 border-purple-200 hover:bg-purple-100"
-              )}
-              data-testid="button-ai-toggle"
+              onClick={() => setCopilotExpanded(p => !p)}
+              className="p-0.5 text-gray-300 hover:text-gray-500 transition-colors rounded"
+              data-testid="button-copilot-collapse"
             >
-              {aiPaused ? "Paused" : "Active"}
+              {copilotExpanded
+                ? <ChevronUp className="w-3.5 h-3.5" />
+                : <ChevronDown className="w-3.5 h-3.5" />
+              }
             </button>
-          ) : (
-            <span className="text-[10px] text-gray-300 font-medium">{copilotUpgradeTo}+</span>
-          )}
+          </div>
         </div>
 
-        {canSeeCopilot ? (
-          <>
-            <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
+        {/* Collapsed summary — just lead + state + suggestion count */}
+        {!copilotExpanded && canSeeCopilot && (
+          <div className="mt-1.5 flex items-center justify-between">
+            <div className="flex items-center gap-1.5">
               <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", intel.leadScore.dot)} />
-              <span className={cn("text-[11px] font-semibold", intel.leadScore.color)}>{intel.leadScore.label} Lead</span>
-              <span className="text-gray-300 text-[10px]">·</span>
-              <span className="text-[11px] text-gray-500">{intel.aiState}</span>
-              <span className="text-gray-300 text-[10px]">·</span>
-              <span className="text-[11px] text-gray-500">{intel.intent}</span>
+              <span className={cn("text-[11px] font-semibold", intel.leadScore.color)}>
+                {intel.leadScore.label} Lead
+              </span>
+              <span className="text-[10px] text-gray-400">· {aiStateLabel}</span>
             </div>
-            <div className="flex items-center gap-1 flex-wrap">
-              <QualBadge ok={intel.hasBudget}    label="Budget"    value={intel.budget} />
-              <QualBadge ok={intel.hasTimeline}  label="Timeline"  value={intel.timeline} />
-              <QualBadge ok={intel.hasFinancing} label="Financing" value={intel.financing} />
-            </div>
-          </>
-        ) : (
-          <AIUpgradePrompt
-            feature="Copilot"
-            requiredPlan={copilotUpgradeTo}
-            reason="Reads conversations and auto-extracts budget, timeline, financing, and lead intent to help you qualify leads faster."
-            size="md"
-            className="mt-1"
-          />
-        )}
-
-        {/* ── Workflow recommendations strip ─────────────────────────── */}
-        {canSeeCopilot && !canSeeWorkflow && (
-          <div className="mt-2 pt-1.5 border-t border-purple-100">
-            <AIUpgradePrompt
-              feature="Autopilot"
-              requiredPlan={workflowUpgradeTo}
-              reason="Suggests and automates actions: assign leads, book appointments, schedule follow-ups, and advance pipeline stages with one click."
-              size="md"
-              className="mt-0.5"
-            />
+            {activeSuggestionCount > 0 && (
+              <span className="text-[10px] text-purple-500 font-medium">
+                {activeSuggestionCount} suggestion{activeSuggestionCount !== 1 ? 's' : ''}
+              </span>
+            )}
           </div>
-        )}
-        {/* ── COPILOT ACTION SUGGESTIONS ──────────────────────────────── */}
-        {canSeeCopilot && canSeeWorkflow && (
-          (() => {
-            // Filter out completed actions
-            const activeActions = workflow.actions.filter(a => !completedActions.has(a.type));
-            const hasTagSuggestion = workflow.tagSuggestion && !workflow.tagAutoApply && !completedActions.has('tag');
-            const hasStageSuggestion = workflow.stageSuggestion && !completedActions.has('stage');
-            const hasAnyActions = activeActions.length > 0 || hasTagSuggestion || hasStageSuggestion;
-
-            if (!hasAnyActions) return null;
-
-            // Helper to mark action as completed with fade-out and toast
-            const completeAction = (actionType: string, toastMsg: string) => {
-              setFadingAction(actionType);
-              setTimeout(() => {
-                setCompletedActions(prev => new Set([...Array.from(prev), actionType]));
-                setFadingAction(null);
-              }, 150);
-              toast({ title: toastMsg, duration: 2500 });
-            };
-
-            return (
-              <div className="mt-2 pt-1.5 border-t border-purple-100">
-                <div className="flex items-center gap-0.5 mb-1">
-                  <span className="text-[9px] font-bold text-purple-400 uppercase tracking-widest">Copilot suggests</span>
-                </div>
-                <div className="flex items-center gap-1 flex-wrap">
-                  {activeActions.slice(0, 2).map(action => {
-                    const actionHandlers: Record<string, () => void> = {
-                      assign:  () => {
-                        setAssignOpen(true);
-                        completeAction(action.type, "Lead assigned");
-                      },
-                      book:    () => {
-                        setBookOpen(true);
-                        completeAction(action.type, "Follow-up scheduled");
-                      },
-                      follow:  () => {
-                        setFollowOpen(true);
-                        completeAction(action.type, "Follow-up scheduled");
-                      },
-                      qualify: action.value ? () => {
-                        if (onInsertMessage && action.value) {
-                          onInsertMessage(action.value);
-                        } else if (action.value) {
-                          navigator.clipboard.writeText(action.value).catch(() => {});
-                        }
-                        completeAction(action.type, "Message inserted");
-                      } : undefined as unknown as () => void,
-                      nurture: () => {
-                        completeAction(action.type, "Added to nurture queue");
-                      },
-                    };
-                    const handler = actionHandlers[action.type];
-                    const colorCls = action.priority === 'high'
-                      ? 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100'
-                      : action.priority === 'medium'
-                      ? 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'
-                      : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100';
-                    
-                    return (
-                      <button
-                        key={action.type}
-                        onClick={handler}
-                        disabled={!handler}
-                        title={action.reason}
-                        data-testid={`workflow-action-${action.type}`}
-                        className={cn(
-                          "text-[10px] font-medium px-1.5 py-0.5 rounded border transition-all leading-none",
-                          colorCls,
-                          !handler && "opacity-60 cursor-default",
-                          fadingAction === action.type && "opacity-0 scale-95"
-                        )}
-                      >
-                        {action.label}
-                      </button>
-                    );
-                  })}
-
-                  {/* Tag suggestion chip — only shows when NOT auto-applying and NOT completed */}
-                  {hasTagSuggestion && (
-                    <button
-                      onClick={() => {
-                        onUpdateContact({ tag: workflow.tagSuggestion! });
-                        completeAction('tag', `Tagged as "${workflow.tagSuggestion}"`);
-                      }}
-                      title={`AI suggests: Tag as "${workflow.tagSuggestion}"`}
-                      data-testid="workflow-tag-suggestion"
-                      className={cn(
-                        "text-[10px] font-medium px-1.5 py-0.5 rounded border bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 transition-all leading-none",
-                        fadingAction === 'tag' && "opacity-0 scale-95"
-                      )}
-                    >
-                      Tag: {workflow.tagSuggestion} ↗
-                    </button>
-                  )}
-
-                  {/* Stage suggestion chip */}
-                  {hasStageSuggestion && (
-                    <button
-                      onClick={() => {
-                        onUpdateContact({ pipelineStage: workflow.stageSuggestion! });
-                        completeAction('stage', `Moved to ${workflow.stageSuggestion}`);
-                      }}
-                      title={`AI suggests moving to ${workflow.stageSuggestion} stage`}
-                      data-testid="workflow-stage-suggestion"
-                      className={cn(
-                        "text-[10px] font-medium px-1.5 py-0.5 rounded border bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 transition-all leading-none",
-                        fadingAction === 'stage' && "opacity-0 scale-95"
-                      )}
-                    >
-                      → {workflow.stageSuggestion}
-                    </button>
-                  )}
-                </div>
-
-                {/* Empty state when all actions are completed */}
-                {!hasAnyActions && (
-                  <p className="text-[10px] text-gray-400 italic mt-1">No actions needed — you're on track</p>
-                )}
-              </div>
-            );
-          })()
         )}
       </div>
 
@@ -887,6 +774,141 @@ export function InboxLeadDetailsPanel({
       <div className="flex-1 overflow-y-auto">
         <div className="px-3 py-3 space-y-3">
 
+          {/* ══ COPILOT EXPANDED PANEL ══════════════════════════════════ */}
+          {copilotExpanded && (
+            <div className="pb-3 border-b border-gray-100 space-y-3">
+
+              {!canSeeCopilot ? (
+                <AIUpgradePrompt
+                  feature="Copilot"
+                  requiredPlan={copilotUpgradeTo}
+                  reason="Reads conversations and auto-extracts budget, timeline, financing, and lead intent to help you qualify leads faster."
+                  size="md"
+                />
+              ) : (
+                <>
+                  {/* A. SNAPSHOT ─────────────────────────────────────── */}
+                  <div className="space-y-2">
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <span className={cn("w-2 h-2 rounded-full shrink-0", intel.leadScore.dot)} />
+                        <span className={cn("text-[13px] font-semibold leading-tight", intel.leadScore.color)}>
+                          {intel.leadScore.label} Lead
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-gray-400 mt-0.5 ml-3.5">
+                        {intel.intent} · {aiStateLabel}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1 flex-wrap">
+                      <QualBadge ok={intel.hasBudget}    label="Budget"    value={intel.budget} />
+                      <QualBadge ok={intel.hasTimeline}  label="Timeline"  value={intel.timeline} />
+                      <QualBadge ok={intel.hasFinancing} label="Financing" value={intel.financing} />
+                    </div>
+                  </div>
+
+                  {/* B. SUGGESTIONS ──────────────────────────────────── */}
+                  {!canSeeWorkflow ? (
+                    <AIUpgradePrompt
+                      feature="Autopilot"
+                      requiredPlan={workflowUpgradeTo}
+                      reason="Suggests and automates actions: assign leads, book appointments, schedule follow-ups, and advance pipeline stages with one click."
+                      size="md"
+                    />
+                  ) : hasAnyChips && (
+                    <div className="flex items-center gap-1 flex-wrap">
+                      {activeChipActions.slice(0, 2).map(action => {
+                        const chipHandlers: Record<string, () => void> = {
+                          assign:  () => { setAssignOpen(true); completeAction(action.type, "Lead assigned"); },
+                          book:    () => { setBookOpen(true); completeAction(action.type, "Follow-up scheduled"); },
+                          follow:  () => { setFollowOpen(true); completeAction(action.type, "Follow-up scheduled"); },
+                          nurture: () => { completeAction(action.type, "Added to nurture queue"); },
+                        };
+                        const handler = chipHandlers[action.type];
+                        const colorCls = action.priority === 'high'
+                          ? 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100'
+                          : action.priority === 'medium'
+                          ? 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'
+                          : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100';
+                        return (
+                          <button
+                            key={action.type}
+                            onClick={handler}
+                            disabled={!handler}
+                            title={action.reason}
+                            data-testid={`workflow-action-${action.type}`}
+                            className={cn(
+                              "text-[10px] font-medium px-2 py-1 rounded-lg border transition-all leading-none",
+                              colorCls,
+                              !handler && "opacity-60 cursor-default",
+                              fadingAction === action.type && "opacity-0 scale-95"
+                            )}
+                          >
+                            {action.label}
+                          </button>
+                        );
+                      })}
+                      {hasTagSuggestion && (
+                        <button
+                          onClick={() => { onUpdateContact({ tag: workflow.tagSuggestion! }); completeAction('tag', `Tagged as "${workflow.tagSuggestion}"`); }}
+                          data-testid="workflow-tag-suggestion"
+                          className={cn("text-[10px] font-medium px-2 py-1 rounded-lg border bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 transition-all leading-none", fadingAction === 'tag' && "opacity-0 scale-95")}
+                        >
+                          Tag: {workflow.tagSuggestion} ↗
+                        </button>
+                      )}
+                      {hasStageSuggestion && (
+                        <button
+                          onClick={() => { onUpdateContact({ pipelineStage: workflow.stageSuggestion! }); completeAction('stage', `Moved to ${workflow.stageSuggestion}`); }}
+                          data-testid="workflow-stage-suggestion"
+                          className={cn("text-[10px] font-medium px-2 py-1 rounded-lg border bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 transition-all leading-none", fadingAction === 'stage' && "opacity-0 scale-95")}
+                        >
+                          → {workflow.stageSuggestion}
+                        </button>
+                      )}
+                    </div>
+                  )}
+
+                  {/* C. SUGGESTED MESSAGE ────────────────────────────── */}
+                  {canSeeWorkflow && qualifyAction?.value && (
+                    <div className="p-2.5 bg-gray-50 rounded-xl border border-gray-100">
+                      <p className="text-[11px] text-gray-600 leading-relaxed italic">"{qualifyAction.value}"</p>
+                      <button
+                        onClick={() => {
+                          if (onInsertMessage && qualifyAction.value) {
+                            onInsertMessage(qualifyAction.value);
+                          } else if (qualifyAction.value) {
+                            navigator.clipboard.writeText(qualifyAction.value).catch(() => {});
+                          }
+                          completeAction('qualify', "Message inserted");
+                        }}
+                        className="mt-1.5 text-[10px] font-medium text-purple-600 hover:text-purple-700 transition-colors"
+                        data-testid="button-insert-suggested-message"
+                      >
+                        Insert into reply →
+                      </button>
+                    </div>
+                  )}
+
+                  {/* D. SUMMARY ──────────────────────────────────────── */}
+                  <div>
+                    <p className="text-[9px] font-bold text-gray-300 uppercase tracking-widest mb-1.5">Summary</p>
+                    {aiMemoryLoading ? (
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-2 h-2 rounded-full bg-purple-200 animate-pulse" />
+                        <span className="text-[11px] text-gray-400 italic">Generating…</span>
+                      </div>
+                    ) : aiMemory ? (
+                      <p className="text-[11px] text-gray-500 leading-relaxed">{aiMemory}</p>
+                    ) : (
+                      <p className="text-[11px] text-gray-400 italic">Summary will appear here as the conversation develops.</p>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
           {/* ── CONTACT INFO ─────────────────────────────────────────── */}
           <div>
             <div className="flex items-center justify-between mb-1">
@@ -1019,78 +1041,28 @@ export function InboxLeadDetailsPanel({
             )}
           </div>
 
-          {/* ── NOTES & MEMORY (TABBED) ──────────────────────────────── */}
+          {/* ── TEAM NOTES ───────────────────────────────────────────── */}
           <div>
-            <div className="mb-1.5">
-              <RowLabel>Notes & Memory</RowLabel>
-            </div>
-            
-            {/* Tab navigation */}
-            <div className="flex gap-1 mb-2 border-b border-gray-200">
-              <button
-                onClick={() => setNotesTab('ai')}
-                className={cn(
-                  "px-2 py-1 text-[11px] font-semibold transition-colors border-b-2",
-                  notesTab === 'ai'
-                    ? 'text-purple-600 border-purple-400'
-                    : 'text-gray-500 border-transparent hover:text-gray-700'
-                )}
-                data-testid="button-tab-ai-memory"
-              >
-                Summary
-              </button>
-              <button
-                onClick={() => setNotesTab('team')}
-                className={cn(
-                  "px-2 py-1 text-[11px] font-semibold transition-colors border-b-2",
-                  notesTab === 'team'
-                    ? 'text-blue-600 border-blue-400'
-                    : 'text-gray-500 border-transparent hover:text-gray-700'
-                )}
-                data-testid="button-tab-team-notes"
-              >
-                Team Notes
-              </button>
-            </div>
-
-            {/* AI Memory tab - AI-generated natural-language summary */}
-            {notesTab === 'ai' && (
-              <div className="p-3 bg-purple-50/60 border border-purple-100 rounded-lg min-h-20 flex flex-col justify-start">
-                {aiMemoryLoading ? (
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full bg-purple-300 animate-pulse" />
-                    <span className="text-[11px] text-purple-400 italic">Generating summary…</span>
-                  </div>
-                ) : aiMemory ? (
-                  <p className="text-[11px] text-purple-900 leading-relaxed">{aiMemory}</p>
-                ) : (
-                  <p className="text-[11px] text-gray-400 italic">Summary will appear here as the conversation develops.</p>
-                )}
-              </div>
-            )}
-
-            {/* Team Notes tab - sourced ONLY from manual localNotes, never AI content */}
-            {notesTab === 'team' && (
-              <button
-                onClick={() => {
-                  setExpandedNotes(localNotes);
-                  setExpandedNotesOpen(true);
-                }}
-                className="w-full group text-left transition-all"
-                data-testid="button-expand-notes"
-              >
-                {localNotes ? (
-                  <div className="p-2.5 bg-blue-50/40 border border-blue-100 rounded-lg hover:bg-blue-50/60 transition-colors">
-                    <p className="text-[11px] text-blue-900 leading-relaxed line-clamp-4">{localNotes}</p>
-                    <p className="text-[9px] text-blue-400 mt-1.5 opacity-0 group-hover:opacity-100 transition-opacity">Click to edit</p>
-                  </div>
-                ) : (
-                  <div className="p-2.5 border border-dashed border-gray-200 rounded-lg hover:border-gray-300 hover:bg-gray-50/40 transition-all">
-                    <p className="text-[11px] text-gray-400">Add a private note…</p>
-                  </div>
-                )}
-              </button>
-            )}
+            <RowLabel>Team Notes</RowLabel>
+            <button
+              onClick={() => {
+                setExpandedNotes(localNotes);
+                setExpandedNotesOpen(true);
+              }}
+              className="w-full group text-left mt-1.5"
+              data-testid="button-expand-notes"
+            >
+              {localNotes ? (
+                <div className="p-2.5 bg-white border border-gray-100 rounded-xl hover:border-gray-200 transition-colors">
+                  <p className="text-[11px] text-gray-600 leading-relaxed line-clamp-4">{localNotes}</p>
+                  <p className="text-[9px] text-gray-400 mt-1.5 opacity-0 group-hover:opacity-100 transition-opacity">Click to edit</p>
+                </div>
+              ) : (
+                <div className="p-2.5 border border-dashed border-gray-200 rounded-xl hover:border-gray-300 hover:bg-gray-50/40 transition-all">
+                  <p className="text-[11px] text-gray-400">Add a private note…</p>
+                </div>
+              )}
+            </button>
           </div>
 
           {/* ── NOTES EDITOR MODAL (MODERN DESIGN) ───────────────────────────────── */}
