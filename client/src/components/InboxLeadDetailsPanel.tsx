@@ -1181,7 +1181,10 @@ export function InboxLeadDetailsPanel({
                   </button>
                   <button
                     onClick={async () => {
-                      if (!newNoteText.trim()) return;
+                      if (!newNoteText.trim()) {
+                        toast({ title: "Note is empty", description: "Please type something before saving.", variant: "destructive" });
+                        return;
+                      }
                       setNotesSaving(true);
                       try {
                         const res = await fetch(`/api/contacts/${contact.id}/notes`, {
@@ -1194,7 +1197,17 @@ export function InboxLeadDetailsPanel({
                           setContactNotesList(prev => [saved, ...prev]);
                           setAddNoteOpen(false);
                           setNewNoteText('');
+                          toast({ title: "Note saved", duration: 2000 });
+                        } else {
+                          let errMsg = "Failed to save note. Please try again.";
+                          try {
+                            const errBody = await res.json();
+                            if (errBody?.error) errMsg = errBody.error;
+                          } catch {}
+                          toast({ title: "Save failed", description: errMsg, variant: "destructive" });
                         }
+                      } catch (err) {
+                        toast({ title: "Save failed", description: "Network error — please check your connection and try again.", variant: "destructive" });
                       } finally {
                         setNotesSaving(false);
                       }
