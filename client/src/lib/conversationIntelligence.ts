@@ -185,24 +185,26 @@ function extractIntent(messages: ConversationMessage[]): string {
   const all     = searchAll(messages);
   const src     = inbound || all;
 
-  // Investor check first (specific)
-  if (/invest(?:ment|or|ing)?|rental\s+income|cap\s+rate|roi|cash\s+flow|property\s+management/gi.test(src))
+  // Investor check first — explicit investment intent only
+  if (/\b(?:investor|invest(?:ing|ment)|multi.?family|multifamily|rental\s+income|cap\s+rate|roi\b|cash\s+flow|property\s+management|income.?producing|income\s+property|investment\s+prop)/gi.test(src))
     return 'Investor';
 
-  // Seller
-  if (/(?:sell(?:ing)?|list(?:ing)?|put(?:ting)?\s+(?:my|our|the)\s+(?:home|house|property)|selling my)/gi.test(src))
+  // Seller — requires possessive or explicit intent to sell/list THEIR property
+  // Does NOT match "your listing", "the listing", "I saw a listing" (those are buyer inquiries)
+  if (/(?:sell(?:ing)?\s+(?:my|our|the)\s+(?:home|house|property|condo|apartment|place)|want\s+to\s+(?:sell|list)\s+(?:my|our)|thinking\s+of\s+(?:selling|listing)|need\s+(?:help\s+)?(?:to\s+)?(?:sell|list)\s+(?:my|our)|listing\s+(?:my|our)\s+(?:home|house|property)|put(?:ting)?\s+(?:my|our|the)\s+(?:home|house|property)\s+(?:on|up))/gi.test(src))
     return 'Seller';
 
   // Renter
-  if (/(?:rent(?:ing|al)?|looking\s+to\s+rent|want\s+to\s+rent|lease)/gi.test(src))
+  if (/(?:looking\s+to\s+rent|want\s+to\s+rent|need\s+to\s+rent|renting|for\s+rent|rental\s+(?:unit|apartment|home|house)|lease\s+a)/gi.test(src))
     return 'Renter';
 
   // Buyer (most common)
-  if (/(?:buy(?:ing)?|purchas(?:e|ing)|looking\s+to\s+buy|want\s+to\s+(?:buy|own)|first\s+(?:home|time)|forever\s+home)/gi.test(src))
+  if (/(?:buy(?:ing)?\s+a|looking\s+to\s+buy|want\s+to\s+(?:buy|own|purchase)|purchas(?:e|ing)\s+a|first.?time\s+(?:home|buyer)|forever\s+home|new\s+home)/gi.test(src))
     return 'Buyer';
 
-  // Generic interest
-  if (/interested\s+in|looking\s+(?:at|for)|considering|exploring/gi.test(src))
+  // Listing inquiry / generic interest → Browsing (NOT Seller)
+  // "I saw your listing", "Is it still available", "interested in the condo" etc.
+  if (/interested\s+in|looking\s+(?:at|for)|considering|exploring|saw\s+(?:your|the)\s+listing|is\s+it\s+still|still\s+available|available\s+for/gi.test(src))
     return 'Browsing';
 
   return 'Browsing';
@@ -493,6 +495,105 @@ export function computeWorkflow(
     nextQuestion,
     followUpDue,
   };
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// AI MEMORY SUMMARY — natural-language synthesis from intel + raw messages
+// ══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Scans inbound messages for property/topic clues to enrich the summary.
+ * Returns a short descriptor like "a 3-bedroom condo downtown" or null.
+ */
+function extractPropertyHint(messages: ConversationMessage[]): string | null {
+  const inbound = messages
+    .filter(m => m.direction === 'inbound')
+    .map(m => m.content)
+    .join(' ');
+  if (!inbound) return null;
+
+  // Bedroom count
+  const bedroomMatch = /(\d+)\s*(?:br|bed(?:room)?s?)/i.exec(inbound);
+  const bedrooms = bedroomMatch ? `${bedroomMatch[1]}-bedroom ` : '';
+
+  // Property type
+  let propType = '';
+  if (/multi.?family|multifamily/i.test(inbound))  propType = 'multi-family properties';
+  else if (/condo(?:minium)?/i.test(inbound))       propType = `${bedrooms}condo`;
+  else if (/townhous|townhome/i.test(inbound))      propType = `${bedrooms}townhouse`;
+  else if (/apartment|apt\b/i.test(inbound))        propType = `${bedrooms}apartment`;
+  else if (/house|home|property/i.test(inbound))    propType = `${bedrooms}home`;
+  else if (bedrooms)                                propType = `${bedrooms}property`;
+
+  // Location hint
+  const locationMatch = /\bin\s+(downtown|uptown|midtown|the\s+\w+\s+area|[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\b/.exec(inbound);
+  const location = locationMatch ? ` in ${locationMatch[1]}` : '';
+
+  return propType ? `${propType}${location}` : null;
+}
+
+/**
+ * Scans the first inbound message for a listing inquiry clue.
+ * Returns a short phrase like "the downtown condo listing" or null.
+ */
+function extractListingHint(messages: ConversationMessage[]): string | null {
+  const firstInbound = messages.find(m => m.direction === 'inbound')?.content || '';
+  if (!firstInbound) return null;
+
+  // "I saw your listing for X" / "the downtown condo" / "the property at Y"
+  const listingMatch = /(?:your|the)\s+listing\s+(?:for\s+)?(.{5,40}?)(?:\.|,|\?|$)/i.exec(firstInbound);
+  if (listingMatch) return `the ${listingMatch[1].trim()} listing`;
+
+  // "the [property/condo/house] at/on/in [place]"
+  const propRef = /(?:the\s+)?(\w+(?:\s+\w+){0,3})\s+(?:at|on|in)\s+([^.?,]{4,30})/i.exec(firstInbound);
+  if (propRef) return `the ${propRef[0].trim()}`;
+
+  return null;
+}
+
+/**
+ * Builds a natural-language AI Memory summary from intel signals and raw messages.
+ * Never returns label strings like "Interested in Investor."
+ */
+export function buildAIMemorySummary(
+  intel: CopilotIntelligence,
+  messages: ConversationMessage[],
+): string {
+  if (!messages || messages.length === 0) return '';
+
+  const parts: string[] = [];
+  const propHint    = extractPropertyHint(messages);
+  const listingHint = extractListingHint(messages);
+
+  // ── Intent-aware opening sentence ─────────────────────────────────────────
+  if (intel.intent === 'Investor') {
+    const target = propHint || 'investment properties';
+    parts.push(`Investor looking for ${target}.`);
+  } else if (intel.intent === 'Seller') {
+    parts.push('Looking to sell their property.');
+  } else if (intel.intent === 'Renter') {
+    const target = propHint || 'a rental property';
+    parts.push(`Looking to rent ${target}.`);
+  } else if (intel.intent === 'Buyer') {
+    const target = propHint || 'a property';
+    parts.push(`Looking to buy ${target}.`);
+  } else {
+    // Browsing / unknown — use listing hint or a generic inquiry line
+    if (listingHint) {
+      parts.push(`Inquired about ${listingHint}.`);
+    } else if (propHint) {
+      parts.push(`Interested in ${propHint}.`);
+    }
+    // If we have no property clue, let budget/timeline speak first
+  }
+
+  // ── Qualification signals as natural additions ─────────────────────────────
+  if (intel.budget)    parts.push(`Budget around ${intel.budget}.`);
+  if (intel.timeline)  parts.push(`Timeline: ${intel.timeline}.`);
+  if (intel.financing) parts.push(`${intel.financing} financing.`);
+
+  // ── Fallback: nothing at all to show ─────────────────────────────────────
+  return parts.join(' ');
 }
 
 // ══════════════════════════════════════════════════════════════════════════════

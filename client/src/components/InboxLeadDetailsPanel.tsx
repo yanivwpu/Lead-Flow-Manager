@@ -38,6 +38,7 @@ import {
   analyzeConversation,
   computeWorkflow,
   runVerification,
+  buildAIMemorySummary,
   type ConversationMessage,
 } from "@/lib/conversationIntelligence";
 import { AIUpgradePrompt } from "./AIUpgradePrompt";
@@ -998,16 +999,9 @@ export function InboxLeadDetailsPanel({
               </button>
             </div>
 
-            {/* AI Memory tab - read-only natural-language summary from conversation */}
+            {/* AI Memory tab - natural-language summary, never raw field labels */}
             {notesTab === 'ai' && (() => {
-              // Build a natural-language summary from intel — NO raw field labels
-              const parts: string[] = [];
-              if (intel.intent)    parts.push(`Interested in ${intel.intent}.`);
-              if (intel.budget)    parts.push(`Budget around ${intel.budget}.`);
-              if (intel.timeline)  parts.push(`Timeline: ${intel.timeline}.`);
-              if (intel.financing) parts.push(`${intel.financing} financing.`);
-              const summary = parts.join(' ');
-
+              const summary = buildAIMemorySummary(intel, messages);
               return (
                 <div className="p-3 bg-purple-50/60 border border-purple-100 rounded-lg min-h-20">
                   {summary ? (

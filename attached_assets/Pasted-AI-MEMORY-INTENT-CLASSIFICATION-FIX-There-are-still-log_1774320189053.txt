@@ -1,0 +1,74 @@
+AI MEMORY + INTENT CLASSIFICATION FIX
+
+There are still logic issues in both intent mapping and AI Memory wording.
+
+Problems seen:
+1. Investor conversation:
+- User says: “Hello, I’m an investor looking for multi-family properties.”
+- AI Memory shows: “Interested in Investor.”
+This is incorrect wording and not natural English.
+
+2. Listing inquiry conversation:
+- User says: “Hi! I saw your listing for the downtown condo. Is it still available?”
+- AI Memory shows seller intent / “Interested in Seller.”
+This is incorrect. That message indicates buyer/inquiry interest, not seller intent.
+
+Fix requirements:
+
+1. INTENT CLASSIFICATION RULES
+- “Investor” should only mean the lead is an investor / investment-focused buyer
+- “Seller” should only be assigned when the user expresses intent to sell a property
+  Examples:
+  - “I want to sell my house”
+  - “Thinking of listing my property”
+  - “Need help selling”
+- Generic listing inquiries must NOT map to Seller
+- Messages asking about availability, viewing, pricing, details, or listings should map to Buyer or Browsing unless stronger investor/renter signals exist
+
+2. PRIORITY / SAFETY
+- Do not classify as Seller from generic real estate inquiry language
+- Prefer:
+  Buyer / Browsing
+  unless there is explicit seller wording
+- Investor should only apply when investment intent is explicit
+
+3. AI MEMORY WORDING
+AI Memory must be natural-language summary, not awkward label conversion.
+
+Bad:
+- “Interested in Investor.”
+- “Interested in Seller.”
+
+Good examples:
+- “Investor looking for multi-family properties.”
+- “Interested in a downtown condo listing.”
+- “Asked whether the listing is still available.”
+- “Looking for investment properties with good ROI.”
+- “Interested in scheduling a viewing.”
+
+4. MEMORY GENERATION LOGIC
+- AI Memory should summarize what the lead wants, not just restate intent labels
+- Use conversation-aware phrasing
+- If property interest is known, mention it
+- If investment intent is known, mention it naturally
+- If only a general inquiry exists, say that clearly
+
+5. ACCEPTANCE EXAMPLES
+Conversation:
+“Hello, I’m an investor looking for multi-family properties.”
+Expected AI Memory:
+- “Investor looking for multi-family properties.”
+or
+- “Looking for multi-family investment opportunities.”
+
+Conversation:
+“Hi! I saw your listing for the downtown condo. Is it still available?”
+Expected AI Memory:
+- “Asked about availability of the downtown condo listing.”
+or
+- “Interested in the downtown condo listing.”
+
+Do not redesign the UI.
+Fix only:
+- intent classification logic
+- AI Memory natural-language generation
