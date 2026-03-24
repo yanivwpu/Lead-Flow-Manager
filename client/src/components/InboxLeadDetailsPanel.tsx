@@ -209,6 +209,8 @@ export function InboxLeadDetailsPanel({
   const [addNoteOpen, setAddNoteOpen] = useState(false);
   const [newNoteText, setNewNoteText] = useState('');
   const [notesSaving, setNotesSaving] = useState(false);
+  // Snapshot of lastViewedAt taken when this contact was first opened — used to compute badge
+  const [notesViewedAt, setNotesViewedAt] = useState<Date | null>(null);
 
   // Copilot action popovers
   const [assignOpen, setAssignOpen] = useState(false);
@@ -243,10 +245,19 @@ export function InboxLeadDetailsPanel({
   // Fetch team notes when contact changes
   useEffect(() => {
     if (!contact.id) return;
+    // Snapshot the last-viewed timestamp BEFORE fetching — used to compute unread badge
+    const storedKey = `notes_viewed_${contact.id}`;
+    const stored = localStorage.getItem(storedKey);
+    setNotesViewedAt(stored ? new Date(stored) : null);
+
     setNotesLoading(true);
     fetch(`/api/contacts/${contact.id}/notes`)
       .then(r => r.ok ? r.json() : [])
-      .then((data: ContactNote[]) => setContactNotesList(Array.isArray(data) ? data : []))
+      .then((data: ContactNote[]) => {
+        setContactNotesList(Array.isArray(data) ? data : []);
+        // Update localStorage to now — next visit to this contact won't re-badge these notes
+        localStorage.setItem(storedKey, new Date().toISOString());
+      })
       .catch(() => setContactNotesList([]))
       .finally(() => setNotesLoading(false));
   }, [contact.id]);
@@ -1086,9 +1097,27 @@ export function InboxLeadDetailsPanel({
           {/* ── TEAM NOTES ───────────────────────────────────────────── */}
           <div className="mt-6 pt-4 border-t border-[#eee]">
             <div className="flex items-center justify-between mb-2">
-              <p className="text-xs uppercase tracking-wide text-gray-500">Team Notes</p>
+              <div className="flex items-center gap-1.5">
+                <p className="text-xs uppercase tracking-wide text-gray-500">Team Notes</p>
+                {(() => {
+                  const unread = notesViewedAt
+                    ? contactNotesList.filter(n => n.createdAt && new Date(n.createdAt) > notesViewedAt).length
+                    : 0;
+                  return unread > 0 ? (
+                    <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-semibold bg-violet-100 text-violet-600" data-testid="badge-unread-notes">
+                      {unread}
+                    </span>
+                  ) : null;
+                })()}
+              </div>
               <button
-                onClick={() => { setNewNoteText(''); setAddNoteOpen(true); }}
+                onClick={() => {
+                  setNewNoteText('');
+                  setAddNoteOpen(true);
+                  // Mark notes as viewed when user opens the modal
+                  setNotesViewedAt(null);
+                  localStorage.setItem(`notes_viewed_${contact.id}`, new Date().toISOString());
+                }}
                 className="flex items-center gap-0.5 text-[11px] font-medium text-gray-400 hover:text-gray-700 transition-colors"
                 data-testid="button-add-note"
               >
@@ -1104,7 +1133,12 @@ export function InboxLeadDetailsPanel({
               </div>
             ) : contactNotesList.length === 0 ? (
               <button
-                onClick={() => { setNewNoteText(''); setAddNoteOpen(true); }}
+                onClick={() => {
+                  setNewNoteText('');
+                  setAddNoteOpen(true);
+                  setNotesViewedAt(null);
+                  localStorage.setItem(`notes_viewed_${contact.id}`, new Date().toISOString());
+                }}
                 className="w-full text-left"
                 data-testid="button-empty-note"
               >
