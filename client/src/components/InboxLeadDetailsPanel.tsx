@@ -199,6 +199,7 @@ export function InboxLeadDetailsPanel({
   // Default to full access if no capabilities provided (backward compat)
   const canSeeCopilot    = capabilities ? capabilities.canUseCopilotIntelligence    : true;
   const canSeeWorkflow   = capabilities ? capabilities.canUseWorkflowRecommendations : true;
+  const hasAIBrain       = capabilities?.hasAIBrain ?? false;
   const copilotUpgradeTo = capabilities?.upgradePlan ?? "Starter";
   const workflowUpgradeTo = capabilities?.upgradePlan ?? "Pro";
   const [aiPaused,   setAiPaused]   = useState(false);
@@ -432,6 +433,9 @@ export function InboxLeadDetailsPanel({
           <div className="flex items-center gap-1.5">
             <Sparkles className="w-3 h-3 text-purple-500" />
             <span className="text-[11px] font-semibold text-gray-700 tracking-wide">Copilot</span>
+            {hasAIBrain && (
+              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-600 tracking-wide leading-none">AI Brain</span>
+            )}
           </div>
 
           <div className="flex items-center gap-2">
@@ -883,7 +887,7 @@ export function InboxLeadDetailsPanel({
                     />
                   ) : hasAnyChips && (
                     <div className="flex items-center gap-1.5 flex-wrap">
-                      {activeChipActions.slice(0, 2).map(action => {
+                      {activeChipActions.slice(0, hasAIBrain ? 4 : 2).map(action => {
                         const chipHandlers: Record<string, () => void> = {
                           assign:  () => { setAssignOpen(true); completeAction(action.type, "Lead assigned"); },
                           book:    () => { setBookOpen(true); completeAction(action.type, "Follow-up scheduled"); },
@@ -935,12 +939,40 @@ export function InboxLeadDetailsPanel({
                     </div>
                   )}
 
+                  {/* QUALIFYING GAP — AI Brain only ─────────────────── */}
+                  {hasAIBrain && canSeeWorkflow && (() => {
+                    const gaps = [
+                      !intel.hasBudget    && "Ask about their budget",
+                      !intel.hasTimeline  && "Ask about their timeline",
+                      !intel.hasFinancing && "Ask about financing plans",
+                    ].filter(Boolean) as string[];
+                    if (!gaps.length) return null;
+                    return (
+                      <div className="bg-violet-50 border border-violet-100 rounded-xl px-3 py-2.5">
+                        <p className="text-[9px] uppercase tracking-widest font-semibold text-violet-400 mb-1.5">Qualifying Gap</p>
+                        <ul className="flex flex-col gap-1">
+                          {gaps.map(g => (
+                            <li key={g} className="flex items-center gap-1.5">
+                              <span className="w-1 h-1 rounded-full bg-violet-400 shrink-0" />
+                              <span className="text-[11px] text-violet-700">{g}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    );
+                  })()}
+
                   {/* SUGGESTED REPLY ────────────────────────────────── */}
                   {canSeeWorkflow && qualifyAction?.value && (
                     <div>
-                      <div className="mb-2">
-                        <p className="text-[10px] uppercase tracking-widest font-semibold text-gray-400">Suggested Reply</p>
-                        <p className="text-[10px] text-gray-400 mt-0.5">Recommended next step</p>
+                      <div className="mb-2 flex items-center justify-between">
+                        <div>
+                          <p className="text-[10px] uppercase tracking-widest font-semibold text-gray-400">Suggested Reply</p>
+                          <p className="text-[10px] text-gray-400 mt-0.5">Recommended next step</p>
+                        </div>
+                        {hasAIBrain && (
+                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-500 leading-none shrink-0">AI Brain</span>
+                        )}
                       </div>
                       <div className="bg-white border border-gray-200 rounded-xl p-3.5 shadow-[0_1px_4px_rgba(0,0,0,0.06)]">
                         <p className="text-[12px] text-gray-800 leading-relaxed">"{qualifyAction.value}"</p>
@@ -965,16 +997,29 @@ export function InboxLeadDetailsPanel({
 
                   {/* SUMMARY ────────────────────────────────────────── */}
                   <div className="pt-3 border-t border-gray-100">
-                    <p className="text-[9px] uppercase tracking-widest font-semibold text-gray-300 mb-1.5">Summary</p>
+                    <div className="flex items-center gap-1.5 mb-1.5">
+                      {hasAIBrain
+                        ? <>
+                            <Sparkles className="w-2.5 h-2.5 text-violet-400 shrink-0" />
+                            <p className="text-[9px] uppercase tracking-widest font-semibold text-violet-400">AI Memory</p>
+                          </>
+                        : <p className="text-[9px] uppercase tracking-widest font-semibold text-gray-300">Summary</p>
+                      }
+                    </div>
                     {aiMemoryLoading ? (
                       <div className="flex items-center gap-1.5">
                         <div className="w-1.5 h-1.5 rounded-full bg-purple-200 animate-pulse" />
                         <span className="text-[11px] text-gray-400 italic">Generating…</span>
                       </div>
                     ) : aiMemory ? (
-                      <p className="text-[11px] text-gray-500 leading-relaxed">{aiMemory}</p>
+                      <p className={cn("text-[11px] leading-relaxed", hasAIBrain ? "text-gray-600" : "text-gray-500")}>{aiMemory}</p>
                     ) : (
-                      <p className="text-[10px] text-gray-400 italic">Summary will appear here as the conversation develops.</p>
+                      <p className="text-[10px] text-gray-400 italic">
+                        {hasAIBrain
+                          ? "AI Memory builds as the conversation develops."
+                          : "Summary will appear here as the conversation develops."
+                        }
+                      </p>
                     )}
                   </div>
                 </>
