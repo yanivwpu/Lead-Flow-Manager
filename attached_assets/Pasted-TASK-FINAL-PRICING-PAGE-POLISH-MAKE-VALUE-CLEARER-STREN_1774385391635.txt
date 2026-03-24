@@ -1,0 +1,220 @@
+TASK: FINAL PRICING PAGE POLISH — MAKE VALUE CLEARER, STRENGTHEN PRO, AND IMPROVE CONVERSION
+
+GOAL:
+The pricing page already looks much better. This round is only for final polish:
+- make Pro feel more outcome-driven
+- make AI Brain clearer and more compelling
+- create subtle upgrade pressure from Starter to Pro
+- better explain the 5 WhatsApp numbers value in Pro
+- keep everything accurate to the real product
+
+IMPORTANT ACCURACY RULES:
+- Do NOT mention public REST API anywhere
+- Keep Lead Scoring as Pro-only
+- Keep Smart Retargeting as Pro-only
+- Keep AI Brain available on Starter and Pro only
+- Keep Starter AI Assist included up to 50/month
+- Keep Pro AI Assist included up to 200/month
+- Keep Pro at up to 5 WhatsApp numbers
+- Do not change billing logic, Stripe logic, or backend gating
+- Frontend copy and layout polish only
+
+==================================================
+1. UPDATE THE PRO CARD COPY
+==================================================
+
+Current issue:
+Pro still reads a little too feature-based.
+We need it to feel more like the money-making / automation plan.
+
+Update the Pro plan descriptor/subtext to something like:
+
+Option A:
+For businesses ready to automate follow-up, identify hot leads, and scale conversations
+
+Option B:
+For teams that want to turn conversations into qualified leads and booked calls
+
+Then improve these bullets so they are more outcome-driven:
+
+Replace generic wording with:
+- AI lead scoring — automatically identify hotter leads
+- Smart retargeting — follow up beyond normal WhatsApp reply windows
+
+Also improve the WhatsApp number bullet:
+Change from:
+- Up to 5 WhatsApp numbers
+
+To:
+- Up to 5 WhatsApp numbers for teams and multi-agent setups
+
+Keep these core bullets in Pro:
+- 2,000 active conversations
+- Multiple users
+- Up to 5 WhatsApp numbers for teams and multi-agent setups
+- Unified inbox + smart channel handling
+- Full CRM
+- AI Assist included — up to 200/month
+- Enhanced AI assistance and inbox insights
+- Advanced automations
+- AI lead scoring — automatically identify hotter leads
+- Smart retargeting — follow up beyond normal WhatsApp reply windows
+- Integrations & webhooks (only if this is truly available)
+- Supports AI Brain add-on
+
+Optional microcopy under Pro card:
+Best for businesses that want the system to help identify serious leads and automate follow-up.
+
+==================================================
+2. UPDATE THE STARTER CARD WITH SUBTLE UPGRADE PRESSURE
+==================================================
+
+Starter should stay attractive, but it should also naturally point users toward Pro.
+
+Keep Starter honest and useful, but add a small note at the bottom of the card:
+
+Add one small muted line like:
+Upgrade to Pro to automatically identify hot leads and follow up with less manual work.
+
+Do NOT make this too aggressive.
+This should be subtle helper text, not a warning.
+
+Keep Starter bullets accurate:
+- 500 active conversations
+- Up to 3 users
+- 1 WhatsApp number
+- Unified inbox across channels
+- Full CRM
+- Tags, notes, pipeline, and tasks
+- AI Assist included — up to 50/month
+- Reply suggestions and sentiment detection
+- Basic automations
+- Live chat widget
+- Supports AI Brain add-on
+
+==================================================
+3. MAKE THE AI BRAIN CARD CLEARER
+==================================================
+
+Current issue:
+AI Brain may still feel vague.
+We need it to feel more valuable without implying it unlocks Pro-only features.
+
+Update AI Brain descriptor/subtext to something like:
+
+Option A:
+Add deeper AI assistance for businesses that want smarter qualification and conversation support
+
+Option B:
+Expand Copilot with deeper lead understanding and smarter AI-powered assistance
+
+Update AI Brain bullets to feel more outcome-based and less generic:
+
+Use:
+- Works with Starter and Pro
+- Expands Copilot capabilities
+- Deeper lead understanding
+- Smarter AI assistance across conversations
+- More advanced AI-powered workflow support
+
+Add one small note under the bullets:
+Best results when combined with Pro automations and workflows.
+
+Very important:
+Do NOT imply AI Brain unlocks lead scoring or smart retargeting on Starter.
+AI Brain should enhance intelligence, not replace Pro plan capabilities.
+
+==================================================
+4. ADD A SMALL USE-CASE SECTION ABOVE OR NEAR THE PRICING CARDS
+==================================================
+
+Add a short section above the pricing cards to connect the pricing page to real business outcomes.
+
+Section title:
+How businesses use WhachatCRM
+
+Use 3 short bullets or 3 small cards:
+- Capture leads from ads, website, and social channels
+- Respond instantly through WhatsApp and one shared inbox
+- Qualify and route serious leads with smarter follow-up
+
+Keep this section short and highly visual.
+Do not turn it into a long paragraph.
+
+==================================================
+5. ENSURE THE COMPARISON TABLE IS CLEAR AND EASY TO SCAN
+==================================================
+
+Keep the comparison table visible and easy to read.
+
+Make sure these rows exist and are accurate:
+- Active conversations
+- Users
+- WhatsApp numbers
+- Unified inbox
+- CRM
+- Pipeline & tasks
+- AI Assist included
+- AI Assist type
+- Automations
+- Lead scoring
+- Smart retargeting
+- AI Brain add-on
+- Integrations & webhooks (only if accurate)
+
+Important:
+The table must clearly show:
+- Lead scoring = Pro only
+- Smart retargeting = Pro only
+- AI Brain add-on = Starter and Pro only
+- AI Assist included = 50/month on Starter, 200/month on Pro
+- WhatsApp numbers = 1 on Free, 1 on Starter, 5 on Pro
+
+==================================================
+6. KEEP THE PAGE SIMPLE AND SALES-DRIVEN
+==================================================
+
+Tone guidelines:
+- less technical
+- more benefits-driven
+- concise
+- easy to scan
+
+Do NOT:
+- mention tokens
+- mention REST API
+- over-explain technical details
+- clutter cards with too much copy
+
+Do:
+- make Pro feel like the scale / automation plan
+- make Starter feel like a good entry point
+- make AI Brain feel like a smart enhancement
+- keep Free as the easy starting option
+
+==================================================
+7. DESIGN / UI RULES
+==================================================
+
+- Keep current visual style and branding
+- Keep Pro visually highlighted as Most Popular
+- Make sure spacing stays clean on desktop and 14-inch laptop screens
+- Preserve good mobile responsiveness
+- Use muted helper text where needed for upgrade cues
+- Add icons only if they improve scanability
+- Do not make the page longer than necessary
+
+==================================================
+8. FINAL QA CHECK BEFORE SHIPPING
+==================================================
+
+Before publishing, verify:
+- Pro descriptor is more outcome-driven
+- Starter includes a subtle upgrade hint to Pro
+- AI Brain copy is clearer and less vague
+- 5 WhatsApp numbers in Pro is explained as team/multi-agent value
+- Lead scoring is only shown in Pro
+- Smart retargeting is only shown in Pro
+- No mention of public API anywhere
+- No feature is promised that does not exist
+- Page still feels clean and not overloaded

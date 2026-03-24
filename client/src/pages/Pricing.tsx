@@ -217,6 +217,37 @@ export function Pricing() {
           </p>
         </div>
 
+        {/* ─────────────── SECTION 2b: USE-CASE STRIP ─────────────── */}
+        <div className="mb-14" data-testid="section-use-cases">
+          <h2 className="text-xl font-display font-bold text-gray-900 text-center mb-6">
+            How businesses use WhachatCRM
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {[
+              {
+                icon: <Users className="h-5 w-5 text-blue-600" />,
+                bg: "bg-blue-50",
+                text: "Capture leads from ads, website, and social channels into one shared inbox",
+              },
+              {
+                icon: <MessageSquare className="h-5 w-5 text-emerald-600" />,
+                bg: "bg-emerald-50",
+                text: "Respond instantly through WhatsApp with your entire team in one place",
+              },
+              {
+                icon: <Zap className="h-5 w-5 text-purple-600" />,
+                bg: "bg-purple-50",
+                text: "Qualify and route serious leads with smarter AI-powered follow-up",
+              },
+            ].map((item, i) => (
+              <div key={i} className={`${item.bg} rounded-2xl p-5 flex items-start gap-4`}>
+                <div className="shrink-0 mt-0.5">{item.icon}</div>
+                <p className="text-sm font-medium text-gray-800 leading-snug">{item.text}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
         {/* ─────────────── SECTION 3: PRICING CARDS ─────────────── */}
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5 mb-14" data-testid="section-pricing-cards">
 
@@ -297,7 +328,7 @@ export function Pricing() {
                     </li>
                   ))}
                 </ul>
-                <p className="text-xs text-gray-400 mt-4 mb-4">Great for teams that want stronger inbox workflow and lightweight AI assistance.</p>
+                <p className="text-xs text-gray-400 mt-4 mb-4">Upgrade to Pro to automatically identify hot leads and follow up with less manual work.</p>
                 <Button
                   className={`w-full ${isCurrentPlan ? "bg-gray-100 text-gray-500" : "bg-blue-600 hover:bg-blue-700 text-white"}`}
                   disabled={isCurrentPlan || isLoading}
@@ -325,20 +356,20 @@ export function Pricing() {
                     <span className="text-3xl font-bold text-gray-900">$49</span>
                     <span className="text-sm text-gray-500">/mo</span>
                   </div>
-                  <p className="text-sm text-gray-500">For businesses ready for automation, qualification, and scale</p>
+                  <p className="text-sm text-gray-500">For teams ready to automate follow-up, identify hot leads, and scale conversations</p>
                 </div>
                 <ul className="space-y-3 flex-1">
                   {[
                     "2,000 active conversations",
                     "Multiple users",
-                    "Up to 5 WhatsApp numbers",
+                    "Up to 5 WhatsApp numbers for teams and multi-agent setups",
                     "Unified inbox + smart channel handling",
                     "Full CRM",
                     "AI Assist included — up to 200/month",
                     "Enhanced AI assistance and inbox insights",
                     "Advanced automations",
-                    "AI lead scoring — identify hotter leads automatically",
-                    "Smart retargeting — follow up beyond reply windows",
+                    "AI lead scoring — automatically identify hotter leads",
+                    "Smart retargeting — follow up beyond normal WhatsApp reply windows",
                     "Integrations & webhooks",
                     "Supports AI Brain add-on",
                   ].map((f) => (
@@ -348,7 +379,7 @@ export function Pricing() {
                     </li>
                   ))}
                 </ul>
-                <p className="text-xs text-gray-400 mt-4 mb-4">Best for teams that want the system to help identify hot leads and automate follow-up.</p>
+                <p className="text-xs text-gray-400 mt-4 mb-4">Best for businesses that want the system to help identify serious leads and automate follow-up.</p>
                 <Button
                   className={`w-full ${isCurrentPlan ? "bg-gray-100 text-gray-500" : "bg-brand-green hover:bg-emerald-700 text-white"}`}
                   disabled={isCurrentPlan || isLoading}
@@ -369,7 +400,7 @@ export function Pricing() {
                 <span className="text-3xl font-bold text-gray-900">+$29</span>
                 <span className="text-sm text-gray-500">/mo</span>
               </div>
-              <p className="text-sm text-gray-500">Add-on for Starter and Pro</p>
+              <p className="text-sm text-gray-500">Add deeper AI assistance for smarter qualification and conversation support</p>
             </div>
             <ul className="space-y-3 flex-1">
               {[
@@ -385,7 +416,7 @@ export function Pricing() {
                 </li>
               ))}
             </ul>
-            <p className="text-xs text-gray-400 mt-4 mb-4">Best results when combined with Pro automations and workflows.</p>
+            <p className="text-xs text-gray-400 mt-4 mb-4">Enhances AI intelligence — Pro remains the plan for lead scoring and smart retargeting.</p>
             {canAccessAIBrain ? (
               <Link href="/app/ai-brain">
                 <Button className="w-full bg-purple-600 hover:bg-purple-700 text-white" data-testid="button-ai-brain-go">
