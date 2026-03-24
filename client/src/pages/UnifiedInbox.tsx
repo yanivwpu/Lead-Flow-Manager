@@ -940,6 +940,7 @@ export function UnifiedInbox() {
           teamMembers={teamMembers}
           messages={messages.map(m => ({ direction: m.direction, content: m.content || '' }))}
           capabilities={capabilities}
+          currentUserId={user?.id}
           onInsertMessage={text => setMessageInput(text)}
           onUpdateContact={updateContact}
           onUpdateConversationStatus={status => {

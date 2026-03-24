@@ -183,6 +183,8 @@ export interface IStorage {
   searchContacts(userId: string, query: string, limit?: number): Promise<Contact[]>;
   getContactNotes(workspaceId: string, contactId: string): Promise<ContactNote[]>;
   addContactNote(data: InsertContactNote): Promise<ContactNote>;
+  getContactNoteById(noteId: string): Promise<ContactNote | undefined>;
+  deleteContactNote(noteId: string): Promise<boolean>;
   
   // Conversation methods
   getConversations(userId: string, limit?: number): Promise<Conversation[]>;
@@ -1413,6 +1415,16 @@ export class DbStorage implements IStorage {
   async addContactNote(data: InsertContactNote): Promise<ContactNote> {
     const [note] = await db.insert(contactNotes).values(data).returning();
     return note;
+  }
+
+  async getContactNoteById(noteId: string): Promise<ContactNote | undefined> {
+    const [note] = await db.select().from(contactNotes).where(eq(contactNotes.id, noteId));
+    return note;
+  }
+
+  async deleteContactNote(noteId: string): Promise<boolean> {
+    const result = await db.delete(contactNotes).where(eq(contactNotes.id, noteId)).returning();
+    return result.length > 0;
   }
 
   // Conversation methods

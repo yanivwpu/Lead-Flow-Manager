@@ -153,6 +153,7 @@ interface InboxLeadDetailsPanelProps {
   teamMembers: TeamMember[];
   messages?: ConversationMessage[];
   capabilities?: AICapabilities;
+  currentUserId?: string;
   onUpdateContact: (fields: Record<string, unknown>) => void;
   onUpdateConversationStatus: (status: string) => void;
   onEditContact: () => void;
@@ -189,13 +190,43 @@ function RowLabel({ children }: { children: React.ReactNode }) {
 interface AddNoteModalProps {
   contactId: string;
   contactNotesList: ContactNote[];
+  currentUserId?: string;
+  teamMembers: TeamMember[];
   onSave: (note: ContactNote) => void;
+  onDelete: (noteId: string) => void;
   onClose: () => void;
 }
-function AddNoteModal({ contactId, contactNotesList, onSave, onClose }: AddNoteModalProps) {
+function AddNoteModal({ contactId, contactNotesList, currentUserId, teamMembers, onSave, onDelete, onClose }: AddNoteModalProps) {
   const { toast } = useToast();
   const [noteText, setNoteText] = useState('');
   const [saving,   setSaving]   = useState(false);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  // Permission: creator or workspace owner/admin
+  const currentMember = teamMembers.find(m => (m.memberId || m.id) === currentUserId);
+  const isAdminOrOwner = currentMember?.role === 'owner' || currentMember?.role === 'admin';
+  const canDeleteNote = (note: ContactNote) =>
+    note.createdByUserId === currentUserId || isAdminOrOwner;
+
+  const handleDelete = async (noteId: string) => {
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/contacts/${contactId}/notes/${noteId}`, { method: 'DELETE' });
+      if (res.ok) {
+        onDelete(noteId);
+        setConfirmDeleteId(null);
+        toast({ title: "Note deleted", duration: 2000 });
+      } else {
+        const body = await res.json().catch(() => ({}));
+        toast({ title: "Delete failed", description: body?.error || "Please try again.", variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "Delete failed", description: "Network error.", variant: "destructive" });
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   const handleSave = async () => {
     if (!noteText.trim()) {
@@ -255,17 +286,50 @@ function AddNoteModal({ contactId, contactNotesList, onSave, onClose }: AddNoteM
         {contactNotesList.length > 0 && (
           <div className="px-5 pt-4 pb-2 flex flex-col gap-3 max-h-[240px] overflow-y-auto" data-testid="modal-notes-history">
             {contactNotesList.map(note => (
-              <div key={note.id} className="flex flex-col gap-0.5" data-testid={`modal-note-${note.id}`}>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[11px] text-gray-400">{note.createdByName || 'Team member'}</span>
-                  <span className="text-[10px] text-gray-400">·</span>
-                  <span className="text-[10px] text-gray-400">
-                    {note.createdAt
-                      ? new Date(note.createdAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
-                      : ''}
-                  </span>
+              <div key={note.id} className="group flex flex-col gap-0.5" data-testid={`modal-note-${note.id}`}>
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                    <span className="text-[11px] text-gray-400">{note.createdByName || 'Team member'}</span>
+                    <span className="text-[10px] text-gray-400">·</span>
+                    <span className="text-[10px] text-gray-400">
+                      {note.createdAt
+                        ? new Date(note.createdAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+                        : ''}
+                    </span>
+                  </div>
+                  {canDeleteNote(note) && confirmDeleteId !== note.id && (
+                    <button
+                      onClick={() => setConfirmDeleteId(note.id)}
+                      className="opacity-0 group-hover:opacity-100 transition-opacity p-1 text-gray-300 hover:text-red-400 rounded"
+                      title="Delete note"
+                      data-testid={`button-delete-note-${note.id}`}
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  )}
                 </div>
                 <p className="text-[12px] text-gray-800 leading-relaxed whitespace-pre-wrap">{note.content}</p>
+                {/* Inline confirm */}
+                {confirmDeleteId === note.id && (
+                  <div className="flex items-center gap-2 mt-1 pt-1 border-t border-gray-100">
+                    <span className="text-[11px] text-gray-500 flex-1">Delete this note?</span>
+                    <button
+                      onClick={() => setConfirmDeleteId(null)}
+                      className="text-[11px] text-gray-500 hover:text-gray-700 font-medium px-2 py-0.5 rounded transition-colors"
+                      data-testid={`button-cancel-delete-${note.id}`}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={() => handleDelete(note.id)}
+                      disabled={deleting}
+                      className="text-[11px] text-white font-semibold bg-red-500 hover:bg-red-600 disabled:opacity-50 px-2 py-0.5 rounded transition-colors"
+                      data-testid={`button-confirm-delete-${note.id}`}
+                    >
+                      {deleting ? '…' : 'Delete'}
+                    </button>
+                  </div>
+                )}
               </div>
             ))}
             <div className="border-t border-gray-100 mt-1" />
@@ -314,6 +378,7 @@ export function InboxLeadDetailsPanel({
   teamMembers,
   messages = [],
   capabilities,
+  currentUserId,
   onUpdateContact,
   onUpdateConversationStatus,
   onEditContact,
@@ -1357,7 +1422,10 @@ export function InboxLeadDetailsPanel({
             <AddNoteModal
               contactId={contact.id}
               contactNotesList={contactNotesList}
+              currentUserId={currentUserId}
+              teamMembers={teamMembers}
               onSave={saved => setContactNotesList(prev => [saved, ...prev])}
+              onDelete={noteId => setContactNotesList(prev => prev.filter(n => n.id !== noteId))}
               onClose={() => setAddNoteOpen(false)}
             />
           )}

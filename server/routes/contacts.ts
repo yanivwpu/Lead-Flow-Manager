@@ -266,6 +266,30 @@ export function registerContactRoutes(app: Express): void {
     }
   });
 
+  // Delete a Team Note
+  app.delete("/api/contacts/:id/notes/:noteId", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+      const { noteId } = req.params;
+
+      const note = await storage.getContactNoteById(noteId);
+      if (!note) return res.status(404).json({ error: "Note not found" });
+
+      // Workspace owner check: workspaceId === req.user.id
+      const isCreator      = note.createdByUserId === req.user.id;
+      const isWorkspaceOwner = note.workspaceId === req.user.id;
+      if (!isCreator && !isWorkspaceOwner) {
+        return res.status(403).json({ error: "You don't have permission to delete this note" });
+      }
+
+      await storage.deleteContactNote(noteId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting contact note:", error);
+      res.status(500).json({ error: "Failed to delete note" });
+    }
+  });
+
   // Get activity timeline for a contact
   app.get("/api/contacts/:id/timeline", async (req, res) => {
     try {
