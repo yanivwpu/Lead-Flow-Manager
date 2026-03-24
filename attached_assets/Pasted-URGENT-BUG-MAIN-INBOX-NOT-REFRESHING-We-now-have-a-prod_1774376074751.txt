@@ -1,0 +1,93 @@
+URGENT BUG — MAIN INBOX NOT REFRESHING
+We now have a production-level issue: the main inbox is not refreshing on either:
+
+incoming messages from real users
+outgoing/sent messages by the agent
+
+This must be treated as priority #1 before any more UI work.
+
+What to debug
+
+Trace the full flow for both directions:
+
+A. Incoming message flow
+Provider webhook receives incoming message
+Message is saved successfully
+Conversation/thread summary is updated:
+lastMessageAt
+last message preview/snippet
+unread count
+channel/source
+Any realtime event is emitted to the frontend
+Frontend inbox list refetches or updates immediately
+B. Outgoing message flow
+Agent sends message
+Outgoing message is saved successfully
+Conversation/thread summary is updated:
+lastMessageAt
+preview/snippet
+thread ordering in inbox
+Frontend invalidates/refetches inbox query immediately
+Open conversation and main inbox stay in sync
+Likely root cause
+
+Very likely we currently update the open chat messages, but do NOT consistently update or invalidate the main inbox list data source.
+Also possible incoming webhooks write to one table while the inbox list reads from another/legacy source.
+
+Required fixes
+
+Please implement all of the following safely:
+
+Single source of truth
+Confirm what table/query powers the main inbox list.
+Make sure both incoming and outgoing messages update that same conversation/thread record.
+Conversation summary update on every message
+After every incoming or outgoing message, update the parent conversation/thread with:
+latest message text/snippet
+lastMessageAt
+unread status/count for incoming
+channel metadata if needed
+Frontend query invalidation
+After send success, explicitly invalidate/refetch:
+inbox list query
+current conversation query
+unread counters / sidebar counters if separate
+Realtime safety
+If websocket/SSE exists, verify events are actually emitted and received.
+If realtime is unreliable, add a safe fallback polling/refetch for inbox list every few seconds while inbox is open.
+No duplicate logic
+Remove any split logic where one path updates messages but another path updates legacy chats only partially.
+Both incoming and outgoing must go through the same conversation-summary updater.
+Add temporary debug logs
+
+Please add temporary logs for:
+
+webhook received
+incoming message saved
+outgoing message saved
+conversation summary updated
+realtime event emitted
+frontend inbox refetch triggered
+
+This is so we can see exactly where the chain breaks.
+
+Acceptance test
+
+Bug is fixed only if all of these work:
+
+Real user sends a message → inbox thread moves instantly to top and preview updates
+Agent sends a message → inbox thread preview updates instantly without manual refresh
+Unread badge changes correctly
+Closing and reopening the chat still shows the correct latest state
+No need for browser refresh to see new state
+Important
+
+Do this as a minimal, safe debugging/fix pass.
+Do not redesign the inbox.
+Do not refactor unrelated UI.
+Do not touch styling unless absolutely necessary.
+Focus only on restoring reliable inbox synchronization.
+
+I’d also tell him this in one line before the brief:
+
+Please stop all cosmetic work — the inbox sync is broken in production and needs root-cause fix first.
