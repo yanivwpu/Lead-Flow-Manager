@@ -34,8 +34,13 @@ export function registerTemplateRoutes(app: Express): void {
         "@shared/localizedTemplates"
       );
 
+      // Normalize locale codes like "en-US" → "en"; drop if unrecognized
+      const VALID_LANGS = ["en", "he", "es"];
+      const rawLang = typeof language === "string" ? language.split("-")[0].toLowerCase() : undefined;
+      const normalizedLang = rawLang && VALID_LANGS.includes(rawLang) ? rawLang : undefined;
+
       const templates = getFilteredTemplates(
-        language as any,
+        normalizedLang as any,
         category as any,
         industry as any
       );

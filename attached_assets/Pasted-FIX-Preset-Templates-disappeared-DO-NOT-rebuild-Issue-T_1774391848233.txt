@@ -1,0 +1,110 @@
+FIX — Preset Templates disappeared (DO NOT rebuild)
+
+Issue:
+The "Preset Templates" section is now empty ("No templates found for the selected filters").
+
+This worked before. Do NOT rebuild or recreate templates.
+
+--------------------------------------------------------
+GOAL
+--------------------------------------------------------
+
+Restore the existing preset templates exactly as they were.
+
+This is a regression fix — not a new feature.
+
+--------------------------------------------------------
+1) DO NOT TOUCH DATA
+--------------------------------------------------------
+
+- Do NOT recreate templates
+- Do NOT reseed database
+- Do NOT modify existing template records
+
+Templates already exist — they are just not loading.
+
+--------------------------------------------------------
+2) CHECK FRONTEND FILTER LOGIC
+--------------------------------------------------------
+
+Verify the filters:
+
+- Language
+- Category
+- Industry
+
+Ensure:
+
+- Default = "All" returns all templates
+- No strict filtering accidentally hiding all results
+
+Common issue:
+filter === value instead of allowing "All"
+
+Fix:
+If filter === "All" → skip filtering
+
+--------------------------------------------------------
+3) CHECK TEMPLATE QUERY (CRITICAL)
+--------------------------------------------------------
+
+Where templates are fetched:
+
+Verify API / query returns templates.
+
+Check:
+- IsPreset flag (if exists)
+- Category / Industry fields
+- Language field
+
+Make sure query is NOT filtering incorrectly.
+
+--------------------------------------------------------
+4) LOG RAW RESPONSE
+--------------------------------------------------------
+
+Add temporary log:
+
+console.log("Templates response:", data)
+
+Check if:
+- data is empty []
+→ backend issue
+
+- data has items but UI shows none
+→ frontend filter issue
+
+--------------------------------------------------------
+5) VERIFY BACKEND ENDPOINT
+--------------------------------------------------------
+
+Check endpoint used for templates list.
+
+Ensure:
+- It still returns preset templates
+- No new conditions were added (like templateType = "growth-engine")
+
+--------------------------------------------------------
+6) QUICK PATCH (SAFE)
+--------------------------------------------------------
+
+If unsure:
+
+Temporarily bypass filters:
+→ render ALL templates returned
+
+Then reintroduce filters correctly.
+
+--------------------------------------------------------
+7) ACCEPTANCE CRITERIA
+--------------------------------------------------------
+
+- Preset Templates section shows templates again
+- Filters work correctly
+- No data loss
+- No reseeding
+
+IMPORTANT:
+This is a regression. Fix only the logic — do not rebuild anything.
+
+END TASK

@@ -94,9 +94,16 @@ export function LocalizedTemplateSelector({
   const { t, i18n } = useTranslation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const currentLang = (getCurrentLanguage() || "en") as "en" | "he" | "es";
-  
-  const [selectedLanguage, setSelectedLanguage] = useState<string>(currentLang);
+  const VALID_TEMPLATE_LANGS = ["en", "he", "es"] as const;
+  const rawLang = getCurrentLanguage() || "en";
+  // Normalize locale codes like "en-US" → "en"; if still unrecognized, default to "all"
+  const normalizedLang = rawLang.split("-")[0].toLowerCase();
+  const currentLang = (VALID_TEMPLATE_LANGS as readonly string[]).includes(normalizedLang)
+    ? (normalizedLang as "en" | "he" | "es")
+    : null;
+
+  // Default to "all" so every template is visible on first load
+  const [selectedLanguage, setSelectedLanguage] = useState<string>(currentLang ?? "all");
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [selectedIndustry, setSelectedIndustry] = useState<string>("all");
   const [previewTemplate, setPreviewTemplate] = useState<AutomationTemplate | null>(null);
