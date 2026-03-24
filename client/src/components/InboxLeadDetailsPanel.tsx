@@ -788,7 +788,7 @@ export function InboxLeadDetailsPanel({
 
           {/* ══ COPILOT EXPANDED PANEL ══════════════════════════════════ */}
           {copilotExpanded && (
-            <div className="pb-3 border-b border-gray-100 space-y-3 animate-in fade-in slide-in-from-top-1 duration-200">
+            <div className="-mx-3 -mt-3 bg-[#fafafa] border-b border-gray-200 px-4 pt-3 pb-4 space-y-4 animate-in fade-in slide-in-from-top-1 duration-200">
 
               {!canSeeCopilot ? (
                 <AIUpgradePrompt
@@ -799,27 +799,27 @@ export function InboxLeadDetailsPanel({
                 />
               ) : (
                 <>
-                  {/* A. SNAPSHOT ─────────────────────────────────────── */}
-                  <div className="space-y-2">
-                    <div>
-                      <div className="flex items-center gap-1.5">
-                        <span className={cn("w-2 h-2 rounded-full shrink-0", intel.leadScore.dot)} />
-                        <span className={cn("text-[13px] font-semibold leading-tight", intel.leadScore.color)}>
-                          {intel.leadScore.label} Lead
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-gray-400 mt-0.5 ml-3.5">
-                        {intel.intent} · {aiStateLabel}
-                      </p>
+                  {/* STATUS ─────────────────────────────────────────── */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-1.5">
+                      <span className={cn("w-2 h-2 rounded-full shrink-0", intel.leadScore.dot)} />
+                      <span className={cn("text-[13px] font-semibold leading-tight", intel.leadScore.color)}>
+                        {intel.leadScore.label} Lead
+                      </span>
                     </div>
-                    <div className="flex items-center gap-1 flex-wrap">
-                      <QualBadge ok={intel.hasBudget}    label="Budget"    value={intel.budget} />
-                      <QualBadge ok={intel.hasTimeline}  label="Timeline"  value={intel.timeline} />
-                      <QualBadge ok={intel.hasFinancing} label="Financing" value={intel.financing} />
-                    </div>
+                    <p className="text-[11px] text-gray-400 ml-3.5">
+                      {intel.intent} · {aiStateLabel}
+                    </p>
                   </div>
 
-                  {/* B. SUGGESTIONS ──────────────────────────────────── */}
+                  {/* SIGNALS ────────────────────────────────────────── */}
+                  <div className="flex items-center gap-1 flex-wrap">
+                    <QualBadge ok={intel.hasBudget}    label="Budget"    value={intel.budget} />
+                    <QualBadge ok={intel.hasTimeline}  label="Timeline"  value={intel.timeline} />
+                    <QualBadge ok={intel.hasFinancing} label="Financing" value={intel.financing} />
+                  </div>
+
+                  {/* SUGGESTIONS ────────────────────────────────────── */}
                   {!canSeeWorkflow ? (
                     <AIUpgradePrompt
                       feature="Autopilot"
@@ -828,7 +828,7 @@ export function InboxLeadDetailsPanel({
                       size="md"
                     />
                   ) : hasAnyChips && (
-                    <div className="flex items-center gap-1 flex-wrap">
+                    <div className="flex items-center gap-1.5 flex-wrap">
                       {activeChipActions.slice(0, 2).map(action => {
                         const chipHandlers: Record<string, () => void> = {
                           assign:  () => { setAssignOpen(true); completeAction(action.type, "Lead assigned"); },
@@ -841,7 +841,7 @@ export function InboxLeadDetailsPanel({
                           ? 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100'
                           : action.priority === 'medium'
                           ? 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'
-                          : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100';
+                          : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50';
                         return (
                           <button
                             key={action.type}
@@ -850,7 +850,7 @@ export function InboxLeadDetailsPanel({
                             title={action.reason}
                             data-testid={`workflow-action-${action.type}`}
                             className={cn(
-                              "text-[10px] font-medium px-2 py-1 rounded-lg border transition-all leading-none",
+                              "text-[11px] font-medium px-2.5 py-1 rounded-lg border transition-all leading-none",
                               colorCls,
                               !handler && "opacity-60 cursor-default",
                               fadingAction === action.type && "opacity-0 scale-95"
@@ -864,7 +864,7 @@ export function InboxLeadDetailsPanel({
                         <button
                           onClick={() => { onUpdateContact({ tag: workflow.tagSuggestion! }); completeAction('tag', `Tagged as "${workflow.tagSuggestion}"`); }}
                           data-testid="workflow-tag-suggestion"
-                          className={cn("text-[10px] font-medium px-2 py-1 rounded-lg border bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 transition-all leading-none", fadingAction === 'tag' && "opacity-0 scale-95")}
+                          className={cn("text-[11px] font-medium px-2.5 py-1 rounded-lg border bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 transition-all leading-none", fadingAction === 'tag' && "opacity-0 scale-95")}
                         >
                           Tag: {workflow.tagSuggestion} ↗
                         </button>
@@ -873,7 +873,7 @@ export function InboxLeadDetailsPanel({
                         <button
                           onClick={() => { onUpdateContact({ pipelineStage: workflow.stageSuggestion! }); completeAction('stage', `Moved to ${workflow.stageSuggestion}`); }}
                           data-testid="workflow-stage-suggestion"
-                          className={cn("text-[10px] font-medium px-2 py-1 rounded-lg border bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 transition-all leading-none", fadingAction === 'stage' && "opacity-0 scale-95")}
+                          className={cn("text-[11px] font-medium px-2.5 py-1 rounded-lg border bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 transition-all leading-none", fadingAction === 'stage' && "opacity-0 scale-95")}
                         >
                           → {workflow.stageSuggestion}
                         </button>
@@ -881,37 +881,40 @@ export function InboxLeadDetailsPanel({
                     </div>
                   )}
 
-                  {/* C. SUGGESTED MESSAGE ────────────────────────────── */}
+                  {/* SUGGESTED REPLY ────────────────────────────────── */}
                   {canSeeWorkflow && qualifyAction?.value && (
-                    <div className="p-2.5 bg-gray-50 rounded-xl border border-gray-100">
-                      <p className="text-[11px] text-gray-600 leading-relaxed italic">"{qualifyAction.value}"</p>
-                      <button
-                        onClick={() => {
-                          if (onInsertMessage && qualifyAction.value) {
-                            onInsertMessage(qualifyAction.value);
-                          } else if (qualifyAction.value) {
-                            navigator.clipboard.writeText(qualifyAction.value).catch(() => {});
-                          }
-                          completeAction('qualify', "Message inserted");
-                        }}
-                        className="mt-1.5 text-[10px] font-medium text-purple-600 hover:text-purple-700 transition-colors"
-                        data-testid="button-insert-suggested-message"
-                      >
-                        Insert into reply →
-                      </button>
+                    <div>
+                      <p className="text-xs uppercase tracking-wide text-gray-500 mb-1.5">Suggested reply</p>
+                      <div className="bg-white border border-gray-200 rounded-lg p-3 shadow-sm">
+                        <p className="text-[12px] text-gray-700 leading-relaxed">"{qualifyAction.value}"</p>
+                        <button
+                          onClick={() => {
+                            if (onInsertMessage && qualifyAction.value) {
+                              onInsertMessage(qualifyAction.value);
+                            } else if (qualifyAction.value) {
+                              navigator.clipboard.writeText(qualifyAction.value).catch(() => {});
+                            }
+                            completeAction('qualify', "Message inserted");
+                          }}
+                          className="mt-2 text-[11px] font-medium text-purple-600 hover:text-purple-700 transition-colors"
+                          data-testid="button-insert-suggested-message"
+                        >
+                          Insert into reply →
+                        </button>
+                      </div>
                     </div>
                   )}
 
-                  {/* D. SUMMARY ──────────────────────────────────────── */}
+                  {/* SUMMARY ────────────────────────────────────────── */}
                   <div>
-                    <p className="text-[9px] font-bold text-gray-300 uppercase tracking-widest mb-1.5">Summary</p>
+                    <p className="text-xs uppercase tracking-wide text-gray-500 mb-1.5">Summary</p>
                     {aiMemoryLoading ? (
                       <div className="flex items-center gap-1.5">
                         <div className="w-2 h-2 rounded-full bg-purple-200 animate-pulse" />
                         <span className="text-[11px] text-gray-400 italic">Generating…</span>
                       </div>
                     ) : aiMemory ? (
-                      <p className="text-[11px] text-gray-500 leading-relaxed">{aiMemory}</p>
+                      <p className="text-[12px] text-gray-600 leading-relaxed">{aiMemory}</p>
                     ) : (
                       <p className="text-[11px] text-gray-400 italic">Summary will appear here as the conversation develops.</p>
                     )}
