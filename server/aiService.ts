@@ -250,6 +250,73 @@ Return JSON: { "summary": "your summary" }`;
     }
   }
 
+  async generateAIMemory(
+    messages: Array<{ direction: 'inbound' | 'outbound'; content: string }>,
+    intel: {
+      intent: string;
+      budget: string | null;
+      timeline: string | null;
+      financing: string | null;
+    }
+  ): Promise<string> {
+    if (!messages || messages.length === 0) return '';
+
+    // Use last 10 messages for context
+    const recent = messages.slice(-10);
+    const conversation = recent
+      .map(m => `${m.direction === 'inbound' ? 'Lead' : 'Agent'}: ${m.content}`)
+      .join('\n');
+
+    const intelLines = [
+      intel.intent    ? `Detected intent: ${intel.intent}` : null,
+      intel.budget    ? `Budget: ${intel.budget}`           : null,
+      intel.timeline  ? `Timeline: ${intel.timeline}`       : null,
+      intel.financing ? `Financing: ${intel.financing}`     : null,
+    ].filter(Boolean).join('\n');
+
+    const systemPrompt = `You are a CRM assistant helping real estate agents understand their leads.
+Write a short, natural 1–2 sentence summary of what this lead wants, based on the conversation.
+
+Rules:
+- Write like a human note an agent would read at a glance
+- Be specific about what the lead asked or mentioned
+- Do NOT use labels like "Intent:", "Budget:", "Buyer:", "Investor:"
+- Do NOT say "Interested in Investor" or "Interested in Seller" — those are awkward
+- If they are an investor, say "Investor looking for..." 
+- If they asked about a listing, say "Inquired about..."
+- If they want to buy, say "Looking to buy..."
+- Mention budget or timeline naturally if known (e.g. "around $500k", "within 2 months")
+- Keep it under 2 sentences
+- Return ONLY the summary text, no JSON, no labels`;
+
+    const userPrompt = `Conversation:
+${conversation}
+
+${intelLines ? `Extracted signals:\n${intelLines}` : ''}
+
+Write a short natural summary of what this lead wants.`;
+
+    try {
+      const response = await aiProvider.complete("summarization", [
+        { role: "system", content: systemPrompt },
+        { role: "user",   content: userPrompt },
+      ]);
+
+      const text = (response || '').trim();
+      // Strip any JSON wrappers if model returns them anyway
+      if (text.startsWith('{')) {
+        try {
+          const parsed = JSON.parse(text);
+          return parsed.summary || parsed.memory || 'Lead inquiring about property details.';
+        } catch { /* not JSON */ }
+      }
+      return text || 'Lead inquiring about property details.';
+    } catch (error) {
+      console.error('[AI] Error generating AI memory:', error);
+      return 'Lead inquiring about property details.';
+    }
+  }
+
   async checkHandoffNeeded(
     message: string,
     settings?: AiSettings

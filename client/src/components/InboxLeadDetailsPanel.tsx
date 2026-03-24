@@ -200,6 +200,12 @@ export function InboxLeadDetailsPanel({
   const [notesSaveStatus, setNotesSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
   const notesSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
 
+  // AI Memory — AI-generated natural-language summary
+  const [aiMemory, setAiMemory] = useState<string>('');
+  const [aiMemoryLoading, setAiMemoryLoading] = useState(false);
+  // Track which contact+message fingerprint the memory was generated for (avoid redundant calls)
+  const aiMemoryKeyRef = useRef<string>('');
+
   // Follow popover: 'quick' shows the quick options; 'custom' shows date+time picker
   const [followView,       setFollowView]       = useState<'quick' | 'custom'>('quick');
   const [customFollowDate, setCustomFollowDate] = useState<Date | undefined>(undefined);
@@ -279,6 +285,54 @@ export function InboxLeadDetailsPanel({
     followUpDate:  contact.followUpDate,
     assignedTo:    contact.assignedTo,
   }), [intel, contact.tag, contact.pipelineStage, contact.followUpDate, contact.assignedTo]);
+
+  // ── AI Memory: fetch AI-generated summary whenever messages change meaningfully ──
+  useEffect(() => {
+    if (messages.length === 0) {
+      setAiMemory('');
+      return;
+    }
+    // Build a key from contact id + message count to avoid duplicate fetches
+    const key = `${contact.id}:${messages.length}`;
+    if (aiMemoryKeyRef.current === key) return;
+    aiMemoryKeyRef.current = key;
+
+    let cancelled = false;
+    setAiMemoryLoading(true);
+
+    fetch('/api/ai/memory', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({
+        messages,
+        intel: {
+          intent:    intel.intent,
+          budget:    intel.budget,
+          timeline:  intel.timeline,
+          financing: intel.financing,
+        },
+      }),
+    })
+      .then(r => r.ok ? r.json() : Promise.reject(r.status))
+      .then(data => {
+        if (!cancelled) {
+          setAiMemory(data.memory || buildAIMemorySummary(intel, messages));
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          // Fallback to rule-based summary
+          setAiMemory(buildAIMemorySummary(intel, messages));
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setAiMemoryLoading(false);
+      });
+
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages.length, contact.id]);
 
   // ── Auto-tag: apply tag automatically when signal is strong + current tag is neutral ──
   const autoTagAppliedRef = useRef<string | null>(null);
@@ -999,19 +1053,21 @@ export function InboxLeadDetailsPanel({
               </button>
             </div>
 
-            {/* AI Memory tab - natural-language summary, never raw field labels */}
-            {notesTab === 'ai' && (() => {
-              const summary = buildAIMemorySummary(intel, messages);
-              return (
-                <div className="p-3 bg-purple-50/60 border border-purple-100 rounded-lg min-h-20">
-                  {summary ? (
-                    <p className="text-[11px] text-purple-900 leading-relaxed">{summary}</p>
-                  ) : (
-                    <p className="text-[11px] text-gray-400 italic">AI Memory will appear here as the conversation develops.</p>
-                  )}
-                </div>
-              );
-            })()}
+            {/* AI Memory tab - AI-generated natural-language summary */}
+            {notesTab === 'ai' && (
+              <div className="p-3 bg-purple-50/60 border border-purple-100 rounded-lg min-h-20 flex flex-col justify-start">
+                {aiMemoryLoading ? (
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full bg-purple-300 animate-pulse" />
+                    <span className="text-[11px] text-purple-400 italic">Generating summary…</span>
+                  </div>
+                ) : aiMemory ? (
+                  <p className="text-[11px] text-purple-900 leading-relaxed">{aiMemory}</p>
+                ) : (
+                  <p className="text-[11px] text-gray-400 italic">AI Memory will appear here as the conversation develops.</p>
+                )}
+              </div>
+            )}
 
             {/* Team Notes tab - sourced ONLY from manual localNotes, never AI content */}
             {notesTab === 'team' && (

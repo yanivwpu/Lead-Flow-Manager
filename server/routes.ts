@@ -5011,6 +5011,28 @@ export async function registerRoutes(
     }
   });
 
+  // Generate AI Memory — natural-language lead summary for AI Memory tab
+  app.post("/api/ai/memory", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const { messages, intel } = req.body;
+
+      if (!messages || !Array.isArray(messages)) {
+        return res.status(400).json({ error: "messages array required" });
+      }
+
+      const { aiService } = await import("./aiService");
+      const memory = await aiService.generateAIMemory(messages, intel || {});
+
+      res.json({ memory });
+    } catch (error) {
+      console.error("AI Memory generation error:", error);
+      res.status(500).json({ error: "Failed to generate AI memory" });
+    }
+  });
+
   // ============= ROUTE MODULES =============
   registerContactRoutes(app);
   registerConversationRoutes(app);
