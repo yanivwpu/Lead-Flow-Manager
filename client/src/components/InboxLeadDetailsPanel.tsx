@@ -284,7 +284,7 @@ function AddNoteModal({ contactId, contactNotesList, currentUserId, teamMembers,
 
         {/* Existing notes history */}
         {contactNotesList.length > 0 && (
-          <div className="px-5 pt-4 pb-2 flex flex-col gap-3 max-h-[240px] overflow-y-auto" data-testid="modal-notes-history">
+          <div className="px-5 pt-4 pb-2 flex flex-col gap-3 max-h-[240px] overflow-y-auto overflow-x-hidden" data-testid="modal-notes-history">
             {contactNotesList.map(note => (
               <div key={note.id} className="group flex flex-col gap-0.5" data-testid={`modal-note-${note.id}`}>
                 <div className="flex items-start justify-between gap-2">
@@ -308,7 +308,7 @@ function AddNoteModal({ contactId, contactNotesList, currentUserId, teamMembers,
                     </button>
                   )}
                 </div>
-                <p className="text-[12px] text-gray-800 leading-relaxed whitespace-pre-wrap">{note.content}</p>
+                <p className="text-[12px] text-gray-800 leading-relaxed" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', overflowWrap: 'anywhere', overflowX: 'hidden' }}>{note.content}</p>
                 {/* Inline confirm */}
                 {confirmDeleteId === note.id && (
                   <div className="flex items-center gap-2 mt-1 pt-1 border-t border-gray-100">
