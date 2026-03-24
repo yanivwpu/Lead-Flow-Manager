@@ -1359,7 +1359,6 @@ export function InboxLeadDetailsPanel({
               </div>
               <button
                 onClick={() => {
-                  setNewNoteText('');
                   setAddNoteOpen(true);
                   // Mark notes as viewed when user opens the modal
                   setNotesViewedAt(null);
@@ -1381,7 +1380,6 @@ export function InboxLeadDetailsPanel({
             ) : contactNotesList.length === 0 ? (
               <button
                 onClick={() => {
-                  setNewNoteText('');
                   setAddNoteOpen(true);
                   setNotesViewedAt(null);
                   localStorage.setItem(`notes_viewed_${contact.id}`, new Date().toISOString());
