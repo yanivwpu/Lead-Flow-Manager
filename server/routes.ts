@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { registerContactRoutes } from "./routes/contacts";
 import { registerConversationRoutes } from "./routes/conversations";
 import { registerChannelRoutes } from "./routes/channels";
-import { registerTemplateRoutes } from "./routes/templates";
+import { registerTemplateRoutes as registerAutomationTemplateRoutes } from "./routes/templates";
 import { registerWebhookRoutes } from "./routes/webhooks";
 import {
   getWhatsAppAvailability,
@@ -134,9 +134,6 @@ export async function registerRoutes(
 
   // Object storage routes for file uploads
   registerObjectStorageRoutes(app);
-
-  // Premium template routes
-  registerTemplateRoutes(app);
 
   // Shopify integration routes
   app.use('/api/shopify', shopifyRoutes);
@@ -5115,6 +5112,7 @@ export async function registerRoutes(
   registerContactRoutes(app);
   registerConversationRoutes(app);
   registerChannelRoutes(app);
+  registerAutomationTemplateRoutes(app);
   registerTemplateRoutes(app);
   registerWebhookRoutes(app);
 
