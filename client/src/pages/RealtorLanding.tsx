@@ -3,7 +3,8 @@ import { Link, useLocation } from "wouter";
 import {
   ArrowRight, CheckCircle2, Zap, MessageSquare, Brain, Calendar,
   Users, Target, Shield, ChevronDown, Globe, Smartphone, Search,
-  Bot, Inbox, BarChart3, Layers, Send, Database, Sparkles, Mail, Share2, Check
+  Bot, Inbox, BarChart3, Layers, Send, Database, Sparkles, Mail, Share2, Check,
+  TrendingUp, PhoneOff, Lightbulb, Clock, LayoutGrid
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { Helmet } from "react-helmet";
@@ -23,7 +24,7 @@ function FaqItem({ question, answer, isRTL }: { question: string; answer: string
   return (
     <div className="border border-gray-200 rounded-xl overflow-hidden">
       <button
-        className={`w-full flex items-center justify-between p-5 text-start hover:bg-gray-50 transition-colors`}
+        className="w-full flex items-center justify-between p-5 text-start hover:bg-gray-50 transition-colors"
         onClick={() => setOpen(!open)}
         data-testid={`faq-toggle-${question.slice(0, 20).replace(/\s/g, '-')}`}
       >
@@ -48,7 +49,7 @@ export function RealtorLanding() {
 
   const ctaHref = user
     ? "/app/templates/realtor-growth-engine"
-    : "/auth?redirect=/app/templates/realtor-growth-engine";
+    : "/signup?redirect=/app/templates/realtor-growth-engine";
 
   const handleCta = () => {
     setLocation(ctaHref);
@@ -60,30 +61,12 @@ export function RealtorLanding() {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const workflowSteps = [
-    { num: 1, icon: Globe, title: t("rge.workflow.s1.title"), desc: t("rge.workflow.s1.desc") },
-    { num: 2, icon: Zap, title: t("rge.workflow.s2.title"), desc: t("rge.workflow.s2.desc") },
-    { num: 3, icon: Brain, title: t("rge.workflow.s3.title"), desc: t("rge.workflow.s3.desc") },
-    { num: 4, icon: Target, title: t("rge.workflow.s4.title"), desc: t("rge.workflow.s4.desc") },
-    { num: 5, icon: Calendar, title: t("rge.workflow.s5.title"), desc: t("rge.workflow.s5.desc") },
-    { num: 6, icon: Database, title: t("rge.workflow.s6.title"), desc: t("rge.workflow.s6.desc") },
-  ];
+  const scrollToWorkflow = () => {
+    document.getElementById("workflow-section")?.scrollIntoView({ behavior: "smooth" });
+  };
 
-  const setupItems = [
-    { icon: Smartphone, text: t("rge.setup.item1") },
-    { icon: Shield, text: t("rge.setup.item2") },
-    { icon: Bot, text: t("rge.setup.item3") },
-    { icon: Calendar, text: t("rge.setup.item4") },
-    { icon: Layers, text: t("rge.setup.item5") },
-  ];
-
-  const platformFeatures = [
-    { icon: Inbox, title: t("rge.platform.f1.title"), desc: t("rge.platform.f1.desc") },
-    { icon: Brain, title: t("rge.platform.f2.title"), desc: t("rge.platform.f2.desc") },
-    { icon: Search, title: t("rge.platform.f3.title"), desc: t("rge.platform.f3.desc") },
-    { icon: Users, title: t("rge.platform.f4.title"), desc: t("rge.platform.f4.desc") },
-    { icon: Send, title: t("rge.platform.f5.title"), desc: t("rge.platform.f5.desc") },
-  ];
+  const arrowClass = isRTL ? "h-5 w-5 rotate-180" : "h-5 w-5";
+  const arrowClassSm = isRTL ? "h-4 w-4 rotate-180" : "h-4 w-4";
 
   const faqs = [
     { q: t("rge.faq.q1"), a: t("rge.faq.a1") },
@@ -93,13 +76,6 @@ export function RealtorLanding() {
     { q: t("rge.faq.q5"), a: t("rge.faq.a5") },
     { q: t("rge.faq.q6"), a: t("rge.faq.a6") },
   ];
-
-  const scrollToWorkflow = () => {
-    document.getElementById("workflow-section")?.scrollIntoView({ behavior: "smooth" });
-  };
-
-  const arrowClass = isRTL ? "h-5 w-5 rotate-180" : "h-5 w-5";
-  const arrowClassSm = isRTL ? "h-4 w-4 rotate-180" : "h-4 w-4";
 
   return (
     <div dir={isRTL ? "rtl" : "ltr"} className="min-h-screen bg-white overflow-x-hidden">
@@ -119,6 +95,7 @@ export function RealtorLanding() {
         <meta name="twitter:image" content="https://whachatcrm.com/og/og-realtor-growth-engine.png" />
       </Helmet>
 
+      {/* NAV */}
       <nav className="p-4 md:p-6 flex justify-between items-center max-w-7xl xl:max-w-[1440px] 2xl:max-w-[1536px] mx-auto">
         <Link href="/">
           <div className="flex items-center gap-2 cursor-pointer">
@@ -143,28 +120,9 @@ export function RealtorLanding() {
         </div>
       </nav>
 
-      <div className="px-4 md:px-6 max-w-7xl xl:max-w-[1440px] mx-auto pt-2 pb-4">
-        <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4">
-          <div className="flex items-center gap-2">
-            <MessageSquare className="h-4 w-4 text-emerald-600 shrink-0" />
-            <span className="text-sm text-emerald-800">{t("rge.banner.curious")}</span>
-          </div>
-          <div className="flex items-center gap-3">
-            <Link href="/contact">
-              <span className="text-sm font-medium text-emerald-700 hover:text-emerald-900 underline underline-offset-2 cursor-pointer">{t("rge.banner.messageUs")}</span>
-            </Link>
-            <span className="text-emerald-300">|</span>
-            <button 
-              onClick={handleShare}
-              className="flex items-center gap-1.5 text-sm font-medium text-emerald-700 hover:text-emerald-900 underline underline-offset-2 cursor-pointer transition-colors"
-            >
-              {copied ? <Check className="h-3.5 w-3.5" /> : <Share2 className="h-3.5 w-3.5" />}
-              {copied ? t("rge.banner.linkCopied") : t("rge.banner.share")}
-            </button>
-          </div>
-        </div>
-      </div>
-
+      {/* ─────────────────────────────────────────────────── */}
+      {/* SECTION 1: HERO */}
+      {/* ─────────────────────────────────────────────────── */}
       <section className="px-4 md:px-6 pt-6 md:pt-12 pb-16 md:pb-24 max-w-7xl xl:max-w-[1440px] mx-auto">
         <div className="grid md:grid-cols-2 gap-10 md:gap-16 xl:gap-20 items-center">
           <motion.div
@@ -172,29 +130,20 @@ export function RealtorLanding() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6 }}
           >
-            <h1 className="text-3xl md:text-5xl lg:text-[3.25rem] xl:text-6xl font-display font-bold text-gray-900 leading-[1.1] mb-4 md:mb-5" data-testid="text-hero-headline">
-              <RealtorMark /> Growth Engine
+            <h1
+              className="text-3xl md:text-5xl lg:text-[3.25rem] xl:text-6xl font-display font-bold text-gray-900 leading-[1.1] mb-4 md:mb-5"
+              data-testid="text-hero-headline"
+            >
+              Turn Real Estate Conversations Into Booked Showings Automatically
             </h1>
-            <p className="text-lg md:text-xl xl:text-2xl text-gray-600 mb-6 leading-relaxed">
-              {t("rge.hero.subtitle")}
+            <p className="text-lg md:text-xl xl:text-2xl text-gray-600 mb-3 leading-relaxed">
+              AI-powered WhatsApp automation that responds instantly, qualifies leads, and schedules showings for you.
+            </p>
+            <p className="text-base text-gray-500 mb-8">
+              A fully pre-built automation system installed inside your CRM — ready to run.
             </p>
 
-            <div className="space-y-3 mb-8">
-              <div className="flex items-center gap-3">
-                <CheckCircle2 className="h-5 w-5 text-brand-green shrink-0" />
-                <span className="text-base md:text-lg text-gray-700">{t("rge.hero.check1")}</span>
-              </div>
-              <div className="flex items-center gap-3">
-                <CheckCircle2 className="h-5 w-5 text-brand-green shrink-0" />
-                <span className="text-base md:text-lg text-gray-700">{t("rge.hero.check2")}</span>
-              </div>
-              <div className="flex items-center gap-3">
-                <CheckCircle2 className="h-5 w-5 text-brand-green shrink-0" />
-                <span className="text-base md:text-lg text-gray-700">{t("rge.hero.check3")}</span>
-              </div>
-            </div>
-
-            <div className="flex flex-col sm:flex-row gap-3 mb-4">
+            <div className="flex flex-col sm:flex-row gap-3">
               <button
                 onClick={handleCta}
                 className="w-full sm:w-auto h-14 px-8 bg-brand-green hover:bg-emerald-700 text-white font-semibold rounded-full flex items-center justify-center gap-2 transition-all shadow-lg hover:shadow-xl cursor-pointer"
@@ -208,7 +157,7 @@ export function RealtorLanding() {
                 className="w-full sm:w-auto h-14 px-8 bg-white border border-gray-200 text-gray-700 font-medium rounded-full flex items-center justify-center gap-2 hover:bg-gray-50 transition-colors"
                 data-testid="button-hero-how-it-works"
               >
-                {t("rge.hero.howItWorks")}
+                See How It Works
               </button>
             </div>
           </motion.div>
@@ -229,9 +178,8 @@ export function RealtorLanding() {
                     <p className="font-semibold text-gray-900 text-sm">{t("rge.preview.lead1Name")}</p>
                     <p className="text-xs text-gray-500 truncate">{t("rge.preview.lead1Quote")}</p>
                   </div>
-                  <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-medium shrink-0 hidden sm:inline md:inline">{t("rge.preview.lead1Tag")}</span>
+                  <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-medium shrink-0 hidden sm:inline">{t("rge.preview.lead1Tag")}</span>
                 </div>
-
                 <div className="flex items-center gap-3 p-3 bg-white rounded-xl shadow-sm border border-gray-100">
                   <div className="h-10 w-10 rounded-full bg-amber-100 flex items-center justify-center shrink-0">
                     <BarChart3 className="h-5 w-5 text-amber-500" />
@@ -240,9 +188,8 @@ export function RealtorLanding() {
                     <p className="font-semibold text-gray-900 text-sm">{t("rge.preview.lead2Name")}</p>
                     <p className="text-xs text-gray-500 truncate">{t("rge.preview.lead2Quote")}</p>
                   </div>
-                  <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-medium shrink-0 hidden sm:inline md:inline">{t("rge.preview.lead2Tag")}</span>
+                  <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-medium shrink-0 hidden sm:inline">{t("rge.preview.lead2Tag")}</span>
                 </div>
-
                 <div className="flex items-center gap-3 p-3 bg-white rounded-xl shadow-sm border border-gray-100">
                   <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center shrink-0">
                     <Sparkles className="h-5 w-5 text-blue-500" />
@@ -251,9 +198,8 @@ export function RealtorLanding() {
                     <p className="font-semibold text-gray-900 text-sm">{t("rge.preview.lead3Name")}</p>
                     <p className="text-xs text-gray-500 truncate">{t("rge.preview.lead3Quote")}</p>
                   </div>
-                  <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium shrink-0 hidden sm:inline md:inline">{t("rge.preview.lead3Tag")}</span>
+                  <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium shrink-0 hidden sm:inline">{t("rge.preview.lead3Tag")}</span>
                 </div>
-
                 <div className="mt-3 p-3 bg-emerald-50 rounded-xl border border-emerald-200">
                   <div className="flex items-center gap-2 mb-1">
                     <Zap className="h-4 w-4 text-emerald-600" />
@@ -267,102 +213,64 @@ export function RealtorLanding() {
         </div>
       </section>
 
-      <section id="workflow-section" className="px-4 md:px-6 py-16 md:py-24 bg-gray-50">
-        <div className="max-w-6xl xl:max-w-[1440px] mx-auto">
-          <div className="text-center mb-12 md:mb-16">
-            <h2 className="text-2xl md:text-4xl xl:text-5xl font-display font-bold text-gray-900 mb-4" data-testid="text-workflow-title">
-              How the <RealtorMark /> Growth Engine Works
-            </h2>
-            <p className="text-base md:text-lg xl:text-xl text-gray-600 max-w-3xl mx-auto">
-              {t("rge.workflow.subtitle")}
-            </p>
-          </div>
-
-          <div className="relative">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 xl:gap-8 relative">
-              {workflowSteps.map((step) => {
-                const Icon = step.icon;
-                return (
-                  <motion.div
-                    key={step.num}
-                    initial={{ opacity: 0, y: 20 }}
-                    whileInView={{ opacity: 1, y: 0 }}
-                    viewport={{ once: true }}
-                    transition={{ delay: step.num * 0.08 }}
-                    className="bg-white rounded-2xl border border-gray-100 p-5 sm:p-6 shadow-sm hover:shadow-md transition-shadow relative z-10"
-                  >
-                    <div className="flex flex-col sm:flex-row items-start gap-3 sm:gap-4">
-                      <div className="h-11 w-11 sm:h-12 sm:w-12 bg-brand-green text-white rounded-xl flex items-center justify-center shrink-0 shadow-md">
-                        <Icon className="h-5 w-5 sm:h-6 sm:w-6" />
-                      </div>
-                      <div className="w-full">
-                        <span className="text-xs font-bold text-brand-green uppercase tracking-wider">{t("rge.workflow.step")} {step.num}</span>
-                        <h3 className="text-base sm:text-lg font-bold text-gray-900 mt-1 mb-1">{step.title}</h3>
-                        <p className="text-sm text-gray-600">{step.desc}</p>
-                      </div>
-                    </div>
-                  </motion.div>
-                );
-              })}
-            </div>
-          </div>
-
-          <p className="text-center text-sm md:text-base text-gray-500 mt-8 max-w-2xl mx-auto">
-            {t("rge.workflow.tagline")}
-          </p>
-        </div>
-      </section>
-
-      <section className="px-4 md:px-6 py-16 md:py-24 bg-white">
+      {/* ─────────────────────────────────────────────────── */}
+      {/* SECTION 2: DONE-FOR-YOU SETUP */}
+      {/* ─────────────────────────────────────────────────── */}
+      <section className="px-4 md:px-6 py-16 md:py-20 bg-emerald-50" data-testid="section-done-for-you">
         <div className="max-w-5xl xl:max-w-6xl mx-auto">
           <div className="grid md:grid-cols-2 gap-10 md:gap-16 items-center">
             <div>
-              <h2 className="text-2xl md:text-4xl xl:text-5xl font-display font-bold text-gray-900 mb-4" data-testid="text-setup-title">
-                {t("rge.setup.title")}
+              <h2 className="text-2xl md:text-4xl xl:text-5xl font-display font-bold text-gray-900 mb-3" data-testid="text-setup-title">
+                Fully Done-For-You Setup
               </h2>
               <p className="text-base md:text-lg text-gray-600 mb-8 leading-relaxed">
-                {t("rge.setup.desc")}
+                No technical setup required. Live in days.
               </p>
               <div className="space-y-4">
-                {setupItems.map((item) => {
+                {[
+                  { icon: Smartphone, text: "WhatsApp Business API setup" },
+                  { icon: Shield, text: "Meta verification assistance" },
+                  { icon: Bot, text: "Automation workflows installed" },
+                  { icon: LayoutGrid, text: "CRM pipeline configured" },
+                  { icon: Calendar, text: "Calendar integration included" },
+                ].map((item) => {
                   const Icon = item.icon;
                   return (
                     <div key={item.text} className="flex items-center gap-3">
                       <div className="h-10 w-10 bg-emerald-100 rounded-lg flex items-center justify-center shrink-0">
                         <Icon className="h-5 w-5 text-emerald-600" />
                       </div>
-                      <span className="text-base md:text-lg text-gray-700">{item.text}</span>
+                      <span className="text-base md:text-lg text-gray-800 font-medium">{item.text}</span>
                     </div>
                   );
                 })}
               </div>
-              <p className="text-sm text-gray-500 mt-6">{t("rge.setup.liveNote")}</p>
             </div>
-            <div className="bg-gradient-to-br from-gray-900 to-gray-800 rounded-2xl sm:rounded-3xl p-5 sm:p-8 text-white">
+            <div className="bg-gray-900 rounded-2xl sm:rounded-3xl p-6 sm:p-8 text-white">
               <div className="flex items-center gap-3 mb-6">
-                <Shield className="h-8 w-8 text-brand-green" />
-                <h3 className="text-xl font-bold">{t("rge.onboarding.title")}</h3>
+                <Shield className="h-8 w-8 text-brand-green shrink-0" />
+                <h3 className="text-xl font-bold">Our team sets everything up for you</h3>
               </div>
               <div className="space-y-4 text-sm text-gray-300">
                 <div className="flex items-start gap-3">
                   <CheckCircle2 className="h-4 w-4 text-brand-green shrink-0 mt-0.5" />
-                  <span>{t("rge.onboarding.b1")}</span>
+                  <span>We handle your WhatsApp Business API application with Meta</span>
                 </div>
                 <div className="flex items-start gap-3">
                   <CheckCircle2 className="h-4 w-4 text-brand-green shrink-0 mt-0.5" />
-                  <span>{t("rge.onboarding.b2")}</span>
+                  <span>We verify your business and configure your phone number</span>
                 </div>
                 <div className="flex items-start gap-3">
                   <CheckCircle2 className="h-4 w-4 text-brand-green shrink-0 mt-0.5" />
-                  <span>{t("rge.onboarding.b3")}</span>
+                  <span>We install all automation workflows into your CRM account</span>
                 </div>
                 <div className="flex items-start gap-3">
                   <CheckCircle2 className="h-4 w-4 text-brand-green shrink-0 mt-0.5" />
-                  <span>{t("rge.onboarding.b4")}</span>
+                  <span>We connect your booking calendar so leads can self-schedule</span>
                 </div>
                 <div className="flex items-start gap-3">
                   <CheckCircle2 className="h-4 w-4 text-brand-green shrink-0 mt-0.5" />
-                  <span>{t("rge.onboarding.b5")}</span>
+                  <span>We go live with you and confirm everything is working</span>
                 </div>
               </div>
             </div>
@@ -370,70 +278,259 @@ export function RealtorLanding() {
         </div>
       </section>
 
-      <section className="px-4 md:px-6 py-16 md:py-24 bg-gray-50">
+      {/* ─────────────────────────────────────────────────── */}
+      {/* SECTION 3: WHAT THE GROWTH ENGINE DOES */}
+      {/* ─────────────────────────────────────────────────── */}
+      <section className="px-4 md:px-6 py-16 md:py-24 bg-white" data-testid="section-what-it-does">
         <div className="max-w-6xl xl:max-w-[1440px] mx-auto">
           <div className="text-center mb-12 md:mb-16">
-            <h2 className="text-2xl md:text-4xl xl:text-5xl font-display font-bold text-gray-900 mb-4" data-testid="text-platform-title">
-              {t("rge.platform.title")}
+            <h2 className="text-2xl md:text-4xl xl:text-5xl font-display font-bold text-gray-900 mb-4" data-testid="text-features-title">
+              What the Growth Engine Does
             </h2>
             <p className="text-base md:text-lg xl:text-xl text-gray-600 max-w-3xl mx-auto">
-              The <RealtorMark /> Growth Engine runs on top of a production-ready messaging and automation platform.
+              A complete lead handling system that runs 24/7 — so you can focus on closing deals.
             </p>
           </div>
-
-          <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3 sm:gap-6">
-            {platformFeatures.map((item) => {
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {[
+              {
+                icon: Zap,
+                title: "Responds instantly to every inquiry",
+                desc: "Buyers reach you 24/7. No missed conversations, no waiting.",
+              },
+              {
+                icon: Target,
+                title: "Qualifies buyers automatically",
+                desc: "Identifies serious prospects based on budget, financing readiness, and timeline.",
+              },
+              {
+                icon: Lightbulb,
+                title: "Identifies serious prospects",
+                desc: "Surfaces ready-to-close leads so you focus on who matters most.",
+              },
+              {
+                icon: Calendar,
+                title: "Sends your calendar when they want to book",
+                desc: "Leads schedule their own showings directly into your availability.",
+              },
+              {
+                icon: Clock,
+                title: "Follows up automatically if leads go quiet",
+                desc: "Multi-day sequences keep warm leads engaged — on day 1, 3, and 7.",
+              },
+              {
+                icon: LayoutGrid,
+                title: "Keeps everything organized in your CRM",
+                desc: "Leads flow through your pipeline with scores and stage tags automatically.",
+              },
+            ].map((item, idx) => {
               const Icon = item.icon;
               return (
-                <div key={item.title} className="bg-white rounded-xl sm:rounded-2xl border border-gray-100 p-4 sm:p-6 text-center hover:shadow-md transition-shadow">
-                  <div className="h-12 w-12 bg-emerald-100 rounded-xl flex items-center justify-center mx-auto mb-4">
-                    <Icon className="h-6 w-6 text-emerald-600" />
+                <motion.div
+                  key={idx}
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ delay: idx * 0.06 }}
+                  className="bg-gray-50 rounded-2xl border border-gray-100 p-6 hover:shadow-md transition-shadow"
+                >
+                  <div className="h-12 w-12 bg-brand-green/10 rounded-xl flex items-center justify-center mb-4">
+                    <Icon className="h-6 w-6 text-brand-green" />
                   </div>
-                  <h3 className="text-base font-bold text-gray-900 mb-1">{item.title}</h3>
-                  <p className="text-sm text-gray-500">{item.desc}</p>
-                </div>
+                  <h3 className="text-base font-bold text-gray-900 mb-2">{item.title}</h3>
+                  <p className="text-sm text-gray-600 leading-relaxed">{item.desc}</p>
+                </motion.div>
               );
             })}
           </div>
         </div>
       </section>
 
-      <section className="px-4 md:px-6 py-16 md:py-24 bg-white">
-        <div className="max-w-4xl mx-auto">
-          <div className="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-2xl sm:rounded-3xl border border-emerald-100 p-5 sm:p-8 md:p-12 text-center">
-            <h2 className="text-2xl md:text-4xl xl:text-5xl font-display font-bold text-gray-900 mb-4" data-testid="text-pricing-title">
-              {t("rge.pricing.title")}
+      {/* ─────────────────────────────────────────────────── */}
+      {/* SECTION 4: VISUAL WORKFLOW */}
+      {/* ─────────────────────────────────────────────────── */}
+      <section id="workflow-section" className="px-4 md:px-6 py-16 md:py-24 bg-gray-50" data-testid="section-workflow">
+        <div className="max-w-6xl xl:max-w-[1440px] mx-auto">
+          <div className="text-center mb-12 md:mb-16">
+            <h2 className="text-2xl md:text-4xl xl:text-5xl font-display font-bold text-gray-900 mb-4" data-testid="text-workflow-title">
+              How Your System Works
             </h2>
-            <p className="text-base md:text-lg text-gray-600 mb-8 max-w-2xl mx-auto">
-              The <RealtorMark /> Growth Engine is a done-for-you automation template on top of WhachatCRM.
+            <p className="text-base md:text-lg xl:text-xl text-gray-600 max-w-3xl mx-auto">
+              From first message to booked showing — automatically.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 xl:gap-8">
+            {[
+              { num: 1, icon: MessageSquare, title: "Lead sends a WhatsApp message", desc: "Inquiry arrives from a buyer or seller. Your system springs to life instantly." },
+              { num: 2, icon: Zap, title: "Instant automated response goes out", desc: "Lead gets a personalized greeting within seconds — no waiting on your end." },
+              { num: 3, icon: Brain, title: "AI qualifies the lead in real-time", desc: "Conversation is analyzed for budget, intent, and seriousness. Lead is scored automatically." },
+              { num: 4, icon: Calendar, title: "Booking link is sent automatically", desc: "When they ask to schedule, your calendar opens directly in the chat." },
+              { num: 5, icon: Users, title: "You get a handoff with context", desc: "Serious leads arrive in your CRM pre-qualified. Your time goes to high-probability deals." },
+              { num: 6, icon: TrendingUp, title: "Cold leads are nurtured automatically", desc: "Leads who go quiet get follow-ups on day 1, 3, and 7. Nothing falls through the cracks." },
+            ].map((step) => {
+              const Icon = step.icon;
+              return (
+                <motion.div
+                  key={step.num}
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ delay: step.num * 0.08 }}
+                  className="bg-white rounded-2xl border border-gray-100 p-5 sm:p-6 shadow-sm hover:shadow-md transition-shadow"
+                >
+                  <div className="flex flex-col sm:flex-row items-start gap-3 sm:gap-4">
+                    <div className="h-11 w-11 sm:h-12 sm:w-12 bg-brand-green text-white rounded-xl flex items-center justify-center shrink-0 shadow-md">
+                      <Icon className="h-5 w-5 sm:h-6 sm:w-6" />
+                    </div>
+                    <div className="w-full">
+                      <span className="text-xs font-bold text-brand-green uppercase tracking-wider">Step {step.num}</span>
+                      <h3 className="text-base sm:text-lg font-bold text-gray-900 mt-1 mb-1">{step.title}</h3>
+                      <p className="text-sm text-gray-600">{step.desc}</p>
+                    </div>
+                  </div>
+                </motion.div>
+              );
+            })}
+          </div>
+
+          <p className="text-center text-lg md:text-xl font-semibold text-gray-900 mt-12" data-testid="text-workflow-tagline">
+            Only serious leads reach you.
+          </p>
+        </div>
+      </section>
+
+      {/* ─────────────────────────────────────────────────── */}
+      {/* SECTION 5: BUILT FOR */}
+      {/* ─────────────────────────────────────────────────── */}
+      <section className="px-4 md:px-6 py-16 md:py-24 bg-white" data-testid="section-built-for">
+        <div className="max-w-5xl xl:max-w-6xl mx-auto">
+          <div className="text-center mb-12">
+            <h2 className="text-2xl md:text-4xl xl:text-5xl font-display font-bold text-gray-900 mb-4" data-testid="text-built-for-title">
+              Built For
+            </h2>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ delay: 0.05 }}
+              className="bg-gray-50 rounded-2xl border border-gray-100 p-8"
+            >
+              <div className="h-14 w-14 bg-brand-green/10 rounded-2xl flex items-center justify-center mb-5">
+                <PhoneOff className="h-7 w-7 text-brand-green" />
+              </div>
+              <h3 className="text-lg font-bold text-gray-900 mb-2">Solo agents who want 24/7 lead handling</h3>
+              <p className="text-sm text-gray-600">Never miss a lead again. Your system works while you sleep, so every inquiry gets a fast, professional reply.</p>
+            </motion.div>
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ delay: 0.1 }}
+              className="bg-gray-50 rounded-2xl border border-gray-100 p-8"
+            >
+              <div className="h-14 w-14 bg-brand-green/10 rounded-2xl flex items-center justify-center mb-5">
+                <Users className="h-7 w-7 text-brand-green" />
+              </div>
+              <h3 className="text-lg font-bold text-gray-900 mb-2">Real estate teams managing high volumes of inquiries</h3>
+              <p className="text-sm text-gray-600">Scale lead handling across your team without adding headcount. Every lead gets qualified and routed correctly.</p>
+            </motion.div>
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ delay: 0.15 }}
+              className="bg-gray-50 rounded-2xl border border-gray-100 p-8"
+            >
+              <div className="h-14 w-14 bg-brand-green/10 rounded-2xl flex items-center justify-center mb-5">
+                <TrendingUp className="h-7 w-7 text-brand-green" />
+              </div>
+              <h3 className="text-lg font-bold text-gray-900 mb-2">Agents running ads, listing campaigns, or online lead generation</h3>
+              <p className="text-sm text-gray-600">Turn your ad spend into booked showings faster. Every inbound lead is handled the moment it arrives.</p>
+            </motion.div>
+          </div>
+        </div>
+      </section>
+
+      {/* ─────────────────────────────────────────────────── */}
+      {/* SECTION 6: WHAT HAPPENS AFTER YOU ACTIVATE */}
+      {/* ─────────────────────────────────────────────────── */}
+      <section className="px-4 md:px-6 py-16 md:py-24 bg-gray-50" data-testid="section-after-activate">
+        <div className="max-w-3xl mx-auto">
+          <div className="text-center mb-12">
+            <h2 className="text-2xl md:text-4xl xl:text-5xl font-display font-bold text-gray-900 mb-4" data-testid="text-activate-title">
+              What Happens After You Activate
+            </h2>
+            <p className="text-base md:text-lg text-gray-600">
+              From install to live — in a few simple steps.
+            </p>
+          </div>
+          <div className="space-y-6">
+            {[
+              { num: 1, title: "Connect your channels", desc: "Authenticate your WhatsApp Business account and link your booking calendar." },
+              { num: 2, title: "The system installs automatically", desc: "All workflows, automations, and CRM pipelines deploy directly into your account." },
+              { num: 3, title: "Automations go live", desc: "Your system is ready and waiting. The moment a lead messages you, it responds." },
+              { num: 4, title: "Leads start getting qualified and routed", desc: "From first message to your CRM — leads are handled, scored, and tracked automatically." },
+            ].map((step) => (
+              <motion.div
+                key={step.num}
+                initial={{ opacity: 0, x: -20 }}
+                whileInView={{ opacity: 1, x: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: step.num * 0.08 }}
+                className="flex gap-5 bg-white rounded-2xl border border-gray-100 p-6 shadow-sm"
+              >
+                <div className="flex-shrink-0 flex items-center justify-center h-10 w-10 rounded-full bg-brand-green text-white font-bold text-base">
+                  {step.num}
+                </div>
+                <div>
+                  <h3 className="font-bold text-gray-900 text-base mb-1">{step.title}</h3>
+                  <p className="text-sm text-gray-600 leading-relaxed">{step.desc}</p>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ─────────────────────────────────────────────────── */}
+      {/* SECTION 7: PRICING */}
+      {/* ─────────────────────────────────────────────────── */}
+      <section className="px-4 md:px-6 py-16 md:py-24 bg-white" data-testid="section-pricing">
+        <div className="max-w-4xl mx-auto">
+          <div className="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-2xl sm:rounded-3xl border border-emerald-100 p-6 sm:p-8 md:p-12 text-center">
+            <h2 className="text-2xl md:text-4xl xl:text-5xl font-display font-bold text-gray-900 mb-4" data-testid="text-pricing-title">
+              What Powers the Realtor Growth Engine
+            </h2>
+            <p className="text-base md:text-lg text-gray-600 mb-10 max-w-2xl mx-auto">
+              Everything you need is included — platform, AI layer, and the template itself.
             </p>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 mb-8">
-              <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-5 shadow-sm">
-                <div className="text-sm font-medium text-gray-500 mb-1">{t("rge.pricing.platform")}</div>
-                <div className="text-lg font-bold text-gray-900">{t("rge.pricing.platformName")}</div>
-                <div className="text-sm text-gray-500">{t("rge.pricing.platformPrice")}</div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+              <div className="bg-white rounded-xl border border-gray-100 p-5 shadow-sm text-left">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Core Platform</p>
+                <p className="text-lg font-bold text-gray-900">WhachatCRM Pro</p>
+                <p className="text-base text-gray-600 mt-1">$49/mo</p>
               </div>
-              <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-5 shadow-sm">
-                <div className="text-sm font-medium text-gray-500 mb-1">{t("rge.pricing.addon")}</div>
-                <div className="text-lg font-bold text-gray-900">{t("rge.pricing.addonName")}</div>
-                <div className="text-sm text-gray-500">{t("rge.pricing.addonPrice")}</div>
+              <div className="bg-white rounded-xl border border-gray-100 p-5 shadow-sm text-left">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">AI Automation Layer</p>
+                <p className="text-lg font-bold text-gray-900">AI Brain</p>
+                <p className="text-base text-gray-600 mt-1">$29/mo</p>
               </div>
-              <div className="bg-white rounded-xl border border-emerald-200 p-4 sm:p-5 shadow-sm ring-2 ring-emerald-100">
-                <div className="text-lg font-bold text-gray-900">{t("rge.pricing.setupName")}</div>
-                <div className="text-base font-bold text-gray-900 mt-1">
-                  <span className="line-through text-gray-400 font-normal">{t("rge.pricing.setupOriginalPrice")}</span>{" "}
-                  <span className="text-emerald-600">{t("rge.pricing.setupSalePrice")}</span>
-                </div>
-                <div className="text-sm text-emerald-600 font-medium mt-1">{t("rge.pricing.setupDiscount")}</div>
+              <div className="bg-white rounded-xl border border-emerald-200 p-5 shadow-sm ring-2 ring-emerald-100 text-left">
+                <p className="text-xs font-semibold text-emerald-600 uppercase tracking-wider mb-2">Realtor Growth Engine</p>
+                <p className="text-lg font-bold text-gray-900">One-time template license</p>
+                <p className="text-base font-semibold text-emerald-600 mt-1">$199</p>
               </div>
             </div>
 
-            <p className="text-sm text-gray-500 mb-8">
-              {t("rge.pricing.metaNote")}
+            <p className="text-sm text-gray-500 mb-8" data-testid="text-meta-note">
+              WhatsApp messaging fees are billed directly by Meta with no markup.
             </p>
 
-            <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center mb-4">
+            <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center">
               <button
                 onClick={handleCta}
                 className="w-full sm:w-auto h-14 px-10 bg-brand-green hover:bg-emerald-700 text-white font-semibold rounded-full flex items-center justify-center gap-2 transition-all shadow-lg hover:shadow-xl text-base sm:text-lg cursor-pointer"
@@ -445,7 +542,7 @@ export function RealtorLanding() {
               <Link href="/pricing" className="w-full sm:w-auto">
                 <button className="w-full sm:w-auto h-14 px-10 bg-white border border-gray-200 text-gray-700 font-medium rounded-full flex items-center justify-center gap-2 hover:bg-gray-50 transition-colors text-base sm:text-lg" data-testid="button-pricing-plans">
                   <BarChart3 className="h-5 w-5" />
-                  {t("rge.pricing.viewPlans")}
+                  View all plans
                 </button>
               </Link>
             </div>
@@ -453,6 +550,7 @@ export function RealtorLanding() {
         </div>
       </section>
 
+      {/* FAQ */}
       <section className="px-4 md:px-6 py-16 md:py-24 bg-gray-50">
         <div className="max-w-3xl xl:max-w-4xl mx-auto">
           <h2 className="text-2xl md:text-4xl xl:text-5xl font-display font-bold text-gray-900 text-center mb-10 md:mb-14" data-testid="text-faq-title">
@@ -466,13 +564,16 @@ export function RealtorLanding() {
         </div>
       </section>
 
-      <section className="px-4 md:px-6 py-12 md:py-16 bg-gray-900 text-white">
+      {/* ─────────────────────────────────────────────────── */}
+      {/* SECTION 8: FINAL CTA */}
+      {/* ─────────────────────────────────────────────────── */}
+      <section className="px-4 md:px-6 py-12 md:py-16 bg-gray-900 text-white" data-testid="section-final-cta">
         <div className="max-w-3xl xl:max-w-4xl mx-auto text-center">
           <h2 className="text-xl md:text-3xl xl:text-4xl font-display font-bold mb-4">
-            {t("rge.cta.title")}
+            Ready to turn leads into booked showings?
           </h2>
-          <p className="text-gray-400 xl:text-lg mb-6">
-            {t("rge.cta.subtitle")}
+          <p className="text-gray-400 xl:text-lg mb-8">
+            Install the Realtor Growth Engine and your automations start running immediately.
           </p>
           <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center">
             <button
@@ -486,10 +587,11 @@ export function RealtorLanding() {
             <Link href="/pricing" className="w-full sm:w-auto">
               <button className="w-full sm:w-auto h-12 px-8 bg-gray-800 border border-gray-700 text-gray-300 font-medium rounded-full flex items-center justify-center gap-2 hover:bg-gray-700 transition-colors" data-testid="button-footer-plans">
                 <BarChart3 className={arrowClassSm} />
-                {t("rge.pricing.viewPlans")}
+                View all plans
               </button>
             </Link>
           </div>
+          <p className="text-gray-500 text-sm mt-5">Ready to run. No technical setup required.</p>
         </div>
       </section>
 

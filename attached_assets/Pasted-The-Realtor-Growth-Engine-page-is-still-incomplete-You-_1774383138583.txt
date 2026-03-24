@@ -1,0 +1,101 @@
+The Realtor Growth Engine page is still incomplete. You applied only part of the redesign.
+
+Please update /realtor-growth-engine again and do NOT stop until every section below exists in the visible UI in this exact order.
+
+FINAL REQUIRED PAGE STRUCTURE
+
+1) HERO
+- Headline:
+  Turn Real Estate Conversations Into Booked Showings Automatically
+- Subheadline:
+  AI-powered WhatsApp automation that responds instantly, qualifies leads, and schedules showings for you.
+- Clarity line under hero:
+  A fully pre-built automation system installed inside your CRM — ready to run.
+- Primary CTA:
+  Install Realtor Growth Engine
+- Secondary CTA:
+  See How It Works
+
+2) FULLY DONE-FOR-YOU SETUP
+This section must appear directly under the hero.
+Include:
+- WhatsApp Business API setup
+- Meta verification assistance
+- Automation workflows installed
+- CRM pipeline configured
+- Calendar integration included
+- Supporting line:
+  No technical setup required. Live in days.
+
+3) WHAT THE GROWTH ENGINE DOES
+This must be a separate section.
+Include clear benefit-driven bullets/cards:
+- Responds instantly to every inquiry
+- Qualifies buyers based on budget, financing readiness, and timeline
+- Identifies serious prospects automatically
+- Sends your calendar when someone wants to book
+- Follows up automatically if leads go quiet
+- Keeps everything organized inside your CRM
+
+4) VISUAL WORKFLOW SECTION
+Keep the flow section, but make sure it exists and is simplified.
+At the bottom of this section add:
+Only serious leads reach you.
+
+5) BUILT FOR
+Add a separate section titled:
+Built For
+Include:
+- Solo agents who want 24/7 lead handling
+- Real estate teams managing high volumes of inquiries
+- Agents running ads, listing campaigns, or online lead generation
+
+6) WHAT HAPPENS AFTER YOU ACTIVATE
+Add this separate section with 4 steps:
+1. Connect your channels
+2. The system installs automatically
+3. Automations go live
+4. Leads start getting qualified and routed
+
+7) PRICING SECTION
+Replace old pricing/launch language with this exact structure:
+
+What Powers the Realtor Growth Engine
+
+Core Platform
+WhachatCRM Pro — $49/mo
+
+AI Automation Layer
+AI Brain — $29/mo
+
+Realtor Growth Engine
+One-time template license — $199
+
+Add this line:
+WhatsApp messaging fees are billed directly by Meta with no markup.
+
+8) FINAL CTA SECTION
+- Button:
+  Install Realtor Growth Engine
+- Supporting line:
+  Ready to run. No technical setup required.
+
+9) REMOVE OLD COPY
+There should be ZERO visible references to:
+- Get Early Access
+- 50% off
+- first 5 installs
+- launch offer
+- one-time onboarding
+
+10) CTA ROUTING
+All Install Realtor Growth Engine buttons must route:
+- logged in -> /app/templates/realtor-growth-engine
+- logged out -> /signup?redirect=/app/templates/realtor-growth-engine
+
+DELIVERY REQUIREMENT
+Do not just say “done”.
+Please reply with:
+- a checklist confirming each of the 8 sections above now exists
+- screenshots of the full page from top to bottom
+- confirmation that the old launch/discount text has been fully removed
