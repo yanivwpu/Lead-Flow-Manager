@@ -1,0 +1,223 @@
+REPLIT TASK — Service Routing Engine (Lender + Movers + Other Services)
+
+GOAL:
+Extend W2 (AI Qualify + Score) to support optional, keyword-based service routing:
+- Lender (financing)
+- Movers (relocation)
+- Additional services (extensible)
+
+Routing must:
+✔ be permission-based (ask user first)
+✔ be configurable per realtor (their own partners)
+✔ support multiple service types
+✔ NOT be automatic/spammy
+
+--------------------------------------------------------
+1) W2 CUSTOMIZE MODAL — ADD NEW SECTION
+--------------------------------------------------------
+
+Add a new section at bottom of W2 Customize tab:
+
+Title:
+Service Routing (Optional)
+
+Helper text:
+Automatically offer to connect leads with your trusted partners based on intent.
+
+--------------------------------------------------------
+2) SERVICE TYPES (REPEATABLE BLOCK)
+--------------------------------------------------------
+
+Create reusable “service config blocks”
+
+Initial default services:
+
+A) Lender (Financing)
+B) Moving Services
+
+Each block includes:
+
+---------------------------------
+Service Name (readonly or editable)
+---------------------------------
+
+Examples:
+- Lender
+- Moving Service
+
+---------------------------------
+Enable Toggle
+---------------------------------
+
+Label:
+Enable this service routing
+
+Default:
+OFF
+
+---------------------------------
+Keyword Detection
+---------------------------------
+
+Label:
+Trigger Keywords
+
+Default examples:
+
+Lender:
+mortgage, lender, financing, pre approved, loan, credit, down payment
+
+Movers:
+moving, movers, relocate, relocation, packing, shipping
+
+---------------------------------
+Offer Message (IMPORTANT)
+---------------------------------
+
+Label:
+Offer Message
+
+Default examples:
+
+Lender:
+"Would you like me to connect you with a lender to get pre-approved?"
+
+Movers:
+"If helpful, I can connect you with a trusted moving company. Want me to send details?"
+
+---------------------------------
+Routing Type (Dropdown)
+---------------------------------
+
+Options:
+1. Send contact info
+2. Send scheduling link
+3. Create internal task
+
+Default:
+Create internal task
+
+---------------------------------
+Partner Details
+---------------------------------
+
+Fields:
+
+Partner Name
+Contact Info (phone/email)
+Scheduling Link
+
+---------------------------------
+Tagging
+---------------------------------
+
+Automatically apply:
+- Needs Financing (for lender)
+- Moving Service Requested (for movers)
+
+--------------------------------------------------------
+3) BACKEND DATA STRUCTURE
+--------------------------------------------------------
+
+Store routing config in:
+
+user_template_data
+- asset_type = "routing_config"
+- asset_key = "realtor_service_routing"
+- data = JSON array of services
+
+Example structure:
+
+[
+  {
+    "type": "lender",
+    "enabled": true,
+    "keywords": [...],
+    "message": "...",
+    "routingType": "link",
+    "partnerName": "...",
+    "contact": "...",
+    "link": "...",
+    "tags": ["Needs Financing"]
+  }
+]
+
+--------------------------------------------------------
+4) RUNTIME LOGIC (W2 EXTENSION)
+--------------------------------------------------------
+
+On inbound message:
+
+1. Detect service intent using keywords
+
+2. If service detected AND enabled:
+
+CHECK:
+- user has not already been offered this service recently (cooldown 24h)
+- lead is not Unqualified / DNC
+- NOT already handled
+
+3. Send OFFER MESSAGE (not routing yet)
+
+Example:
+"Would you like me to connect you with a moving company?"
+
+--------------------------------------------------------
+5) USER CONFIRMATION REQUIRED
+--------------------------------------------------------
+
+If user responds with:
+yes, sure, ok, please, etc.
+
+THEN execute routing:
+
+---------------------------------
+IF routingType = contact info:
+---------------------------------
+Send:
+"Here are the details: [contact info]"
+
+---------------------------------
+IF routingType = scheduling link:
+---------------------------------
+Send:
+"You can book here: [link]"
+
+---------------------------------
+IF routingType = internal task:
+---------------------------------
+Create CRM task:
+"Connect lead with [service]"
+
+---------------------------------
+
+Also:
+Apply service tag(s)
+
+--------------------------------------------------------
+6) SAFETY RULES
+--------------------------------------------------------
+
+- Never auto-send partner info without user confirmation
+- Only one service offer per message cycle
+- Cooldown per service: 24 hours
+- Do not trigger if:
+  - lead is Unqualified
+  - DNC active
+  - conversation already in booking flow
+
+--------------------------------------------------------
+7) ACCEPTANCE CRITERIA
+--------------------------------------------------------
+
+- W2 modal includes Service Routing section
+- Realtor can enable/disable each service
+- Realtor can input their own partner details
+- System detects service intent via keywords
+- System asks BEFORE routing
+- Routing happens only after user confirms
+- Tags applied correctly
+- No spam behavior
+- Works alongside existing W2 + W3 without conflict
+
+END TASK

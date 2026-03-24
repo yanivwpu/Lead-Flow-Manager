@@ -51,7 +51,7 @@ import fs from "fs";
 import { subscriptionService } from "./subscriptionService";
 import { sendWelcomeEmail, sendContactFormEmail, sendDemoBookingNotification, sendDemoConfirmationEmail, sendSalespersonWelcomeEmail } from "./email";
 import bcrypt from "bcryptjs";
-import { triggerNewChatWorkflows, triggerKeywordWorkflows, runW2QualificationEngine } from "./workflowEngine";
+import { triggerNewChatWorkflows, triggerKeywordWorkflows, runW2QualificationEngine, runServiceRoutingEngine } from "./workflowEngine";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import shopifyRoutes from "./shopifyRoutes";
 import ghlRoutes from "./ghlRoutes";
@@ -1683,6 +1683,23 @@ export async function registerRoutes(
                   } catch (err) { console.error("[W2] Failed to send qualification question:", err); }
                 }, 3000);
               }
+              // Service Routing Engine
+              try {
+                const routing = await runServiceRoutingEngine(userId, updatedChat, parsed.body);
+                const routingMsg = routing.offerMessage || routing.routingMessage;
+                if (routingMsg && updatedChat.whatsappPhone) {
+                  const delay = w2.qualificationQuestion ? 6000 : 3500;
+                  setTimeout(async () => {
+                    try {
+                      await sendUserWhatsAppMessage(userId, updatedChat.whatsappPhone!, routingMsg);
+                      console.log(`[Routing] ${routing.offerMessage ? "Offer" : "Routing"} message sent (${routing.serviceType}) to ${updatedChat.whatsappPhone}`);
+                    } catch (err) { console.error("[Routing] Failed to send routing message:", err); }
+                  }, delay);
+                }
+                if (routing.taskNote) {
+                  console.log(`[Routing] Internal task created for chat ${updatedChat.id}: ${routing.taskNote}`);
+                }
+              } catch (err) { console.error("[Routing] Engine error:", err); }
             }
           } catch (err) { console.error("[W2] Engine error:", err); }
         })();
@@ -2153,6 +2170,23 @@ export async function registerRoutes(
                         } catch (err) { console.error("[W2] Failed to send qualification question (Meta):", err); }
                       }, 3000);
                     }
+                    // Service Routing Engine (Meta)
+                    try {
+                      const routing = await runServiceRoutingEngine(user.id, freshChat, incomingMessage.text!);
+                      const routingMsg = routing.offerMessage || routing.routingMessage;
+                      if (routingMsg && incomingMessage.from) {
+                        const delay = w2.qualificationQuestion ? 6000 : 3500;
+                        setTimeout(async () => {
+                          try {
+                            await sendMetaWhatsAppMessage(user.id, incomingMessage.from, routingMsg);
+                            console.log(`[Routing] ${routing.offerMessage ? "Offer" : "Routing"} message sent (Meta, ${routing.serviceType}) to ${incomingMessage.from}`);
+                          } catch (err) { console.error("[Routing] Failed to send routing message (Meta):", err); }
+                        }, delay);
+                      }
+                      if (routing.taskNote) {
+                        console.log(`[Routing] Internal task created for chat ${freshChat.id}: ${routing.taskNote}`);
+                      }
+                    } catch (err) { console.error("[Routing] Engine error (Meta):", err); }
                   }
                 } catch (err) { console.error("[W2] Engine error (Meta):", err); }
               })();

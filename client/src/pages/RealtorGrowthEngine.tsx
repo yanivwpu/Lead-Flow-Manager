@@ -1359,13 +1359,51 @@ export function RealtorGrowthEngine() {
   };
 
   const DashboardView = () => {
+    interface ServiceConfig {
+      type: string;
+      name: string;
+      enabled: boolean;
+      keywords: string;
+      offerMessage: string;
+      routingType: "contact_info" | "link" | "task";
+      partnerName: string;
+      contact: string;
+      link: string;
+      tags: string[];
+    }
+
+    const DEFAULT_ROUTING_SERVICES: ServiceConfig[] = [
+      {
+        type: "lender", name: "Lender",
+        enabled: false,
+        keywords: "mortgage, lender, financing, pre approved, loan, credit, down payment",
+        offerMessage: "Would you like me to connect you with a lender to get pre-approved?",
+        routingType: "task", partnerName: "", contact: "", link: "",
+        tags: ["Needs Financing"],
+      },
+      {
+        type: "movers", name: "Moving Service",
+        enabled: false,
+        keywords: "moving, movers, relocate, relocation, packing, shipping",
+        offerMessage: "If helpful, I can connect you with a trusted moving company. Want me to send details?",
+        routingType: "task", partnerName: "", contact: "", link: "",
+        tags: ["Moving Service Requested"],
+      },
+    ];
+
     const [selectedWf, setSelectedWf] = useState<any>(null);
     const [modalTab, setModalTab] = useState<string>("preview");
     const [localPrefs, setLocalPrefs] = useState<Record<string, any>>({});
+    const [routingServices, setRoutingServices] = useState<ServiceConfig[]>(DEFAULT_ROUTING_SERVICES);
     const [saving, setSaving] = useState(false);
 
     const { data: prefsData } = useQuery({
       queryKey: ["/api/templates/realtor-growth-engine/preferences"],
+      enabled: status === 'installed',
+    });
+
+    const { data: routingData } = useQuery({
+      queryKey: ["/api/templates/realtor-growth-engine/routing-config"],
       enabled: status === 'installed',
     });
 
@@ -1381,6 +1419,13 @@ export function RealtorGrowthEngine() {
         }
       }
       setLocalPrefs(merged);
+      // Load saved routing services or use defaults
+      const savedRouting = (routingData as any)?.services;
+      if (savedRouting && Array.isArray(savedRouting) && savedRouting.length > 0) {
+        setRoutingServices(savedRouting);
+      } else {
+        setRoutingServices(DEFAULT_ROUTING_SERVICES);
+      }
       setSelectedWf(wf);
       setModalTab("preview");
     };
@@ -1388,8 +1433,13 @@ export function RealtorGrowthEngine() {
     const handleSave = async () => {
       setSaving(true);
       try {
-        await apiRequest("PUT", "/api/templates/realtor-growth-engine/preferences", { preferences: localPrefs });
+        const savePrefs = apiRequest("PUT", "/api/templates/realtor-growth-engine/preferences", { preferences: localPrefs });
+        const saveRouting = selectedWf?.key === "W2"
+          ? apiRequest("PUT", "/api/templates/realtor-growth-engine/routing-config", { services: routingServices })
+          : Promise.resolve();
+        await Promise.all([savePrefs, saveRouting]);
         queryClient.invalidateQueries({ queryKey: ["/api/templates/realtor-growth-engine/preferences"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/templates/realtor-growth-engine/routing-config"] });
         toast({ title: "Settings saved", description: `Preferences for "${selectedWf?.name}" updated.` });
         setSelectedWf(null);
       } catch {
@@ -1584,6 +1634,124 @@ export function RealtorGrowthEngine() {
           {qaInput("budgetQuestion", "Budget question")}
           {qaInput("timelineQuestion", "Timeline question")}
           {qaInput("lenderQuestion", "Lender assistance question")}
+
+          <Separator />
+          <div>
+            <p className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Service Routing (Optional)</p>
+            <p className="text-[11px] text-muted-foreground mt-1">Automatically offer to connect leads with your trusted partners based on intent.</p>
+          </div>
+
+          {routingServices.map((svc, idx) => {
+            const update = (field: keyof typeof svc, value: any) => {
+              setRoutingServices(prev => prev.map((s, i) => i === idx ? { ...s, [field]: value } : s));
+            };
+            return (
+              <div key={svc.type} className="border rounded-xl overflow-hidden" data-testid={`service-block-${svc.type}`}>
+                <div className="flex items-center justify-between px-4 py-3 bg-gray-50">
+                  <p className="text-sm font-semibold text-gray-800">{svc.name}</p>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={svc.enabled}
+                    onClick={() => update("enabled", !svc.enabled)}
+                    data-testid={`toggle-service-${svc.type}`}
+                    className={cn(
+                      "relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors",
+                      svc.enabled ? "bg-brand-green" : "bg-gray-300"
+                    )}
+                  >
+                    <span className={cn("inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-transform", svc.enabled ? "translate-x-4" : "translate-x-1")} />
+                  </button>
+                </div>
+
+                {svc.enabled && (
+                  <div className="px-4 py-4 space-y-3 border-t bg-white">
+                    <div>
+                      <Label className="text-sm font-medium">Trigger Keywords</Label>
+                      <Input
+                        placeholder="keyword1, keyword2"
+                        value={svc.keywords}
+                        onChange={e => update("keywords", e.target.value)}
+                        className="mt-1"
+                        data-testid={`input-routing-keywords-${svc.type}`}
+                      />
+                      <p className="text-[11px] text-muted-foreground mt-1">Comma-separated — used to detect service intent</p>
+                    </div>
+                    <div>
+                      <Label className="text-sm font-medium">Offer Message</Label>
+                      <Textarea
+                        rows={2}
+                        value={svc.offerMessage}
+                        onChange={e => update("offerMessage", e.target.value)}
+                        className="mt-1 text-sm resize-none"
+                        data-testid={`textarea-routing-offer-${svc.type}`}
+                      />
+                      <p className="text-[11px] text-muted-foreground mt-1">Sent to ask permission before routing — not the routing itself</p>
+                    </div>
+                    <div>
+                      <Label className="text-sm font-medium">Routing Type</Label>
+                      <Select value={svc.routingType} onValueChange={v => update("routingType", v)}>
+                        <SelectTrigger className="mt-1" data-testid={`select-routing-type-${svc.type}`}>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="task">Create internal task</SelectItem>
+                          <SelectItem value="contact_info">Send contact info</SelectItem>
+                          <SelectItem value="link">Send scheduling link</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <Separator />
+                    <p className="text-[11px] font-semibold text-gray-600 uppercase tracking-wide">Partner Details</p>
+                    <div>
+                      <Label className="text-sm font-medium">Partner Name</Label>
+                      <Input
+                        placeholder="e.g. First National Lending"
+                        value={svc.partnerName}
+                        onChange={e => update("partnerName", e.target.value)}
+                        className="mt-1"
+                        data-testid={`input-partner-name-${svc.type}`}
+                      />
+                    </div>
+                    {(svc.routingType === "contact_info" || svc.routingType === "task") && (
+                      <div>
+                        <Label className="text-sm font-medium">Contact Info (phone / email)</Label>
+                        <Input
+                          placeholder="e.g. +1 305 555 0100 or hello@partner.com"
+                          value={svc.contact}
+                          onChange={e => update("contact", e.target.value)}
+                          className="mt-1"
+                          data-testid={`input-partner-contact-${svc.type}`}
+                        />
+                      </div>
+                    )}
+                    {(svc.routingType === "link" || svc.routingType === "task") && (
+                      <div>
+                        <Label className="text-sm font-medium">Scheduling Link</Label>
+                        <Input
+                          placeholder="https://calendly.com/..."
+                          value={svc.link}
+                          onChange={e => update("link", e.target.value)}
+                          className="mt-1"
+                          data-testid={`input-partner-link-${svc.type}`}
+                        />
+                      </div>
+                    )}
+                    <div>
+                      <Label className="text-sm font-medium">Auto-Applied Tag</Label>
+                      <Input
+                        value={svc.tags.join(", ")}
+                        onChange={e => update("tags", e.target.value.split(",").map((t: string) => t.trim()).filter(Boolean))}
+                        className="mt-1"
+                        data-testid={`input-routing-tags-${svc.type}`}
+                      />
+                      <p className="text-[11px] text-muted-foreground mt-1">Applied to the lead when routing is confirmed</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       );
     };

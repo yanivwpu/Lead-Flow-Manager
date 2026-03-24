@@ -417,6 +417,34 @@ export function registerTemplateRoutes(app: Express) {
     }
   });
 
+  app.get("/api/templates/realtor-growth-engine/routing-config", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      const data = await storage.getUserTemplateDataByKey(userId, TEMPLATE_ID, "routing_config", "realtor_service_routing");
+      res.json({ services: data?.definition?.services || null });
+    } catch (error: any) {
+      console.error("[Template] Routing config fetch error:", error);
+      res.status(500).json({ error: "Failed to fetch routing config" });
+    }
+  });
+
+  app.put("/api/templates/realtor-growth-engine/routing-config", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      const { services } = req.body;
+      if (!Array.isArray(services)) {
+        return res.status(400).json({ error: "Invalid routing config: services must be an array" });
+      }
+      const result = await storage.upsertUserTemplateData(
+        userId, TEMPLATE_ID, "routing_config", "realtor_service_routing", { services }
+      );
+      res.json({ success: true, services: (result.definition as any)?.services });
+    } catch (error: any) {
+      console.error("[Template] Routing config save error:", error);
+      res.status(500).json({ error: "Failed to save routing config" });
+    }
+  });
+
   app.delete("/api/templates/realtor-growth-engine/reset", requireAuth, async (req, res) => {
     try {
       if (process.env.NODE_ENV === "production") {

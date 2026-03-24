@@ -359,6 +359,150 @@ export async function runW2QualificationEngine(
   return { scoreAdjustment: score, qualificationQuestion, fieldUpdates, signalsDetected: signals };
 }
 
+interface ServiceConfig {
+  type: string;
+  name: string;
+  enabled: boolean;
+  keywords: string;
+  offerMessage: string;
+  routingType: "contact_info" | "link" | "task";
+  partnerName: string;
+  contact: string;
+  link: string;
+  tags: string[];
+}
+
+export interface ServiceRoutingResult {
+  offerMessage: string | null;
+  routingMessage: string | null;
+  taskNote: string | null;
+  tagsToApply: string[];
+  serviceType: string | null;
+}
+
+async function getServiceRoutingConfig(userId: string): Promise<ServiceConfig[]> {
+  try {
+    const data = await storage.getUserTemplateDataByKey(
+      userId, "realtor-growth-engine", "routing_config", "realtor_service_routing"
+    );
+    const services = (data?.definition as any)?.services;
+    return Array.isArray(services) ? services : [];
+  } catch {
+    return [];
+  }
+}
+
+const CONFIRM_PATTERNS = /\b(yes|yeah|yep|sure|ok|okay|please|definitely|absolutely|sounds good|go ahead|do it|connect me|yes please|i would|i'd like)\b/i;
+const DECLINE_PATTERNS = /\b(no|nope|not now|no thanks|don't|dont|maybe later|not interested|pass|not yet)\b/i;
+
+export async function runServiceRoutingEngine(
+  userId: string,
+  chat: Chat,
+  message: string
+): Promise<ServiceRoutingResult> {
+  const empty: ServiceRoutingResult = { offerMessage: null, routingMessage: null, taskNote: null, tagsToApply: [], serviceType: null };
+
+  try {
+    const services = await getServiceRoutingConfig(userId);
+    const enabledServices = services.filter(s => s.enabled && s.keywords?.trim());
+    if (enabledServices.length === 0) return empty;
+
+    const alreadyUnqualified = chat.pipelineStage === "Unqualified" || chat.tag === "Do Not Contact";
+    if (alreadyUnqualified) return empty;
+
+    const cf = (chat.customFields as Record<string, any>) || {};
+    const msgLower = message.toLowerCase();
+    const now = Date.now();
+    const twentyFourHoursMs = 24 * 60 * 60 * 1000;
+
+    // Check if there's a pending offer awaiting confirmation
+    const pending = cf._pendingServiceOffer as { type: string; timestamp: number } | undefined;
+    if (pending && (now - pending.timestamp) < twentyFourHoursMs) {
+      const svc = enabledServices.find(s => s.type === pending.type);
+      if (svc) {
+        if (CONFIRM_PATTERNS.test(message)) {
+          // Execute routing
+          let routingMessage: string | null = null;
+          let taskNote: string | null = null;
+
+          if (svc.routingType === "contact_info" && svc.contact) {
+            const name = svc.partnerName ? `${svc.partnerName}: ` : "";
+            routingMessage = `Here are the details: ${name}${svc.contact}`;
+          } else if (svc.routingType === "link" && svc.link) {
+            const name = svc.partnerName ? `with ${svc.partnerName} ` : "";
+            routingMessage = `You can book ${name}here: ${svc.link}`;
+          } else {
+            // "task" — internal note + optional contact/link if available
+            const name = svc.partnerName || svc.name;
+            const details = [svc.contact, svc.link].filter(Boolean).join(" | ");
+            taskNote = `Connect lead with ${name}${details ? ` (${details})` : ""}`;
+            routingMessage = svc.contact
+              ? `Here are the details: ${svc.partnerName ? svc.partnerName + ": " : ""}${svc.contact}${svc.link ? " | Book: " + svc.link : ""}`
+              : null;
+          }
+
+          // Clear pending offer and record execution
+          try {
+            await storage.updateChat(chat.id, {
+              customFields: {
+                ...cf,
+                _pendingServiceOffer: null,
+                [`_serviceRouted_${svc.type}`]: new Date().toISOString(),
+              }
+            });
+          } catch { /* non-critical */ }
+
+          return { offerMessage: null, routingMessage, taskNote, tagsToApply: svc.tags || [], serviceType: svc.type };
+        }
+
+        if (DECLINE_PATTERNS.test(message)) {
+          // Clear the pending offer
+          try {
+            await storage.updateChat(chat.id, {
+              customFields: { ...cf, _pendingServiceOffer: null }
+            });
+          } catch { /* non-critical */ }
+        }
+
+        return empty;
+      }
+    }
+
+    // No pending offer — check for service intent in this message
+    for (const svc of enabledServices) {
+      const kws = svc.keywords.split(",").map((k: string) => k.trim().toLowerCase()).filter(Boolean);
+      const detected = kws.some((kw: string) => msgLower.includes(kw));
+      if (!detected) continue;
+
+      // Check 24h cooldown per service
+      const lastOffered = cf[`_serviceOffered_${svc.type}`];
+      if (lastOffered && (now - new Date(lastOffered).getTime()) < twentyFourHoursMs) continue;
+
+      // Already routed?
+      const lastRouted = cf[`_serviceRouted_${svc.type}`];
+      if (lastRouted && (now - new Date(lastRouted).getTime()) < twentyFourHoursMs) continue;
+
+      // Set pending offer
+      try {
+        await storage.updateChat(chat.id, {
+          customFields: {
+            ...cf,
+            _pendingServiceOffer: { type: svc.type, timestamp: now },
+            [`_serviceOffered_${svc.type}`]: new Date().toISOString(),
+          }
+        });
+      } catch { /* non-critical */ }
+
+      return { offerMessage: svc.offerMessage, routingMessage: null, taskNote: null, tagsToApply: [], serviceType: svc.type };
+    }
+
+    return empty;
+  } catch (error) {
+    console.error("[ServiceRoutingEngine] Error:", error);
+    return empty;
+  }
+}
+
 export async function triggerTagChangeWorkflows(userId: string, chat: Chat, oldTag: string, newTag: string): Promise<void> {
   try {
     const workflows = await storage.getActiveWorkflowsByTrigger(userId, "tag_change");
