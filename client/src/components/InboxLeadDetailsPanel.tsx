@@ -1167,15 +1167,23 @@ export function InboxLeadDetailsPanel({
                 </div>
               </button>
             ) : (
-              <div className="space-y-2 max-h-[240px] overflow-y-auto pr-0.5">
+              <div className="space-y-3 max-h-[240px] overflow-y-auto pr-0.5">
                 {contactNotesList.map(note => (
-                  <div key={note.id} className="p-2.5 rounded-xl" style={{ background: '#FFF8E1', border: '1px solid #FDE68A' }} data-testid={`note-item-${note.id}`}>
-                    <div className="flex items-center gap-1.5 mb-1">
-                      <span className="text-[11px] text-gray-400">{note.createdByName || "Team member"}</span>
-                      <span className="text-[10px] text-gray-400">·</span>
+                  <div
+                    key={note.id}
+                    className="p-3 rounded-xl overflow-x-hidden"
+                    style={{ background: '#FFFDF5', border: '1px solid #E8E2CC' }}
+                    data-testid={`note-item-${note.id}`}
+                  >
+                    <div className="flex items-center gap-1 mb-1.5">
+                      <span className="text-[10px] text-gray-400">{note.createdByName || "Team member"}</span>
+                      <span className="text-[10px] text-gray-300">·</span>
                       <span className="text-[10px] text-gray-400">{formatRelativeTime(note.createdAt)}</span>
                     </div>
-                    <p className="text-[12px] text-gray-800 leading-relaxed">{note.content}</p>
+                    <p
+                      className="text-[12px] text-gray-800"
+                      style={{ lineHeight: '1.6', wordBreak: 'break-word', overflowWrap: 'anywhere' }}
+                    >{note.content}</p>
                   </div>
                 ))}
               </div>
