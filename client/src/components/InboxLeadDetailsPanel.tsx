@@ -1157,7 +1157,28 @@ export function InboxLeadDetailsPanel({
                   </button>
                 </div>
 
-                {/* Body */}
+                {/* Existing notes */}
+                {contactNotesList.length > 0 && (
+                  <div className="px-5 pt-4 pb-2 flex flex-col gap-3 max-h-[240px] overflow-y-auto" data-testid="modal-notes-history">
+                    {contactNotesList.map(note => (
+                      <div key={note.id} className="flex flex-col gap-0.5" data-testid={`modal-note-${note.id}`}>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[11px] font-semibold text-gray-700">{note.createdByName || 'Team member'}</span>
+                          <span className="text-[10px] text-gray-400">·</span>
+                          <span className="text-[10px] text-gray-400">
+                            {note.createdAt
+                              ? new Date(note.createdAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+                              : ''}
+                          </span>
+                        </div>
+                        <p className="text-[12px] text-gray-600 leading-relaxed whitespace-pre-wrap">{note.content}</p>
+                      </div>
+                    ))}
+                    <div className="border-t border-gray-100 mt-1" />
+                  </div>
+                )}
+
+                {/* Body — new note input */}
                 <div className="px-5 py-4">
                   <textarea
                     className="notes-textarea w-full min-h-[120px] bg-white rounded-xl p-3 text-[13px] text-gray-700 placeholder-gray-400 resize-none font-sans leading-relaxed"
