@@ -91,6 +91,7 @@ function handleAuth(ws: WebSocket, message: { userId: string; userName: string }
   });
 
   ws.send(JSON.stringify({ type: "auth_success" }));
+  console.log(`[WS Presence] Client authenticated — userId=${userId} totalClients=${clients.size}`);
 }
 
 function handleJoinChat(ws: WebSocket, message: { chatId: string }) {
@@ -192,16 +193,25 @@ function handleDisconnect(ws: WebSocket) {
     leaveChat(client.userId, user.chatId);
   }
 
+  console.log(`[WS Presence] Client disconnected — userId=${client.userId} remainingClients=${clients.size - 1}`);
   userPresence.delete(client.userId);
   clients.delete(ws);
 }
 
 export function notifyUser(userId: string, payload: Record<string, unknown>) {
+  let sent = 0;
+  let skipped = 0;
   clients.forEach((client) => {
-    if (client.userId === userId && client.ws.readyState === WebSocket.OPEN) {
-      client.ws.send(JSON.stringify(payload));
+    if (client.userId === userId) {
+      if (client.ws.readyState === WebSocket.OPEN) {
+        client.ws.send(JSON.stringify(payload));
+        sent++;
+      } else {
+        skipped++;
+      }
     }
   });
+  console.log(`[WS Push] type=${payload.type} userId=${userId} — sent to ${sent} client(s), skipped ${skipped} (not OPEN)`);
 }
 
 function broadcastChatPresence(chatId: string) {

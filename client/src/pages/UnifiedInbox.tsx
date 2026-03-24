@@ -218,37 +218,68 @@ export function UnifiedInbox() {
 
   useEffect(() => {
     if (!user) return;
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const ws = new WebSocket(`${protocol}//${window.location.host}/ws/presence`);
+
+    let ws: WebSocket | null = null;
     let heartbeat: ReturnType<typeof setInterval>;
+    let reconnectTimer: ReturnType<typeof setTimeout>;
+    let destroyed = false;
 
-    ws.onopen = () => {
-      ws.send(JSON.stringify({ type: "auth", userId: user.id, userName: user.name || "Agent" }));
-      heartbeat = setInterval(() => {
-        if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "heartbeat" }));
-      }, 25000);
-    };
+    const connect = () => {
+      if (destroyed) return;
+      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+      ws = new WebSocket(`${protocol}//${window.location.host}/ws/presence`);
 
-    ws.onmessage = (event) => {
-      try {
-        const msg = JSON.parse(event.data);
-        if (msg.type === "new_message") {
-          queryClient.invalidateQueries({ queryKey: ["/api/inbox"] });
-          if (msg.conversationId) {
-            queryClient.invalidateQueries({
-              queryKey: ["/api/conversations", msg.conversationId, "messages"],
-            });
+      ws.onopen = () => {
+        console.log("[WS Inbox] Connected — authenticating userId:", user.id);
+        ws!.send(JSON.stringify({ type: "auth", userId: user.id, userName: user.name || "Agent" }));
+        heartbeat = setInterval(() => {
+          if (ws?.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: "heartbeat" }));
+            console.log("[WS Inbox] Heartbeat sent — connection alive");
           }
+        }, 25000);
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+          if (msg.type === "auth_success") {
+            console.log("[WS Inbox] Auth confirmed — ready to receive new_message events");
+          } else if (msg.type === "new_message") {
+            console.log("[WS Inbox] new_message received — conversationId:", msg.conversationId, "contactId:", msg.contactId);
+            console.log("[WS Inbox] Invalidating /api/inbox query — refetch triggered");
+            queryClient.invalidateQueries({ queryKey: ["/api/inbox"] });
+            if (msg.conversationId) {
+              console.log("[WS Inbox] Invalidating /api/conversations/" + msg.conversationId + "/messages — refetch triggered");
+              queryClient.invalidateQueries({
+                queryKey: ["/api/conversations", msg.conversationId, "messages"],
+              });
+            }
+          }
+        } catch {}
+      };
+
+      ws.onclose = (evt) => {
+        clearInterval(heartbeat);
+        if (!destroyed) {
+          console.log("[WS Inbox] Connection closed (code:", evt.code, ") — reconnecting in 3s");
+          reconnectTimer = setTimeout(connect, 3000);
         }
-      } catch {}
+      };
+
+      ws.onerror = () => {
+        console.error("[WS Inbox] WebSocket error — closing for reconnect");
+        ws?.close();
+      };
     };
 
-    ws.onclose = () => clearInterval(heartbeat);
-    ws.onerror = () => ws.close();
+    connect();
 
     return () => {
+      destroyed = true;
       clearInterval(heartbeat);
-      ws.close();
+      clearTimeout(reconnectTimer);
+      ws?.close();
     };
   }, [user, queryClient]);
 
