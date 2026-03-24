@@ -247,12 +247,12 @@ export function UnifiedInbox() {
             console.log("[WS Inbox] Auth confirmed — ready to receive new_message events");
           } else if (msg.type === "new_message") {
             console.log("[WS Inbox] new_message received — conversationId:", msg.conversationId, "contactId:", msg.contactId);
-            console.log("[WS Inbox] Invalidating /api/inbox query — refetch triggered");
-            queryClient.invalidateQueries({ queryKey: ["/api/inbox"] });
+            console.log("[WS Inbox] Force-refetching /api/inbox and messages — triggered by WS push");
+            queryClient.refetchQueries({ queryKey: ["/api/inbox"], type: "active" });
             if (msg.conversationId) {
-              console.log("[WS Inbox] Invalidating /api/conversations/" + msg.conversationId + "/messages — refetch triggered");
-              queryClient.invalidateQueries({
+              queryClient.refetchQueries({
                 queryKey: ["/api/conversations", msg.conversationId, "messages"],
+                type: "active",
               });
             }
           }
