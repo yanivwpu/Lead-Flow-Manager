@@ -953,7 +953,7 @@ export function InboxLeadDetailsPanel({
                     };
                     if (!missingLabels.length) return null;
                     return (
-                      <div className="bg-violet-50 border border-violet-100 rounded-xl px-3 py-2.5 space-y-1.5">
+                      <div className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 space-y-1.5">
                         <p className="text-[9px] uppercase tracking-widest font-semibold text-violet-400">Next best action</p>
                         <p className="text-[11px] text-gray-500">
                           <span className="font-medium text-gray-700">Missing:</span>{" "}
@@ -985,11 +985,11 @@ export function InboxLeadDetailsPanel({
                             }
                             completeAction('qualify', "Message inserted");
                           }}
-                          className="mt-2.5 text-[11px] font-semibold text-purple-600 hover:text-purple-700 transition-colors flex items-center gap-1"
+                          className="mt-2.5 text-[11px] font-semibold text-emerald-600 hover:text-emerald-700 transition-colors flex items-center gap-1"
                           data-testid="button-insert-suggested-message"
                         >
                           Insert reply
-                          <span className="text-purple-400">→</span>
+                          <span className="text-emerald-400">→</span>
                         </button>
                       </div>
                     </div>
