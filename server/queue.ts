@@ -43,9 +43,17 @@ export function createRedisConnection(): IORedis {
     maxRetriesPerRequest: null,
     enableReadyCheck: false,
     tls: useTls ? {} : undefined,
+    // Exponential backoff capped at 5 minutes — prevents hammering Upstash
+    // quota when the database is at its request limit. After ~10 attempts the
+    // delay stays at 5 minutes per reconnect, burning far fewer requests.
     retryStrategy(times: number) {
-      const delay = Math.min(times * 500, 5000);
-      console.log(`[Queue] Redis reconnecting in ${delay}ms (attempt ${times})`);
+      if (times > 30) {
+        // After 30 failed attempts stop retrying entirely to save quota
+        console.error(`[Queue] Redis: ${times} consecutive failures — giving up retrying to preserve quota`);
+        return null;
+      }
+      const delay = Math.min(1000 * Math.pow(2, times - 1), 300000); // cap at 5 min
+      console.log(`[Queue] Redis reconnecting in ${Math.round(delay / 1000)}s (attempt ${times})`);
       return delay;
     },
   });

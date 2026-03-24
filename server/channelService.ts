@@ -238,7 +238,21 @@ class ChannelService {
   }): Promise<{ contact: Contact; conversation: Conversation; message: Message }> {
     const { userId, channel, channelContactId, contactName, content, contentType = 'text', mediaUrl, externalMessageId } = params;
 
-    console.log(`[Inbox Worker] Processing inbound message — channel: ${channel}, from: ${channelContactId}, userId: ${userId}, messageId: ${externalMessageId}`);
+    console.log(`[Inbound] Webhook received — channel: ${channel}, from: ${channelContactId}, userId: ${userId}, messageId: ${externalMessageId}`);
+
+    // Deduplicate: skip if this external message ID was already processed
+    if (externalMessageId) {
+      const existing = await storage.getMessageByExternalId(externalMessageId);
+      if (existing) {
+        console.log(`[Inbound] Duplicate — skipping already-processed messageId: ${externalMessageId}`);
+        // Return existing data so callers can still ACK 200 safely
+        const conv = await storage.getConversation(existing.conversationId);
+        const cont = await storage.getContact(existing.contactId);
+        return { contact: cont!, conversation: conv!, message: existing };
+      }
+    }
+
+    console.log(`[Inbound] Channel identified: ${channel} — starting processIncomingMessage`);
 
     let contact = await storage.getContactByChannelId(userId, channel, channelContactId);
     
@@ -310,7 +324,7 @@ class ChannelService {
       externalMessageId,
     });
 
-    console.log(`[Inbox Worker] Message saved successfully — messageId: ${message.id}, conversationId: ${conversation.id}, contactId: ${contact.id}, preview: "${content.substring(0, 80)}"`);
+    console.log(`[Inbound] DB write success — messageId: ${message.id}, conversationId: ${conversation.id}, contactId: ${contact.id}, preview: "${content.substring(0, 80)}"`);
 
     await storage.updateConversation(conversation.id, {
       lastMessageAt: new Date(),
@@ -318,7 +332,7 @@ class ChannelService {
       lastMessageDirection: 'inbound',
       unreadCount: (conversation.unreadCount || 0) + 1,
     });
-    console.log(`[Debug] Conversation summary updated after inbound — conversationId: ${conversation.id}, unreadCount: ${(conversation.unreadCount || 0) + 1}, preview: "${content.substring(0, 60)}"`);
+    console.log(`[Inbound] Conversation/thread updated — conversationId: ${conversation.id}, unreadCount: ${(conversation.unreadCount || 0) + 1}, preview: "${content.substring(0, 60)}"`);
 
     await this.logActivity(userId, contact.id, conversation.id, 'message', {
       direction: 'inbound',

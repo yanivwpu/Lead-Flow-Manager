@@ -1,6 +1,5 @@
 import type { Express } from "express";
 import { storage } from "../storage";
-import { addInboxJobWithFallback } from "../queue";
 import { parseIncomingWebhook, findUserByTwilioCredentials } from "../userTwilio";
 
 export function registerWebhookRoutes(app: Express): void {
@@ -11,7 +10,7 @@ export function registerWebhookRoutes(app: Express): void {
     try {
       const { userId } = req.params;
       const update = req.body;
-      console.log("Telegram webhook received:", JSON.stringify(update).substring(0, 500));
+      console.log(`[Inbound] Webhook received — channel: telegram, userId: ${userId}`);
 
       if (update.message) {
         const message = update.message;
@@ -21,8 +20,11 @@ export function registerWebhookRoutes(app: Express): void {
           ? `${message.from.first_name} ${message.from.last_name || ""}`.trim()
           : chatId;
 
-        console.log(`[Debug] Telegram webhook received — userId: ${userId}, from: ${chatId}, messageId: ${message.message_id}`);
-        await addInboxJobWithFallback({
+        console.log(`[Inbound] Channel identified: telegram — from: ${chatId}, messageId: ${message.message_id}`);
+        console.log(`[Inbound] Starting processIncomingMessage — channel: telegram, userId: ${userId}`);
+
+        const { channelService } = await import("../channelService");
+        await channelService.processIncomingMessage({
           userId,
           channel: 'telegram',
           channelContactId: chatId,
@@ -31,12 +33,12 @@ export function registerWebhookRoutes(app: Express): void {
           contentType: 'text',
           externalMessageId: String(message.message_id),
         });
-        console.log(`[Debug] Telegram message enqueued/processed — userId: ${userId}, from: ${chatId}`);
       }
 
+      console.log(`[Inbound] Webhook returned 200 — channel: telegram, userId: ${userId}`);
       res.status(200).json({ ok: true });
     } catch (error) {
-      console.error("Telegram webhook error:", error);
+      console.error("[Inbound] Telegram webhook error:", error);
       res.status(200).json({ ok: true });
     }
   });
@@ -88,8 +90,11 @@ export function registerWebhookRoutes(app: Express): void {
       const webchatExternalId = `webchat_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       const webchatVisitorId = visitorId || `visitor_${Date.now()}`;
 
-      console.log(`[Debug] Webchat webhook received — userId: ${userId}, visitorId: ${webchatVisitorId}`);
-      await addInboxJobWithFallback({
+      console.log(`[Inbound] Webhook received — channel: webchat, userId: ${userId}, visitorId: ${webchatVisitorId}`);
+      console.log(`[Inbound] Channel identified: webchat — starting processIncomingMessage`);
+
+      const { channelService } = await import("../channelService");
+      await channelService.processIncomingMessage({
         userId,
         channel: 'webchat',
         channelContactId: webchatVisitorId,
@@ -98,15 +103,15 @@ export function registerWebhookRoutes(app: Express): void {
         contentType: 'text',
         externalMessageId: webchatExternalId,
       });
-      console.log(`[Debug] Webchat message enqueued/processed — userId: ${userId}, visitorId: ${webchatVisitorId}`);
 
+      console.log(`[Inbound] Webhook returned 200 — channel: webchat, userId: ${userId}`);
       res.json({
         success: true,
         visitorId: webchatVisitorId,
-        queued: true,
+        queued: false,
       });
     } catch (error) {
-      console.error("Web chat error:", error);
+      console.error("[Inbound] Web chat error:", error);
       res.status(500).json({ error: "Failed to process message" });
     }
   });
@@ -143,19 +148,21 @@ export function registerWebhookRoutes(app: Express): void {
       const parsed = parseIncomingWebhook(req.body);
       const isWhatsApp = req.body.From?.startsWith("whatsapp:");
       const channel = isWhatsApp ? 'whatsapp' : 'sms';
-      console.log(`[Twilio Webhook/inbox] Received — from: ${parsed.from}, to: ${parsed.to}, channel: ${channel}, messageSid: ${parsed.messageSid}`);
+
+      console.log(`[Inbound] Webhook received — channel: ${channel}, from: ${parsed.from}, messageSid: ${parsed.messageSid}`);
 
       const user = await findUserByTwilioCredentials(parsed.accountSid, parsed.to);
       if (!user) {
-        console.warn(`[Twilio Webhook/inbox] No user found — accountSid: ${parsed.accountSid}, to: ${parsed.to}`);
+        console.warn(`[Inbound] No user matched — accountSid: ${parsed.accountSid}, to: ${parsed.to}`);
         return res.status(200).send("");
       }
 
-      console.log(`[Twilio Webhook/inbox] User matched — userId: ${user.id}`);
       const normalizedFrom = parsed.from.replace(/^\+/, "");
+      console.log(`[Inbound] Channel identified: ${channel} — userId: ${user.id}, from: ${normalizedFrom}`);
+      console.log(`[Inbound] Starting processIncomingMessage — channel: ${channel}, messageSid: ${parsed.messageSid}`);
 
-      console.log(`[Debug] Twilio inbox webhook received — userId: ${user.id}, from: ${normalizedFrom}, channel: ${channel}, messageSid: ${parsed.messageSid}`);
-      await addInboxJobWithFallback({
+      const { channelService } = await import("../channelService");
+      await channelService.processIncomingMessage({
         userId: user.id,
         channel: channel as any,
         channelContactId: normalizedFrom,
@@ -164,11 +171,11 @@ export function registerWebhookRoutes(app: Express): void {
         contentType: 'text',
         externalMessageId: parsed.messageSid,
       });
-      console.log(`[Debug] Twilio inbox message enqueued/processed — from: ${normalizedFrom}, messageSid: ${parsed.messageSid}`);
 
+      console.log(`[Inbound] Webhook returned 200 — channel: ${channel}, messageSid: ${parsed.messageSid}`);
       res.status(200).send("");
     } catch (error) {
-      console.error("[Twilio Webhook/inbox] Error:", error);
+      console.error("[Inbound] Twilio inbox webhook error:", error);
       res.status(200).send("");
     }
   });

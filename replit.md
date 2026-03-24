@@ -15,6 +15,20 @@ The application is a full multi-tenant SaaS implementation with:
 - Notification system for follow-up reminders (push & email)
 - PWA capabilities (installable, offline-first)
 
+## Recent Changes (March 24, 2026) — Inbox Direct-Path & Redis Circuit Breaker
+
+**Root cause:** Upstash Redis hit its 500K free-tier request limit. The BullMQ worker was crash-looping, hammering Redis with reconnect attempts and dropping all inbound messages.
+
+**Fixes applied (surgical, no major refactor):**
+1. **Direct DB path for all inbound webhooks** — All inbound message channels (Twilio SMS/WhatsApp, Meta WhatsApp, Instagram, Facebook, Telegram, Webchat) now call `channelService.processIncomingMessage()` directly in the webhook handler. No Redis/BullMQ dependency for core inbox delivery.
+2. **Duplicate detection** — `processIncomingMessage` in `channelService.ts` checks `storage.getMessageByExternalId(externalMessageId)` at the top and skips duplicates silently.
+3. **Worker circuit breaker** — `server/worker.ts` now closes itself after 8 consecutive Redis errors, stopping the Redis request flood. The worker stays intact for future background jobs but won't burn quota when Redis is down.
+4. **Aggressive reconnect backoff** — `server/queue.ts` uses exponential backoff (1s → 5 min) for Redis reconnects, capped at 30 attempts before giving up.
+5. **Frontend polling** — Inbox list polls every 5s; conversation messages poll every 4s (added `refetchInterval` to React Query calls in `UnifiedInbox.tsx`).
+6. **Queue remains intact** — BullMQ, Bull Board, and all queue infrastructure stay in place for future optional background jobs. Only the inbox delivery path is decoupled.
+
+**Key files changed:** `server/channelService.ts`, `server/routes.ts`, `server/routes/webhooks.ts`, `server/worker.ts`, `server/queue.ts`, `client/src/pages/UnifiedInbox.tsx`
+
 ## Recent Changes (March 20, 2026) — IndexNow
 - **IndexNow implemented** (`server/indexNow.ts`):
   - Key: `9726ec610d574c62b33130ba828766eb`

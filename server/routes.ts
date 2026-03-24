@@ -55,7 +55,7 @@ import { triggerNewChatWorkflows, triggerKeywordWorkflows } from "./workflowEngi
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import shopifyRoutes from "./shopifyRoutes";
 import ghlRoutes from "./ghlRoutes";
-import { addInboxJobWithFallback } from "./queue";
+
 import { registerTemplateRoutes } from "./templateRoutes";
 
 const TWILIO_BASE_COST_PER_MESSAGE = 0.005;
@@ -1640,9 +1640,11 @@ export async function registerRoutes(
         unread: (chat.unread || 0) + 1,
       });
 
-      // Queue unified inbox write (with direct-processing fallback if Redis is unavailable)
-      console.log(`[Debug] Twilio webhook received — userId: ${userId}, from: ${normalizedFrom}, channel: ${channel}, messageSid: ${parsed.messageSid}`);
-      await addInboxJobWithFallback({
+      // Process inbound message directly to DB — no queue dependency
+      console.log(`[Inbound] Webhook received — channel: ${channel}, from: ${normalizedFrom}, messageSid: ${parsed.messageSid}`);
+      console.log(`[Inbound] Channel identified: ${channel} — starting processIncomingMessage, userId: ${userId}`);
+      const { channelService: cs } = await import("./channelService");
+      await cs.processIncomingMessage({
         userId,
         channel,
         channelContactId: normalizedFrom,
@@ -1651,7 +1653,7 @@ export async function registerRoutes(
         contentType: 'text',
         externalMessageId: parsed.messageSid,
       });
-      console.log(`[Debug] Twilio message enqueued/processed — from: ${normalizedFrom}, channel: ${channel}, messageSid: ${parsed.messageSid}, userId: ${userId}`);
+      console.log(`[Inbound] Webhook returned 200 — channel: ${channel}, messageSid: ${parsed.messageSid}, userId: ${userId}`);
 
       // Trigger workflow automations (Pro feature)
       const updatedChat = await storage.getChat(chat.id);
@@ -1931,17 +1933,17 @@ export async function registerRoutes(
         console.log("[Meta Webhook] Payload is neither a message nor a status update — likely a notification event, ignoring");
       }
 
-      // Queue all inbox jobs BEFORE responding 200
-      // If queueing fails, return 500 so Meta retries
-      const queueJobs: Promise<void>[] = [];
+      // Process all inbound messages directly to DB — no queue dependency
+      const { channelService: metaCs } = await import("./channelService");
+      const directJobs: Promise<void>[] = [];
 
       if (incomingMessage) {
         const user = await findUserByMetaPhoneNumberId(incomingMessage.phoneNumberId);
         if (user) {
-          console.log(`[Meta Webhook] Routing message to userId=${user.id} (email: ${user.email})`);
-          console.log(`[Debug] Meta/WhatsApp webhook received — userId: ${user.id}, from: ${incomingMessage.from}, type: ${incomingMessage.type}, messageId: ${incomingMessage.messageId}`);
-          queueJobs.push(
-            addInboxJobWithFallback({
+          console.log(`[Inbound] Webhook received — channel: whatsapp, from: ${incomingMessage.from}, messageId: ${incomingMessage.messageId}`);
+          console.log(`[Inbound] Channel identified: whatsapp — userId: ${user.id}, starting processIncomingMessage`);
+          directJobs.push(
+            metaCs.processIncomingMessage({
               userId: user.id,
               channel: 'whatsapp',
               channelContactId: incomingMessage.from,
@@ -1950,7 +1952,7 @@ export async function registerRoutes(
               contentType: incomingMessage.type === 'text' ? 'text' : incomingMessage.type,
               externalMessageId: incomingMessage.messageId,
             }).then(() => {
-              console.log(`[Debug] Meta/WhatsApp message enqueued/processed — from: ${incomingMessage.from}, messageId: ${incomingMessage.messageId}, userId: ${user.id}`);
+              console.log(`[Inbound] Webhook returned 200 — channel: whatsapp, messageId: ${incomingMessage.messageId}, userId: ${user.id}`);
             })
           );
         } else {
@@ -1986,16 +1988,21 @@ export async function registerRoutes(
               });
 
               if (matchSetting) {
-                console.log(`[Debug] Instagram webhook received — userId: ${matchSetting.userId}, from: ${senderId}, messageId: ${messageId}`);
-                queueJobs.push(addInboxJobWithFallback({
-                  userId: matchSetting.userId,
-                  channel: 'instagram',
-                  channelContactId: senderId,
-                  contactName: event.sender?.username || senderId,
-                  content: messageText,
-                  contentType: 'text',
-                  externalMessageId: messageId,
-                }));
+                console.log(`[Inbound] Webhook received — channel: instagram, from: ${senderId}, messageId: ${messageId}`);
+                console.log(`[Inbound] Channel identified: instagram — userId: ${matchSetting.userId}, starting processIncomingMessage`);
+                directJobs.push(
+                  metaCs.processIncomingMessage({
+                    userId: matchSetting.userId,
+                    channel: 'instagram',
+                    channelContactId: senderId,
+                    contactName: event.sender?.username || senderId,
+                    content: messageText,
+                    contentType: 'text',
+                    externalMessageId: messageId,
+                  }).then(() => {
+                    console.log(`[Inbound] Webhook returned 200 — channel: instagram, messageId: ${messageId}`);
+                  })
+                );
               }
             }
           }
@@ -2028,29 +2035,32 @@ export async function registerRoutes(
               });
 
               if (matchSetting) {
-                console.log(`[Debug] Facebook webhook received — userId: ${matchSetting.userId}, from: ${senderId}, messageId: ${messageId}`);
-                queueJobs.push(addInboxJobWithFallback({
-                  userId: matchSetting.userId,
-                  channel: 'facebook',
-                  channelContactId: senderId,
-                  contactName: event.sender?.name || senderId,
-                  content: messageText,
-                  contentType: 'text',
-                  externalMessageId: messageId,
-                }));
+                console.log(`[Inbound] Webhook received — channel: facebook, from: ${senderId}, messageId: ${messageId}`);
+                console.log(`[Inbound] Channel identified: facebook — userId: ${matchSetting.userId}, starting processIncomingMessage`);
+                directJobs.push(
+                  metaCs.processIncomingMessage({
+                    userId: matchSetting.userId,
+                    channel: 'facebook',
+                    channelContactId: senderId,
+                    contactName: event.sender?.name || senderId,
+                    content: messageText,
+                    contentType: 'text',
+                    externalMessageId: messageId,
+                  }).then(() => {
+                    console.log(`[Inbound] Webhook returned 200 — channel: facebook, messageId: ${messageId}`);
+                  })
+                );
               }
             }
           }
         }
       }
 
-      // Process all queued jobs (fallback to direct processing if Redis unavailable)
-      if (queueJobs.length > 0) {
-        await Promise.all(queueJobs);
-        console.log(`[Debug] Meta webhook — ${queueJobs.length} message(s) enqueued/processed`);
+      // All message processing completes before we ACK 200 to the provider
+      if (directJobs.length > 0) {
+        await Promise.all(directJobs);
       }
 
-      // Only respond 200 AFTER all jobs are queued successfully
       res.status(200).send("EVENT_RECEIVED");
 
       // Process legacy chat write and other side effects asynchronously (non-critical)
