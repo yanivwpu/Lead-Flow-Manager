@@ -1299,7 +1299,7 @@ export type InsertUserTemplateData = z.infer<typeof insertUserTemplateDataSchema
 export const contactNotes = pgTable("contact_notes", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   workspaceId: varchar("workspace_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  contactId: varchar("contact_id").notNull().references(() => contacts.id, { onDelete: "cascade" }),
+  contactId: varchar("contact_id").notNull(),
   content: text("content").notNull(),
   createdByUserId: varchar("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
   createdByName: text("created_by_name").notNull().default(""),
