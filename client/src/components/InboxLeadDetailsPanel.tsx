@@ -1117,11 +1117,11 @@ export function InboxLeadDetailsPanel({
                 {contactNotesList.map(note => (
                   <div key={note.id} className="p-2.5 bg-white border border-gray-100 rounded-xl" data-testid={`note-item-${note.id}`}>
                     <div className="flex items-center gap-1.5 mb-1">
-                      <span className="text-[11px] font-medium text-gray-600">{note.createdByName || "Team member"}</span>
+                      <span className="text-[11px] text-gray-400">{note.createdByName || "Team member"}</span>
                       <span className="text-[10px] text-gray-400">·</span>
                       <span className="text-[10px] text-gray-400">{formatRelativeTime(note.createdAt)}</span>
                     </div>
-                    <p className="text-[12px] text-gray-700 leading-relaxed">{note.content}</p>
+                    <p className="text-[12px] text-gray-800 leading-relaxed">{note.content}</p>
                   </div>
                 ))}
               </div>
@@ -1160,7 +1160,7 @@ export function InboxLeadDetailsPanel({
                     {contactNotesList.map(note => (
                       <div key={note.id} className="flex flex-col gap-0.5" data-testid={`modal-note-${note.id}`}>
                         <div className="flex items-center gap-1.5">
-                          <span className="text-[11px] font-semibold text-gray-700">{note.createdByName || 'Team member'}</span>
+                          <span className="text-[11px] text-gray-400">{note.createdByName || 'Team member'}</span>
                           <span className="text-[10px] text-gray-400">·</span>
                           <span className="text-[10px] text-gray-400">
                             {note.createdAt
@@ -1168,7 +1168,7 @@ export function InboxLeadDetailsPanel({
                               : ''}
                           </span>
                         </div>
-                        <p className="text-[12px] text-gray-600 leading-relaxed whitespace-pre-wrap">{note.content}</p>
+                        <p className="text-[12px] text-gray-800 leading-relaxed whitespace-pre-wrap">{note.content}</p>
                       </div>
                     ))}
                     <div className="border-t border-gray-100 mt-1" />
