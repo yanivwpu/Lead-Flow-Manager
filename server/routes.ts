@@ -51,7 +51,7 @@ import fs from "fs";
 import { subscriptionService } from "./subscriptionService";
 import { sendWelcomeEmail, sendContactFormEmail, sendDemoBookingNotification, sendDemoConfirmationEmail, sendSalespersonWelcomeEmail } from "./email";
 import bcrypt from "bcryptjs";
-import { triggerNewChatWorkflows, triggerKeywordWorkflows } from "./workflowEngine";
+import { triggerNewChatWorkflows, triggerKeywordWorkflows, runW2QualificationEngine } from "./workflowEngine";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import shopifyRoutes from "./shopifyRoutes";
 import ghlRoutes from "./ghlRoutes";
@@ -1666,6 +1666,26 @@ export async function registerRoutes(
         triggerKeywordWorkflows(userId, updatedChat, parsed.body).catch(err => 
           console.error("Keyword workflow error:", err)
         );
+        // W2 Financial Qualification Engine (Realtor Growth Engine)
+        ;(async () => {
+          try {
+            const install = await storage.getTemplateInstall(userId, "realtor-growth-engine");
+            if (install?.installStatus === "installed") {
+              const w2 = await runW2QualificationEngine(userId, updatedChat, parsed.body);
+              if (w2.signalsDetected.length > 0) {
+                console.log(`[W2] Signals detected for chat ${updatedChat.id}: ${w2.signalsDetected.join(", ")} score+=${w2.scoreAdjustment}`);
+              }
+              if (w2.qualificationQuestion && updatedChat.whatsappPhone) {
+                setTimeout(async () => {
+                  try {
+                    await sendUserWhatsAppMessage(userId, updatedChat.whatsappPhone!, w2.qualificationQuestion!);
+                    console.log(`[W2] Qualification question sent to ${updatedChat.whatsappPhone}`);
+                  } catch (err) { console.error("[W2] Failed to send qualification question:", err); }
+                }, 3000);
+              }
+            }
+          } catch (err) { console.error("[W2] Engine error:", err); }
+        })();
       }
 
       // Auto-reply & Business Hours handling
@@ -2114,6 +2134,28 @@ export async function registerRoutes(
 
             if (incomingMessage.text) {
               triggerKeywordWorkflows(user.id, chat, incomingMessage.text).catch(err => console.error("Keyword workflow error:", err));
+              // W2 Financial Qualification Engine (Realtor Growth Engine)
+              ;(async () => {
+                try {
+                  const install = await storage.getTemplateInstall(user.id, "realtor-growth-engine");
+                  if (install?.installStatus === "installed") {
+                    const freshChat = await storage.getChat(chat.id);
+                    if (!freshChat) return;
+                    const w2 = await runW2QualificationEngine(user.id, freshChat, incomingMessage.text!);
+                    if (w2.signalsDetected.length > 0) {
+                      console.log(`[W2] Signals detected for chat ${chat.id}: ${w2.signalsDetected.join(", ")} score+=${w2.scoreAdjustment}`);
+                    }
+                    if (w2.qualificationQuestion && incomingMessage.from) {
+                      setTimeout(async () => {
+                        try {
+                          await sendMetaWhatsAppMessage(user.id, incomingMessage.from, w2.qualificationQuestion!);
+                          console.log(`[W2] Qualification question sent (Meta) to ${incomingMessage.from}`);
+                        } catch (err) { console.error("[W2] Failed to send qualification question (Meta):", err); }
+                      }, 3000);
+                    }
+                  }
+                } catch (err) { console.error("[W2] Engine error (Meta):", err); }
+              })();
             }
 
             if (user.autoReplyEnabled && user.autoReplyMessage) {

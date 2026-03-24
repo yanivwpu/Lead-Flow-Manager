@@ -1270,11 +1270,17 @@ export function RealtorGrowthEngine() {
     );
   };
 
-  const WORKFLOW_DESCRIPTIONS: Record<string, { summary: string; triggers: string; timing: string }> = {
+  const WORKFLOW_DESCRIPTIONS: Record<string, { summary: string; triggers: string; timing: string; qualificationLogic?: string }> = {
     W1: {
       summary: "Instantly replies to every new WhatsApp inquiry with a personalized greeting. Creates a lead record, tags as 'New', sets pipeline to 'New Lead', and creates a review task.",
       triggers: "New chat / first message from an unknown number",
       timing: "Immediate (within seconds of first message)",
+    },
+    W2: {
+      summary: "Detects buyer, seller, and investor intent, scores each inbound message, extracts budget / financing / timeline signals, and asks lightweight follow-up questions when critical information is missing.",
+      triggers: "Every inbound message",
+      timing: "Real-time analysis on each incoming message",
+      qualificationLogic: "Financing → Budget → Timeline",
     },
     W3: {
       summary: "Detects when a lead mentions scheduling intent (tour, showing, call, visit) and automatically sends your customized Booking Link (e.g., Calendly/TidyCal). This allows the lead to book directly into your calendar. Also tags the lead as 'Appointment Requested' and creates a high-priority task in your CRM.",
@@ -1309,7 +1315,12 @@ export function RealtorGrowthEngine() {
   };
 
   const WORKFLOW_FIELDS: Record<string, string[]> = {
-    W2: ["buyerKeywords", "sellerKeywords", "investorKeywords"],
+    W2: [
+      "buyerKeywords", "sellerKeywords", "investorKeywords",
+      "financialKeywords", "budgetKeywords", "timelineKeywords", "bookingKeywords",
+      "askFinancingFollowUp", "askBudgetFollowUp", "askTimelineFollowUp", "limitOneQuestion",
+      "financingQuestion", "budgetQuestion", "timelineQuestion", "lenderQuestion",
+    ],
     W3: ["appointmentIntentKeywords", "bookingLink"],
     W4: ["followUpDelayHours"],
     W5: ["followUpDelayHours"],
@@ -1325,7 +1336,23 @@ export function RealtorGrowthEngine() {
   };
 
   const WORKFLOW_PREF_DEFAULTS: Record<string, Record<string, any>> = {
-    W2: { buyerKeywords: "buy, purchase, looking for, apartment, house, condo", sellerKeywords: "sell, listing, list my, market value", investorKeywords: "invest, roi, return, flip, portfolio" },
+    W2: {
+      buyerKeywords: "buy, purchase, looking for, apartment, house, condo",
+      sellerKeywords: "sell, listing, list my, market value",
+      investorKeywords: "invest, roi, return, flip, portfolio",
+      financialKeywords: "pre approved, preapproved, mortgage, lender, financing, loan, down payment, credit score, cash buyer, cash, fha, va, conventional",
+      budgetKeywords: "budget, price range, max price, up to, around, afford, under, over, million",
+      timelineKeywords: "asap, immediately, this month, next month, 30 days, 60 days, 90 days, 3 months, soon, just browsing, researching",
+      bookingKeywords: "tour, showing, visit, schedule, appointment, call, see property, viewing",
+      askFinancingFollowUp: true,
+      askBudgetFollowUp: true,
+      askTimelineFollowUp: true,
+      limitOneQuestion: true,
+      financingQuestion: "Are you currently pre-approved, working with a lender, or still exploring financing options?",
+      budgetQuestion: "Do you have a budget or price range in mind?",
+      timelineQuestion: "Are you planning to move soon, or are you still exploring options?",
+      lenderQuestion: "If helpful, I can also connect you with a lender for pre-approval guidance.",
+    },
     W3: { appointmentIntentKeywords: "call, book, available, tour, showing, visit, schedule", bookingLink: "https://calendly.com/your-profile/showing" },
     W4: { followUpDelayHours: 24 },
     W5: { followUpDelayHours: 72 },
@@ -1478,9 +1505,94 @@ export function RealtorGrowthEngine() {
       </div>
     );
 
+    const renderW2Fields = () => {
+      const kw = (field: string) => `W2_${field}`;
+      const def = WORKFLOW_PREF_DEFAULTS.W2;
+      const kwInput = (field: string, label: string, helperText: string) => (
+        <div key={field}>
+          <Label className="text-sm font-medium">{label}</Label>
+          <Input
+            placeholder="keyword1, keyword2, keyword3"
+            value={localPrefs[kw(field)] ?? def[field] ?? ""}
+            onChange={e => updatePref(kw(field), e.target.value)}
+            className="mt-1"
+            data-testid={`input-${field}`}
+          />
+          <p className="text-[11px] text-muted-foreground mt-1">{helperText}</p>
+        </div>
+      );
+      const toggle = (field: string, label: string) => {
+        const val = localPrefs[kw(field)] !== undefined ? localPrefs[kw(field)] : def[field];
+        return (
+          <div key={field} className="flex items-center justify-between py-1">
+            <Label className="text-sm font-medium cursor-pointer">{label}</Label>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={!!val}
+              onClick={() => updatePref(kw(field), !val)}
+              data-testid={`toggle-${field}`}
+              className={cn(
+                "relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors",
+                val ? "bg-brand-green" : "bg-gray-300"
+              )}
+            >
+              <span className={cn("inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-transform", val ? "translate-x-4" : "translate-x-1")} />
+            </button>
+          </div>
+        );
+      };
+      const qaInput = (field: string, label: string) => (
+        <div key={field}>
+          <Label className="text-sm font-medium">{label}</Label>
+          <Textarea
+            rows={2}
+            value={localPrefs[kw(field)] ?? def[field] ?? ""}
+            onChange={e => updatePref(kw(field), e.target.value)}
+            className="mt-1 text-sm resize-none"
+            data-testid={`textarea-${field}`}
+          />
+        </div>
+      );
+
+      return (
+        <div className="space-y-5 mt-4">
+          <Separator />
+          <p className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Lead Type Detection</p>
+          {kwInput("buyerKeywords", "Buyer Detection Keywords", "Comma-separated keywords used to detect buyer intent")}
+          {kwInput("sellerKeywords", "Seller Detection Keywords", "Comma-separated keywords used to detect seller intent")}
+          {kwInput("investorKeywords", "Investor Detection Keywords", "Comma-separated keywords used to detect investor intent")}
+
+          <Separator />
+          <p className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Financial Readiness Detection</p>
+          {kwInput("financialKeywords", "Financial Readiness Keywords", "Comma-separated keywords used to detect financing readiness")}
+          {kwInput("budgetKeywords", "Budget Keywords", "Keywords used to detect budget or price range discussions")}
+          {kwInput("timelineKeywords", "Timeline Keywords", "Keywords used to detect how soon the lead plans to move or buy")}
+          {kwInput("bookingKeywords", "Booking / High Intent Keywords", "Keywords used to detect immediate appointment intent")}
+
+          <Separator />
+          <p className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Qualification Follow-Up Behavior</p>
+          <p className="text-[11px] text-muted-foreground -mt-2">The engine will ask only the next most important question if information is missing.</p>
+          {toggle("askFinancingFollowUp", "Ask financing follow-up when missing")}
+          {toggle("askBudgetFollowUp", "Ask budget follow-up when missing")}
+          {toggle("askTimelineFollowUp", "Ask timeline follow-up when missing")}
+          {toggle("limitOneQuestion", "Limit qualification follow-ups to one unanswered question at a time")}
+
+          <Separator />
+          <p className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Follow-Up Question Templates</p>
+          {qaInput("financingQuestion", "Financing question")}
+          {qaInput("budgetQuestion", "Budget question")}
+          {qaInput("timelineQuestion", "Timeline question")}
+          {qaInput("lenderQuestion", "Lender assistance question")}
+        </div>
+      );
+    };
+
     const renderWorkflowFields = (wfKey: string) => {
       const fields = WORKFLOW_FIELDS[wfKey];
       if (!fields) return null;
+
+      if (wfKey === "W2") return renderW2Fields();
 
       return (
         <div className="space-y-4 mt-4">
@@ -1699,6 +1811,33 @@ export function RealtorGrowthEngine() {
                       {selectedWf && WORKFLOW_DESCRIPTIONS[selectedWf.key]?.timing}
                     </p>
                   </div>
+
+                  {selectedWf?.key === "W2" && (
+                    <div className="space-y-4">
+                      <div>
+                        <h4 className="text-sm font-semibold text-gray-800 mb-1">Qualification logic</h4>
+                        <p className="text-sm text-muted-foreground leading-relaxed">
+                          This workflow detects buyer, seller, and investor intent, scores each inbound message, extracts budget / financing / timeline signals, and asks lightweight follow-up questions when critical information is missing.
+                        </p>
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-semibold text-gray-800 mb-2">Follow-up question priority order</h4>
+                        <div className="space-y-1.5">
+                          {[
+                            { n: 1, label: "Financing / pre-approval", q: localPrefs["W2_financingQuestion"] || WORKFLOW_PREF_DEFAULTS.W2.financingQuestion },
+                            { n: 2, label: "Budget / price range", q: localPrefs["W2_budgetQuestion"] || WORKFLOW_PREF_DEFAULTS.W2.budgetQuestion },
+                            { n: 3, label: "Timeline / move date", q: localPrefs["W2_timelineQuestion"] || WORKFLOW_PREF_DEFAULTS.W2.timelineQuestion },
+                          ].map(item => (
+                            <div key={item.n} className="p-2.5 bg-gray-50 rounded-lg border border-gray-100">
+                              <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-0.5">Step {item.n} — {item.label}</p>
+                              <p className="text-xs text-gray-700 italic">"{item.q}"</p>
+                            </div>
+                          ))}
+                        </div>
+                        <p className="text-[11px] text-muted-foreground mt-2">Only the next missing question is asked — one at a time.</p>
+                      </div>
+                    </div>
+                  )}
 
                   {getWorkflowTemplates(selectedWf).length > 0 && (
                     <div>

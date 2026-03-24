@@ -1,0 +1,281 @@
+REPLIT TASK — Upgrade W2 (“AI Qualify + Score on Every Inbound”) into full Buyer Readiness / Financial Qualification logic
+
+Goal:
+Upgrade the Realtor Growth Engine W2 workflow so it does more than detect Buyer / Seller / Investor.
+It should now also:
+1) Detect financial readiness signals
+2) Extract budget / financing / timeline data
+3) Ask lightweight follow-up qualification questions when key info is missing
+4) Use the new data in lead scoring, tags, and pipeline movement
+5) Expose these settings in the existing W2 Customize modal (same modal the user already sees)
+
+IMPORTANT:
+This is an upgrade to W2 only.
+Do NOT rebuild the workflow system.
+Do NOT expose full workflow editing.
+Keep the core logic locked.
+Only add safe configurable keyword fields + guided qualification behavior.
+
+========================================================
+1) W2 OBJECTIVE (NEW BEHAVIOR)
+========================================================
+
+Current W2:
+- detects Buyer / Seller / Investor
+- scores every inbound message
+- updates tag + pipeline stage
+
+Upgrade W2 to also detect:
+- financial readiness
+- budget
+- timeline
+- pre-approval / lender / cash buyer status
+
+And if a lead is missing key qualification info, W2 should trigger one simple follow-up question at a time.
+
+Target journey:
+Initial interest → financial readiness → lender qualification → home purchase
+
+========================================================
+2) W2 CUSTOMIZE MODAL — ADD NEW SAFE FIELDS
+========================================================
+
+File/area:
+The existing W2 “AI Qualify + Score on Every Inbound” Customize modal
+
+Keep current sections:
+- Buyer Detection Keywords
+- Seller Detection Keywords
+- Investor Detection Keywords
+
+Add these new sections below them:
+
+--------------------------------------------------------
+A) Financial Readiness Keywords
+--------------------------------------------------------
+Label:
+Financial Readiness Keywords
+
+Default value:
+pre approved, preapproved, mortgage, lender, financing, loan, down payment, credit score, cash buyer, cash, fha, va, conventional
+
+Helper text:
+Comma-separated keywords used to detect financing readiness
+
+--------------------------------------------------------
+B) Budget Keywords
+--------------------------------------------------------
+Label:
+Budget Keywords
+
+Default value:
+budget, price range, max price, up to, around, afford, under, over, k, million
+
+Helper text:
+Keywords used to detect budget or price range discussions
+
+--------------------------------------------------------
+C) Timeline Keywords
+--------------------------------------------------------
+Label:
+Timeline Keywords
+
+Default value:
+asap, immediately, this month, next month, 30 days, 60 days, 90 days, 3 months, soon, just browsing, researching
+
+Helper text:
+Keywords used to detect how soon the lead plans to move or buy
+
+--------------------------------------------------------
+D) Booking / High Intent Keywords
+--------------------------------------------------------
+Label:
+Booking / High Intent Keywords
+
+Default value:
+tour, showing, visit, schedule, appointment, call, see property, viewing
+
+Helper text:
+Keywords used to detect immediate appointment intent
+
+--------------------------------------------------------
+E) Qualification Follow-Up Behavior
+--------------------------------------------------------
+Add a small section with toggles:
+
+1. Ask financing follow-up when missing
+Default: ON
+
+2. Ask budget follow-up when missing
+Default: ON
+
+3. Ask timeline follow-up when missing
+Default: ON
+
+4. Limit qualification follow-ups to one unanswered question at a time
+Default: ON
+
+Helper text:
+The engine will ask only the next most important question if information is missing.
+
+--------------------------------------------------------
+F) Follow-Up Question Templates (editable safe text)
+--------------------------------------------------------
+Add textareas for these message templates:
+
+1. Financing question
+Default:
+"Are you currently pre-approved, working with a lender, or still exploring financing options?"
+
+2. Budget question
+Default:
+"Do you have a budget or price range in mind?"
+
+3. Timeline question
+Default:
+"Are you planning to move soon, or are you still exploring options?"
+
+4. Lender assistance question
+Default:
+"If helpful, I can also connect you with a lender for pre-approval guidance."
+
+Store all of the above in user_template_data:
+- asset_type = "preferences"
+- asset_key = "realtor_growth_engine_preferences"
+
+========================================================
+3) NEW CRM FIELDS TO EXTRACT / UPDATE
+========================================================
+
+Ensure W2 updates these lead fields when detected:
+
+- leadType (Buyer / Seller / Investor / Rental)
+- budgetRange
+- financingType (cash / mortgage / unknown)
+- preApproved (yes / no / unknown)
+- timeline (asap / 30d / 60d / 90d / browsing / unknown)
+- lenderConnected (yes / no / unknown)
+
+If fields already exist under different names, map to the existing schema instead of creating duplicates.
+
+========================================================
+4) SIGNAL DETECTION + SCORING UPDATES
+========================================================
+
+Keep existing tiered scoring model and add these financial-readiness signals:
+
+--------------------------------------------------------
+A) Financial Signals
+--------------------------------------------------------
+- PREAPPROVED_YES: +30
+- CASH_BUYER: +40
+- WORKING_WITH_LENDER: +20
+- NEEDS_FINANCING: +5   (not negative; still valid lead)
+- BUDGET_MENTIONED: +20
+- TIMELINE_30_DAYS_OR_LESS: +30
+- TIMELINE_60_TO_90_DAYS: +15
+- JUST_BROWSING: +5
+
+--------------------------------------------------------
+B) Detection Logic
+--------------------------------------------------------
+Use the configured keywords + simple pattern extraction.
+
+Examples:
+- “I’m pre-approved” -> preApproved=yes, +30
+- “Cash buyer” -> financingType=cash, +40
+- “My budget is 700k” -> budgetRange=700k, +20
+- “Looking to move next month” -> timeline=30d, +30
+- “Just browsing” -> timeline=browsing, +5
+
+--------------------------------------------------------
+C) Cap
+--------------------------------------------------------
+Keep the existing per-message positive cap of +60.
+
+========================================================
+5) QUALIFICATION FOLLOW-UP LOGIC (IMPORTANT)
+========================================================
+
+W2 should now do guided qualification, but lightly.
+
+Rules:
+- Ask ONLY one missing qualification question at a time
+- Do NOT ask the same question repeatedly if already asked recently
+- Do NOT send all 3 questions at once
+- Prioritize questions in this order:
+  1) Financing / pre-approval
+  2) Budget
+  3) Timeline
+
+Trigger logic:
+If leadType == Buyer AND one of the above fields is missing:
+- send the next missing question (if corresponding toggle is ON)
+
+Example:
+Buyer detected, but no financing info yet:
+-> send Financing question
+
+If financing answered later but budget missing:
+-> send Budget question
+
+If budget answered but timeline missing:
+-> send Timeline question
+
+Safeguards:
+- Only ask follow-up if no similar question was sent in last 12 hours
+- Only ask if lead is still active / not Unqualified / not Closed
+- If booking intent already detected, do NOT block booking flow
+- W3 booking intent should still run additively
+
+========================================================
+6) LEAD CLASSIFICATION BEHAVIOR (UPDATED)
+========================================================
+
+Use detected financial readiness to improve classification:
+
+Examples:
+- Buyer + preApproved + budget + timeline <=30d
+  -> likely HOT (80+), tag Hot, pipeline Qualified (Hot)
+
+- Buyer + budget but no financing
+  -> likely WARM, tag Warm, Qualified (Warm)
+
+- Buyer + browsing only + no budget + no timeline
+  -> NEW or LOW INTENT, lighter nurture
+
+- Seller / Investor should still be scored by their existing signals, but financial data can still add weight when present
+
+========================================================
+7) PREVIEW TAB (READ-ONLY) — UPDATE CONTENT
+========================================================
+
+In W2 Preview tab, add a new section:
+
+Title:
+Qualification logic
+
+Text:
+"This workflow detects buyer, seller, and investor intent, scores each inbound message, extracts budget / financing / timeline signals, and asks lightweight follow-up questions when critical information is missing."
+
+Also show:
+- The 3 qualification questions (read-only preview)
+- The priority order (Financing → Budget → Timeline)
+
+========================================================
+8) ACCEPTANCE CRITERIA
+========================================================
+
+- W2 Customize modal includes new keyword sections:
+  Financial Readiness, Budget, Timeline, Booking/High Intent
+- W2 Customize modal includes toggles + editable question templates
+- W2 extracts and updates:
+  budget, financing, pre-approval, timeline, lender status
+- W2 adds the new financial scoring signals listed above
+- W2 can ask one lightweight follow-up question at a time when data is missing
+- W2 does not spam multiple questions
+- W3 booking flow still works additively without conflict
+- Preview tab explains the upgraded qualification behavior
+- Preferences are saved per user and reused at runtime
+
+END TASK
