@@ -248,6 +248,7 @@ export function UnifiedInbox() {
 
   const { data: inboxData, isLoading: inboxLoading } = useQuery<InboxItem[]>({
     queryKey: ["/api/inbox"],
+    refetchInterval: 5000,
   });
 
   const { data: demoChats = [] } = useQuery<any[]>({
@@ -338,6 +339,7 @@ export function UnifiedInbox() {
   const { data: realMessages = [] } = useQuery<Message[]>({
     queryKey: ["/api/conversations", primaryConversation?.id, "messages"],
     enabled: !!primaryConversation?.id && (!isDemoUser || !selectedDemoChat),
+    refetchInterval: 4000,
   });
 
   const messages: Message[] = useMemo(() => {
@@ -399,6 +401,7 @@ export function UnifiedInbox() {
       return json;
     },
     onSuccess: () => {
+      console.log("[Debug] Outgoing message sent — invalidating inbox and conversation queries");
       queryClient.invalidateQueries({ queryKey: ["/api/inbox"] });
       queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
       setMessageInput("");

@@ -55,7 +55,7 @@ import { triggerNewChatWorkflows, triggerKeywordWorkflows } from "./workflowEngi
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import shopifyRoutes from "./shopifyRoutes";
 import ghlRoutes from "./ghlRoutes";
-import { addInboxJob } from "./queue";
+import { addInboxJobWithFallback } from "./queue";
 import { registerTemplateRoutes } from "./templateRoutes";
 
 const TWILIO_BASE_COST_PER_MESSAGE = 0.005;
@@ -1640,22 +1640,18 @@ export async function registerRoutes(
         unread: (chat.unread || 0) + 1,
       });
 
-      // Queue unified inbox write via BullMQ (same worker as Meta path)
-      try {
-        await addInboxJob({
-          userId,
-          channel,
-          channelContactId: normalizedFrom,
-          contactName: parsed.profileName || normalizedFrom,
-          content: parsed.body,
-          contentType: 'text',
-          externalMessageId: parsed.messageSid,
-        });
-        console.log(`[Twilio Webhook] Job queued successfully — from: ${normalizedFrom}, channel: ${channel}, messageSid: ${parsed.messageSid}, userId: ${userId}`);
-      } catch (queueErr) {
-        console.error(`[Twilio Webhook] Failed to queue job — messageSid: ${parsed.messageSid}, error: ${(queueErr as any)?.message}`);
-        return res.status(500).send("Queue unavailable");
-      }
+      // Queue unified inbox write (with direct-processing fallback if Redis is unavailable)
+      console.log(`[Debug] Twilio webhook received — userId: ${userId}, from: ${normalizedFrom}, channel: ${channel}, messageSid: ${parsed.messageSid}`);
+      await addInboxJobWithFallback({
+        userId,
+        channel,
+        channelContactId: normalizedFrom,
+        contactName: parsed.profileName || normalizedFrom,
+        content: parsed.body,
+        contentType: 'text',
+        externalMessageId: parsed.messageSid,
+      });
+      console.log(`[Debug] Twilio message enqueued/processed — from: ${normalizedFrom}, channel: ${channel}, messageSid: ${parsed.messageSid}, userId: ${userId}`);
 
       // Trigger workflow automations (Pro feature)
       const updatedChat = await storage.getChat(chat.id);
@@ -1943,8 +1939,9 @@ export async function registerRoutes(
         const user = await findUserByMetaPhoneNumberId(incomingMessage.phoneNumberId);
         if (user) {
           console.log(`[Meta Webhook] Routing message to userId=${user.id} (email: ${user.email})`);
+          console.log(`[Debug] Meta/WhatsApp webhook received — userId: ${user.id}, from: ${incomingMessage.from}, type: ${incomingMessage.type}, messageId: ${incomingMessage.messageId}`);
           queueJobs.push(
-            addInboxJob({
+            addInboxJobWithFallback({
               userId: user.id,
               channel: 'whatsapp',
               channelContactId: incomingMessage.from,
@@ -1953,10 +1950,7 @@ export async function registerRoutes(
               contentType: incomingMessage.type === 'text' ? 'text' : incomingMessage.type,
               externalMessageId: incomingMessage.messageId,
             }).then(() => {
-              console.log(`[Meta Webhook] Job queued successfully — from: ${incomingMessage.from}, type: ${incomingMessage.type}, messageId: ${incomingMessage.messageId}, userId: ${user.id}`);
-            }).catch((qErr: any) => {
-              console.error(`[Meta Webhook] Failed to queue job — from: ${incomingMessage.from}, error: ${qErr?.message}`);
-              throw qErr;
+              console.log(`[Debug] Meta/WhatsApp message enqueued/processed — from: ${incomingMessage.from}, messageId: ${incomingMessage.messageId}, userId: ${user.id}`);
             })
           );
         } else {
@@ -1992,7 +1986,8 @@ export async function registerRoutes(
               });
 
               if (matchSetting) {
-                queueJobs.push(addInboxJob({
+                console.log(`[Debug] Instagram webhook received — userId: ${matchSetting.userId}, from: ${senderId}, messageId: ${messageId}`);
+                queueJobs.push(addInboxJobWithFallback({
                   userId: matchSetting.userId,
                   channel: 'instagram',
                   channelContactId: senderId,
@@ -2033,7 +2028,8 @@ export async function registerRoutes(
               });
 
               if (matchSetting) {
-                queueJobs.push(addInboxJob({
+                console.log(`[Debug] Facebook webhook received — userId: ${matchSetting.userId}, from: ${senderId}, messageId: ${messageId}`);
+                queueJobs.push(addInboxJobWithFallback({
                   userId: matchSetting.userId,
                   channel: 'facebook',
                   channelContactId: senderId,
@@ -2048,14 +2044,10 @@ export async function registerRoutes(
         }
       }
 
-      // Enqueue all jobs - if ANY fail, return 500 so Meta retries
+      // Process all queued jobs (fallback to direct processing if Redis unavailable)
       if (queueJobs.length > 0) {
-        try {
-          await Promise.all(queueJobs);
-        } catch (queueErr) {
-          console.error("[Queue] Failed to enqueue Meta message(s):", queueErr);
-          return res.status(500).send("Queue unavailable");
-        }
+        await Promise.all(queueJobs);
+        console.log(`[Debug] Meta webhook — ${queueJobs.length} message(s) enqueued/processed`);
       }
 
       // Only respond 200 AFTER all jobs are queued successfully

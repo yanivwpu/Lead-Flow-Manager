@@ -110,6 +110,31 @@ export async function addInboxJob(payload: InboxJobPayload): Promise<void> {
   console.log(`[Queue] Job added: ${jobId} (channel: ${payload.channel}, user: ${payload.userId})`);
 }
 
+export async function processInboxJobDirectly(payload: InboxJobPayload): Promise<void> {
+  console.log(`[Queue] Direct processing (queue bypass) — channel: ${payload.channel}, user: ${payload.userId}, externalId: ${payload.externalMessageId}`);
+  const { channelService } = await import("./channelService");
+  await channelService.processIncomingMessage({
+    userId: payload.userId,
+    channel: payload.channel,
+    channelContactId: payload.channelContactId,
+    contactName: payload.contactName,
+    content: payload.content,
+    contentType: payload.contentType,
+    mediaUrl: payload.mediaUrl,
+    externalMessageId: payload.externalMessageId,
+  });
+  console.log(`[Queue] Direct processing complete — channel: ${payload.channel}, user: ${payload.userId}`);
+}
+
+export async function addInboxJobWithFallback(payload: InboxJobPayload): Promise<void> {
+  try {
+    await addInboxJob(payload);
+  } catch (queueErr) {
+    console.warn(`[Queue] Redis unavailable, falling back to direct processing — channel: ${payload.channel}, error: ${(queueErr as Error).message}`);
+    await processInboxJobDirectly(payload);
+  }
+}
+
 export async function closeQueue(): Promise<void> {
   if (_queueEvents) {
     await _queueEvents.close();

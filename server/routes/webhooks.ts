@@ -1,6 +1,6 @@
 import type { Express } from "express";
 import { storage } from "../storage";
-import { addInboxJob } from "../queue";
+import { addInboxJobWithFallback } from "../queue";
 import { parseIncomingWebhook, findUserByTwilioCredentials } from "../userTwilio";
 
 export function registerWebhookRoutes(app: Express): void {
@@ -21,20 +21,17 @@ export function registerWebhookRoutes(app: Express): void {
           ? `${message.from.first_name} ${message.from.last_name || ""}`.trim()
           : chatId;
 
-        try {
-          await addInboxJob({
-            userId,
-            channel: 'telegram',
-            channelContactId: chatId,
-            contactName: senderName,
-            content: text,
-            contentType: 'text',
-            externalMessageId: String(message.message_id),
-          });
-        } catch (queueErr) {
-          console.error("[Queue] Failed to enqueue Telegram message:", queueErr);
-          return res.status(500).json({ ok: false, error: "Queue unavailable" });
-        }
+        console.log(`[Debug] Telegram webhook received — userId: ${userId}, from: ${chatId}, messageId: ${message.message_id}`);
+        await addInboxJobWithFallback({
+          userId,
+          channel: 'telegram',
+          channelContactId: chatId,
+          contactName: senderName,
+          content: text,
+          contentType: 'text',
+          externalMessageId: String(message.message_id),
+        });
+        console.log(`[Debug] Telegram message enqueued/processed — userId: ${userId}, from: ${chatId}`);
       }
 
       res.status(200).json({ ok: true });
@@ -91,20 +88,17 @@ export function registerWebhookRoutes(app: Express): void {
       const webchatExternalId = `webchat_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       const webchatVisitorId = visitorId || `visitor_${Date.now()}`;
 
-      try {
-        await addInboxJob({
-          userId,
-          channel: 'webchat',
-          channelContactId: webchatVisitorId,
-          contactName: name || "Website Visitor",
-          content: message,
-          contentType: 'text',
-          externalMessageId: webchatExternalId,
-        });
-      } catch (queueErr) {
-        console.error("[Queue] Failed to enqueue webchat message:", queueErr);
-        return res.status(500).json({ error: "Queue unavailable" });
-      }
+      console.log(`[Debug] Webchat webhook received — userId: ${userId}, visitorId: ${webchatVisitorId}`);
+      await addInboxJobWithFallback({
+        userId,
+        channel: 'webchat',
+        channelContactId: webchatVisitorId,
+        contactName: name || "Website Visitor",
+        content: message,
+        contentType: 'text',
+        externalMessageId: webchatExternalId,
+      });
+      console.log(`[Debug] Webchat message enqueued/processed — userId: ${userId}, visitorId: ${webchatVisitorId}`);
 
       res.json({
         success: true,
@@ -160,21 +154,17 @@ export function registerWebhookRoutes(app: Express): void {
       console.log(`[Twilio Webhook/inbox] User matched — userId: ${user.id}`);
       const normalizedFrom = parsed.from.replace(/^\+/, "");
 
-      try {
-        await addInboxJob({
-          userId: user.id,
-          channel: channel as any,
-          channelContactId: normalizedFrom,
-          contactName: parsed.profileName || normalizedFrom,
-          content: parsed.body,
-          contentType: 'text',
-          externalMessageId: parsed.messageSid,
-        });
-        console.log(`[Twilio Webhook/inbox] Job queued — from: ${normalizedFrom}, messageSid: ${parsed.messageSid}`);
-      } catch (queueErr) {
-        console.error("[Twilio Webhook/inbox] Failed to enqueue:", queueErr);
-        return res.status(500).send("Queue unavailable");
-      }
+      console.log(`[Debug] Twilio inbox webhook received — userId: ${user.id}, from: ${normalizedFrom}, channel: ${channel}, messageSid: ${parsed.messageSid}`);
+      await addInboxJobWithFallback({
+        userId: user.id,
+        channel: channel as any,
+        channelContactId: normalizedFrom,
+        contactName: parsed.profileName || normalizedFrom,
+        content: parsed.body,
+        contentType: 'text',
+        externalMessageId: parsed.messageSid,
+      });
+      console.log(`[Debug] Twilio inbox message enqueued/processed — from: ${normalizedFrom}, messageSid: ${parsed.messageSid}`);
 
       res.status(200).send("");
     } catch (error) {

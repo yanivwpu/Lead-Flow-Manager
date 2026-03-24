@@ -109,6 +109,7 @@ class ChannelService {
     });
 
     if (sendResult.success) {
+      console.log(`[Debug] Outgoing message sent — messageId: ${message.id}, conversationId: ${conversation.id}, channel: ${targetChannel}`);
       await storage.updateMessage(message.id, {
         status: 'sent',
         externalMessageId: sendResult.externalMessageId,
@@ -120,6 +121,7 @@ class ChannelService {
         lastMessagePreview: content.substring(0, 100),
         lastMessageDirection: 'outbound',
       });
+      console.log(`[Debug] Conversation summary updated after outbound — conversationId: ${conversation.id}, preview: "${content.substring(0, 60)}"`);
 
       await this.logActivity(userId, contactId, conversation.id, 'message', {
         direction: 'outbound',
@@ -316,6 +318,7 @@ class ChannelService {
       lastMessageDirection: 'inbound',
       unreadCount: (conversation.unreadCount || 0) + 1,
     });
+    console.log(`[Debug] Conversation summary updated after inbound — conversationId: ${conversation.id}, unreadCount: ${(conversation.unreadCount || 0) + 1}, preview: "${content.substring(0, 60)}"`);
 
     await this.logActivity(userId, contact.id, conversation.id, 'message', {
       direction: 'inbound',
