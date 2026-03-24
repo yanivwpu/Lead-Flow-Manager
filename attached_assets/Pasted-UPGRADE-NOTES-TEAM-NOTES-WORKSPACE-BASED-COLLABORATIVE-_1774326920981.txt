@@ -1,0 +1,173 @@
+UPGRADE NOTES → TEAM NOTES (WORKSPACE-BASED COLLABORATIVE NOTES)
+
+Goal:
+Convert the current single-note field into a real Team Notes system that supports multiple team members in the same workspace, while keeping the UI compact and premium.
+
+IMPORTANT PRODUCT RULES
+- Team members belong to the same workspace/account
+- Notes are shared across the workspace
+- Notes are NOT limited per plan
+- Plan limits apply to number of team members, not number of notes
+
+--------------------------------------------------
+1. DATA MODEL
+--------------------------------------------------
+
+Create a proper notes model (if not already present), for example:
+
+contact_notes
+- id
+- workspaceId
+- contactId
+- content
+- createdByUserId
+- createdAt
+- updatedAt (optional)
+
+If possible, also return creator display info:
+- createdByName
+- createdByEmail (optional, not required in UI)
+
+IMPORTANT:
+Do NOT store Team Notes as one single text blob on contact.notes anymore.
+Each note should be its own record.
+
+--------------------------------------------------
+2. WORKSPACE / TEAM BEHAVIOR
+--------------------------------------------------
+
+Notes must be shared per workspace.
+
+Behavior:
+- Any user inside the same workspace can see Team Notes for that contact
+- Any allowed team member can add a note
+- Notes should appear for all workspace members
+- Notes are fetched by workspaceId + contactId
+
+This should work for:
+- Free: single user workspace
+- Starter: up to allowed team members
+- Pro: unlimited team members
+
+--------------------------------------------------
+3. SAVE BEHAVIOR
+--------------------------------------------------
+
+When a user adds a note:
+- INSERT a new note record
+- Do NOT overwrite previous notes
+
+When editing:
+Preferred v1:
+- allow editing only the user’s own most recent note
+OR
+- skip editing for now and support "add note" only
+
+If editing remains enabled, keep it safe and scoped:
+- no accidental overwriting of other team members’ notes
+
+--------------------------------------------------
+4. DISPLAY IN SIDEBAR
+--------------------------------------------------
+
+Replace current single note preview with a Team Notes list.
+
+Inside the Team Notes section:
+- Show notes in reverse chronological order (newest first)
+- Each note should be compact and readable
+
+For each note item show:
+
+Top meta row (small and subtle):
+- Agent/User name
+- timestamp
+
+Example:
+Yaniv • 2h ago
+
+Below it:
+- note content
+
+STYLE RULES:
+- Name + timestamp must be small and visually light
+- Visible enough to understand ownership
+- Do NOT let meta row dominate the note
+- Content remains the focus
+
+Suggested visual style:
+- meta row: text-xs / text-gray-500
+- content: text-sm / text-gray-800
+- spacing tight but breathable
+
+If only one note exists:
+- still show author + timestamp
+
+If no notes exist:
+- show empty state:
+  "Add a private team note…"
+
+--------------------------------------------------
+5. NOTES MODAL / ADD NOTE FLOW
+--------------------------------------------------
+
+Keep the modal/editor simple and modern.
+
+Behavior:
+- "Add Note" or "Edit/Add Team Note" opens modal
+- User writes note
+- Save creates a new note entry
+- After save:
+  - notes list refreshes
+  - newest note appears at top
+
+Do NOT preload AI Summary into Team Notes.
+Team Notes must remain human-only.
+
+--------------------------------------------------
+6. RENAME / LABELING
+--------------------------------------------------
+
+Keep section label:
+Team Notes
+
+This is correct if notes are shared across workspace members.
+
+Do NOT rename to just "Notes" if collaboration is intended.
+
+--------------------------------------------------
+7. OPTIONAL V1.5 IMPROVEMENT (ONLY IF EASY)
+--------------------------------------------------
+
+If straightforward, support:
+- show only latest 2–3 notes in sidebar
+- add small "View all" or expand behavior if more notes exist
+
+This keeps the sidebar compact.
+
+But this is optional.
+Primary goal is proper multi-note collaboration.
+
+--------------------------------------------------
+8. ACCEPTANCE CRITERIA
+--------------------------------------------------
+
+Done = all of the following are true:
+
+1. Team Notes are stored as separate note records
+2. Notes are shared across users in the same workspace
+3. Adding a note does not overwrite previous notes
+4. Sidebar shows note list (newest first)
+5. Each note shows:
+   - small author name
+   - small timestamp
+   - note content
+6. Meta info is visible but subtle
+7. Team Notes never duplicate Summary/Copilot content
+8. Empty state appears when there are no team notes
+
+FINAL UX GOAL:
+Team Notes should feel like a lightweight collaborative context layer:
+- compact
+- shared
+- accountable
+- clean

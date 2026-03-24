@@ -22,7 +22,9 @@ import {
   Save,
   ChevronDown,
   ChevronUp,
+  Plus,
 } from "lucide-react";
+import type { ContactNote } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 import {
   Select,
@@ -159,6 +161,20 @@ interface InboxLeadDetailsPanelProps {
   onInsertMessage?: (text: string) => void;
 }
 
+function formatRelativeTime(date: Date | string | null | undefined): string {
+  if (!date) return '';
+  const d = typeof date === 'string' ? new Date(date) : date;
+  const diff = Date.now() - d.getTime();
+  const mins  = Math.floor(diff / 60000);
+  const hours = Math.floor(diff / 3600000);
+  const days  = Math.floor(diff / 86400000);
+  if (mins < 1)   return 'just now';
+  if (mins < 60)  return `${mins}m ago`;
+  if (hours < 24) return `${hours}h ago`;
+  if (days < 7)   return `${days}d ago`;
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
 function RowLabel({ children }: { children: React.ReactNode }) {
   return (
     <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide shrink-0">
@@ -185,10 +201,14 @@ export function InboxLeadDetailsPanel({
   const canSeeWorkflow   = capabilities ? capabilities.canUseWorkflowRecommendations : true;
   const copilotUpgradeTo = capabilities?.upgradePlan ?? "Starter";
   const workflowUpgradeTo = capabilities?.upgradePlan ?? "Pro";
-  const [localNotes, setLocalNotes] = useState(contact.notes || "");
-  const [expandedNotesOpen, setExpandedNotesOpen] = useState(false);
-  const [expandedNotes, setExpandedNotes] = useState(contact.notes || "");
   const [aiPaused,   setAiPaused]   = useState(false);
+
+  // Team Notes
+  const [contactNotesList, setContactNotesList] = useState<ContactNote[]>([]);
+  const [notesLoading, setNotesLoading] = useState(false);
+  const [addNoteOpen, setAddNoteOpen] = useState(false);
+  const [newNoteText, setNewNoteText] = useState('');
+  const [notesSaving, setNotesSaving] = useState(false);
 
   // Copilot action popovers
   const [assignOpen, setAssignOpen] = useState(false);
@@ -197,8 +217,6 @@ export function InboxLeadDetailsPanel({
   const [bookOpen,   setBookOpen]   = useState(false);
   const [completedActions, setCompletedActions] = useState<Set<string>>(new Set());
   const [fadingAction, setFadingAction] = useState<string | null>(null);
-  const [notesSaveStatus, setNotesSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
-  const notesSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // AI Memory — AI-generated natural-language summary
   const [aiMemory, setAiMemory] = useState<string>('');
@@ -219,10 +237,19 @@ export function InboxLeadDetailsPanel({
   const [copilotExpanded, setCopilotExpanded]   = useState(true);
 
   useEffect(() => {
-    setLocalNotes(contact.notes || "");
-    setExpandedNotes(contact.notes || "");
     setCompletedActions(new Set()); // Reset completed actions when contact changes
-  }, [contact.id, contact.notes]);
+  }, [contact.id]);
+
+  // Fetch team notes when contact changes
+  useEffect(() => {
+    if (!contact.id) return;
+    setNotesLoading(true);
+    fetch(`/api/contacts/${contact.id}/notes`)
+      .then(r => r.ok ? r.json() : [])
+      .then((data: ContactNote[]) => setContactNotesList(Array.isArray(data) ? data : []))
+      .catch(() => setContactNotesList([]))
+      .finally(() => setNotesLoading(false));
+  }, [contact.id]);
 
   // Reset follow popover state when it closes
   useEffect(() => {
@@ -1058,138 +1085,126 @@ export function InboxLeadDetailsPanel({
 
           {/* ── TEAM NOTES ───────────────────────────────────────────── */}
           <div className="mt-6 pt-4 border-t border-[#eee]">
-            <p className="text-xs uppercase tracking-wide text-gray-500 mb-1.5">Team Notes</p>
-            <button
-              onClick={() => {
-                setExpandedNotes(localNotes);
-                setExpandedNotesOpen(true);
-              }}
-              className="w-full group text-left"
-              data-testid="button-expand-notes"
-            >
-              {localNotes ? (
-                <div className="p-2.5 bg-white border border-gray-100 rounded-xl hover:border-gray-200 transition-colors">
-                  <p className="text-[11px] text-gray-600 leading-relaxed line-clamp-4">{localNotes}</p>
-                  <p className="text-[9px] text-gray-400 mt-1.5 opacity-0 group-hover:opacity-100 transition-opacity">Click to edit</p>
-                </div>
-              ) : (
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs uppercase tracking-wide text-gray-500">Team Notes</p>
+              <button
+                onClick={() => { setNewNoteText(''); setAddNoteOpen(true); }}
+                className="flex items-center gap-0.5 text-[11px] font-medium text-gray-400 hover:text-gray-700 transition-colors"
+                data-testid="button-add-note"
+              >
+                <Plus className="w-3 h-3" />
+                Add
+              </button>
+            </div>
+
+            {notesLoading ? (
+              <div className="flex items-center gap-1.5 py-1">
+                <div className="w-1.5 h-1.5 rounded-full bg-gray-200 animate-pulse" />
+                <span className="text-[11px] text-gray-400">Loading…</span>
+              </div>
+            ) : contactNotesList.length === 0 ? (
+              <button
+                onClick={() => { setNewNoteText(''); setAddNoteOpen(true); }}
+                className="w-full text-left"
+                data-testid="button-empty-note"
+              >
                 <div className="p-2.5 border border-dashed border-gray-200 rounded-xl hover:border-gray-300 hover:bg-gray-50/40 transition-all">
-                  <p className="text-[11px] text-gray-400">Add a private note…</p>
+                  <p className="text-[11px] text-gray-400">Add a team note…</p>
                 </div>
-              )}
-            </button>
+              </button>
+            ) : (
+              <div className="space-y-2">
+                {contactNotesList.slice(0, 3).map(note => (
+                  <div key={note.id} className="p-2.5 bg-white border border-gray-100 rounded-xl" data-testid={`note-item-${note.id}`}>
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <span className="text-[11px] font-medium text-gray-600">{note.createdByName || "Team member"}</span>
+                      <span className="text-[10px] text-gray-400">·</span>
+                      <span className="text-[10px] text-gray-400">{formatRelativeTime(note.createdAt)}</span>
+                    </div>
+                    <p className="text-[12px] text-gray-700 leading-relaxed">{note.content}</p>
+                  </div>
+                ))}
+                {contactNotesList.length > 3 && (
+                  <p className="text-[10px] text-gray-400 text-center">+{contactNotesList.length - 3} more notes</p>
+                )}
+              </div>
+            )}
           </div>
 
-          {/* ── NOTES EDITOR MODAL (MODERN DESIGN) ───────────────────────────────── */}
-          {expandedNotesOpen && (
-            <div 
+          {/* ── ADD NOTE MODAL ──────────────────────────────────────────── */}
+          {addNoteOpen && (
+            <div
               className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 animate-in fade-in duration-150"
-              onClick={() => setExpandedNotesOpen(false)}
-              data-testid="modal-overlay-expanded-notes"
+              onClick={() => setAddNoteOpen(false)}
+              data-testid="modal-overlay-add-note"
             >
-              <div 
-                className="bg-white rounded-2xl shadow-lg w-[90%] max-w-[520px] flex flex-col transform transition-all duration-150 scale-100 animate-in zoom-in-95"
+              <div
+                className="bg-white rounded-2xl shadow-lg w-[90%] max-w-[480px] flex flex-col animate-in zoom-in-95 duration-150"
                 onClick={e => e.stopPropagation()}
               >
                 {/* Header */}
-                <div className="px-6 pt-6 pb-3 border-b border-gray-100 flex items-start justify-between">
-                  <div className="flex-1">
-                    <h2 className="text-[15px] font-semibold text-gray-900">Notes</h2>
-                    <p className="text-[12px] text-gray-400 mt-0.5">Internal notes — not visible to customer</p>
+                <div className="px-5 pt-5 pb-3 border-b border-gray-100 flex items-start justify-between">
+                  <div>
+                    <h2 className="text-[15px] font-semibold text-gray-900">Add Team Note</h2>
+                    <p className="text-[11px] text-gray-400 mt-0.5">Visible to all team members — not shown to customer</p>
                   </div>
                   <button
-                    onClick={() => setExpandedNotesOpen(false)}
-                    className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors flex-shrink-0"
-                    data-testid="button-close-notes-modal"
+                    onClick={() => setAddNoteOpen(false)}
+                    className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
+                    data-testid="button-close-note-modal"
                   >
                     <X className="w-4 h-4 text-gray-400" />
                   </button>
                 </div>
 
-                {/* Content */}
-                <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3">
+                {/* Body */}
+                <div className="px-5 py-4">
                   <textarea
-                    className="notes-textarea w-full min-h-40 bg-white rounded-xl p-4 text-[13px] text-gray-700 placeholder-gray-400 resize-none font-sans leading-relaxed outline-none focus:outline-none ring-0 focus:ring-0"
-                    style={{
-                      outline: 'none',
-                      boxShadow: 'none',
-                      border: '1px solid #E5E7EB',
-                      WebkitAppearance: 'none',
-                    }}
-                    placeholder="Add notes about this lead… (preferences, objections, context)"
-                    value={expandedNotes}
-                    onChange={e => {
-                      setExpandedNotes(e.target.value);
-                      setNotesSaveStatus('saving');
-                      
-                      // Clear existing timer
-                      if (notesSaveTimerRef.current) {
-                        clearTimeout(notesSaveTimerRef.current);
-                      }
-                      
-                      // Set new debounce timer (600ms)
-                      notesSaveTimerRef.current = setTimeout(() => {
-                        setLocalNotes(e.target.value);
-                        onUpdateContact({ notes: e.target.value });
-                        setNotesSaveStatus('saved');
-                        setTimeout(() => setNotesSaveStatus('idle'), 1500);
-                      }, 600);
-                    }}
+                    className="notes-textarea w-full min-h-[120px] bg-white rounded-xl p-3 text-[13px] text-gray-700 placeholder-gray-400 resize-none font-sans leading-relaxed"
+                    style={{ outline: 'none', boxShadow: 'none', border: '1px solid #E5E7EB' }}
+                    placeholder="Add context, objections, preferences…"
+                    value={newNoteText}
+                    onChange={e => setNewNoteText(e.target.value)}
                     autoFocus
-                    data-testid="textarea-expanded-notes"
+                    data-testid="textarea-new-note"
                   />
-                  
                 </div>
 
                 {/* Footer */}
-                <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-between">
-                  <div className="text-[11px] font-medium h-5 flex items-center">
-                    {notesSaveStatus === 'saving' && (
-                      <span className="text-gray-500">Saving…</span>
-                    )}
-                    {notesSaveStatus === 'saved' && (
-                      <span className="text-emerald-600">Saved ✓</span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => {
-                        // Clear any pending save timer
-                        if (notesSaveTimerRef.current) {
-                          clearTimeout(notesSaveTimerRef.current);
+                <div className="px-5 pb-5 flex items-center justify-end gap-2">
+                  <button
+                    onClick={() => setAddNoteOpen(false)}
+                    className="py-2 px-4 text-[12px] font-semibold text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+                    data-testid="button-cancel-note"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={async () => {
+                      if (!newNoteText.trim()) return;
+                      setNotesSaving(true);
+                      try {
+                        const res = await fetch(`/api/contacts/${contact.id}/notes`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ content: newNoteText.trim() }),
+                        });
+                        if (res.ok) {
+                          const saved: ContactNote = await res.json();
+                          setContactNotesList(prev => [saved, ...prev]);
+                          setAddNoteOpen(false);
+                          setNewNoteText('');
                         }
-                        // Auto-save any unsaved changes before closing
-                        if (notesSaveStatus === 'saving') {
-                          setLocalNotes(expandedNotes);
-                          onUpdateContact({ notes: expandedNotes });
-                        }
-                        setExpandedNotesOpen(false);
-                      }}
-                      className="py-2 px-4 text-[12px] font-semibold text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
-                      data-testid="button-cancel-notes"
-                    >
-                      Close
-                    </button>
-                    <button
-                      onClick={() => {
-                        // Clear any pending save timer and save immediately
-                        if (notesSaveTimerRef.current) {
-                          clearTimeout(notesSaveTimerRef.current);
-                        }
-                        setLocalNotes(expandedNotes);
-                        onUpdateContact({ notes: expandedNotes });
-                        setNotesSaveStatus('saved');
-                        setTimeout(() => {
-                          setNotesSaveStatus('idle');
-                          setExpandedNotesOpen(false);
-                        }, 800);
-                      }}
-                      className="py-2 px-4 text-[12px] font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition-colors"
-                      data-testid="button-save-notes"
-                    >
-                      Save Note
-                    </button>
-                  </div>
+                      } finally {
+                        setNotesSaving(false);
+                      }
+                    }}
+                    disabled={!newNoteText.trim() || notesSaving}
+                    className="py-2 px-4 text-[12px] font-semibold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors"
+                    data-testid="button-save-note"
+                  >
+                    {notesSaving ? 'Saving…' : 'Save Note'}
+                  </button>
                 </div>
               </div>
             </div>

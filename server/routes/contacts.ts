@@ -220,6 +220,44 @@ export function registerContactRoutes(app: Express): void {
     }
   });
 
+  // Get Team Notes for a contact
+  app.get("/api/contacts/:id/notes", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+      const contact = await storage.getContact(req.params.id);
+      if (!contact) return res.status(404).json({ error: "Contact not found" });
+      if (contact.userId !== req.user.id) return res.status(403).json({ error: "Forbidden" });
+      const notes = await storage.getContactNotes(contact.userId, req.params.id);
+      res.json(notes);
+    } catch (error) {
+      console.error("Error fetching contact notes:", error);
+      res.status(500).json({ error: "Failed to fetch contact notes" });
+    }
+  });
+
+  // Add a Team Note to a contact
+  app.post("/api/contacts/:id/notes", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+      const contact = await storage.getContact(req.params.id);
+      if (!contact) return res.status(404).json({ error: "Contact not found" });
+      if (contact.userId !== req.user.id) return res.status(403).json({ error: "Forbidden" });
+      const { content } = req.body;
+      if (!content?.trim()) return res.status(400).json({ error: "Content is required" });
+      const note = await storage.addContactNote({
+        workspaceId: contact.userId,
+        contactId: req.params.id,
+        content: content.trim(),
+        createdByUserId: req.user.id,
+        createdByName: req.user.name || req.user.email || "Team member",
+      });
+      res.json(note);
+    } catch (error) {
+      console.error("Error adding contact note:", error);
+      res.status(500).json({ error: "Failed to add note" });
+    }
+  });
+
   // Get activity timeline for a contact
   app.get("/api/contacts/:id/timeline", async (req, res) => {
     try {

@@ -1294,3 +1294,18 @@ export type TemplateAsset = typeof templateAssets.$inferSelect;
 export type InsertTemplateAsset = z.infer<typeof insertTemplateAssetSchema>;
 export type UserTemplateData = typeof userTemplateData.$inferSelect;
 export type InsertUserTemplateData = z.infer<typeof insertUserTemplateDataSchema>;
+
+// ─── Contact Notes (Team Notes — collaborative, workspace-scoped) ─────────────
+export const contactNotes = pgTable("contact_notes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  workspaceId: varchar("workspace_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  contactId: varchar("contact_id").notNull().references(() => contacts.id, { onDelete: "cascade" }),
+  content: text("content").notNull(),
+  createdByUserId: varchar("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
+  createdByName: text("created_by_name").notNull().default(""),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertContactNoteSchema = createInsertSchema(contactNotes).omit({ id: true, createdAt: true });
+export type ContactNote = typeof contactNotes.$inferSelect;
+export type InsertContactNote = z.infer<typeof insertContactNoteSchema>;

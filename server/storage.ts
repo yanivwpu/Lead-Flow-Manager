@@ -38,13 +38,14 @@ import {
   type TemplateInstall, type InsertTemplateInstall,
   type TemplateAsset, type InsertTemplateAsset,
   type UserTemplateData, type InsertUserTemplateData,
+  type ContactNote, type InsertContactNote,
   aiSettings, aiBusinessKnowledge, aiUsage, aiLeadScores,
   userAutomationTemplates, templateUsageAnalytics,
   templates as templatesTable, templateEntitlements, realtorOnboardingSubmissions,
   templateInstalls, templateAssets, userTemplateData
 } from "@shared/schema";
 import { db } from "../drizzle/db";
-import { users, chats, registeredPhones, messageUsage, conversationWindows, teamMembers, workflows, workflowExecutions, recurringReminders, webhooks, webhookDeliveries, integrations, messageTemplates, templateSends, dripCampaigns, dripSteps, dripEnrollments, dripSends, chatbotFlows, chatbotSessions, salespeople, demoBookings, salesConversions, adminSettings, contacts, conversations, messages, activityEvents, channelSettings, supportTickets, partners, commissions, agreementAcceptances, type InsertConversationWindow, type ConversationWindow } from "@shared/schema";
+import { users, chats, registeredPhones, messageUsage, conversationWindows, teamMembers, workflows, workflowExecutions, recurringReminders, webhooks, webhookDeliveries, integrations, messageTemplates, templateSends, dripCampaigns, dripSteps, dripEnrollments, dripSends, chatbotFlows, chatbotSessions, salespeople, demoBookings, salesConversions, adminSettings, contacts, conversations, messages, activityEvents, channelSettings, supportTickets, partners, commissions, agreementAcceptances, contactNotes, type InsertConversationWindow, type ConversationWindow } from "@shared/schema";
 import { eq, and, lte, sql, isNotNull, asc, desc, gte, sum, gt, or, like, ilike } from "drizzle-orm";
 
 export interface IStorage {
@@ -180,6 +181,8 @@ export interface IStorage {
   deleteContact(id: string): Promise<void>;
   mergeContacts(targetId: string, sourceId: string): Promise<Contact>;
   searchContacts(userId: string, query: string, limit?: number): Promise<Contact[]>;
+  getContactNotes(workspaceId: string, contactId: string): Promise<ContactNote[]>;
+  addContactNote(data: InsertContactNote): Promise<ContactNote>;
   
   // Conversation methods
   getConversations(userId: string, limit?: number): Promise<Conversation[]>;
@@ -1396,6 +1399,20 @@ export class DbStorage implements IStorage {
       ))
       .orderBy(desc(contacts.updatedAt))
       .limit(limit);
+  }
+
+  async getContactNotes(workspaceId: string, contactId: string): Promise<ContactNote[]> {
+    return await db.select().from(contactNotes)
+      .where(and(
+        eq(contactNotes.workspaceId, workspaceId),
+        eq(contactNotes.contactId, contactId)
+      ))
+      .orderBy(desc(contactNotes.createdAt));
+  }
+
+  async addContactNote(data: InsertContactNote): Promise<ContactNote> {
+    const [note] = await db.insert(contactNotes).values(data).returning();
+    return note;
   }
 
   // Conversation methods
