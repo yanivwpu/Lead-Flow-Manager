@@ -1,0 +1,118 @@
+BUG FIX — White screen on "View & Activate" (Realtor Growth Engine)
+
+Issue:
+Clicking "View & Activate" leads to a blank white screen.
+This indicates a React runtime crash on the template detail page.
+
+--------------------------------------------------------
+1) Add ERROR BOUNDARY (CRITICAL)
+--------------------------------------------------------
+
+Wrap Realtor Growth Engine page component with an ErrorBoundary.
+
+If any runtime error occurs:
+→ Show fallback UI instead of white screen
+
+Fallback UI:
+Title: "Something went wrong loading this template"
+Button: "Retry"
+Button: "Back to Templates"
+
+--------------------------------------------------------
+2) SAFE DATA FETCHING (MOST LIKELY ROOT CAUSE)
+--------------------------------------------------------
+
+In RealtorGrowthEngine.tsx:
+
+Before rendering ANY data:
+
+Check:
+- template data exists
+- entitlement exists
+- install state exists
+
+Example:
+
+if (isLoading) return <Loader />
+if (!data) return <EmptyState />
+
+DO NOT directly access:
+data.template.name
+data.entitlement.status
+
+Without null checks.
+
+--------------------------------------------------------
+3) LOG THE ERROR (IMPORTANT)
+--------------------------------------------------------
+
+Add console logging:
+
+console.error("Realtor Growth Engine load error:", error)
+
+Also log API response.
+
+--------------------------------------------------------
+4) VERIFY API RESPONSE
+--------------------------------------------------------
+
+Check:
+GET /api/templates/realtor-growth-engine
+
+Ensure it ALWAYS returns:
+
+{
+  template,
+  entitlement,
+  install,
+  subscription
+}
+
+If any of these are undefined → frontend must handle it safely.
+
+--------------------------------------------------------
+5) ROUTER CHECK
+--------------------------------------------------------
+
+Verify route exists:
+
+/app/templates/realtor-growth-engine
+
+Ensure:
+- It is registered in router
+- It uses correct component
+- No redirect loop
+
+--------------------------------------------------------
+6) COMMON CRASH FIX
+--------------------------------------------------------
+
+Guard ALL optional objects:
+
+Use optional chaining:
+
+data?.template?.name
+data?.entitlement?.status
+
+Never assume structure.
+
+--------------------------------------------------------
+7) ADD LOADING + EMPTY STATES
+--------------------------------------------------------
+
+If API fails:
+→ show friendly error card
+
+If no entitlement:
+→ show "Not purchased" state
+
+--------------------------------------------------------
+ACCEPTANCE CRITERIA
+--------------------------------------------------------
+
+- Clicking "View & Activate" NEVER shows blank screen
+- Page loads OR shows fallback UI
+- Errors logged in console
+- No unhandled undefined access
+
+END TASK

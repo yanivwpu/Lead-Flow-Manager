@@ -1,4 +1,54 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, Component } from "react";
+
+// ─── Error Boundary ───────────────────────────────────────────────────────────
+interface EBState { hasError: boolean; error?: Error }
+class RealtorEngineErrorBoundary extends Component<{ children: React.ReactNode }, EBState> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError(error: Error): EBState {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    console.error("[RealtorGrowthEngine] Runtime error:", error, info.componentStack);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4 px-4 text-center">
+          <div className="rounded-full bg-red-100 p-4">
+            <svg className="w-8 h-8 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+            </svg>
+          </div>
+          <h2 className="text-xl font-semibold text-gray-900">Something went wrong loading this template</h2>
+          <p className="text-sm text-muted-foreground max-w-md">
+            {this.state.error?.message || "An unexpected error occurred. Try refreshing the page."}
+          </p>
+          <div className="flex gap-3">
+            <button
+              onClick={() => { this.setState({ hasError: false }); window.location.reload(); }}
+              className="px-4 py-2 rounded-md bg-brand-green text-white text-sm font-medium hover:bg-brand-green/90"
+              data-testid="button-error-retry"
+            >
+              Retry
+            </button>
+            <button
+              onClick={() => { window.location.href = "/app/templates"; }}
+              className="px-4 py-2 rounded-md border text-sm font-medium hover:bg-gray-50"
+              data-testid="button-error-back"
+            >
+              Back to Templates
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+// ─────────────────────────────────────────────────────────────────────────────
 
 function RealtorMark() {
   return (
@@ -140,13 +190,21 @@ export function RealtorGrowthEngine() {
   const [subscriptionGate, setSubscriptionGate] = useState<{ show: boolean; hasPro: boolean; hasAI: boolean }>({ show: false, hasPro: true, hasAI: true });
   const [checkingSubscription, setCheckingSubscription] = useState(false);
 
-  const { data: templateData, isLoading } = useQuery<TemplateData>({
+  const { data: templateData, isLoading, isError, error: queryError } = useQuery<TemplateData>({
     queryKey: ["/api/templates/realtor-growth-engine", new URLSearchParams(window.location.search).get("bypass")],
     queryFn: async ({ queryKey }) => {
       const url = queryKey[1] ? `/api/templates/realtor-growth-engine?bypass=${queryKey[1]}` : "/api/templates/realtor-growth-engine";
-      const res = await apiRequest("GET", url);
-      return res.json();
-    }
+      try {
+        const res = await apiRequest("GET", url);
+        const json = await res.json();
+        console.log("[RealtorGrowthEngine] Template data loaded:", { status: json?.entitlement?.status, hasInstall: !!json?.install });
+        return json;
+      } catch (err) {
+        console.error("[RealtorGrowthEngine] Load error:", err);
+        throw err;
+      }
+    },
+    retry: 1,
   });
 
   const verifyPaymentMutation = useMutation({
@@ -238,7 +296,33 @@ export function RealtorGrowthEngine() {
   }, [subscriptionActive]);
 
   if (isLoading) {
-    return <div className="flex h-full items-center justify-center">Loading...</div>;
+    return (
+      <div className="flex h-full items-center justify-center gap-3 text-muted-foreground" data-testid="state-loading">
+        <Loader2 className="w-5 h-5 animate-spin" />
+        <span className="text-sm">Loading template…</span>
+      </div>
+    );
+  }
+
+  if (isError || !templateData) {
+    const msg = (queryError as Error)?.message || "Could not load template data.";
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4 px-4 text-center" data-testid="state-error">
+        <div className="rounded-full bg-red-100 p-4">
+          <AlertCircle className="w-8 h-8 text-red-500" />
+        </div>
+        <h2 className="text-xl font-semibold text-gray-900">Failed to load template</h2>
+        <p className="text-sm text-muted-foreground max-w-md">{msg}</p>
+        <div className="flex gap-3">
+          <Button onClick={() => queryClient.invalidateQueries({ queryKey: ["/api/templates/realtor-growth-engine"] })} data-testid="button-error-retry">
+            Retry
+          </Button>
+          <Button variant="outline" onClick={() => setLocation("/app/templates")} data-testid="button-error-back">
+            Back to Templates
+          </Button>
+        </div>
+      </div>
+    );
   }
 
   // --- Views ---
@@ -2056,9 +2140,11 @@ export function RealtorGrowthEngine() {
   // --- Main Render ---
 
   return (
-    <>
-      {status === 'installed' ? <DashboardView /> : <DetailPage />}
-      <EligibilityDialog />
-    </>
+    <RealtorEngineErrorBoundary>
+      <>
+        {status === 'installed' ? <DashboardView /> : <DetailPage />}
+        <EligibilityDialog />
+      </>
+    </RealtorEngineErrorBoundary>
   );
 }
