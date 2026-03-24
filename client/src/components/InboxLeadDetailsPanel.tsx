@@ -941,23 +941,28 @@ export function InboxLeadDetailsPanel({
 
                   {/* QUALIFYING GAP — AI Brain only ─────────────────── */}
                   {hasAIBrain && canSeeWorkflow && (() => {
-                    const gaps = [
-                      !intel.hasBudget    && "Ask about their budget",
-                      !intel.hasTimeline  && "Ask about their timeline",
-                      !intel.hasFinancing && "Ask about financing plans",
+                    const missingLabels = [
+                      !intel.hasBudget    && "Budget",
+                      !intel.hasTimeline  && "Timeline",
+                      !intel.hasFinancing && "Financing",
                     ].filter(Boolean) as string[];
-                    if (!gaps.length) return null;
+                    const nextActions: Record<string, string> = {
+                      Budget:    "Ask about their budget",
+                      Timeline:  "Ask about their timeline",
+                      Financing: "Ask about financing plans",
+                    };
+                    if (!missingLabels.length) return null;
                     return (
-                      <div className="bg-violet-50 border border-violet-100 rounded-xl px-3 py-2.5">
-                        <p className="text-[9px] uppercase tracking-widest font-semibold text-violet-400 mb-1.5">Qualifying Gap</p>
-                        <ul className="flex flex-col gap-1">
-                          {gaps.map(g => (
-                            <li key={g} className="flex items-center gap-1.5">
-                              <span className="w-1 h-1 rounded-full bg-violet-400 shrink-0" />
-                              <span className="text-[11px] text-violet-700">{g}</span>
-                            </li>
-                          ))}
-                        </ul>
+                      <div className="bg-violet-50 border border-violet-100 rounded-xl px-3 py-2.5 space-y-1.5">
+                        <p className="text-[9px] uppercase tracking-widest font-semibold text-violet-400">Next best action</p>
+                        <p className="text-[11px] text-gray-500">
+                          <span className="font-medium text-gray-700">Missing:</span>{" "}
+                          {missingLabels.join(", ")}
+                        </p>
+                        <p className="text-[11px] text-gray-500">
+                          <span className="font-medium text-gray-700">Next step:</span>{" "}
+                          {nextActions[missingLabels[0]]}
+                        </p>
                       </div>
                     );
                   })()}
@@ -965,14 +970,9 @@ export function InboxLeadDetailsPanel({
                   {/* SUGGESTED REPLY ────────────────────────────────── */}
                   {canSeeWorkflow && qualifyAction?.value && (
                     <div>
-                      <div className="mb-2 flex items-center justify-between">
-                        <div>
-                          <p className="text-[10px] uppercase tracking-widest font-semibold text-gray-400">Suggested Reply</p>
-                          <p className="text-[10px] text-gray-400 mt-0.5">Recommended next step</p>
-                        </div>
-                        {hasAIBrain && (
-                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-500 leading-none shrink-0">AI Brain</span>
-                        )}
+                      <div className="mb-2">
+                        <p className="text-[10px] uppercase tracking-widest font-semibold text-gray-400">Suggested Reply</p>
+                        <p className="text-[10px] text-gray-400 mt-0.5">Recommended next step</p>
                       </div>
                       <div className="bg-white border border-gray-200 rounded-xl p-3.5 shadow-[0_1px_4px_rgba(0,0,0,0.06)]">
                         <p className="text-[12px] text-gray-800 leading-relaxed">"{qualifyAction.value}"</p>
@@ -997,26 +997,20 @@ export function InboxLeadDetailsPanel({
 
                   {/* SUMMARY ────────────────────────────────────────── */}
                   <div className="pt-3 border-t border-gray-100">
-                    <div className="flex items-center gap-1.5 mb-1.5">
-                      {hasAIBrain
-                        ? <>
-                            <Sparkles className="w-2.5 h-2.5 text-violet-400 shrink-0" />
-                            <p className="text-[9px] uppercase tracking-widest font-semibold text-violet-400">AI Memory</p>
-                          </>
-                        : <p className="text-[9px] uppercase tracking-widest font-semibold text-gray-300">Summary</p>
-                      }
-                    </div>
+                    <p className="text-[9px] uppercase tracking-widest font-semibold text-gray-300 mb-1.5">
+                      {hasAIBrain ? "Memory" : "Summary"}
+                    </p>
                     {aiMemoryLoading ? (
                       <div className="flex items-center gap-1.5">
                         <div className="w-1.5 h-1.5 rounded-full bg-purple-200 animate-pulse" />
                         <span className="text-[11px] text-gray-400 italic">Generating…</span>
                       </div>
                     ) : aiMemory ? (
-                      <p className={cn("text-[11px] leading-relaxed", hasAIBrain ? "text-gray-600" : "text-gray-500")}>{aiMemory}</p>
+                      <p className="text-[11px] text-gray-500 leading-relaxed">{aiMemory}</p>
                     ) : (
                       <p className="text-[10px] text-gray-400 italic">
                         {hasAIBrain
-                          ? "AI Memory builds as the conversation develops."
+                          ? "Memory builds as the conversation develops."
                           : "Summary will appear here as the conversation develops."
                         }
                       </p>
