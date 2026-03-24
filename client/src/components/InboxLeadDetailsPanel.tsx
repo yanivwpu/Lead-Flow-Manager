@@ -1167,7 +1167,7 @@ export function InboxLeadDetailsPanel({
                 </div>
               </button>
             ) : (
-              <div className="space-y-3 max-h-[240px] overflow-y-auto pr-0.5">
+              <div className="notes-scroll space-y-2 max-h-[240px] overflow-y-auto pr-1">
                 {contactNotesList.map(note => (
                   <div
                     key={note.id}
