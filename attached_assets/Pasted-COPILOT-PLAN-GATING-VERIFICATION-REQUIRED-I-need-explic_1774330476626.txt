@@ -1,0 +1,95 @@
+COPILOT PLAN-GATING — VERIFICATION REQUIRED
+
+I need explicit confirmation that Copilot behavior is correct per plan.
+Do NOT answer “it works” — show exact behavior per level.
+
+Test and confirm the following:
+
+-------------------------------------
+1. FREE PLAN
+-------------------------------------
+
+Expected:
+
+- Copilot panel is VISIBLE (not hidden)
+- Shows locked / upgrade UI
+- NO real intelligence (or minimal placeholder)
+- NO action chips (Assign, Follow-up, etc.)
+- Shows upgrade prompts (Starter+ or Pro+)
+
+Confirm:
+- What exactly is rendered in UI?
+- Screenshot or exact UI state description
+
+
+-------------------------------------
+2. STARTER PLAN
+-------------------------------------
+
+Expected:
+
+- Copilot panel visible
+- Intelligence visible:
+  - Lead Score
+  - Intent
+  - Budget / Timeline / Financing (if available)
+- NO workflow/action chips
+- Instead shows "Upgrade to Pro" in suggestions area
+
+Confirm:
+- Which components are enabled vs disabled?
+- What the user actually sees
+
+
+-------------------------------------
+3. PRO PLAN (WITH AI BRAIN)
+-------------------------------------
+
+Expected:
+
+- Full Copilot unlocked:
+  - Intelligence
+  - Suggestions
+  - Action chips (Assign, Follow-up, etc.)
+  - Stage suggestions
+  - Tag triggers
+
+Confirm:
+- All features visible and clickable
+- No upgrade prompts
+
+
+-------------------------------------
+4. CODE-LEVEL CONFIRMATION
+
+Show:
+
+- Where useAICapabilities is called
+- What flags are returned:
+  - canUseCopilotIntelligence
+  - canUseWorkflowRecommendations
+  - canUseSuggest
+  - canUseAuto
+
+- How these flags control UI rendering in:
+  - InboxLeadDetailsPanel
+  - AIComposer
+
+-------------------------------------
+5. EDGE CASE
+
+What happens if:
+- User is Pro but WITHOUT AI Brain?
+
+Expected:
+- Copilot partially locked or downgraded
+
+Explain actual behavior.
+
+-------------------------------------
+
+Goal:
+I want clear confirmation that:
+- Copilot is visible on ALL plans
+- Features unlock progressively
+- No incorrect full access on lower tiers
