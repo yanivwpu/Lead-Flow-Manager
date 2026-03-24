@@ -1,0 +1,342 @@
+TASK: FULL PRICING PAGE REDESIGN — CLEARER VALUE, COPILOT IN ALL PLANS, ACCURATE FEATURE DIFFERENTIATION
+
+GOAL:
+Redesign /pricing so it clearly explains:
+- what is included in each plan
+- how Copilot is included in all paid plans but with different strength/limits
+- what is Pro-only
+- what AI Brain adds
+- what plan is best for which type of customer
+
+IMPORTANT ACCURACY RULES:
+- Do NOT mention public REST API anywhere
+- Replace any “API & integrations” wording with “Integrations & webhooks” ONLY if that feature is truly enabled in Pro
+- Lead scoring is Pro-only
+- Smart retargeting is Pro-only
+- AI Brain is available as an add-on for Starter and Pro
+- Starter includes AI Assist up to 50/month
+- Pro includes AI Assist up to 200/month
+- Pro allows up to 5 WhatsApp numbers
+- Starter allows 1 WhatsApp number
+- Free allows 1 WhatsApp number
+- Keep existing billing / Stripe logic intact unless already supported
+- Frontend copy/structure update only unless a tiny display logic update is required
+
+==================================================
+1. HERO SECTION — REWRITE
+==================================================
+
+Replace current pricing hero copy with:
+
+Headline:
+Simple, transparent pricing for growing conversations
+
+Subheadline:
+Start free and upgrade when you’re ready for more AI assistance, automation, and team capacity. No message markups — connect your own WhatsApp through Meta or Twilio.
+
+Optional small supporting line under subheadline:
+Built for businesses that want one inbox, better follow-up, and smarter lead handling across messaging channels.
+
+==================================================
+2. ADD NEW “COPILOT” EXPLANATION SECTION ABOVE PRICING CARDS
+==================================================
+
+Create a new section above the pricing cards.
+
+Section title:
+Copilot grows with your plan
+
+Section intro text:
+WhachatCRM includes built-in AI assistance to help your team respond faster and work smarter. Higher plans unlock stronger Copilot capabilities, more included AI usage, and access to AI Brain for deeper automation and qualification.
+
+Create 3 explanation cards or columns:
+
+CARD 1
+Title:
+Starter AI Assist
+
+Text:
+Included in Starter for day-to-day help inside chats.
+
+Bullets:
+- Reply suggestions
+- Sentiment detection
+- Up to 50 AI actions per month
+
+CARD 2
+Title:
+Pro Enhanced AI Assist
+
+Text:
+Included in Pro for stronger AI support across conversations.
+
+Bullets:
+- Higher-quality suggestions
+- Conversation insights
+- More advanced assistance in the inbox
+- Up to 200 AI actions per month
+
+CARD 3
+Title:
+AI Brain add-on
+
+Text:
+Available on Starter and Pro for businesses that want deeper AI-powered qualification and workflow support.
+
+Bullets:
+- Smarter AI assistance
+- Deeper lead understanding
+- Expanded AI capabilities across conversations
+
+Small note below this section:
+AI Brain enhances intelligence, but Pro remains the plan for advanced system capabilities like lead scoring and smart retargeting.
+
+==================================================
+3. REDESIGN THE PRICING CARDS
+==================================================
+
+Use 4 visible cards/blocks:
+- Free
+- Starter
+- Pro
+- AI Brain Add-on
+
+Keep design clean, easy to scan, and consistent with current branding.
+Highlight Pro as “Most Popular”.
+
+----------------------------------------
+FREE — $0/mo
+----------------------------------------
+
+Plan label:
+Free
+
+Short descriptor:
+Best for getting started
+
+Bullets:
+- 50 active conversations
+- 1 user
+- 1 WhatsApp number
+- Unified inbox
+- CRM basics
+- Tags, notes, and contact management
+- Live chat widget
+
+CTA:
+Start Free
+
+Optional note:
+Upgrade when you need more users, more conversations, and built-in AI assistance.
+
+----------------------------------------
+STARTER — $19/mo
+----------------------------------------
+
+Plan label:
+Starter
+
+Short descriptor:
+For businesses managing more conversations with built-in AI help
+
+Bullets:
+- 500 active conversations
+- Up to 3 users
+- 1 WhatsApp number
+- Unified inbox across channels
+- Full CRM
+- Tags, notes, pipeline, and tasks
+- AI Assist included — up to 50/month
+- Reply suggestions and sentiment detection
+- Basic automations
+- Live chat widget
+- Supports AI Brain add-on
+
+CTA:
+Upgrade to Starter
+
+Optional microcopy under bullets:
+Great for teams that want stronger inbox workflow and lightweight AI assistance.
+
+----------------------------------------
+PRO — $49/mo
+----------------------------------------
+
+Plan label:
+Pro
+
+Badge:
+Most Popular
+
+Short descriptor:
+For businesses ready for automation, qualification, and scale
+
+Bullets:
+- 2,000 active conversations
+- Multiple users
+- Up to 5 WhatsApp numbers
+- Unified inbox + smart channel handling
+- Full CRM
+- AI Assist included — up to 200/month
+- Enhanced AI assistance and inbox insights
+- Advanced automations
+- AI lead scoring
+- Smart retargeting
+- Integrations & webhooks (ONLY if truly available)
+- Supports AI Brain add-on
+
+CTA:
+Upgrade to Pro
+
+Optional microcopy:
+Best for teams that want the system to help identify hot leads and automate follow-up.
+
+IMPORTANT:
+Use better wording for these two bullets:
+- “AI lead scoring” = automatically identify hotter leads
+- “Smart retargeting” = follow up beyond normal WhatsApp reply windows
+
+----------------------------------------
+AI BRAIN ADD-ON — $29/mo
+----------------------------------------
+
+Plan label:
+AI Brain
+
+Short descriptor:
+Add-on for Starter and Pro
+
+Bullets:
+- Works with Starter and Pro
+- Expands Copilot capabilities
+- Deeper lead understanding
+- Smarter AI assistance across conversations
+- More advanced AI-powered workflow support
+
+CTA:
+Add AI Brain
+
+IMPORTANT:
+Do NOT present AI Brain as unlocking Pro-only system capabilities.
+It should NOT imply that Starter + AI Brain includes lead scoring or smart retargeting.
+Add small note:
+Best results when combined with Pro automations and workflows.
+
+==================================================
+4. ADD A COMPARISON TABLE BELOW THE CARDS
+==================================================
+
+Create a responsive comparison table that is easy to read on desktop and stacks cleanly on smaller screens.
+
+Columns:
+Feature | Free | Starter | Pro
+
+Rows:
+Active conversations | 50 | 500 | 2,000
+Users | 1 | Up to 3 | Multiple
+WhatsApp numbers | 1 | 1 | 5
+Unified inbox | Yes | Yes | Yes
+CRM | Basic | Full | Full
+Pipeline & tasks | No / Basic (depending on actual current product) | Yes | Yes
+AI Assist included | No | 50/month | 200/month
+AI Assist type | None | Reply suggestions + sentiment | Enhanced AI assistance
+Automations | No / Basic (match actual product) | Basic | Advanced
+Lead scoring | No | No | Yes
+Smart retargeting | No | No | Yes
+AI Brain add-on | No | Yes | Yes
+Integrations & webhooks | No | No | Yes (ONLY if truly accurate)
+
+If “Pipeline & tasks” is already included in Free, reflect the real product truth. Do not invent restrictions that don’t exist.
+
+==================================================
+5. ADD SHORT EXPLANATION / FAQ SECTION
+==================================================
+
+Add a small FAQ / clarification section under the comparison table.
+
+Use these 3 items:
+
+Q: What are active conversations?
+A: Active conversations are contacts you interact with during your billing cycle — not individual messages.
+
+Q: Do you charge per message?
+A: No. You connect your own Meta or Twilio account and pay them directly. WhachatCRM does not add message markups.
+
+Q: Can I upgrade later?
+A: Yes. You can move to a higher plan as your team, conversation volume, and automation needs grow.
+
+Optional 4th FAQ if space looks good:
+Q: What’s the difference between Pro and AI Brain?
+A: Pro unlocks advanced platform capabilities like lead scoring and smart retargeting. AI Brain is an add-on that expands AI intelligence on Starter or Pro.
+
+==================================================
+6. ADD A FINAL CTA SECTION AT THE BOTTOM
+==================================================
+
+Bottom section headline:
+Start simple. Upgrade when your conversations grow.
+
+Text:
+Whether you’re handling a small number of leads or managing conversations across a team, WhachatCRM gives you a clear path from basic inbox management to smarter AI-assisted follow-up.
+
+Primary CTA:
+Start Free
+
+Optional secondary CTA:
+Talk to Sales
+
+==================================================
+7. IMPORTANT POSITIONING / COPY RULES
+==================================================
+
+Use this positioning consistently across the page:
+
+- Free = try the platform
+- Starter = manage conversations with built-in AI assistance
+- Pro = automate, qualify, and scale
+- AI Brain = add deeper AI intelligence
+
+Very important:
+- Do not overcomplicate with technical language
+- Do not mention tokens
+- Do not mention REST API
+- Do not suggest AI Brain replaces Pro
+- Keep the value ladder obvious:
+  Free → Starter → Pro → Pro + AI Brain
+
+==================================================
+8. DESIGN / UX RULES
+==================================================
+
+- Keep the current site visual language
+- Make Pro card visually highlighted
+- Keep spacing generous and cards easy to scan
+- Ensure mobile responsiveness
+- Make sure pricing table remains readable on 14-inch laptop screens
+- Use concise microcopy, not dense paragraphs
+- Add icons only if it improves scannability
+- Do not clutter cards with too much subtext
+
+==================================================
+9. DO NOT CHANGE
+==================================================
+
+- Existing Stripe / billing logic
+- Existing backend feature gating
+- Existing subscriptions / plan IDs
+- Existing checkout flow unless necessary for visual accuracy only
+
+==================================================
+10. FINAL QA CHECK BEFORE SHIPPING
+==================================================
+
+Before publishing, verify:
+- No mention of public API
+- AI Brain shown as available on Starter and Pro only
+- Lead scoring shown only in Pro
+- Smart retargeting shown only in Pro
+- Starter AI Assist shows 50/month
+- Pro AI Assist shows 200/month
+- Pro shows 5 WhatsApp numbers
+- Copy is consistent across cards and comparison table
+- Nothing on the page overpromises features we do not actually offer
