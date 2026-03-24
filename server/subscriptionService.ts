@@ -112,7 +112,7 @@ class SubscriptionService {
         customer: stripeCustomerId,
         status: 'active',
         limit: 10,
-        expand: ['data.items.data.price.product'],
+        expand: ['data.items.data.price'],
       });
       
       // Check if any active subscription has the AI Brain add-on

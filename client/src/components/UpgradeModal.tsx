@@ -163,8 +163,14 @@ export function UpgradeModal({ open, onOpenChange, reason, currentPlan, limitInf
         body: JSON.stringify({ planId: content.targetPlan }),
       });
 
+      if (response.status === 401) {
+        window.location.href = "/auth?redirect=/pricing";
+        return;
+      }
+
       if (!response.ok) {
-        throw new Error("Failed to start checkout");
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to start checkout");
       }
 
       const data = await response.json();

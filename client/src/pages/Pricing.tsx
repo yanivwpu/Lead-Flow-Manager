@@ -107,7 +107,14 @@ export function Pricing() {
         body: JSON.stringify({ planId }),
         credentials: "include",
       });
-      if (!res.ok) throw new Error("Failed to create checkout");
+      if (res.status === 401) {
+        setLocation("/auth?redirect=/pricing");
+        throw new Error("session_expired");
+      }
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to create checkout");
+      }
       return res.json();
     },
     onSuccess: (data) => {
@@ -117,11 +124,13 @@ export function Pricing() {
       }
     },
     onError: (error: any) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to start checkout",
-        variant: "destructive",
-      });
+      if (error.message !== "session_expired") {
+        toast({
+          title: "Error",
+          description: error.message || "Failed to start checkout",
+          variant: "destructive",
+        });
+      }
       setLoadingPlan(null);
     },
   });

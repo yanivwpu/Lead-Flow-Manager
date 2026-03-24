@@ -1178,6 +1178,10 @@ export function RealtorGrowthEngine() {
                   method: "POST",
                   credentials: "include",
                 });
+                if (res.status === 401) {
+                  window.location.href = "/auth?redirect=/app/templates/realtor-growth-engine";
+                  return;
+                }
                 if (!res.ok) throw new Error("Failed to create checkout");
                 const data = await res.json();
                 if (data.url) {

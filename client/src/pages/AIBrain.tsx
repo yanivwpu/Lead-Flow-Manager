@@ -155,6 +155,10 @@ function AIBrainContent() {
         headers: { "Content-Type": "application/json" },
         credentials: "include",
       });
+      if (response.status === 401) {
+        window.location.href = "/auth?redirect=/app/ai-brain";
+        return;
+      }
       const data = await response.json();
       if (!response.ok) {
         throw new Error(data.error || "Failed to start checkout");
@@ -163,6 +167,7 @@ function AIBrainContent() {
         window.location.href = data.url;
       }
     } catch (error: any) {
+      if (error.message === "session_expired") return;
       toast({
         title: "Checkout Error",
         description: error.message || "Failed to start checkout. Please try again.",
