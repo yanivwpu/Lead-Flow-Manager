@@ -365,7 +365,7 @@ export function InboxLeadDetailsPanel({
         <div className="flex items-center justify-between mb-1.5">
           <div className="flex items-center gap-1.5">
             <Sparkles className="w-3 h-3 text-purple-500" />
-            <span className="text-[11px] font-semibold text-gray-700 tracking-wide">AI Copilot</span>
+            <span className="text-[11px] font-semibold text-gray-700 tracking-wide">Copilot</span>
           </div>
           {canSeeCopilot ? (
             <button
@@ -403,9 +403,9 @@ export function InboxLeadDetailsPanel({
           </>
         ) : (
           <AIUpgradePrompt
-            feature="AI Copilot"
+            feature="Copilot"
             requiredPlan={copilotUpgradeTo}
-            reason="AI reads conversations and auto-extracts budget, timeline, financing, and lead intent to help you qualify leads faster."
+            reason="Reads conversations and auto-extracts budget, timeline, financing, and lead intent to help you qualify leads faster."
             size="md"
             className="mt-1"
           />
@@ -415,9 +415,9 @@ export function InboxLeadDetailsPanel({
         {canSeeCopilot && !canSeeWorkflow && (
           <div className="mt-2 pt-1.5 border-t border-purple-100">
             <AIUpgradePrompt
-              feature="AI Autopilot"
+              feature="Autopilot"
               requiredPlan={workflowUpgradeTo}
-              reason="AI suggests and automates actions: assign leads, book appointments, schedule follow-ups, and advance pipeline stages with one click."
+              reason="Suggests and automates actions: assign leads, book appointments, schedule follow-ups, and advance pipeline stages with one click."
               size="md"
               className="mt-0.5"
             />
@@ -1037,7 +1037,7 @@ export function InboxLeadDetailsPanel({
                 )}
                 data-testid="button-tab-ai-memory"
               >
-                AI Memory
+                Summary
               </button>
               <button
                 onClick={() => setNotesTab('team')}
@@ -1064,7 +1064,7 @@ export function InboxLeadDetailsPanel({
                 ) : aiMemory ? (
                   <p className="text-[11px] text-purple-900 leading-relaxed">{aiMemory}</p>
                 ) : (
-                  <p className="text-[11px] text-gray-400 italic">AI Memory will appear here as the conversation develops.</p>
+                  <p className="text-[11px] text-gray-400 italic">Summary will appear here as the conversation develops.</p>
                 )}
               </div>
             )}

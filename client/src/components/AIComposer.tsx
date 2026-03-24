@@ -283,13 +283,13 @@ export function AIComposer({
   // ─── Status line text ────────────────────────────────────────────────────
   const statusLineText = (() => {
     if (isSuggestMode) {
-      if (isDrafting) return "AI is drafting a reply…";
-      if (aiDraft) return "AI reply ready — edit or send";
-      return "Switching to AI Suggest…";
+      if (isDrafting) return "Drafting a reply…";
+      if (aiDraft) return "Draft ready — edit or send";
+      return "Switching to Suggest…";
     }
     if (isAutoPassive) {
-      if (autoPhase === "typing") return "AI is typing…";
-      if (autoPhase === "replied") return "AI replied — waiting for customer response";
+      if (autoPhase === "typing") return "Typing…";
+      if (autoPhase === "replied") return "Replied — waiting for customer response";
       return "Waiting for customer response…";
     }
     return null;
@@ -306,11 +306,11 @@ export function AIComposer({
 
   const autoLabel =
     autoPhase === "typing"
-      ? "AI is typing a reply…"
+      ? "Typing a reply…"
       : autoPhase === "replied"
-      ? "AI replied — waiting for response"
+      ? "Replied — waiting for response"
       : autoPhase === "idle"
-      ? "AI is ready to respond"
+      ? "Ready to respond"
       : "Waiting for customer response…";
 
   return (
@@ -345,11 +345,11 @@ export function AIComposer({
 
               const lockReason =
                 !modeEnabled && mode === "suggest" && capabilities?.plan === "free"
-                  ? "Unlock AI Assist to draft replies"
+                  ? "Unlock Suggest to draft replies"
                   : !modeEnabled && mode === "auto" && capabilities?.plan === "starter"
-                  ? "Unlock AI Autopilot to reply automatically"
+                  ? "Unlock Autopilot to reply automatically"
                   : !modeEnabled && (capabilities?.isExhausted)
-                  ? "AI replies exhausted this month — upgrade for more"
+                  ? "Monthly replies exhausted — upgrade for more"
                   : !modeEnabled
                   ? "Upgrade to unlock"
                   : null;

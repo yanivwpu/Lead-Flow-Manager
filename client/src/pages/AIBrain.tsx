@@ -551,14 +551,14 @@ function AIBrainContent() {
             <div className="bg-white rounded-xl border border-gray-200 p-6">
               <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
                 <Bot className="w-5 h-5 text-purple-500" />
-                AI Mode
+                Mode
               </h2>
               
               <div className="grid gap-3">
                 {[
-                  { value: "off", label: "Off", desc: "AI Copilot and Autopilot are paused", icon: X },
-                  { value: "suggest_only", label: "Suggest Only", desc: "AI suggests replies, you send them", icon: Lightbulb },
-                  { value: "full_auto", label: "Full Auto", desc: "AI responds automatically (with guardrails)", icon: Sparkles },
+                  { value: "off", label: "Off", desc: "Copilot and Autopilot are paused", icon: X },
+                  { value: "suggest_only", label: "Suggest Only", desc: "Suggests replies, you send them", icon: Lightbulb },
+                  { value: "full_auto", label: "Full Auto", desc: "Responds automatically (with guardrails)", icon: Sparkles },
                 ].map(mode => (
                   <button
                     key={mode.value}
@@ -1082,7 +1082,7 @@ function AIBrainContent() {
                         aiHealth.status === "limited" && "text-yellow-600",
                         aiHealth.status === "paused" && "text-red-600"
                       )}>
-                        {aiHealth.status === "healthy" && "AI Copilot and Autopilot are working normally."}
+                        {aiHealth.status === "healthy" && "Copilot and Autopilot are working normally."}
                         {aiHealth.status === "limited" && (aiHealth.message || "AI assistance is temporarily limited to protect deliverability.")}
                         {aiHealth.status === "paused" && (aiHealth.message || "AI assistance is temporarily limited to protect deliverability.")}
                       </p>
