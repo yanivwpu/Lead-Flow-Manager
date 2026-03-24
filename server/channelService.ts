@@ -1,5 +1,6 @@
 import { storage } from "./storage";
 import { subscriptionService } from "./subscriptionService";
+import { notifyUser } from "./presence";
 import { 
   type Contact, type Conversation, type Message, type Channel, 
   CHANNEL_INFO, CHANNELS 
@@ -333,6 +334,12 @@ class ChannelService {
       unreadCount: (conversation.unreadCount || 0) + 1,
     });
     console.log(`[Inbound] Conversation/thread updated — conversationId: ${conversation.id}, unreadCount: ${(conversation.unreadCount || 0) + 1}, preview: "${content.substring(0, 60)}"`);
+
+    notifyUser(userId, {
+      type: 'new_message',
+      conversationId: conversation.id,
+      contactId: contact.id,
+    });
 
     await this.logActivity(userId, contact.id, conversation.id, 'message', {
       direction: 'inbound',

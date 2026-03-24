@@ -215,6 +215,43 @@ export function UnifiedInbox() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const { toast } = useToast();
+
+  useEffect(() => {
+    if (!user) return;
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const ws = new WebSocket(`${protocol}//${window.location.host}/ws/presence`);
+    let heartbeat: ReturnType<typeof setInterval>;
+
+    ws.onopen = () => {
+      ws.send(JSON.stringify({ type: "auth", userId: user.id, userName: user.name || "Agent" }));
+      heartbeat = setInterval(() => {
+        if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "heartbeat" }));
+      }, 25000);
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const msg = JSON.parse(event.data);
+        if (msg.type === "new_message") {
+          queryClient.invalidateQueries({ queryKey: ["/api/inbox"] });
+          if (msg.conversationId) {
+            queryClient.invalidateQueries({
+              queryKey: ["/api/conversations", msg.conversationId, "messages"],
+            });
+          }
+        }
+      } catch {}
+    };
+
+    ws.onclose = () => clearInterval(heartbeat);
+    ws.onerror = () => ws.close();
+
+    return () => {
+      clearInterval(heartbeat);
+      ws.close();
+    };
+  }, [user, queryClient]);
+
   const { data: subscription } = useSubscription();
 
   // AI access flags (legacy — kept for backward compat with other components)
@@ -249,6 +286,7 @@ export function UnifiedInbox() {
   const { data: inboxData, isLoading: inboxLoading } = useQuery<InboxItem[]>({
     queryKey: ["/api/inbox"],
     refetchInterval: 5000,
+    refetchIntervalInBackground: true,
   });
 
   const { data: demoChats = [] } = useQuery<any[]>({
@@ -340,6 +378,7 @@ export function UnifiedInbox() {
     queryKey: ["/api/conversations", primaryConversation?.id, "messages"],
     enabled: !!primaryConversation?.id && (!isDemoUser || !selectedDemoChat),
     refetchInterval: 4000,
+    refetchIntervalInBackground: true,
   });
 
   const messages: Message[] = useMemo(() => {

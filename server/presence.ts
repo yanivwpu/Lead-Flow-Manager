@@ -196,6 +196,14 @@ function handleDisconnect(ws: WebSocket) {
   clients.delete(ws);
 }
 
+export function notifyUser(userId: string, payload: Record<string, unknown>) {
+  clients.forEach((client) => {
+    if (client.userId === userId && client.ws.readyState === WebSocket.OPEN) {
+      client.ws.send(JSON.stringify(payload));
+    }
+  });
+}
+
 function broadcastChatPresence(chatId: string) {
   const viewers = chatPresence.get(chatId);
   if (!viewers) return;
