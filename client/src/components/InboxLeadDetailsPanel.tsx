@@ -1057,14 +1057,14 @@ export function InboxLeadDetailsPanel({
           </div>
 
           {/* ── TEAM NOTES ───────────────────────────────────────────── */}
-          <div>
-            <RowLabel>Team Notes</RowLabel>
+          <div className="mt-6 pt-4 border-t border-[#eee]">
+            <p className="text-xs uppercase tracking-wide text-gray-500 mb-1.5">Team Notes</p>
             <button
               onClick={() => {
                 setExpandedNotes(localNotes);
                 setExpandedNotesOpen(true);
               }}
-              className="w-full group text-left mt-1.5"
+              className="w-full group text-left"
               data-testid="button-expand-notes"
             >
               {localNotes ? (
