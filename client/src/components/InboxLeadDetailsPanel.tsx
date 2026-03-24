@@ -826,7 +826,7 @@ export function InboxLeadDetailsPanel({
 
           {/* ══ COPILOT EXPANDED PANEL ══════════════════════════════════ */}
           {copilotExpanded && (
-            <div className="-mx-3 -mt-3 bg-[#fafafa] border-b border-gray-200 px-4 pt-3 pb-4 space-y-4 animate-in fade-in slide-in-from-top-1 duration-200">
+            <div className="-mx-3 -mt-3 bg-[#fafafa] border-b border-gray-200 px-4 pt-3 pb-4 space-y-5 animate-in fade-in slide-in-from-top-1 duration-200">
 
               {!canSeeCopilot ? (
                 <AIUpgradePrompt
@@ -851,10 +851,26 @@ export function InboxLeadDetailsPanel({
                   </div>
 
                   {/* SIGNALS ────────────────────────────────────────── */}
-                  <div className="flex items-center gap-1 flex-wrap">
-                    <QualBadge ok={intel.hasBudget}    label="Budget"    value={intel.budget} />
-                    <QualBadge ok={intel.hasTimeline}  label="Timeline"  value={intel.timeline} />
-                    <QualBadge ok={intel.hasFinancing} label="Financing" value={intel.financing} />
+                  <div className="flex flex-col gap-1.5">
+                    {[
+                      { ok: intel.hasBudget,    label: 'Budget',    value: intel.budget },
+                      { ok: intel.hasTimeline,  label: 'Timeline',  value: intel.timeline },
+                      { ok: intel.hasFinancing, label: 'Financing', value: intel.financing },
+                    ].map(({ ok, label, value }) => (
+                      <div key={label} className="flex items-center gap-1.5 min-w-0">
+                        {ok
+                          ? <CheckCircle2 className="w-3 h-3 text-emerald-500 shrink-0" />
+                          : <Circle className="w-3 h-3 text-gray-300 shrink-0" />
+                        }
+                        <span className={cn("text-[11px] truncate", ok ? "text-gray-700" : "text-gray-400")}>
+                          <span className="font-medium">{label}</span>
+                          {ok && value
+                            ? <span className="font-normal">: {value}</span>
+                            : <span className="text-gray-300"> —</span>
+                          }
+                        </span>
+                      </div>
+                    ))}
                   </div>
 
                   {/* SUGGESTIONS ────────────────────────────────────── */}
@@ -922,9 +938,12 @@ export function InboxLeadDetailsPanel({
                   {/* SUGGESTED REPLY ────────────────────────────────── */}
                   {canSeeWorkflow && qualifyAction?.value && (
                     <div>
-                      <p className="text-xs uppercase tracking-wide text-gray-500 mb-1.5">Suggested reply</p>
-                      <div className="bg-white border border-gray-200 rounded-lg p-3 shadow-sm">
-                        <p className="text-[12px] text-gray-700 leading-relaxed">"{qualifyAction.value}"</p>
+                      <div className="mb-2">
+                        <p className="text-[10px] uppercase tracking-widest font-semibold text-gray-400">Suggested Reply</p>
+                        <p className="text-[10px] text-gray-400 mt-0.5">Recommended next step</p>
+                      </div>
+                      <div className="bg-white border border-gray-200 rounded-xl p-3.5 shadow-[0_1px_4px_rgba(0,0,0,0.06)]">
+                        <p className="text-[12px] text-gray-800 leading-relaxed">"{qualifyAction.value}"</p>
                         <button
                           onClick={() => {
                             if (onInsertMessage && qualifyAction.value) {
@@ -934,27 +953,28 @@ export function InboxLeadDetailsPanel({
                             }
                             completeAction('qualify', "Message inserted");
                           }}
-                          className="mt-2 text-[11px] font-medium text-purple-600 hover:text-purple-700 transition-colors"
+                          className="mt-2.5 text-[11px] font-semibold text-purple-600 hover:text-purple-700 transition-colors flex items-center gap-1"
                           data-testid="button-insert-suggested-message"
                         >
-                          Insert into reply →
+                          Insert reply
+                          <span className="text-purple-400">→</span>
                         </button>
                       </div>
                     </div>
                   )}
 
                   {/* SUMMARY ────────────────────────────────────────── */}
-                  <div>
-                    <p className="text-xs uppercase tracking-wide text-gray-500 mb-1.5">Summary</p>
+                  <div className="pt-3 border-t border-gray-100">
+                    <p className="text-[9px] uppercase tracking-widest font-semibold text-gray-300 mb-1.5">Summary</p>
                     {aiMemoryLoading ? (
                       <div className="flex items-center gap-1.5">
-                        <div className="w-2 h-2 rounded-full bg-purple-200 animate-pulse" />
+                        <div className="w-1.5 h-1.5 rounded-full bg-purple-200 animate-pulse" />
                         <span className="text-[11px] text-gray-400 italic">Generating…</span>
                       </div>
                     ) : aiMemory ? (
-                      <p className="text-[12px] text-gray-600 leading-relaxed">{aiMemory}</p>
+                      <p className="text-[11px] text-gray-500 leading-relaxed">{aiMemory}</p>
                     ) : (
-                      <p className="text-[11px] text-gray-400 italic">Summary will appear here as the conversation develops.</p>
+                      <p className="text-[10px] text-gray-400 italic">Summary will appear here as the conversation develops.</p>
                     )}
                   </div>
                 </>
