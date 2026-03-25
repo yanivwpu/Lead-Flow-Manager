@@ -14,9 +14,10 @@ import { supportedLanguages } from "@/lib/i18n";
 
 // ─── Shared structural component ────────────────────────────────────────────
 // Used for every checkmark + text row throughout the page.
-// RTL: icon appears on the right (flex-row-reverse), text wraps right-aligned
-// under itself (not under the icon) because it uses flex-1 + dir="auto".
-// LTR: icon on left, text left-aligned, same wrapping behaviour.
+// RTL: dir="rtl" on the <li> makes the browser place the first flex child
+// (Check icon) on the RIGHT and the text span to its LEFT automatically.
+// Wrapped text lines stay anchored under the text's right edge.
+// LTR: dir="ltr" — icon on left, text right of it, left-aligned.
 function FeatureItem({
   text,
   iconClass,
@@ -28,14 +29,14 @@ function FeatureItem({
 }) {
   return (
     <li
-      className={`flex items-start gap-2 text-sm text-gray-700 ${
-        isRTL ? "flex-row-reverse" : ""
-      }`}
+      dir={isRTL ? "rtl" : "ltr"}
+      className="flex items-start gap-2 text-sm text-gray-700"
     >
+      {/* With dir="rtl" the browser places the first flex child (Check) on the
+          RIGHT and the text span to its LEFT. Wrapped lines stay anchored under
+          the text's right edge — no manual flex-row-reverse needed. */}
       <Check className={`h-4 w-4 shrink-0 mt-0.5 ${iconClass}`} />
-      {/* flex-1 ensures wrapped lines stay under the text, not the icon.
-          dir="auto" lets the browser handle Hebrew + English bidi correctly. */}
-      <span className="flex-1 leading-snug" dir="auto">
+      <span className="flex-1 leading-snug">
         {text}
       </span>
     </li>
