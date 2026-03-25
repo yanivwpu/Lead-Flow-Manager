@@ -671,30 +671,17 @@ export function Pricing() {
             {t(`${p}.compare.title`)}
           </h2>
 
-          {/*
-            The parent div already carries dir="rtl" when Hebrew is active.
-            We do NOT repeat dir on the <table> to avoid double-application and
-            scroll-direction conflicts with overflow-x-auto.
-
-            Column order in RTL (inherited from parent):
-              Visually left→right:  Pro | Starter | Free | Feature
-              Reading  right→left:  Feature | Free | Starter | Pro  ✓
-
-            The feature <td> is the first DOM child, so in RTL it renders on
-            the far right — the natural reading-start position in Hebrew.
-          */}
-          <div className="overflow-x-auto rounded-2xl border border-gray-200 bg-white shadow-sm">
-            <table className="w-full text-sm min-w-[600px]">
+          <div
+            className="overflow-x-auto rounded-2xl border border-gray-200 bg-white shadow-sm"
+            dir={isRTL ? "rtl" : "ltr"}
+          >
+            <table className="w-full text-sm min-w-[600px]" dir={isRTL ? "rtl" : "ltr"}>
               <thead>
                 <tr className="border-b border-gray-100">
-                  {/*
-                    Feature header: text-right in RTL (logical "start"),
-                    text-left in LTR. No extra dir needed.
-                  */}
+                  {/* Feature header — explicit dir so mixed labels anchor correctly */}
                   <th
-                    className={`${
-                      isRTL ? "text-right" : "text-left"
-                    } py-4 px-5 font-semibold text-gray-700 w-[40%]`}
+                    dir={isRTL ? "rtl" : "ltr"}
+                    className="py-4 px-5 font-semibold text-gray-700 w-[40%] text-start"
                   >
                     {t(`${p}.compare.feature`)}
                   </th>
@@ -715,30 +702,19 @@ export function Pricing() {
                     key={row.feature}
                     className={idx % 2 === 0 ? "bg-gray-50/40" : ""}
                   >
-                    {/*
-                      Feature cell:
-                        - text-right / text-left for alignment
-                        - <bdi> is the correct HTML element for bidirectional
-                          isolation. It lets the browser auto-detect the
-                          direction of each label independently, which is
-                          essential for mixed strings like "תוסף AI Brain"
-                          (Hebrew word + English product name).
-                    */}
+                    {/* Feature cell — explicit dir="rtl" forces the correct anchor
+                        even for labels that start with English ("CRM", "AI Assist…").
+                        text-start resolves to right in RTL, left in LTR. */}
                     <td
-                      className={`py-3 px-5 font-medium text-gray-800 ${
-                        isRTL ? "text-right" : "text-left"
-                      }`}
+                      dir={isRTL ? "rtl" : "ltr"}
+                      className="py-3 px-5 font-medium text-gray-800 text-start"
                     >
-                      <bdi>{row.feature}</bdi>
+                      {row.feature}
                     </td>
 
-                    {/*
-                      Value cells: always text-center.
-                      TableCellValue wraps string content in dir="auto" so:
-                        - LTR strings ("50/month", "200/month") stay LTR
-                        - Hebrew strings ("הצעות תגובה + סנטימנט") stay RTL
-                        - Neutral content (—) stays centred
-                    */}
+                    {/* Value cells: always centered.
+                        dir="auto" on string values so "50/month" stays LTR
+                        and Hebrew strings stay RTL. */}
                     <td className="py-3 px-3 text-center">
                       <TableCellValue val={row.free} />
                     </td>
