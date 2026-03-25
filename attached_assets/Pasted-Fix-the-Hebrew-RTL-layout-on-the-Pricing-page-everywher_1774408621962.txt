@@ -1,0 +1,78 @@
+Fix the Hebrew RTL layout on the Pricing page everywhere, including the COMPARISON TABLE, not just the plan feature lists.
+
+MAIN ISSUE
+The Hebrew RTL is still wrong inside the comparison table.
+The feature-name column and mixed Hebrew/English text (like CRM, AI Assist, WhatsApp) are not flowing correctly in RTL.
+Also, any checkmark/text rows must render correctly in Hebrew.
+
+IMPORTANT
+Do NOT redesign the page.
+Do NOT change pricing content.
+Do NOT rewrite the pricing model.
+This is strictly a structural RTL fix.
+
+AREAS TO FIX
+1. comparison table
+2. plan card feature lists
+3. checkmark + sentence rows
+4. icon + text rows
+5. FAQ rows if they include icon/text
+6. mobile Hebrew layout too, not desktop only
+
+COMPARISON TABLE — REQUIRED FIX
+For Hebrew locale:
+- the whole comparison table must behave correctly in RTL
+- the feature/label column must be right-aligned
+- Hebrew text must read naturally from RTL
+- mixed strings such as CRM, AI Assist, WhatsApp, Pro, Starter, and pricing/numbers must still display correctly
+- cells must not look visually reversed or awkward
+- checkmarks, dashes, and included/not-included values must stay centered or aligned consistently
+- the table should feel like a real RTL table, not an LTR table with right-aligned text
+
+VERY IMPORTANT FOR MIXED TEXT
+In Hebrew rows that contain English product words like:
+- CRM
+- AI Assist
+- WhatsApp
+make sure bidi handling is correct so they do not appear visually broken.
+
+Recommended:
+- inspect the comparison table component and fix RTL at the table/row/cell structure level
+- do not patch cell by cell
+- use proper dir handling for Hebrew
+- for mixed-content labels, use a clean text wrapper approach so Hebrew + English terms render naturally
+
+CHECKMARK / ICON ROWS
+For Hebrew:
+- checkmark should appear before the sentence in RTL reading flow
+- row should use proper RTL flex structure
+- text should be right-aligned
+- wrapped lines must align properly under the text block
+- use gap, not random margins
+
+TECHNICAL EXPECTATION
+Please fix this structurally in the shared/reusable component(s), not by hardcoding special cases.
+
+TEST THESE SPECIFIC CASES
+- comparison table feature-name column
+- rows containing CRM
+- rows containing AI Assist
+- rows containing WhatsApp
+- rows with only checkmarks
+- rows with dash / unavailable values
+- mobile Hebrew table overflow/alignment
+- desktop Hebrew alignment
+
+ACCEPTANCE CHECKLIST
+- comparison table is fully correct in Hebrew RTL
+- feature-name column is right-aligned and reads naturally
+- mixed Hebrew/English terms render correctly
+- checkmark/text rows are correct
+- English and Spanish remain unchanged
+- mobile and desktop both look correct
+- no visual regressions
+
+PLEASE SEND BACK
+1. what shared component(s) were fixed
+2. whether the comparison table RTL was fixed structurally
+3. screenshots of Hebrew desktop and Hebrew mobile after the fix

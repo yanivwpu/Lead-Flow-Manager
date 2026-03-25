@@ -12,6 +12,48 @@ import { useAuth } from "@/lib/auth-context";
 import { useToast } from "@/hooks/use-toast";
 import { supportedLanguages } from "@/lib/i18n";
 
+// ─── Shared structural component ────────────────────────────────────────────
+// Used for every checkmark + text row throughout the page.
+// RTL: icon appears on the right (flex-row-reverse), text wraps right-aligned
+// under itself (not under the icon) because it uses flex-1 + dir="auto".
+// LTR: icon on left, text left-aligned, same wrapping behaviour.
+function FeatureItem({
+  text,
+  iconClass,
+  isRTL,
+}: {
+  text: string;
+  iconClass: string;
+  isRTL: boolean;
+}) {
+  return (
+    <li
+      className={`flex items-start gap-2 text-sm text-gray-700 ${
+        isRTL ? "flex-row-reverse" : ""
+      }`}
+    >
+      <Check className={`h-4 w-4 shrink-0 mt-0.5 ${iconClass}`} />
+      {/* flex-1 ensures wrapped lines stay under the text, not the icon.
+          dir="auto" lets the browser handle Hebrew + English bidi correctly. */}
+      <span className="flex-1 leading-snug" dir="auto">
+        {text}
+      </span>
+    </li>
+  );
+}
+
+// ─── Comparison table cell helpers ──────────────────────────────────────────
+// TableCellValue renders a single value cell (boolean or string).
+// String values use dir="auto" so LTR strings ("50/month") stay LTR and
+// Hebrew strings stay RTL regardless of the table's inherited direction.
+function TableCellValue({ val }: { val: boolean | string }) {
+  if (val === true)  return <Check className="w-4 h-4 text-emerald-500 mx-auto" />;
+  if (val === false) return <span className="text-gray-300">—</span>;
+  return <span className="text-gray-700" dir="auto">{val}</span>;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 export function Pricing() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
@@ -19,13 +61,17 @@ export function Pricing() {
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
   const { t, i18n } = useTranslation();
 
-  const isRTL = (supportedLanguages[i18n.language as keyof typeof supportedLanguages]?.dir ?? "ltr") === "rtl";
+  const isRTL =
+    (supportedLanguages[i18n.language as keyof typeof supportedLanguages]?.dir ??
+      "ltr") === "rtl";
 
   useEffect(() => {
     window.scrollTo(0, 0);
   }, []);
 
-  const { data: subscription } = useQuery<{ subscription: { plan: string } | null }>({
+  const { data: subscription } = useQuery<{
+    subscription: { plan: string } | null;
+  }>({
     queryKey: ["/api/subscription"],
     enabled: !!user,
   });
@@ -78,13 +124,40 @@ export function Pricing() {
     checkoutMutation.mutate(planId);
   };
 
-  const getPlanIndex = (planId: string) => ["free", "starter", "pro"].indexOf(planId);
+  const getPlanIndex = (planId: string) =>
+    ["free", "starter", "pro"].indexOf(planId);
   const currentPlanIndex = getPlanIndex(currentPlan);
-  const canAccessAIBrain = currentPlan === "starter" || currentPlan === "pro";
+  const canAccessAIBrain =
+    currentPlan === "starter" || currentPlan === "pro";
 
   const p = "pricingPage";
 
+  // Comparison table rows – feature labels are already translated strings
+  const compareRows: {
+    feature: string;
+    free: boolean | string;
+    starter: boolean | string;
+    pro: boolean | string;
+  }[] = [
+    { feature: t(`${p}.compare.activeConversations`), free: "50", starter: "500", pro: "2,000" },
+    { feature: t(`${p}.compare.users`), free: "1", starter: t(`${p}.compare.upTo3`), pro: t(`${p}.compare.multiple`) },
+    { feature: t(`${p}.compare.whatsappNumbers`), free: "1", starter: "1", pro: "5" },
+    { feature: t(`${p}.compare.unifiedInbox`), free: true, starter: true, pro: true },
+    { feature: t(`${p}.compare.crm`), free: t(`${p}.compare.basic`), starter: t(`${p}.compare.full`), pro: t(`${p}.compare.full`) },
+    { feature: t(`${p}.compare.pipelineTasks`), free: true, starter: true, pro: true },
+    { feature: t(`${p}.compare.aiAssistIncluded`), free: false, starter: "50/month", pro: "200/month" },
+    { feature: t(`${p}.compare.aiAssistType`), free: false, starter: t(`${p}.compare.replyAndSentiment`), pro: t(`${p}.compare.enhancedAI`) },
+    { feature: t(`${p}.compare.automations`), free: false, starter: t(`${p}.compare.basic`), pro: t(`${p}.compare.advanced`) },
+    { feature: t(`${p}.compare.leadScoring`), free: false, starter: false, pro: true },
+    { feature: t(`${p}.compare.smartRetargeting`), free: false, starter: false, pro: true },
+    { feature: t(`${p}.compare.integrationsWebhooks`), free: false, starter: false, pro: true },
+    { feature: t(`${p}.compare.aiBrainAddon`), free: false, starter: true, pro: true },
+  ];
+
   return (
+    // dir on the root div propagates to all children automatically.
+    // We do NOT add dir again on the table — inherited is correct and avoids
+    // double-application issues with overflow-x-auto scroll direction.
     <div
       dir={isRTL ? "rtl" : "ltr"}
       className={`min-h-screen bg-gray-50 ${isRTL ? "text-right" : "text-left"}`}
@@ -105,15 +178,24 @@ export function Pricing() {
       <div className="max-w-6xl 2xl:max-w-7xl mx-auto px-4 py-10">
 
         <Link href={user ? "/app/settings" : "/"}>
-          <a className={`inline-flex items-center text-sm text-gray-500 hover:text-brand-green mb-8 ${isRTL ? "flex-row-reverse" : ""}`}>
-            <ArrowLeft className={`h-4 w-4 ${isRTL ? "ml-2 rotate-180" : "mr-2"}`} />
+          <a
+            className={`inline-flex items-center text-sm text-gray-500 hover:text-brand-green mb-8 ${
+              isRTL ? "flex-row-reverse" : ""
+            }`}
+          >
+            <ArrowLeft
+              className={`h-4 w-4 ${isRTL ? "ml-2 rotate-180" : "mr-2"}`}
+            />
             {user ? t(`${p}.backSettings`) : t(`${p}.backHome`)}
           </a>
         </Link>
 
         {/* ─────────────── SECTION 1: HERO ─────────────── */}
         <div className="text-center mb-14">
-          <h1 className="text-4xl xl:text-5xl font-display font-bold text-gray-900 mb-4" data-testid="text-pricing-hero-title">
+          <h1
+            className="text-4xl xl:text-5xl font-display font-bold text-gray-900 mb-4"
+            data-testid="text-pricing-hero-title"
+          >
             {t(`${p}.hero.title`)}
           </h1>
           <p className="text-lg xl:text-xl text-gray-600 max-w-2xl xl:max-w-3xl mx-auto mb-2">
@@ -150,34 +232,50 @@ export function Pricing() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-            {/* Card 1 */}
-            <div className="bg-white rounded-2xl border border-blue-100 p-6" data-testid="copilot-card-starter">
-              <div className={`h-10 w-10 bg-blue-100 rounded-xl flex items-center justify-center mb-3 ${isRTL ? "mr-0" : ""}`}>
+            {/* Starter card */}
+            <div
+              className="bg-white rounded-2xl border border-blue-100 p-6"
+              data-testid="copilot-card-starter"
+            >
+              <div className="h-10 w-10 bg-blue-100 rounded-xl flex items-center justify-center mb-3">
                 <MessageSquare className="h-5 w-5 text-blue-600" />
               </div>
-              <h3 className="font-bold text-gray-900 mb-1">{t(`${p}.copilot.starterTitle`)}</h3>
-              <p className="text-sm text-gray-500 mb-4">{t(`${p}.copilot.starterDesc`)}</p>
+              <h3 className="font-bold text-gray-900 mb-1">
+                {t(`${p}.copilot.starterTitle`)}
+              </h3>
+              <p className="text-sm text-gray-500 mb-4">
+                {t(`${p}.copilot.starterDesc`)}
+              </p>
               <ul className="space-y-2">
                 {[
                   t(`${p}.copilot.starterF1`),
                   t(`${p}.copilot.starterF2`),
                   t(`${p}.copilot.starterF3`),
                 ].map((item) => (
-                  <li key={item} className={`flex items-center gap-2 text-sm text-gray-700 ${isRTL ? "flex-row-reverse" : ""}`}>
-                    <Check className="h-4 w-4 text-blue-500 shrink-0" />
-                    {item}
-                  </li>
+                  <FeatureItem
+                    key={item}
+                    text={item}
+                    iconClass="text-blue-500"
+                    isRTL={isRTL}
+                  />
                 ))}
               </ul>
             </div>
 
-            {/* Card 2 */}
-            <div className="bg-white rounded-2xl border border-emerald-100 p-6" data-testid="copilot-card-pro">
+            {/* Pro card */}
+            <div
+              className="bg-white rounded-2xl border border-emerald-100 p-6"
+              data-testid="copilot-card-pro"
+            >
               <div className="h-10 w-10 bg-emerald-100 rounded-xl flex items-center justify-center mb-3">
                 <Zap className="h-5 w-5 text-emerald-600" />
               </div>
-              <h3 className="font-bold text-gray-900 mb-1">{t(`${p}.copilot.proTitle`)}</h3>
-              <p className="text-sm text-gray-500 mb-4">{t(`${p}.copilot.proDesc`)}</p>
+              <h3 className="font-bold text-gray-900 mb-1">
+                {t(`${p}.copilot.proTitle`)}
+              </h3>
+              <p className="text-sm text-gray-500 mb-4">
+                {t(`${p}.copilot.proDesc`)}
+              </p>
               <ul className="space-y-2">
                 {[
                   t(`${p}.copilot.proF1`),
@@ -185,31 +283,42 @@ export function Pricing() {
                   t(`${p}.copilot.proF3`),
                   t(`${p}.copilot.proF4`),
                 ].map((item) => (
-                  <li key={item} className={`flex items-center gap-2 text-sm text-gray-700 ${isRTL ? "flex-row-reverse" : ""}`}>
-                    <Check className="h-4 w-4 text-emerald-500 shrink-0" />
-                    {item}
-                  </li>
+                  <FeatureItem
+                    key={item}
+                    text={item}
+                    iconClass="text-emerald-500"
+                    isRTL={isRTL}
+                  />
                 ))}
               </ul>
             </div>
 
-            {/* Card 3 */}
-            <div className="bg-white rounded-2xl border border-purple-100 p-6" data-testid="copilot-card-ai-brain">
+            {/* AI Brain card */}
+            <div
+              className="bg-white rounded-2xl border border-purple-100 p-6"
+              data-testid="copilot-card-ai-brain"
+            >
               <div className="h-10 w-10 bg-purple-100 rounded-xl flex items-center justify-center mb-3">
                 <Brain className="h-5 w-5 text-purple-600" />
               </div>
-              <h3 className="font-bold text-gray-900 mb-1">{t(`${p}.copilot.brainTitle`)}</h3>
-              <p className="text-sm text-gray-500 mb-4">{t(`${p}.copilot.brainDesc`)}</p>
+              <h3 className="font-bold text-gray-900 mb-1">
+                {t(`${p}.copilot.brainTitle`)}
+              </h3>
+              <p className="text-sm text-gray-500 mb-4">
+                {t(`${p}.copilot.brainDesc`)}
+              </p>
               <ul className="space-y-2">
                 {[
                   t(`${p}.copilot.brainF1`),
                   t(`${p}.copilot.brainF2`),
                   t(`${p}.copilot.brainF3`),
                 ].map((item) => (
-                  <li key={item} className={`flex items-center gap-2 text-sm text-gray-700 ${isRTL ? "flex-row-reverse" : ""}`}>
-                    <Check className="h-4 w-4 text-purple-500 shrink-0" />
-                    {item}
-                  </li>
+                  <FeatureItem
+                    key={item}
+                    text={item}
+                    iconClass="text-purple-500"
+                    isRTL={isRTL}
+                  />
                 ))}
               </ul>
             </div>
@@ -243,29 +352,53 @@ export function Pricing() {
                 text: t(`${p}.useCases.case3`),
               },
             ].map((item, i) => (
-              <div key={i} className={`${item.bg} rounded-2xl p-5 flex items-start gap-4 ${isRTL ? "flex-row-reverse" : ""}`}>
+              <div
+                key={i}
+                className={`${item.bg} rounded-2xl p-5 flex items-start gap-4 ${
+                  isRTL ? "flex-row-reverse" : ""
+                }`}
+              >
                 <div className="shrink-0 mt-0.5">{item.icon}</div>
-                <p className="text-sm font-medium text-gray-800 leading-snug">{item.text}</p>
+                <p className="text-sm font-medium text-gray-800 leading-snug" dir="auto">
+                  {item.text}
+                </p>
               </div>
             ))}
           </div>
         </div>
 
         {/* ─────────────── SECTION 3: PRICING CARDS ─────────────── */}
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5 mb-14" data-testid="section-pricing-cards">
-
+        <div
+          className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5 mb-14"
+          data-testid="section-pricing-cards"
+        >
           {/* FREE */}
           {(() => {
             const isCurrentPlan = currentPlan === "free";
             return (
-              <div className="bg-white rounded-2xl border-2 border-gray-200 p-6 flex flex-col" data-testid="plan-card-free">
+              <div
+                className="bg-white rounded-2xl border-2 border-gray-200 p-6 flex flex-col"
+                data-testid="plan-card-free"
+              >
                 <div className="mb-5">
-                  <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{t(`${p}.plans.free.name`)}</span>
-                  <div className={`flex items-baseline gap-1 mt-1 mb-1 ${isRTL ? "flex-row-reverse justify-end" : ""}`}>
-                    <span className="text-3xl font-bold text-gray-900">{t(`${p}.plans.free.price`)}</span>
-                    <span className="text-sm text-gray-500">{t(`${p}.plans.free.period`)}</span>
+                  <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                    {t(`${p}.plans.free.name`)}
+                  </span>
+                  <div
+                    className={`flex items-baseline gap-1 mt-1 mb-1 ${
+                      isRTL ? "flex-row-reverse justify-end" : ""
+                    }`}
+                  >
+                    <span className="text-3xl font-bold text-gray-900">
+                      {t(`${p}.plans.free.price`)}
+                    </span>
+                    <span className="text-sm text-gray-500">
+                      {t(`${p}.plans.free.period`)}
+                    </span>
                   </div>
-                  <p className="text-sm text-gray-500">{t(`${p}.plans.free.desc`)}</p>
+                  <p className="text-sm text-gray-500">
+                    {t(`${p}.plans.free.desc`)}
+                  </p>
                 </div>
                 <ul className="space-y-3 flex-1">
                   {[
@@ -277,20 +410,26 @@ export function Pricing() {
                     t(`${p}.plans.free.f6`),
                     t(`${p}.plans.free.f7`),
                   ].map((f) => (
-                    <li key={f} className={`flex items-start gap-2 text-sm text-gray-700 ${isRTL ? "flex-row-reverse" : ""}`}>
-                      <Check className="h-4 w-4 text-emerald-500 shrink-0 mt-0.5" />
-                      {f}
-                    </li>
+                    <FeatureItem
+                      key={f}
+                      text={f}
+                      iconClass="text-emerald-500"
+                      isRTL={isRTL}
+                    />
                   ))}
                 </ul>
-                <p className="text-xs text-gray-400 mt-4 mb-4">{t(`${p}.plans.free.upsell`)}</p>
+                <p className="text-xs text-gray-400 mt-4 mb-4">
+                  {t(`${p}.plans.free.upsell`)}
+                </p>
                 <Button
                   className="w-full bg-gray-100 text-gray-700 hover:bg-gray-200"
                   onClick={() => setLocation(user ? "/app/chats" : "/auth")}
                   disabled={isCurrentPlan}
                   data-testid="button-upgrade-free"
                 >
-                  {isCurrentPlan ? t(`${p}.plans.currentPlan`) : t(`${p}.plans.free.cta`)}
+                  {isCurrentPlan
+                    ? t(`${p}.plans.currentPlan`)
+                    : t(`${p}.plans.free.cta`)}
                 </Button>
               </div>
             );
@@ -301,14 +440,29 @@ export function Pricing() {
             const isCurrentPlan = currentPlan === "starter";
             const isLoading = loadingPlan === "starter";
             return (
-              <div className="bg-white rounded-2xl border-2 border-blue-200 p-6 flex flex-col" data-testid="plan-card-starter">
+              <div
+                className="bg-white rounded-2xl border-2 border-blue-200 p-6 flex flex-col"
+                data-testid="plan-card-starter"
+              >
                 <div className="mb-5">
-                  <span className="text-xs font-semibold text-blue-600 uppercase tracking-wider">{t(`${p}.plans.starter.name`)}</span>
-                  <div className={`flex items-baseline gap-1 mt-1 mb-1 ${isRTL ? "flex-row-reverse justify-end" : ""}`}>
-                    <span className="text-3xl font-bold text-gray-900">{t(`${p}.plans.starter.price`)}</span>
-                    <span className="text-sm text-gray-500">{t(`${p}.plans.starter.period`)}</span>
+                  <span className="text-xs font-semibold text-blue-600 uppercase tracking-wider">
+                    {t(`${p}.plans.starter.name`)}
+                  </span>
+                  <div
+                    className={`flex items-baseline gap-1 mt-1 mb-1 ${
+                      isRTL ? "flex-row-reverse justify-end" : ""
+                    }`}
+                  >
+                    <span className="text-3xl font-bold text-gray-900">
+                      {t(`${p}.plans.starter.price`)}
+                    </span>
+                    <span className="text-sm text-gray-500">
+                      {t(`${p}.plans.starter.period`)}
+                    </span>
                   </div>
-                  <p className="text-sm text-gray-500">{t(`${p}.plans.starter.desc`)}</p>
+                  <p className="text-sm text-gray-500">
+                    {t(`${p}.plans.starter.desc`)}
+                  </p>
                 </div>
                 <ul className="space-y-3 flex-1">
                   {[
@@ -324,20 +478,34 @@ export function Pricing() {
                     t(`${p}.plans.starter.f10`),
                     t(`${p}.plans.starter.f11`),
                   ].map((f) => (
-                    <li key={f} className={`flex items-start gap-2 text-sm text-gray-700 ${isRTL ? "flex-row-reverse" : ""}`}>
-                      <Check className="h-4 w-4 text-blue-500 shrink-0 mt-0.5" />
-                      {f}
-                    </li>
+                    <FeatureItem
+                      key={f}
+                      text={f}
+                      iconClass="text-blue-500"
+                      isRTL={isRTL}
+                    />
                   ))}
                 </ul>
-                <p className="text-xs text-gray-400 mt-4 mb-4">{t(`${p}.plans.starter.upsell`)}</p>
+                <p className="text-xs text-gray-400 mt-4 mb-4">
+                  {t(`${p}.plans.starter.upsell`)}
+                </p>
                 <Button
-                  className={`w-full ${isCurrentPlan ? "bg-gray-100 text-gray-500" : "bg-blue-600 hover:bg-blue-700 text-white"}`}
+                  className={`w-full ${
+                    isCurrentPlan
+                      ? "bg-gray-100 text-gray-500"
+                      : "bg-blue-600 hover:bg-blue-700 text-white"
+                  }`}
                   disabled={isCurrentPlan || isLoading}
                   onClick={() => handleUpgrade("starter")}
                   data-testid="button-upgrade-starter"
                 >
-                  {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : isCurrentPlan ? t(`${p}.plans.currentPlan`) : t(`${p}.plans.starter.cta`)}
+                  {isLoading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : isCurrentPlan ? (
+                    t(`${p}.plans.currentPlan`)
+                  ) : (
+                    t(`${p}.plans.starter.cta`)
+                  )}
                 </Button>
               </div>
             );
@@ -348,17 +516,33 @@ export function Pricing() {
             const isCurrentPlan = currentPlan === "pro";
             const isLoading = loadingPlan === "pro";
             return (
-              <div className="bg-white rounded-2xl border-2 border-brand-green shadow-lg p-6 flex flex-col relative" data-testid="plan-card-pro">
-                <div className={`absolute -top-3 ${isRTL ? "right-1/2 translate-x-1/2" : "left-1/2 -translate-x-1/2"} bg-brand-green text-white text-xs font-semibold px-3 py-1 rounded-full whitespace-nowrap`}>
+              <div
+                className="bg-white rounded-2xl border-2 border-brand-green shadow-lg p-6 flex flex-col relative"
+                data-testid="plan-card-pro"
+              >
+                {/* Badge: centred regardless of LTR/RTL */}
+                <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-brand-green text-white text-xs font-semibold px-3 py-1 rounded-full whitespace-nowrap">
                   {t(`${p}.plans.pro.badge`)}
                 </div>
                 <div className="mb-5 mt-2">
-                  <span className="text-xs font-semibold text-brand-green uppercase tracking-wider">{t(`${p}.plans.pro.name`)}</span>
-                  <div className={`flex items-baseline gap-1 mt-1 mb-1 ${isRTL ? "flex-row-reverse justify-end" : ""}`}>
-                    <span className="text-3xl font-bold text-gray-900">{t(`${p}.plans.pro.price`)}</span>
-                    <span className="text-sm text-gray-500">{t(`${p}.plans.pro.period`)}</span>
+                  <span className="text-xs font-semibold text-brand-green uppercase tracking-wider">
+                    {t(`${p}.plans.pro.name`)}
+                  </span>
+                  <div
+                    className={`flex items-baseline gap-1 mt-1 mb-1 ${
+                      isRTL ? "flex-row-reverse justify-end" : ""
+                    }`}
+                  >
+                    <span className="text-3xl font-bold text-gray-900">
+                      {t(`${p}.plans.pro.price`)}
+                    </span>
+                    <span className="text-sm text-gray-500">
+                      {t(`${p}.plans.pro.period`)}
+                    </span>
                   </div>
-                  <p className="text-sm text-gray-500">{t(`${p}.plans.pro.desc`)}</p>
+                  <p className="text-sm text-gray-500">
+                    {t(`${p}.plans.pro.desc`)}
+                  </p>
                 </div>
                 <ul className="space-y-3 flex-1">
                   {[
@@ -375,34 +559,63 @@ export function Pricing() {
                     t(`${p}.plans.pro.f11`),
                     t(`${p}.plans.pro.f12`),
                   ].map((f) => (
-                    <li key={f} className={`flex items-start gap-2 text-sm text-gray-700 ${isRTL ? "flex-row-reverse" : ""}`}>
-                      <Check className="h-4 w-4 text-brand-green shrink-0 mt-0.5" />
-                      {f}
-                    </li>
+                    <FeatureItem
+                      key={f}
+                      text={f}
+                      iconClass="text-brand-green"
+                      isRTL={isRTL}
+                    />
                   ))}
                 </ul>
-                <p className="text-xs text-gray-400 mt-4 mb-4">{t(`${p}.plans.pro.upsell`)}</p>
+                <p className="text-xs text-gray-400 mt-4 mb-4">
+                  {t(`${p}.plans.pro.upsell`)}
+                </p>
                 <Button
-                  className={`w-full ${isCurrentPlan ? "bg-gray-100 text-gray-500" : "bg-brand-green hover:bg-emerald-700 text-white"}`}
+                  className={`w-full ${
+                    isCurrentPlan
+                      ? "bg-gray-100 text-gray-500"
+                      : "bg-brand-green hover:bg-emerald-700 text-white"
+                  }`}
                   disabled={isCurrentPlan || isLoading}
                   onClick={() => handleUpgrade("pro")}
                   data-testid="button-upgrade-pro"
                 >
-                  {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : isCurrentPlan ? t(`${p}.plans.currentPlan`) : t(`${p}.plans.pro.cta`)}
+                  {isLoading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : isCurrentPlan ? (
+                    t(`${p}.plans.currentPlan`)
+                  ) : (
+                    t(`${p}.plans.pro.cta`)
+                  )}
                 </Button>
               </div>
             );
           })()}
 
           {/* AI BRAIN ADD-ON */}
-          <div className="bg-gradient-to-br from-purple-50 to-blue-50 rounded-2xl border-2 border-purple-200 p-6 flex flex-col" data-testid="plan-card-ai-brain">
+          <div
+            className="bg-gradient-to-br from-purple-50 to-blue-50 rounded-2xl border-2 border-purple-200 p-6 flex flex-col"
+            data-testid="plan-card-ai-brain"
+          >
             <div className="mb-5">
-              <span className="text-xs font-semibold text-purple-600 uppercase tracking-wider">{t(`${p}.plans.aiBrain.name`)}</span>
-              <div className={`flex items-baseline gap-1 mt-1 mb-1 ${isRTL ? "flex-row-reverse justify-end" : ""}`}>
-                <span className="text-3xl font-bold text-gray-900">{t(`${p}.plans.aiBrain.price`)}</span>
-                <span className="text-sm text-gray-500">{t(`${p}.plans.aiBrain.period`)}</span>
+              <span className="text-xs font-semibold text-purple-600 uppercase tracking-wider">
+                {t(`${p}.plans.aiBrain.name`)}
+              </span>
+              <div
+                className={`flex items-baseline gap-1 mt-1 mb-1 ${
+                  isRTL ? "flex-row-reverse justify-end" : ""
+                }`}
+              >
+                <span className="text-3xl font-bold text-gray-900">
+                  {t(`${p}.plans.aiBrain.price`)}
+                </span>
+                <span className="text-sm text-gray-500">
+                  {t(`${p}.plans.aiBrain.period`)}
+                </span>
               </div>
-              <p className="text-sm text-gray-500">{t(`${p}.plans.aiBrain.desc`)}</p>
+              <p className="text-sm text-gray-500">
+                {t(`${p}.plans.aiBrain.desc`)}
+              </p>
             </div>
             <ul className="space-y-3 flex-1">
               {[
@@ -412,16 +625,23 @@ export function Pricing() {
                 t(`${p}.plans.aiBrain.f4`),
                 t(`${p}.plans.aiBrain.f5`),
               ].map((f) => (
-                <li key={f} className={`flex items-start gap-2 text-sm text-gray-700 ${isRTL ? "flex-row-reverse" : ""}`}>
-                  <Check className="h-4 w-4 text-purple-500 shrink-0 mt-0.5" />
-                  {f}
-                </li>
+                <FeatureItem
+                  key={f}
+                  text={f}
+                  iconClass="text-purple-500"
+                  isRTL={isRTL}
+                />
               ))}
             </ul>
-            <p className="text-xs text-gray-400 mt-4 mb-4">{t(`${p}.plans.aiBrain.upsell`)}</p>
+            <p className="text-xs text-gray-400 mt-4 mb-4">
+              {t(`${p}.plans.aiBrain.upsell`)}
+            </p>
             {canAccessAIBrain ? (
               <Link href="/app/ai-brain">
-                <Button className="w-full bg-purple-600 hover:bg-purple-700 text-white" data-testid="button-ai-brain-go">
+                <Button
+                  className="w-full bg-purple-600 hover:bg-purple-700 text-white"
+                  data-testid="button-ai-brain-go"
+                >
                   <Brain className={`w-4 h-4 ${isRTL ? "ml-2" : "mr-2"}`} />
                   {t(`${p}.plans.aiBrain.ctaUnlock`)}
                 </Button>
@@ -433,7 +653,11 @@ export function Pricing() {
                 disabled={loadingPlan === "starter"}
                 data-testid="button-upgrade-for-ai-brain"
               >
-                {loadingPlan === "starter" ? <Loader2 className={`w-4 h-4 animate-spin ${isRTL ? "ml-2" : "mr-2"}`} /> : null}
+                {loadingPlan === "starter" && (
+                  <Loader2
+                    className={`w-4 h-4 animate-spin ${isRTL ? "ml-2" : "mr-2"}`}
+                  />
+                )}
                 {t(`${p}.plans.aiBrain.ctaUpgrade`)}
               </Button>
             )}
@@ -445,45 +669,84 @@ export function Pricing() {
           <h2 className="text-2xl font-display font-bold text-gray-900 text-center mb-8">
             {t(`${p}.compare.title`)}
           </h2>
+
+          {/*
+            The parent div already carries dir="rtl" when Hebrew is active.
+            We do NOT repeat dir on the <table> to avoid double-application and
+            scroll-direction conflicts with overflow-x-auto.
+
+            Column order in RTL (inherited from parent):
+              Visually left→right:  Pro | Starter | Free | Feature
+              Reading  right→left:  Feature | Free | Starter | Pro  ✓
+
+            The feature <td> is the first DOM child, so in RTL it renders on
+            the far right — the natural reading-start position in Hebrew.
+          */}
           <div className="overflow-x-auto rounded-2xl border border-gray-200 bg-white shadow-sm">
-            <table className="w-full text-sm min-w-[600px]" dir={isRTL ? "rtl" : "ltr"}>
+            <table className="w-full text-sm min-w-[600px]">
               <thead>
                 <tr className="border-b border-gray-100">
-                  <th className={`${isRTL ? "text-right" : "text-left"} py-4 px-5 font-semibold text-gray-700 w-[40%]`}>{t(`${p}.compare.feature`)}</th>
-                  <th className="text-center py-4 px-3 font-semibold text-gray-700">{t(`${p}.plans.free.name`)}</th>
-                  <th className="text-center py-4 px-3 font-semibold text-blue-700">{t(`${p}.plans.starter.name`)}</th>
-                  <th className="text-center py-4 px-3 font-semibold text-brand-green">{t(`${p}.plans.pro.name`)}</th>
+                  {/*
+                    Feature header: text-right in RTL (logical "start"),
+                    text-left in LTR. No extra dir needed.
+                  */}
+                  <th
+                    className={`${
+                      isRTL ? "text-right" : "text-left"
+                    } py-4 px-5 font-semibold text-gray-700 w-[40%]`}
+                  >
+                    {t(`${p}.compare.feature`)}
+                  </th>
+                  <th className="text-center py-4 px-3 font-semibold text-gray-700">
+                    {t(`${p}.plans.free.name`)}
+                  </th>
+                  <th className="text-center py-4 px-3 font-semibold text-blue-700">
+                    {t(`${p}.plans.starter.name`)}
+                  </th>
+                  <th className="text-center py-4 px-3 font-semibold text-brand-green">
+                    {t(`${p}.plans.pro.name`)}
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {[
-                  { feature: t(`${p}.compare.activeConversations`), free: "50", starter: "500", pro: "2,000" },
-                  { feature: t(`${p}.compare.users`), free: "1", starter: t(`${p}.compare.upTo3`), pro: t(`${p}.compare.multiple`) },
-                  { feature: t(`${p}.compare.whatsappNumbers`), free: "1", starter: "1", pro: "5" },
-                  { feature: t(`${p}.compare.unifiedInbox`), free: true, starter: true, pro: true },
-                  { feature: t(`${p}.compare.crm`), free: t(`${p}.compare.basic`), starter: t(`${p}.compare.full`), pro: t(`${p}.compare.full`) },
-                  { feature: t(`${p}.compare.pipelineTasks`), free: true, starter: true, pro: true },
-                  { feature: t(`${p}.compare.aiAssistIncluded`), free: false, starter: "50/month", pro: "200/month" },
-                  { feature: t(`${p}.compare.aiAssistType`), free: false, starter: t(`${p}.compare.replyAndSentiment`), pro: t(`${p}.compare.enhancedAI`) },
-                  { feature: t(`${p}.compare.automations`), free: false, starter: t(`${p}.compare.basic`), pro: t(`${p}.compare.advanced`) },
-                  { feature: t(`${p}.compare.leadScoring`), free: false, starter: false, pro: true },
-                  { feature: t(`${p}.compare.smartRetargeting`), free: false, starter: false, pro: true },
-                  { feature: t(`${p}.compare.integrationsWebhooks`), free: false, starter: false, pro: true },
-                  { feature: t(`${p}.compare.aiBrainAddon`), free: false, starter: true, pro: true },
-                ].map((row, idx) => (
-                  <tr key={row.feature} className={idx % 2 === 0 ? "bg-gray-50/40" : ""}>
-                    <td className={`py-3 px-5 font-medium text-gray-800 ${isRTL ? "text-right" : "text-left"}`}>{row.feature}</td>
-                    {([row.free, row.starter, row.pro] as (boolean | string)[]).map((val, i) => (
-                      <td key={i} className="py-3 px-3 text-center text-sm">
-                        {val === true ? (
-                          <Check className="w-4 h-4 text-emerald-500 mx-auto" />
-                        ) : val === false ? (
-                          <span className="text-gray-300">—</span>
-                        ) : (
-                          <span className="text-gray-700">{val}</span>
-                        )}
-                      </td>
-                    ))}
+                {compareRows.map((row, idx) => (
+                  <tr
+                    key={row.feature}
+                    className={idx % 2 === 0 ? "bg-gray-50/40" : ""}
+                  >
+                    {/*
+                      Feature cell:
+                        - text-right / text-left for alignment
+                        - <bdi> is the correct HTML element for bidirectional
+                          isolation. It lets the browser auto-detect the
+                          direction of each label independently, which is
+                          essential for mixed strings like "תוסף AI Brain"
+                          (Hebrew word + English product name).
+                    */}
+                    <td
+                      className={`py-3 px-5 font-medium text-gray-800 ${
+                        isRTL ? "text-right" : "text-left"
+                      }`}
+                    >
+                      <bdi>{row.feature}</bdi>
+                    </td>
+
+                    {/*
+                      Value cells: always text-center.
+                      TableCellValue wraps string content in dir="auto" so:
+                        - LTR strings ("50/month", "200/month") stay LTR
+                        - Hebrew strings ("הצעות תגובה + סנטימנט") stay RTL
+                        - Neutral content (—) stays centred
+                    */}
+                    <td className="py-3 px-3 text-center">
+                      <TableCellValue val={row.free} />
+                    </td>
+                    <td className="py-3 px-3 text-center">
+                      <TableCellValue val={row.starter} />
+                    </td>
+                    <td className="py-3 px-3 text-center">
+                      <TableCellValue val={row.pro} />
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -503,16 +766,27 @@ export function Pricing() {
               { q: t(`${p}.faq.q3`), a: t(`${p}.faq.a3`) },
               { q: t(`${p}.faq.q4`), a: t(`${p}.faq.a4`) },
             ].map((item, idx) => (
-              <div key={idx} className="bg-white rounded-xl border border-gray-200 p-5">
-                <p className="font-semibold text-gray-900 mb-2">{item.q}</p>
-                <p className="text-sm text-gray-600 leading-relaxed">{item.a}</p>
+              <div
+                key={idx}
+                className="bg-white rounded-xl border border-gray-200 p-5"
+              >
+                {/* dir="auto": question/answer text direction auto-detected per language */}
+                <p className="font-semibold text-gray-900 mb-2" dir="auto">
+                  {item.q}
+                </p>
+                <p className="text-sm text-gray-600 leading-relaxed" dir="auto">
+                  {item.a}
+                </p>
               </div>
             ))}
           </div>
         </div>
 
         {/* ─────────────── SECTION 6: FINAL CTA ─────────────── */}
-        <div className="bg-gray-900 rounded-2xl p-8 md:p-12 text-center text-white" data-testid="section-final-cta">
+        <div
+          className="bg-gray-900 rounded-2xl p-8 md:p-12 text-center text-white"
+          data-testid="section-final-cta"
+        >
           <h2 className="text-2xl md:text-3xl font-display font-bold mb-4">
             {t(`${p}.cta.title`)}
           </h2>
