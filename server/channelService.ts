@@ -237,7 +237,14 @@ class ChannelService {
     mediaUrl?: string;
     externalMessageId?: string;
   }): Promise<{ contact: Contact; conversation: Conversation; message: Message }> {
-    const { userId, channel, channelContactId, contactName, content, contentType = 'text', mediaUrl, externalMessageId } = params;
+    const { userId, channel, content, contentType = 'text', mediaUrl, externalMessageId } = params;
+    let { channelContactId, contactName } = params;
+
+    // Normalise phone-based identifiers to digits-only so "+923364127888" and
+    // "923364127888" always resolve to the same contact record.
+    if (channel === 'whatsapp' || channel === 'sms') {
+      channelContactId = channelContactId.replace(/\D/g, '');
+    }
 
     console.log(`[Inbound] Webhook received — channel: ${channel}, from: ${channelContactId}, userId: ${userId}, messageId: ${externalMessageId}`);
 

@@ -277,6 +277,78 @@ app.use((req, res, next) => {
     console.error('[Seed] Failed to seed Realtor Growth Engine template:', err);
   }
 
+  // One-time deduplication: merge contacts that share the same normalised WhatsApp/phone number.
+  // Safe to run on every startup — no-ops immediately when no duplicates exist.
+  try {
+    const { db } = await import("../drizzle/db");
+    const { contacts, conversations } = await import("@shared/schema");
+    const { eq, and, sql: rawSql, asc } = await import("drizzle-orm");
+
+    const allContacts = await db.select().from(contacts);
+    const groups = new Map<string, typeof allContacts>();
+    for (const c of allContacts) {
+      const raw = c.whatsappId || c.phone || '';
+      if (!raw) continue;
+      const digits = raw.replace(/\D/g, '');
+      if (digits.length < 7) continue; // skip obviously non-phone values
+      const key = `${c.userId}::${digits}`;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(c);
+    }
+
+    for (const [key, group] of groups.entries()) {
+      if (group.length < 2) continue;
+
+      // Count messages per contact
+      const counts = await Promise.all(group.map(async (c) => {
+        const rows = await db.execute(rawSql`
+          SELECT COUNT(*) as cnt FROM messages m
+          JOIN conversations cv ON m.conversation_id = cv.id
+          WHERE cv.contact_id = ${c.id}
+        `);
+        return { contact: c, msgCount: Number((rows.rows[0] as any).cnt) };
+      }));
+
+      // Winner = most messages; tie-break: has whatsappId, then oldest
+      counts.sort((a, b) => {
+        if (b.msgCount !== a.msgCount) return b.msgCount - a.msgCount;
+        if (a.contact.whatsappId && !b.contact.whatsappId) return -1;
+        if (!a.contact.whatsappId && b.contact.whatsappId) return 1;
+        return new Date(a.contact.createdAt!).getTime() - new Date(b.contact.createdAt!).getTime();
+      });
+
+      const winner = counts[0].contact;
+      const losers = counts.slice(1).map(c => c.contact);
+      const normalizedPhone = (winner.whatsappId || winner.phone || '').replace(/\D/g, '');
+
+      const winnerConvs = await db.select().from(conversations)
+        .where(and(eq(conversations.contactId, winner.id), eq(conversations.channel, 'whatsapp')))
+        .orderBy(asc(conversations.createdAt)).limit(1);
+      const winnerConv = winnerConvs[0] ?? null;
+
+      for (const loser of losers) {
+        const loserConvs = await db.select().from(conversations).where(eq(conversations.contactId, loser.id));
+        for (const lc of loserConvs) {
+          if (winnerConv) {
+            await db.execute(rawSql`UPDATE messages SET conversation_id = ${winnerConv.id}, contact_id = ${winner.id} WHERE conversation_id = ${lc.id}`);
+            await db.execute(rawSql`DELETE FROM conversations WHERE id = ${lc.id}`);
+          } else {
+            await db.execute(rawSql`UPDATE conversations SET contact_id = ${winner.id} WHERE id = ${lc.id}`);
+            await db.execute(rawSql`UPDATE messages SET contact_id = ${winner.id} WHERE conversation_id = ${lc.id}`);
+          }
+        }
+        await db.execute(rawSql`UPDATE activity_events SET contact_id = ${winner.id} WHERE contact_id = ${loser.id}`);
+        await db.execute(rawSql`DELETE FROM contacts WHERE id = ${loser.id}`);
+        console.log(`[Dedup] Merged duplicate contact ${loser.id} (${loser.name}) into ${winner.id} (${winner.name}) [${key}]`);
+      }
+
+      // Normalise winner phone/whatsapp_id to digits-only
+      await db.execute(rawSql`UPDATE contacts SET phone = ${normalizedPhone}, whatsapp_id = ${normalizedPhone} WHERE id = ${winner.id}`);
+    }
+  } catch (dedupErr: any) {
+    console.error('[Dedup] Contact deduplication error (non-fatal):', dedupErr.message);
+  }
+
   // Start notification scheduler
   startNotificationScheduler();
   

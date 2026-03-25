@@ -1276,16 +1276,26 @@ export class DbStorage implements IStorage {
     let whereClause;
     switch (channel) {
       case 'whatsapp': {
-        // Primary lookup: exact whatsappId match.
-        whereClause = and(eq(contacts.userId, userId), eq(contacts.whatsappId, channelId));
-        const primary = await db.select().from(contacts).where(whereClause);
+        // Normalise the incoming channelId so "+923..." and "923..." are treated identically
+        const digits = channelId.replace(/\D/g, '');
+        const withPlus = `+${digits}`;
+
+        // Primary lookup: check all normalised forms of whatsappId so a stored "+923..."
+        // is found when an inbound arrives as "923..." and vice-versa.
+        const primary = await db.select().from(contacts).where(
+          and(
+            eq(contacts.userId, userId),
+            or(
+              eq(contacts.whatsappId, digits),
+              eq(contacts.whatsappId, withPlus),
+              eq(contacts.whatsappId, channelId),
+            )
+          )
+        ).orderBy(asc(contacts.createdAt)).limit(1);
         if (primary[0]) return primary[0];
 
         // Fallback: phone number match for manually-created contacts whose
-        // whatsappId was never set. Normalise both sides to digits-only so
-        // "+923364127888" matches "923364127888" and vice-versa.
-        const digits = channelId.replace(/\D/g, '');
-        const withPlus = `+${digits}`;
+        // whatsappId was never set. Returns the oldest matching contact deterministically.
         const phoneFallback = await db.select().from(contacts).where(
           and(
             eq(contacts.userId, userId),
@@ -1295,7 +1305,7 @@ export class DbStorage implements IStorage {
               eq(contacts.phone, channelId),
             )
           )
-        );
+        ).orderBy(asc(contacts.createdAt)).limit(1);
         return phoneFallback[0];
       }
       case 'instagram':

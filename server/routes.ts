@@ -3718,6 +3718,138 @@ export async function registerRoutes(
     }
   });
 
+  // Admin: Merge duplicate contacts that share the same WhatsApp/phone number
+  app.post("/api/admin/merge-duplicate-contacts", requireAdmin, async (req, res) => {
+    try {
+      const { db } = await import("../drizzle/db");
+      const { contacts, conversations } = await import("@shared/schema");
+      const { eq, and, sql: rawSql } = await import("drizzle-orm");
+
+      const dryRun = req.body.dryRun === true;
+      const filterUserId = req.body.userId as string | undefined;
+
+      // Fetch all contacts with a phone or whatsapp_id set
+      const allContacts = await db.select().from(contacts);
+
+      // Group contacts by (userId, normalised phone digits)
+      const groups = new Map<string, typeof allContacts>();
+      for (const c of allContacts) {
+        if (filterUserId && c.userId !== filterUserId) continue;
+        const raw = c.whatsappId || c.phone || '';
+        if (!raw) continue;
+        const digits = raw.replace(/\D/g, '');
+        if (!digits) continue;
+        const key = `${c.userId}::${digits}`;
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key)!.push(c);
+      }
+
+      const report: any[] = [];
+
+      for (const [key, group] of groups.entries()) {
+        if (group.length < 2) continue;
+
+        // Get message counts per contact
+        const counts = await Promise.all(group.map(async (c) => {
+          const rows = await db.execute(rawSql`
+            SELECT COUNT(*) as cnt FROM messages m
+            JOIN conversations cv ON m.conversation_id = cv.id
+            WHERE cv.contact_id = ${c.id}
+          `);
+          return { contact: c, msgCount: Number((rows.rows[0] as any).cnt) };
+        }));
+
+        // Winner = contact with the most messages. On a tie, prefer the one with whatsapp_id set, then oldest.
+        counts.sort((a, b) => {
+          if (b.msgCount !== a.msgCount) return b.msgCount - a.msgCount;
+          if (a.contact.whatsappId && !b.contact.whatsappId) return -1;
+          if (!a.contact.whatsappId && b.contact.whatsappId) return 1;
+          return new Date(a.contact.createdAt!).getTime() - new Date(b.contact.createdAt!).getTime();
+        });
+
+        const winner = counts[0].contact;
+        const losers = counts.slice(1).map(c => c.contact);
+
+        // Normalised phone (digits only) for winner update
+        const normalizedPhone = (winner.whatsappId || winner.phone || '').replace(/\D/g, '');
+
+        // Find winner's primary whatsapp conversation (if any)
+        const winnerConvs = await db.select().from(conversations)
+          .where(and(eq(conversations.contactId, winner.id), eq(conversations.channel, 'whatsapp')));
+        const winnerConv = winnerConvs[0] ?? null;
+
+        const loserSummary = losers.map(l => ({
+          id: l.id, name: l.name, phone: l.phone, whatsapp_id: l.whatsappId,
+          msgCount: counts.find(c => c.contact.id === l.id)?.msgCount,
+        }));
+
+        report.push({
+          key,
+          winner: { id: winner.id, name: winner.name, phone: winner.phone, whatsapp_id: winner.whatsappId, msgCount: counts[0].msgCount },
+          losers: loserSummary,
+          winnerConvId: winnerConv?.id ?? null,
+          dryRun,
+        });
+
+        if (dryRun) continue;
+
+        for (const loser of losers) {
+          // Find loser conversations
+          const loserConvs = await db.select().from(conversations).where(eq(conversations.contactId, loser.id));
+
+          for (const lc of loserConvs) {
+            if (winnerConv && lc.channel === winnerConv.channel) {
+              // Re-point messages to winner's conversation
+              await db.execute(rawSql`
+                UPDATE messages SET conversation_id = ${winnerConv.id}, contact_id = ${winner.id}
+                WHERE conversation_id = ${lc.id}
+              `);
+              // Delete the now-empty loser conversation
+              await db.execute(rawSql`DELETE FROM conversations WHERE id = ${lc.id}`);
+            } else if (!winnerConv) {
+              // No winner conversation yet — re-parent the loser conversation to the winner contact
+              await db.execute(rawSql`
+                UPDATE conversations SET contact_id = ${winner.id} WHERE id = ${lc.id}
+              `);
+              await db.execute(rawSql`
+                UPDATE messages SET contact_id = ${winner.id} WHERE conversation_id = ${lc.id}
+              `);
+            } else {
+              // Different channel — just re-parent to winner contact
+              await db.execute(rawSql`
+                UPDATE conversations SET contact_id = ${winner.id} WHERE id = ${lc.id}
+              `);
+              await db.execute(rawSql`
+                UPDATE messages SET contact_id = ${winner.id} WHERE conversation_id = ${lc.id}
+              `);
+            }
+          }
+
+          // Re-point activity_events
+          await db.execute(rawSql`UPDATE activity_events SET contact_id = ${winner.id} WHERE contact_id = ${loser.id}`);
+
+          // Delete the loser contact
+          await db.execute(rawSql`DELETE FROM contacts WHERE id = ${loser.id}`);
+          console.log(`[MergeDuplicates] Deleted loser contact ${loser.id} (${loser.name}) — merged into ${winner.id} (${winner.name})`);
+        }
+
+        // Normalise winner phone and whatsapp_id to digits-only
+        if (!dryRun) {
+          await db.execute(rawSql`
+            UPDATE contacts SET phone = ${normalizedPhone}, whatsapp_id = ${normalizedPhone}
+            WHERE id = ${winner.id}
+          `);
+          console.log(`[MergeDuplicates] Normalised winner ${winner.id} phone/whatsapp_id to "${normalizedPhone}"`);
+        }
+      }
+
+      res.json({ success: true, mergedGroups: report.length, report });
+    } catch (error: any) {
+      console.error("Error merging duplicate contacts:", error);
+      res.status(500).json({ error: error.message || "Failed to merge contacts" });
+    }
+  });
+
   // Admin: Mark conversion as paid
   app.patch("/api/admin/conversions/:id/paid", requireAdmin, async (req, res) => {
     try {
