@@ -309,6 +309,7 @@ export function UnifiedInbox() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [editContactForm, setEditContactForm] = useState({ name: "", phone: "", email: "" });
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
 
   const selectedContactId = match ? params?.contactId : null;
 
@@ -451,10 +452,25 @@ export function UnifiedInbox() {
   });
 
 
-  // Scroll to bottom on new messages
+  // Scroll to bottom on new messages — only if user is already near the bottom
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    const container = messagesContainerRef.current;
+    if (!container) return;
+    const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+    const isNearBottom = distanceFromBottom < 120;
+    if (isNearBottom) {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
   }, [messages]);
+
+  // Scroll to bottom immediately when switching conversations
+  useEffect(() => {
+    if (selectedContactId) {
+      setTimeout(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
+      }, 50);
+    }
+  }, [selectedContactId]);
 
   // --- Mutations ---
 
@@ -990,6 +1006,7 @@ export function UnifiedInbox() {
 
             {/* Messages area */}
             <div
+              ref={messagesContainerRef}
               className="flex-1 overflow-y-auto relative"
               style={{ backgroundImage: 'url("https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png")', backgroundRepeat: 'repeat', backgroundSize: '400px' }}
             >

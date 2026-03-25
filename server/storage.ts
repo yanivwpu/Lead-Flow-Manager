@@ -1470,7 +1470,7 @@ export class DbStorage implements IStorage {
   async getMessages(conversationId: string, limit: number = 100, offset: number = 0): Promise<Message[]> {
     return await db.select().from(messages)
       .where(eq(messages.conversationId, conversationId))
-      .orderBy(desc(messages.createdAt))
+      .orderBy(asc(messages.createdAt))
       .limit(limit)
       .offset(offset);
   }
