@@ -1,0 +1,145 @@
+Update the Pricing page so it fully supports the EXISTING global language switcher already used on the home page.
+
+GOAL
+Keep the current approved Pricing page design and the new pricing structure exactly as is, but connect the page to the existing multilingual system so Pricing also works in:
+1. English
+2. Hebrew (highest priority, full RTL)
+3. Spanish
+
+IMPORTANT
+- Do NOT add a new language selector to the Pricing page
+- Reuse the existing world-icon/global language switcher from the home page
+- Pricing page must respond to the currently selected site language
+- Do NOT redesign the page from scratch
+- Do NOT change pricing logic, plan structure, CTA links, or billing flow
+
+MAIN TASK
+The Pricing page is currently not fully connected to the existing translation system. Fix that so when the user changes language from the existing site language switcher, the Pricing page also updates correctly.
+
+SCOPE
+Apply localization to all visible text on the Pricing page, including:
+- hero title/subtitle
+- plan names
+- plan descriptions
+- price labels
+- feature bullets
+- AI Brain wording and limits wording
+- CTA buttons
+- notes/disclaimers
+- FAQ section
+- comparison table text
+- badges like “Most Popular” / “Best Value” if present
+
+IMPLEMENTATION REQUIREMENTS
+
+1) REUSE EXISTING GLOBAL LANGUAGE SYSTEM
+- Do not create a new language state just for Pricing
+- Do not use a separate localStorage key if the site already has one
+- Reuse the same translation provider / context / hook / locale source already used by the home page
+- Pricing page must automatically reflect the selected language from the existing world icon language switcher
+
+2) MOVE ALL PRICING TEXT INTO TRANSLATIONS
+- Remove hardcoded Pricing page text
+- Put all visible Pricing content into the existing translation structure / locale files
+- Keep translation keys organized and clean, for example:
+  pricing.hero.title
+  pricing.hero.subtitle
+  pricing.plans.free.name
+  pricing.plans.starter.features.0
+  pricing.plans.pro.features.0
+  pricing.faq.q1
+  pricing.faq.a1
+- Use the CURRENT approved Pricing page content as source of truth
+- Do not invent a new pricing model or rewrite pricing details unless needed only for correct translation
+
+3) HEBREW SUPPORT — HIGHEST PRIORITY
+When the active language is Hebrew:
+- apply proper RTL behavior
+- make sure the Pricing page layout feels natural and polished in Hebrew
+- hero, cards, feature lists, buttons, FAQ, badges, and comparison areas must all align correctly
+- do not let the page look awkwardly mirrored or broken
+
+Specifically check and fix:
+- text alignment
+- card content alignment
+- icon/checkmark spacing
+- bullet/feature alignment
+- FAQ row direction and expand icon placement
+- button spacing
+- table alignment if there is a comparison table
+- badge placement
+- section spacing in RTL
+
+4) RTL DIRECTION HANDLING
+- Ensure Hebrew sets proper direction at page or relevant container level
+- Numbers, currency, and mixed text must still display correctly in RTL
+- Make sure strings like:
+  $19/mo
+  AI Brain
+  WhatsApp
+  Pro
+  Starter
+stay readable and visually correct in Hebrew layout
+
+5) SPANISH SUPPORT
+- Add full Spanish translations for all visible Pricing page text
+- Keep wording natural and sales-friendly
+- Preserve the tone of the approved English pricing page
+
+6) DO NOT TRANSLATE BRAND TERMS
+Keep these terms consistent unless there is a very strong UX reason not to:
+- WhachatCRM
+- WhatsApp
+- AI Brain
+- Meta
+- Twilio
+- Instagram
+- Facebook Messenger
+- Telegram
+- SMS
+
+7) RESPONSIVE QA
+Make sure Pricing works correctly in EN / HE / ES on:
+- desktop
+- tablet
+- mobile
+
+Watch for:
+- Hebrew RTL spacing/alignment issues
+- Spanish longer text wrapping badly
+- button height inconsistencies
+- card height imbalance
+- broken FAQ layout
+- overflow in comparison rows or feature bullets
+
+8) NO FUNCTIONAL REGRESSIONS
+- Do not break CTA buttons
+- Do not break signup or billing links
+- Do not break route navigation
+- Do not break any shared global i18n behavior already used elsewhere on the site
+
+DELIVERABLES
+1. Pricing page connected to the existing global language switcher
+2. English version unchanged in meaning and design
+3. Hebrew version fully translated with polished RTL
+4. Spanish version fully translated
+5. No broken billing/CTA functionality
+6. No layout regressions
+
+ACCEPTANCE CHECKLIST
+- Changing language from the existing world icon updates the Pricing page too
+- Pricing page uses the same language state/system as the home page
+- English Pricing stays correct
+- Hebrew Pricing is fully translated and RTL works properly
+- Spanish Pricing is fully translated
+- Buttons, cards, FAQ, and comparison sections remain aligned in all languages
+- Currency and mixed English/product terms display correctly in Hebrew
+- No console errors
+- No broken links or routes
+
+PLEASE ALSO PROVIDE
+After implementation, send me:
+1. what files were updated
+2. whether Pricing now uses the same exact i18n source as the home page
+3. whether RTL is handled globally or specifically in Pricing
+4. preview links or screenshots for EN / HE / ES Pricing page
