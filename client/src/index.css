@@ -758,3 +758,11 @@ section h2 + p {
   margin-inline: auto;
   max-width: 800px;
 }
+
+@keyframes msg-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0);   }
+}
+.animate-msg-in {
+  animation: msg-in 150ms ease-out both;
+}

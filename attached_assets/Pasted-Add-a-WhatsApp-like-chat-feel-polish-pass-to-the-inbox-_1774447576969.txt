@@ -1,0 +1,67 @@
+Add a WhatsApp-like chat feel polish pass to the inbox UI without changing backend logic or breaking current message delivery.
+
+Goal:
+Make the chat feel smoother, more native, and more premium while keeping the current behavior intact.
+
+Requirements:
+	1.	Smooth auto-scroll
+
+	•	Keep the existing “only auto-scroll when user is near bottom” logic
+	•	But when auto-scroll happens for a new message, use smooth scrolling instead of a hard jump
+	•	When switching between conversations, keep the current instant scroll-to-bottom behavior (no smooth animation needed there)
+
+	2.	Message enter animation
+
+	•	Add a very subtle animation when a new message appears in the thread
+	•	Desired feel:
+	•	slight fade in
+	•	slight upward motion
+	•	very fast and clean, around 120–180ms
+	•	Keep it minimal and professional, not flashy
+	•	Must work for both inbound and outbound messages
+
+	3.	Outgoing message sending state
+
+	•	When the user sends a message, show immediate visual feedback in the bubble before server confirmation
+	•	Add a small sending state for outbound messages such as:
+	•	sending…
+	•	then normal sent state after success
+	•	Keep this lightweight and visually clean
+	•	If there is already optimistic rendering, enhance it with status instead of changing the whole flow
+
+	4.	New messages indicator when user is scrolled up
+
+	•	If the user is not near the bottom and a new inbound/outbound message arrives:
+	•	do not force scroll
+	•	show a small floating indicator/button near the bottom right of the messages area:
+New messages ↓
+	•	Clicking it should smoothly scroll to the latest message and then hide the indicator
+	•	Indicator should match app styling and not block message input
+
+	5.	Composer polish
+
+	•	Keep current Enter to send / Shift+Enter for newline behavior
+	•	Make sure the input feels stable:
+	•	no cursor jumping
+	•	no focus loss after send
+	•	If safe, auto-resize the text area slightly for multi-line input, with a sensible max height
+
+	6.	Do not break current logic
+
+	•	Do not change backend ordering again
+	•	Do not touch sidebar ordering
+	•	Do not introduce flex reverse layouts
+	•	Do not rewrite message architecture unless necessary
+	•	This is a UI/UX polish pass only
+
+Acceptance test:
+	•	Open a thread → loads at latest message correctly
+	•	Send a message → appears instantly, shows lightweight sending state, stays at bottom smoothly
+	•	Receive a message while near bottom → appears with subtle animation and smooth scroll
+	•	Receive a message while scrolled up → no forced jump, show “New messages ↓” indicator
+	•	Click indicator → smooth scroll to latest
+	•	Switching conversations still lands correctly at bottom
+	•	No duplicate messages, no jitter, no broken input behavior
+
+Priority:
+Keep it minimal, stable, and WhatsApp-like. This should feel more polished, not more complicated.

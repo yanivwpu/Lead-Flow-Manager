@@ -310,6 +310,9 @@ export function UnifiedInbox() {
   const [editContactForm, setEditContactForm] = useState({ name: "", phone: "", email: "" });
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const prevMsgCountRef = useRef(0);
+  const prevContactIdRef = useRef<string | null>(null);
+  const [showNewMsgBanner, setShowNewMsgBanner] = useState(false);
 
   const selectedContactId = match ? params?.contactId : null;
 
@@ -452,16 +455,43 @@ export function UnifiedInbox() {
   });
 
 
-  // Scroll to bottom on new messages — only if user is already near the bottom
+  // Smart scroll: auto-scroll when near bottom, show banner when not
   useEffect(() => {
     const container = messagesContainerRef.current;
     if (!container) return;
-    const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
-    const isNearBottom = distanceFromBottom < 120;
-    if (isNearBottom) {
-      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+
+    // On conversation switch: reset trackers, skip banner logic
+    if (selectedContactId !== prevContactIdRef.current) {
+      prevContactIdRef.current = selectedContactId;
+      prevMsgCountRef.current = messages.length;
+      setShowNewMsgBanner(false);
+      return;
     }
-  }, [messages]);
+
+    const dist = container.scrollHeight - container.scrollTop - container.clientHeight;
+    const isNearBottom = dist < 120;
+    const isNew = messages.length > prevMsgCountRef.current;
+    prevMsgCountRef.current = messages.length;
+
+    if (isNearBottom) {
+      setShowNewMsgBanner(false);
+      if (isNew) messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    } else if (isNew) {
+      setShowNewMsgBanner(true);
+    }
+  }, [messages, selectedContactId]);
+
+  // Hide banner when user manually scrolls near bottom
+  useEffect(() => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+    const onScroll = () => {
+      const dist = container.scrollHeight - container.scrollTop - container.clientHeight;
+      if (dist < 120) setShowNewMsgBanner(false);
+    };
+    container.addEventListener("scroll", onScroll, { passive: true });
+    return () => container.removeEventListener("scroll", onScroll);
+  }, [selectedContactId]);
 
   // Scroll to bottom immediately when switching conversations
   useEffect(() => {
@@ -1020,11 +1050,13 @@ export function UnifiedInbox() {
                 ) : (
                   messages.map((msg, i) => {
                     const isOut = msg.direction === 'outbound';
+                    const isSending = msg.status === 'sending';
                     return (
-                      <div key={msg.id || i} className={cn("flex", isOut ? "justify-end" : "justify-start")}>
+                      <div key={msg.id || i} className={cn("flex animate-msg-in", isOut ? "justify-end" : "justify-start")}>
                         <div className={cn(
                           "max-w-[75%] rounded-lg px-3 py-1.5 text-sm shadow-sm relative",
-                          isOut ? "bg-[#d9fdd3] text-gray-900 rounded-tr-none" : "bg-white text-gray-900 rounded-tl-none"
+                          isOut ? "bg-[#d9fdd3] text-gray-900 rounded-tr-none" : "bg-white text-gray-900 rounded-tl-none",
+                          isSending && "opacity-75"
                         )}>
                           {msg.mediaUrl && msg.mediaType?.startsWith('image') ? (
                             <img src={msg.mediaUrl} alt="Media" className="max-w-full rounded cursor-pointer" onClick={() => window.open(msg.mediaUrl, '_blank')} />
@@ -1042,9 +1074,11 @@ export function UnifiedInbox() {
                             )}
                             <span className="text-[10px] text-gray-400">{format(new Date(msg.createdAt), 'h:mm a')}</span>
                             {isOut && (
-                              <span className="text-[10px] text-gray-400">
-                                {msg.status === 'read' ? '✓✓' : msg.status === 'delivered' ? '✓✓' : '✓'}
-                              </span>
+                              isSending
+                                ? <Loader2 className="w-2.5 h-2.5 text-gray-400 animate-spin" />
+                                : <span className="text-[10px] text-gray-400">
+                                    {msg.status === 'read' ? '✓✓' : msg.status === 'delivered' ? '✓✓' : '✓'}
+                                  </span>
                             )}
                           </div>
                         </div>
@@ -1054,6 +1088,20 @@ export function UnifiedInbox() {
                 )}
                 <div ref={messagesEndRef} />
               </div>
+
+              {/* New messages banner — shown when user is scrolled up */}
+              {showNewMsgBanner && (
+                <button
+                  data-testid="banner-new-messages"
+                  onClick={() => {
+                    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+                    setShowNewMsgBanner(false);
+                  }}
+                  className="absolute bottom-3 right-3 z-20 flex items-center gap-1.5 bg-white text-gray-700 text-xs font-medium px-3 py-1.5 rounded-full shadow-md border border-gray-200 hover:bg-gray-50 transition-all"
+                >
+                  New messages <ChevronDown className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
 
             {/* Composer */}
