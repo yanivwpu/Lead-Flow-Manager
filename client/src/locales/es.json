@@ -182,28 +182,105 @@
     "upgradeDesc": "Actualiza a Pro para desbloquear las funciones del Cerebro IA"
   },
   "pricing": {
-    "title": "Precios",
-    "subtitle": "Elige el plan adecuado para ti",
-    "monthly": "Mensual",
-    "annually": "Anual",
-    "savePercent": "Ahorra {{percent}}%",
-    "free": "Gratis",
-    "starter": "Inicial",
-    "pro": "Pro",
-    "enterprise": "Empresarial",
+    "backToSettings": "Volver a Configuración",
+    "backToHome": "Volver al Inicio",
+    "title": "Una Bandeja. Todos los Canales. Precios Simples.",
+    "subtitle": "WhatsApp, SMS, Telegram, Instagram, Facebook, Chat Web — todo en un solo lugar.",
+    "subtitle2": "Deja de hacer malabares con apps. Responde más rápido, nunca pierdas un lead y luce más grande de lo que eres.",
+    "noMarkup": "Sin Recargo en Mensajes",
+    "unlimitedMessages": "Mensajes Ilimitados",
+    "noPerMessageFees": "Sin Cargos por Mensaje",
+    "channels": "7 Canales Soportados",
+    "cancelAnytime": "Cancela Cuando Quieras",
+    "mostPopular": "Más Popular",
+    "perMonth": "/ mes",
     "currentPlan": "Plan Actual",
-    "upgrade": "Mejorar",
-    "downgrade": "Reducir",
-    "perMonth": "/mes",
-    "perYear": "/año",
-    "features": "Características",
-    "conversations": "Conversaciones",
-    "teamMembers": "Miembros del Equipo",
-    "whatsappNumbers": "Números de WhatsApp",
-    "unlimited": "Ilimitado",
-    "startTrial": "Iniciar Prueba Gratis",
-    "contactSales": "Contactar Ventas",
-    "mostPopular": "Más Popular"
+    "foreverFree": "Gratis Para Siempre",
+    "noCreditCard": "No se requiere tarjeta de crédito",
+    "plans": {
+      "free": {
+        "name": "Gratis",
+        "description": "Prueba la bandeja unificada con flujos reales",
+        "cta": "Empezar Gratis",
+        "note": "No se requiere tarjeta de crédito"
+      },
+      "starter": {
+        "name": "Starter",
+        "description": "Para pequeños negocios y equipos individuales",
+        "cta": "Empezar Starter",
+        "note": "Ideal para ventas y soporte multicanal"
+      },
+      "pro": {
+        "name": "Pro",
+        "description": "Para equipos en crecimiento con alto volumen",
+        "cta": "Actualizar a Pro",
+        "note": "Diseñado para operaciones multicanal serias"
+      }
+    },
+    "features": {
+      "unifiedInbox": "Bandeja unificada (todos los canales)",
+      "whatsappWebchat": "WhatsApp + Chat Web",
+      "websiteWidget": "Widget para Sitios Web",
+      "oneUser": "1 usuario",
+      "activeConversations50": "50 conversaciones activas / mes",
+      "autoRouting": "Enrutamiento automático de canales",
+      "tagsNotes": "Etiquetas y notas internas",
+      "tasksReminders": "Tareas y recordatorios",
+      "smartPrioritization": "Priorización inteligente de tareas (Recomendado por IA)",
+      "awayMessages": "Mensajes de ausencia (horario comercial)",
+      "exportConversations": "Exportar conversaciones (CSV)",
+      "communitySupport": "Soporte comunitario",
+      "everythingFree": "Todo en Gratis, más:",
+      "allChannels": "Todos los canales: WhatsApp, SMS, Telegram, Instagram, Facebook, Chat Web",
+      "tiktokIntake": "Captación de leads desde TikTok",
+      "threeUsers": "Hasta 3 miembros del equipo",
+      "activeConversations500": "500 conversaciones activas / mes",
+      "chatbotBuilder": "Constructor visual de chatbot",
+      "autoReply": "Mensajes de respuesta automática",
+      "smartFallback": "Enrutamiento de respaldo inteligente",
+      "csvImport": "Importar contactos CSV",
+      "notifications": "Notificaciones por email y push",
+      "webhooks3": "3 integraciones webhook",
+      "aiAssistBasic": "AI Assist incluido (sugerencias básicas de respuesta y detección de sentimiento – hasta 50/mes)",
+      "aiBrainAddon": "Complemento AI Brain completo disponible (+$29/mes)",
+      "everythingStarter": "Todo en Starter, más:",
+      "fiveNumbers": "Hasta 5 números WhatsApp Business",
+      "unlimitedTeam": "Miembros del equipo ilimitados",
+      "activeConversations2000": "2,000 conversaciones activas / mes",
+      "dripSequences": "Secuencias drip y campañas",
+      "workflowAutomation": "Automatización de flujos de trabajo",
+      "templateMessaging": "Mensajes con plantilla y retargeting",
+      "webhooks10": "10 webhook + integraciones nativas",
+      "prioritySupport": "Soporte prioritario",
+      "aiAssistEnhanced": "AI Assist mejorado incluido (límites más altos – hasta 200/mes)"
+    },
+    "aiBrain": {
+      "title": "AI Brain Completo",
+      "subtitle": "Mejora tu AI Assist a poder ilimitado",
+      "price": "$29",
+      "perMonth": "/mes",
+      "addon": "COMPLEMENTO $29/mes",
+      "description": "Mejora tu AI Assist a AI Brain Completo – desbloquea sugerencias ilimitadas, calificación de leads, resumen inteligente, constructor de automatización en lenguaje natural y más. Disponible en planes Starter o Pro.",
+      "feature1": "Respuestas Inteligentes y sugerencias IA ilimitadas",
+      "feature2": "Calificación y puntuación automática de leads",
+      "feature3": "Resumen de conversaciones",
+      "feature4": "Análisis e insights en tiempo real"
+    },
+    "faq": {
+      "title": "Preguntas Frecuentes",
+      "q1": "¿Qué es una 'conversación activa'?",
+      "a1": "Una conversación activa es cualquier chat que tuvo al menos un mensaje (entrante o saliente) en los últimos 30 días. Las conversaciones archivadas o cerradas no cuentan.",
+      "q2": "¿Cobran por cada mensaje de WhatsApp?",
+      "a2": "No. Nunca agregamos recargo sobre los precios de la API de WhatsApp de Meta. Pagas directamente las tarifas de Meta. Nuestra suscripción solo cubre las funciones del CRM.",
+      "q3": "¿Puedo actualizar o degradar después?",
+      "a3": "¡Sí! Actualiza en cualquier momento, prorrateado. Degrada al final de tu ciclo de facturación. Sin penalizaciones ni cargos ocultos.",
+      "q4": "¿Hay prueba gratuita para planes de pago?",
+      "a4": "Sí. Cada plan de pago viene con 14 días de prueba gratis. No se requiere tarjeta de crédito para comenzar.",
+      "q5": "¿Cómo funciona AI Assist?",
+      "a5": "AI Assist usa GPT-4 para analizar mensajes entrantes y sugerir respuestas contextuales. En Gratis, obtienes vistas previas de solo lectura. En Starter+, obtienes sugerencias reales hasta el límite de tu plan.",
+      "q6": "¿Cuál es la diferencia entre AI Assist y AI Brain?",
+      "a6": "AI Assist está incluido en planes de pago con límites de uso. AI Brain es un complemento que elimina límites y agrega funciones avanzadas como puntuación de leads y construcción de automatización."
+    }
   },
   "settings": {
     "title": "Configuración",
@@ -338,107 +415,6 @@
     "sendResetLink": "Enviar Enlace",
     "checkEmail": "Revisa tu correo",
     "resetEmailSent": "Si existe una cuenta con este correo, recibirás instrucciones para restablecer tu contraseña."
-  },
-  "pricing": {
-    "backToSettings": "Volver a Configuración",
-    "backToHome": "Volver al Inicio",
-    "title": "Una Bandeja. Todos los Canales. Precios Simples.",
-    "subtitle": "WhatsApp, SMS, Telegram, Instagram, Facebook, Chat Web — todo en un solo lugar.",
-    "subtitle2": "Deja de hacer malabares con apps. Responde más rápido, nunca pierdas un lead y luce más grande de lo que eres.",
-    "noMarkup": "Sin Recargo en Mensajes",
-    "unlimitedMessages": "Mensajes Ilimitados",
-    "noPerMessageFees": "Sin Cargos por Mensaje",
-    "channels": "7 Canales Soportados",
-    "cancelAnytime": "Cancela Cuando Quieras",
-    "mostPopular": "Más Popular",
-    "perMonth": "/ mes",
-    "currentPlan": "Plan Actual",
-    "foreverFree": "Gratis Para Siempre",
-    "noCreditCard": "No se requiere tarjeta de crédito",
-    "plans": {
-      "free": {
-        "name": "Gratis",
-        "description": "Prueba la bandeja unificada con flujos reales",
-        "cta": "Empezar Gratis",
-        "note": "No se requiere tarjeta de crédito"
-      },
-      "starter": {
-        "name": "Starter",
-        "description": "Para pequeños negocios y equipos individuales",
-        "cta": "Empezar Starter",
-        "note": "Ideal para ventas y soporte multicanal"
-      },
-      "pro": {
-        "name": "Pro",
-        "description": "Para equipos en crecimiento con alto volumen",
-        "cta": "Actualizar a Pro",
-        "note": "Diseñado para operaciones multicanal serias"
-      }
-    },
-    "features": {
-      "unifiedInbox": "Bandeja unificada (todos los canales)",
-      "whatsappWebchat": "WhatsApp + Chat Web",
-      "websiteWidget": "Widget para Sitios Web",
-      "oneUser": "1 usuario",
-      "activeConversations50": "50 conversaciones activas / mes",
-      "autoRouting": "Enrutamiento automático de canales",
-      "tagsNotes": "Etiquetas y notas internas",
-      "tasksReminders": "Tareas y recordatorios",
-      "smartPrioritization": "Priorización inteligente de tareas (Recomendado por IA)",
-      "awayMessages": "Mensajes de ausencia (horario comercial)",
-      "exportConversations": "Exportar conversaciones (CSV)",
-      "communitySupport": "Soporte comunitario",
-      "everythingFree": "Todo en Gratis, más:",
-      "allChannels": "Todos los canales: WhatsApp, SMS, Telegram, Instagram, Facebook, Chat Web",
-      "tiktokIntake": "Captación de leads desde TikTok",
-      "threeUsers": "Hasta 3 miembros del equipo",
-      "activeConversations500": "500 conversaciones activas / mes",
-      "chatbotBuilder": "Constructor visual de chatbot",
-      "autoReply": "Mensajes de respuesta automática",
-      "smartFallback": "Enrutamiento de respaldo inteligente",
-      "csvImport": "Importar contactos CSV",
-      "notifications": "Notificaciones por email y push",
-      "webhooks3": "3 integraciones webhook",
-      "aiAssistBasic": "AI Assist incluido (sugerencias básicas de respuesta y detección de sentimiento – hasta 50/mes)",
-      "aiBrainAddon": "Complemento AI Brain completo disponible (+$29/mes)",
-      "everythingStarter": "Todo en Starter, más:",
-      "fiveNumbers": "Hasta 5 números WhatsApp Business",
-      "unlimitedTeam": "Miembros del equipo ilimitados",
-      "activeConversations2000": "2,000 conversaciones activas / mes",
-      "dripSequences": "Secuencias drip y campañas",
-      "workflowAutomation": "Automatización de flujos de trabajo",
-      "templateMessaging": "Mensajes con plantilla y retargeting",
-      "webhooks10": "10 webhook + integraciones nativas",
-      "prioritySupport": "Soporte prioritario",
-      "aiAssistEnhanced": "AI Assist mejorado incluido (límites más altos – hasta 200/mes)"
-    },
-    "aiBrain": {
-      "title": "AI Brain Completo",
-      "subtitle": "Mejora tu AI Assist a poder ilimitado",
-      "price": "$29",
-      "perMonth": "/mes",
-      "addon": "COMPLEMENTO $29/mes",
-      "description": "Mejora tu AI Assist a AI Brain Completo – desbloquea sugerencias ilimitadas, calificación de leads, resumen inteligente, constructor de automatización en lenguaje natural y más. Disponible en planes Starter o Pro.",
-      "feature1": "Respuestas Inteligentes y sugerencias IA ilimitadas",
-      "feature2": "Calificación y puntuación automática de leads",
-      "feature3": "Resumen de conversaciones",
-      "feature4": "Análisis e insights en tiempo real"
-    },
-    "faq": {
-      "title": "Preguntas Frecuentes",
-      "q1": "¿Qué es una 'conversación activa'?",
-      "a1": "Una conversación activa es cualquier chat que tuvo al menos un mensaje (entrante o saliente) en los últimos 30 días. Las conversaciones archivadas o cerradas no cuentan.",
-      "q2": "¿Cobran por cada mensaje de WhatsApp?",
-      "a2": "No. Nunca agregamos recargo sobre los precios de la API de WhatsApp de Meta. Pagas directamente las tarifas de Meta. Nuestra suscripción solo cubre las funciones del CRM.",
-      "q3": "¿Puedo actualizar o degradar después?",
-      "a3": "¡Sí! Actualiza en cualquier momento, prorrateado. Degrada al final de tu ciclo de facturación. Sin penalizaciones ni cargos ocultos.",
-      "q4": "¿Hay prueba gratuita para planes de pago?",
-      "a4": "Sí. Cada plan de pago viene con 14 días de prueba gratis. No se requiere tarjeta de crédito para comenzar.",
-      "q5": "¿Cómo funciona AI Assist?",
-      "a5": "AI Assist usa GPT-4 para analizar mensajes entrantes y sugerir respuestas contextuales. En Gratis, obtienes vistas previas de solo lectura. En Starter+, obtienes sugerencias reales hasta el límite de tu plan.",
-      "q6": "¿Cuál es la diferencia entre AI Assist y AI Brain?",
-      "a6": "AI Assist está incluido en planes de pago con límites de uso. AI Brain es un complemento que elimina límites y agrega funciones avanzadas como puntuación de leads y construcción de automatización."
-    }
   },
   "home": {
     "hero": {
@@ -585,7 +561,12 @@
       "check3": "Agenda visitas directamente a través de WhatsApp",
       "earlyAccess": "Obtén Acceso Anticipado",
       "howItWorks": "Mira Cómo Funciona",
-      "launchOffer": "Oferta de lanzamiento: 50% de descuento en la Licencia de Plantilla para los primeros 5 agentes inmobiliarios."
+      "launchOffer": "Oferta de lanzamiento: 50% de descuento en la Licencia de Plantilla para los primeros 5 agentes inmobiliarios.",
+      "mainTitle": "Convierte Conversaciones Inmobiliarias en Visitas Agendadas Automáticamente",
+      "mainSubtitle": "Automatización de WhatsApp con IA que responde al instante, califica leads y agenda visitas por ti.",
+      "mainDesc": "Un sistema de automatización completamente pre-construido instalado dentro de tu CRM — listo para funcionar.",
+      "installCta": "Instalar Motor de Crecimiento Inmobiliario",
+      "seeHowItWorks": "Ver Cómo Funciona"
     },
     "preview": {
       "lead1Name": "Sarah M. — Puntuación: 92 (Caliente)",
@@ -638,7 +619,19 @@
       "item3": "Flujos de automatización configurados",
       "item4": "Integración de reserva de calendario",
       "item5": "Configuración del embudo del CRM",
-      "liveNote": "La mayoría de los agentes están operativos en pocos días."
+      "liveNote": "La mayoría de los agentes están operativos en pocos días.",
+      "noTech": "Sin configuración técnica. En funcionamiento en días.",
+      "teamTitle": "Nuestro equipo lo configura todo para ti",
+      "teamItem1": "Gestionamos tu solicitud de la API de WhatsApp Business con Meta",
+      "teamItem2": "Verificamos tu negocio y configuramos tu número de teléfono",
+      "teamItem3": "Instalamos todos los flujos de automatización en tu cuenta del CRM",
+      "teamItem4": "Conectamos tu calendario de reservas para que los leads se agenden solos",
+      "teamItem5": "Salimos en vivo contigo y confirmamos que todo funciona",
+      "setupItem1": "Configuración de la API de WhatsApp Business",
+      "setupItem2": "Asistencia en la verificación de Meta",
+      "setupItem3": "Flujos de automatización instalados",
+      "setupItem4": "Pipeline del CRM configurado",
+      "setupItem5": "Integración de calendario incluida"
     },
     "onboarding": {
       "title": "Incorporación de Guante Blanco",
@@ -720,6 +713,117 @@
       "terms": "Términos de Uso",
       "gettingStarted": "Primeros Pasos",
       "helpCenter": "Centro de Ayuda"
+    },
+    "features": {
+      "title": "¿Qué Hace el Motor de Crecimiento?",
+      "subtitle": "Un sistema completo de manejo de leads que funciona 24/7 — para que puedas enfocarte en cerrar tratos.",
+      "f1": {
+        "title": "Responde al instante a cada consulta",
+        "desc": "Los compradores te contactan 24/7. Sin conversaciones perdidas, sin esperas."
+      },
+      "f2": {
+        "title": "Califica compradores automáticamente",
+        "desc": "Identifica prospectos serios según presupuesto, financiamiento disponible y plazo."
+      },
+      "f3": {
+        "title": "Identifica prospectos serios",
+        "desc": "Resalta los leads listos para cerrar para que te enfoques en los que más importan."
+      },
+      "f4": {
+        "title": "Envía tu calendario cuando quieren agendar",
+        "desc": "Los leads programan sus propias visitas directamente en tu disponibilidad."
+      },
+      "f5": {
+        "title": "Hace seguimiento automático si los leads se enfrían",
+        "desc": "Secuencias de varios días mantienen a los leads tibios activos — en el día 1, 3 y 7."
+      },
+      "f6": {
+        "title": "Mantiene todo organizado en tu CRM",
+        "desc": "Los leads fluyen por tu pipeline con puntuaciones y etiquetas de etapa automáticamente."
+      }
+    },
+    "howItWorks": {
+      "title": "Cómo Funciona Tu Sistema",
+      "subtitle": "Del primer mensaje a la visita agendada — automáticamente.",
+      "step": "Paso",
+      "tagline": "Solo los leads serios te llegan a ti.",
+      "s1": {
+        "title": "El lead envía un mensaje de WhatsApp",
+        "desc": "La consulta llega de un comprador o vendedor. Tu sistema entra en acción al instante."
+      },
+      "s2": {
+        "title": "Sale una respuesta automatizada al instante",
+        "desc": "El lead recibe un saludo personalizado en segundos — sin espera de tu parte."
+      },
+      "s3": {
+        "title": "La IA califica el lead en tiempo real",
+        "desc": "La conversación se analiza según presupuesto, intención y seriedad. El lead se puntúa automáticamente."
+      },
+      "s4": {
+        "title": "El enlace de reserva se envía automáticamente",
+        "desc": "Cuando quieren agendar, tu calendario se abre directamente en el chat."
+      },
+      "s5": {
+        "title": "Recibes el traspaso con contexto",
+        "desc": "Los leads serios llegan a tu CRM pre-calificados. Tu tiempo se dedica a los tratos de alta probabilidad."
+      },
+      "s6": {
+        "title": "Los leads fríos se nutren automáticamente",
+        "desc": "Los leads que se callan reciben seguimientos en el día 1, 3 y 7. Nada se pierde."
+      }
+    },
+    "builtFor": {
+      "title": "Diseñado Para",
+      "solo": {
+        "title": "Agentes independientes que quieren manejo de leads 24/7",
+        "desc": "Nunca pierdas un lead. Tu sistema trabaja mientras duermes, para que cada consulta reciba una respuesta rápida y profesional."
+      },
+      "teams": {
+        "title": "Equipos inmobiliarios que manejan grandes volúmenes de consultas",
+        "desc": "Escala el manejo de leads en tu equipo sin añadir personal. Cada lead se califica y se enruta correctamente."
+      },
+      "ads": {
+        "title": "Agentes con campañas de anuncios, listados o generación de leads en línea",
+        "desc": "Convierte tu inversión en publicidad en visitas agendadas más rápido. Cada lead entrante se atiende en el momento en que llega."
+      }
+    },
+    "activate": {
+      "title": "Qué Pasa Después de Que Activas",
+      "subtitle": "De la instalación a estar en vivo — en unos simples pasos.",
+      "s1": {
+        "title": "Conecta tus canales",
+        "desc": "Autentica tu cuenta de WhatsApp Business y enlaza tu calendario de reservas."
+      },
+      "s2": {
+        "title": "El sistema se instala automáticamente",
+        "desc": "Todos los flujos de trabajo, automatizaciones y pipelines del CRM se despliegan directamente en tu cuenta."
+      },
+      "s3": {
+        "title": "Las automatizaciones entran en vivo",
+        "desc": "Tu sistema está listo y esperando. En el momento en que un lead te escribe, responde."
+      },
+      "s4": {
+        "title": "Los leads comienzan a calificarse y enrutarse",
+        "desc": "Del primer mensaje a tu CRM — los leads se manejan, puntúan y rastrean automáticamente."
+      }
+    },
+    "pricingSection": {
+      "title": "Qué Impulsa el Motor de Crecimiento Inmobiliario",
+      "subtitle": "Todo lo que necesitas está incluido — plataforma, capa de IA y la plantilla en sí.",
+      "corePlatform": "Plataforma Principal",
+      "aiLayer": "Capa de Automatización IA",
+      "templateLicense": "Motor de Crecimiento Inmobiliario",
+      "oneTime": "Licencia de plantilla única",
+      "metaNote": "Las tarifas de mensajería de WhatsApp son facturadas directamente por Meta sin recargo.",
+      "installCta": "Instalar Motor de Crecimiento Inmobiliario",
+      "viewPlans": "Ver todos los planes"
+    },
+    "finalCta": {
+      "title": "¿Listo para convertir leads en visitas agendadas?",
+      "subtitle": "Instala el Motor de Crecimiento Inmobiliario y tus automatizaciones comienzan a funcionar de inmediato.",
+      "installCta": "Instalar Motor de Crecimiento Inmobiliario",
+      "viewPlans": "Ver todos los planes",
+      "note": "Listo para funcionar. Sin configuración técnica."
     }
   },
   "pricingPage": {

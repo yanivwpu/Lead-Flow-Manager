@@ -134,13 +134,13 @@ export function RealtorLanding() {
               className="text-3xl md:text-5xl lg:text-[3.25rem] xl:text-6xl font-display font-bold text-gray-900 leading-[1.1] mb-4 md:mb-5"
               data-testid="text-hero-headline"
             >
-              Turn Real Estate Conversations Into Booked Showings Automatically
+              {t("rge.hero.mainTitle")}
             </h1>
             <p className="text-lg md:text-xl xl:text-2xl text-gray-600 mb-3 leading-relaxed">
-              AI-powered WhatsApp automation that responds instantly, qualifies leads, and schedules showings for you.
+              {t("rge.hero.mainSubtitle")}
             </p>
             <p className="text-base text-gray-500 mb-8">
-              A fully pre-built automation system installed inside your CRM — ready to run.
+              {t("rge.hero.mainDesc")}
             </p>
 
             <div className="flex flex-col sm:flex-row gap-3">
@@ -149,7 +149,7 @@ export function RealtorLanding() {
                 className="w-full sm:w-auto h-14 px-8 bg-brand-green hover:bg-emerald-700 text-white font-semibold rounded-full flex items-center justify-center gap-2 transition-all shadow-lg hover:shadow-xl cursor-pointer"
                 data-testid="button-hero-install"
               >
-                Install Realtor Growth Engine
+                {t("rge.hero.installCta")}
                 <ArrowRight className={arrowClass} />
               </button>
               <button
@@ -157,7 +157,7 @@ export function RealtorLanding() {
                 className="w-full sm:w-auto h-14 px-8 bg-white border border-gray-200 text-gray-700 font-medium rounded-full flex items-center justify-center gap-2 hover:bg-gray-50 transition-colors"
                 data-testid="button-hero-how-it-works"
               >
-                See How It Works
+                {t("rge.hero.seeHowItWorks")}
               </button>
             </div>
           </motion.div>
@@ -221,26 +221,26 @@ export function RealtorLanding() {
           <div className="grid md:grid-cols-2 gap-10 md:gap-16 items-center">
             <div>
               <h2 className="text-2xl md:text-4xl xl:text-5xl font-display font-bold text-gray-900 mb-3" data-testid="text-setup-title">
-                Fully Done-For-You Setup
+                {t("rge.setup.title")}
               </h2>
               <p className="text-base md:text-lg text-gray-600 mb-8 leading-relaxed">
-                No technical setup required. Live in days.
+                {t("rge.setup.noTech")}
               </p>
               <div className="space-y-4">
                 {[
-                  { icon: Smartphone, text: "WhatsApp Business API setup" },
-                  { icon: Shield, text: "Meta verification assistance" },
-                  { icon: Bot, text: "Automation workflows installed" },
-                  { icon: LayoutGrid, text: "CRM pipeline configured" },
-                  { icon: Calendar, text: "Calendar integration included" },
+                  { icon: Smartphone, key: "rge.setup.setupItem1" },
+                  { icon: Shield, key: "rge.setup.setupItem2" },
+                  { icon: Bot, key: "rge.setup.setupItem3" },
+                  { icon: LayoutGrid, key: "rge.setup.setupItem4" },
+                  { icon: Calendar, key: "rge.setup.setupItem5" },
                 ].map((item) => {
                   const Icon = item.icon;
                   return (
-                    <div key={item.text} className="flex items-center gap-3">
+                    <div key={item.key} className="flex items-center gap-3">
                       <div className="h-10 w-10 bg-emerald-100 rounded-lg flex items-center justify-center shrink-0">
                         <Icon className="h-5 w-5 text-emerald-600" />
                       </div>
-                      <span className="text-base md:text-lg text-gray-800 font-medium">{item.text}</span>
+                      <span className="text-base md:text-lg text-gray-800 font-medium">{t(item.key)}</span>
                     </div>
                   );
                 })}
@@ -249,29 +249,15 @@ export function RealtorLanding() {
             <div className="bg-gray-900 rounded-2xl sm:rounded-3xl p-6 sm:p-8 text-white">
               <div className="flex items-center gap-3 mb-6">
                 <Shield className="h-8 w-8 text-brand-green shrink-0" />
-                <h3 className="text-xl font-bold">Our team sets everything up for you</h3>
+                <h3 className="text-xl font-bold">{t("rge.setup.teamTitle")}</h3>
               </div>
               <div className="space-y-4 text-sm text-gray-300">
-                <div className="flex items-start gap-3">
-                  <CheckCircle2 className="h-4 w-4 text-brand-green shrink-0 mt-0.5" />
-                  <span>We handle your WhatsApp Business API application with Meta</span>
-                </div>
-                <div className="flex items-start gap-3">
-                  <CheckCircle2 className="h-4 w-4 text-brand-green shrink-0 mt-0.5" />
-                  <span>We verify your business and configure your phone number</span>
-                </div>
-                <div className="flex items-start gap-3">
-                  <CheckCircle2 className="h-4 w-4 text-brand-green shrink-0 mt-0.5" />
-                  <span>We install all automation workflows into your CRM account</span>
-                </div>
-                <div className="flex items-start gap-3">
-                  <CheckCircle2 className="h-4 w-4 text-brand-green shrink-0 mt-0.5" />
-                  <span>We connect your booking calendar so leads can self-schedule</span>
-                </div>
-                <div className="flex items-start gap-3">
-                  <CheckCircle2 className="h-4 w-4 text-brand-green shrink-0 mt-0.5" />
-                  <span>We go live with you and confirm everything is working</span>
-                </div>
+                {["rge.setup.teamItem1","rge.setup.teamItem2","rge.setup.teamItem3","rge.setup.teamItem4","rge.setup.teamItem5"].map((key) => (
+                  <div key={key} className="flex items-start gap-3">
+                    <CheckCircle2 className="h-4 w-4 text-brand-green shrink-0 mt-0.5" />
+                    <span>{t(key)}</span>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
@@ -285,44 +271,20 @@ export function RealtorLanding() {
         <div className="max-w-6xl xl:max-w-[1440px] mx-auto">
           <div className="text-center mb-12 md:mb-16">
             <h2 className="text-2xl md:text-4xl xl:text-5xl font-display font-bold text-gray-900 mb-4" data-testid="text-features-title">
-              What the Growth Engine Does
+              {t("rge.features.title")}
             </h2>
             <p className="text-base md:text-lg xl:text-xl text-gray-600 max-w-3xl mx-auto">
-              A complete lead handling system that runs 24/7 — so you can focus on closing deals.
+              {t("rge.features.subtitle")}
             </p>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {[
-              {
-                icon: Zap,
-                title: "Responds instantly to every inquiry",
-                desc: "Buyers reach you 24/7. No missed conversations, no waiting.",
-              },
-              {
-                icon: Target,
-                title: "Qualifies buyers automatically",
-                desc: "Identifies serious prospects based on budget, financing readiness, and timeline.",
-              },
-              {
-                icon: Lightbulb,
-                title: "Identifies serious prospects",
-                desc: "Surfaces ready-to-close leads so you focus on who matters most.",
-              },
-              {
-                icon: Calendar,
-                title: "Sends your calendar when they want to book",
-                desc: "Leads schedule their own showings directly into your availability.",
-              },
-              {
-                icon: Clock,
-                title: "Follows up automatically if leads go quiet",
-                desc: "Multi-day sequences keep warm leads engaged — on day 1, 3, and 7.",
-              },
-              {
-                icon: LayoutGrid,
-                title: "Keeps everything organized in your CRM",
-                desc: "Leads flow through your pipeline with scores and stage tags automatically.",
-              },
+              { icon: Zap, titleKey: "rge.features.f1.title", descKey: "rge.features.f1.desc" },
+              { icon: Target, titleKey: "rge.features.f2.title", descKey: "rge.features.f2.desc" },
+              { icon: Lightbulb, titleKey: "rge.features.f3.title", descKey: "rge.features.f3.desc" },
+              { icon: Calendar, titleKey: "rge.features.f4.title", descKey: "rge.features.f4.desc" },
+              { icon: Clock, titleKey: "rge.features.f5.title", descKey: "rge.features.f5.desc" },
+              { icon: LayoutGrid, titleKey: "rge.features.f6.title", descKey: "rge.features.f6.desc" },
             ].map((item, idx) => {
               const Icon = item.icon;
               return (
@@ -337,8 +299,8 @@ export function RealtorLanding() {
                   <div className="h-12 w-12 bg-brand-green/10 rounded-xl flex items-center justify-center mb-4">
                     <Icon className="h-6 w-6 text-brand-green" />
                   </div>
-                  <h3 className="text-base font-bold text-gray-900 mb-2">{item.title}</h3>
-                  <p className="text-sm text-gray-600 leading-relaxed">{item.desc}</p>
+                  <h3 className="text-base font-bold text-gray-900 mb-2">{t(item.titleKey)}</h3>
+                  <p className="text-sm text-gray-600 leading-relaxed">{t(item.descKey)}</p>
                 </motion.div>
               );
             })}
@@ -353,21 +315,21 @@ export function RealtorLanding() {
         <div className="max-w-6xl xl:max-w-[1440px] mx-auto">
           <div className="text-center mb-12 md:mb-16">
             <h2 className="text-2xl md:text-4xl xl:text-5xl font-display font-bold text-gray-900 mb-4" data-testid="text-workflow-title">
-              How Your System Works
+              {t("rge.howItWorks.title")}
             </h2>
             <p className="text-base md:text-lg xl:text-xl text-gray-600 max-w-3xl mx-auto">
-              From first message to booked showing — automatically.
+              {t("rge.howItWorks.subtitle")}
             </p>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 xl:gap-8">
             {[
-              { num: 1, icon: MessageSquare, title: "Lead sends a WhatsApp message", desc: "Inquiry arrives from a buyer or seller. Your system springs to life instantly." },
-              { num: 2, icon: Zap, title: "Instant automated response goes out", desc: "Lead gets a personalized greeting within seconds — no waiting on your end." },
-              { num: 3, icon: Brain, title: "AI qualifies the lead in real-time", desc: "Conversation is analyzed for budget, intent, and seriousness. Lead is scored automatically." },
-              { num: 4, icon: Calendar, title: "Booking link is sent automatically", desc: "When they ask to schedule, your calendar opens directly in the chat." },
-              { num: 5, icon: Users, title: "You get a handoff with context", desc: "Serious leads arrive in your CRM pre-qualified. Your time goes to high-probability deals." },
-              { num: 6, icon: TrendingUp, title: "Cold leads are nurtured automatically", desc: "Leads who go quiet get follow-ups on day 1, 3, and 7. Nothing falls through the cracks." },
+              { num: 1, icon: MessageSquare, titleKey: "rge.howItWorks.s1.title", descKey: "rge.howItWorks.s1.desc" },
+              { num: 2, icon: Zap, titleKey: "rge.howItWorks.s2.title", descKey: "rge.howItWorks.s2.desc" },
+              { num: 3, icon: Brain, titleKey: "rge.howItWorks.s3.title", descKey: "rge.howItWorks.s3.desc" },
+              { num: 4, icon: Calendar, titleKey: "rge.howItWorks.s4.title", descKey: "rge.howItWorks.s4.desc" },
+              { num: 5, icon: Users, titleKey: "rge.howItWorks.s5.title", descKey: "rge.howItWorks.s5.desc" },
+              { num: 6, icon: TrendingUp, titleKey: "rge.howItWorks.s6.title", descKey: "rge.howItWorks.s6.desc" },
             ].map((step) => {
               const Icon = step.icon;
               return (
@@ -384,9 +346,9 @@ export function RealtorLanding() {
                       <Icon className="h-5 w-5 sm:h-6 sm:w-6" />
                     </div>
                     <div className="w-full">
-                      <span className="text-xs font-bold text-brand-green uppercase tracking-wider">Step {step.num}</span>
-                      <h3 className="text-base sm:text-lg font-bold text-gray-900 mt-1 mb-1">{step.title}</h3>
-                      <p className="text-sm text-gray-600">{step.desc}</p>
+                      <span className="text-xs font-bold text-brand-green uppercase tracking-wider">{t("rge.howItWorks.step")} {step.num}</span>
+                      <h3 className="text-base sm:text-lg font-bold text-gray-900 mt-1 mb-1">{t(step.titleKey)}</h3>
+                      <p className="text-sm text-gray-600">{t(step.descKey)}</p>
                     </div>
                   </div>
                 </motion.div>
@@ -395,7 +357,7 @@ export function RealtorLanding() {
           </div>
 
           <p className="text-center text-lg md:text-xl font-semibold text-gray-900 mt-12" data-testid="text-workflow-tagline">
-            Only serious leads reach you.
+            {t("rge.howItWorks.tagline")}
           </p>
         </div>
       </section>
@@ -407,7 +369,7 @@ export function RealtorLanding() {
         <div className="max-w-5xl xl:max-w-6xl mx-auto">
           <div className="text-center mb-12">
             <h2 className="text-2xl md:text-4xl xl:text-5xl font-display font-bold text-gray-900 mb-4" data-testid="text-built-for-title">
-              Built For
+              {t("rge.builtFor.title")}
             </h2>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -421,8 +383,8 @@ export function RealtorLanding() {
               <div className="h-14 w-14 bg-brand-green/10 rounded-2xl flex items-center justify-center mb-5">
                 <PhoneOff className="h-7 w-7 text-brand-green" />
               </div>
-              <h3 className="text-lg font-bold text-gray-900 mb-2">Solo agents who want 24/7 lead handling</h3>
-              <p className="text-sm text-gray-600">Never miss a lead again. Your system works while you sleep, so every inquiry gets a fast, professional reply.</p>
+              <h3 className="text-lg font-bold text-gray-900 mb-2">{t("rge.builtFor.solo.title")}</h3>
+              <p className="text-sm text-gray-600">{t("rge.builtFor.solo.desc")}</p>
             </motion.div>
             <motion.div
               initial={{ opacity: 0, y: 20 }}
@@ -434,8 +396,8 @@ export function RealtorLanding() {
               <div className="h-14 w-14 bg-brand-green/10 rounded-2xl flex items-center justify-center mb-5">
                 <Users className="h-7 w-7 text-brand-green" />
               </div>
-              <h3 className="text-lg font-bold text-gray-900 mb-2">Real estate teams managing high volumes of inquiries</h3>
-              <p className="text-sm text-gray-600">Scale lead handling across your team without adding headcount. Every lead gets qualified and routed correctly.</p>
+              <h3 className="text-lg font-bold text-gray-900 mb-2">{t("rge.builtFor.teams.title")}</h3>
+              <p className="text-sm text-gray-600">{t("rge.builtFor.teams.desc")}</p>
             </motion.div>
             <motion.div
               initial={{ opacity: 0, y: 20 }}
@@ -447,8 +409,8 @@ export function RealtorLanding() {
               <div className="h-14 w-14 bg-brand-green/10 rounded-2xl flex items-center justify-center mb-5">
                 <TrendingUp className="h-7 w-7 text-brand-green" />
               </div>
-              <h3 className="text-lg font-bold text-gray-900 mb-2">Agents running ads, listing campaigns, or online lead generation</h3>
-              <p className="text-sm text-gray-600">Turn your ad spend into booked showings faster. Every inbound lead is handled the moment it arrives.</p>
+              <h3 className="text-lg font-bold text-gray-900 mb-2">{t("rge.builtFor.ads.title")}</h3>
+              <p className="text-sm text-gray-600">{t("rge.builtFor.ads.desc")}</p>
             </motion.div>
           </div>
         </div>
@@ -461,18 +423,18 @@ export function RealtorLanding() {
         <div className="max-w-3xl mx-auto">
           <div className="text-center mb-12">
             <h2 className="text-2xl md:text-4xl xl:text-5xl font-display font-bold text-gray-900 mb-4" data-testid="text-activate-title">
-              What Happens After You Activate
+              {t("rge.activate.title")}
             </h2>
             <p className="text-base md:text-lg text-gray-600">
-              From install to live — in a few simple steps.
+              {t("rge.activate.subtitle")}
             </p>
           </div>
           <div className="space-y-6">
             {[
-              { num: 1, title: "Connect your channels", desc: "Authenticate your WhatsApp Business account and link your booking calendar." },
-              { num: 2, title: "The system installs automatically", desc: "All workflows, automations, and CRM pipelines deploy directly into your account." },
-              { num: 3, title: "Automations go live", desc: "Your system is ready and waiting. The moment a lead messages you, it responds." },
-              { num: 4, title: "Leads start getting qualified and routed", desc: "From first message to your CRM — leads are handled, scored, and tracked automatically." },
+              { num: 1, titleKey: "rge.activate.s1.title", descKey: "rge.activate.s1.desc" },
+              { num: 2, titleKey: "rge.activate.s2.title", descKey: "rge.activate.s2.desc" },
+              { num: 3, titleKey: "rge.activate.s3.title", descKey: "rge.activate.s3.desc" },
+              { num: 4, titleKey: "rge.activate.s4.title", descKey: "rge.activate.s4.desc" },
             ].map((step) => (
               <motion.div
                 key={step.num}
@@ -486,8 +448,8 @@ export function RealtorLanding() {
                   {step.num}
                 </div>
                 <div>
-                  <h3 className="font-bold text-gray-900 text-base mb-1">{step.title}</h3>
-                  <p className="text-sm text-gray-600 leading-relaxed">{step.desc}</p>
+                  <h3 className="font-bold text-gray-900 text-base mb-1">{t(step.titleKey)}</h3>
+                  <p className="text-sm text-gray-600 leading-relaxed">{t(step.descKey)}</p>
                 </div>
               </motion.div>
             ))}
@@ -502,32 +464,32 @@ export function RealtorLanding() {
         <div className="max-w-4xl mx-auto">
           <div className="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-2xl sm:rounded-3xl border border-emerald-100 p-6 sm:p-8 md:p-12 text-center">
             <h2 className="text-2xl md:text-4xl xl:text-5xl font-display font-bold text-gray-900 mb-4" data-testid="text-pricing-title">
-              What Powers the Realtor Growth Engine
+              {t("rge.pricingSection.title")}
             </h2>
             <p className="text-base md:text-lg text-gray-600 mb-10 max-w-2xl mx-auto">
-              Everything you need is included — platform, AI layer, and the template itself.
+              {t("rge.pricingSection.subtitle")}
             </p>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
               <div className="bg-white rounded-xl border border-gray-100 p-5 shadow-sm text-left">
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Core Platform</p>
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">{t("rge.pricingSection.corePlatform")}</p>
                 <p className="text-lg font-bold text-gray-900">WhachatCRM Pro</p>
                 <p className="text-base text-gray-600 mt-1">$49/mo</p>
               </div>
               <div className="bg-white rounded-xl border border-gray-100 p-5 shadow-sm text-left">
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">AI Automation Layer</p>
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">{t("rge.pricingSection.aiLayer")}</p>
                 <p className="text-lg font-bold text-gray-900">AI Brain</p>
                 <p className="text-base text-gray-600 mt-1">$29/mo</p>
               </div>
               <div className="bg-white rounded-xl border border-emerald-200 p-5 shadow-sm ring-2 ring-emerald-100 text-left">
-                <p className="text-xs font-semibold text-emerald-600 uppercase tracking-wider mb-2">Realtor Growth Engine</p>
-                <p className="text-lg font-bold text-gray-900">One-time template license</p>
+                <p className="text-xs font-semibold text-emerald-600 uppercase tracking-wider mb-2">{t("rge.pricingSection.templateLicense")}</p>
+                <p className="text-lg font-bold text-gray-900">{t("rge.pricingSection.oneTime")}</p>
                 <p className="text-base font-semibold text-emerald-600 mt-1">$199</p>
               </div>
             </div>
 
             <p className="text-sm text-gray-500 mb-8" data-testid="text-meta-note">
-              WhatsApp messaging fees are billed directly by Meta with no markup.
+              {t("rge.pricingSection.metaNote")}
             </p>
 
             <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center">
@@ -536,13 +498,13 @@ export function RealtorLanding() {
                 className="w-full sm:w-auto h-14 px-10 bg-brand-green hover:bg-emerald-700 text-white font-semibold rounded-full flex items-center justify-center gap-2 transition-all shadow-lg hover:shadow-xl text-base sm:text-lg cursor-pointer"
                 data-testid="button-pricing-install"
               >
-                Install Realtor Growth Engine
+                {t("rge.pricingSection.installCta")}
                 <ArrowRight className={arrowClass} />
               </button>
               <Link href="/pricing" className="w-full sm:w-auto">
                 <button className="w-full sm:w-auto h-14 px-10 bg-white border border-gray-200 text-gray-700 font-medium rounded-full flex items-center justify-center gap-2 hover:bg-gray-50 transition-colors text-base sm:text-lg" data-testid="button-pricing-plans">
                   <BarChart3 className="h-5 w-5" />
-                  View all plans
+                  {t("rge.pricingSection.viewPlans")}
                 </button>
               </Link>
             </div>
@@ -570,10 +532,10 @@ export function RealtorLanding() {
       <section className="px-4 md:px-6 py-12 md:py-16 bg-gray-900 text-white" data-testid="section-final-cta">
         <div className="max-w-3xl xl:max-w-4xl mx-auto text-center">
           <h2 className="text-xl md:text-3xl xl:text-4xl font-display font-bold mb-4">
-            Ready to turn leads into booked showings?
+            {t("rge.finalCta.title")}
           </h2>
           <p className="text-gray-400 xl:text-lg mb-8">
-            Install the Realtor Growth Engine and your automations start running immediately.
+            {t("rge.finalCta.subtitle")}
           </p>
           <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center">
             <button
@@ -581,17 +543,17 @@ export function RealtorLanding() {
               className="w-full sm:w-auto h-12 px-8 bg-brand-green hover:bg-emerald-700 text-white font-semibold rounded-full flex items-center justify-center gap-2 transition-all cursor-pointer"
               data-testid="button-footer-cta"
             >
-              Install Realtor Growth Engine
+              {t("rge.finalCta.installCta")}
               <ArrowRight className={arrowClassSm} />
             </button>
             <Link href="/pricing" className="w-full sm:w-auto">
               <button className="w-full sm:w-auto h-12 px-8 bg-gray-800 border border-gray-700 text-gray-300 font-medium rounded-full flex items-center justify-center gap-2 hover:bg-gray-700 transition-colors" data-testid="button-footer-plans">
                 <BarChart3 className={arrowClassSm} />
-                View all plans
+                {t("rge.finalCta.viewPlans")}
               </button>
             </Link>
           </div>
-          <p className="text-gray-500 text-sm mt-5">Ready to run. No technical setup required.</p>
+          <p className="text-gray-500 text-sm mt-5">{t("rge.finalCta.note")}</p>
         </div>
       </section>
 

@@ -175,28 +175,185 @@
     "upgradeDesc": "Upgrade to Pro to unlock AI Brain features"
   },
   "pricing": {
-    "title": "Pricing",
-    "subtitle": "Choose the plan that's right for you",
-    "monthly": "Monthly",
-    "annually": "Annually",
-    "savePercent": "Save {{percent}}%",
-    "free": "Free",
-    "starter": "Starter",
-    "pro": "Pro",
-    "enterprise": "Enterprise",
+    "backToSettings": "Back to Settings",
+    "backToHome": "Back to Home",
+    "title": "One Inbox. Every Channel. Simple Pricing.",
+    "subtitle": "WhatsApp, SMS, Telegram, Instagram, Facebook, Web Chat — all in one place.",
+    "subtitle2": "Stop juggling apps. Respond faster, never lose a lead, and look bigger than you are.",
+    "noMarkup": "No Markup on Messages",
+    "unlimitedMessages": "Unlimited Messages",
+    "noPerMessageFees": "No Per-Message Fees",
+    "channels": "7 Channels Supported",
+    "cancelAnytime": "Cancel Anytime",
+    "mostPopular": "Most Popular",
+    "perMonth": "/ month",
     "currentPlan": "Current Plan",
-    "upgrade": "Upgrade",
-    "downgrade": "Downgrade",
-    "perMonth": "/month",
-    "perYear": "/year",
-    "features": "Features",
-    "conversations": "Conversations",
-    "teamMembers": "Team Members",
-    "whatsappNumbers": "WhatsApp Numbers",
-    "unlimited": "Unlimited",
-    "startTrial": "Start Free Trial",
-    "contactSales": "Contact Sales",
-    "mostPopular": "Most Popular"
+    "foreverFree": "Forever Free",
+    "noCreditCard": "No credit card required",
+    "plans": {
+      "free": {
+        "name": "Free",
+        "description": "Try unified inbox with real workflows",
+        "cta": "Start Free",
+        "note": "No credit card required"
+      },
+      "starter": {
+        "name": "Starter",
+        "description": "For small businesses & solo teams",
+        "cta": "Start Starter",
+        "note": "Best for multi-channel sales & support"
+      },
+      "pro": {
+        "name": "Pro",
+        "description": "For growing teams handling high volume",
+        "cta": "Upgrade to Pro",
+        "note": "Built for serious multi-channel operations"
+      }
+    },
+    "features": {
+      "unifiedInbox": "Unified inbox (all channels)",
+      "whatsappWebchat": "WhatsApp + Web Chat",
+      "websiteWidget": "Website Widget",
+      "oneUser": "1 user",
+      "activeConversations50": "50 active conversations / month",
+      "autoRouting": "Auto channel routing",
+      "tagsNotes": "Tags & internal notes",
+      "tasksReminders": "Tasks & reminders",
+      "smartPrioritization": "Smart task prioritization (AI Recommended)",
+      "awayMessages": "Away messages (business hours)",
+      "exportConversations": "Export conversations (CSV)",
+      "communitySupport": "Community support",
+      "everythingFree": "Everything in Free, plus:",
+      "allChannels": "All channels: WhatsApp, SMS, Telegram, Instagram, Facebook, Web Chat",
+      "tiktokIntake": "TikTok lead intake",
+      "threeUsers": "Up to 3 team members",
+      "activeConversations500": "500 active conversations / month",
+      "chatbotBuilder": "Visual chatbot builder",
+      "autoReply": "Auto-reply messages",
+      "smartFallback": "Smart fallback routing",
+      "csvImport": "CSV import contacts",
+      "notifications": "Email & push notifications",
+      "webhooks3": "3 webhook integrations",
+      "aiAssistBasic": "AI Assist included (basic reply suggestions & sentiment detection – up to 50/month)",
+      "aiBrainAddon": "Full AI Brain add-on available (+$29/mo)",
+      "everythingStarter": "Everything in Starter, plus:",
+      "fiveNumbers": "Up to 5 WhatsApp Business numbers",
+      "unlimitedTeam": "Unlimited team members",
+      "activeConversations2000": "2,000 active conversations / month",
+      "dripSequences": "Drip sequences & campaigns",
+      "workflowAutomation": "Workflow automation",
+      "templateMessaging": "Template messaging & retargeting",
+      "webhooks10": "10 webhook + native integrations",
+      "prioritySupport": "Priority support",
+      "aiAssistEnhanced": "Enhanced AI Assist included (higher limits – up to 200/month)"
+    },
+    "aiBrain": {
+      "title": "Full AI Brain",
+      "subtitle": "Upgrade your AI Assist to unlimited power",
+      "price": "$29",
+      "perMonth": "/month",
+      "addon": "$29/mo ADD-ON",
+      "description": "Upgrade your AI Assist to Full AI Brain – unlock unlimited suggestions, lead qualification, smart summarization, plain-English automation builder, and more. Available on Starter or Pro plans.",
+      "feature1": "Unlimited Smart Replies & AI suggestions",
+      "feature2": "Auto lead qualification & scoring",
+      "feature3": "Conversation summarization",
+      "feature4": "Real-time analytics & insights",
+      "availableFor": "Available for Starter and Pro plan subscribers",
+      "unlockButton": "Unlock Full AI Brain – $29/mo",
+      "getStarterButton": "Get Starter to Access AI Features"
+    },
+    "notices": {
+      "messageCosts": {
+        "title": "Important: WhatsApp Message Costs",
+        "description": "WhatsApp message delivery is billed separately by your provider (Twilio or Meta WhatsApp Business API).",
+        "noCharge": "WhachatCRM does not charge per message.",
+        "planControls": "Your plan only controls how many conversations you manage inside the CRM.",
+        "transparent": "This keeps pricing transparent and predictable.",
+        "viewCosts": "View message costs:",
+        "twilioLink": "Twilio WhatsApp Pricing",
+        "metaLink": "Meta WhatsApp Business API Pricing"
+      },
+      "activeConversation": {
+        "title": "What Is an \"Active Conversation\"?",
+        "description": "An active conversation is:",
+        "point1": "One unique WhatsApp contact within a rolling 30-day window",
+        "point2": "Unlimited messages can happen inside that conversation — the count stays the same"
+      },
+      "reachLimit": {
+        "title": "What Happens When I Reach My Limit?",
+        "inboundContinue": "Inbound messages continue normally",
+        "outboundPaused": "Outbound replies are paused",
+        "upgradePrompt": "You'll see a clear upgrade prompt",
+        "instantUpgrade": "Upgrade instantly — no downtime",
+        "inControl": "You're always in control."
+      }
+    },
+    "faq": {
+      "title": "Frequently Asked Questions",
+      "payTwice": {
+        "q": "Do I pay twice — once to my provider and once to WhachatCRM?",
+        "a1": "No. You're paying for two different things:",
+        "provider": "Your provider (Twilio or Meta):",
+        "providerDesc": "WhatsApp message delivery",
+        "whachat": "WhachatCRM:",
+        "whachatDesc": "Managing conversations, teams, notes, tasks & workflows",
+        "analogy": "Think of it like email: Gmail sends emails, CRM manages customers."
+      },
+      "noMessageFees": {
+        "q": "Why don't your plans include WhatsApp message fees?",
+        "a1": "Because WhatsApp pricing varies by:",
+        "country": "Country",
+        "type": "Message type",
+        "volume": "Volume",
+        "a2": "By letting customers connect their own provider:",
+        "noHidden": "You avoid hidden fees",
+        "transparent": "Costs stay transparent",
+        "control": "You keep full control",
+        "standard": "This is the standard SaaS model."
+      },
+      "channels": {
+        "q": "Which channels do you support?",
+        "a1": "WhachatCRM supports 7 messaging channels in one unified inbox:",
+        "whatsapp": "Via Twilio or Meta Business API (your choice)",
+        "sms": "Via Twilio",
+        "telegram": "Connect your bot",
+        "instagram": "Via Meta integration",
+        "facebook": "Via Meta integration",
+        "webchat": "Embeddable widget for your website",
+        "tiktok": "Lead intake only (capture leads from TikTok ads)",
+        "note": "Note: SMS requires Twilio. Meta only supports WhatsApp, not SMS."
+      },
+      "providers": {
+        "q": "Which WhatsApp providers do you support?",
+        "a1": "WhachatCRM supports two official WhatsApp Business API providers:",
+        "twilio": "Fast approval, reliable infrastructure, includes SMS support",
+        "meta": "Direct integration, green checkmark verification, WhatsApp-only",
+        "a2": "Choose the provider that best fits your needs — we guide you step-by-step during setup.",
+        "note": "The WhatsApp Business mobile app is not supported."
+      },
+      "twilioVsMeta": {
+        "q": "Twilio vs Meta — which should I choose?",
+        "chooseTwilio": "Choose Twilio if:",
+        "twilio1": "You want the easiest setup experience",
+        "twilio2": "You need Twilio's other communication tools (SMS, voice)",
+        "twilio3": "You prefer an intermediary handling WhatsApp compliance",
+        "chooseMeta": "Choose Meta WhatsApp Business API if:",
+        "meta1": "You already have a WhatsApp Business account",
+        "meta2": "You want the official green checkmark verification",
+        "meta3": "You need lower messaging costs for high-volume usage",
+        "meta4": "You want access to native WhatsApp features (catalogs, interactive buttons)"
+      },
+      "otherProviders": {
+        "q": "Do you support other WhatsApp providers?",
+        "a1": "Currently we support Twilio and Meta WhatsApp Business API.",
+        "a2": "We're collecting demand for additional providers like:",
+        "contact": "Contact us to help shape future integrations."
+      },
+      "upgradeDowngrade": {
+        "q": "Can I upgrade or downgrade anytime?",
+        "a": "Yes. Plans are monthly, flexible, and update instantly."
+      }
+    }
   },
   "settings": {
     "title": "Settings",
@@ -466,187 +623,6 @@
     "checkEmail": "Check your email",
     "resetEmailSent": "If an account exists with this email, you will receive password reset instructions."
   },
-  "pricing": {
-    "backToSettings": "Back to Settings",
-    "backToHome": "Back to Home",
-    "title": "One Inbox. Every Channel. Simple Pricing.",
-    "subtitle": "WhatsApp, SMS, Telegram, Instagram, Facebook, Web Chat — all in one place.",
-    "subtitle2": "Stop juggling apps. Respond faster, never lose a lead, and look bigger than you are.",
-    "noMarkup": "No Markup on Messages",
-    "unlimitedMessages": "Unlimited Messages",
-    "noPerMessageFees": "No Per-Message Fees",
-    "channels": "7 Channels Supported",
-    "cancelAnytime": "Cancel Anytime",
-    "mostPopular": "Most Popular",
-    "perMonth": "/ month",
-    "currentPlan": "Current Plan",
-    "foreverFree": "Forever Free",
-    "noCreditCard": "No credit card required",
-    "plans": {
-      "free": {
-        "name": "Free",
-        "description": "Try unified inbox with real workflows",
-        "cta": "Start Free",
-        "note": "No credit card required"
-      },
-      "starter": {
-        "name": "Starter",
-        "description": "For small businesses & solo teams",
-        "cta": "Start Starter",
-        "note": "Best for multi-channel sales & support"
-      },
-      "pro": {
-        "name": "Pro",
-        "description": "For growing teams handling high volume",
-        "cta": "Upgrade to Pro",
-        "note": "Built for serious multi-channel operations"
-      }
-    },
-    "features": {
-      "unifiedInbox": "Unified inbox (all channels)",
-      "whatsappWebchat": "WhatsApp + Web Chat",
-      "websiteWidget": "Website Widget",
-      "oneUser": "1 user",
-      "activeConversations50": "50 active conversations / month",
-      "autoRouting": "Auto channel routing",
-      "tagsNotes": "Tags & internal notes",
-      "tasksReminders": "Tasks & reminders",
-      "smartPrioritization": "Smart task prioritization (AI Recommended)",
-      "awayMessages": "Away messages (business hours)",
-      "exportConversations": "Export conversations (CSV)",
-      "communitySupport": "Community support",
-      "everythingFree": "Everything in Free, plus:",
-      "allChannels": "All channels: WhatsApp, SMS, Telegram, Instagram, Facebook, Web Chat",
-      "tiktokIntake": "TikTok lead intake",
-      "threeUsers": "Up to 3 team members",
-      "activeConversations500": "500 active conversations / month",
-      "chatbotBuilder": "Visual chatbot builder",
-      "autoReply": "Auto-reply messages",
-      "smartFallback": "Smart fallback routing",
-      "csvImport": "CSV import contacts",
-      "notifications": "Email & push notifications",
-      "webhooks3": "3 webhook integrations",
-      "aiAssistBasic": "AI Assist included (basic reply suggestions & sentiment detection – up to 50/month)",
-      "aiBrainAddon": "Full AI Brain add-on available (+$29/mo)",
-      "everythingStarter": "Everything in Starter, plus:",
-      "fiveNumbers": "Up to 5 WhatsApp Business numbers",
-      "unlimitedTeam": "Unlimited team members",
-      "activeConversations2000": "2,000 active conversations / month",
-      "dripSequences": "Drip sequences & campaigns",
-      "workflowAutomation": "Workflow automation",
-      "templateMessaging": "Template messaging & retargeting",
-      "webhooks10": "10 webhook + native integrations",
-      "prioritySupport": "Priority support",
-      "aiAssistEnhanced": "Enhanced AI Assist included (higher limits – up to 200/month)"
-    },
-    "aiBrain": {
-      "title": "Full AI Brain",
-      "subtitle": "Upgrade your AI Assist to unlimited power",
-      "price": "$29",
-      "perMonth": "/month",
-      "addon": "$29/mo ADD-ON",
-      "description": "Upgrade your AI Assist to Full AI Brain – unlock unlimited suggestions, lead qualification, smart summarization, plain-English automation builder, and more. Available on Starter or Pro plans.",
-      "feature1": "Unlimited Smart Replies & AI suggestions",
-      "feature2": "Auto lead qualification & scoring",
-      "feature3": "Conversation summarization",
-      "feature4": "Real-time analytics & insights",
-      "availableFor": "Available for Starter and Pro plan subscribers",
-      "unlockButton": "Unlock Full AI Brain – $29/mo",
-      "getStarterButton": "Get Starter to Access AI Features"
-    },
-    "notices": {
-      "messageCosts": {
-        "title": "Important: WhatsApp Message Costs",
-        "description": "WhatsApp message delivery is billed separately by your provider (Twilio or Meta WhatsApp Business API).",
-        "noCharge": "WhachatCRM does not charge per message.",
-        "planControls": "Your plan only controls how many conversations you manage inside the CRM.",
-        "transparent": "This keeps pricing transparent and predictable.",
-        "viewCosts": "View message costs:",
-        "twilioLink": "Twilio WhatsApp Pricing",
-        "metaLink": "Meta WhatsApp Business API Pricing"
-      },
-      "activeConversation": {
-        "title": "What Is an \"Active Conversation\"?",
-        "description": "An active conversation is:",
-        "point1": "One unique WhatsApp contact within a rolling 30-day window",
-        "point2": "Unlimited messages can happen inside that conversation — the count stays the same"
-      },
-      "reachLimit": {
-        "title": "What Happens When I Reach My Limit?",
-        "inboundContinue": "Inbound messages continue normally",
-        "outboundPaused": "Outbound replies are paused",
-        "upgradePrompt": "You'll see a clear upgrade prompt",
-        "instantUpgrade": "Upgrade instantly — no downtime",
-        "inControl": "You're always in control."
-      }
-    },
-    "faq": {
-      "title": "Frequently Asked Questions",
-      "payTwice": {
-        "q": "Do I pay twice — once to my provider and once to WhachatCRM?",
-        "a1": "No. You're paying for two different things:",
-        "provider": "Your provider (Twilio or Meta):",
-        "providerDesc": "WhatsApp message delivery",
-        "whachat": "WhachatCRM:",
-        "whachatDesc": "Managing conversations, teams, notes, tasks & workflows",
-        "analogy": "Think of it like email: Gmail sends emails, CRM manages customers."
-      },
-      "noMessageFees": {
-        "q": "Why don't your plans include WhatsApp message fees?",
-        "a1": "Because WhatsApp pricing varies by:",
-        "country": "Country",
-        "type": "Message type",
-        "volume": "Volume",
-        "a2": "By letting customers connect their own provider:",
-        "noHidden": "You avoid hidden fees",
-        "transparent": "Costs stay transparent",
-        "control": "You keep full control",
-        "standard": "This is the standard SaaS model."
-      },
-      "channels": {
-        "q": "Which channels do you support?",
-        "a1": "WhachatCRM supports 7 messaging channels in one unified inbox:",
-        "whatsapp": "Via Twilio or Meta Business API (your choice)",
-        "sms": "Via Twilio",
-        "telegram": "Connect your bot",
-        "instagram": "Via Meta integration",
-        "facebook": "Via Meta integration",
-        "webchat": "Embeddable widget for your website",
-        "tiktok": "Lead intake only (capture leads from TikTok ads)",
-        "note": "Note: SMS requires Twilio. Meta only supports WhatsApp, not SMS."
-      },
-      "providers": {
-        "q": "Which WhatsApp providers do you support?",
-        "a1": "WhachatCRM supports two official WhatsApp Business API providers:",
-        "twilio": "Fast approval, reliable infrastructure, includes SMS support",
-        "meta": "Direct integration, green checkmark verification, WhatsApp-only",
-        "a2": "Choose the provider that best fits your needs — we guide you step-by-step during setup.",
-        "note": "The WhatsApp Business mobile app is not supported."
-      },
-      "twilioVsMeta": {
-        "q": "Twilio vs Meta — which should I choose?",
-        "chooseTwilio": "Choose Twilio if:",
-        "twilio1": "You want the easiest setup experience",
-        "twilio2": "You need Twilio's other communication tools (SMS, voice)",
-        "twilio3": "You prefer an intermediary handling WhatsApp compliance",
-        "chooseMeta": "Choose Meta WhatsApp Business API if:",
-        "meta1": "You already have a WhatsApp Business account",
-        "meta2": "You want the official green checkmark verification",
-        "meta3": "You need lower messaging costs for high-volume usage",
-        "meta4": "You want access to native WhatsApp features (catalogs, interactive buttons)"
-      },
-      "otherProviders": {
-        "q": "Do you support other WhatsApp providers?",
-        "a1": "Currently we support Twilio and Meta WhatsApp Business API.",
-        "a2": "We're collecting demand for additional providers like:",
-        "contact": "Contact us to help shape future integrations."
-      },
-      "upgradeDowngrade": {
-        "q": "Can I upgrade or downgrade anytime?",
-        "a": "Yes. Plans are monthly, flexible, and update instantly."
-      }
-    }
-  },
   "rge": {
     "nav": {
       "pricing": "Pricing",
@@ -668,7 +644,12 @@
       "check3": "Book showings directly through WhatsApp",
       "earlyAccess": "Get Early Access",
       "howItWorks": "See How It Works",
-      "launchOffer": "Launch offer: 50% off the Growth Engine Template for the first 5 real estate agents."
+      "launchOffer": "Launch offer: 50% off the Growth Engine Template for the first 5 real estate agents.",
+      "mainTitle": "Turn Real Estate Conversations Into Booked Showings Automatically",
+      "mainSubtitle": "AI-powered WhatsApp automation that responds instantly, qualifies leads, and schedules showings for you.",
+      "mainDesc": "A fully pre-built automation system installed inside your CRM — ready to run.",
+      "installCta": "Install Realtor Growth Engine",
+      "seeHowItWorks": "See How It Works"
     },
     "preview": {
       "lead1Name": "Sarah M. — Score: 92 (Hot)",
@@ -721,7 +702,19 @@
       "item3": "Automation workflows configured",
       "item4": "Calendar booking integration",
       "item5": "CRM pipeline setup",
-      "liveNote": "Most agents are live within a few days."
+      "liveNote": "Most agents are live within a few days.",
+      "noTech": "No technical setup required. Live in days.",
+      "teamTitle": "Our team sets everything up for you",
+      "teamItem1": "We handle your WhatsApp Business API application with Meta",
+      "teamItem2": "We verify your business and configure your phone number",
+      "teamItem3": "We install all automation workflows into your CRM account",
+      "teamItem4": "We connect your booking calendar so leads can self-schedule",
+      "teamItem5": "We go live with you and confirm everything is working",
+      "setupItem1": "WhatsApp Business API setup",
+      "setupItem2": "Meta verification assistance",
+      "setupItem3": "Automation workflows installed",
+      "setupItem4": "CRM pipeline configured",
+      "setupItem5": "Calendar integration included"
     },
     "onboarding": {
       "title": "White-Glove Onboarding",
@@ -801,6 +794,117 @@
       "rge": "Realtor® Growth Engine",
       "privacy": "Privacy",
       "terms": "Terms"
+    },
+    "features": {
+      "title": "What the Growth Engine Does",
+      "subtitle": "A complete lead handling system that runs 24/7 — so you can focus on closing deals.",
+      "f1": {
+        "title": "Responds instantly to every inquiry",
+        "desc": "Buyers reach you 24/7. No missed conversations, no waiting."
+      },
+      "f2": {
+        "title": "Qualifies buyers automatically",
+        "desc": "Identifies serious prospects based on budget, financing readiness, and timeline."
+      },
+      "f3": {
+        "title": "Identifies serious prospects",
+        "desc": "Surfaces ready-to-close leads so you focus on who matters most."
+      },
+      "f4": {
+        "title": "Sends your calendar when they want to book",
+        "desc": "Leads schedule their own showings directly into your availability."
+      },
+      "f5": {
+        "title": "Follows up automatically if leads go quiet",
+        "desc": "Multi-day sequences keep warm leads engaged — on day 1, 3, and 7."
+      },
+      "f6": {
+        "title": "Keeps everything organized in your CRM",
+        "desc": "Leads flow through your pipeline with scores and stage tags automatically."
+      }
+    },
+    "howItWorks": {
+      "title": "How Your System Works",
+      "subtitle": "From first message to booked showing — automatically.",
+      "step": "Step",
+      "tagline": "Only serious leads reach you.",
+      "s1": {
+        "title": "Lead sends a WhatsApp message",
+        "desc": "Inquiry arrives from a buyer or seller. Your system springs to life instantly."
+      },
+      "s2": {
+        "title": "Instant automated response goes out",
+        "desc": "Lead gets a personalized greeting within seconds — no waiting on your end."
+      },
+      "s3": {
+        "title": "AI qualifies the lead in real-time",
+        "desc": "Conversation is analyzed for budget, intent, and seriousness. Lead is scored automatically."
+      },
+      "s4": {
+        "title": "Booking link is sent automatically",
+        "desc": "When they ask to schedule, your calendar opens directly in the chat."
+      },
+      "s5": {
+        "title": "You get a handoff with context",
+        "desc": "Serious leads arrive in your CRM pre-qualified. Your time goes to high-probability deals."
+      },
+      "s6": {
+        "title": "Cold leads are nurtured automatically",
+        "desc": "Leads who go quiet get follow-ups on day 1, 3, and 7. Nothing falls through the cracks."
+      }
+    },
+    "builtFor": {
+      "title": "Built For",
+      "solo": {
+        "title": "Solo agents who want 24/7 lead handling",
+        "desc": "Never miss a lead again. Your system works while you sleep, so every inquiry gets a fast, professional reply."
+      },
+      "teams": {
+        "title": "Real estate teams managing high volumes of inquiries",
+        "desc": "Scale lead handling across your team without adding headcount. Every lead gets qualified and routed correctly."
+      },
+      "ads": {
+        "title": "Agents running ads, listing campaigns, or online lead generation",
+        "desc": "Turn your ad spend into booked showings faster. Every inbound lead is handled the moment it arrives."
+      }
+    },
+    "activate": {
+      "title": "What Happens After You Activate",
+      "subtitle": "From install to live — in a few simple steps.",
+      "s1": {
+        "title": "Connect your channels",
+        "desc": "Authenticate your WhatsApp Business account and link your booking calendar."
+      },
+      "s2": {
+        "title": "The system installs automatically",
+        "desc": "All workflows, automations, and CRM pipelines deploy directly into your account."
+      },
+      "s3": {
+        "title": "Automations go live",
+        "desc": "Your system is ready and waiting. The moment a lead messages you, it responds."
+      },
+      "s4": {
+        "title": "Leads start getting qualified and routed",
+        "desc": "From first message to your CRM — leads are handled, scored, and tracked automatically."
+      }
+    },
+    "pricingSection": {
+      "title": "What Powers the Realtor Growth Engine",
+      "subtitle": "Everything you need is included — platform, AI layer, and the template itself.",
+      "corePlatform": "Core Platform",
+      "aiLayer": "AI Automation Layer",
+      "templateLicense": "Realtor Growth Engine",
+      "oneTime": "One-time template license",
+      "metaNote": "WhatsApp messaging fees are billed directly by Meta with no markup.",
+      "installCta": "Install Realtor Growth Engine",
+      "viewPlans": "View all plans"
+    },
+    "finalCta": {
+      "title": "Ready to turn leads into booked showings?",
+      "subtitle": "Install the Realtor Growth Engine and your automations start running immediately.",
+      "installCta": "Install Realtor Growth Engine",
+      "viewPlans": "View all plans",
+      "note": "Ready to run. No technical setup required."
     }
   },
   "pricingPage": {
