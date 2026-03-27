@@ -1,0 +1,67 @@
+Before changing anything, do NOT rebuild the GHL integration, OAuth, marketplace install flow, Shopify integration, or existing webhook subscriptions.
+
+I need a verification audit only.
+
+Please confirm these exact points:
+
+1. LeadConnector install / OAuth
+
+* Do we already have a complete OAuth install flow for GHL / LeadConnector?
+* What exact route handles the install callback?
+* What tokens / location data are stored after install?
+* What table/fields store the connected GHL account info?
+
+2. Current WhachatCRM integration status
+
+* On the WhachatCRM Integrations page, what logic determines whether LeadConnector shows Connected vs Not Connected?
+* Why is it showing Not Connected right now?
+* Is this only because no account completed install, or is the status check broken?
+
+3. Existing webhook handling
+
+* List every GHL/LeadConnector webhook event we already receive and handle.
+* Confirm the exact endpoint(s), including /api/ext/webhook and any others.
+* For each event, state whether we:
+  a) only log it
+  b) store it
+  c) update/create contact in WhachatCRM
+  d) update/create conversation
+  e) update tags/stages
+* Confirm whether ContactUpdate, ContactTagUpdate, InboundMessage are only acknowledged or actually processed.
+
+4. Data mapping already built
+
+* Do we already map any GHL contact fields into WhachatCRM contacts?
+* Do we already map tags like hot_lead or appointment_set into WhachatCRM?
+* Do we already create conversations/messages in WhachatCRM from GHL events?
+* Do we already create opportunities or stages in WhachatCRM from GHL data?
+
+5. Safety / loop risk
+
+* Could current GHL workflows + our webhook handlers create loops or noisy repeated events?
+* Do we already have deduplication, idempotency, or replay protection?
+* If yes, where?
+* If not, confirm that clearly.
+
+6. What should NOT be touched
+
+* Explicitly list which parts are already working and should not be changed:
+
+  * marketplace app install flow
+  * OAuth
+  * webhook subscription setup
+  * Shopify app/review-sensitive code
+  * integrations page status logic
+  * any existing token storage / callback routes
+
+7. Minimal gap only
+
+* After the audit, tell me the smallest missing piece required so that:
+  GHL event -> WhachatCRM contact/thread/tag update
+* I want only the minimal missing backend work, not a rebuild.
+
+Please answer with:
+A. What already works
+B. What is stubbed / incomplete
+C. What is risky to change
+D. What is the minimum safe task to implement next
