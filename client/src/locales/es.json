@@ -889,7 +889,6 @@
         "f1": "500 conversaciones activas",
         "f2": "Hasta 3 usuarios",
         "f3": "1 número de WhatsApp",
-        "f4": "Bandeja de entrada unificada",
         "f5": "CRM completo",
         "f6": "Etiquetas, notas, pipeline y tareas",
         "f7": "AI Assist incluido — hasta 50/mes",
@@ -897,6 +896,7 @@
         "f9": "Automatizaciones básicas",
         "f10": "Widget de chat en vivo",
         "f11": "Compatible con el complemento AI Brain",
+        "f12": "Integraciones y webhooks",
         "upsell": "Actualiza a Pro para identificar automáticamente leads calientes y hacer seguimiento con menos trabajo manual.",
         "cta": "Actualizar a Starter"
       },

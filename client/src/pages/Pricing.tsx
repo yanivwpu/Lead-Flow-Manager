@@ -470,7 +470,6 @@ export function Pricing() {
                     t(`${p}.plans.starter.f1`),
                     t(`${p}.plans.starter.f2`),
                     t(`${p}.plans.starter.f3`),
-                    t(`${p}.plans.starter.f4`),
                     t(`${p}.plans.starter.f5`),
                     t(`${p}.plans.starter.f6`),
                     t(`${p}.plans.starter.f7`),
@@ -478,6 +477,7 @@ export function Pricing() {
                     t(`${p}.plans.starter.f9`),
                     t(`${p}.plans.starter.f10`),
                     t(`${p}.plans.starter.f11`),
+                    t(`${p}.plans.starter.f12`),
                   ].map((f) => (
                     <FeatureItem
                       key={f}
