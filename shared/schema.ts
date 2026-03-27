@@ -131,6 +131,7 @@ export const users = pgTable("users", {
   shopifyChargeId: text("shopify_charge_id"), // Active Shopify billing charge ID
   shopifySubscriptionStatus: text("shopify_subscription_status"), // active, cancelled, pending
   shopifyInstalledAt: timestamp("shopify_installed_at"),
+  shopifyAIBrainEnabled: boolean("shopify_ai_brain_enabled").default(false),
   createdAt: timestamp("created_at").defaultNow(),
   // Trial re-engagement email tracking
   checkinEmailSent: boolean("checkin_email_sent").default(false),

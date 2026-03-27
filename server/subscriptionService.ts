@@ -71,7 +71,11 @@ class SubscriptionService {
     // Trial users get full AI Brain access as part of the Pro trial experience
     // Demo user (demo@whachat.com) gets full AI Brain for demonstration purposes
     const isDemoUser = user.email === 'demo@whachat.com';
-    const hasAIBrainAddon = isInTrial || isDemoUser ? true : await this.checkAIBrainAddonStatus(user.stripeCustomerId);
+    const hasAIBrainAddon = isInTrial || isDemoUser
+      ? true
+      : user.shopifyAIBrainEnabled
+        ? true
+        : await this.checkAIBrainAddonStatus(user.stripeCustomerId);
 
     return {
       plan: effectivePlan,

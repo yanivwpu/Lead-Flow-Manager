@@ -183,15 +183,33 @@ router.get('/billing/callback', async (req: Request, res: Response) => {
       if (user.shopifyChargeId && subscription.id !== user.shopifyChargeId) {
         console.warn(`Charge ID mismatch: expected ${user.shopifyChargeId}, got ${subscription.id}`);
       }
-      
+
+      const name = subscription.name || '';
+      const isAIBrainAddon = name.includes('AI Brain');
+
+      if (isAIBrainAddon) {
+        // AI Brain add-on approval — do NOT overwrite the base plan
+        await storage.updateUser(user.id, {
+          shopifySubscriptionStatus: 'active',
+          shopifyChargeId: subscription.id,
+          shopifyAIBrainEnabled: true,
+        });
+        return res.redirect(`/app?shopify_billing=success&plan=ai-brain`);
+      }
+
+      // Map Shopify plan name → internal plan
+      let internalPlan: 'starter' | 'pro' = 'starter';
+      if (name.includes('Pro')) internalPlan = 'pro';
+      else if (name.includes('Starter')) internalPlan = 'starter';
+
       await storage.updateUser(user.id, {
         shopifySubscriptionStatus: 'active',
         shopifyChargeId: subscription.id,
-        subscriptionPlan: 'pro',
+        subscriptionPlan: internalPlan,
         subscriptionStatus: 'active',
       });
 
-      return res.redirect(`/app?shopify_billing=success&plan=pro`);
+      return res.redirect(`/app?shopify_billing=success&plan=${internalPlan}`);
     }
 
     await storage.updateUser(user.id, {
