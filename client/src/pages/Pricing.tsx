@@ -151,7 +151,7 @@ export function Pricing() {
     { feature: t(`${p}.compare.automations`), free: false, starter: t(`${p}.compare.basic`), pro: t(`${p}.compare.advanced`) },
     { feature: t(`${p}.compare.leadScoring`), free: false, starter: false, pro: true },
     { feature: t(`${p}.compare.smartRetargeting`), free: false, starter: false, pro: true },
-    { feature: t(`${p}.compare.integrationsWebhooks`), free: false, starter: false, pro: true },
+    { feature: t(`${p}.compare.integrationsWebhooks`), free: false, starter: true, pro: true },
     { feature: t(`${p}.compare.aiBrainAddon`), free: false, starter: true, pro: true },
   ];
 
