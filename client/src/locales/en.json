@@ -910,6 +910,8 @@
   "pricingPage": {
     "backHome": "Back to Home",
     "backSettings": "Back to Settings",
+    "trialBanner": "All paid plans include a 14-day free Pro trial that lets you experience the complete system. No charge during trial.",
+    "trialNote": "14-day free Pro trial included",
     "hero": {
       "title": "Simple, transparent pricing for growing conversations",
       "subtitle": "Start free and upgrade when you're ready for more AI assistance, automation, and team capacity. No message markups — connect your own WhatsApp through Meta or Twilio.",

@@ -829,6 +829,8 @@
   "pricingPage": {
     "backHome": "Volver al Inicio",
     "backSettings": "Volver a Configuración",
+    "trialBanner": "Todos los planes de pago incluyen una prueba gratuita de 14 días del plan Pro para que experimentes el sistema completo. Sin cargos durante la prueba.",
+    "trialNote": "Prueba gratuita de 14 días del plan Pro incluida",
     "hero": {
       "title": "Precios simples y transparentes para conversaciones en crecimiento",
       "subtitle": "Comienza gratis y actualiza cuando estés listo para más asistencia de IA, automatización y capacidad del equipo. Sin recargos por mensajes — conecta tu propio WhatsApp a través de Meta o Twilio.",
