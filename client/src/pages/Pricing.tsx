@@ -240,6 +240,14 @@ export function Pricing() {
           </a>
         </Link>
 
+        {/* ─────────────── FREE TRIAL BANNER ─────────────── */}
+        <div className="flex items-start gap-3 bg-emerald-50 border border-emerald-200 rounded-xl px-5 py-4 mb-10 text-sm text-emerald-800" data-testid="banner-free-trial">
+          <span className="text-emerald-500 mt-0.5 shrink-0">✓</span>
+          <span>
+            <strong>All paid plans include a 14-day free Pro trial</strong> that lets you experience the complete system. No charge during trial.
+          </span>
+        </div>
+
         {/* ─────────────── SECTION 1: HERO ─────────────── */}
         <div className="text-center mb-14">
           <h1
@@ -536,8 +544,11 @@ export function Pricing() {
                     />
                   ))}
                 </ul>
-                <p className="text-xs text-gray-400 mt-4 mb-4">
+                <p className="text-xs text-gray-400 mt-4 mb-2">
                   {t(`${p}.plans.starter.upsell`)}
+                </p>
+                <p className="text-xs font-medium text-emerald-600 mb-4 flex items-center gap-1" data-testid="text-trial-starter">
+                  <span>✓</span> 14-day free Pro trial included
                 </p>
                 <Button
                   className={`w-full ${
@@ -617,8 +628,11 @@ export function Pricing() {
                     />
                   ))}
                 </ul>
-                <p className="text-xs text-gray-400 mt-4 mb-4">
+                <p className="text-xs text-gray-400 mt-4 mb-2">
                   {t(`${p}.plans.pro.upsell`)}
+                </p>
+                <p className="text-xs font-medium text-emerald-600 mb-4 flex items-center gap-1" data-testid="text-trial-pro">
+                  <span>✓</span> 14-day free Pro trial included
                 </p>
                 <Button
                   className={`w-full ${
