@@ -304,6 +304,7 @@ export function UnifiedInbox() {
   const [filterTab, setFilterTab] = useState<FilterTab>('all');
   const allChannels: Channel[] = ['whatsapp', 'instagram', 'facebook', 'sms', 'webchat', 'telegram', 'tiktok'];
   const [selectedChannels, setSelectedChannels] = useState<Set<Channel>>(new Set(allChannels));
+  const [demoChannelOverrides, setDemoChannelOverrides] = useState<Record<string, Channel>>({});
   const [messageInput, setMessageInput] = useState("");
   const [showNewContact, setShowNewContact] = useState(false);
   const [newContactForm, setNewContactForm] = useState({ name: "", phone: "", email: "" });
@@ -379,7 +380,9 @@ export function UnifiedInbox() {
   const contactData = useMemo(() => {
     if (isDemoUser && selectedDemoChat) {
       const chatIndex = demoChats.findIndex((c: any) => String(c.id) === String(selectedDemoChat.id));
-      const ch = (selectedDemoChat.channel || DEMO_CHANNELS[chatIndex >= 0 ? chatIndex % DEMO_CHANNELS.length : 0]) as Channel;
+      const baseCh = (selectedDemoChat.channel || DEMO_CHANNELS[chatIndex >= 0 ? chatIndex % DEMO_CHANNELS.length : 0]) as Channel;
+      const overrideCh = demoChannelOverrides[selectedDemoChat.id] as Channel | undefined;
+      const activeCh = overrideCh || baseCh;
       return {
         contact: {
           id: selectedDemoChat.id,
@@ -387,8 +390,8 @@ export function UnifiedInbox() {
           avatar: selectedDemoChat.avatar,
           phone: selectedDemoChat.whatsappPhone || '',
           email: '',
-          primaryChannel: ch,
-          primaryChannelOverride: undefined as Channel | undefined,
+          primaryChannel: baseCh,
+          primaryChannelOverride: overrideCh,
           tag: selectedDemoChat.tag,
           pipelineStage: selectedDemoChat.pipelineStage,
           notes: selectedDemoChat.notes || '',
@@ -399,14 +402,14 @@ export function UnifiedInbox() {
         },
         conversations: [{
           id: selectedDemoChat.id,
-          channel: ch,
+          channel: activeCh,
           status: selectedDemoChat.status || 'open',
           unreadCount: selectedDemoChat.unread || 0,
         }]
       };
     }
     return realContactData;
-  }, [isDemoUser, selectedDemoChat, realContactData, demoChats]);
+  }, [isDemoUser, selectedDemoChat, realContactData, demoChats, demoChannelOverrides]);
 
   const primaryConversation = contactData?.conversations?.find(
     (c) => c.channel === (contactData?.contact?.primaryChannelOverride || contactData?.contact?.primaryChannel)
@@ -671,7 +674,8 @@ export function UnifiedInbox() {
       if (!res.ok) throw new Error("Failed to switch channel");
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/contacts", variables.contactId] });
       queryClient.invalidateQueries({ queryKey: ["/api/contacts"] });
       queryClient.invalidateQueries({ queryKey: ["/api/inbox"] });
     },
@@ -1029,8 +1033,10 @@ export function UnifiedInbox() {
                         <DropdownMenuItem
                           key={key}
                           onClick={() => {
-                            if (!isDemoUser) {
-                              switchChannelMutation.mutate({ contactId: selectedContactId!, channel: key as Channel });
+                            if (isDemoUser && selectedContactId) {
+                              setDemoChannelOverrides(prev => ({ ...prev, [selectedContactId]: key as Channel }));
+                            } else if (selectedContactId) {
+                              switchChannelMutation.mutate({ contactId: selectedContactId, channel: key as Channel });
                             }
                           }}
                           className={cn("gap-2", isActive && "font-medium")}
