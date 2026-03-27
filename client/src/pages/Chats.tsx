@@ -77,6 +77,7 @@ interface Chat {
   name: string;
   avatar: string;
   whatsappPhone?: string | null;
+  channel?: string;
   lastMessage: string;
   time: string;
   unread: number;
@@ -105,6 +106,7 @@ export function Chats() {
   const [, setLocation] = useLocation();
   const { user } = useAuth();
   const [searchTerm, setSearchTerm] = useState("");
+  const [selectedChannels, setSelectedChannels] = useState<Set<string>>(new Set(["whatsapp", "instagram", "facebook", "sms", "webchat", "telegram", "tiktok"]));
   const queryClient = useQueryClient();
   const { data: subscription } = useSubscription();
   const { toast } = useToast();
@@ -301,10 +303,13 @@ export function Chats() {
     });
   }, [activeChats, demoChats, demoMode]);
 
-  const filteredChats = sortedChats.filter(chat => 
-    chat.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    chat.lastMessage.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredChats = sortedChats.filter(chat => {
+    const matchesSearch = chat.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      chat.lastMessage.toLowerCase().includes(searchTerm.toLowerCase());
+    const chatChannel = (chat.channel || "whatsapp").toLowerCase();
+    const matchesChannel = selectedChannels.has(chatChannel);
+    return matchesSearch && matchesChannel;
+  });
 
   const handleUpdateChat = (updates: Partial<Chat>) => {
     if (!selectedChat) return;
@@ -676,6 +681,41 @@ export function Chats() {
                  </DropdownMenuContent>
                </DropdownMenu>
              </div>
+          </div>
+          
+          {/* Channel Filter */}
+          <div className="mb-3 flex gap-2">
+            <Popover>
+              <PopoverTrigger asChild>
+                <button className="px-3 py-2 text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 border border-gray-200 rounded-lg transition-colors" data-testid="button-channel-filter">
+                  📱 Channels
+                </button>
+              </PopoverTrigger>
+              <PopoverContent className="w-56 p-3" align="start">
+                <div className="space-y-2">
+                  {(['whatsapp', 'instagram', 'facebook', 'messenger', 'sms', 'webchat', 'telegram', 'tiktok'] as const).map(channel => (
+                    <label key={channel} className="flex items-center gap-2 p-2 rounded hover:bg-gray-100 cursor-pointer transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={selectedChannels.has(channel)}
+                        onChange={(e) => {
+                          const newChannels = new Set(selectedChannels);
+                          if (e.target.checked) {
+                            newChannels.add(channel);
+                          } else {
+                            newChannels.delete(channel);
+                          }
+                          setSelectedChannels(newChannels);
+                        }}
+                        className="w-4 h-4 rounded border-gray-300"
+                        data-testid={`checkbox-channel-${channel}`}
+                      />
+                      <span className="text-sm text-gray-700 capitalize">{channel}</span>
+                    </label>
+                  ))}
+                </div>
+              </PopoverContent>
+            </Popover>
           </div>
           
           {/* Team Inbox Toggle */}
