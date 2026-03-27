@@ -45,6 +45,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -301,6 +302,8 @@ export function UnifiedInbox() {
 
   const [searchQuery, setSearchQuery] = useState("");
   const [filterTab, setFilterTab] = useState<FilterTab>('all');
+  const allChannels: Channel[] = ['whatsapp', 'instagram', 'facebook', 'sms', 'webchat', 'telegram', 'tiktok'];
+  const [selectedChannels, setSelectedChannels] = useState<Set<Channel>>(new Set(allChannels));
   const [messageInput, setMessageInput] = useState("");
   const [showNewContact, setShowNewContact] = useState(false);
   const [newContactForm, setNewContactForm] = useState({ name: "", phone: "", email: "" });
@@ -733,8 +736,11 @@ export function UnifiedInbox() {
     );
     if (filterTab === 'unread') result = result.filter(item => item.unreadCount > 0);
     if (filterTab === 'mine') result = result.filter(item => item.contact.assignedTo === user?.id);
+    if (selectedChannels.size < allChannels.length) {
+      result = result.filter(item => selectedChannels.has(item.channel as Channel));
+    }
     return result;
-  }, [inbox, searchQuery, filterTab, user?.id]);
+  }, [inbox, searchQuery, filterTab, user?.id, selectedChannels]);
 
   // --- Helpers ---
 
@@ -799,11 +805,57 @@ export function UnifiedInbox() {
         <div className="p-3 border-b">
           <div className="flex items-center gap-2 mb-2">
             <h2 className="text-base font-semibold flex-1">Inbox</h2>
+            {/* Channel Filter */}
+            <Popover>
+              <PopoverTrigger asChild>
+                <button
+                  className="h-7 px-2.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-md hover:bg-gray-50 transition-colors flex items-center gap-1"
+                  data-testid="button-channel-filter"
+                >
+                  {selectedChannels.size === allChannels.length ? (
+                    <><Globe className="w-3 h-3" /> All</>
+                  ) : (
+                    <><Globe className="w-3 h-3" /> {selectedChannels.size} ch</>
+                  )}
+                </button>
+              </PopoverTrigger>
+              <PopoverContent className="w-52 p-2" align="end">
+                <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide px-2 mb-1">Filter by channel</p>
+                {allChannels.map(ch => {
+                  const cfg = CHANNEL_CONFIG[ch];
+                  const Icon = cfg.icon;
+                  return (
+                    <label key={ch} className="flex items-center gap-2.5 px-2 py-1.5 rounded hover:bg-gray-50 cursor-pointer transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={selectedChannels.has(ch)}
+                        onChange={(e) => {
+                          const next = new Set(selectedChannels);
+                          if (e.target.checked) next.add(ch); else next.delete(ch);
+                          setSelectedChannels(next);
+                        }}
+                        className="w-3.5 h-3.5 rounded border-gray-300 accent-emerald-600"
+                        data-testid={`checkbox-channel-${ch}`}
+                      />
+                      <Icon className="w-3.5 h-3.5 flex-shrink-0" style={{ color: cfg.color }} />
+                      <span className="text-sm text-gray-700">{cfg.label}</span>
+                    </label>
+                  );
+                })}
+                <div className="border-t mt-1 pt-1 flex gap-1 px-2">
+                  <button onClick={() => setSelectedChannels(new Set(allChannels))} className="flex-1 text-[11px] text-gray-500 hover:text-gray-700 py-1">All</button>
+                  <button onClick={() => setSelectedChannels(new Set())} className="flex-1 text-[11px] text-gray-500 hover:text-gray-700 py-1">None</button>
+                </div>
+              </PopoverContent>
+            </Popover>
             <Dialog open={showNewContact} onOpenChange={setShowNewContact}>
               <DialogTrigger asChild>
-                <Button size="sm" className="h-7 px-2 text-xs" data-testid="button-new-contact">
-                  <Plus className="w-3.5 h-3.5 mr-1" /> New
-                </Button>
+                <button
+                  className="h-7 px-2.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-md hover:bg-gray-50 transition-colors flex items-center gap-1"
+                  data-testid="button-new-contact"
+                >
+                  <Plus className="w-3.5 h-3.5" /> New
+                </button>
               </DialogTrigger>
               <DialogContent>
                 <DialogHeader><DialogTitle>Add New Contact</DialogTitle></DialogHeader>
