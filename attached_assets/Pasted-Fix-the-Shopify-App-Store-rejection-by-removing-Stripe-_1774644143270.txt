@@ -1,0 +1,86 @@
+Fix the Shopify App Store rejection by removing Stripe from the Shopify merchant billing flow.
+
+Problem:
+Shopify reviewer selected a plan inside the app and a Stripe checkout window opened. This is the rejection reason. Public Shopify apps must not require off-platform billing for app charges.
+
+What is already correct:
+
+* Shopify pricing plans are set up in Partner Dashboard
+* Free / Starter / Pro / AI Brain pricing is visible
+* 14-day free trial is visible
+* Shopify billing callback already exists:
+  GET /api/shopify/billing/callback
+* Current callback URL already used in code:
+  https://whachatcrm.com/api/shopify/billing/callback?shop={shop}
+
+What must change now:
+
+1. Completely disable Stripe checkout for Shopify-installed merchants.
+
+   * If user is coming from Shopify app install / embedded Shopify session / has shop domain, they must never see Stripe.
+   * Stripe can remain only for non-Shopify users outside the Shopify app.
+
+2. Replace the current Shopify plan-selection action with Shopify billing only.
+
+   * When a Shopify merchant selects Starter / Pro / AI Brain, do not open Stripe.
+   * Use Shopify Managed Pricing or Shopify Billing API flow only.
+   * The merchant should go from:
+     Select plan → Shopify approval screen → /api/shopify/billing/callback → /app
+
+3. Preserve and use the existing Shopify callback route.
+
+   * Keep:
+     /api/shopify/billing/callback
+   * After successful approval, redirect into the app.
+   * No external checkout page should appear.
+
+4. Find and remove the exact code path that opens Stripe from the Shopify onboarding or pricing screen.
+   Search for:
+
+   * stripe
+   * checkout
+   * createCheckoutSession
+   * billing
+   * pricing
+   * upgrade
+   * subscription
+     Then patch the Shopify path so it does not call Stripe at all.
+
+5. Add a clean branch in the billing logic:
+
+   * Shopify merchant:
+     use Shopify billing only
+   * Non-Shopify user:
+     existing Stripe flow may remain if needed
+
+6. Confirm the frontend plan buttons now do this for Shopify users:
+
+   * Free plan → continue directly
+   * Paid plan → open Shopify billing approval
+   * Never open Stripe
+
+7. Verify the callback logic still works after approval.
+
+   * Merchant approves billing
+   * Shopify returns to /api/shopify/billing/callback
+   * App verifies active subscription
+   * Merchant lands back inside /app
+
+Important:
+The Shopify preview pricing page is already fine. Do not spend more time on listing changes right now. The blocker is strictly that Stripe still opens after selecting a plan.
+
+Acceptance criteria:
+
+* Install app in Shopify dev store
+* Select Starter / Pro / AI Brain
+* Shopify billing approval opens
+* No Stripe window appears
+* After approval, merchant returns to the app successfully
+* Shopify reviewer can complete install and plan selection without any off-platform payment
+
+Please return:
+
+1. The exact file(s) where Stripe was being triggered for Shopify users
+2. The exact change made to stop that
+3. The exact file(s) handling the new Shopify-only plan selection flow
+4. Confirmation that Stripe no longer appears anywhere in the Shopify install/onboarding flow

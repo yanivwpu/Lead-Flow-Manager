@@ -70,6 +70,10 @@ interface SubscriptionData {
     plan: string;
     planName: string;
   };
+  subscription?: {
+    plan: string;
+    isShopify?: boolean;
+  };
 }
 
 const INDUSTRY_OPTIONS = [
@@ -146,10 +150,25 @@ function AIBrainContent() {
   const [generatedWorkflow, setGeneratedWorkflow] = useState<any>(null);
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   
+  const isShopify = !!(subscription?.subscription?.isShopify);
+
   // AI Brain add-on checkout
   const handleAddonCheckout = async () => {
     setIsCheckingOut(true);
     try {
+      if (isShopify) {
+        const response = await fetch("/api/shopify/billing/checkout-web", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ plan: 'AI Brain Add-on' }),
+        });
+        if (!response.ok) throw new Error("Failed to start billing");
+        const data = await response.json();
+        if (data.confirmationUrl) window.location.href = data.confirmationUrl;
+        return;
+      }
+
       const response = await fetch("/api/subscription/addon/ai-brain", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

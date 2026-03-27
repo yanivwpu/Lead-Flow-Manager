@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Zap, MessageSquare, Users, Phone, Sparkles, Loader2, Check, Info } from "lucide-react";
@@ -147,15 +148,38 @@ function buildConversationLimitDescription(limitInfo?: ConversationLimitInfo): R
   );
 }
 
+const SHOPIFY_PLAN_MAP: Record<string, string> = { starter: 'Starter', pro: 'Pro' };
+
 export function UpgradeModal({ open, onOpenChange, reason, currentPlan, limitInfo }: UpgradeModalProps) {
   const [isLoading, setIsLoading] = useState(false);
   const content = { ...UPGRADE_CONTENT[reason] };
 
   const isConversationLimit = reason === "conversation_limit";
 
+  const { data: subscription } = useQuery<{
+    subscription: { plan: string; isShopify?: boolean } | null;
+  }>({ queryKey: ["/api/subscription"] });
+
+  const isShopify = !!(subscription?.subscription?.isShopify);
+
   const handleUpgrade = async () => {
     setIsLoading(true);
     try {
+      if (isShopify) {
+        const shopifyPlan = SHOPIFY_PLAN_MAP[content.targetPlan];
+        if (!shopifyPlan) throw new Error("Invalid plan");
+        const response = await fetch("/api/shopify/billing/checkout-web", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ plan: shopifyPlan }),
+        });
+        if (!response.ok) throw new Error("Failed to start billing");
+        const data = await response.json();
+        if (data.confirmationUrl) window.location.href = data.confirmationUrl;
+        return;
+      }
+
       const response = await fetch("/api/subscription/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

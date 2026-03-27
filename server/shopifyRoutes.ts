@@ -498,4 +498,44 @@ router.post('/webhooks/shop/redact', async (req: Request, res: Response) => {
   }
 });
 
+// Session-auth Shopify billing – called from the web app (no Shopify JWT required)
+router.post('/billing/checkout-web', async (req: Request, res: Response) => {
+  if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
+
+  const { plan } = req.body;
+  if (!plan || !SHOPIFY_BILLING_PLANS[plan as keyof typeof SHOPIFY_BILLING_PLANS]) {
+    return res.status(400).json({ error: 'Invalid plan' });
+  }
+
+  try {
+    const user = await storage.getUser((req.user as any).id);
+    if (!user?.shopifyShop || !user?.shopifyAccessToken) {
+      return res.status(400).json({ error: 'Not a Shopify merchant' });
+    }
+
+    if (user.shopifyChargeId) {
+      await cancelShopifySubscription(user.shopifyShop, user.shopifyAccessToken, user.shopifyChargeId);
+    }
+
+    const HOST = process.env.SHOPIFY_APP_HOST || process.env.HOST || 'https://whachatcrm.com';
+    const billingResult = await createShopifyBillingCharge(
+      user.shopifyShop,
+      user.shopifyAccessToken,
+      plan as keyof typeof SHOPIFY_BILLING_PLANS,
+      `${HOST}/api/shopify/billing/callback?shop=${user.shopifyShop}`,
+      process.env.NODE_ENV !== 'production'
+    );
+
+    if (billingResult?.confirmationUrl) {
+      await storage.updateUser(user.id, { shopifyChargeId: billingResult.chargeId });
+      return res.json({ confirmationUrl: billingResult.confirmationUrl });
+    }
+
+    res.status(500).json({ error: 'Failed to create billing charge' });
+  } catch (error) {
+    console.error('Shopify web checkout error:', error);
+    res.status(500).json({ error: 'Billing failed' });
+  }
+});
+
 export default router;

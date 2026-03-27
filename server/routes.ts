@@ -2270,6 +2270,7 @@ export async function registerRoutes(
           plan: user.subscriptionPlan,
           status: user.subscriptionStatus,
           currentPeriodEnd: user.currentPeriodEnd,
+          isShopify: !!(user.shopifyShop),
         } : null,
       });
     } catch (error) {

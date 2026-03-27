@@ -71,13 +71,58 @@ export function Pricing() {
   }, []);
 
   const { data: subscription } = useQuery<{
-    subscription: { plan: string } | null;
+    subscription: { plan: string; isShopify?: boolean } | null;
   }>({
     queryKey: ["/api/subscription"],
     enabled: !!user,
   });
 
   const currentPlan = subscription?.subscription?.plan || "free";
+  const isShopify = !!(subscription?.subscription?.isShopify);
+
+  // Shopify plan name mapping
+  const SHOPIFY_PLAN_MAP: Record<string, string> = {
+    starter: 'Starter',
+    pro: 'Pro',
+  };
+
+  const shopifyCheckoutMutation = useMutation({
+    mutationFn: async (planId: string) => {
+      const shopifyPlan = SHOPIFY_PLAN_MAP[planId];
+      if (!shopifyPlan) throw new Error("Invalid plan");
+      const res = await fetch("/api/shopify/billing/checkout-web", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ plan: shopifyPlan }),
+        credentials: "include",
+      });
+      if (res.status === 401) {
+        setLocation("/auth?redirect=/pricing");
+        throw new Error("session_expired");
+      }
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to start billing");
+      }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      if (data.confirmationUrl) {
+        window.location.href = data.confirmationUrl;
+      }
+      setLoadingPlan(null);
+    },
+    onError: (error: any) => {
+      if (error.message !== "session_expired") {
+        toast({
+          title: "Error",
+          description: error.message || "Failed to start billing",
+          variant: "destructive",
+        });
+      }
+      setLoadingPlan(null);
+    },
+  });
 
   const checkoutMutation = useMutation({
     mutationFn: async (planId: string) => {
@@ -122,7 +167,11 @@ export function Pricing() {
     }
     if (planId === "free") return;
     setLoadingPlan(planId);
-    checkoutMutation.mutate(planId);
+    if (isShopify) {
+      shopifyCheckoutMutation.mutate(planId);
+    } else {
+      checkoutMutation.mutate(planId);
+    }
   };
 
   const getPlanIndex = (planId: string) =>
