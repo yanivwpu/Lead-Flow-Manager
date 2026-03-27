@@ -15,6 +15,13 @@
       "when": 1740865200000,
       "tag": "0001_realtor_growth_engine",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1774582083000,
+      "tag": "0002_ghl_sync",
+      "breakpoints": true
     }
   ]
 }
