@@ -1015,7 +1015,7 @@ export function UnifiedInbox() {
                 {/* Channel switcher */}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="sm" className="gap-1 h-7 px-2 text-xs" data-testid="button-switch-channel">
+                    <Button variant="outline" size="sm" className="gap-1 h-7 px-2 text-xs border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-gray-700 bg-white shadow-none" data-testid="button-switch-channel">
                       {getChannelIcon(activeChannel)}
                       <span className="hidden sm:inline">{CHANNEL_CONFIG[activeChannel]?.label}</span>
                       <ChevronDown className="w-3 h-3" />
