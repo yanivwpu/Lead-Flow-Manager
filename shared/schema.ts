@@ -764,7 +764,7 @@ export type AgreementAcceptance = typeof agreementAcceptances.$inferSelect;
 // ============= MULTI-CHANNEL CRM SCHEMA =============
 
 // Channel enum - all supported messaging channels
-export const CHANNELS = ['whatsapp', 'instagram', 'facebook', 'sms', 'webchat', 'telegram', 'tiktok'] as const;
+export const CHANNELS = ['whatsapp', 'instagram', 'facebook', 'sms', 'webchat', 'telegram', 'tiktok', 'gohighlevel'] as const;
 export type Channel = typeof CHANNELS[number];
 
 // Channel metadata for UI and logic
@@ -782,6 +782,7 @@ export const CHANNEL_INFO: Record<Channel, {
   webchat: { label: 'Web Chat', icon: 'globe', color: '#3B82F6', isMessaging: true, supportsMedia: true },
   telegram: { label: 'Telegram', icon: 'send', color: '#0088CC', isMessaging: true, supportsMedia: true },
   tiktok: { label: 'TikTok', icon: 'video', color: '#000000', isMessaging: false, supportsMedia: false }, // Lead-intake only
+  gohighlevel: { label: 'GoHighLevel', icon: 'link-2', color: '#6366F1', isMessaging: true, supportsMedia: true },
 };
 
 // Unified contacts table - one record per lead
@@ -798,6 +799,7 @@ export const contacts = pgTable("contacts", {
   instagramId: text("instagram_id"), // Instagram user ID
   facebookId: text("facebook_id"), // Facebook PSID
   telegramId: text("telegram_id"), // Telegram chat ID
+  ghlId: text("ghl_id"), // GoHighLevel (LeadConnector) contact ID
   
   // Primary channel logic
   primaryChannel: text("primary_channel").notNull().default("whatsapp"), // Auto-detected from last incoming message
@@ -1309,3 +1311,16 @@ export const contactNotes = pgTable("contact_notes", {
 export const insertContactNoteSchema = createInsertSchema(contactNotes).omit({ id: true, createdAt: true });
 export type ContactNote = typeof contactNotes.$inferSelect;
 export type InsertContactNote = z.infer<typeof insertContactNoteSchema>;
+
+// ─── GHL Event Dedup (Idempotency tracking for webhook events) ──────────────
+export const ghlEventDedup = pgTable("ghl_event_dedup", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  integrationId: varchar("integration_id").notNull().references(() => integrations.id, { onDelete: "cascade" }),
+  eventId: text("event_id").notNull(), // GHL's event ID
+  eventType: text("event_type").notNull(), // ContactCreate, ContactUpdate, etc.
+  processedAt: timestamp("processed_at").defaultNow(),
+});
+
+export const insertGhlEventDedupSchema = createInsertSchema(ghlEventDedup).omit({ id: true, processedAt: true });
+export type GhlEventDedup = typeof ghlEventDedup.$inferSelect;
+export type InsertGhlEventDedup = z.infer<typeof insertGhlEventDedupSchema>;

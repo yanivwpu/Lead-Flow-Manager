@@ -177,55 +177,205 @@ router.post('/webhook', async (req: Request, res: Response) => {
     const body = req.body || {};
     const type = body.type || 'UNKNOWN';
     const locationId = body.locationId || null;
+    const eventId = body.eventId || body.id || null;
 
-    console.log(`[LeadConnector Webhook] ${timestamp} | Event: ${type} | Location: ${locationId || 'N/A'} | Payload: ${JSON.stringify(body).substring(0, 500)}`);
+    console.log(`[LeadConnector Webhook] ${timestamp} | Event: ${type} | Location: ${locationId || 'N/A'}`);
+
+    const ghlIntegrations = await storage.getIntegrationsByType('gohighlevel');
+    const integration = ghlIntegrations.find(
+      (i: any) => i.config && (i.config as any).locationId === locationId
+    );
+
+    if (!integration) {
+      console.log(`[LeadConnector Webhook] ${timestamp} | No integration found for location: ${locationId}`);
+      return;
+    }
+
+    const isNew = await storage.checkAndRecordGhlEvent(integration.id, eventId || `${type}-${timestamp}`, type);
+    if (!isNew) {
+      console.log(`[LeadConnector Webhook] ${timestamp} | Event already processed: ${eventId}`);
+      return;
+    }
+
+    const userId = (integration as any).userId;
 
     switch (type) {
       case 'ContactCreate':
-      case 'ContactUpdate':
+      case 'ContactUpdate': {
+        try {
+          const contact = body.contact || body;
+          const ghlId = contact.id || contact.contactId;
+          const name = contact.firstName && contact.lastName 
+            ? `${contact.firstName} ${contact.lastName}` 
+            : contact.firstName || contact.email || 'Unknown';
+          
+          const contacts = await storage.getContacts(userId);
+          const existingContact = contacts.find((c: any) => c.ghlId === ghlId);
+          
+          if (existingContact) {
+            await storage.updateContact(existingContact.id, {
+              name,
+              email: contact.email || existingContact.email,
+              phone: contact.phone || existingContact.phone,
+              tag: contact.tags?.[0] || existingContact.tag,
+              sourceDetails: JSON.stringify({
+                ...(existingContact.sourceDetails ? JSON.parse(existingContact.sourceDetails as any) : {}),
+                customFields: contact.customFields,
+                allTags: contact.tags,
+              }),
+            });
+            console.log(`[LeadConnector Webhook] ${timestamp} | Updated contact: ${ghlId}`);
+          } else {
+            await storage.createContact({
+              userId,
+              name,
+              email: contact.email,
+              phone: contact.phone,
+              primaryChannel: 'gohighlevel',
+              ghlId,
+              source: 'gohighlevel',
+              sourceDetails: JSON.stringify({
+                customFields: contact.customFields,
+                allTags: contact.tags,
+              }),
+              tag: contact.tags?.[0] || 'New',
+            });
+            console.log(`[LeadConnector Webhook] ${timestamp} | Created contact: ${ghlId}`);
+          }
+        } catch (contactErr) {
+          console.error(`[LeadConnector Webhook] ${timestamp} | Error processing contact:`, contactErr);
+        }
+        break;
+      }
+
+      case 'ContactTagUpdate': {
+        try {
+          const ghlId = body.contactId || body.contact?.id;
+          const tags = body.tags || body.contact?.tags;
+          
+          if (ghlId && tags) {
+            const contacts = await storage.getContacts(userId);
+            const existingContact = contacts.find((c: any) => c.ghlId === ghlId);
+            if (existingContact) {
+              await storage.updateContact(existingContact.id, {
+                tag: tags[0] || existingContact.tag,
+                sourceDetails: JSON.stringify({
+                  ...(existingContact.sourceDetails ? JSON.parse(existingContact.sourceDetails as any) : {}),
+                  allTags: tags,
+                }),
+              });
+              console.log(`[LeadConnector Webhook] ${timestamp} | Updated tags for contact: ${ghlId}`);
+            }
+          }
+        } catch (tagErr) {
+          console.error(`[LeadConnector Webhook] ${timestamp} | Error processing tag update:`, tagErr);
+        }
+        break;
+      }
+
+      case 'InboundMessage': {
+        try {
+          const msg = body.message || body;
+          const ghlContactId = msg.contactId || msg.contact?.id;
+          const conversationId = msg.conversationId || msg.conversation?.id;
+          
+          if (!ghlContactId) {
+            console.log(`[LeadConnector Webhook] ${timestamp} | Missing contactId for InboundMessage`);
+            break;
+          }
+
+          const contacts = await storage.getContacts(userId);
+          let contact = contacts.find((c: any) => c.ghlId === ghlContactId);
+          
+          if (!contact) {
+            contact = await storage.createContact({
+              userId,
+              name: msg.contactName || msg.contact?.firstName || 'Unknown',
+              phone: msg.contact?.phone,
+              email: msg.contact?.email,
+              primaryChannel: 'gohighlevel',
+              ghlId: ghlContactId,
+              source: 'gohighlevel',
+            });
+          }
+
+          let conversation = await storage.getConversationByContactAndChannel(contact.id, 'gohighlevel');
+          if (!conversation) {
+            conversation = await storage.createConversation({
+              userId,
+              contactId: contact.id,
+              channel: 'gohighlevel',
+              externalThreadId: conversationId,
+              status: 'open',
+            });
+          }
+
+          await storage.createMessage({
+            conversationId: conversation.id,
+            contactId: contact.id,
+            userId,
+            direction: 'inbound',
+            content: msg.content || msg.messageText || '',
+            contentType: msg.contentType || 'text',
+            externalMessageId: msg.messageId,
+          });
+          
+          console.log(`[LeadConnector Webhook] ${timestamp} | Created message for contact: ${ghlContactId}`);
+        } catch (msgErr) {
+          console.error(`[LeadConnector Webhook] ${timestamp} | Error processing message:`, msgErr);
+        }
+        break;
+      }
+
+      case 'AppointmentCreate': {
+        try {
+          const apt = body.appointment || body;
+          const ghlContactId = apt.contactId || apt.contact?.id;
+          
+          if (ghlContactId) {
+            const contacts = await storage.getContacts(userId);
+            const contact = contacts.find((c: any) => c.ghlId === ghlContactId);
+            if (contact) {
+              await storage.createActivityEvent({
+                userId,
+                contactId: contact.id,
+                eventType: 'appointment_created',
+                eventData: {
+                  ghlAppointmentId: apt.id,
+                  title: apt.title,
+                  startTime: apt.startTime,
+                  status: apt.status,
+                } as any,
+              });
+              console.log(`[LeadConnector Webhook] ${timestamp} | Logged appointment for contact: ${ghlContactId}`);
+            }
+          }
+        } catch (aptErr) {
+          console.error(`[LeadConnector Webhook] ${timestamp} | Error processing appointment:`, aptErr);
+        }
+        break;
+      }
+
       case 'ContactDelete':
       case 'ContactDndUpdate':
-      case 'ContactTagUpdate':
-        console.log(`[LeadConnector Webhook] ${timestamp} | Contact event processed: ${type}`);
-        break;
-
       case 'OpportunityCreate':
       case 'OpportunityUpdate':
       case 'OpportunityDelete':
       case 'OpportunityStatusUpdate':
       case 'OpportunityStageUpdate':
-      case 'OpportunityMonetaryValueUpdate':
-      case 'OpportunityAssignedToUpdate':
-        console.log(`[LeadConnector Webhook] ${timestamp} | Opportunity event processed: ${type}`);
-        break;
-
-      case 'InboundMessage':
       case 'OutboundMessage':
-        console.log(`[LeadConnector Webhook] ${timestamp} | Message event processed: ${type}`);
-        break;
-
       case 'ConversationUnreadUpdate':
       case 'ConversationProviderUpdate':
-        console.log(`[LeadConnector Webhook] ${timestamp} | Conversation event processed: ${type}`);
-        break;
-
       case 'NoteCreate':
       case 'NoteUpdate':
       case 'NoteDelete':
-        console.log(`[LeadConnector Webhook] ${timestamp} | Note event processed: ${type}`);
-        break;
-
       case 'TaskCreate':
       case 'TaskUpdate':
       case 'TaskDelete':
       case 'TaskCompleted':
-        console.log(`[LeadConnector Webhook] ${timestamp} | Task event processed: ${type}`);
-        break;
-
-      case 'AppointmentCreate':
       case 'AppointmentUpdate':
       case 'AppointmentDelete':
-        console.log(`[LeadConnector Webhook] ${timestamp} | Appointment event processed: ${type}`);
+        console.log(`[LeadConnector Webhook] ${timestamp} | Event acknowledged (not yet synced): ${type}`);
         break;
 
       case 'AppInstall':
@@ -237,15 +387,9 @@ router.post('/webhook', async (req: Request, res: Response) => {
       case 'UNINSTALL':
         console.log(`[LeadConnector Webhook] ${timestamp} | App uninstalled for location: ${locationId}`);
         try {
-          if (locationId) {
-            const integrations = await storage.getIntegrationsByType('gohighlevel');
-            const match = integrations.find(
-              (i: any) => i.config && (i.config as any).locationId === locationId
-            );
-            if (match) {
-              await storage.updateIntegration(match.id, { isActive: false });
-              console.log(`[LeadConnector Webhook] ${timestamp} | Deactivated integration: ${match.id}`);
-            }
+          if (integration) {
+            await storage.updateIntegration(integration.id, { isActive: false });
+            console.log(`[LeadConnector Webhook] ${timestamp} | Deactivated integration: ${integration.id}`);
           }
         } catch (uninstallErr) {
           console.error(`[LeadConnector Webhook] ${timestamp} | Error handling uninstall:`, uninstallErr);
@@ -253,10 +397,10 @@ router.post('/webhook', async (req: Request, res: Response) => {
         break;
 
       default:
-        console.log(`[LeadConnector Webhook] ${timestamp} | Acknowledged unhandled event type: ${type}`);
+        console.log(`[LeadConnector Webhook] ${timestamp} | Unhandled event type: ${type}`);
     }
   } catch (error) {
-    console.error(`[LeadConnector Webhook] ${timestamp} | Post-ack processing error:`, error);
+    console.error(`[LeadConnector Webhook] ${timestamp} | Webhook processing error:`, error);
   }
 });
 

@@ -39,10 +39,11 @@ import {
   type TemplateAsset, type InsertTemplateAsset,
   type UserTemplateData, type InsertUserTemplateData,
   type ContactNote, type InsertContactNote,
+  type GhlEventDedup, type InsertGhlEventDedup,
   aiSettings, aiBusinessKnowledge, aiUsage, aiLeadScores,
   userAutomationTemplates, templateUsageAnalytics,
   templates as templatesTable, templateEntitlements, realtorOnboardingSubmissions,
-  templateInstalls, templateAssets, userTemplateData
+  templateInstalls, templateAssets, userTemplateData, ghlEventDedup
 } from "@shared/schema";
 import { db } from "../drizzle/db";
 import { users, chats, registeredPhones, messageUsage, conversationWindows, teamMembers, workflows, workflowExecutions, recurringReminders, webhooks, webhookDeliveries, integrations, messageTemplates, templateSends, dripCampaigns, dripSteps, dripEnrollments, dripSends, chatbotFlows, chatbotSessions, salespeople, demoBookings, salesConversions, adminSettings, contacts, conversations, messages, activityEvents, channelSettings, supportTickets, partners, commissions, agreementAcceptances, contactNotes, type InsertConversationWindow, type ConversationWindow } from "@shared/schema";
@@ -138,6 +139,10 @@ export interface IStorage {
   createIntegration(integration: InsertIntegration): Promise<Integration>;
   updateIntegration(id: string, updates: Partial<Integration>): Promise<Integration | undefined>;
   deleteIntegration(id: string): Promise<void>;
+  
+  // GHL event dedup (idempotency)
+  checkAndRecordGhlEvent(integrationId: string, eventId: string, eventType: string): Promise<boolean>;
+  getGhlEventDedup(integrationId: string, eventId: string): Promise<GhlEventDedup | undefined>;
   
   // Template methods
   getMessageTemplates(userId: string): Promise<MessageTemplate[]>;
@@ -704,6 +709,28 @@ export class DbStorage implements IStorage {
 
   async deleteIntegration(id: string): Promise<void> {
     await db.delete(integrations).where(eq(integrations.id, id));
+  }
+
+  async checkAndRecordGhlEvent(integrationId: string, eventId: string, eventType: string): Promise<boolean> {
+    const existing = await db.select().from(ghlEventDedup)
+      .where(and(eq(ghlEventDedup.integrationId, integrationId), eq(ghlEventDedup.eventId, eventId)));
+    
+    if (existing.length > 0) {
+      return false;
+    }
+    
+    await db.insert(ghlEventDedup).values({
+      integrationId,
+      eventId,
+      eventType,
+    });
+    return true;
+  }
+
+  async getGhlEventDedup(integrationId: string, eventId: string): Promise<GhlEventDedup | undefined> {
+    const result = await db.select().from(ghlEventDedup)
+      .where(and(eq(ghlEventDedup.integrationId, integrationId), eq(ghlEventDedup.eventId, eventId)));
+    return result[0];
   }
 
   // Template methods
