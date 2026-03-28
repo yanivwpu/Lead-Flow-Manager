@@ -1,5 +1,6 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
+import crypto from "crypto";
 import { registerContactRoutes } from "./routes/contacts";
 import { registerConversationRoutes } from "./routes/conversations";
 import { registerChannelRoutes } from "./routes/channels";
@@ -3491,42 +3492,40 @@ export async function registerRoutes(
   });
 
   // Admin authentication
+  const _adminTokenSecret = process.env.SESSION_SECRET || 'whatsapp-crm-secret-key-change-in-production';
+  function computeAdminToken(hash: string): string {
+    return crypto.createHmac('sha256', _adminTokenSecret).update(hash).digest('hex');
+  }
+  async function verifyAdminToken(token: string): Promise<boolean> {
+    const storedHash = await storage.getAdminPasswordHash();
+    if (!storedHash) return false;
+    return computeAdminToken(storedHash) === token;
+  }
+
   app.post("/api/admin/login", async (req, res) => {
     try {
       const { password } = req.body;
       const storedHash = await storage.getAdminPasswordHash();
 
       if (!storedHash) {
-        // First-time setup: set the password
         const hash = await bcrypt.hash(password, 10);
         await storage.setAdminPassword(hash);
         (req.session as any).isAdmin = true;
-        
+        const token = computeAdminToken(hash);
         return req.session.save((err) => {
-          if (err) {
-            console.error('[Admin] Session save error on setup:', err);
-            return res.status(500).json({ error: "Session save failed" });
-          }
-          console.log('[Admin] Password set, session:', req.sessionID);
-          res.json({ success: true, message: "Admin password set" });
+          if (err) console.error('[Admin] Session save error on setup:', err);
+          res.json({ success: true, token, message: "Admin password set" });
         });
       }
 
       const valid = await bcrypt.compare(password, storedHash);
-      if (!valid) {
-        return res.status(401).json({ error: "Invalid password" });
-      }
+      if (!valid) return res.status(401).json({ error: "Invalid password" });
 
       (req.session as any).isAdmin = true;
-      
-      // Explicitly save session to ensure it's persisted before responding
+      const token = computeAdminToken(storedHash);
       req.session.save((err) => {
-        if (err) {
-          console.error('[Admin] Session save error:', err);
-          return res.status(500).json({ error: "Session save failed" });
-        }
-        console.log('[Admin] Login successful, session:', req.sessionID);
-        res.json({ success: true });
+        if (err) console.error('[Admin] Session save error:', err);
+        res.json({ success: true, token });
       });
     } catch (error) {
       console.error("Error in admin login:", error);
@@ -3535,9 +3534,13 @@ export async function registerRoutes(
   });
 
   app.get("/api/admin/check", async (req, res) => {
-    const isAdmin = (req.session as any)?.isAdmin === true;
-    console.log('[Admin] Check - session:', req.sessionID, 'isAdmin:', isAdmin);
-    res.json({ isAdmin });
+    if ((req.session as any)?.isAdmin === true) return res.json({ isAdmin: true });
+    const token = req.headers['x-admin-token'] as string;
+    if (token) {
+      const valid = await verifyAdminToken(token);
+      if (valid) return res.json({ isAdmin: true });
+    }
+    res.json({ isAdmin: false });
   });
 
   app.post("/api/admin/logout", async (req, res) => {
@@ -3545,13 +3548,12 @@ export async function registerRoutes(
     res.json({ success: true });
   });
 
-  // Admin middleware
-  const requireAdmin = (req: any, res: any, next: any) => {
-    if ((req.session as any)?.isAdmin !== true) {
-      console.log('[Admin] Auth failed - session:', req.sessionID, 'isAdmin:', (req.session as any)?.isAdmin);
-      return res.status(401).json({ error: "Admin authentication required" });
-    }
-    next();
+  // Admin middleware — accepts session OR persistent token header
+  const requireAdmin = async (req: any, res: any, next: any) => {
+    if ((req.session as any)?.isAdmin === true) return next();
+    const token = req.headers['x-admin-token'] as string;
+    if (token && await verifyAdminToken(token)) return next();
+    return res.status(401).json({ error: "Admin authentication required" });
   };
 
   // Admin: Manual IndexNow submission

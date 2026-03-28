@@ -1,4 +1,25 @@
 import { useState, useEffect } from "react";
+
+const ADMIN_TOKEN_KEY = 'whachat_admin_token';
+function getAdminToken() { return localStorage.getItem(ADMIN_TOKEN_KEY) || ''; }
+function adminHeaders(extra: Record<string, string> = {}): Record<string, string> {
+  const token = getAdminToken();
+  return token ? { 'x-admin-token': token, ...extra } : { ...extra };
+}
+function adminFetch(url: string, options: RequestInit = {}) {
+  return fetch(url, {
+    ...options,
+    credentials: 'include',
+    headers: { ...adminHeaders(), ...(options.headers as Record<string, string> || {}) },
+  });
+}
+function adminQueryFn<T = unknown>(url: string) {
+  return async (): Promise<T> => {
+    const res = await adminFetch(url);
+    if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
+    return res.json();
+  };
+}
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -129,7 +150,7 @@ export function Admin() {
   const queryClient = useQueryClient();
 
   useEffect(() => {
-    fetch('/api/admin/check', { credentials: 'include' })
+    adminFetch('/api/admin/check')
       .then(res => res.json())
       .then(data => setIsLoggedIn(data.isAdmin))
       .catch(() => setIsLoggedIn(false));
@@ -153,8 +174,8 @@ export function Admin() {
         throw new Error(data.error || 'Login failed');
       }
 
-      // Small delay to ensure session is persisted before queries start
-      await new Promise(resolve => setTimeout(resolve, 500));
+      const data = await res.json();
+      if (data.token) localStorage.setItem(ADMIN_TOKEN_KEY, data.token);
       setIsLoggedIn(true);
       setPassword("");
     } catch (err: any) {
@@ -165,43 +186,51 @@ export function Admin() {
   };
 
   const handleLogout = async () => {
-    await fetch('/api/admin/logout', { method: 'POST', credentials: 'include' });
+    await adminFetch('/api/admin/logout', { method: 'POST' });
+    localStorage.removeItem(ADMIN_TOKEN_KEY);
     setIsLoggedIn(false);
   };
 
   const { data: salespeople = [] } = useQuery<Salesperson[]>({
     queryKey: ['/api/admin/salespeople'],
+    queryFn: adminQueryFn('/api/admin/salespeople'),
     enabled: isLoggedIn,
   });
 
   const { data: bookings = [] } = useQuery<Booking[]>({
     queryKey: ['/api/admin/bookings'],
+    queryFn: adminQueryFn('/api/admin/bookings'),
     enabled: isLoggedIn,
   });
 
   const { data: conversions = [] } = useQuery<Conversion[]>({
     queryKey: ['/api/admin/conversions'],
+    queryFn: adminQueryFn('/api/admin/conversions'),
     enabled: isLoggedIn,
   });
 
   const { data: roiStats } = useQuery<{ totalCost: number; totalRevenue: number; roi: number }>({
     queryKey: ['/api/admin/conversions/roi'],
+    queryFn: adminQueryFn('/api/admin/conversions/roi'),
     enabled: isLoggedIn,
   });
 
   const { data: adminUsers = [], isError: usersError, error: usersErrorDetails, refetch: refetchUsers } = useQuery<AdminUser[]>({
     queryKey: ['/api/admin/users'],
+    queryFn: adminQueryFn('/api/admin/users'),
     enabled: isLoggedIn,
     retry: 1,
   });
 
   const { data: partners = [] } = useQuery<Partner[]>({
     queryKey: ['/api/admin/partners'],
+    queryFn: adminQueryFn('/api/admin/partners'),
     enabled: isLoggedIn,
   });
 
   const { data: ghlIntegrations = [] } = useQuery<GhlIntegration[]>({
     queryKey: ['/api/admin/ghl-integrations'],
+    queryFn: adminQueryFn('/api/admin/ghl-integrations'),
     enabled: isLoggedIn,
   });
 
@@ -215,10 +244,9 @@ export function Admin() {
 
   const createPartner = useMutation({
     mutationFn: async (data: { name: string; email: string; password: string; commissionRate?: string; commissionDurationMonths?: number }) => {
-      const res = await fetch('/api/admin/partners', {
+      const res = await adminFetch('/api/admin/partners', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify(data)
       });
       if (!res.ok) {
@@ -240,11 +268,10 @@ export function Admin() {
 
   const updatePartner = useMutation({
     mutationFn: async ({ id, ...data }: Partial<Partner> & { id: string }) => {
-      const res = await fetch(`/api/admin/partners/${id}`, {
+      const res = await adminFetch(`/api/admin/partners/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
-        credentials: 'include'
       });
       if (!res.ok) throw new Error('Failed to update partner');
       return res.json();
@@ -257,7 +284,7 @@ export function Admin() {
 
   const deletePartner = useMutation({
     mutationFn: async (id: string) => {
-      const res = await fetch(`/api/admin/partners/${id}`, { method: 'DELETE', credentials: 'include' });
+      const res = await adminFetch(`/api/admin/partners/${id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Failed to delete partner');
     },
     onSuccess: () => {
@@ -267,10 +294,9 @@ export function Admin() {
 
   const createSalesperson = useMutation({
     mutationFn: async (data: { name: string; email: string; phone?: string }) => {
-      const res = await fetch('/api/admin/salespeople', {
+      const res = await adminFetch('/api/admin/salespeople', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify(data)
       });
       if (!res.ok) {
@@ -292,11 +318,10 @@ export function Admin() {
 
   const updateSalesperson = useMutation({
     mutationFn: async ({ id, ...data }: Partial<Salesperson> & { id: string }) => {
-      const res = await fetch(`/api/admin/salespeople/${id}`, {
+      const res = await adminFetch(`/api/admin/salespeople/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
-        credentials: 'include'
       });
       if (!res.ok) throw new Error('Failed to update salesperson');
       return res.json();
@@ -309,7 +334,7 @@ export function Admin() {
 
   const deleteSalesperson = useMutation({
     mutationFn: async (id: string) => {
-      const res = await fetch(`/api/admin/salespeople/${id}`, { method: 'DELETE', credentials: 'include' });
+      const res = await adminFetch(`/api/admin/salespeople/${id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Failed to delete salesperson');
     },
     onSuccess: () => {
