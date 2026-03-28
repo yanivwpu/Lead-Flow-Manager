@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next";
 import {
   Search, UserPlus, MessageCircle, Instagram, Facebook, Smartphone, Globe, Send,
   ChevronUp, ChevronDown, ChevronsUpDown, X, Users, Phone, Mail,
-  ArrowUpRight, RefreshCw, Download, StickyNote, Sparkles, Loader2, NotebookPen,
+  ArrowUpRight, RefreshCw, Download, StickyNote, Sparkles, Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -157,7 +157,6 @@ export function Contacts() {
   const [newContact, setNewContact] = useState({ name: "", phone: "", email: "" });
   const [addError, setAddError] = useState("");
 
-  const [notesContact, setNotesContact] = useState<Contact | null>(null);
   const [snapshotContact, setSnapshotContact] = useState<Contact | null>(null);
   const [snapshotText, setSnapshotText] = useState<string>("");
   const [snapshotLoading, setSnapshotLoading] = useState(false);
@@ -269,11 +268,6 @@ export function Contacts() {
     } finally {
       setSnapshotLoading(false);
     }
-  }
-
-  function openNotes(contact: Contact, e: React.MouseEvent) {
-    e.stopPropagation();
-    setNotesContact(contact);
   }
 
   function handleSort(field: SortField) {
@@ -521,8 +515,8 @@ export function Contacts() {
                               {contact.name}
                             </p>
                             <button
-                              onClick={(e) => openNotes(contact, e)}
-                              title="View notes"
+                              onClick={(e) => { e.stopPropagation(); navigate(`/app/inbox/${contact.id}`); }}
+                              title="Open notes in inbox"
                               data-testid={`btn-notes-${contact.id}`}
                               className="flex-shrink-0 text-amber-400 hover:text-amber-600 transition-colors"
                             >
@@ -658,19 +652,6 @@ export function Contacts() {
         </DialogContent>
       </Dialog>
 
-      {/* Notes Dialog */}
-      <Dialog open={!!notesContact} onOpenChange={(o) => !o && setNotesContact(null)}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <NotebookPen className="w-4 h-4 text-amber-500" />
-              {notesContact?.name} — Notes
-            </DialogTitle>
-          </DialogHeader>
-          <NotesContent contactId={notesContact?.id} contactNotes={notesContact?.notes} />
-        </DialogContent>
-      </Dialog>
-
       {/* Snapshot Dialog */}
       <Dialog open={!!snapshotContact} onOpenChange={(o) => !o && setSnapshotContact(null)}>
         <DialogContent className="sm:max-w-md">
@@ -708,67 +689,3 @@ export function Contacts() {
   );
 }
 
-function NotesContent({ contactId, contactNotes }: { contactId?: string; contactNotes?: string }) {
-  const { data: notes, isLoading } = useQuery<any[]>({
-    queryKey: ["/api/contacts", contactId, "notes"],
-    queryFn: async () => {
-      if (!contactId) return [];
-      const res = await fetch(`/api/contacts/${contactId}/notes`, { credentials: "include" });
-      if (!res.ok) throw new Error("Failed");
-      return res.json();
-    },
-    enabled: !!contactId,
-  });
-
-  const hasContactNotes = contactNotes && contactNotes.trim().length > 0;
-  const hasTeamNotes = notes && notes.length > 0;
-  const hasAnything = hasContactNotes || hasTeamNotes;
-
-  if (isLoading) {
-    return (
-      <div className="flex items-center gap-2 text-gray-400 py-6">
-        <Loader2 className="w-4 h-4 animate-spin" />
-        <span className="text-sm">Loading notes…</span>
-      </div>
-    );
-  }
-
-  if (!hasAnything) {
-    return (
-      <div className="py-8 text-center">
-        <StickyNote className="w-8 h-8 text-gray-200 mx-auto mb-2" />
-        <p className="text-gray-400 text-sm">No notes yet for this contact.</p>
-        <p className="text-gray-300 text-xs mt-1">Open the conversation to add a note.</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-3 max-h-[420px] overflow-y-auto py-1 pr-1">
-      {hasContactNotes && (
-        <div className="bg-yellow-50 border border-yellow-100 rounded-lg px-3 py-2.5">
-          <p className="text-xs font-semibold text-yellow-700 uppercase tracking-wide mb-1.5">Contact Notes</p>
-          <p className="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap">{contactNotes}</p>
-        </div>
-      )}
-      {hasTeamNotes && (
-        <>
-          {hasContactNotes && (
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide px-1">Team Notes</p>
-          )}
-          {notes!.map((note: any) => (
-            <div key={note.id} className="bg-amber-50 border border-amber-100 rounded-lg px-3 py-2.5">
-              <p className="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap">{note.content}</p>
-              <p className="text-xs text-gray-400 mt-1.5 flex items-center gap-1">
-                <span className="font-medium text-amber-600">{note.createdByName || "Team member"}</span>
-                {note.createdAt && (
-                  <span>· {formatDistanceToNow(new Date(note.createdAt), { addSuffix: true })}</span>
-                )}
-              </p>
-            </div>
-          ))}
-        </>
-      )}
-    </div>
-  );
-}
