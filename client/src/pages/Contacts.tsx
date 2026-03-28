@@ -356,15 +356,14 @@ export function Contacts() {
               <Download className="w-4 h-4" />
               {t("contacts.export", "Export")}
             </Button>
-            <Button
-              size="sm"
+            <button
               onClick={() => setShowAddDialog(true)}
               data-testid="button-add-contact"
-              className="flex items-center gap-1.5 bg-gray-700 hover:bg-gray-800 text-white"
+              className="h-8 px-3 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-md hover:bg-gray-50 transition-colors flex items-center gap-1.5"
             >
-              <UserPlus className="w-4 h-4" />
+              <UserPlus className="w-3.5 h-3.5" />
               {t("contacts.addContact", "Add Contact")}
-            </Button>
+            </button>
           </div>
         </div>
       </div>
@@ -624,63 +623,55 @@ export function Contacts() {
       </div>
 
       {/* Add Contact Dialog */}
-      <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
+      <Dialog open={showAddDialog} onOpenChange={(o) => { setShowAddDialog(o); if (!o) { setAddError(""); setNewContact({ name: "", phone: "", email: "" }); } }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>{t("contacts.addContact", "Add Contact")}</DialogTitle>
+            <DialogTitle className="text-center text-lg font-semibold">
+              {t("contacts.addNewContact", "Add New Contact")}
+            </DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="space-y-1.5">
-              <Label htmlFor="contact-name">{t("contacts.fieldName", "Name")} *</Label>
+          <div className="space-y-4 mt-2">
+            <div>
+              <Label>{t("contacts.fieldName", "Name")}</Label>
               <Input
-                id="contact-name"
                 value={newContact.name}
                 onChange={(e) => setNewContact((p) => ({ ...p, name: e.target.value }))}
-                placeholder={t("contacts.namePlaceholder", "Full name")}
+                placeholder="Contact name"
                 data-testid="input-new-contact-name"
               />
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="contact-phone">{t("contacts.fieldPhone", "Phone")}</Label>
+            <div>
+              <Label>{t("contacts.fieldPhone", "Phone")}</Label>
               <Input
-                id="contact-phone"
                 value={newContact.phone}
                 onChange={(e) => setNewContact((p) => ({ ...p, phone: e.target.value }))}
-                placeholder="+1 234 567 8900"
+                placeholder="+1234567890"
                 data-testid="input-new-contact-phone"
               />
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="contact-email">{t("contacts.fieldEmail", "Email")}</Label>
+            <div>
+              <Label>{t("contacts.fieldEmail", "Email")}</Label>
               <Input
-                id="contact-email"
                 type="email"
                 value={newContact.email}
                 onChange={(e) => setNewContact((p) => ({ ...p, email: e.target.value }))}
-                placeholder="name@example.com"
+                placeholder="email@example.com"
                 data-testid="input-new-contact-email"
               />
             </div>
-            {addError && (
-              <p className="text-sm text-red-600">{addError}</p>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowAddDialog(false)} data-testid="button-cancel-add-contact">
-              {t("common.cancel", "Cancel")}
-            </Button>
+            {addError && <p className="text-sm text-red-500">{addError}</p>}
             <Button
+              className="w-full bg-emerald-500 hover:bg-emerald-600 text-white"
               onClick={() => {
                 if (!newContact.name.trim()) { setAddError(t("contacts.nameRequired", "Name is required")); return; }
                 addMutation.mutate(newContact);
               }}
               disabled={addMutation.isPending}
-              className="bg-gray-700 hover:bg-gray-800 text-white"
               data-testid="button-save-new-contact"
             >
-              {addMutation.isPending ? t("common.saving", "Saving…") : t("contacts.saveAndOpen", "Save & Open")}
+              {addMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : t("contacts.addContact", "Add Contact")}
             </Button>
-          </DialogFooter>
+          </div>
         </DialogContent>
       </Dialog>
 

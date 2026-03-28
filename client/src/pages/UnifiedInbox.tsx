@@ -7,7 +7,6 @@ import { AIComposer } from "@/components/AIComposer";
 import {
   Search,
   Send,
-  Plus,
   User,
   Phone,
   MessageCircle,
@@ -43,7 +42,6 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
@@ -306,8 +304,6 @@ export function UnifiedInbox() {
   const [selectedChannels, setSelectedChannels] = useState<Set<Channel>>(new Set(allChannels));
   const [demoChannelOverrides, setDemoChannelOverrides] = useState<Record<string, Channel>>({});
   const [messageInput, setMessageInput] = useState("");
-  const [showNewContact, setShowNewContact] = useState(false);
-  const [newContactForm, setNewContactForm] = useState({ name: "", phone: "", email: "" });
   const [showEditContact, setShowEditContact] = useState(false);
   const [showTimeline, setShowTimeline] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -598,24 +594,6 @@ export function UnifiedInbox() {
     },
   });
 
-  const createContactMutation = useMutation({
-    mutationFn: async (data: { name: string; phone?: string; email?: string }) => {
-      const res = await fetch("/api/contacts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify(data),
-      });
-      if (!res.ok) throw new Error("Failed to create contact");
-      return res.json();
-    },
-    onSuccess: (contact) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/inbox"] });
-      setShowNewContact(false);
-      setNewContactForm({ name: "", phone: "", email: "" });
-      setLocation(`/app/inbox/${contact.id}`);
-    },
-  });
 
   const updateContactMutation = useMutation({
     mutationFn: async (data: Record<string, unknown> & { contactId: string }) => {
@@ -852,36 +830,6 @@ export function UnifiedInbox() {
                 </div>
               </PopoverContent>
             </Popover>
-            <Dialog open={showNewContact} onOpenChange={setShowNewContact}>
-              <DialogTrigger asChild>
-                <button
-                  className="h-7 px-2.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-md hover:bg-gray-50 transition-colors flex items-center gap-1"
-                  data-testid="button-new-contact"
-                >
-                  <Plus className="w-3.5 h-3.5" /> New
-                </button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader><DialogTitle>Add New Contact</DialogTitle></DialogHeader>
-                <div className="space-y-4 mt-4">
-                  <div>
-                    <Label>Name</Label>
-                    <Input value={newContactForm.name} onChange={e => setNewContactForm({ ...newContactForm, name: e.target.value })} placeholder="Contact name" data-testid="input-contact-name" />
-                  </div>
-                  <div>
-                    <Label>Phone</Label>
-                    <Input value={newContactForm.phone} onChange={e => setNewContactForm({ ...newContactForm, phone: e.target.value })} placeholder="+1234567890" data-testid="input-contact-phone" />
-                  </div>
-                  <div>
-                    <Label>Email</Label>
-                    <Input value={newContactForm.email} onChange={e => setNewContactForm({ ...newContactForm, email: e.target.value })} placeholder="email@example.com" data-testid="input-contact-email" />
-                  </div>
-                  <Button className="w-full" onClick={() => createContactMutation.mutate(newContactForm)} disabled={!newContactForm.name || createContactMutation.isPending} data-testid="button-save-contact">
-                    {createContactMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Add Contact"}
-                  </Button>
-                </div>
-              </DialogContent>
-            </Dialog>
           </div>
           {/* Search */}
           <div className="relative mb-2">
