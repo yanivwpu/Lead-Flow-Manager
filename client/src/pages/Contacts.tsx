@@ -1,11 +1,11 @@
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo } from "react";
 import { useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import {
   Search, UserPlus, MessageCircle, Instagram, Facebook, Smartphone, Globe, Send,
-  ChevronUp, ChevronDown, ChevronsUpDown, X, Filter, Users, Phone, Mail,
-  Calendar, ArrowUpRight, Tag, Layers, RefreshCw, Download,
+  ChevronUp, ChevronDown, ChevronsUpDown, X, Users, Phone, Mail,
+  ArrowUpRight, RefreshCw, Download, StickyNote, Sparkles, Loader2, NotebookPen,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -156,6 +156,12 @@ export function Contacts() {
   const [newContact, setNewContact] = useState({ name: "", phone: "", email: "" });
   const [addError, setAddError] = useState("");
 
+  const [notesContact, setNotesContact] = useState<Contact | null>(null);
+  const [snapshotContact, setSnapshotContact] = useState<Contact | null>(null);
+  const [snapshotText, setSnapshotText] = useState<string>("");
+  const [snapshotLoading, setSnapshotLoading] = useState(false);
+  const [snapshotError, setSnapshotError] = useState("");
+
   const { data: contacts = [], isLoading, refetch } = useQuery<Contact[]>({
     queryKey: ["/api/contacts"],
     queryFn: async () => {
@@ -245,6 +251,29 @@ export function Contacts() {
   }, [contacts]);
 
   const activeFiltersCount = [filterTag, filterChannel, filterStage].filter(Boolean).length;
+
+  async function openSnapshot(contact: Contact, e: React.MouseEvent) {
+    e.stopPropagation();
+    setSnapshotContact(contact);
+    setSnapshotText("");
+    setSnapshotError("");
+    setSnapshotLoading(true);
+    try {
+      const res = await fetch(`/api/contacts/${contact.id}/snapshot`, { credentials: "include" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed");
+      setSnapshotText(data.snapshot || "");
+    } catch (err: any) {
+      setSnapshotError(err.message);
+    } finally {
+      setSnapshotLoading(false);
+    }
+  }
+
+  function openNotes(contact: Contact, e: React.MouseEvent) {
+    e.stopPropagation();
+    setNotesContact(contact);
+  }
 
   function handleSort(field: SortField) {
     if (field === sortField) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -485,10 +514,28 @@ export function Contacts() {
                       {/* Name + phone */}
                       <div className="flex items-center gap-3 min-w-0">
                         <Avatar contact={contact} />
-                        <div className="min-w-0">
-                          <p className="font-medium text-gray-900 text-sm truncate group-hover:text-indigo-700 transition-colors">
-                            {contact.name}
-                          </p>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5">
+                            <p className="font-medium text-gray-900 text-sm truncate group-hover:text-indigo-700 transition-colors">
+                              {contact.name}
+                            </p>
+                            <button
+                              onClick={(e) => openNotes(contact, e)}
+                              title="View notes"
+                              data-testid={`btn-notes-${contact.id}`}
+                              className="flex-shrink-0 text-gray-300 hover:text-amber-500 transition-colors opacity-0 group-hover:opacity-100"
+                            >
+                              <StickyNote className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={(e) => openSnapshot(contact, e)}
+                              title="AI Snapshot"
+                              data-testid={`btn-snapshot-${contact.id}`}
+                              className="flex-shrink-0 text-gray-300 hover:text-violet-500 transition-colors opacity-0 group-hover:opacity-100"
+                            >
+                              <Sparkles className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                           {contact.phone && (
                             <p className="text-xs text-gray-400 truncate flex items-center gap-1 mt-0.5">
                               <Phone className="w-3 h-3 flex-shrink-0" />
@@ -502,7 +549,7 @@ export function Contacts() {
                             </p>
                           )}
                         </div>
-                        <ArrowUpRight className="w-3.5 h-3.5 text-indigo-400 opacity-0 group-hover:opacity-100 transition-opacity ml-auto flex-shrink-0" />
+                        <ArrowUpRight className="w-3.5 h-3.5 text-indigo-400 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
                       </div>
 
                       {/* Tag */}
@@ -609,6 +656,101 @@ export function Contacts() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Notes Dialog */}
+      <Dialog open={!!notesContact} onOpenChange={(o) => !o && setNotesContact(null)}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <NotebookPen className="w-4 h-4 text-amber-500" />
+              {notesContact?.name} — Notes
+            </DialogTitle>
+          </DialogHeader>
+          <NotesContent contactId={notesContact?.id} />
+        </DialogContent>
+      </Dialog>
+
+      {/* Snapshot Dialog */}
+      <Dialog open={!!snapshotContact} onOpenChange={(o) => !o && setSnapshotContact(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-violet-500" />
+              Snapshot — {snapshotContact?.name}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-3 min-h-[80px]">
+            {snapshotLoading ? (
+              <div className="flex items-center gap-2 text-gray-400">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span className="text-sm">Generating snapshot…</span>
+              </div>
+            ) : snapshotError ? (
+              <p className="text-sm text-red-500">{snapshotError}</p>
+            ) : snapshotText ? (
+              <p className="text-gray-700 text-sm leading-relaxed">{snapshotText}</p>
+            ) : (
+              <p className="text-gray-400 text-sm italic">
+                No conversation or notes yet — nothing to summarise for this contact.
+              </p>
+            )}
+          </div>
+          {snapshotText && (
+            <p className="text-xs text-gray-400 border-t pt-3 flex items-center gap-1">
+              <Sparkles className="w-3 h-3 text-violet-400" />
+              AI-generated from recent conversation and team notes
+            </p>
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+function NotesContent({ contactId }: { contactId?: string }) {
+  const { data: notes, isLoading } = useQuery<any[]>({
+    queryKey: ["/api/contacts", contactId, "notes"],
+    queryFn: async () => {
+      if (!contactId) return [];
+      const res = await fetch(`/api/contacts/${contactId}/notes`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    enabled: !!contactId,
+  });
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center gap-2 text-gray-400 py-6">
+        <Loader2 className="w-4 h-4 animate-spin" />
+        <span className="text-sm">Loading notes…</span>
+      </div>
+    );
+  }
+
+  if (!notes || notes.length === 0) {
+    return (
+      <div className="py-8 text-center">
+        <StickyNote className="w-8 h-8 text-gray-200 mx-auto mb-2" />
+        <p className="text-gray-400 text-sm">No notes yet for this contact.</p>
+        <p className="text-gray-300 text-xs mt-1">Open the conversation to add a note.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3 max-h-[400px] overflow-y-auto py-1 pr-1">
+      {notes.map((note: any) => (
+        <div key={note.id} className="bg-amber-50 border border-amber-100 rounded-lg px-3 py-2.5">
+          <p className="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap">{note.content}</p>
+          <p className="text-xs text-gray-400 mt-1.5 flex items-center gap-1">
+            <span className="font-medium text-amber-600">{note.createdByName || "Team member"}</span>
+            {note.createdAt && (
+              <span>· {formatDistanceToNow(new Date(note.createdAt), { addSuffix: true })}</span>
+            )}
+          </p>
+        </div>
+      ))}
     </div>
   );
 }

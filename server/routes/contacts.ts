@@ -1,5 +1,11 @@
 import type { Express } from "express";
 import { storage } from "../storage";
+import OpenAI from "openai";
+
+const openai = new OpenAI({
+  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+  baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+});
 
 async function resolveEntityForNotes(id: string): Promise<{ userId: string } | null> {
   const contact = await storage.getContact(id);
@@ -287,6 +293,63 @@ export function registerContactRoutes(app: Express): void {
     } catch (error) {
       console.error("Error deleting contact note:", error);
       res.status(500).json({ error: "Failed to delete note" });
+    }
+  });
+
+  // AI Snapshot — 2-sentence deal summary from conversation history + notes
+  app.get("/api/contacts/:id/snapshot", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+      const contact = await storage.getContact(req.params.id);
+      if (!contact) return res.status(404).json({ error: "Contact not found" });
+      if (contact.userId !== req.user.id) return res.status(403).json({ error: "Forbidden" });
+
+      const { conversations: convs } = await storage.getContactWithConversations(req.params.id) || { conversations: [] };
+      const notes = await storage.getContactNotes(req.user.id, req.params.id);
+
+      let messageText = "";
+      if (convs.length > 0) {
+        const msgs = await storage.getMessages(convs[0].id, 40);
+        messageText = msgs
+          .map((m) => `${m.direction === "inbound" ? "Contact" : "Agent"}: ${m.content || ""}`)
+          .filter((l) => l.length > 10)
+          .join("\n");
+      }
+
+      const noteText = notes.map((n) => n.content).join("\n");
+      const hasContent = messageText.length > 0 || noteText.length > 0;
+
+      if (!hasContent) {
+        return res.json({ snapshot: null });
+      }
+
+      const prompt = [
+        `Contact name: ${contact.name}`,
+        contact.tag ? `Tag: ${contact.tag}` : "",
+        contact.pipelineStage ? `Pipeline stage: ${contact.pipelineStage}` : "",
+        noteText ? `Team notes:\n${noteText}` : "",
+        messageText ? `Recent conversation:\n${messageText}` : "",
+      ].filter(Boolean).join("\n\n");
+
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are a CRM assistant. Given a contact's conversation history and notes, write a 1–2 sentence deal snapshot that helps a salesperson instantly remember who this person is, what they want, and where things stand. Be direct and specific. No fluff.",
+          },
+          { role: "user", content: prompt },
+        ],
+        max_tokens: 120,
+        temperature: 0.4,
+      });
+
+      const snapshot = completion.choices[0]?.message?.content?.trim() || null;
+      res.json({ snapshot });
+    } catch (error) {
+      console.error("Error generating snapshot:", error);
+      res.status(500).json({ error: "Failed to generate snapshot" });
     }
   });
 
