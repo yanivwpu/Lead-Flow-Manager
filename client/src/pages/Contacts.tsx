@@ -162,6 +162,35 @@ export function Contacts() {
   const [snapshotLoading, setSnapshotLoading] = useState(false);
   const [snapshotError, setSnapshotError] = useState("");
 
+  const [notesContact, setNotesContact] = useState<Contact | null>(null);
+  const [notesList, setNotesList] = useState<any[]>([]);
+  const [notesLoading, setNotesLoading] = useState(false);
+
+  const { data: notesSummary = {} } = useQuery<Record<string, number>>({
+    queryKey: ["/api/contacts/notes-summary"],
+    queryFn: async () => {
+      const res = await fetch("/api/contacts/notes-summary", { credentials: "include" });
+      if (!res.ok) return {};
+      return res.json();
+    },
+  });
+
+  async function openNotesPopup(contact: Contact, e: React.MouseEvent) {
+    e.stopPropagation();
+    setNotesContact(contact);
+    setNotesList([]);
+    setNotesLoading(true);
+    try {
+      const res = await fetch(`/api/contacts/${contact.id}/notes`, { credentials: "include" });
+      const data = await res.json();
+      setNotesList(Array.isArray(data) ? data : []);
+    } catch {
+      setNotesList([]);
+    } finally {
+      setNotesLoading(false);
+    }
+  }
+
   const { data: contacts = [], isLoading, refetch } = useQuery<Contact[]>({
     queryKey: ["/api/contacts"],
     queryFn: async () => {
@@ -514,14 +543,16 @@ export function Contacts() {
                             <p className="font-medium text-gray-900 text-sm truncate group-hover:text-indigo-700 transition-colors">
                               {contact.name}
                             </p>
-                            <button
-                              onClick={(e) => { e.stopPropagation(); navigate(`/app/inbox/${contact.id}`); }}
-                              title="Open notes in inbox"
-                              data-testid={`btn-notes-${contact.id}`}
-                              className="flex-shrink-0 text-amber-400 hover:text-amber-600 transition-colors"
-                            >
-                              <StickyNote className="w-3.5 h-3.5" />
-                            </button>
+                            {(notesSummary[contact.id] ?? 0) > 0 && (
+                              <button
+                                onClick={(e) => openNotesPopup(contact, e)}
+                                title={`${notesSummary[contact.id]} note${notesSummary[contact.id] > 1 ? "s" : ""}`}
+                                data-testid={`btn-notes-${contact.id}`}
+                                className="flex-shrink-0 text-amber-400 hover:text-amber-600 transition-colors"
+                              >
+                                <StickyNote className="w-3.5 h-3.5" />
+                              </button>
+                            )}
                             <button
                               onClick={(e) => openSnapshot(contact, e)}
                               title="AI Snapshot"
@@ -649,6 +680,40 @@ export function Contacts() {
               {addMutation.isPending ? t("common.saving", "Saving…") : t("contacts.saveAndOpen", "Save & Open")}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Notes Popup */}
+      <Dialog open={!!notesContact} onOpenChange={(o) => !o && setNotesContact(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <StickyNote className="w-4 h-4 text-amber-500" />
+              {notesContact?.name} — Team Notes
+            </DialogTitle>
+          </DialogHeader>
+          <div className="overflow-y-auto max-h-[420px] space-y-3 pr-1 py-1">
+            {notesLoading && (
+              <div className="flex items-center gap-2 text-gray-400 py-8 justify-center">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span className="text-sm">Loading notes…</span>
+              </div>
+            )}
+            {!notesLoading && notesList.length === 0 && (
+              <div className="py-10 text-center text-gray-400 text-sm">No notes for this contact.</div>
+            )}
+            {!notesLoading && notesList.map((note: any) => (
+              <div key={note.id} className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+                <p className="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap">{note.content}</p>
+                <p className="text-xs text-gray-400 mt-2 flex items-center gap-1">
+                  <span className="font-semibold text-amber-600">{note.createdByName || "Team member"}</span>
+                  {note.createdAt && (
+                    <span>· {formatDistanceToNow(new Date(note.createdAt), { addSuffix: true })}</span>
+                  )}
+                </p>
+              </div>
+            ))}
+          </div>
         </DialogContent>
       </Dialog>
 

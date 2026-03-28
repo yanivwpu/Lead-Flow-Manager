@@ -296,6 +296,30 @@ export function registerContactRoutes(app: Express): void {
     }
   });
 
+  // Notes summary — returns { contactId: count } for all contacts with notes
+  app.get("/api/contacts/notes-summary", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+      const { db } = await import("../db");
+      const { contactNotes } = await import("@shared/schema");
+      const { sql, eq } = await import("drizzle-orm");
+      const rows = await db
+        .select({
+          contactId: contactNotes.contactId,
+          count: sql<number>`count(*)::int`,
+        })
+        .from(contactNotes)
+        .where(eq(contactNotes.workspaceId, req.user.id))
+        .groupBy(contactNotes.contactId);
+      const summary: Record<string, number> = {};
+      rows.forEach((r) => { if (r.contactId) summary[r.contactId] = r.count; });
+      res.json(summary);
+    } catch (error) {
+      console.error("Error fetching notes summary:", error);
+      res.status(500).json({ error: "Failed" });
+    }
+  });
+
   // AI Snapshot — 2-sentence deal summary from conversation history + notes
   app.get("/api/contacts/:id/snapshot", async (req, res) => {
     try {
