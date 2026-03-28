@@ -112,7 +112,7 @@ function SortHeader({
       onClick={() => onSort(field)}
       className={cn(
         "flex items-center gap-1 text-xs font-medium uppercase tracking-wide transition-colors",
-        active ? "text-indigo-600" : "text-gray-500 hover:text-gray-700",
+        active ? "text-gray-700 font-semibold" : "text-gray-500 hover:text-gray-700",
       )}
     >
       {label}
@@ -127,11 +127,11 @@ function SortHeader({
   );
 }
 
-function StatCard({ label, value, icon: Icon, color }: { label: string; value: number; icon: any; color: string }) {
+function StatCard({ label, value, icon: Icon, color, iconColor = "text-gray-500" }: { label: string; value: number; icon: any; color: string; iconColor?: string }) {
   return (
     <div className="flex items-center gap-3 bg-white rounded-xl border border-gray-100 px-4 py-3 shadow-sm min-w-0">
       <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0", color)}>
-        <Icon className="w-4 h-4 text-white" />
+        <Icon className={cn("w-4 h-4", iconColor)} />
       </div>
       <div className="min-w-0">
         <p className="text-xl font-bold text-gray-900 leading-none">{value.toLocaleString()}</p>
@@ -360,7 +360,7 @@ export function Contacts() {
               size="sm"
               onClick={() => setShowAddDialog(true)}
               data-testid="button-add-contact"
-              className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white"
+              className="flex items-center gap-1.5 bg-gray-700 hover:bg-gray-800 text-white"
             >
               <UserPlus className="w-4 h-4" />
               {t("contacts.addContact", "Add Contact")}
@@ -377,7 +377,8 @@ export function Contacts() {
               label={t("contacts.totalContacts", "Total Contacts")}
               value={contacts.length}
               icon={Users}
-              color="bg-indigo-500"
+              color="bg-gray-100"
+              iconColor="text-gray-500"
             />
             {topChannels.map(([ch, count]) => {
               const cfg = CHANNEL_CONFIG[ch] || CHANNEL_CONFIG.whatsapp;
@@ -389,7 +390,7 @@ export function Contacts() {
                   className={cn(
                     "flex items-center gap-3 bg-white rounded-xl border px-4 py-3 shadow-sm cursor-pointer transition-all",
                     filterChannel === ch
-                      ? "border-indigo-300 ring-2 ring-indigo-100"
+                      ? "border-gray-300 ring-2 ring-gray-100"
                       : "border-gray-100 hover:border-gray-200",
                   )}
                   data-testid={`stat-channel-${ch}`}
@@ -473,7 +474,7 @@ export function Contacts() {
               >
                 <X className="w-3.5 h-3.5" />
                 {t("contacts.clearFilters", "Clear")}
-                <Badge className="ml-0.5 bg-indigo-100 text-indigo-700 text-xs px-1.5 py-0 h-4">
+                <Badge className="ml-0.5 bg-gray-100 text-gray-600 text-xs px-1.5 py-0 h-4">
                   {activeFiltersCount}
                 </Badge>
               </Button>
@@ -518,7 +519,7 @@ export function Contacts() {
                   </p>
                 )}
                 {contacts.length > 0 && (
-                  <Button variant="ghost" size="sm" onClick={clearFilters} className="mt-3 text-indigo-600">
+                  <Button variant="ghost" size="sm" onClick={clearFilters} className="mt-3 text-gray-600">
                     {t("contacts.clearFilters", "Clear filters")}
                   </Button>
                 )}
@@ -532,7 +533,7 @@ export function Contacts() {
                     <div
                       key={contact.id}
                       onClick={() => navigate(`/app/inbox/${contact.id}`)}
-                      className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr] gap-4 px-4 py-3 items-center hover:bg-indigo-50/40 cursor-pointer transition-colors group"
+                      className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr] gap-4 px-4 py-3 items-center hover:bg-gray-50 cursor-pointer transition-colors group"
                       data-testid={`row-contact-${contact.id}`}
                     >
                       {/* Name + phone */}
@@ -540,7 +541,7 @@ export function Contacts() {
                         <Avatar contact={contact} />
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-1.5">
-                            <p className="font-medium text-gray-900 text-sm truncate group-hover:text-indigo-700 transition-colors">
+                            <p className="font-medium text-gray-900 text-sm truncate group-hover:text-gray-700 transition-colors">
                               {contact.name}
                             </p>
                             {(notesSummary[contact.id] ?? 0) > 0 && (
@@ -575,7 +576,7 @@ export function Contacts() {
                             </p>
                           )}
                         </div>
-                        <ArrowUpRight className="w-3.5 h-3.5 text-indigo-400 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
+                        <ArrowUpRight className="w-3.5 h-3.5 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
                       </div>
 
                       {/* Tag */}
@@ -674,7 +675,7 @@ export function Contacts() {
                 addMutation.mutate(newContact);
               }}
               disabled={addMutation.isPending}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white"
+              className="bg-gray-700 hover:bg-gray-800 text-white"
               data-testid="button-save-new-contact"
             >
               {addMutation.isPending ? t("common.saving", "Saving…") : t("contacts.saveAndOpen", "Save & Open")}
