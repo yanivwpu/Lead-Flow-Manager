@@ -523,7 +523,7 @@ export function Contacts() {
                               onClick={(e) => openNotes(contact, e)}
                               title="View notes"
                               data-testid={`btn-notes-${contact.id}`}
-                              className="flex-shrink-0 text-gray-300 hover:text-amber-500 transition-colors opacity-0 group-hover:opacity-100"
+                              className="flex-shrink-0 text-amber-400 hover:text-amber-600 transition-colors"
                             >
                               <StickyNote className="w-3.5 h-3.5" />
                             </button>
@@ -531,7 +531,7 @@ export function Contacts() {
                               onClick={(e) => openSnapshot(contact, e)}
                               title="AI Snapshot"
                               data-testid={`btn-snapshot-${contact.id}`}
-                              className="flex-shrink-0 text-gray-300 hover:text-violet-500 transition-colors opacity-0 group-hover:opacity-100"
+                              className="flex-shrink-0 text-violet-400 hover:text-violet-600 transition-colors"
                             >
                               <Sparkles className="w-3.5 h-3.5" />
                             </button>
