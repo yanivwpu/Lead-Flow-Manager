@@ -23,6 +23,7 @@ const UnifiedInbox = lazy(() => import("./UnifiedInbox").then(m => ({ default: m
 const WebsiteWidget = lazy(() => import("./WebsiteWidget").then(m => ({ default: m.WebsiteWidget })));
 const AIBrain = lazy(() => import("./AIBrain").then(m => ({ default: m.AIBrain })));
 const RealtorGrowthEngine = lazy(() => import("./RealtorGrowthEngine").then(m => ({ default: m.RealtorGrowthEngine })));
+const Contacts = lazy(() => import("./Contacts").then(m => ({ default: m.Contacts })));
 
 const PageLoader = () => (
   <div className="flex h-full items-center justify-center">
@@ -82,6 +83,7 @@ function AppContent() {
               <Route path="/app/chats/:id"><Redirect to="/app/inbox" /></Route>
               <Route path="/app/chats"><Redirect to="/app/inbox" /></Route>
               <Route path="/app/followups" component={FollowUps} />
+              <Route path="/app/contacts" component={Contacts} />
               <Route path="/app/workflows" component={Workflows} />
               <Route path="/app/chatbot" component={ChatbotBuilder} />
               <Route path="/app/templates/realtor-growth-engine/onboarding" component={RealtorGrowthEngine} />

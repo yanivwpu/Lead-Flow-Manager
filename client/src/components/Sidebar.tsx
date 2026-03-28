@@ -17,6 +17,7 @@ import {
   BookOpen,
   PanelLeftClose,
   PanelLeftOpen,
+  Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
@@ -76,6 +77,7 @@ export function Sidebar() {
       items: [
         { icon: Inbox, label: t("nav.inbox", "Inbox"), href: "/app/inbox", testId: "sidebar-inbox" },
         { icon: ListTodo, label: t("nav.followups", "Follow-ups"), href: "/app/followups", testId: "sidebar-followups" },
+        { icon: Users, label: t("nav.contacts", "Contacts"), href: "/app/contacts", testId: "sidebar-contacts" },
       ],
     },
     {
