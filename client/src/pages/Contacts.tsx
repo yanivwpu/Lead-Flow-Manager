@@ -33,6 +33,7 @@ interface Contact {
   source?: string;
   assignedTo?: string;
   followUpDate?: string;
+  notes?: string;
   createdAt: string;
   whatsappId?: string;
   instagramId?: string;
@@ -666,7 +667,7 @@ export function Contacts() {
               {notesContact?.name} — Notes
             </DialogTitle>
           </DialogHeader>
-          <NotesContent contactId={notesContact?.id} />
+          <NotesContent contactId={notesContact?.id} contactNotes={notesContact?.notes} />
         </DialogContent>
       </Dialog>
 
@@ -707,7 +708,7 @@ export function Contacts() {
   );
 }
 
-function NotesContent({ contactId }: { contactId?: string }) {
+function NotesContent({ contactId, contactNotes }: { contactId?: string; contactNotes?: string }) {
   const { data: notes, isLoading } = useQuery<any[]>({
     queryKey: ["/api/contacts", contactId, "notes"],
     queryFn: async () => {
@@ -719,6 +720,10 @@ function NotesContent({ contactId }: { contactId?: string }) {
     enabled: !!contactId,
   });
 
+  const hasContactNotes = contactNotes && contactNotes.trim().length > 0;
+  const hasTeamNotes = notes && notes.length > 0;
+  const hasAnything = hasContactNotes || hasTeamNotes;
+
   if (isLoading) {
     return (
       <div className="flex items-center gap-2 text-gray-400 py-6">
@@ -728,7 +733,7 @@ function NotesContent({ contactId }: { contactId?: string }) {
     );
   }
 
-  if (!notes || notes.length === 0) {
+  if (!hasAnything) {
     return (
       <div className="py-8 text-center">
         <StickyNote className="w-8 h-8 text-gray-200 mx-auto mb-2" />
@@ -739,18 +744,31 @@ function NotesContent({ contactId }: { contactId?: string }) {
   }
 
   return (
-    <div className="space-y-3 max-h-[400px] overflow-y-auto py-1 pr-1">
-      {notes.map((note: any) => (
-        <div key={note.id} className="bg-amber-50 border border-amber-100 rounded-lg px-3 py-2.5">
-          <p className="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap">{note.content}</p>
-          <p className="text-xs text-gray-400 mt-1.5 flex items-center gap-1">
-            <span className="font-medium text-amber-600">{note.createdByName || "Team member"}</span>
-            {note.createdAt && (
-              <span>· {formatDistanceToNow(new Date(note.createdAt), { addSuffix: true })}</span>
-            )}
-          </p>
+    <div className="space-y-3 max-h-[420px] overflow-y-auto py-1 pr-1">
+      {hasContactNotes && (
+        <div className="bg-yellow-50 border border-yellow-100 rounded-lg px-3 py-2.5">
+          <p className="text-xs font-semibold text-yellow-700 uppercase tracking-wide mb-1.5">Contact Notes</p>
+          <p className="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap">{contactNotes}</p>
         </div>
-      ))}
+      )}
+      {hasTeamNotes && (
+        <>
+          {hasContactNotes && (
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide px-1">Team Notes</p>
+          )}
+          {notes!.map((note: any) => (
+            <div key={note.id} className="bg-amber-50 border border-amber-100 rounded-lg px-3 py-2.5">
+              <p className="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap">{note.content}</p>
+              <p className="text-xs text-gray-400 mt-1.5 flex items-center gap-1">
+                <span className="font-medium text-amber-600">{note.createdByName || "Team member"}</span>
+                {note.createdAt && (
+                  <span>· {formatDistanceToNow(new Date(note.createdAt), { addSuffix: true })}</span>
+                )}
+              </p>
+            </div>
+          ))}
+        </>
+      )}
     </div>
   );
 }
