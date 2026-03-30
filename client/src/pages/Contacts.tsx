@@ -486,8 +486,126 @@ export function Contacts() {
             </span>
           </div>
 
-          {/* Table */}
-          <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+          {/* ── MOBILE card list (< md) ── */}
+          <div className="md:hidden bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+            {isLoading ? (
+              <div className="py-16 text-center text-gray-400">
+                <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2" />
+                <p className="text-sm">{t("contacts.loading", "Loading contacts…")}</p>
+              </div>
+            ) : filtered.length === 0 ? (
+              <div className="py-16 text-center">
+                <Users className="w-10 h-10 text-gray-200 mx-auto mb-3" />
+                <p className="text-gray-500 font-medium">
+                  {contacts.length === 0
+                    ? t("contacts.emptyState", "No contacts yet")
+                    : t("contacts.noResults", "No contacts match your filters")}
+                </p>
+                {contacts.length === 0 && (
+                  <p className="text-gray-400 text-sm mt-1">
+                    {t("contacts.emptyHint", "Contacts are created automatically when someone messages you")}
+                  </p>
+                )}
+                {contacts.length > 0 && (
+                  <Button variant="ghost" size="sm" onClick={clearFilters} className="mt-3 text-gray-600">
+                    {t("contacts.clearFilters", "Clear filters")}
+                  </Button>
+                )}
+              </div>
+            ) : (
+              <div className="divide-y divide-gray-100">
+                {filtered.map((contact) => {
+                  const ch = contact.primaryChannelOverride || contact.primaryChannel;
+                  const cfg = CHANNEL_CONFIG[ch] || CHANNEL_CONFIG.whatsapp;
+                  return (
+                    <div
+                      key={contact.id}
+                      onClick={() => navigate(`/app/inbox/${contact.id}`)}
+                      className="flex items-center gap-3 px-4 py-3 active:bg-gray-50 cursor-pointer transition-colors"
+                      data-testid={`row-contact-${contact.id}`}
+                    >
+                      {/* Avatar */}
+                      <div className="flex-shrink-0">
+                        <Avatar contact={contact} />
+                      </div>
+
+                      {/* Main info */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5 mb-0.5">
+                          <p className="font-medium text-gray-900 text-sm truncate">
+                            {contact.name}
+                          </p>
+                          {(notesSummary[contact.id] ?? 0) > 0 && (
+                            <button
+                              onClick={(e) => openNotesPopup(contact, e)}
+                              data-testid={`btn-notes-${contact.id}`}
+                              className="flex-shrink-0 text-amber-400"
+                            >
+                              <StickyNote className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                          <button
+                            onClick={(e) => openSnapshot(contact, e)}
+                            data-testid={`btn-snapshot-${contact.id}`}
+                            className="flex-shrink-0 text-violet-400"
+                          >
+                            <Sparkles className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {/* Channel icon + label */}
+                          <span className="flex items-center gap-1 text-xs text-gray-400">
+                            <ChannelIcon channel={ch} size="w-3.5 h-3.5" />
+                            {cfg.label}
+                          </span>
+                          {/* Tag badge */}
+                          {contact.tag && (
+                            <span className={cn(
+                              "inline-flex items-center px-1.5 py-0 rounded-full text-[11px] font-medium border",
+                              getTagColor(contact.tag),
+                            )} data-testid={`badge-tag-${contact.id}`}>
+                              {contact.tag}
+                            </span>
+                          )}
+                          {/* Stage */}
+                          {contact.pipelineStage && (
+                            <span className="text-[11px] text-gray-500" data-testid={`text-stage-${contact.id}`}>
+                              {contact.pipelineStage}
+                            </span>
+                          )}
+                        </div>
+                        {/* Phone / email */}
+                        {contact.phone ? (
+                          <p className="text-xs text-gray-400 flex items-center gap-1 mt-0.5">
+                            <Phone className="w-3 h-3 flex-shrink-0" />
+                            {contact.phone}
+                          </p>
+                        ) : contact.email ? (
+                          <p className="text-xs text-gray-400 flex items-center gap-1 mt-0.5">
+                            <Mail className="w-3 h-3 flex-shrink-0" />
+                            {contact.email}
+                          </p>
+                        ) : null}
+                      </div>
+
+                      {/* Right: timestamp + arrow */}
+                      <div className="flex-shrink-0 flex flex-col items-end gap-1">
+                        <span className="text-[10px] text-gray-400" data-testid={`text-created-${contact.id}`}>
+                          {contact.createdAt
+                            ? formatDistanceToNow(new Date(contact.createdAt), { addSuffix: true })
+                            : "—"}
+                        </span>
+                        <ArrowUpRight className="w-3.5 h-3.5 text-gray-300" />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* ── DESKTOP table (md+) ── */}
+          <div className="hidden md:block bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
             {/* Table header */}
             <div className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr] gap-4 px-4 py-2.5 border-b border-gray-100 bg-gray-50">
               <SortHeader label={t("contacts.colName", "Contact")} field="name" sortField={sortField} sortDir={sortDir} onSort={handleSort} />

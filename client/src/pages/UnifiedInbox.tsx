@@ -1180,30 +1180,39 @@ export function UnifiedInbox() {
       )}
 
       {/* ── MOBILE CRM Sheet ── */}
-      {isMobile && selectedContactId && contact && (
+      {isMobile && (
         <Sheet open={showDetailsSheet} onOpenChange={setShowDetailsSheet}>
-          <SheetContent side="right" className="w-full sm:w-96 p-0 overflow-y-auto" data-testid="mobile-crm-sheet">
-            <SheetHeader className="px-4 pt-4 pb-2 border-b">
-              <SheetTitle className="text-sm font-semibold">{contact.name} — Details</SheetTitle>
+          <SheetContent side="right" className="w-full sm:w-96 p-0 flex flex-col" data-testid="mobile-crm-sheet">
+            <SheetHeader className="px-4 pt-4 pb-2 border-b flex-shrink-0">
+              <SheetTitle className="text-sm font-semibold">
+                {contact ? `${contact.name} — Details` : "Details"}
+              </SheetTitle>
             </SheetHeader>
-            <div className="overflow-y-auto h-full pb-20">
-              <InboxLeadDetailsPanel
-                contact={contact}
-                primaryConversation={primaryConversation}
-                teamMembers={teamMembers}
-                messages={messages.map(m => ({ direction: m.direction, content: m.content || '' }))}
-                capabilities={capabilities}
-                currentUserId={user?.id}
-                onInsertMessage={text => { setMessageInput(text); setShowDetailsSheet(false); }}
-                onUpdateContact={updateContact}
-                onUpdateConversationStatus={status => {
-                  if (primaryConversation) {
-                    updateConversationMutation.mutate({ conversationId: primaryConversation.id, status });
-                  }
-                }}
-                onEditContact={() => { setShowDetailsSheet(false); handleEditContact(); }}
-                onDeleteContact={() => { setShowDetailsSheet(false); setShowDeleteConfirm(true); }}
-              />
+            <div className="flex-1 min-h-0 overflow-y-auto">
+              {selectedContactId && contact ? (
+                <InboxLeadDetailsPanel
+                  contact={contact}
+                  primaryConversation={primaryConversation}
+                  teamMembers={teamMembers}
+                  messages={messages.map(m => ({ direction: m.direction, content: m.content || '' }))}
+                  capabilities={capabilities}
+                  currentUserId={user?.id}
+                  onInsertMessage={text => { setMessageInput(text); setShowDetailsSheet(false); }}
+                  onUpdateContact={updateContact}
+                  onUpdateConversationStatus={status => {
+                    if (primaryConversation) {
+                      updateConversationMutation.mutate({ conversationId: primaryConversation.id, status });
+                    }
+                  }}
+                  onEditContact={() => { setShowDetailsSheet(false); handleEditContact(); }}
+                  onDeleteContact={() => { setShowDetailsSheet(false); setShowDeleteConfirm(true); }}
+                />
+              ) : (
+                <div className="flex flex-col items-center justify-center h-40 text-gray-400 text-sm gap-2">
+                  <PanelRight className="w-6 h-6 opacity-40" />
+                  <p>No contact selected</p>
+                </div>
+              )}
             </div>
           </SheetContent>
         </Sheet>

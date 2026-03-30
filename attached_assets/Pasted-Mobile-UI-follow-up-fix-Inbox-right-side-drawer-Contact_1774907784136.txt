@@ -1,0 +1,101 @@
+Mobile UI follow-up fix — Inbox right-side drawer + Contacts mobile layout
+
+Goal:
+Fix two mobile UX issues:
+1. Inbox chat right-side features drawer shows blank/gray instead of content
+2. Contacts page does not render well on mobile (still behaves like a squeezed desktop table)
+
+Do NOT touch backend logic, CRM architecture, Shopify/GHL, auth, billing, or workflow logic.
+Do NOT undo recent mobile navigation fixes.
+
+---
+
+Part 1 — Fix Inbox mobile right-side drawer content
+
+Problem:
+On mobile Inbox chat view, opening the right-side drawer (CRM / details / Copilot) shows an empty gray panel instead of actual content.
+
+Required fix:
+- Ensure the same content used in the desktop right sidebar is properly rendered inside the mobile drawer/sheet
+- Confirm the selected conversation/contact data is correctly passed into the drawer
+- Fix any issues related to:
+  - component not mounting
+  - conditional rendering failing
+  - desktop-only layout assumptions
+  - height/overflow/z-index hiding content
+  - loading state stuck or not resolving
+
+Required behavior:
+- Open Inbox on mobile
+- Open a conversation
+- Tap CRM/Details button
+- Drawer opens with real content visible:
+  - tags
+  - pipeline stage
+  - notes
+  - follow-up
+  - Copilot / suggestions
+  - contact info
+- Drawer is scrollable
+- Close button works
+- Returning to chat works cleanly
+- If no data exists, show a proper empty-state message (not a blank gray panel)
+
+---
+
+Part 2 — Improve Contacts page mobile layout
+
+Problem:
+Contacts page is using a desktop table squeezed into mobile width, causing poor readability and awkward wrapping.
+
+Required fix:
+- On mobile widths, replace table layout with stacked list/card layout
+- Each contact should be a clean, tappable row
+- Show key info in a mobile-friendly format:
+  - avatar + contact name
+  - tag
+  - stage
+  - channel icon
+  - short last activity label
+- Reduce multi-line wrapping and clutter
+- Keep rows compact and readable
+
+Important:
+- Desktop Contacts page must remain unchanged (still table-based)
+
+---
+
+Acceptance criteria:
+
+A. Inbox mobile drawer
+- Drawer opens with actual content (not blank/gray)
+- All CRM features are visible and usable
+- Drawer scroll works
+- Close works
+- No hidden or clipped content
+
+B. Contacts mobile page
+- Renders as stacked list/cards
+- Readable and compact rows
+- No squeezed table behavior
+- Full row is tappable
+
+C. Desktop safety
+- Desktop Inbox sidebar unchanged
+- Desktop Contacts table unchanged
+- No regressions
+
+D. Stability
+- No new TypeScript errors
+- App runs cleanly
+
+---
+
+Deliverables:
+1. Exact files changed
+2. Root cause of blank/gray drawer
+3. How drawer content rendering was fixed
+4. How Contacts mobile layout was implemented
+5. Screenshots:
+   - mobile Inbox with drawer open (content visible)
+   - mobile Contacts list
