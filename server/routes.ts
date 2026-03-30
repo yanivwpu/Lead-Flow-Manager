@@ -1645,7 +1645,12 @@ export async function registerRoutes(
       // isNewConversation and chatbotWillFire are evaluated once inside
       // processIncomingMessage and returned here so no subsequent handler
       // needs to query the DB again to make the same determination.
-      const { isNewConversation: inboxIsNewConv, chatbotWillFire: inboxChatbotWillFire } = await cs.processIncomingMessage({
+      const {
+        isNewConversation: inboxIsNewConv,
+        chatbotWillFire: inboxChatbotWillFire,
+        contact: inboxContact,
+        conversation: inboxConversation,
+      } = await cs.processIncomingMessage({
         userId,
         channel,
         channelContactId: normalizedFrom,
@@ -1660,11 +1665,11 @@ export async function registerRoutes(
       const updatedChat = await storage.getChat(chat.id);
       if (updatedChat) {
         if (isNewChat) {
-          triggerNewChatWorkflows(userId, updatedChat).catch(err => 
+          triggerNewChatWorkflows(userId, updatedChat, inboxContact, inboxConversation.id).catch(err => 
             console.error("New chat workflow error:", err)
           );
         }
-        triggerKeywordWorkflows(userId, updatedChat, parsed.body).catch(err => 
+        triggerKeywordWorkflows(userId, updatedChat, parsed.body, inboxContact, inboxConversation.id).catch(err => 
           console.error("Keyword workflow error:", err)
         );
         // W2 Financial Qualification Engine (Realtor Growth Engine)
@@ -1678,7 +1683,7 @@ export async function registerRoutes(
                 console.log(`[W2] Outbound suppressed (Twilio) — chatbot owns this reply for userId: ${userId}`);
               }
 
-              const w2 = await runW2QualificationEngine(userId, updatedChat, parsed.body);
+              const w2 = await runW2QualificationEngine(userId, updatedChat, parsed.body, inboxContact);
               if (w2.signalsDetected.length > 0) {
                 console.log(`[W2] Signals detected for chat ${updatedChat.id}: ${w2.signalsDetected.join(", ")} score+=${w2.scoreAdjustment}`);
               }
@@ -1693,7 +1698,7 @@ export async function registerRoutes(
               }
               // Service Routing Engine
               try {
-                const routing = await runServiceRoutingEngine(userId, updatedChat, parsed.body);
+                const routing = await runServiceRoutingEngine(userId, updatedChat, parsed.body, inboxContact);
                 const routingMsg = routing.offerMessage || routing.routingMessage;
                 // Only send routing message if chatbot is NOT handling this conversation
                 if (!inboxChatbotWillFire && routingMsg && updatedChat.whatsappPhone) {
@@ -1991,6 +1996,9 @@ export async function registerRoutes(
       // Capture processIncomingMessage result so post-ACK handlers can read
       // chatbotWillFire and isNewConversation without extra DB round-trips.
       let metaInboxResult: { chatbotWillFire: boolean; isNewConversation: boolean } | null = null;
+      // Phase A: capture contact and conversationId from processIncomingMessage for Growth Engine
+      let metaInboxContact: any = null;
+      let metaInboxConversationId: string | null = null;
 
       if (incomingMessage) {
         const user = await findUserByMetaPhoneNumberId(incomingMessage.phoneNumberId);
@@ -2008,6 +2016,8 @@ export async function registerRoutes(
               externalMessageId: incomingMessage.messageId,
             }).then((result) => {
               metaInboxResult = { chatbotWillFire: result.chatbotWillFire, isNewConversation: result.isNewConversation };
+              metaInboxContact = result.contact;
+              metaInboxConversationId = result.conversation.id;
               console.log(`[Inbound] Webhook returned 200 — channel: whatsapp, messageId: ${incomingMessage.messageId}, userId: ${user.id}`);
             })
           );
@@ -2165,11 +2175,11 @@ export async function registerRoutes(
             await markMessageAsRead(user.id, incomingMessage.messageId);
 
             if (messages.length === 1) {
-              triggerNewChatWorkflows(user.id, chat).catch(err => console.error("New chat workflow error:", err));
+              triggerNewChatWorkflows(user.id, chat, metaInboxContact ?? undefined, metaInboxConversationId ?? undefined).catch(err => console.error("New chat workflow error:", err));
             }
 
             if (incomingMessage.text) {
-              triggerKeywordWorkflows(user.id, chat, incomingMessage.text).catch(err => console.error("Keyword workflow error:", err));
+              triggerKeywordWorkflows(user.id, chat, incomingMessage.text, metaInboxContact ?? undefined, metaInboxConversationId ?? undefined).catch(err => console.error("Keyword workflow error:", err));
               // W2 Financial Qualification Engine (Realtor Growth Engine)
               ;(async () => {
                 try {
@@ -2177,14 +2187,14 @@ export async function registerRoutes(
                   if (install?.installStatus === "installed") {
                     // chatbotWillFire was determined once inside processIncomingMessage
                     // and captured in metaInboxResult — no extra DB round-trip needed.
-                    const chatbotHandlesReplyMeta = metaInboxResult?.chatbotWillFire ?? false;
+                    const chatbotHandlesReplyMeta = (metaInboxResult as { chatbotWillFire: boolean } | null)?.chatbotWillFire ?? false;
                     if (chatbotHandlesReplyMeta) {
                       console.log(`[W2] Outbound suppressed (Meta) — chatbot owns this reply for userId: ${user.id}`);
                     }
 
                     const freshChat = await storage.getChat(chat.id);
                     if (!freshChat) return;
-                    const w2 = await runW2QualificationEngine(user.id, freshChat, incomingMessage.text!);
+                    const w2 = await runW2QualificationEngine(user.id, freshChat, incomingMessage.text!, metaInboxContact ?? undefined);
                     if (w2.signalsDetected.length > 0) {
                       console.log(`[W2] Signals detected for chat ${chat.id}: ${w2.signalsDetected.join(", ")} score+=${w2.scoreAdjustment}`);
                     }
@@ -2199,7 +2209,7 @@ export async function registerRoutes(
                     }
                     // Service Routing Engine (Meta)
                     try {
-                      const routing = await runServiceRoutingEngine(user.id, freshChat, incomingMessage.text!);
+                      const routing = await runServiceRoutingEngine(user.id, freshChat, incomingMessage.text!, metaInboxContact ?? undefined);
                       const routingMsg = routing.offerMessage || routing.routingMessage;
                       // Only send routing message if chatbot is NOT handling this conversation
                       if (!chatbotHandlesReplyMeta && routingMsg && incomingMessage.from) {
@@ -2223,7 +2233,7 @@ export async function registerRoutes(
             if (user.autoReplyEnabled && user.autoReplyMessage) {
               // chatbotWillFire was determined once inside processIncomingMessage
               // and captured in metaInboxResult — no extra DB round-trip needed.
-              const metaChatbotWillFire = metaInboxResult?.chatbotWillFire ?? false;
+              const metaChatbotWillFire = (metaInboxResult as { chatbotWillFire: boolean } | null)?.chatbotWillFire ?? false;
               if (metaChatbotWillFire) {
                 console.log(`[AutoReply] Suppressed (Meta) — chatbot owns this reply for userId: ${user.id}`);
               } else {

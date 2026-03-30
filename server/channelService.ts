@@ -256,7 +256,7 @@ class ChannelService {
         // Return existing data so callers can still ACK 200 safely
         const conv = await storage.getConversation(existing.conversationId);
         const cont = await storage.getContact(existing.contactId);
-        return { contact: cont!, conversation: conv!, message: existing };
+        return { contact: cont!, conversation: conv!, message: existing, isNewConversation: false, chatbotWillFire: false };
       }
     }
 

@@ -1,5 +1,5 @@
 import { storage } from "./storage";
-import { type Chat, type Workflow } from "@shared/schema";
+import { type Chat, type Workflow, type Contact, type Conversation } from "@shared/schema";
 import { subscriptionService } from "./subscriptionService";
 
 export interface WorkflowAction {
@@ -40,10 +40,41 @@ export async function getTemplatePreferences(userId: string): Promise<Record<str
   }
 }
 
+// ─── Dual-write helpers ───────────────────────────────────────────────────────
+// During the transition period both the legacy chat row and the unified-inbox
+// contact/conversation rows are updated.  Once the manual-send UI and billing
+// are migrated off the chats table the chat writes below will be removed.
+
+async function dualWriteContact(
+  contact: Contact | undefined,
+  contactUpdates: Partial<Contact>,
+  chat: Chat,
+  chatUpdates: Parameters<typeof storage.updateChat>[1]
+) {
+  if (contact) {
+    await storage.updateContact(contact.id, contactUpdates).catch(() => {});
+  }
+  await storage.updateChat(chat.id, chatUpdates).catch(() => {});
+}
+
+async function dualWriteConversation(
+  conversationId: string | undefined,
+  status: string,
+  chat: Chat
+) {
+  if (conversationId) {
+    await storage.updateConversation(conversationId, { status } as any).catch(() => {});
+  }
+  // Legacy chat also carries status for the chat-list UI
+  await storage.updateChat(chat.id, { status } as any).catch(() => {});
+}
+
 export async function executeWorkflowActions(
   workflow: Workflow,
   chat: Chat,
-  triggerData: any = {}
+  triggerData: any = {},
+  contact?: Contact,
+  conversationId?: string
 ): Promise<{ success: boolean; actionsExecuted: WorkflowAction[] }> {
   const actions = workflow.actions as WorkflowAction[];
   const executedActions: WorkflowAction[] = [];
@@ -62,44 +93,72 @@ export async function executeWorkflowActions(
             if (activeMembers.length > 0) {
               const randomIndex = Math.floor(Math.random() * activeMembers.length);
               const assignee = activeMembers[randomIndex];
-              await storage.updateChat(chat.id, { assignedTo: assignee.memberId });
+              await dualWriteContact(
+                contact,
+                { assignedTo: assignee.memberId ?? null },
+                chat,
+                { assignedTo: assignee.memberId }
+              );
               executedActions.push({ type: "assign", value: assignee.memberId || "unassigned" });
             }
           } else if (action.value) {
-            await storage.updateChat(chat.id, { assignedTo: action.value });
+            await dualWriteContact(
+              contact,
+              { assignedTo: action.value },
+              chat,
+              { assignedTo: action.value }
+            );
             executedActions.push(action);
           }
           break;
           
         case "tag":
           if (action.value) {
-            await storage.updateChat(chat.id, { tag: action.value });
+            await dualWriteContact(
+              contact,
+              { tag: action.value },
+              chat,
+              { tag: action.value }
+            );
             executedActions.push(action);
           }
           break;
           
         case "set_status":
+          // status belongs on conversation in the unified inbox; legacy chat
+          // also stores status so both are updated during the dual-write window.
           if (action.value) {
-            await storage.updateChat(chat.id, { status: action.value });
+            await dualWriteConversation(conversationId, action.value, chat);
             executedActions.push(action);
           }
           break;
           
         case "set_pipeline":
           if (action.value) {
-            await storage.updateChat(chat.id, { pipelineStage: action.value });
+            await dualWriteContact(
+              contact,
+              { pipelineStage: action.value },
+              chat,
+              { pipelineStage: action.value }
+            );
             executedActions.push(action);
           }
           break;
           
         case "add_note":
           if (action.value) {
-            const currentNotes = chat.notes || "";
+            // Read existing notes from the authoritative source
+            const currentNotes = (contact ? contact.notes : chat.notes) || "";
             const timestamp = new Date().toLocaleString();
-            const newNote = currentNotes 
+            const newNote = currentNotes
               ? `${currentNotes}\n\n[${timestamp}] ${action.value}`
               : `[${timestamp}] ${action.value}`;
-            await storage.updateChat(chat.id, { notes: newNote });
+            await dualWriteContact(
+              contact,
+              { notes: newNote },
+              chat,
+              { notes: newNote }
+            );
             executedActions.push(action);
           }
           break;
@@ -109,10 +168,13 @@ export async function executeWorkflowActions(
             const days = parseInt(action.value) || 1;
             const followUpDate = new Date();
             followUpDate.setDate(followUpDate.getDate() + days);
-            await storage.updateChat(chat.id, { 
-              followUpDate,
-              followUp: `${days} day${days > 1 ? 's' : ''}`
-            });
+            const followUp = `${days} day${days > 1 ? 's' : ''}`;
+            await dualWriteContact(
+              contact,
+              { followUpDate, followUp },
+              chat,
+              { followUpDate, followUp }
+            );
             executedActions.push(action);
           }
           break;
@@ -143,18 +205,29 @@ export async function executeWorkflowActions(
   }
 }
 
-export async function triggerNewChatWorkflows(userId: string, chat: Chat): Promise<void> {
+export async function triggerNewChatWorkflows(
+  userId: string,
+  chat: Chat,
+  contact?: Contact,
+  conversationId?: string
+): Promise<void> {
   try {
     const workflows = await storage.getActiveWorkflowsByTrigger(userId, "new_chat");
     for (const workflow of workflows) {
-      await executeWorkflowActions(workflow, chat, { trigger: "new_chat" });
+      await executeWorkflowActions(workflow, chat, { trigger: "new_chat" }, contact, conversationId);
     }
   } catch (error) {
     console.error("Error triggering new chat workflows:", error);
   }
 }
 
-export async function triggerKeywordWorkflows(userId: string, chat: Chat, message: string): Promise<void> {
+export async function triggerKeywordWorkflows(
+  userId: string,
+  chat: Chat,
+  message: string,
+  contact?: Contact,
+  conversationId?: string
+): Promise<void> {
   try {
     const workflows = await storage.getActiveWorkflowsByTrigger(userId, "keyword");
     for (const workflow of workflows) {
@@ -171,7 +244,7 @@ export async function triggerKeywordWorkflows(userId: string, chat: Chat, messag
           trigger: "keyword", 
           message,
           matchedKeywords: keywords.filter(k => messageLower.includes(k.toLowerCase()))
-        });
+        }, contact, conversationId);
       }
     }
   } catch (error) {
@@ -201,7 +274,8 @@ interface W2Result {
 export async function runW2QualificationEngine(
   userId: string,
   chat: Chat,
-  message: string
+  message: string,
+  contact?: Contact
 ): Promise<W2Result> {
   const prefs = await getTemplatePreferences(userId);
   const def = {
@@ -232,7 +306,13 @@ export async function runW2QualificationEngine(
   const signals: string[] = [];
   let score = 0;
   const fieldUpdates: Record<string, any> = {};
-  const existingCustomFields = (chat.customFields as Record<string, any>) || {};
+  // Phase B: read signal state from contact.customFields if available (unified inbox),
+  // falling back to chat.customFields for backwards compatibility.
+  // Note: customFields is not in the Chat Drizzle type (it's a DB-only column added
+  // via push migration) so we read it via (chat as any).customFields.
+  const existingCustomFields = contact
+    ? ((contact.customFields as Record<string, any>) || {})
+    : (((chat as any).customFields as Record<string, any>) || {});
 
   // Lead type detection
   const isBuyer = matchesAny(msgLower, buyerKw);
@@ -307,11 +387,15 @@ export async function runW2QualificationEngine(
   // Cap per-message positive score
   score = Math.min(score, 60);
 
-  // Apply field updates to chat
+  // Apply field updates — dual-write to contact.customFields (unified inbox) and
+  // chat.customFields (legacy, kept during transition window).
   if (Object.keys(fieldUpdates).length > 0) {
     const merged = { ...existingCustomFields, ...fieldUpdates };
     try {
-      await storage.updateChat(chat.id, { customFields: merged });
+      if (contact) {
+        await storage.updateContact(contact.id, { customFields: merged }).catch(() => {});
+      }
+      await storage.updateChat(chat.id, { customFields: merged } as any).catch(() => {});
     } catch (e) {
       // non-critical — continue
     }
@@ -321,7 +405,10 @@ export async function runW2QualificationEngine(
   let qualificationQuestion: string | null = null;
   const cf = { ...existingCustomFields, ...fieldUpdates };
   const isQualifiedLead = isBuyer || existingCustomFields.leadType === "Buyer";
-  const alreadyUnqualified = chat.pipelineStage === "Unqualified" || chat.tag === "Do Not Contact";
+  // Phase D guard: prefer contact pipeline/tag (unified inbox); fall back to chat.
+  const alreadyUnqualified = contact
+    ? (contact.pipelineStage === "Unqualified" || contact.tag === "Do Not Contact")
+    : (chat.pipelineStage === "Unqualified" || chat.tag === "Do Not Contact");
 
   if (isQualifiedLead && !alreadyUnqualified && !hasBookingIntent) {
     const lastAsked = existingCustomFields._lastQualificationAskedAt;
@@ -347,10 +434,12 @@ export async function runW2QualificationEngine(
       }
 
       if (qualificationQuestion) {
+        const cfWithTimestamp = { ...cf, _lastQualificationAskedAt: new Date().toISOString() };
         try {
-          await storage.updateChat(chat.id, {
-            customFields: { ...cf, _lastQualificationAskedAt: new Date().toISOString() }
-          });
+          if (contact) {
+            await storage.updateContact(contact.id, { customFields: cfWithTimestamp }).catch(() => {});
+          }
+          await storage.updateChat(chat.id, { customFields: cfWithTimestamp } as any).catch(() => {});
         } catch (e) { /* non-critical */ }
       }
     }
@@ -398,7 +487,8 @@ const DECLINE_PATTERNS = /\b(no|nope|not now|no thanks|don't|dont|maybe later|no
 export async function runServiceRoutingEngine(
   userId: string,
   chat: Chat,
-  message: string
+  message: string,
+  contact?: Contact
 ): Promise<ServiceRoutingResult> {
   const empty: ServiceRoutingResult = { offerMessage: null, routingMessage: null, taskNote: null, tagsToApply: [], serviceType: null };
 
@@ -407,10 +497,16 @@ export async function runServiceRoutingEngine(
     const enabledServices = services.filter(s => s.enabled && s.keywords?.trim());
     if (enabledServices.length === 0) return empty;
 
-    const alreadyUnqualified = chat.pipelineStage === "Unqualified" || chat.tag === "Do Not Contact";
+    // Phase D guard: prefer contact pipeline/tag; fall back to chat.
+    const alreadyUnqualified = contact
+      ? (contact.pipelineStage === "Unqualified" || contact.tag === "Do Not Contact")
+      : (chat.pipelineStage === "Unqualified" || chat.tag === "Do Not Contact");
     if (alreadyUnqualified) return empty;
 
-    const cf = (chat.customFields as Record<string, any>) || {};
+    // Phase B: read signal state from contact.customFields if available.
+    const cf = contact
+      ? ((contact.customFields as Record<string, any>) || {})
+      : (((chat as any).customFields as Record<string, any>) || {});
     const msgLower = message.toLowerCase();
     const now = Date.now();
     const twentyFourHoursMs = 24 * 60 * 60 * 1000;
@@ -441,26 +537,30 @@ export async function runServiceRoutingEngine(
               : null;
           }
 
-          // Clear pending offer and record execution
+          // Clear pending offer and record execution — dual-write
+          const cfAfterRoute = {
+            ...cf,
+            _pendingServiceOffer: null,
+            [`_serviceRouted_${svc.type}`]: new Date().toISOString(),
+          };
           try {
-            await storage.updateChat(chat.id, {
-              customFields: {
-                ...cf,
-                _pendingServiceOffer: null,
-                [`_serviceRouted_${svc.type}`]: new Date().toISOString(),
-              }
-            });
+            if (contact) {
+              await storage.updateContact(contact.id, { customFields: cfAfterRoute }).catch(() => {});
+            }
+            await storage.updateChat(chat.id, { customFields: cfAfterRoute } as any).catch(() => {});
           } catch { /* non-critical */ }
 
           return { offerMessage: null, routingMessage, taskNote, tagsToApply: svc.tags || [], serviceType: svc.type };
         }
 
         if (DECLINE_PATTERNS.test(message)) {
-          // Clear the pending offer
+          // Clear the pending offer — dual-write
+          const cfDeclined = { ...cf, _pendingServiceOffer: null };
           try {
-            await storage.updateChat(chat.id, {
-              customFields: { ...cf, _pendingServiceOffer: null }
-            });
+            if (contact) {
+              await storage.updateContact(contact.id, { customFields: cfDeclined }).catch(() => {});
+            }
+            await storage.updateChat(chat.id, { customFields: cfDeclined } as any).catch(() => {});
           } catch { /* non-critical */ }
         }
 
@@ -482,15 +582,17 @@ export async function runServiceRoutingEngine(
       const lastRouted = cf[`_serviceRouted_${svc.type}`];
       if (lastRouted && (now - new Date(lastRouted).getTime()) < twentyFourHoursMs) continue;
 
-      // Set pending offer
+      // Set pending offer — dual-write
+      const cfWithOffer = {
+        ...cf,
+        _pendingServiceOffer: { type: svc.type, timestamp: now },
+        [`_serviceOffered_${svc.type}`]: new Date().toISOString(),
+      };
       try {
-        await storage.updateChat(chat.id, {
-          customFields: {
-            ...cf,
-            _pendingServiceOffer: { type: svc.type, timestamp: now },
-            [`_serviceOffered_${svc.type}`]: new Date().toISOString(),
-          }
-        });
+        if (contact) {
+          await storage.updateContact(contact.id, { customFields: cfWithOffer }).catch(() => {});
+        }
+        await storage.updateChat(chat.id, { customFields: cfWithOffer } as any).catch(() => {});
       } catch { /* non-critical */ }
 
       return { offerMessage: svc.offerMessage, routingMessage: null, taskNote: null, tagsToApply: [], serviceType: svc.type };
@@ -503,7 +605,14 @@ export async function runServiceRoutingEngine(
   }
 }
 
-export async function triggerTagChangeWorkflows(userId: string, chat: Chat, oldTag: string, newTag: string): Promise<void> {
+export async function triggerTagChangeWorkflows(
+  userId: string,
+  chat: Chat,
+  oldTag: string,
+  newTag: string,
+  contact?: Contact,
+  conversationId?: string
+): Promise<void> {
   try {
     const workflows = await storage.getActiveWorkflowsByTrigger(userId, "tag_change");
     for (const workflow of workflows) {
@@ -515,7 +624,7 @@ export async function triggerTagChangeWorkflows(userId: string, chat: Chat, oldT
           trigger: "tag_change", 
           oldTag,
           newTag 
-        });
+        }, contact, conversationId);
       }
     }
   } catch (error) {
