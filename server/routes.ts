@@ -1669,11 +1669,20 @@ export async function registerRoutes(
           try {
             const install = await storage.getTemplateInstall(userId, "realtor-growth-engine");
             if (install?.installStatus === "installed") {
+              // Check whether chatbot will handle outbound replies for this message.
+              // If so, suppress W2/routing messages to prevent duplicate outbound messages.
+              const { willChatbotTrigger: w2CheckChatbot } = await import("./chatbotEngine");
+              const chatbotHandlesReply = await w2CheckChatbot(userId, parsed.body, isNewChat);
+              if (chatbotHandlesReply) {
+                console.log(`[W2] Outbound suppressed (Twilio) — active chatbot flow handles this conversation for userId: ${userId}`);
+              }
+
               const w2 = await runW2QualificationEngine(userId, updatedChat, parsed.body);
               if (w2.signalsDetected.length > 0) {
                 console.log(`[W2] Signals detected for chat ${updatedChat.id}: ${w2.signalsDetected.join(", ")} score+=${w2.scoreAdjustment}`);
               }
-              if (w2.qualificationQuestion && updatedChat.whatsappPhone) {
+              // Only send qualification question if chatbot is NOT handling this conversation
+              if (!chatbotHandlesReply && w2.qualificationQuestion && updatedChat.whatsappPhone) {
                 setTimeout(async () => {
                   try {
                     await sendUserWhatsAppMessage(userId, updatedChat.whatsappPhone!, w2.qualificationQuestion!);
@@ -1685,7 +1694,8 @@ export async function registerRoutes(
               try {
                 const routing = await runServiceRoutingEngine(userId, updatedChat, parsed.body);
                 const routingMsg = routing.offerMessage || routing.routingMessage;
-                if (routingMsg && updatedChat.whatsappPhone) {
+                // Only send routing message if chatbot is NOT handling this conversation
+                if (!chatbotHandlesReply && routingMsg && updatedChat.whatsappPhone) {
                   const delay = w2.qualificationQuestion ? 6000 : 3500;
                   setTimeout(async () => {
                     try {
@@ -2160,13 +2170,23 @@ export async function registerRoutes(
                 try {
                   const install = await storage.getTemplateInstall(user.id, "realtor-growth-engine");
                   if (install?.installStatus === "installed") {
+                    // Check whether chatbot will handle outbound replies for this message.
+                    // If so, suppress W2/routing messages to prevent duplicate outbound messages.
+                    const { willChatbotTrigger: w2CheckChatbotMeta } = await import("./chatbotEngine");
+                    const metaIsNewChat = messages.length === 1;
+                    const chatbotHandlesReplyMeta = await w2CheckChatbotMeta(user.id, incomingMessage.text!, metaIsNewChat);
+                    if (chatbotHandlesReplyMeta) {
+                      console.log(`[W2] Outbound suppressed (Meta) — active chatbot flow handles this conversation for userId: ${user.id}`);
+                    }
+
                     const freshChat = await storage.getChat(chat.id);
                     if (!freshChat) return;
                     const w2 = await runW2QualificationEngine(user.id, freshChat, incomingMessage.text!);
                     if (w2.signalsDetected.length > 0) {
                       console.log(`[W2] Signals detected for chat ${chat.id}: ${w2.signalsDetected.join(", ")} score+=${w2.scoreAdjustment}`);
                     }
-                    if (w2.qualificationQuestion && incomingMessage.from) {
+                    // Only send qualification question if chatbot is NOT handling this conversation
+                    if (!chatbotHandlesReplyMeta && w2.qualificationQuestion && incomingMessage.from) {
                       setTimeout(async () => {
                         try {
                           await sendMetaWhatsAppMessage(user.id, incomingMessage.from, w2.qualificationQuestion!);
@@ -2178,7 +2198,8 @@ export async function registerRoutes(
                     try {
                       const routing = await runServiceRoutingEngine(user.id, freshChat, incomingMessage.text!);
                       const routingMsg = routing.offerMessage || routing.routingMessage;
-                      if (routingMsg && incomingMessage.from) {
+                      // Only send routing message if chatbot is NOT handling this conversation
+                      if (!chatbotHandlesReplyMeta && routingMsg && incomingMessage.from) {
                         const delay = w2.qualificationQuestion ? 6000 : 3500;
                         setTimeout(async () => {
                           try {
