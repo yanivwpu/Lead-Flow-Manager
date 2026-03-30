@@ -1,0 +1,74 @@
+We have a real-user production issue with the chatbot runtime.
+
+User created a simple active chatbot flow with trigger keywords like:
+Hello, Hi, Good Morning, Good Afternoon
+and a welcome reply message.
+
+Expected behavior:
+	•	when the user sends an inbound WhatsApp message such as “Hi” or “hello”
+	•	the chatbot should automatically send the configured reply
+
+Actual behavior:
+	•	nothing happens
+
+Please debug the full execution path end-to-end, not just the builder UI.
+
+Check these exact points:
+	1.	Flow activation
+
+	•	Confirm that a chatbot marked as Active in the builder is actually eligible for runtime execution
+	•	Verify the saved flow is persisted correctly in DB and loaded by the execution engine
+
+	2.	Trigger type behavior
+
+	•	Clarify exactly how this chatbot is supposed to fire:
+	•	keyword trigger on inbound message
+	•	new chat trigger
+	•	or both
+	•	In the current screenshot, “Trigger on new chat” appears OFF, so keyword-based trigger should still work if implemented
+	•	If keyword trigger is not implemented, say that clearly and do not expose it in UI as working
+
+	3.	Inbound WhatsApp hookup
+
+	•	Verify that inbound WhatsApp messages pass through chatbot trigger evaluation
+	•	Confirm the WhatsApp webhook / inbox processor actually calls the chatbot engine for active flows
+
+	4.	Keyword matching
+
+	•	Parse trigger keywords correctly as a list, not one raw string
+	•	Normalize input before matching:
+	•	trim spaces
+	•	lowercase
+	•	handle “Hi” vs “hi” vs “hello”
+	•	Confirm whether match is exact, contains, or token-based, and make it user-friendly
+
+	5.	Channel support
+
+	•	Confirm whether chatbot flows are supported for WhatsApp threads, not only website widget chats
+	•	If WhatsApp is supported, verify the channel filter is not blocking execution
+
+	6.	Reply send path
+
+	•	After trigger match, verify the bot reply is actually created and sent into the same conversation
+	•	Check if it fails silently due to provider/channel restrictions
+
+	7.	Logging
+
+	•	Add clear server logs for chatbot execution:
+	•	inbound received
+	•	flow evaluated
+	•	keyword matched / not matched
+	•	reply created
+	•	reply sent / failed
+	•	We need to know exactly where the chain breaks
+
+	8.	Real test required
+
+	•	Test with this exact scenario:
+	•	active chatbot
+	•	keyword “Hi”
+	•	inbound WhatsApp message “Hi”
+	•	auto-reply sent into same thread
+	•	Do not mark fixed unless this exact real flow works
+
+Also verify whether existing conversations are eligible for keyword-trigger responses or only new chats are.
