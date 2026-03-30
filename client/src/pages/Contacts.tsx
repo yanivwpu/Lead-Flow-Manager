@@ -17,6 +17,7 @@ import { Label } from "@/components/ui/label";
 import { format, formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
+import { TAG_COLORS } from "@/lib/data";
 
 type Channel = "whatsapp" | "instagram" | "facebook" | "sms" | "webchat" | "telegram";
 
@@ -48,18 +49,6 @@ const CHANNEL_CONFIG: Record<string, { icon: any; color: string; label: string }
   sms: { icon: Smartphone, color: "#6B7280", label: "SMS" },
   webchat: { icon: Globe, color: "#3B82F6", label: "Web Chat" },
   telegram: { icon: Send, color: "#0088CC", label: "Telegram" },
-};
-
-const TAG_COLORS: Record<string, string> = {
-  Hot: "bg-red-100 text-red-700 border-red-200",
-  Warm: "bg-orange-100 text-orange-700 border-orange-200",
-  Cold: "bg-blue-100 text-blue-700 border-blue-200",
-  New: "bg-gray-100 text-gray-700 border-gray-200",
-  Quoted: "bg-yellow-100 text-yellow-700 border-yellow-200",
-  Paid: "bg-green-100 text-green-700 border-green-200",
-  Investor: "bg-purple-100 text-purple-700 border-purple-200",
-  Buyer: "bg-indigo-100 text-indigo-700 border-indigo-200",
-  Seller: "bg-pink-100 text-pink-700 border-pink-200",
 };
 
 function getTagColor(tag: string) {
