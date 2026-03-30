@@ -1,0 +1,139 @@
+Performance optimization pass — mobile-first, without hurting desktop
+
+Goal:
+Improve real loading speed with priority on mobile performance, while keeping desktop equal or better. Focus on the smallest high-impact optimizations only. Do not redesign UI and do not touch the recent Unified Inbox / CRM migration work.
+
+Context:
+Lighthouse is strong on desktop, but mobile performance is lagging. Main issues seen:
+- high mobile LCP
+- high mobile Speed Index
+- unused JavaScript
+- network dependency chains
+- too much JS/main-thread work on first load
+
+This task is performance-only.
+Do NOT undo or modify the recent mobile inbox/navigation fixes.
+Do NOT touch Shopify, GHL, auth, billing, backend workflows, webhook logic, migration logic, contacts-first CRM logic, conversationId wiring, or dual-write behavior.
+
+Important clarification:
+This is a mobile-first optimization pass, not mobile-only.
+Prioritize mobile improvements first, but do not make any change that degrades desktop performance. Desktop should stay equal or improve.
+
+Required work:
+
+1. Separate public marketing pages from authenticated app bundle
+Review current frontend bundling and make sure public pages do NOT eagerly load authenticated app/dashboard code.
+
+Target:
+- landing/home/pricing/blog pages should load only what they need
+- inbox/dashboard/builder/settings/other app-only code should not be pulled into the initial public-page bundle unless actually required
+
+Use route-based code splitting where appropriate.
+
+2. Lazy-load heavy non-critical features
+Identify heavy components/libraries that do not need to be in the first render path and lazy-load them safely.
+
+Likely candidates:
+- chatbot/flow builder
+- large settings modules
+- analytics/reporting views
+- AI/Copilot panels if not needed for first paint
+- below-the-fold sections
+- hidden tabs/modals/drawers
+
+Do NOT lazy-load anything critical to the first visible inbox/chat experience.
+Use the smallest safe wins only.
+
+3. Improve LCP on public pages
+Identify the actual LCP element on the homepage/landing page and optimize it.
+
+Typical fixes:
+- compress/resize oversized hero image assets
+- use modern image format if possible
+- preload only the true above-the-fold critical asset if needed
+- avoid loading hidden hero assets
+- make sure above-the-fold content is not blocked by non-critical JS
+- if fonts are delaying rendering, make font loading non-blocking where safe
+
+4. Defer non-critical work until after first render
+Audit anything running on initial load that can be deferred until after paint/idle.
+
+Examples:
+- non-critical analytics/init work
+- hidden widgets/panels
+- optional enhancements
+- logic for below-the-fold sections
+- anything attached to hidden tabs or drawers
+
+Keep the first screen as light as possible.
+
+5. Reduce unused JavaScript on initial load
+Trim obvious unused JS from the first mobile path.
+
+Do not do a broad rewrite.
+Do only high-impact safe changes:
+- replace eager imports with lazy imports where safe
+- avoid pulling app-only modules into public routes
+- avoid importing heavy modules into shared entry points unless necessary
+
+6. Preserve SSR / SEO / metadata
+Do not break:
+- SSR behavior for marketing/blog/home pages
+- meta tags
+- JSON-LD/schema
+- OG tags/canonical tags
+- crawlability/indexability
+
+Performance wins must not come at the expense of SEO.
+
+7. Preserve current app behavior
+Do not break:
+- inbox/chat functionality
+- mobile navigation fixes
+- contacts page routing
+- authenticated app routes
+- Shopify flows
+- GHL flows
+- billing/auth/webhooks
+- Unified Inbox / CRM migration behavior
+
+Acceptance criteria:
+
+A. Mobile-first performance
+- initial mobile load is lighter
+- obvious unused JS in first load path is reduced
+- mobile LCP path is improved
+- non-critical work is deferred
+
+B. Desktop safety
+- desktop performance is equal or better
+- no desktop UX regression introduced
+
+C. Public page bundle hygiene
+- public pages do not eagerly load dashboard/builder-heavy code
+- route-based splitting is in place where appropriate
+
+D. App bundle hygiene
+- heavy modules are lazy-loaded where safe
+- initial app/inbox render is not burdened by unrelated modules
+
+E. Stability
+- app runs cleanly
+- no new TypeScript errors from this work
+- no regressions to SEO/SSR/public metadata
+- no regressions to inbox/mobile fixes
+
+Deliverables:
+1. Exact files changed
+2. What was code-split or lazy-loaded
+3. What was done specifically to improve mobile performance
+4. What was done to keep desktop safe
+5. What was done for LCP improvement
+6. Any assets optimized/replaced
+7. Before/after Lighthouse results if possible, especially mobile
+8. Confirmation that SEO/SSR and recent mobile inbox fixes remain intact
+
+Important constraint:
+Choose the smallest high-impact changes only.
+Do not over-engineer.
+Do not start a broad refactor.

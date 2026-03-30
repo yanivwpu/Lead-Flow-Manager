@@ -3,11 +3,12 @@ import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { Welcome } from "@/pages/Welcome";
-import { AuthPage } from "@/pages/Auth";
 import { AuthProvider, useAuth } from "@/lib/auth-context";
 import { Loader2 } from "lucide-react";
 import { lazy, Suspense, useEffect } from "react";
 import { useTranslation } from "react-i18next";
+
+const AuthPage = lazy(() => import("@/pages/Auth").then(m => ({ default: m.AuthPage })));
 
 const AppLayout = lazy(() => import("@/pages/AppLayout").then(m => ({ default: m.AppLayout })));
 const ResetPassword = lazy(() => import("@/pages/ResetPassword").then(m => ({ default: m.ResetPassword })));

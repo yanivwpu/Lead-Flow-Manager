@@ -4,13 +4,14 @@ import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { Sidebar } from "@/components/Sidebar";
 import { MobileNav } from "@/components/MobileNav";
-import { FollowUps } from "./FollowUps";
 import { UsageWarningBanner } from "@/components/UsageWarningBanner";
 import { TrialBanner } from "@/components/TrialBanner";
-import { OnboardingTour } from "@/components/OnboardingTour";
 import { SubscriptionProvider, useSubscription } from "@/lib/subscription-context";
 import { Loader2 } from "lucide-react";
 import { supportedLanguages, type SupportedLanguage } from "@/lib/i18n";
+
+const FollowUps = lazy(() => import("./FollowUps").then(m => ({ default: m.FollowUps })));
+const OnboardingTour = lazy(() => import("@/components/OnboardingTour").then(m => ({ default: m.OnboardingTour })));
 
 const Search = lazy(() => import("./Search").then(m => ({ default: m.Search })));
 const Settings = lazy(() => import("./Settings").then(m => ({ default: m.Settings })));
