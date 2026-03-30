@@ -1704,9 +1704,15 @@ export async function registerRoutes(
       }
 
       // Auto-reply & Business Hours handling
+      // Skip auto-reply entirely if an active chatbot flow would respond
       try {
+        const { willChatbotTrigger } = await import("./chatbotEngine");
+        const chatbotWillFire = await willChatbotTrigger(userId, parsed.body, isNewChat);
+        if (chatbotWillFire) {
+          console.log(`[AutoReply] Suppressed — active chatbot flow will handle this message for userId: ${userId}`);
+        }
         const userSettings = await storage.getUser(userId);
-        if (userSettings) {
+        if (userSettings && !chatbotWillFire) {
           let shouldSendAutoReply = false;
           let autoReplyText = "";
 
@@ -2191,6 +2197,17 @@ export async function registerRoutes(
             }
 
             if (user.autoReplyEnabled && user.autoReplyMessage) {
+              // Suppress auto-reply if an active chatbot flow will respond
+              const { willChatbotTrigger: metaWillChatbot } = await import("./chatbotEngine");
+              const metaIsNewChat = messages.length === 1;
+              const metaChatbotWillFire = await metaWillChatbot(
+                user.id,
+                incomingMessage.text || "",
+                metaIsNewChat
+              );
+              if (metaChatbotWillFire) {
+                console.log(`[AutoReply] Suppressed (Meta) — active chatbot flow will handle this message for userId: ${user.id}`);
+              } else {
               const delay = user.autoReplyDelay || 0;
               setTimeout(async () => {
                 try {
@@ -2216,6 +2233,7 @@ export async function registerRoutes(
                   console.error("Failed to send auto-reply via Meta:", err);
                 }
               }, delay * 1000);
+              }
             }
 
             console.log("Meta message processed successfully");

@@ -28,7 +28,7 @@ interface ChatbotEdge {
   label?: string;
 }
 
-interface TriggerContext {
+export interface TriggerContext {
   userId: string;
   contactId: string;
   conversationId: string;
@@ -37,6 +37,37 @@ interface TriggerContext {
   isNewConversation: boolean;
 }
 
+// ─── Per-conversation cooldown ─────────────────────────────────────────────
+// Prevents the bot from firing more than once every COOLDOWN_MS per conversation.
+// Stored in-memory (resets on server restart) which is acceptable — a short
+// restart window won't cause user-visible harm.
+const COOLDOWN_MS = 30_000; // 30 seconds
+const lastFiredAt = new Map<string, number>(); // conversationId → timestamp
+
+function isCoolingDown(conversationId: string): boolean {
+  const last = lastFiredAt.get(conversationId);
+  if (!last) return false;
+  return Date.now() - last < COOLDOWN_MS;
+}
+
+function markFired(conversationId: string): void {
+  lastFiredAt.set(conversationId, Date.now());
+  // Periodically prune the map to prevent unbounded growth
+  if (lastFiredAt.size > 10_000) {
+    const cutoff = Date.now() - COOLDOWN_MS * 2;
+    for (const [k, v] of lastFiredAt) {
+      if (v < cutoff) lastFiredAt.delete(k);
+    }
+  }
+}
+
+// ─── Max delay cap (5 minutes) ─────────────────────────────────────────────
+// Longer delays are more reliably handled by a job queue. For now we cap them
+// so the server doesn't hold async chains open for hours.
+const MAX_DELAY_MS = 5 * 60 * 1000;
+
+// ─── Helpers ───────────────────────────────────────────────────────────────
+
 function normalizeText(text: string): string {
   return text.trim().toLowerCase();
 }
@@ -44,13 +75,39 @@ function normalizeText(text: string): string {
 function keywordMatches(message: string, keywords: string[]): boolean {
   if (!keywords || keywords.length === 0) return false;
   const msgNorm = normalizeText(message);
+  if (!msgNorm) return false; // empty / whitespace-only messages never match
   return keywords.some((kw) => {
     const kwNorm = normalizeText(kw);
-    if (!kwNorm) return false;
-    // Exact match first, then contains match for multi-word keywords
+    if (!kwNorm) return false; // skip blank keywords
+    // Exact word-boundary style: exact full match OR contains for multi-word
     return msgNorm === kwNorm || msgNorm.includes(kwNorm);
   });
 }
+
+/**
+ * Check whether any active chatbot flow would be triggered by this message,
+ * without executing it. Used by callers (e.g. auto-reply) to suppress
+ * duplicate responses.
+ */
+export async function willChatbotTrigger(
+  userId: string,
+  message: string,
+  isNewConversation: boolean
+): Promise<boolean> {
+  try {
+    const activeFlows = await storage.getActiveChatbotFlows(userId);
+    for (const flow of activeFlows) {
+      const keywords = (flow.triggerKeywords as string[]) || [];
+      if (keywords.length > 0 && keywordMatches(message, keywords)) return true;
+      if (flow.triggerOnNewChat && isNewConversation) return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+// ─── Reply sender ──────────────────────────────────────────────────────────
 
 async function sendChatbotReply(
   ctx: TriggerContext,
@@ -74,6 +131,8 @@ async function sendChatbotReply(
   }
 }
 
+// ─── Action node ───────────────────────────────────────────────────────────
+
 async function executeActionNode(
   ctx: TriggerContext,
   node: ChatbotNode
@@ -92,7 +151,9 @@ async function executeActionNode(
         break;
       case "set_status":
         if (value) {
-          await storage.updateConversation(ctx.conversationId, { status: value as any });
+          await storage.updateConversation(ctx.conversationId, {
+            status: value as any,
+          });
           console.log(
             `[Chatbot] Action — set_status: "${value}" on conversationId: ${ctx.conversationId}`
           );
@@ -115,12 +176,14 @@ async function executeActionNode(
         }
         break;
       default:
-        console.log(`[Chatbot] Unknown action type: ${type}`);
+        console.log(`[Chatbot] Unknown action type: "${type}" — skipping`);
     }
   } catch (err: any) {
     console.error(`[Chatbot] Action node error: ${err.message}`);
   }
 }
+
+// ─── Flow executor ─────────────────────────────────────────────────────────
 
 async function executeFlow(
   flow: ChatbotFlow,
@@ -138,10 +201,10 @@ async function executeFlow(
     `[Chatbot] Executing flow "${flow.name}" (id: ${flow.id}) — ${nodes.length} nodes, ${edges.length} edges`
   );
 
-  // Build adjacency map: nodeId → next nodeId via edges
+  // Build adjacency map: nodeId → next nodeId (first edge wins for linear flows)
   const nextNodeMap = new Map<string, string>();
   for (const edge of edges) {
-    if (edge.source && edge.target) {
+    if (edge.source && edge.target && !nextNodeMap.has(edge.source)) {
       nextNodeMap.set(edge.source, edge.target);
     }
   }
@@ -152,7 +215,7 @@ async function executeFlow(
     nodeMap.set(node.id, node);
   }
 
-  // Start execution from the first node (id 'start' takes priority, else first in array)
+  // Start from node with id 'start', else the first node in the array
   let currentNode: ChatbotNode | undefined =
     nodeMap.get("start") || nodes[0];
 
@@ -162,9 +225,10 @@ async function executeFlow(
   while (currentNode) {
     const nodeId = currentNode.id;
 
+    // Loop / cycle detection
     if (visited.has(nodeId)) {
       console.warn(
-        `[Chatbot] Cycle detected at node "${nodeId}" in flow "${flow.name}" — stopping`
+        `[Chatbot] ⚠ Cycle detected at node "${nodeId}" in flow "${flow.name}" — stopping to prevent loop`
       );
       break;
     }
@@ -179,9 +243,13 @@ async function executeFlow(
       case "question": {
         const content = currentNode.data.content?.trim();
         if (content) {
-          const delayToUse = cumulativeDelayMs;
-          cumulativeDelayMs = 0; // reset after consuming
+          // Consume accumulated delay before this send
+          const delayToUse = Math.min(cumulativeDelayMs, MAX_DELAY_MS);
+          cumulativeDelayMs = 0;
           if (delayToUse > 0) {
+            console.log(
+              `[Chatbot] Waiting ${delayToUse / 1000}s before sending node "${nodeId}"`
+            );
             await new Promise((resolve) => setTimeout(resolve, delayToUse));
           }
           await sendChatbotReply(ctx, content);
@@ -192,43 +260,62 @@ async function executeFlow(
         }
         break;
       }
+
       case "delay": {
         const minutes = currentNode.data.delayMinutes || 0;
-        const delayMs = minutes * 60 * 1000;
-        if (delayMs > 0) {
-          console.log(
-            `[Chatbot] Delay node — waiting ${minutes} minute(s) before next step`
+        const rawMs = minutes * 60 * 1000;
+        const cappedMs = Math.min(rawMs, MAX_DELAY_MS);
+        if (rawMs > MAX_DELAY_MS) {
+          console.warn(
+            `[Chatbot] Delay node "${nodeId}" requests ${minutes}m but is capped at ${MAX_DELAY_MS / 60_000}m for stability`
           );
-          cumulativeDelayMs += delayMs;
+        }
+        if (cappedMs > 0) {
+          console.log(
+            `[Chatbot] Delay node — accumulating ${cappedMs / 1000}s before next message`
+          );
+          cumulativeDelayMs += cappedMs;
         }
         break;
       }
+
       case "action": {
         await executeActionNode(ctx, currentNode);
         break;
       }
+
       default:
         console.log(
           `[Chatbot] Unknown node type "${currentNode.type}" — skipping`
         );
     }
 
-    // Follow the edge to the next node
+    // Advance to next node
     const nextNodeId = nextNodeMap.get(nodeId);
     currentNode = nextNodeId ? nodeMap.get(nextNodeId) : undefined;
   }
 
-  console.log(`[Chatbot] Flow "${flow.name}" execution complete`);
+  console.log(`[Chatbot] ✅ Flow "${flow.name}" execution complete`);
 
-  // Increment execution count asynchronously (non-blocking)
+  // Increment execution count (non-blocking)
   storage.incrementChatbotFlowExecution(flow.id).catch(() => {});
 }
+
+// ─── Public entry point ────────────────────────────────────────────────────
 
 export async function triggerChatbotFlows(ctx: TriggerContext): Promise<void> {
   try {
     console.log(
       `[Chatbot] Evaluating flows — userId: ${ctx.userId}, channel: ${ctx.channel}, isNewConversation: ${ctx.isNewConversation}, message: "${ctx.message.substring(0, 80)}"`
     );
+
+    // Per-conversation cooldown: prevent spam replies for rapid messages
+    if (isCoolingDown(ctx.conversationId)) {
+      console.log(
+        `[Chatbot] ⏳ Cooldown active for conversationId: ${ctx.conversationId} — skipping`
+      );
+      return;
+    }
 
     const activeFlows = await storage.getActiveChatbotFlows(ctx.userId);
 
@@ -252,12 +339,12 @@ export async function triggerChatbotFlows(ctx: TriggerContext): Promise<void> {
       let shouldTrigger = false;
       let triggerReason = "";
 
-      // Keyword trigger — normalize and match
+      // 1. Keyword trigger — normalize + match
       if (keywords.length > 0) {
         const matched = keywordMatches(ctx.message, keywords);
         if (matched) {
           shouldTrigger = true;
-          triggerReason = `keyword match (keywords: [${keywords.join(", ")}])`;
+          triggerReason = `keyword match — message: "${normalizeText(ctx.message)}", matched against: [${keywords.map(normalizeText).join(", ")}]`;
         } else {
           console.log(
             `[Chatbot] Flow "${flow.name}" — keyword NOT matched. Message: "${normalizeText(ctx.message)}", keywords: [${keywords.map(normalizeText).join(", ")}]`
@@ -265,7 +352,7 @@ export async function triggerChatbotFlows(ctx: TriggerContext): Promise<void> {
         }
       }
 
-      // New chat trigger
+      // 2. New conversation trigger
       if (!shouldTrigger && triggerOnNewChat && ctx.isNewConversation) {
         shouldTrigger = true;
         triggerReason = "new conversation trigger";
@@ -279,18 +366,22 @@ export async function triggerChatbotFlows(ctx: TriggerContext): Promise<void> {
       }
 
       console.log(
-        `[Chatbot] ✅ Flow "${flow.name}" (id: ${flow.id}) TRIGGERED — reason: ${triggerReason}`
+        `[Chatbot] ✅ Flow "${flow.name}" (id: ${flow.id}) TRIGGERED — ${triggerReason}`
       );
+
+      // Mark cooldown BEFORE executing so concurrent rapid messages don't sneak through
+      markFired(ctx.conversationId);
       flowTriggered = true;
 
-      // Execute asynchronously so webhook can return 200 quickly
+      // Execute asynchronously — webhook returns 200 immediately
       executeFlow(flow, ctx).catch((err) =>
         console.error(
-          `[Chatbot] Flow execution error for flow "${flow.name}": ${err.message}`
+          `[Chatbot] Flow execution error for flow "${flow.name}": ${err.message}`,
+          err.stack
         )
       );
 
-      // Only trigger the first matching flow to avoid spam
+      // Only trigger the first matching flow per message
       break;
     }
 

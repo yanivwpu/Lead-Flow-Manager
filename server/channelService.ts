@@ -270,8 +270,8 @@ class ChannelService {
       contact = await storage.createContact({
         userId,
         name: contactName || channelContactId,
-        [channelIdField]: channelContactId,
         phone: channel === 'whatsapp' || channel === 'sms' ? channelContactId : undefined,
+        [channelIdField]: channelContactId,
         primaryChannel: channel,
         lastIncomingChannel: channel,
         lastIncomingAt: new Date(),
