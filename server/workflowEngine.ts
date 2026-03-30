@@ -185,6 +185,8 @@ export async function executeWorkflowActions(
     await storage.logWorkflowExecution({
       workflowId: workflow.id,
       chatId: chat.id,
+      // Phase E Step 3: also log conversationId (unified inbox reference)
+      conversationId: conversationId ?? null,
       triggerData,
       actionsExecuted: executedActions,
       status: "success",
@@ -196,6 +198,7 @@ export async function executeWorkflowActions(
     await storage.logWorkflowExecution({
       workflowId: workflow.id,
       chatId: chat.id,
+      conversationId: conversationId ?? null,
       triggerData,
       actionsExecuted: executedActions,
       status: "failed",

@@ -1,5 +1,5 @@
 import { db } from '../drizzle/db';
-import { users, chats, templateEntitlements } from '@shared/schema';
+import { users, chats, contacts, templateEntitlements } from '@shared/schema';
 import { eq, and, lte, gte, isNotNull, or, desc, ne } from 'drizzle-orm';
 import { sendTrialCheckinEmail, sendDailyHotListEmail, type HotLeadEntry } from './email';
 
@@ -121,27 +121,46 @@ export async function runDailyHotListEmails(): Promise<{ sent: number; errors: n
         });
         if (!user) continue;
 
-        const hotChats = await db
-          .select()
-          .from(chats)
-          .where(
+        // Phase E Step 1: query contacts (authoritative CRM source) instead of chats.
+        // LEFT JOIN to chats on whatsappPhone = whatsappId to fetch lastMessage and
+        // chatId for the email link without a separate N+1 lookup.
+        const hotLeads = await db
+          .select({
+            contactId: contacts.id,
+            name: contacts.name,
+            pipelineStage: contacts.pipelineStage,
+            phone: contacts.phone,
+            whatsappId: contacts.whatsappId,
+            chatId: chats.id,
+            lastMessage: chats.lastMessage,
+          })
+          .from(contacts)
+          .leftJoin(
+            chats,
             and(
-              eq(chats.userId, ent.userId),
-              eq(chats.tag, 'Hot'),
-              ne(chats.pipelineStage, 'Closed'),
-              ne(chats.pipelineStage, 'Unqualified')
+              eq(chats.userId, contacts.userId),
+              eq(chats.whatsappPhone, contacts.whatsappId)
             )
           )
-          .orderBy(desc(chats.updatedAt))
+          .where(
+            and(
+              eq(contacts.userId, ent.userId),
+              eq(contacts.tag, 'Hot'),
+              ne(contacts.pipelineStage, 'Closed'),
+              ne(contacts.pipelineStage, 'Unqualified')
+            )
+          )
+          .orderBy(desc(contacts.updatedAt))
           .limit(5);
 
-        const leads: HotLeadEntry[] = hotChats.map(chat => ({
-          name: chat.name,
+        const leads: HotLeadEntry[] = hotLeads.map(row => ({
+          name: row.name,
           score: 80,
-          lastMessage: chat.lastMessage || '',
-          pipelineStage: chat.pipelineStage,
-          phone: chat.whatsappPhone || '',
-          chatId: chat.id,
+          lastMessage: row.lastMessage || '',
+          pipelineStage: row.pipelineStage,
+          phone: row.phone || row.whatsappId || '',
+          // Fall back to contactId if no matching chat exists yet
+          chatId: row.chatId || row.contactId,
         }));
 
         const success = await sendDailyHotListEmail(user.email, user.name, leads);

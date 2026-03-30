@@ -262,6 +262,8 @@ export const workflowExecutions = pgTable("workflow_executions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   workflowId: varchar("workflow_id").notNull().references(() => workflows.id, { onDelete: "cascade" }),
   chatId: varchar("chat_id").references(() => chats.id, { onDelete: "set null" }),
+  // Phase E Step 3: unified inbox reference — no FK (conversations defined after this table)
+  conversationId: varchar("conversation_id"),
   triggerData: jsonb("trigger_data"), // Data that triggered the workflow
   actionsExecuted: jsonb("actions_executed"), // What actions were performed
   status: text("status").notNull().default("success"), // success, failed, partial

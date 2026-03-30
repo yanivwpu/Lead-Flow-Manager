@@ -52,7 +52,7 @@ import fs from "fs";
 import { subscriptionService } from "./subscriptionService";
 import { sendWelcomeEmail, sendContactFormEmail, sendDemoBookingNotification, sendDemoConfirmationEmail, sendSalespersonWelcomeEmail } from "./email";
 import bcrypt from "bcryptjs";
-import { triggerNewChatWorkflows, triggerKeywordWorkflows, runW2QualificationEngine, runServiceRoutingEngine } from "./workflowEngine";
+import { triggerNewChatWorkflows, triggerKeywordWorkflows, triggerTagChangeWorkflows, runW2QualificationEngine, runServiceRoutingEngine } from "./workflowEngine";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import shopifyRoutes from "./shopifyRoutes";
 import ghlRoutes from "./ghlRoutes";
@@ -206,19 +206,29 @@ export async function registerRoutes(
         return res.status(401).json({ error: "Unauthorized" });
       }
       const chats = await storage.getChats(req.user.id);
-      
+      // Phase E Step 2: overlay CRM fields from contacts (authoritative source)
+      const contactsForExport = await storage.getContacts(req.user.id);
+      const contactCrmByPhone = new Map(
+        contactsForExport
+          .filter(c => c.whatsappId || c.phone)
+          .map(c => [(c.whatsappId || c.phone || '').replace(/\D/g, ''), c])
+      );
       const headers = ['Name', 'Phone', 'Tag', 'Pipeline Stage', 'Status', 'Notes', 'Follow-up', 'Last Message', 'Created'];
-      const rows = chats.map((chat: any) => [
-        chat.name || '',
-        chat.whatsappPhone || '',
-        chat.tag || '',
-        chat.pipelineStage || '',
-        chat.status || '',
-        (chat.notes || '').replace(/"/g, '""'),
-        chat.followUp || '',
-        (chat.lastMessage || '').replace(/"/g, '""'),
-        chat.createdAt ? new Date(chat.createdAt).toISOString().split('T')[0] : ''
-      ]);
+      const rows = chats.map((chat: any) => {
+        const norm = (chat.whatsappPhone || '').replace(/\D/g, '');
+        const ct = norm ? contactCrmByPhone.get(norm) : undefined;
+        return [
+          chat.name || '',
+          chat.whatsappPhone || '',
+          (ct?.tag ?? chat.tag) || '',
+          (ct?.pipelineStage ?? chat.pipelineStage) || '',
+          chat.status || '',
+          ((ct?.notes ?? chat.notes) || '').replace(/"/g, '""'),
+          (ct?.followUp ?? chat.followUp) || '',
+          (chat.lastMessage || '').replace(/"/g, '""'),
+          chat.createdAt ? new Date(chat.createdAt).toISOString().split('T')[0] : ''
+        ];
+      });
       
       const csv = [
         headers.join(','),
@@ -1711,14 +1721,20 @@ export async function registerRoutes(
                   }, delay);
                 }
                 // Phase D: apply service-routing tags via dual-write (contact-first)
+                // Phase E Step 4: fire tag-change workflows after the write
                 if (routing.tagsToApply.length > 0) {
                   const newTag = routing.tagsToApply[0];
+                  const oldTag = inboxContact?.tag ?? updatedChat.tag ?? 'New';
                   try {
                     if (inboxContact) {
                       await storage.updateContact(inboxContact.id, { tag: newTag }).catch(() => {});
                     }
                     await storage.updateChat(updatedChat.id, { tag: newTag }).catch(() => {});
                     console.log(`[Routing] Tag applied (Twilio): "${newTag}" for chat ${updatedChat.id}`);
+                    if (oldTag !== newTag) {
+                      triggerTagChangeWorkflows(userId, updatedChat, oldTag, newTag, inboxContact, inboxConversation.id)
+                        .catch(e => console.error('[TagChange] Twilio routing:', e));
+                    }
                   } catch (err) { console.error("[Routing] Failed to apply tag:", err); }
                 }
                 if (routing.taskNote) {
@@ -2233,14 +2249,20 @@ export async function registerRoutes(
                         }, delay);
                       }
                       // Phase D: apply service-routing tags via dual-write (contact-first)
+                      // Phase E Step 4: fire tag-change workflows after the write
                       if (routing.tagsToApply.length > 0) {
                         const newTag = routing.tagsToApply[0];
+                        const oldTag = metaInboxContact?.tag ?? freshChat.tag ?? 'New';
                         try {
                           if (metaInboxContact) {
                             await storage.updateContact(metaInboxContact.id, { tag: newTag }).catch(() => {});
                           }
                           await storage.updateChat(freshChat.id, { tag: newTag }).catch(() => {});
                           console.log(`[Routing] Tag applied (Meta): "${newTag}" for chat ${freshChat.id}`);
+                          if (oldTag !== newTag) {
+                            triggerTagChangeWorkflows(user.id, freshChat, oldTag, newTag, metaInboxContact ?? undefined, metaInboxConversationId ?? undefined)
+                              .catch(e => console.error('[TagChange] Meta routing:', e));
+                          }
                         } catch (err) { console.error("[Routing] Failed to apply tag (Meta):", err); }
                       }
                       if (routing.taskNote) {
@@ -2927,9 +2949,18 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Search query must be at least 2 characters" });
       }
       const chats = await storage.searchMessages(req.user.id, query);
+      // Phase E Step 2: overlay CRM fields from contacts (authoritative source)
+      const contactsForSearch = await storage.getContacts(req.user.id);
+      const contactCrmSearch = new Map(
+        contactsForSearch
+          .filter(c => c.whatsappId || c.phone)
+          .map(c => [(c.whatsappId || c.phone || '').replace(/\D/g, ''), c])
+      );
       
       // Transform to search results format with matched text excerpts
       const results = chats.flatMap(chat => {
+        const norm = ((chat as any).whatsappPhone || '').replace(/\D/g, '');
+        const ct = norm ? contactCrmSearch.get(norm) : undefined;
         const matches: any[] = [];
         const queryLower = query.toLowerCase();
         
@@ -2945,22 +2976,23 @@ export async function registerRoutes(
                 ? msg.text.substring(0, 150) + '...' 
                 : msg.text,
               timestamp: msg.time || chat.time,
-              pipelineStage: chat.pipelineStage,
-              tag: chat.tag,
+              pipelineStage: ct?.pipelineStage ?? chat.pipelineStage,
+              tag: ct?.tag ?? chat.tag,
             });
           }
         }
         
         // Check notes for matches
-        if (chat.notes && chat.notes.toLowerCase().includes(queryLower)) {
+        const notes = ct?.notes ?? chat.notes;
+        if (notes && notes.toLowerCase().includes(queryLower)) {
           matches.push({
             chatId: chat.id,
             chatName: chat.name,
             avatar: chat.avatar,
-            matchedText: `Note: ${chat.notes.length > 150 ? chat.notes.substring(0, 150) + '...' : chat.notes}`,
+            matchedText: `Note: ${notes.length > 150 ? notes.substring(0, 150) + '...' : notes}`,
             timestamp: chat.time || 'Recently',
-            pipelineStage: chat.pipelineStage,
-            tag: chat.tag,
+            pipelineStage: ct?.pipelineStage ?? chat.pipelineStage,
+            tag: ct?.tag ?? chat.tag,
           });
         }
         
@@ -2972,8 +3004,8 @@ export async function registerRoutes(
             avatar: chat.avatar,
             matchedText: chat.lastMessage || 'No recent messages',
             timestamp: chat.time || 'Recently',
-            pipelineStage: chat.pipelineStage,
-            tag: chat.tag,
+            pipelineStage: ct?.pipelineStage ?? chat.pipelineStage,
+            tag: ct?.tag ?? chat.tag,
           });
         }
         
@@ -3298,18 +3330,28 @@ export async function registerRoutes(
       
       if (integration.type === 'google_sheets' && syncOptions.includes('export_leads')) {
         const chats = await storage.getChats(req.user.id);
-        
-        const rows = chats.map(chat => ({
-          name: chat.name,
-          phone: chat.whatsappPhone || '',
-          tag: chat.tag,
-          pipelineStage: chat.pipelineStage,
-          status: chat.status,
-          notes: chat.notes || '',
-          lastMessage: chat.lastMessage,
-          createdAt: chat.createdAt?.toISOString() || '',
-          updatedAt: chat.updatedAt?.toISOString() || '',
-        }));
+        // Phase E Step 2: overlay CRM fields from contacts (authoritative source)
+        const contactsForSync = await storage.getContacts(req.user.id);
+        const contactCrmSync = new Map(
+          contactsForSync
+            .filter(c => c.whatsappId || c.phone)
+            .map(c => [(c.whatsappId || c.phone || '').replace(/\D/g, ''), c])
+        );
+        const rows = chats.map(chat => {
+          const norm = (chat.whatsappPhone || '').replace(/\D/g, '');
+          const ct = norm ? contactCrmSync.get(norm) : undefined;
+          return {
+            name: chat.name,
+            phone: chat.whatsappPhone || '',
+            tag: ct?.tag ?? chat.tag,
+            pipelineStage: ct?.pipelineStage ?? chat.pipelineStage,
+            status: chat.status,
+            notes: ct?.notes ?? chat.notes ?? '',
+            lastMessage: chat.lastMessage,
+            createdAt: chat.createdAt?.toISOString() || '',
+            updatedAt: chat.updatedAt?.toISOString() || '',
+          };
+        });
         
         syncResult.details = `Prepared ${rows.length} leads for export. Configure Google Sheets API to enable automatic sync.`;
         console.log(`Google Sheets sync: ${rows.length} leads ready for user ${req.user.id}`);
@@ -3818,7 +3860,7 @@ export async function registerRoutes(
 
       const report: any[] = [];
 
-      for (const [key, group] of groups.entries()) {
+      for (const [key, group] of Array.from(groups.entries())) {
         if (group.length < 2) continue;
 
         // Get message counts per contact
