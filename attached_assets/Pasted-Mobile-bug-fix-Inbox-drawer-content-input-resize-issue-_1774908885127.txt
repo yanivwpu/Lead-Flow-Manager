@@ -1,0 +1,120 @@
+Mobile bug fix — Inbox drawer content + input resize issue
+
+Goal:
+Fix two critical mobile bugs in the Inbox chat view:
+1. Right-side drawer opens but shows empty/gray content
+2. Message input expands/jumps incorrectly when keyboard opens
+
+Do NOT touch backend, CRM logic, workflows, Shopify, GHL, or routing.
+This is UI/UX fix only.
+
+---
+
+Part 1 — Fix Inbox right-side drawer content
+
+Problem:
+On mobile, opening the CRM/details drawer shows a blank/gray panel instead of actual content.
+
+Required fix:
+- Ensure the same component used for the desktop right sidebar is rendered inside the mobile drawer
+- Verify selected conversation/contact data is correctly passed into that component
+- Fix any issues with:
+  - component not mounting
+  - conditional rendering failing (e.g. null contact)
+  - wrong props being passed
+  - CSS hiding content (overflow, height:0, opacity, z-index)
+  - container missing height or padding
+- Ensure drawer content container:
+  - has visible padding
+  - is scrollable (overflow-y auto)
+  - fills available height
+
+Expected result:
+- Drawer shows:
+  - tags
+  - pipeline stage
+  - notes
+  - follow-up
+  - Copilot / suggestions
+  - contact details
+- Not blank
+- Scroll works
+
+---
+
+Part 2 — Fix mobile input resizing / keyboard behavior
+
+Problem:
+When focusing the message input:
+- input box grows too large
+- layout shifts up incorrectly
+- UI becomes unstable
+
+Root causes likely:
+- textarea auto-resize uncontrolled
+- missing max-height
+- container not respecting viewport height
+- iOS keyboard viewport issues
+
+Required fix:
+
+1. Constrain textarea:
+- Add max-height (e.g. 120px–160px)
+- Enable internal scroll when content exceeds max height
+- Prevent uncontrolled vertical growth
+
+2. Fix container layout:
+- Ensure chat layout uses flex column:
+  - messages area = flex-1 (scrollable)
+  - input area = fixed at bottom
+- Input container should not push layout upward excessively
+
+3. Handle mobile viewport correctly:
+- Avoid using 100vh directly (causes issues on iOS)
+- Use safer approach (like dynamic viewport height or container-based layout)
+- Ensure keyboard opening does NOT break layout
+
+4. Prevent jump:
+- Input focus should not resize entire chat container
+- Only textarea should expand within limits
+
+Expected result:
+- When user taps input:
+  - keyboard opens
+  - input stays stable at bottom
+  - input grows slightly but stays within max-height
+  - chat messages area adjusts correctly
+  - no jumpy layout
+
+---
+
+Acceptance criteria:
+
+A. Drawer
+- Open conversation
+- Tap CRM/details
+- Drawer shows real content (not blank)
+- Scroll works
+- Close works
+
+B. Input behavior
+- Tap input → keyboard opens smoothly
+- Input does NOT jump or grow excessively
+- Input stays within max height
+- Messages area remains usable
+
+C. Desktop safety
+- Desktop chat UI unchanged
+
+D. Stability
+- No new TypeScript errors
+- App runs cleanly
+
+---
+
+Deliverables:
+1. Files changed
+2. Root cause of blank drawer
+3. Root cause of input resizing issue
+4. How each was fixed
+5. Screenshots of fixed mobile chat + drawer

@@ -107,13 +107,16 @@ export function AIComposer({
   const lastAutoReplyKeyRef = useRef<string>("");
   const autoReplyInFlightRef = useRef(false);
 
-  // Auto-resize textarea
+  // Auto-resize textarea — avoid height-auto jump on mobile by reading scrollHeight before reset
   useEffect(() => {
     const el = textareaRef.current;
     if (!el) return;
+    // Briefly set overflow-y hidden to avoid scrollbar flash during resize
+    el.style.overflowY = "hidden";
     el.style.height = "auto";
     const next = Math.min(Math.max(el.scrollHeight, MIN_TEXTAREA_HEIGHT), MAX_TEXTAREA_HEIGHT);
     el.style.height = `${next}px`;
+    el.style.overflowY = next >= MAX_TEXTAREA_HEIGHT ? "auto" : "hidden";
   }, [value]);
 
   // Reset when conversation changes
@@ -449,12 +452,12 @@ export function AIComposer({
                 : "Type a message… (Enter to send, Shift+Enter for new line)"
             }
             className={cn(
-              "w-full border rounded-xl px-3.5 py-2.5 text-[13px] leading-relaxed focus:outline-none transition-colors resize-none overflow-y-auto",
+              "w-full border rounded-xl px-3.5 py-2.5 text-base md:text-[13px] leading-relaxed focus:outline-none transition-colors resize-none",
               isSuggestMode && (isDrafting || aiDraft)
                 ? "bg-violet-50/30 border-purple-200/70 focus:border-purple-300 text-gray-800"
                 : "bg-white border-gray-200 focus:border-brand-green text-gray-800"
             )}
-            style={{ minHeight: MIN_TEXTAREA_HEIGHT, maxHeight: MAX_TEXTAREA_HEIGHT }}
+            style={{ minHeight: MIN_TEXTAREA_HEIGHT, maxHeight: MAX_TEXTAREA_HEIGHT, touchAction: "manipulation" }}
             value={value}
             onChange={handleTextareaChange}
             onKeyDown={handleKeyDown}

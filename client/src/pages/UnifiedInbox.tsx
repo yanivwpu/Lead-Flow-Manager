@@ -1197,6 +1197,7 @@ export function UnifiedInbox() {
                   messages={messages.map(m => ({ direction: m.direction, content: m.content || '' }))}
                   capabilities={capabilities}
                   currentUserId={user?.id}
+                  panelClassName="flex flex-col w-full bg-white"
                   onInsertMessage={text => { setMessageInput(text); setShowDetailsSheet(false); }}
                   onUpdateContact={updateContact}
                   onUpdateConversationStatus={status => {

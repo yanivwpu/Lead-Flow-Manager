@@ -160,6 +160,8 @@ interface InboxLeadDetailsPanelProps {
   onDeleteContact: () => void;
   /** Called when a qualifying question is clicked — inserts it into the composer */
   onInsertMessage?: (text: string) => void;
+  /** Override the root container class — use when embedding in a mobile sheet */
+  panelClassName?: string;
 }
 
 function formatRelativeTime(date: Date | string | null | undefined): string {
@@ -384,6 +386,7 @@ export function InboxLeadDetailsPanel({
   onEditContact,
   onDeleteContact,
   onInsertMessage,
+  panelClassName,
 }: InboxLeadDetailsPanelProps) {
   const { toast } = useToast();
   // Default to full access if no capabilities provided (backward compat)
@@ -605,7 +608,7 @@ export function InboxLeadDetailsPanel({
   const activeSuggestionCount = (hasAnyChips ? 1 : 0) + (qualifyAction ? 1 : 0);
 
   return (
-    <div className="hidden lg:flex w-[260px] xl:w-[272px] flex-col border-l border-gray-100 bg-white overflow-y-auto flex-shrink-0">
+    <div className={panelClassName ?? "hidden lg:flex w-[260px] xl:w-[272px] flex-col border-l border-gray-100 bg-white overflow-y-auto flex-shrink-0"}>
 
       {/* ══ COPILOT STICKY HEADER ════════════════════════════════════════ */}
       <div className={cn(
