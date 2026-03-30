@@ -1710,6 +1710,17 @@ export async function registerRoutes(
                     } catch (err) { console.error("[Routing] Failed to send routing message:", err); }
                   }, delay);
                 }
+                // Phase D: apply service-routing tags via dual-write (contact-first)
+                if (routing.tagsToApply.length > 0) {
+                  const newTag = routing.tagsToApply[0];
+                  try {
+                    if (inboxContact) {
+                      await storage.updateContact(inboxContact.id, { tag: newTag }).catch(() => {});
+                    }
+                    await storage.updateChat(updatedChat.id, { tag: newTag }).catch(() => {});
+                    console.log(`[Routing] Tag applied (Twilio): "${newTag}" for chat ${updatedChat.id}`);
+                  } catch (err) { console.error("[Routing] Failed to apply tag:", err); }
+                }
                 if (routing.taskNote) {
                   console.log(`[Routing] Internal task created for chat ${updatedChat.id}: ${routing.taskNote}`);
                 }
@@ -2220,6 +2231,17 @@ export async function registerRoutes(
                             console.log(`[Routing] ${routing.offerMessage ? "Offer" : "Routing"} message sent (Meta, ${routing.serviceType}) to ${incomingMessage.from}`);
                           } catch (err) { console.error("[Routing] Failed to send routing message (Meta):", err); }
                         }, delay);
+                      }
+                      // Phase D: apply service-routing tags via dual-write (contact-first)
+                      if (routing.tagsToApply.length > 0) {
+                        const newTag = routing.tagsToApply[0];
+                        try {
+                          if (metaInboxContact) {
+                            await storage.updateContact(metaInboxContact.id, { tag: newTag }).catch(() => {});
+                          }
+                          await storage.updateChat(freshChat.id, { tag: newTag }).catch(() => {});
+                          console.log(`[Routing] Tag applied (Meta): "${newTag}" for chat ${freshChat.id}`);
+                        } catch (err) { console.error("[Routing] Failed to apply tag (Meta):", err); }
                       }
                       if (routing.taskNote) {
                         console.log(`[Routing] Internal task created for chat ${freshChat.id}: ${routing.taskNote}`);
