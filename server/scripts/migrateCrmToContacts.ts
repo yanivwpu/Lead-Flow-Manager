@@ -9,7 +9,6 @@
  *   npx tsx server/scripts/migrateCrmToContacts.ts --execute ← apply writes
  */
 
-import "dotenv/config";
 import { db } from "../../drizzle/db";
 import { chats, contacts, type Chat, type Contact } from "@shared/schema";
 import { eq } from "drizzle-orm";
