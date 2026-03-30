@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { Inbox, ListTodo, Settings, Menu } from "lucide-react";
+import { Inbox, ListTodo, Users, Menu } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
 import {
@@ -23,7 +23,7 @@ export function MobileNav() {
   const mainNavItems = [
     { icon: Inbox, label: t('nav.inbox', 'Inbox'), href: "/app/inbox", testId: "mobile-nav-inbox" },
     { icon: ListTodo, label: t('nav.followUps', 'Follow-ups'), href: "/app/followups", testId: "mobile-nav-followups" },
-    { icon: Settings, label: t('nav.settings', 'Settings'), href: "/app/settings", testId: "mobile-nav-settings" },
+    { icon: Users, label: t('nav.contacts', 'Contacts'), href: "/app/contacts", testId: "mobile-nav-contacts" },
   ];
 
   const moreNavItems = [

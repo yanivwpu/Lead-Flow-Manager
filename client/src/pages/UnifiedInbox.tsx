@@ -27,6 +27,7 @@ import {
   Edit,
   X,
   Zap,
+  PanelRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -52,6 +53,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { ChatAvatar } from "@/components/ChatAvatar";
@@ -304,9 +307,11 @@ export function UnifiedInbox() {
   const [selectedChannels, setSelectedChannels] = useState<Set<Channel>>(new Set(allChannels));
   const [demoChannelOverrides, setDemoChannelOverrides] = useState<Record<string, Channel>>({});
   const [messageInput, setMessageInput] = useState("");
+  const isMobile = useIsMobile();
   const [showEditContact, setShowEditContact] = useState(false);
   const [showTimeline, setShowTimeline] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showDetailsSheet, setShowDetailsSheet] = useState(false);
   const [editContactForm, setEditContactForm] = useState({ name: "", phone: "", email: "" });
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -964,6 +969,18 @@ export function UnifiedInbox() {
                 </div>
               </div>
               <div className="flex items-center gap-1 flex-shrink-0">
+                {/* Mobile: open CRM details sheet */}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="md:hidden h-7 w-7 p-0"
+                  onClick={() => setShowDetailsSheet(true)}
+                  data-testid="button-mobile-crm-details"
+                  title="CRM Details"
+                >
+                  <PanelRight className="w-4 h-4" />
+                </Button>
+
                 {/* Channel switcher */}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -1141,8 +1158,8 @@ export function UnifiedInbox() {
         )}
       </div>
 
-      {/* ── RIGHT COLUMN: CRM Panel ── */}
-      {selectedContactId && contact && (
+      {/* ── RIGHT COLUMN: CRM Panel (desktop) ── */}
+      {!isMobile && selectedContactId && contact && (
         <InboxLeadDetailsPanel
           contact={contact}
           primaryConversation={primaryConversation}
@@ -1160,6 +1177,36 @@ export function UnifiedInbox() {
           onEditContact={handleEditContact}
           onDeleteContact={() => setShowDeleteConfirm(true)}
         />
+      )}
+
+      {/* ── MOBILE CRM Sheet ── */}
+      {isMobile && selectedContactId && contact && (
+        <Sheet open={showDetailsSheet} onOpenChange={setShowDetailsSheet}>
+          <SheetContent side="right" className="w-full sm:w-96 p-0 overflow-y-auto" data-testid="mobile-crm-sheet">
+            <SheetHeader className="px-4 pt-4 pb-2 border-b">
+              <SheetTitle className="text-sm font-semibold">{contact.name} — Details</SheetTitle>
+            </SheetHeader>
+            <div className="overflow-y-auto h-full pb-20">
+              <InboxLeadDetailsPanel
+                contact={contact}
+                primaryConversation={primaryConversation}
+                teamMembers={teamMembers}
+                messages={messages.map(m => ({ direction: m.direction, content: m.content || '' }))}
+                capabilities={capabilities}
+                currentUserId={user?.id}
+                onInsertMessage={text => { setMessageInput(text); setShowDetailsSheet(false); }}
+                onUpdateContact={updateContact}
+                onUpdateConversationStatus={status => {
+                  if (primaryConversation) {
+                    updateConversationMutation.mutate({ conversationId: primaryConversation.id, status });
+                  }
+                }}
+                onEditContact={() => { setShowDetailsSheet(false); handleEditContact(); }}
+                onDeleteContact={() => { setShowDetailsSheet(false); setShowDeleteConfirm(true); }}
+              />
+            </div>
+          </SheetContent>
+        </Sheet>
       )}
 
       {/* ── DIALOGS ── */}

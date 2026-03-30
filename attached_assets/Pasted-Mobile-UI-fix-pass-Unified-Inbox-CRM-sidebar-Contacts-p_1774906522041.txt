@@ -1,0 +1,128 @@
+Mobile UI fix pass — Unified Inbox / CRM sidebar / Contacts page
+
+Goal:
+Fix the mobile app experience so the new Unified Inbox features are fully usable on small screens without breaking desktop behavior or the recent contacts-first architecture work.
+
+Context:
+Since the migration toward Unified Inbox + CRM overlay, the desktop experience is mostly fine, but on mobile the right-side CRM/Copilot area is not accessible/visible, and the new Contacts page was added to the app but not wired into the mobile navigation.
+
+This task is ONLY about mobile UX/navigation/layout. Do not refactor architecture and do not touch Shopify, GHL, auth, billing, or unrelated backend logic.
+
+What must be fixed:
+
+1. Mobile access to the right-side panel features
+The following features currently live in the right-side area and must be accessible on mobile:
+- CRM details
+- tags
+- pipeline stage
+- notes
+- follow-up
+- Copilot / AI suggestions
+- any contact detail/actions currently shown in the desktop right sidebar
+
+Required behavior on mobile:
+- When a conversation is open on mobile, provide a clear way to open these details
+- Use a mobile pattern like:
+  - top-right “Details” / “CRM” button, or
+  - bottom action bar button, or
+  - slide-over drawer / sheet
+- The panel should open as a full-height mobile drawer/sheet/modal from right or bottom
+- It must be scrollable independently
+- It must not overflow off-screen
+- It must not hide behind the chat area
+- User must be able to close it easily and return to the conversation
+
+Important:
+Do NOT remove desktop right-sidebar behavior.
+Desktop keeps current layout.
+This is mobile-only adaptation.
+
+2. Mobile layout for inbox conversation screen
+Review the mobile conversation layout and make sure:
+- chat thread takes the main screen
+- top bar remains usable
+- opening CRM/details does not break message input
+- keyboard open state does not overlap important actions
+- notes/Copilot/actions are reachable on small screens
+- no horizontal overflow
+- no hidden controls off the right edge
+
+3. Add Contacts page to mobile navigation
+The Contacts page was added to the app but is missing from mobile navigation.
+
+Required:
+- Add Contacts to the mobile nav/menu using the same routing and permissions already used on desktop
+- Keep naming and icon style consistent with the rest of the app
+- Ensure mobile users can actually navigate to Contacts and back
+- Do not create a duplicate route; just expose the existing page properly in mobile nav
+
+4. Mobile UX consistency for new CRM/contact features
+Make sure the following can be used on mobile if they already exist on desktop:
+- edit/view tag
+- edit/view pipeline stage
+- view/add notes
+- follow-up UI
+- Copilot / suggestions area
+- contact info section
+
+If some features are too wide for mobile, stack them vertically inside the mobile drawer/sheet instead of shrinking them until unusable.
+
+5. Preserve current architecture
+Do not change:
+- contacts-first CRM logic
+- conversationId wiring
+- triggerTagChangeWorkflows wiring
+- dual-write behavior
+- Twilio/Meta webhook logic
+- Shopify/GHL routes or auth
+- billing/integrations
+
+This task is UI wiring and layout only unless a tiny route/nav fix is required.
+
+Implementation guidance:
+- Prefer a responsive conditional layout instead of separate duplicated pages
+- Reuse existing sidebar/detail components where possible
+- On mobile, render the right sidebar content inside a Sheet/Drawer/Dialog component
+- Keep desktop rendering unchanged
+- If there is already a mobile breakpoint utility, use it
+- Avoid rebuilding the inbox page from scratch
+
+Acceptance criteria:
+
+A. Inbox mobile
+- Open app on mobile width
+- Open a conversation
+- There is a visible way to access CRM/details/Copilot
+- Tapping it opens a usable drawer/sheet/modal
+- Tags, pipeline stage, notes, follow-up, and Copilot/suggestions are visible there
+- Can close and return to chat cleanly
+- No overflow or broken layout
+
+B. Contacts mobile
+- Contacts appears in mobile nav/menu
+- Tapping it opens the existing Contacts page correctly
+- Navigation back to Inbox works
+- No missing route or blank screen
+
+C. Desktop safety
+- Desktop inbox still shows the right sidebar as before
+- Desktop Contacts navigation still works
+- No regressions to existing desktop behavior
+
+D. Stability
+- No new TypeScript errors from this work
+- App runs cleanly
+- No changes to Shopify/GHL/auth/integration code
+
+Deliverables:
+1. Summary of files changed
+2. Short explanation of the mobile pattern chosen (button + sheet/drawer/etc.)
+3. Confirmation that Contacts is now in mobile navigation
+4. Confirmation that desktop behavior remains unchanged
+5. Screenshots or short validation notes for:
+   - mobile inbox chat view
+   - mobile CRM/details drawer open
+   - mobile Contacts nav/page
+
+Important constraint:
+Do this as the smallest clean implementation possible. Do not over-engineer and do not redesign the whole app.
