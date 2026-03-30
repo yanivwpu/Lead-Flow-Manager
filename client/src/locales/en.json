@@ -460,7 +460,14 @@
     "clinic": "Healthcare & Clinics",
     "realEstate": "Real Estate",
     "travel": "Travel & Tourism",
-    "ecommerce": "E-commerce"
+    "ecommerce": "E-commerce",
+    "growthEngines": {
+      "feature1": "Capture and respond to every new lead instantly on WhatsApp",
+      "feature2": "AI qualifies buyers & sellers so you focus only on serious prospects",
+      "feature3": "Automated follow-ups that turn cold leads into active conversations",
+      "feature4": "Every lead has a stage, a score, and a next step — automatically assigned",
+      "feature5": "Done-for-you setup + live onboarding sessions so you launch fast"
+    }
   },
   "landing": {
     "pricing": "Pricing",

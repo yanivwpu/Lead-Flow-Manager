@@ -24,6 +24,7 @@ import {
 import { LocalizedTemplateSelector } from "@/components/LocalizedTemplateSelector";
 import { apiRequest } from "@/lib/queryClient";
 import { useLocation } from "wouter";
+import { useTranslation } from "react-i18next";
 
 interface MessageTemplate {
   id: string;
@@ -68,13 +69,14 @@ const STATUS_ICONS: Record<string, any> = {
 
 function GrowthEnginesTab() {
   const [, setLocation] = useLocation();
+  const { t } = useTranslation();
 
   const features = [
-    { icon: MessageSquare, text: "Capture and respond to every new lead instantly on WhatsApp" },
-    { icon: Bot, text: "AI qualifies buyers & sellers so you focus only on serious prospects" },
-    { icon: Clock, text: "Automated follow-ups that turn cold leads into active conversations" },
-    { icon: Target, text: "Built-in real estate CRM pipeline to track every deal from first message to closing" },
-    { icon: CalendarCheck, text: "Done-for-you setup + live onboarding sessions so you launch fast" },
+    { icon: MessageSquare, text: t("templates.growthEngines.feature1") },
+    { icon: Bot, text: t("templates.growthEngines.feature2") },
+    { icon: Clock, text: t("templates.growthEngines.feature3") },
+    { icon: Target, text: t("templates.growthEngines.feature4") },
+    { icon: CalendarCheck, text: t("templates.growthEngines.feature5") },
   ];
 
   return (

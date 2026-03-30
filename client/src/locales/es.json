@@ -387,7 +387,14 @@
     "clinic": "Salud y Clínicas",
     "realEstate": "Bienes Raíces",
     "travel": "Viajes y Turismo",
-    "ecommerce": "Comercio Electrónico"
+    "ecommerce": "Comercio Electrónico",
+    "growthEngines": {
+      "feature1": "Captura y responde a cada nuevo lead al instante en WhatsApp",
+      "feature2": "La IA califica compradores y vendedores para que te centres solo en prospectos serios",
+      "feature3": "Seguimientos automáticos que convierten leads fríos en conversaciones activas",
+      "feature4": "Cada lead tiene una etapa, una puntuación y un próximo paso — asignados automáticamente",
+      "feature5": "Configuración completa + sesiones de incorporación en vivo para que lances rápido"
+    }
   },
   "landing": {
     "pricing": "Precios",
