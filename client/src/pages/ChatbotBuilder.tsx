@@ -950,8 +950,8 @@ export function ChatbotBuilder() {
               </div>
             </div>
 
-            <div className="p-3 border-t bg-white">
-              <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+            <div className="p-3 border-t bg-white space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-start gap-3 sm:gap-4">
                 <div className="flex-1 min-w-0">
                   <Label className="text-xs text-gray-500 mb-1 block">Trigger Keywords (comma-separated)</Label>
                   <Input
@@ -968,19 +968,62 @@ export function ChatbotBuilder() {
                     className="text-sm"
                     data-testid="input-trigger-keywords"
                   />
+                  <p className="text-xs text-gray-400 mt-1">Bot fires when a message contains one of these words (case-insensitive, any conversation)</p>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Switch
-                    checked={selectedFlow.triggerOnNewChat}
-                    onCheckedChange={(checked) => {
-                      setSelectedFlow({ ...selectedFlow, triggerOnNewChat: checked });
-                      setUnsavedChanges(true);
-                    }}
-                    data-testid="switch-trigger-new-chat"
-                  />
-                  <Label className="text-sm text-gray-600">Trigger on new chat</Label>
+                <div className="flex flex-col gap-1 sm:pt-0.5">
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      checked={selectedFlow.triggerOnNewChat}
+                      onCheckedChange={(checked) => {
+                        setSelectedFlow({ ...selectedFlow, triggerOnNewChat: checked });
+                        setUnsavedChanges(true);
+                      }}
+                      data-testid="switch-trigger-new-chat"
+                    />
+                    <Label className="text-sm text-gray-700 font-medium">Auto-reply on new conversations</Label>
+                  </div>
+                  <p className="text-xs text-gray-400 ml-11">
+                    {selectedFlow.triggerOnNewChat
+                      ? "ON — bot fires on any first message, even without a keyword"
+                      : "OFF — bot only fires when a keyword matches"}
+                  </p>
                 </div>
               </div>
+
+              {(() => {
+                const hasKeywords = (selectedFlow.triggerKeywords?.length ?? 0) > 0;
+                const newChat = selectedFlow.triggerOnNewChat;
+                if (!hasKeywords && !newChat) {
+                  return (
+                    <div className="flex items-center gap-2 px-2 py-1.5 rounded bg-amber-50 border border-amber-200 text-xs text-amber-700" data-testid="trigger-summary-warning">
+                      <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                      <span><strong>No trigger set</strong> — this flow will never fire. Add a keyword or enable auto-reply on new conversations.</span>
+                    </div>
+                  );
+                }
+                if (hasKeywords && newChat) {
+                  return (
+                    <div className="flex items-center gap-2 px-2 py-1.5 rounded bg-blue-50 border border-blue-200 text-xs text-blue-700" data-testid="trigger-summary-both">
+                      <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                      <span><strong>Both conditions active:</strong> bot fires on a keyword match <em>or</em> on any new conversation — whichever comes first.</span>
+                    </div>
+                  );
+                }
+                if (newChat && !hasKeywords) {
+                  return (
+                    <div className="flex items-center gap-2 px-2 py-1.5 rounded bg-green-50 border border-green-200 text-xs text-green-700" data-testid="trigger-summary-newchat">
+                      <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+                      <span>Bot fires on <strong>every new conversation</strong> (no keywords set).</span>
+                    </div>
+                  );
+                }
+                return (
+                  <div className="flex items-center gap-2 px-2 py-1.5 rounded bg-green-50 border border-green-200 text-xs text-green-700" data-testid="trigger-summary-keywords">
+                    <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+                    <span>Bot fires on <strong>keyword match only</strong> — it won't reply to messages that don't contain a trigger word.</span>
+                  </div>
+                );
+              })()}
             </div>
           </div>
         ) : (
@@ -1039,15 +1082,43 @@ export function ChatbotBuilder() {
                 placeholder="e.g., help, info, pricing"
                 data-testid="input-new-flow-keywords"
               />
+              <p className="text-xs text-gray-400 mt-1">Bot fires when a message contains one of these words (case-insensitive, any conversation)</p>
             </div>
-            <div className="flex items-center gap-2">
-              <Switch
-                checked={triggerOnNewChat}
-                onCheckedChange={setTriggerOnNewChat}
-                data-testid="switch-new-flow-new-chat"
-              />
-              <Label>Trigger on new chat</Label>
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <Switch
+                  checked={triggerOnNewChat}
+                  onCheckedChange={setTriggerOnNewChat}
+                  data-testid="switch-new-flow-new-chat"
+                />
+                <Label className="font-medium">Auto-reply on new conversations</Label>
+              </div>
+              <p className="text-xs text-gray-400 ml-11">
+                {triggerOnNewChat
+                  ? "ON — bot fires on any first message, even without a keyword"
+                  : "OFF — bot only fires when a keyword matches"}
+              </p>
             </div>
+            {(() => {
+              const hasKeywords = triggerKeywords.trim().length > 0;
+              if (!hasKeywords && !triggerOnNewChat) {
+                return (
+                  <div className="flex items-center gap-2 px-2 py-1.5 rounded bg-amber-50 border border-amber-200 text-xs text-amber-700">
+                    <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                    <span><strong>No trigger set</strong> — add a keyword or enable auto-reply so the flow can fire.</span>
+                  </div>
+                );
+              }
+              if (hasKeywords && triggerOnNewChat) {
+                return (
+                  <div className="flex items-center gap-2 px-2 py-1.5 rounded bg-blue-50 border border-blue-200 text-xs text-blue-700">
+                    <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                    <span><strong>Both conditions active:</strong> bot fires on a keyword match <em>or</em> on any new conversation — whichever comes first.</span>
+                  </div>
+                );
+              }
+              return null;
+            })()}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
