@@ -300,6 +300,7 @@ class ChannelService {
     }
 
     let conversation = await storage.getConversationByContactAndChannel(contact.id, channel);
+    let isNewConversation = false;
     if (!conversation) {
       console.log(`[Inbox Worker] No existing conversation, creating new one for contactId=${contact.id}, channel=${channel}`);
       conversation = await storage.createConversation({
@@ -310,6 +311,7 @@ class ChannelService {
         windowActive: true,
         windowExpiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
       });
+      isNewConversation = true;
       console.log(`[Inbox Worker] Conversation created — conversationId: ${conversation.id}`);
       await subscriptionService.incrementConversationUsage(userId);
     } else {
@@ -353,6 +355,19 @@ class ChannelService {
       channel,
       preview: content.substring(0, 100),
     });
+
+    // Trigger chatbot flows asynchronously (does not block webhook response)
+    const { triggerChatbotFlows } = await import('./chatbotEngine');
+    triggerChatbotFlows({
+      userId,
+      contactId: contact.id,
+      conversationId: conversation.id,
+      channel,
+      message: content,
+      isNewConversation,
+    }).catch((err: Error) =>
+      console.error('[Chatbot] triggerChatbotFlows error:', err.message)
+    );
 
     return { contact, conversation, message };
   }
