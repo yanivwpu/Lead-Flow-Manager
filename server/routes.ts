@@ -1642,7 +1642,10 @@ export async function registerRoutes(
       console.log(`[Inbound] Webhook received — channel: ${channel}, from: ${normalizedFrom}, messageSid: ${parsed.messageSid}`);
       console.log(`[Inbound] Channel identified: ${channel} — starting processIncomingMessage, userId: ${userId}`);
       const { channelService: cs } = await import("./channelService");
-      await cs.processIncomingMessage({
+      // isNewConversation and chatbotWillFire are evaluated once inside
+      // processIncomingMessage and returned here so no subsequent handler
+      // needs to query the DB again to make the same determination.
+      const { isNewConversation: inboxIsNewConv, chatbotWillFire: inboxChatbotWillFire } = await cs.processIncomingMessage({
         userId,
         channel,
         channelContactId: normalizedFrom,
@@ -1665,16 +1668,14 @@ export async function registerRoutes(
           console.error("Keyword workflow error:", err)
         );
         // W2 Financial Qualification Engine (Realtor Growth Engine)
+        // chatbotWillFire was determined once inside processIncomingMessage —
+        // no extra DB round-trip needed here.
         ;(async () => {
           try {
             const install = await storage.getTemplateInstall(userId, "realtor-growth-engine");
             if (install?.installStatus === "installed") {
-              // Check whether chatbot will handle outbound replies for this message.
-              // If so, suppress W2/routing messages to prevent duplicate outbound messages.
-              const { willChatbotTrigger: w2CheckChatbot } = await import("./chatbotEngine");
-              const chatbotHandlesReply = await w2CheckChatbot(userId, parsed.body, isNewChat);
-              if (chatbotHandlesReply) {
-                console.log(`[W2] Outbound suppressed (Twilio) — active chatbot flow handles this conversation for userId: ${userId}`);
+              if (inboxChatbotWillFire) {
+                console.log(`[W2] Outbound suppressed (Twilio) — chatbot owns this reply for userId: ${userId}`);
               }
 
               const w2 = await runW2QualificationEngine(userId, updatedChat, parsed.body);
@@ -1682,7 +1683,7 @@ export async function registerRoutes(
                 console.log(`[W2] Signals detected for chat ${updatedChat.id}: ${w2.signalsDetected.join(", ")} score+=${w2.scoreAdjustment}`);
               }
               // Only send qualification question if chatbot is NOT handling this conversation
-              if (!chatbotHandlesReply && w2.qualificationQuestion && updatedChat.whatsappPhone) {
+              if (!inboxChatbotWillFire && w2.qualificationQuestion && updatedChat.whatsappPhone) {
                 setTimeout(async () => {
                   try {
                     await sendUserWhatsAppMessage(userId, updatedChat.whatsappPhone!, w2.qualificationQuestion!);
@@ -1695,7 +1696,7 @@ export async function registerRoutes(
                 const routing = await runServiceRoutingEngine(userId, updatedChat, parsed.body);
                 const routingMsg = routing.offerMessage || routing.routingMessage;
                 // Only send routing message if chatbot is NOT handling this conversation
-                if (!chatbotHandlesReply && routingMsg && updatedChat.whatsappPhone) {
+                if (!inboxChatbotWillFire && routingMsg && updatedChat.whatsappPhone) {
                   const delay = w2.qualificationQuestion ? 6000 : 3500;
                   setTimeout(async () => {
                     try {
@@ -1714,15 +1715,14 @@ export async function registerRoutes(
       }
 
       // Auto-reply & Business Hours handling
-      // Skip auto-reply entirely if an active chatbot flow would respond
+      // chatbotWillFire was determined once inside processIncomingMessage —
+      // no extra DB round-trip needed here.
       try {
-        const { willChatbotTrigger } = await import("./chatbotEngine");
-        const chatbotWillFire = await willChatbotTrigger(userId, parsed.body, isNewChat);
-        if (chatbotWillFire) {
-          console.log(`[AutoReply] Suppressed — active chatbot flow will handle this message for userId: ${userId}`);
+        if (inboxChatbotWillFire) {
+          console.log(`[AutoReply] Suppressed (Twilio) — chatbot owns this reply for userId: ${userId}`);
         }
         const userSettings = await storage.getUser(userId);
-        if (userSettings && !chatbotWillFire) {
+        if (userSettings && !inboxChatbotWillFire) {
           let shouldSendAutoReply = false;
           let autoReplyText = "";
 
@@ -1988,6 +1988,10 @@ export async function registerRoutes(
       const { channelService: metaCs } = await import("./channelService");
       const directJobs: Promise<void>[] = [];
 
+      // Capture processIncomingMessage result so post-ACK handlers can read
+      // chatbotWillFire and isNewConversation without extra DB round-trips.
+      let metaInboxResult: { chatbotWillFire: boolean; isNewConversation: boolean } | null = null;
+
       if (incomingMessage) {
         const user = await findUserByMetaPhoneNumberId(incomingMessage.phoneNumberId);
         if (user) {
@@ -2002,7 +2006,8 @@ export async function registerRoutes(
               content: incomingMessage.text || incomingMessage.caption || `[${incomingMessage.type}]`,
               contentType: incomingMessage.type === 'text' ? 'text' : incomingMessage.type,
               externalMessageId: incomingMessage.messageId,
-            }).then(() => {
+            }).then((result) => {
+              metaInboxResult = { chatbotWillFire: result.chatbotWillFire, isNewConversation: result.isNewConversation };
               console.log(`[Inbound] Webhook returned 200 — channel: whatsapp, messageId: ${incomingMessage.messageId}, userId: ${user.id}`);
             })
           );
@@ -2170,13 +2175,11 @@ export async function registerRoutes(
                 try {
                   const install = await storage.getTemplateInstall(user.id, "realtor-growth-engine");
                   if (install?.installStatus === "installed") {
-                    // Check whether chatbot will handle outbound replies for this message.
-                    // If so, suppress W2/routing messages to prevent duplicate outbound messages.
-                    const { willChatbotTrigger: w2CheckChatbotMeta } = await import("./chatbotEngine");
-                    const metaIsNewChat = messages.length === 1;
-                    const chatbotHandlesReplyMeta = await w2CheckChatbotMeta(user.id, incomingMessage.text!, metaIsNewChat);
+                    // chatbotWillFire was determined once inside processIncomingMessage
+                    // and captured in metaInboxResult — no extra DB round-trip needed.
+                    const chatbotHandlesReplyMeta = metaInboxResult?.chatbotWillFire ?? false;
                     if (chatbotHandlesReplyMeta) {
-                      console.log(`[W2] Outbound suppressed (Meta) — active chatbot flow handles this conversation for userId: ${user.id}`);
+                      console.log(`[W2] Outbound suppressed (Meta) — chatbot owns this reply for userId: ${user.id}`);
                     }
 
                     const freshChat = await storage.getChat(chat.id);
@@ -2218,16 +2221,11 @@ export async function registerRoutes(
             }
 
             if (user.autoReplyEnabled && user.autoReplyMessage) {
-              // Suppress auto-reply if an active chatbot flow will respond
-              const { willChatbotTrigger: metaWillChatbot } = await import("./chatbotEngine");
-              const metaIsNewChat = messages.length === 1;
-              const metaChatbotWillFire = await metaWillChatbot(
-                user.id,
-                incomingMessage.text || "",
-                metaIsNewChat
-              );
+              // chatbotWillFire was determined once inside processIncomingMessage
+              // and captured in metaInboxResult — no extra DB round-trip needed.
+              const metaChatbotWillFire = metaInboxResult?.chatbotWillFire ?? false;
               if (metaChatbotWillFire) {
-                console.log(`[AutoReply] Suppressed (Meta) — active chatbot flow will handle this message for userId: ${user.id}`);
+                console.log(`[AutoReply] Suppressed (Meta) — chatbot owns this reply for userId: ${user.id}`);
               } else {
               const delay = user.autoReplyDelay || 0;
               setTimeout(async () => {

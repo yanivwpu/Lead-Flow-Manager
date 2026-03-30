@@ -236,7 +236,7 @@ class ChannelService {
     contentType?: string;
     mediaUrl?: string;
     externalMessageId?: string;
-  }): Promise<{ contact: Contact; conversation: Conversation; message: Message }> {
+  }): Promise<{ contact: Contact; conversation: Conversation; message: Message; isNewConversation: boolean; chatbotWillFire: boolean }> {
     const { userId, channel, content, contentType = 'text', mediaUrl, externalMessageId } = params;
     let { channelContactId, contactName } = params;
 
@@ -356,8 +356,12 @@ class ChannelService {
       preview: content.substring(0, 100),
     });
 
+    // Evaluate chatbot trigger once — used both to fire the flow and to let
+    // callers gate their own outbound messages without an extra DB round-trip.
+    const { willChatbotTrigger, triggerChatbotFlows } = await import('./chatbotEngine');
+    const chatbotWillFire = await willChatbotTrigger(userId, content, isNewConversation);
+
     // Trigger chatbot flows asynchronously (does not block webhook response)
-    const { triggerChatbotFlows } = await import('./chatbotEngine');
     triggerChatbotFlows({
       userId,
       contactId: contact.id,
@@ -369,7 +373,7 @@ class ChannelService {
       console.error('[Chatbot] triggerChatbotFlows error:', err.message)
     );
 
-    return { contact, conversation, message };
+    return { contact, conversation, message, isNewConversation, chatbotWillFire };
   }
 
   private getChannelIdField(channel: Channel): string {
