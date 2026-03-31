@@ -682,7 +682,6 @@ export function InboxLeadDetailsPanel({
       </div>
 
       {copilotExpanded && (
-      {/* ══ 2. COPILOT QUICK ACTIONS ══════════════════════════════════════ */}
       <div className="px-3 py-2 border-b border-gray-100">
         <div className="grid grid-cols-4 gap-1">
 
