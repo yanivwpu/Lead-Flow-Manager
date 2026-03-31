@@ -3,6 +3,7 @@ import { Search as SearchIcon, MessageSquare, Clock, Loader2, ArrowRight, User }
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { cn } from "@/lib/utils";
+import { TAG_COLORS } from "@/lib/data";
 
 interface SearchResult {
   chatId: string;
@@ -122,50 +123,47 @@ export function Search() {
               </p>
               
               {results.map((result, index) => (
-                <Link key={`${result.chatId}-${index}`} href={`/app/chats/${result.chatId}`}>
-                  <a 
-                    className="block p-4 bg-white border border-gray-200 rounded-xl hover:border-brand-green hover:shadow-md transition-all group"
-                    data-testid={`link-search-result-${result.chatId}`}
-                  >
-                    <div className="flex items-start gap-3">
-                      <div className="h-10 w-10 rounded-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center text-gray-600 font-medium shrink-0">
-                        {result.avatar ? (
-                          <img src={result.avatar} alt="" className="h-full w-full rounded-full object-cover" />
-                        ) : (
-                          <User className="h-5 w-5" />
+                <Link
+                  key={`${result.chatId}-${index}`}
+                  href={`/app/inbox/${result.chatId}`}
+                  className="block p-4 bg-white border border-gray-200 rounded-xl hover:border-brand-green hover:shadow-md transition-all group"
+                  data-testid={`link-search-result-${result.chatId}`}
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="h-10 w-10 rounded-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center text-gray-600 font-medium shrink-0">
+                      {result.avatar ? (
+                        <img src={result.avatar} alt="" className="h-full w-full rounded-full object-cover" />
+                      ) : (
+                        <User className="h-5 w-5" />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="font-semibold text-gray-900">{result.chatName}</span>
+                        {result.tag && (
+                          <span className={cn(
+                            "text-xs px-2 py-0.5 rounded-full border",
+                            TAG_COLORS[result.tag] || "bg-gray-100 text-gray-600 border-gray-200"
+                          )}>
+                            {result.tag}
+                          </span>
+                        )}
+                        {result.pipelineStage && (
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-sky-100 text-sky-700 border border-sky-200">
+                            {result.pipelineStage}
+                          </span>
                         )}
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="font-semibold text-gray-900">{result.chatName}</span>
-                          {result.tag && (
-                            <span className={cn(
-                              "text-xs px-2 py-0.5 rounded-full",
-                              result.tag === 'Hot' ? 'bg-orange-100 text-orange-700' :
-                              result.tag === 'Paid' ? 'bg-green-100 text-green-700' :
-                              result.tag === 'Lost' ? 'bg-red-100 text-red-700' :
-                              'bg-gray-100 text-gray-600'
-                            )}>
-                              {result.tag}
-                            </span>
-                          )}
-                          {result.pipelineStage && (
-                            <span className="text-xs px-2 py-0.5 rounded-full bg-sky-100 text-sky-700">
-                              {result.pipelineStage}
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-gray-600 text-sm leading-relaxed line-clamp-2">
-                          {highlightMatch(result.matchedText, debouncedQuery)}
-                        </p>
-                        <div className="flex items-center gap-2 mt-2 text-xs text-gray-400">
-                          <Clock className="h-3 w-3" />
-                          <span>{result.timestamp}</span>
-                        </div>
+                      <p className="text-gray-600 text-sm leading-relaxed line-clamp-2">
+                        {highlightMatch(result.matchedText, debouncedQuery)}
+                      </p>
+                      <div className="flex items-center gap-2 mt-2 text-xs text-gray-400">
+                        <Clock className="h-3 w-3" />
+                        <span>{result.timestamp}</span>
                       </div>
-                      <ArrowRight className="h-5 w-5 text-gray-300 group-hover:text-brand-green transition-colors shrink-0" />
                     </div>
-                  </a>
+                    <ArrowRight className="h-5 w-5 text-gray-300 group-hover:text-brand-green transition-colors shrink-0" />
+                  </div>
                 </Link>
               ))}
             </div>

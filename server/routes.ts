@@ -2966,12 +2966,13 @@ export async function registerRoutes(
         
         // Check messages for matches
         const messages = (chat.messages as any[]) || [];
+        const resolvedId = ct?.id || chat.id;
         for (const msg of messages) {
           if (msg.text && msg.text.toLowerCase().includes(queryLower)) {
             matches.push({
-              chatId: chat.id,
-              chatName: chat.name,
-              avatar: chat.avatar,
+              chatId: resolvedId,
+              chatName: ct?.name ?? chat.name,
+              avatar: ct?.avatar ?? chat.avatar,
               matchedText: msg.text.length > 150 
                 ? msg.text.substring(0, 150) + '...' 
                 : msg.text,
@@ -2986,9 +2987,9 @@ export async function registerRoutes(
         const notes = ct?.notes ?? chat.notes;
         if (notes && notes.toLowerCase().includes(queryLower)) {
           matches.push({
-            chatId: chat.id,
-            chatName: chat.name,
-            avatar: chat.avatar,
+            chatId: resolvedId,
+            chatName: ct?.name ?? chat.name,
+            avatar: ct?.avatar ?? chat.avatar,
             matchedText: `Note: ${notes.length > 150 ? notes.substring(0, 150) + '...' : notes}`,
             timestamp: chat.time || 'Recently',
             pipelineStage: ct?.pipelineStage ?? chat.pipelineStage,
@@ -2999,9 +3000,9 @@ export async function registerRoutes(
         // Check name for matches
         if (chat.name.toLowerCase().includes(queryLower) && matches.length === 0) {
           matches.push({
-            chatId: chat.id,
-            chatName: chat.name,
-            avatar: chat.avatar,
+            chatId: resolvedId,
+            chatName: ct?.name ?? chat.name,
+            avatar: ct?.avatar ?? chat.avatar,
             matchedText: chat.lastMessage || 'No recent messages',
             timestamp: chat.time || 'Recently',
             pipelineStage: ct?.pipelineStage ?? chat.pipelineStage,
