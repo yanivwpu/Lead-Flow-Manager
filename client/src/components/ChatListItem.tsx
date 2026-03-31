@@ -24,71 +24,68 @@ interface ChatListItemProps {
 }
 
 export function ChatListItem({ chat, isActive }: ChatListItemProps) {
-  const lastMessage = chat.messages && chat.messages.length > 0 
-    ? chat.messages[chat.messages.length - 1] 
+  const lastMessage = chat.messages && chat.messages.length > 0
+    ? chat.messages[chat.messages.length - 1]
     : null;
   const isLastMessageFromMe = lastMessage?.sender === 'me';
 
-  // Debug: Log the avatar source
-  // console.log(`Avatar for ${chat.name}:`, chat.avatar);
+  const timeDisplay = chat.time && !chat.time.includes('T')
+    ? chat.time
+    : (chat.time ? format(new Date(chat.time), 'HH:mm') : '');
 
   return (
     <Link href={`/app/chats/${chat.id}`}>
       <div
         className={cn(
-          "flex items-center py-1.5 px-3 cursor-pointer transition-colors border-b border-gray-100 hover:bg-gray-50",
+          "flex items-center gap-2 py-[7px] px-3 cursor-pointer transition-colors border-b border-gray-100 hover:bg-gray-50",
           isActive ? "bg-gray-100 hover:bg-gray-100" : "bg-white"
         )}
         data-testid={`chat-item-${chat.id}`}
       >
         <div className="relative shrink-0">
-          <ChatAvatar src={chat.avatar} name={chat.name} size="md" />
+          <ChatAvatar src={chat.avatar} name={chat.name} size="sm" />
           {chat.unread > 0 && (
-            <div className="absolute -top-0.5 -right-0.5 h-4 w-4 bg-brand-green text-white text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-white">
+            <div className="absolute -top-0.5 -right-0.5 h-[14px] w-[14px] bg-brand-green text-white text-[9px] font-bold rounded-full flex items-center justify-center border border-white">
               {chat.unread}
             </div>
           )}
         </div>
 
-        <div className="ml-2.5 flex-1 min-w-0">
-          <div className="flex justify-between items-baseline">
-            <h3 className="font-medium text-gray-900 truncate text-[14px]">{chat.name}</h3>
+        <div className="flex-1 min-w-0">
+          <div className="flex justify-between items-baseline gap-1">
+            <h3 className="font-medium text-gray-900 truncate text-[13.5px] leading-tight">{chat.name}</h3>
             <span
               className={cn(
-                "text-[11px] whitespace-nowrap ml-2",
+                "text-[10px] whitespace-nowrap shrink-0 leading-tight",
                 chat.unread > 0 ? "text-brand-green font-medium" : "text-gray-400"
               )}
             >
-              {chat.time && !chat.time.includes('T') ? chat.time : (chat.time ? format(new Date(chat.time), 'HH:mm') : '')}
+              {timeDisplay}
             </span>
           </div>
 
-          <div className="flex justify-between items-center">
-            <div className="flex items-center text-[12px] text-gray-500 truncate pr-2">
+          <div className="flex items-center justify-between gap-1 mt-[2px]">
+            <div className="flex items-center text-[11.5px] text-gray-500 truncate min-w-0 leading-tight">
               {isLastMessageFromMe && (
-                <span className="mr-1">
-                   <CheckCheck className="h-3.5 w-3.5 text-blue-400" />
-                </span>
+                <CheckCheck className="h-3 w-3 text-blue-400 shrink-0 mr-0.5" />
               )}
               <span className="truncate">{chat.lastMessage}</span>
             </div>
-          </div>
-          
-          <div className="flex flex-wrap gap-0.5 mt-0.5">
-            <span className={cn(
-              "text-[9px] px-1 py-px rounded border", 
-              TAG_COLORS[chat.tag] || "bg-blue-50 text-blue-600 border-blue-100"
-            )}>
-              {chat.tag}
-            </span>
-            <span className="text-[9px] px-1 py-px rounded border bg-blue-50 text-blue-500 border-blue-100">
-              {chat.pipelineStage}
-            </span>
-            {chat.followUp && (
-              <span className="text-[9px] px-1 py-px rounded border bg-red-50 text-red-500 border-red-100 flex items-center">
-                Due {chat.followUp}
-              </span>
-            )}
+            <div className="flex items-center gap-0.5 shrink-0">
+              {chat.tag && (
+                <span className={cn(
+                  "text-[9px] px-1 py-px rounded border leading-none",
+                  TAG_COLORS[chat.tag] || "bg-gray-50 text-gray-500 border-gray-200"
+                )}>
+                  {chat.tag}
+                </span>
+              )}
+              {chat.followUp && (
+                <span className="text-[9px] px-1 py-px rounded border bg-red-50 text-red-500 border-red-100 leading-none">
+                  Due
+                </span>
+              )}
+            </div>
           </div>
         </div>
       </div>
