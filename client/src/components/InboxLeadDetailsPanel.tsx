@@ -665,12 +665,25 @@ export function InboxLeadDetailsPanel({
             onClick={() => setCopilotExpanded(true)}
             className="px-3 pb-2 flex items-center justify-between cursor-pointer"
           >
-            <div className="flex items-center gap-1.5">
-              <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", intel.leadScore.dot)} />
-              <span className={cn("text-[11px] font-semibold", intel.leadScore.color)}>
-                {intel.leadScore.label} Lead
+            <div className="flex flex-col gap-0">
+              <div className="flex items-center gap-1.5">
+                <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", intel.leadScore.dot)} />
+                <span className={cn("text-[11px] font-semibold", intel.leadScore.color)}>
+                  {intel.leadScore.label} Lead
+                </span>
+              </div>
+              <span className="text-[10px] text-gray-400 ml-3">
+                {(() => {
+                  const missing = [
+                    !intel.hasBudget    && "budget",
+                    !intel.hasTimeline  && "timeline",
+                    !intel.hasFinancing && "financing",
+                  ].filter(Boolean) as string[];
+                  return missing.length
+                    ? `Needs ${missing.slice(0, 2).join(" & ")}`
+                    : aiStateLabel;
+                })()}
               </span>
-              <span className="text-[10px] text-gray-400">· {aiStateLabel}</span>
             </div>
             {activeSuggestionCount > 0 && (
               <span className="text-[10px] text-purple-500 font-medium">
@@ -1033,129 +1046,140 @@ export function InboxLeadDetailsPanel({
                 />
               ) : (
                 <>
-                  {/* A. LEAD SNAPSHOT ──────────────────────────────── */}
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-1.5">
-                      <span className={cn("w-2 h-2 rounded-full shrink-0", intel.leadScore.dot)} />
-                      <span className={cn("text-[13px] font-semibold leading-tight", intel.leadScore.color)}>
-                        {intel.leadScore.label} Lead
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-gray-400 ml-3.5">
-                      {intel.intent} · {aiStateLabel}
-                    </p>
-                  </div>
-
-                  {/* B. SIGNALS ─────────────────────────────────────── */}
-                  <div className="flex flex-col gap-1.5">
-                    {[
-                      { ok: intel.hasBudget,    label: 'Budget',    value: intel.budget },
-                      { ok: intel.hasTimeline,  label: 'Timeline',  value: intel.timeline },
-                      { ok: intel.hasFinancing, label: 'Financing', value: intel.financing },
-                    ].map(({ ok, label, value }) => (
-                      <div key={label} className="flex items-center gap-1.5 min-w-0">
-                        {ok
-                          ? <CheckCircle2 className="w-3 h-3 text-emerald-500 shrink-0" />
-                          : <Circle className="w-3 h-3 text-gray-300 shrink-0" />
-                        }
-                        <span className={cn("text-[11px] truncate", ok ? "text-gray-700" : "text-gray-400")}>
-                          <span className="font-medium">{label}</span>
-                          {ok && value
-                            ? <span className="font-normal">: {value}</span>
-                            : <span className="text-gray-300"> —</span>
-                          }
+                  {/* A. SNAPSHOT — lead level + signals, plain text no card */}
+                  <div className="space-y-2">
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <span className={cn("w-2 h-2 rounded-full shrink-0", intel.leadScore.dot)} />
+                        <span className={cn("text-[13px] font-semibold leading-tight", intel.leadScore.color)}>
+                          {intel.leadScore.label} Lead
                         </span>
                       </div>
-                    ))}
+                      <p className="text-[11px] text-gray-400 mt-0.5 ml-3.5">
+                        {intel.intent} · {aiStateLabel}
+                      </p>
+                    </div>
+
+                    <div className="flex flex-col gap-1">
+                      {[
+                        { ok: intel.hasBudget,    label: 'Budget',    value: intel.budget },
+                        { ok: intel.hasTimeline,  label: 'Timeline',  value: intel.timeline },
+                        { ok: intel.hasFinancing, label: 'Financing', value: intel.financing },
+                      ].map(({ ok, label, value }) => (
+                        <div key={label} className="flex items-center gap-1.5 min-w-0">
+                          {ok
+                            ? <CheckCircle2 className="w-3 h-3 text-emerald-500 shrink-0" />
+                            : <Circle className="w-3 h-3 text-gray-300 shrink-0" />
+                          }
+                          <span className={cn("text-[11px] truncate", ok ? "text-gray-700" : "text-gray-400")}>
+                            <span className="font-medium">{label}</span>
+                            {ok && value
+                              ? <span className="font-normal">: {value}</span>
+                              : <span className="text-gray-300"> —</span>
+                            }
+                          </span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
 
-                  {/* C. NEXT BEST ACTION — hero block ─────────────── */}
-                  {hasAIBrain && canSeeWorkflow && (() => {
-                    const missingLabels = [
-                      !intel.hasBudget    && "Budget",
-                      !intel.hasTimeline  && "Timeline",
-                      !intel.hasFinancing && "Financing",
-                    ].filter(Boolean) as string[];
-                    const nextActions: Record<string, string> = {
-                      Budget:    "Ask about their budget",
-                      Timeline:  "Ask about their timeline",
-                      Financing: "Ask about financing plans",
-                    };
-                    if (!missingLabels.length) return null;
+                  {/* B. ACTION — NBA + Suggested Reply unified in one block */}
+                  {canSeeWorkflow && (() => {
+                    const nbaData = hasAIBrain ? (() => {
+                      const missingLabels = [
+                        !intel.hasBudget    && "Budget",
+                        !intel.hasTimeline  && "Timeline",
+                        !intel.hasFinancing && "Financing",
+                      ].filter(Boolean) as string[];
+                      const nextActions: Record<string, string> = {
+                        Budget:    "Ask about budget",
+                        Timeline:  "Ask about timeline",
+                        Financing: "Ask about financing",
+                      };
+                      if (!missingLabels.length) return null;
+                      return {
+                        missing:        missingLabels,
+                        recommendation: nextActions[missingLabels[0]],
+                      };
+                    })() : null;
+
+                    const hasReply = !!qualifyAction?.value;
+                    if (!nbaData && !hasReply) return null;
+
                     return (
-                      <div className="rounded-xl border border-gray-200 bg-white px-3 py-3 space-y-1.5 shadow-[0_1px_3px_rgba(0,0,0,0.05)]">
-                        <p className="text-[9px] uppercase tracking-widest font-bold text-gray-500">Next best action</p>
-                        <p className="text-[11px] text-gray-500">
-                          <span className="font-semibold text-gray-700">Missing:</span>{" "}
-                          {missingLabels.join(", ")}
+                      <div className="bg-gray-50 border border-gray-100 rounded-xl px-3 py-3 space-y-2">
+                        <p className="text-[9px] uppercase tracking-widest font-bold text-gray-400">
+                          {nbaData ? "Next best action" : "Suggested reply"}
                         </p>
-                        <p className="text-[12px] font-semibold text-gray-800">
-                          {nextActions[missingLabels[0]]}
-                        </p>
+
+                        {nbaData && (
+                          <div className="space-y-0.5">
+                            <p className="text-[11px] text-gray-400">
+                              <span className="font-medium text-gray-600">Missing:</span>{" "}
+                              {nbaData.missing.join(", ")}
+                            </p>
+                            <p className="text-[13px] font-semibold text-gray-800 leading-snug">
+                              {nbaData.recommendation}
+                            </p>
+                          </div>
+                        )}
+
+                        {hasReply && (
+                          <div className={cn(nbaData && "pt-2 border-t border-gray-200")}>
+                            <p className="text-[12px] text-gray-700 leading-relaxed">
+                              "{qualifyAction!.value}"
+                            </p>
+                            <button
+                              onClick={() => {
+                                if (onInsertMessage && qualifyAction!.value) {
+                                  onInsertMessage(qualifyAction!.value);
+                                } else if (qualifyAction!.value) {
+                                  navigator.clipboard.writeText(qualifyAction!.value).catch(() => {});
+                                }
+                                completeAction('qualify', "Message inserted");
+                              }}
+                              className="mt-2 text-[11px] font-semibold text-emerald-600 hover:text-emerald-700 transition-colors flex items-center gap-1"
+                              data-testid="button-insert-suggested-message"
+                            >
+                              Insert reply
+                              <span className="text-emerald-400">→</span>
+                            </button>
+                          </div>
+                        )}
                       </div>
                     );
                   })()}
 
-                  {/* D. SUGGESTED REPLY — executes the recommendation */}
-                  {canSeeWorkflow && qualifyAction?.value && (
-                    <div>
-                      <div className="mb-1.5">
-                        <p className="text-[10px] uppercase tracking-widest font-semibold text-gray-400">Suggested Reply</p>
-                        <p className="text-[10px] text-gray-400 mt-0.5">Recommended next step</p>
-                      </div>
-                      <div className="bg-white border border-gray-200 rounded-xl p-3 shadow-[0_1px_4px_rgba(0,0,0,0.06)]">
-                        <p className="text-[12px] text-gray-800 leading-relaxed">"{qualifyAction.value}"</p>
-                        <button
-                          onClick={() => {
-                            if (onInsertMessage && qualifyAction.value) {
-                              onInsertMessage(qualifyAction.value);
-                            } else if (qualifyAction.value) {
-                              navigator.clipboard.writeText(qualifyAction.value).catch(() => {});
-                            }
-                            completeAction('qualify', "Message inserted");
-                          }}
-                          className="mt-2 text-[11px] font-semibold text-emerald-600 hover:text-emerald-700 transition-colors flex items-center gap-1"
-                          data-testid="button-insert-suggested-message"
-                        >
-                          Insert reply
-                          <span className="text-emerald-400">→</span>
-                        </button>
-                      </div>
+                  {/* C. CONTEXT — summary, intentionally muted */}
+                  {(aiMemory || aiMemoryLoading) && (
+                    <div className="pt-2 border-t border-gray-100">
+                      <p className="text-[9px] uppercase tracking-widest font-semibold text-gray-300 mb-1">
+                        {hasAIBrain ? "Memory" : "Summary"}
+                      </p>
+                      {aiMemoryLoading ? (
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-1.5 h-1.5 rounded-full bg-gray-200 animate-pulse" />
+                          <span className="text-[11px] text-gray-400 italic">Generating…</span>
+                        </div>
+                      ) : (
+                        <p className="text-[11px] text-gray-400 leading-relaxed">{aiMemory}</p>
+                      )}
                     </div>
                   )}
 
-                  {/* E. SUMMARY — supporting context, muted/secondary */}
-                  <div className="pt-2 border-t border-gray-100">
-                    <p className="text-[9px] uppercase tracking-widest font-semibold text-gray-300 mb-1">
-                      {hasAIBrain ? "Memory" : "Summary"}
-                    </p>
-                    {aiMemoryLoading ? (
-                      <div className="flex items-center gap-1.5">
-                        <div className="w-1.5 h-1.5 rounded-full bg-gray-200 animate-pulse" />
-                        <span className="text-[11px] text-gray-400 italic">Generating…</span>
-                      </div>
-                    ) : aiMemory ? (
-                      <p className="text-[11px] text-gray-400 leading-relaxed">{aiMemory}</p>
-                    ) : (
-                      <p className="text-[10px] text-gray-400 italic">
-                        {hasAIBrain
-                          ? "Memory builds as the conversation develops."
-                          : "Summary will appear here as the conversation develops."
-                        }
-                      </p>
-                    )}
-                  </div>
-
-                  {/* F. SUGGESTION CHIPS — compact, below main content */}
-                  {!canSeeWorkflow ? (
+                  {/* Autopilot upgrade prompt (non-AI plan users) */}
+                  {!canSeeWorkflow && (
                     <AIUpgradePrompt
                       feature="Autopilot"
                       requiredPlan={workflowUpgradeTo}
                       reason="Suggests and automates actions: assign leads, book appointments, schedule follow-ups, and advance pipeline stages with one click."
                       size="md"
                     />
-                  ) : hasAnyChips && (
-                    <div className="flex items-center gap-1 flex-wrap pt-0.5">
+                  )}
+
+                  {/* Suggestion chips — compact, below the flow */}
+                  {canSeeWorkflow && hasAnyChips && (
+                    <div className="flex items-center gap-1 flex-wrap">
                       {activeChipActions.slice(0, hasAIBrain ? 4 : 2).map(action => {
                         const chipHandlers: Record<string, () => void> = {
                           assign:  () => { setAssignOpen(true); completeAction(action.type, "Lead assigned"); },
@@ -1203,6 +1227,7 @@ export function InboxLeadDetailsPanel({
                     </div>
                   )}
                 </>
+
 
               )}
             </div>

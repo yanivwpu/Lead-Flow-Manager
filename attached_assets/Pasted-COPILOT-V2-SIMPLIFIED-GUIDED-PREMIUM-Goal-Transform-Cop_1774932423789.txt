@@ -1,0 +1,177 @@
+COPILOT V2 — SIMPLIFIED, GUIDED, PREMIUM
+
+Goal:
+Transform Copilot from “stack of sections” into a single guided flow.
+Reduce visual noise, increase clarity, make the next action obvious.
+
+IMPORTANT:
+- Do NOT change backend logic
+- Do NOT remove features
+- Only adjust layout, grouping, and visual hierarchy
+
+==================================================
+1. STRUCTURE — SINGLE FLOW (NO MORE STACKED CARDS)
+==================================================
+
+Reorganize Copilot into 3 logical blocks only:
+
+A. SNAPSHOT (top)
+B. ACTION (middle — main focus)
+C. CONTEXT (bottom)
+
+Everything must feel connected, not separated widgets.
+
+--------------------------------------------------
+A. SNAPSHOT
+--------------------------------------------------
+
+Display:
+
+Warm Lead  
+Buyer • Collecting details  
+
+Budget: Missing  
+Timeline: Missing  
+Financing: Unknown  
+
+Rules:
+- Clean, no heavy borders
+- No card box — just structured text
+- Keep compact
+- This is informational only
+
+--------------------------------------------------
+B. ACTION (MOST IMPORTANT BLOCK)
+--------------------------------------------------
+
+This is the heart of Copilot.
+
+Merge:
+- Next Best Action
+- Suggested Reply
+
+Into ONE unified block.
+
+Display:
+
+Next best action  
+Ask about budget and timeline  
+
+[ Suggested reply text here... ]
+
+[ Insert reply ]
+
+Rules:
+
+1. ONE container only (not multiple cards)
+2. No separate “Suggested Reply” section
+3. Reply is visually tied to the action
+4. This block must stand out slightly:
+   - subtle background (very light)
+   - or stronger spacing
+5. CTA = clear and easy to click
+6. This is where the eye should land FIRST
+
+--------------------------------------------------
+C. CONTEXT (SUMMARY)
+--------------------------------------------------
+
+Display:
+
+Summary  
+Interested in downtown condo, asked about availability
+
+Rules:
+- More muted than Action
+- Smaller text
+- No strong background
+- Optional light divider above
+
+==================================================
+2. REMOVE VISUAL NOISE
+==================================================
+
+- Reduce number of bordered boxes
+- Use spacing instead of containers
+- Keep only ONE highlighted block (Action)
+
+Purple usage:
+- Keep ONLY for AI Brain badge
+- Do NOT use purple backgrounds for sections
+
+==================================================
+3. HIERARCHY (VERY IMPORTANT)
+==================================================
+
+User should visually read:
+
+1. Lead status (quick understanding)
+2. Action (what to do)
+3. Context (why)
+
+NOT:
+info → info → info → decision
+
+==================================================
+4. EXPAND / COLLAPSE (KEEP BUT IMPROVE)
+==================================================
+
+Collapsed:
+- Copilot
+- Warm Lead
+- 1-line state (e.g. "Needs budget & timeline")
+
+Expanded:
+- Shows full flow above
+
+Make header clearly clickable:
+- entire header clickable
+- visible chevron
+- label: Expand / Collapse
+
+==================================================
+5. MOBILE ADAPTATION (CRITICAL)
+==================================================
+
+Apply same structure to mobile slide-out:
+
+Order:
+Snapshot → Action → Context
+
+Rules:
+- tighter spacing
+- no side-by-side layouts
+- everything stacked cleanly
+- Action block remains dominant
+- no overflow or horizontal scroll
+- Insert reply button always visible
+
+==================================================
+6. TEAM NOTES (DO NOT CHANGE STRUCTURE)
+==================================================
+
+Keep as separate section below.
+
+Ensure:
+- fixed max height
+- internal scroll
+- soft yellow note cards
+- metadata small + subtle
+
+==================================================
+7. ACCEPTANCE CRITERIA
+==================================================
+
+Done means:
+
+- Copilot feels like ONE assistant, not multiple widgets
+- Next action is immediately obvious
+- Suggested reply feels tied to the action
+- Summary is clearly secondary
+- Visual clutter reduced
+- No overuse of colors
+- Works cleanly on mobile slide-out
+- No functionality regression
+
+FINAL UX FEEL:
+User opens Copilot → instantly understands → takes action
