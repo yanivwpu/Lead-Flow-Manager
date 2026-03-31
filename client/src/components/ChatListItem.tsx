@@ -37,7 +37,7 @@ export function ChatListItem({ chat, isActive }: ChatListItemProps) {
     <Link href={`/app/chats/${chat.id}`}>
       <div
         className={cn(
-          "flex items-center gap-2 py-[7px] px-3 cursor-pointer transition-colors border-b border-gray-100 hover:bg-gray-50",
+          "flex items-center gap-2 py-[4px] px-3 cursor-pointer transition-colors border-b border-gray-100 hover:bg-gray-50",
           isActive ? "bg-gray-100 hover:bg-gray-100" : "bg-white"
         )}
         data-testid={`chat-item-${chat.id}`}
@@ -64,7 +64,7 @@ export function ChatListItem({ chat, isActive }: ChatListItemProps) {
             </span>
           </div>
 
-          <div className="flex items-center justify-between gap-1 mt-[2px]">
+          <div className="flex items-center justify-between gap-1 mt-[1px]">
             <div className="flex items-center text-[11.5px] text-gray-500 truncate min-w-0 leading-tight">
               {isLastMessageFromMe && (
                 <CheckCheck className="h-3 w-3 text-blue-400 shrink-0 mr-0.5" />
