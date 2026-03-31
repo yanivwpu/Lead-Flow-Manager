@@ -36,13 +36,13 @@ export function ChatListItem({ chat, isActive }: ChatListItemProps) {
     <Link href={`/app/chats/${chat.id}`}>
       <div
         className={cn(
-          "flex items-center py-2 px-3 cursor-pointer transition-colors border-b border-gray-100 hover:bg-gray-50",
+          "flex items-center py-1.5 px-3 cursor-pointer transition-colors border-b border-gray-100 hover:bg-gray-50",
           isActive ? "bg-gray-100 hover:bg-gray-100" : "bg-white"
         )}
         data-testid={`chat-item-${chat.id}`}
       >
         <div className="relative shrink-0">
-          <ChatAvatar src={chat.avatar} name={chat.name} size="lg" />
+          <ChatAvatar src={chat.avatar} name={chat.name} size="md" />
           {chat.unread > 0 && (
             <div className="absolute -top-0.5 -right-0.5 h-4 w-4 bg-brand-green text-white text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-white">
               {chat.unread}
@@ -52,7 +52,7 @@ export function ChatListItem({ chat, isActive }: ChatListItemProps) {
 
         <div className="ml-2.5 flex-1 min-w-0">
           <div className="flex justify-between items-baseline">
-            <h3 className="font-semibold text-gray-900 truncate text-[15px]">{chat.name}</h3>
+            <h3 className="font-medium text-gray-900 truncate text-[14px]">{chat.name}</h3>
             <span
               className={cn(
                 "text-[11px] whitespace-nowrap ml-2",
@@ -64,7 +64,7 @@ export function ChatListItem({ chat, isActive }: ChatListItemProps) {
           </div>
 
           <div className="flex justify-between items-center">
-            <div className="flex items-center text-[13px] text-gray-500 truncate pr-2">
+            <div className="flex items-center text-[12px] text-gray-500 truncate pr-2">
               {isLastMessageFromMe && (
                 <span className="mr-1">
                    <CheckCheck className="h-3.5 w-3.5 text-blue-400" />
@@ -74,19 +74,19 @@ export function ChatListItem({ chat, isActive }: ChatListItemProps) {
             </div>
           </div>
           
-          <div className="flex flex-wrap gap-1 mt-1">
+          <div className="flex flex-wrap gap-0.5 mt-0.5">
             <span className={cn(
-              "text-[9px] px-1.5 py-0.5 rounded border font-medium", 
-              TAG_COLORS[chat.tag] || "bg-blue-100 text-blue-700 border-blue-200"
+              "text-[9px] px-1 py-px rounded border", 
+              TAG_COLORS[chat.tag] || "bg-blue-50 text-blue-600 border-blue-100"
             )}>
               {chat.tag}
             </span>
-            <span className="text-[9px] px-1.5 py-0.5 rounded border bg-blue-50 text-blue-600 border-blue-100 font-medium">
+            <span className="text-[9px] px-1 py-px rounded border bg-blue-50 text-blue-500 border-blue-100">
               {chat.pipelineStage}
             </span>
             {chat.followUp && (
-              <span className="text-[9px] px-1.5 py-0.5 rounded border bg-red-50 text-red-600 border-red-100 font-medium flex items-center">
-                 Due {chat.followUp}
+              <span className="text-[9px] px-1 py-px rounded border bg-red-50 text-red-500 border-red-100 flex items-center">
+                Due {chat.followUp}
               </span>
             )}
           </div>
