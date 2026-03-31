@@ -69,8 +69,9 @@ class ChannelService {
     contentType?: string;
     mediaUrl?: string;
     forceChannel?: Channel;
+    templateVariables?: Record<string, any>;
   }): Promise<SendMessageResult> {
-    const { userId, contactId, content, contentType = 'text', mediaUrl, forceChannel } = params;
+    const { userId, contactId, content, contentType = 'text', mediaUrl, forceChannel, templateVariables } = params;
 
     const contact = await storage.getContact(contactId);
     if (!contact) {
@@ -99,6 +100,7 @@ class ChannelService {
       contentType,
       mediaUrl,
       status: 'pending',
+      ...(templateVariables ? { templateVariables } : {}),
     });
 
     const sendResult = await this.dispatchMessage(userId, targetChannel, {

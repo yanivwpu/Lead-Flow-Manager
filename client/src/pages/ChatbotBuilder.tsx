@@ -38,6 +38,18 @@ import { cn } from "@/lib/utils";
 
 type MessageType = 'text' | 'image' | 'video' | 'file' | 'buttons';
 
+export interface ButtonOption {
+  label: string;
+  value: string;
+  nextNodeId?: string;
+}
+
+/** Normalize legacy string buttons to ButtonOption objects */
+function resolveButton(btn: string | ButtonOption): ButtonOption {
+  if (typeof btn === 'string') return { label: btn, value: btn };
+  return { label: btn.label || btn.value, value: btn.value || btn.label, nextNodeId: btn.nextNodeId };
+}
+
 interface ChatbotNode {
   id: string;
   type: 'message' | 'question' | 'condition' | 'action' | 'delay';
@@ -49,7 +61,7 @@ interface ChatbotNode {
     mediaUrl?: string;
     mediaCaption?: string;
     fileName?: string;
-    buttons?: string[];
+    buttons?: ButtonOption[];
     options?: { label: string; nextNodeId: string }[];
     condition?: { type: string; value: string };
     action?: { type: string; value: string };
@@ -619,7 +631,7 @@ export function ChatbotBuilder() {
                                     onClick={() => updateNode(node.id, { 
                                       messageType: mt.value,
                                       ...(mt.value === 'text' ? { mediaUrl: undefined, mediaCaption: undefined, fileName: undefined, buttons: undefined } : {}),
-                                      ...(mt.value === 'buttons' && !node.data.buttons ? { buttons: ['Option 1'] } : {}),
+                                      ...(mt.value === 'buttons' && !node.data.buttons ? { buttons: [{ label: 'Option 1', value: 'option_1' }] as ButtonOption[] } : {}),
                                     })}
                                     className={cn(
                                       "flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors",
@@ -748,10 +760,35 @@ export function ChatbotBuilder() {
                             </div>
                           )}
 
-                          {(node.data.messageType) === 'buttons' && (
-                            <div className="space-y-2">
+                          {(node.data.messageType) === 'buttons' && (() => {
+                            // Normalize: handle legacy string[] from old saved flows
+                            const rawBtns = node.data.buttons || [];
+                            const buttons: ButtonOption[] = rawBtns.map(b => resolveButton(b as any));
+                            // Other nodes for nextNodeId selector (exclude current)
+                            const otherNodes = (selectedFlow?.nodes || []).filter(n => n.id !== node.id);
+
+                            return (
+                            <div className="space-y-3">
+                              {/* Channel support notice */}
+                              <div className="rounded-lg border border-blue-100 bg-blue-50 p-2.5 text-xs space-y-1">
+                                <p className="font-semibold text-blue-700">Interactive Buttons — Channel Support</p>
+                                <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-blue-600">
+                                  <span>✅ WhatsApp (Meta)</span>
+                                  <span>✅ WebChat widget</span>
+                                  <span>⚠️ WhatsApp (Twilio)</span>
+                                  <span>⚠️ Instagram / Facebook</span>
+                                  <span className="col-span-2">⚠️ Telegram / SMS — all fall back to numbered text list</span>
+                                </div>
+                              </div>
+
+                              {buttons.length > 3 && (
+                                <div className="rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs text-amber-700">
+                                  ⚠️ WhatsApp supports max 3 buttons. Only the first 3 will be sent as interactive buttons.
+                                </div>
+                              )}
+
                               <div>
-                                <Label className="text-xs text-gray-500 mb-1 block">Message</Label>
+                                <Label className="text-xs text-gray-500 mb-1 block">Prompt Message</Label>
                                 <Textarea
                                   value={node.data.content || ''}
                                   onChange={(e) => updateNode(node.id, { content: e.target.value })}
@@ -760,44 +797,95 @@ export function ChatbotBuilder() {
                                   data-testid={`input-buttons-message-${node.id}`}
                                 />
                               </div>
+
                               <div>
-                                <Label className="text-xs text-gray-500 mb-1 block">Button Options (max 3)</Label>
-                                <div className="space-y-2">
-                                  {(node.data.buttons || []).map((btn, btnIndex) => (
-                                    <div key={btnIndex} className="flex items-center gap-2">
-                                      <div className="flex items-center justify-center w-6 h-6 rounded-full bg-brand-green/10 text-brand-green text-xs font-medium flex-shrink-0">
-                                        {btnIndex + 1}
+                                <Label className="text-xs text-gray-500 mb-1 block">Button Options (max 3 for WhatsApp)</Label>
+                                <div className="space-y-2.5">
+                                  {buttons.map((btn, btnIndex) => (
+                                    <div key={btnIndex} className="border border-gray-200 rounded-lg p-2.5 space-y-2 bg-gray-50">
+                                      <div className="flex items-center justify-between mb-1">
+                                        <span className="text-xs font-medium text-gray-500">Button {btnIndex + 1}</span>
+                                        <button
+                                          onClick={() => {
+                                            const newButtons = buttons.filter((_, i) => i !== btnIndex);
+                                            updateNode(node.id, { buttons: newButtons });
+                                          }}
+                                          className="p-0.5 text-gray-300 hover:text-red-500 transition-colors"
+                                          data-testid={`delete-button-${node.id}-${btnIndex}`}
+                                        >
+                                          <X className="h-3.5 w-3.5" />
+                                        </button>
                                       </div>
-                                      <Input
-                                        value={btn}
-                                        onChange={(e) => {
-                                          const newButtons = [...(node.data.buttons || [])];
-                                          newButtons[btnIndex] = e.target.value;
-                                          updateNode(node.id, { buttons: newButtons });
-                                        }}
-                                        placeholder={`Button ${btnIndex + 1}`}
-                                        className="text-sm flex-1"
-                                        maxLength={20}
-                                        data-testid={`input-button-${node.id}-${btnIndex}`}
-                                      />
-                                      <button
-                                        onClick={() => {
-                                          const newButtons = (node.data.buttons || []).filter((_, i) => i !== btnIndex);
-                                          updateNode(node.id, { buttons: newButtons });
-                                        }}
-                                        className="p-1 text-gray-400 hover:text-red-500"
-                                      >
-                                        <X className="h-4 w-4" />
-                                      </button>
+
+                                      {/* Label */}
+                                      <div>
+                                        <Label className="text-xs text-gray-400 mb-0.5 block">Label (shown to user, max 20 chars)</Label>
+                                        <Input
+                                          value={btn.label}
+                                          onChange={(e) => {
+                                            const newBtns = [...buttons];
+                                            const label = e.target.value;
+                                            // Auto-derive value from label if not manually set
+                                            const autoValue = label.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '').substring(0, 64);
+                                            newBtns[btnIndex] = {
+                                              ...newBtns[btnIndex],
+                                              label,
+                                              value: newBtns[btnIndex].value === resolveButton(rawBtns[btnIndex] as any).value
+                                                ? autoValue || label
+                                                : newBtns[btnIndex].value,
+                                            };
+                                            updateNode(node.id, { buttons: newBtns });
+                                          }}
+                                          placeholder={`Button ${btnIndex + 1} label`}
+                                          className="text-sm h-8"
+                                          maxLength={20}
+                                          data-testid={`input-button-label-${node.id}-${btnIndex}`}
+                                        />
+                                      </div>
+
+                                      {/* Next step */}
+                                      {otherNodes.length > 0 && (
+                                        <div>
+                                          <Label className="text-xs text-gray-400 mb-0.5 block">Next step (optional)</Label>
+                                          <Select
+                                            value={btn.nextNodeId || '__none__'}
+                                            onValueChange={(val) => {
+                                              const newBtns = [...buttons];
+                                              newBtns[btnIndex] = {
+                                                ...newBtns[btnIndex],
+                                                nextNodeId: val === '__none__' ? undefined : val,
+                                              };
+                                              updateNode(node.id, { buttons: newBtns });
+                                            }}
+                                          >
+                                            <SelectTrigger className="h-8 text-xs" data-testid={`select-nextstep-${node.id}-${btnIndex}`}>
+                                              <SelectValue placeholder="Continue flow or stop" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                              <SelectItem value="__none__">— No branch (end flow) —</SelectItem>
+                                              {otherNodes.map(n => (
+                                                <SelectItem key={n.id} value={n.id}>
+                                                  {n.data.label || n.id}
+                                                </SelectItem>
+                                              ))}
+                                            </SelectContent>
+                                          </Select>
+                                        </div>
+                                      )}
                                     </div>
                                   ))}
-                                  {(node.data.buttons || []).length < 3 && (
+
+                                  {buttons.length < 3 && (
                                     <Button
                                       variant="outline"
                                       size="sm"
                                       onClick={() => {
-                                        const newButtons = [...(node.data.buttons || []), ''];
-                                        updateNode(node.id, { buttons: newButtons });
+                                        const idx = buttons.length + 1;
+                                        const newBtns: ButtonOption[] = [
+                                          ...buttons,
+                                          { label: `Option ${idx}`, value: `option_${idx}` },
+                                        ];
+                                        updateNode(node.id, { buttons: newBtns });
                                       }}
                                       className="w-full text-xs"
                                       data-testid={`add-button-${node.id}`}
@@ -809,7 +897,8 @@ export function ChatbotBuilder() {
                                 </div>
                               </div>
                             </div>
-                          )}
+                            );
+                          })()}
                         </div>
                       )}
 

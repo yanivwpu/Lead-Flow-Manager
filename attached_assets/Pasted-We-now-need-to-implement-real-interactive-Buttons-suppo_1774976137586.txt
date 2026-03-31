@@ -1,0 +1,230 @@
+We now need to implement real interactive Buttons support in the chatbot system — not the current plain-text fallback.
+
+Goal:
+Make Buttons a true production feature with the correct UX in the builder, correct runtime execution, and correct provider/channel payloads.
+
+Scope
+
+Implement real button support for:
+
+WhatsApp via Meta Cloud API
+WhatsApp via Twilio
+WebChat widget
+
+For all other channels (Instagram, Facebook, Telegram), if interactive buttons are not supported yet, keep a safe fallback and label it clearly.
+
+1. Builder / UX requirements
+Button node behavior
+
+A Buttons node should allow:
+
+Prompt text/message
+Up to 3 reply buttons for WhatsApp compatibility
+Each button has:
+label
+value / payload
+optional next-step mapping
+Validation rules
+Max 3 buttons when node is intended for WhatsApp
+Each label must respect WhatsApp limits
+Prevent empty button labels
+Prevent duplicate button labels
+Show a live warning if the configured node exceeds WhatsApp compatibility
+UX clarity
+
+Inside the builder/edit panel:
+
+Clearly label this node as:
+Interactive Buttons
+Show support notes per channel:
+WhatsApp Meta: supported
+WhatsApp Twilio: supported if provider payload allows
+WebChat: supported
+Other channels: fallback to text list unless implemented later
+
+If a channel does not support interactive buttons:
+
+do not pretend they are native buttons
+show a notice that fallback text format will be used
+2. Runtime / chatbot engine requirements
+Node execution
+
+In chatbotEngine.ts, add explicit handling for a Buttons node type.
+
+Behavior:
+
+If current channel supports interactive buttons:
+send an actual interactive button message
+If not supported:
+send a text fallback in numbered-list format
+Button click handling
+
+When a user taps a button:
+
+the platform must capture the selected button payload/value
+store the user response in the conversation/messages history
+continue the flow to the next mapped step
+Flow continuation
+
+Buttons must support:
+
+button-specific branching
+or default “treat selected button as inbound text” fallback if explicit branching is not configured
+
+Preferred implementation:
+
+each button can point to a next node
+if no next node is mapped, store the button payload as inbound user text and allow normal keyword/AI/workflow handling
+Logging
+
+Add logs for:
+
+buttons node entered
+channel support mode chosen (interactive vs fallback)
+button payload sent
+button click received
+branch selected / next node executed
+provider success/failure
+3. Provider implementation requirements
+A. WhatsApp Meta Cloud API
+
+Implement proper interactive reply button payloads using Meta’s supported WhatsApp interactive message format.
+
+Need:
+
+prompt/body text
+reply buttons
+button IDs / payloads mapped back to the chatbot flow
+B. WhatsApp via Twilio
+
+Implement the correct Twilio WhatsApp interactive/button payload path if supported by the current Twilio WhatsApp integration in our codebase.
+
+Important:
+
+verify actual Twilio support for reply buttons in the route we use
+if Twilio account/config path does not support the same interactive structure, say so clearly and provide a graceful fallback
+do not fake support
+C. WebChat
+
+Implement real clickable buttons in the web widget UI:
+
+buttons rendered under the chatbot message
+clicking a button should:
+send the button payload/value into the same conversation
+visually show the selected response
+continue the mapped flow
+4. Data model requirements
+
+Please confirm whether current chatbot node schema already stores enough for buttons. If not, extend it safely.
+
+Each button option should support storing:
+
+label
+value or payload
+nextNodeId (optional but preferred)
+
+Persist all of this in the chatbot flow JSON so it survives save/load/edit cleanly.
+
+5. Conversation UX requirements
+WhatsApp / WebChat desired experience
+
+Bot sends:
+“Are you buying or selling?”
+
+Buttons:
+
+Buy
+Sell
+Rent
+
+When user taps:
+
+the selected option appears as the user’s reply
+no duplicate text fallback should be sent
+the next step runs immediately
+Fallback behavior for unsupported channels
+
+If unsupported:
+
+send:
+Buy
+Sell
+Rent
+accept replies like:
+1
+Buy
+buy
+map them back to the intended button option
+
+This fallback should still preserve branching logic.
+
+6. Channel support matrix
+
+After implementation, provide the final truth table for:
+
+WhatsApp Meta
+WhatsApp Twilio
+WebChat
+Instagram
+Facebook
+Telegram
+
+Each should be marked as:
+
+native interactive buttons
+text fallback only
+unsupported
+7. Edge cases
+
+Handle safely:
+
+duplicate button click events
+expired buttons / old messages
+invalid or missing button payload
+user types free text instead of clicking
+unsupported channel
+more than 3 buttons configured for WhatsApp
+edited flow with broken nextNodeId references
+
+No crashes, clear logs, graceful fallback.
+
+8. Validation required before calling complete
+
+Do not mark this complete until you validate all of these:
+
+WhatsApp Meta
+bot sends real interactive buttons
+button tap is received
+correct branch continues
+no duplicate sends
+WhatsApp Twilio
+confirm real support or confirmed fallback
+if native supported, validate end-to-end
+if not, document limitation clearly
+WebChat
+clickable buttons render
+click continues flow correctly
+Fallback mode
+numbered-list fallback works
+typed reply 1 / Buy maps correctly
+9. Important product requirement
+
+We should not show “Buttons” as a full production feature unless:
+
+native interactive behavior works on at least WhatsApp Meta and WebChat
+and fallback behavior is reliable everywhere else
+
+If any channel is fallback-only, make that explicit in the UI and documentation.
+
+10. Deliverables
+
+Please return with:
+
+implementation summary
+exact files changed
+final support matrix by channel
+screenshots or logs of native buttons working
+any remaining limitations clearly stated
+
+Priority:
+Build this as a real, future-safe feature — not another builder-only UI element with partial runtime support.

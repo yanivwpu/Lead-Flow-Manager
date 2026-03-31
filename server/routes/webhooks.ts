@@ -116,6 +116,24 @@ export function registerWebhookRoutes(app: Express): void {
     }
   });
 
+  // Public widget settings (no auth — returns only appearance fields)
+  app.get("/api/webchat/:userId/settings", async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const user = await storage.getUser(userId);
+      const defaults = { color: "#25D366", welcomeMessage: "Hi! How can we help you today?", businessName: "" };
+      if (!user) return res.json(defaults);
+      const ws = (user.widgetSettings as any) || {};
+      res.json({
+        color: ws.color || defaults.color,
+        welcomeMessage: ws.welcomeMessage || defaults.welcomeMessage,
+        businessName: (user as any).businessName || (user as any).name || "",
+      });
+    } catch {
+      res.json({ color: "#25D366", welcomeMessage: "Hi! How can we help you?", businessName: "" });
+    }
+  });
+
   // Get web chat messages for a visitor
   app.get("/api/webchat/:userId/:visitorId/messages", async (req, res) => {
     try {
