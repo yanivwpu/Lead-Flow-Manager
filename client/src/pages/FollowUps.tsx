@@ -60,6 +60,10 @@ function getTaskStatus(followUpDate: string | null): 'overdue' | 'today' | 'upco
   return 'upcoming';
 }
 
+function isClosedStage(stage: string): boolean {
+  return stage === 'Closed' || stage === 'Closed Won';
+}
+
 function hasNeedsReply(chat: Chat): boolean {
   return (chat.lastMessageDirection === 'inbound' && chat.unread > 0) || chat.unread > 0;
 }
@@ -90,7 +94,7 @@ function KPIHeader({ chats, activeFilter, onFilterChange }: {
   [chats]);
 
   const bookedCount = useMemo(() => 
-    chats.filter(c => c.pipelineStage === 'Closed').length,
+    chats.filter(c => isClosedStage(c.pipelineStage)).length,
   [chats]);
 
   const needsReplyCount = useMemo(() => 
@@ -98,7 +102,7 @@ function KPIHeader({ chats, activeFilter, onFilterChange }: {
   [chats]);
 
   const activeDealsCount = useMemo(() => 
-    chats.filter(c => c.pipelineStage !== 'Closed').length,
+    chats.filter(c => !isClosedStage(c.pipelineStage)).length,
   [chats]);
 
   const kpis: { label: string; filterKey: KPIFilter; value: number; icon: any; color: string; bg: string; border: string; activeBorder: string }[] = [
@@ -308,9 +312,9 @@ function PipelineView({
     const map = new Map<string, Chat[]>();
     PIPELINE_STAGES.forEach(stage => map.set(stage, []));
     chats.forEach(chat => {
-      const stage = PIPELINE_STAGES.includes(chat.pipelineStage as any) 
-        ? chat.pipelineStage 
-        : 'Lead';
+      let stage: string = chat.pipelineStage;
+      if (isClosedStage(stage)) stage = 'Closed';
+      if (!PIPELINE_STAGES.includes(stage as any)) stage = 'Lead';
       map.get(stage)?.push(chat);
     });
     return map;
@@ -594,11 +598,11 @@ function applyKPIFilter(chatList: Chat[], filter: KPIFilter): Chat[] {
     case 'booking-requested':
       return chatList.filter(c => c.pipelineStage === 'Negotiation');
     case 'booked':
-      return chatList.filter(c => c.pipelineStage === 'Closed');
+      return chatList.filter(c => isClosedStage(c.pipelineStage));
     case 'needs-reply':
       return chatList.filter(c => hasNeedsReply(c));
     case 'active-deals':
-      return chatList.filter(c => c.pipelineStage !== 'Closed');
+      return chatList.filter(c => !isClosedStage(c.pipelineStage));
     default:
       return chatList;
   }

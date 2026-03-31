@@ -504,7 +504,7 @@ async function setupDemoSampleData(userId: string) {
         avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Michael',
         primaryChannel: 'sms',
         tag: 'Customer',
-        pipelineStage: 'Closed Won',
+        pipelineStage: 'Closed',
         notes: 'Just closed on beach house property. Very happy client!',
         source: 'manual',
       },
