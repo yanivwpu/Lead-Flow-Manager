@@ -1,6 +1,9 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import crypto from "crypto";
+import { db } from "../drizzle/db";
+import { messages as messagesTable, contacts as contactsTable } from "@shared/schema";
+import { eq, and, or, isNotNull, ilike, desc } from "drizzle-orm";
 import { registerContactRoutes } from "./routes/contacts";
 import { registerConversationRoutes } from "./routes/conversations";
 import { registerChannelRoutes } from "./routes/channels";
@@ -2948,72 +2951,147 @@ export async function registerRoutes(
       if (!query || query.length < 2) {
         return res.status(400).json({ error: "Search query must be at least 2 characters" });
       }
-      const chats = await storage.searchMessages(req.user.id, query);
-      // Phase E Step 2: overlay CRM fields from contacts (authoritative source)
-      const contactsForSearch = await storage.getContacts(req.user.id);
-      const contactCrmSearch = new Map(
-        contactsForSearch
+      const userId = req.user.id;
+      const searchPattern = `%${query}%`;
+      const queryLower = query.toLowerCase();
+      const seen = new Set<string>(); // dedup by contactId
+      const results: any[] = [];
+
+      // ── NEW SYSTEM: search messages table joined with contacts ──────────
+      // One result per contact (most recent matching message wins)
+      const newMsgRows = await db
+        .selectDistinctOn([messagesTable.contactId], {
+          contactId:     messagesTable.contactId,
+          content:       messagesTable.content,
+          createdAt:     messagesTable.createdAt,
+          contactName:   contactsTable.name,
+          avatar:        contactsTable.avatar,
+          tag:           contactsTable.tag,
+          pipelineStage: contactsTable.pipelineStage,
+        })
+        .from(messagesTable)
+        .innerJoin(contactsTable, eq(messagesTable.contactId, contactsTable.id))
+        .where(
+          and(
+            eq(messagesTable.userId, userId),
+            isNotNull(messagesTable.content),
+            ilike(messagesTable.content, searchPattern)
+          )
+        )
+        .orderBy(messagesTable.contactId, desc(messagesTable.createdAt))
+        .limit(50);
+
+      for (const row of newMsgRows) {
+        if (seen.has(row.contactId)) continue;
+        seen.add(row.contactId);
+        const text = row.content || '';
+        results.push({
+          chatId:        row.contactId,
+          chatName:      row.contactName,
+          avatar:        row.avatar,
+          matchedText:   text.length > 150 ? text.substring(0, 150) + '...' : text,
+          timestamp:     row.createdAt?.toISOString() ?? '',
+          pipelineStage: row.pipelineStage ?? '',
+          tag:           row.tag ?? '',
+        });
+      }
+
+      // ── NEW SYSTEM: search contacts by name / notes ─────────────────────
+      const contactRows = await db
+        .select()
+        .from(contactsTable)
+        .where(
+          and(
+            eq(contactsTable.userId, userId),
+            or(
+              ilike(contactsTable.name, searchPattern),
+              ilike(contactsTable.notes, searchPattern)
+            )
+          )
+        )
+        .limit(30);
+
+      for (const ct of contactRows) {
+        if (seen.has(ct.id)) continue;
+        seen.add(ct.id);
+        const isNoteMatch = ct.notes && ct.notes.toLowerCase().includes(queryLower);
+        results.push({
+          chatId:        ct.id,
+          chatName:      ct.name,
+          avatar:        ct.avatar ?? '',
+          matchedText:   isNoteMatch
+            ? `Note: ${(ct.notes!.length > 150 ? ct.notes!.substring(0, 150) + '...' : ct.notes!)}`
+            : ct.name,
+          timestamp:     ct.updatedAt?.toISOString() ?? '',
+          pipelineStage: ct.pipelineStage ?? '',
+          tag:           ct.tag ?? '',
+        });
+      }
+
+      // ── LEGACY SYSTEM: search old chats table (backward compat) ─────────
+      const oldChats = await storage.searchMessages(userId, query);
+      const allContacts = await storage.getContacts(userId);
+      const contactByPhone = new Map(
+        allContacts
           .filter(c => c.whatsappId || c.phone)
           .map(c => [(c.whatsappId || c.phone || '').replace(/\D/g, ''), c])
       );
-      
-      // Transform to search results format with matched text excerpts
-      const results = chats.flatMap(chat => {
+
+      for (const chat of oldChats) {
         const norm = ((chat as any).whatsappPhone || '').replace(/\D/g, '');
-        const ct = norm ? contactCrmSearch.get(norm) : undefined;
-        const matches: any[] = [];
-        const queryLower = query.toLowerCase();
-        
-        // Check messages for matches
-        const messages = (chat.messages as any[]) || [];
+        const ct = norm ? contactByPhone.get(norm) : undefined;
         const resolvedId = ct?.id || chat.id;
-        for (const msg of messages) {
+
+        // Skip if already covered by the new system
+        if (seen.has(resolvedId)) continue;
+
+        const chatMessages = (chat.messages as any[]) || [];
+        let added = false;
+        for (const msg of chatMessages) {
           if (msg.text && msg.text.toLowerCase().includes(queryLower)) {
-            matches.push({
-              chatId: resolvedId,
-              chatName: ct?.name ?? chat.name,
-              avatar: ct?.avatar ?? chat.avatar,
-              matchedText: msg.text.length > 150 
-                ? msg.text.substring(0, 150) + '...' 
-                : msg.text,
-              timestamp: msg.time || chat.time,
-              pipelineStage: ct?.pipelineStage ?? chat.pipelineStage,
-              tag: ct?.tag ?? chat.tag,
+            seen.add(resolvedId);
+            results.push({
+              chatId:        resolvedId,
+              chatName:      ct?.name ?? chat.name,
+              avatar:        ct?.avatar ?? chat.avatar,
+              matchedText:   msg.text.length > 150 ? msg.text.substring(0, 150) + '...' : msg.text,
+              timestamp:     msg.time || chat.time || '',
+              pipelineStage: ct?.pipelineStage ?? chat.pipelineStage ?? '',
+              tag:           ct?.tag ?? chat.tag ?? '',
+            });
+            added = true;
+            break; // one result per legacy chat
+          }
+        }
+        if (!added) {
+          const notes = ct?.notes ?? chat.notes;
+          if (notes && notes.toLowerCase().includes(queryLower)) {
+            seen.add(resolvedId);
+            results.push({
+              chatId:        resolvedId,
+              chatName:      ct?.name ?? chat.name,
+              avatar:        ct?.avatar ?? chat.avatar,
+              matchedText:   `Note: ${notes.length > 150 ? notes.substring(0, 150) + '...' : notes}`,
+              timestamp:     chat.time || '',
+              pipelineStage: ct?.pipelineStage ?? chat.pipelineStage ?? '',
+              tag:           ct?.tag ?? chat.tag ?? '',
+            });
+          } else if (chat.name.toLowerCase().includes(queryLower)) {
+            seen.add(resolvedId);
+            results.push({
+              chatId:        resolvedId,
+              chatName:      ct?.name ?? chat.name,
+              avatar:        ct?.avatar ?? chat.avatar,
+              matchedText:   chat.lastMessage || 'No recent messages',
+              timestamp:     chat.time || '',
+              pipelineStage: ct?.pipelineStage ?? chat.pipelineStage ?? '',
+              tag:           ct?.tag ?? chat.tag ?? '',
             });
           }
         }
-        
-        // Check notes for matches
-        const notes = ct?.notes ?? chat.notes;
-        if (notes && notes.toLowerCase().includes(queryLower)) {
-          matches.push({
-            chatId: resolvedId,
-            chatName: ct?.name ?? chat.name,
-            avatar: ct?.avatar ?? chat.avatar,
-            matchedText: `Note: ${notes.length > 150 ? notes.substring(0, 150) + '...' : notes}`,
-            timestamp: chat.time || 'Recently',
-            pipelineStage: ct?.pipelineStage ?? chat.pipelineStage,
-            tag: ct?.tag ?? chat.tag,
-          });
-        }
-        
-        // Check name for matches
-        if (chat.name.toLowerCase().includes(queryLower) && matches.length === 0) {
-          matches.push({
-            chatId: resolvedId,
-            chatName: ct?.name ?? chat.name,
-            avatar: ct?.avatar ?? chat.avatar,
-            matchedText: chat.lastMessage || 'No recent messages',
-            timestamp: chat.time || 'Recently',
-            pipelineStage: ct?.pipelineStage ?? chat.pipelineStage,
-            tag: ct?.tag ?? chat.tag,
-          });
-        }
-        
-        return matches;
-      }).slice(0, 50); // Limit to 50 results
-      
-      res.json(results);
+      }
+
+      res.json(results.slice(0, 50));
     } catch (error) {
       console.error("Error searching messages:", error);
       res.status(500).json({ error: "Failed to search messages" });
