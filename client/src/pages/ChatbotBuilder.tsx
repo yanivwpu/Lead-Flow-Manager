@@ -770,14 +770,21 @@ export function ChatbotBuilder() {
                             return (
                             <div className="space-y-3">
                               {/* Channel support notice */}
-                              <div className="rounded-lg border border-blue-100 bg-blue-50 p-2.5 text-xs space-y-1">
-                                <p className="font-semibold text-blue-700">Interactive Buttons — Channel Support</p>
-                                <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-blue-600">
-                                  <span>✅ WhatsApp (Meta)</span>
-                                  <span>✅ WebChat widget</span>
-                                  <span>⚠️ WhatsApp (Twilio)</span>
-                                  <span>⚠️ Instagram / Facebook</span>
-                                  <span className="col-span-2">⚠️ Telegram / SMS — all fall back to numbered text list</span>
+                              <div className="rounded-lg border border-slate-200 bg-slate-50 p-2.5 text-xs space-y-2">
+                                <p className="font-semibold text-slate-700">Interactive Buttons — Channel Support</p>
+                                <div className="space-y-1">
+                                  <div className="flex gap-2">
+                                    <span className="text-green-600 font-medium w-4">✅</span>
+                                    <span className="text-slate-700"><span className="font-medium">Full support:</span> WhatsApp (Meta Cloud API), WebChat widget</span>
+                                  </div>
+                                  <div className="flex gap-2">
+                                    <span className="text-amber-500 font-medium w-4">〜</span>
+                                    <span className="text-slate-700"><span className="font-medium">Partial / fallback:</span> WhatsApp (Twilio) — buttons sent as a numbered text list. Full interactive buttons require Twilio Content API templates.</span>
+                                  </div>
+                                  <div className="flex gap-2">
+                                    <span className="text-slate-400 font-medium w-4">✖</span>
+                                    <span className="text-slate-500"><span className="font-medium">Text only:</span> Instagram, Facebook, Telegram, SMS — always sent as a numbered list.</span>
+                                  </div>
                                 </div>
                               </div>
 
