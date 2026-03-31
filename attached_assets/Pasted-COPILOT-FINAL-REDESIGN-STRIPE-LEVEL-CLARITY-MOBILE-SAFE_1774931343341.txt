@@ -1,0 +1,251 @@
+COPILOT FINAL REDESIGN — STRIPE-LEVEL CLARITY + MOBILE-SAFE
+
+Goal:
+Refine the current Copilot so it feels like one clear assistant, not a stack of widgets.
+Do NOT rebuild logic. Keep all current working features. This is a layout/hierarchy polish pass only.
+Also make sure the same structure adapts cleanly to the mobile slide-out sidebar.
+
+==================================================
+1. CORE DESIGN PRINCIPLE
+==================================================
+
+Copilot must answer 3 things in order:
+
+1. What kind of lead is this?
+2. What is missing?
+3. What should I do next?
+
+Everything in the panel should support that flow.
+Reduce visual noise and make the “next step” obvious.
+
+==================================================
+2. DESKTOP STRUCTURE (EXPANDED COPILOT)
+==================================================
+
+Keep one Copilot panel only.
+
+Use this exact order:
+
+A. HEADER
+- Title: Copilot
+- AI Brain badge (only if applicable)
+- Status pill: Active
+- Expand / Collapse control must be clearly visible and clickable
+
+B. LEAD SNAPSHOT
+Line 1:
+- Warm Lead / Hot Lead / Cold Lead
+
+Line 2:
+- Buyer / Investor / Seller / Inquiry
+- Collecting details / Ready to convert / Waiting for reply / New conversation
+
+This area should be compact and calm.
+Do NOT cram everything into one line.
+
+C. SIGNALS
+Show Budget / Timeline / Financing in one clean row or compact stack.
+
+Rules:
+- Missing = muted / hollow
+- Captured = filled / highlighted
+- If value exists, show it inline where possible
+
+Examples:
+- Budget: Missing
+- Timeline: 2–3 months
+- Financing: Pre-approved
+
+This section should feel informative, not decorative.
+
+D. NEXT BEST ACTION (MOST IMPORTANT BLOCK)
+This is the hero section of Copilot.
+
+Display:
+- Label: Next best action
+- Missing info summary:
+  “Missing: Budget, Timeline”
+- Recommended next move:
+  “Ask about budget”
+
+Style:
+- One single prominent block
+- Subtle highlight (light neutral or very soft accent)
+- NOT a strong purple card
+- This should stand out more than Summary
+
+E. SUGGESTED REPLY
+Place directly under Next Best Action because it is the execution of that recommendation.
+
+Display:
+- Label: Suggested reply
+- Small helper text: Recommended next step
+- Suggested message in a clean white card
+- CTA: Insert reply
+
+Style:
+- Clean card
+- Subtle border
+- Small shadow if needed
+- Action should feel obvious but not loud
+
+F. SUMMARY
+Move this below Suggested Reply.
+This is supporting context, not the main action.
+
+Display:
+- Label: Summary
+- 1–2 sentence natural language summary
+
+Style:
+- More muted than Suggested Reply
+- Smaller text
+- Very light divider above it
+- No heavy background color
+- No extra purple emphasis
+
+==================================================
+3. REMOVE VISUAL CLUTTER
+==================================================
+
+1. Reduce number of colored blocks
+- Only one area should feel visually emphasized:
+  Next Best Action
+
+2. Purple usage
+- Keep purple only for:
+  - AI Brain badge
+  - small accent text if needed
+- Do NOT use purple-heavy backgrounds across multiple sections
+
+3. Fewer boxes
+- Do not make every section a separate loud card
+- Use spacing and typography to create hierarchy
+
+4. Clear reading flow
+User should scan:
+Lead → Missing info → Action → Suggested reply → Summary
+
+==================================================
+4. ACTION CHIPS / BUTTONS
+==================================================
+
+Keep current actions working:
+- Book
+- Assign
+- Follow
+- Pause
+
+But visually:
+- reduce their dominance slightly
+- they should not compete with Next Best Action
+- keep them compact and aligned
+
+Suggestion chips should remain ephemeral:
+- after action is taken, chip disappears
+- new relevant chip can appear later
+
+==================================================
+5. EXPAND / COLLAPSE UX
+==================================================
+
+Current collapse affordance is too subtle.
+
+Fix:
+- Make the entire Copilot header clickable
+- Add clear text:
+  “Expand” when collapsed
+  “Collapse” when expanded
+- Use visible chevron icon
+- Add hover feedback
+- Smooth 150–200ms expand/collapse animation
+
+Collapsed view should show only:
+- Copilot
+- Lead level
+- one short state line
+- small suggestion count
+
+Expanded view reveals full content described above.
+
+==================================================
+6. TEAM NOTES SECTION (BELOW COPILOT)
+==================================================
+
+Keep Team Notes separate from Copilot.
+
+Team Notes should remain below Follow-up / CRM fields.
+
+Polish rules:
+- Keep compact
+- Notes list should have max height with internal vertical scroll
+- No horizontal scroll ever
+- Note cards use soft pale yellow / cream background
+- Metadata (user + timestamp) should be small and muted
+- Content should be darker and easier to read
+- Reduce note card gap slightly (compact but breathable)
+
+Do NOT move Team Notes into Copilot.
+
+==================================================
+7. MOBILE SLIDE-OUT ADAPTATION (IMPORTANT)
+==================================================
+
+This redesign must also work in the mobile slide-out sidebar.
+
+Rules for mobile:
+
+1. Same content order:
+- Snapshot
+- Signals
+- Next Best Action
+- Suggested Reply
+- Summary
+
+2. Reduce spacing slightly for narrow width
+- tighter paddings
+- tighter gaps
+- but do not feel cramped
+
+3. Stack everything vertically
+- no side-by-side dense layouts
+- keep readability first
+
+4. Next Best Action must still be the most visually obvious block
+
+5. Suggested Reply card must fit narrow screens cleanly
+- no overflow
+- no clipped text
+- CTA remains visible
+
+6. Team Notes cards:
+- full width
+- wrapped text
+- no horizontal overflow
+- internal scroll only inside notes container if needed
+
+7. Expand / Collapse control on mobile must still be obvious
+- no tiny hidden chevron
+- text + icon preferred
+
+==================================================
+8. ACCEPTANCE CRITERIA
+==================================================
+
+Done means:
+
+1. Copilot feels like one assistant, not multiple widget blocks
+2. Next Best Action is clearly the main focal point
+3. Suggested Reply feels directly connected to the action
+4. Summary is calmer and secondary
+5. Purple is reduced and used intentionally
+6. Expanded state feels structured, not like a dump of information
+7. Collapsed state is obvious and understandable
+8. Mobile slide-out version preserves the same hierarchy and clarity
+9. No logic regressions
+10. No overflow / clipping / awkward spacing on desktop or mobile
+
+IMPORTANT:
+This is a visual hierarchy + layout refinement only.
+Do NOT rewrite working Copilot logic.
+Keep all current actions, gating, and functionality intact.

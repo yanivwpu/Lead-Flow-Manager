@@ -681,6 +681,7 @@ export function InboxLeadDetailsPanel({
         )}
       </div>
 
+      {copilotExpanded && (
       {/* ══ 2. COPILOT QUICK ACTIONS ══════════════════════════════════════ */}
       <div className="px-3 py-2 border-b border-gray-100">
         <div className="grid grid-cols-4 gap-1">
@@ -1014,6 +1015,7 @@ export function InboxLeadDetailsPanel({
 
         </div>
       </div>
+      )}
 
       {/* ══ Body ════════════════════════════════════════════════════════════ */}
       <div className="flex-1 overflow-y-auto">
@@ -1021,7 +1023,7 @@ export function InboxLeadDetailsPanel({
 
           {/* ══ COPILOT EXPANDED PANEL ══════════════════════════════════ */}
           {copilotExpanded && (
-            <div className="-mx-3 -mt-3 bg-[#fafafa] border-b border-gray-200 px-4 pt-3 pb-4 space-y-5 animate-in fade-in slide-in-from-top-1 duration-200">
+            <div className="-mx-3 -mt-3 bg-[#fafafa] border-b border-gray-200 px-4 pt-3 pb-4 space-y-3 animate-in fade-in slide-in-from-top-1 duration-200">
 
               {!canSeeCopilot ? (
                 <AIUpgradePrompt
@@ -1032,8 +1034,8 @@ export function InboxLeadDetailsPanel({
                 />
               ) : (
                 <>
-                  {/* STATUS ─────────────────────────────────────────── */}
-                  <div className="space-y-1.5">
+                  {/* A. LEAD SNAPSHOT ──────────────────────────────── */}
+                  <div className="space-y-1">
                     <div className="flex items-center gap-1.5">
                       <span className={cn("w-2 h-2 rounded-full shrink-0", intel.leadScore.dot)} />
                       <span className={cn("text-[13px] font-semibold leading-tight", intel.leadScore.color)}>
@@ -1045,7 +1047,7 @@ export function InboxLeadDetailsPanel({
                     </p>
                   </div>
 
-                  {/* SIGNALS ────────────────────────────────────────── */}
+                  {/* B. SIGNALS ─────────────────────────────────────── */}
                   <div className="flex flex-col gap-1.5">
                     {[
                       { ok: intel.hasBudget,    label: 'Budget',    value: intel.budget },
@@ -1068,69 +1070,7 @@ export function InboxLeadDetailsPanel({
                     ))}
                   </div>
 
-                  {/* SUGGESTIONS ────────────────────────────────────── */}
-                  {!canSeeWorkflow ? (
-                    <AIUpgradePrompt
-                      feature="Autopilot"
-                      requiredPlan={workflowUpgradeTo}
-                      reason="Suggests and automates actions: assign leads, book appointments, schedule follow-ups, and advance pipeline stages with one click."
-                      size="md"
-                    />
-                  ) : hasAnyChips && (
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      {activeChipActions.slice(0, hasAIBrain ? 4 : 2).map(action => {
-                        const chipHandlers: Record<string, () => void> = {
-                          assign:  () => { setAssignOpen(true); completeAction(action.type, "Lead assigned"); },
-                          book:    () => { setBookOpen(true); completeAction(action.type, "Follow-up scheduled"); },
-                          follow:  () => { setFollowOpen(true); completeAction(action.type, "Follow-up scheduled"); },
-                          nurture: () => { completeAction(action.type, "Added to nurture queue"); },
-                        };
-                        const handler = chipHandlers[action.type];
-                        const colorCls = action.priority === 'high'
-                          ? 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100'
-                          : action.priority === 'medium'
-                          ? 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'
-                          : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50';
-                        return (
-                          <button
-                            key={action.type}
-                            onClick={handler}
-                            disabled={!handler}
-                            title={action.reason}
-                            data-testid={`workflow-action-${action.type}`}
-                            className={cn(
-                              "text-[11px] font-medium px-2.5 py-1 rounded-lg border transition-all leading-none",
-                              colorCls,
-                              !handler && "opacity-60 cursor-default",
-                              fadingAction === action.type && "opacity-0 scale-95"
-                            )}
-                          >
-                            {action.label}
-                          </button>
-                        );
-                      })}
-                      {hasTagSuggestion && (
-                        <button
-                          onClick={() => { onUpdateContact({ tag: workflow.tagSuggestion! }); completeAction('tag', `Tagged as "${workflow.tagSuggestion}"`); }}
-                          data-testid="workflow-tag-suggestion"
-                          className={cn("text-[11px] font-medium px-2.5 py-1 rounded-lg border bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 transition-all leading-none", fadingAction === 'tag' && "opacity-0 scale-95")}
-                        >
-                          Tag: {workflow.tagSuggestion} ↗
-                        </button>
-                      )}
-                      {hasStageSuggestion && (
-                        <button
-                          onClick={() => { onUpdateContact({ pipelineStage: workflow.stageSuggestion! }); completeAction('stage', `Moved to ${workflow.stageSuggestion}`); }}
-                          data-testid="workflow-stage-suggestion"
-                          className={cn("text-[11px] font-medium px-2.5 py-1 rounded-lg border bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 transition-all leading-none", fadingAction === 'stage' && "opacity-0 scale-95")}
-                        >
-                          → {workflow.stageSuggestion}
-                        </button>
-                      )}
-                    </div>
-                  )}
-
-                  {/* QUALIFYING GAP — AI Brain only ─────────────────── */}
+                  {/* C. NEXT BEST ACTION — hero block ─────────────── */}
                   {hasAIBrain && canSeeWorkflow && (() => {
                     const missingLabels = [
                       !intel.hasBudget    && "Budget",
@@ -1144,28 +1084,27 @@ export function InboxLeadDetailsPanel({
                     };
                     if (!missingLabels.length) return null;
                     return (
-                      <div className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 space-y-1.5">
-                        <p className="text-[9px] uppercase tracking-widest font-semibold text-violet-400">Next best action</p>
+                      <div className="rounded-xl border border-gray-200 bg-white px-3 py-3 space-y-1.5 shadow-[0_1px_3px_rgba(0,0,0,0.05)]">
+                        <p className="text-[9px] uppercase tracking-widest font-bold text-gray-500">Next best action</p>
                         <p className="text-[11px] text-gray-500">
-                          <span className="font-medium text-gray-700">Missing:</span>{" "}
+                          <span className="font-semibold text-gray-700">Missing:</span>{" "}
                           {missingLabels.join(", ")}
                         </p>
-                        <p className="text-[11px] text-gray-500">
-                          <span className="font-medium text-gray-700">Next step:</span>{" "}
+                        <p className="text-[12px] font-semibold text-gray-800">
                           {nextActions[missingLabels[0]]}
                         </p>
                       </div>
                     );
                   })()}
 
-                  {/* SUGGESTED REPLY ────────────────────────────────── */}
+                  {/* D. SUGGESTED REPLY — executes the recommendation */}
                   {canSeeWorkflow && qualifyAction?.value && (
                     <div>
-                      <div className="mb-2">
+                      <div className="mb-1.5">
                         <p className="text-[10px] uppercase tracking-widest font-semibold text-gray-400">Suggested Reply</p>
                         <p className="text-[10px] text-gray-400 mt-0.5">Recommended next step</p>
                       </div>
-                      <div className="bg-white border border-gray-200 rounded-xl p-3.5 shadow-[0_1px_4px_rgba(0,0,0,0.06)]">
+                      <div className="bg-white border border-gray-200 rounded-xl p-3 shadow-[0_1px_4px_rgba(0,0,0,0.06)]">
                         <p className="text-[12px] text-gray-800 leading-relaxed">"{qualifyAction.value}"</p>
                         <button
                           onClick={() => {
@@ -1176,7 +1115,7 @@ export function InboxLeadDetailsPanel({
                             }
                             completeAction('qualify', "Message inserted");
                           }}
-                          className="mt-2.5 text-[11px] font-semibold text-emerald-600 hover:text-emerald-700 transition-colors flex items-center gap-1"
+                          className="mt-2 text-[11px] font-semibold text-emerald-600 hover:text-emerald-700 transition-colors flex items-center gap-1"
                           data-testid="button-insert-suggested-message"
                         >
                           Insert reply
@@ -1186,18 +1125,18 @@ export function InboxLeadDetailsPanel({
                     </div>
                   )}
 
-                  {/* SUMMARY ────────────────────────────────────────── */}
-                  <div className="pt-3 border-t border-gray-100">
-                    <p className="text-[9px] uppercase tracking-widest font-semibold text-gray-300 mb-1.5">
+                  {/* E. SUMMARY — supporting context, muted/secondary */}
+                  <div className="pt-2 border-t border-gray-100">
+                    <p className="text-[9px] uppercase tracking-widest font-semibold text-gray-300 mb-1">
                       {hasAIBrain ? "Memory" : "Summary"}
                     </p>
                     {aiMemoryLoading ? (
                       <div className="flex items-center gap-1.5">
-                        <div className="w-1.5 h-1.5 rounded-full bg-purple-200 animate-pulse" />
+                        <div className="w-1.5 h-1.5 rounded-full bg-gray-200 animate-pulse" />
                         <span className="text-[11px] text-gray-400 italic">Generating…</span>
                       </div>
                     ) : aiMemory ? (
-                      <p className="text-[11px] text-gray-500 leading-relaxed">{aiMemory}</p>
+                      <p className="text-[11px] text-gray-400 leading-relaxed">{aiMemory}</p>
                     ) : (
                       <p className="text-[10px] text-gray-400 italic">
                         {hasAIBrain
@@ -1207,7 +1146,65 @@ export function InboxLeadDetailsPanel({
                       </p>
                     )}
                   </div>
+
+                  {/* F. SUGGESTION CHIPS — compact, below main content */}
+                  {!canSeeWorkflow ? (
+                    <AIUpgradePrompt
+                      feature="Autopilot"
+                      requiredPlan={workflowUpgradeTo}
+                      reason="Suggests and automates actions: assign leads, book appointments, schedule follow-ups, and advance pipeline stages with one click."
+                      size="md"
+                    />
+                  ) : hasAnyChips && (
+                    <div className="flex items-center gap-1 flex-wrap pt-0.5">
+                      {activeChipActions.slice(0, hasAIBrain ? 4 : 2).map(action => {
+                        const chipHandlers: Record<string, () => void> = {
+                          assign:  () => { setAssignOpen(true); completeAction(action.type, "Lead assigned"); },
+                          book:    () => { setBookOpen(true); completeAction(action.type, "Follow-up scheduled"); },
+                          follow:  () => { setFollowOpen(true); completeAction(action.type, "Follow-up scheduled"); },
+                          nurture: () => { completeAction(action.type, "Added to nurture queue"); },
+                        };
+                        const handler = chipHandlers[action.type];
+                        return (
+                          <button
+                            key={action.type}
+                            onClick={handler}
+                            disabled={!handler}
+                            title={action.reason}
+                            data-testid={`workflow-action-${action.type}`}
+                            className={cn(
+                              "text-[10px] font-medium px-2 py-0.5 rounded-md border transition-all leading-none",
+                              "bg-white text-gray-500 border-gray-200 hover:border-gray-300 hover:text-gray-700",
+                              !handler && "opacity-60 cursor-default",
+                              fadingAction === action.type && "opacity-0 scale-95"
+                            )}
+                          >
+                            {action.label}
+                          </button>
+                        );
+                      })}
+                      {hasTagSuggestion && (
+                        <button
+                          onClick={() => { onUpdateContact({ tag: workflow.tagSuggestion! }); completeAction('tag', `Tagged as "${workflow.tagSuggestion}"`); }}
+                          data-testid="workflow-tag-suggestion"
+                          className={cn("text-[10px] font-medium px-2 py-0.5 rounded-md border bg-white text-gray-500 border-gray-200 hover:border-gray-300 hover:text-gray-700 transition-all leading-none", fadingAction === 'tag' && "opacity-0 scale-95")}
+                        >
+                          Tag: {workflow.tagSuggestion} ↗
+                        </button>
+                      )}
+                      {hasStageSuggestion && (
+                        <button
+                          onClick={() => { onUpdateContact({ pipelineStage: workflow.stageSuggestion! }); completeAction('stage', `Moved to ${workflow.stageSuggestion}`); }}
+                          data-testid="workflow-stage-suggestion"
+                          className={cn("text-[10px] font-medium px-2 py-0.5 rounded-md border bg-white text-gray-500 border-gray-200 hover:border-gray-300 hover:text-gray-700 transition-all leading-none", fadingAction === 'stage' && "opacity-0 scale-95")}
+                        >
+                          → {workflow.stageSuggestion}
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </>
+
               )}
             </div>
           )}
