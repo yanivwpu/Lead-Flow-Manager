@@ -107,7 +107,7 @@ export async function willChatbotTrigger(
   }
 }
 
-// ─── Reply sender ──────────────────────────────────────────────────────────
+// ─── Reply senders ─────────────────────────────────────────────────────────
 
 async function sendChatbotReply(
   ctx: TriggerContext,
@@ -122,11 +122,54 @@ async function sendChatbotReply(
       contentType: "text",
     });
     console.log(
-      `[Chatbot] ✅ Reply sent — contactId: ${ctx.contactId}, channel: ${ctx.channel}, preview: "${content.substring(0, 80)}"`
+      `[Chatbot] ✅ Text reply sent — contactId: ${ctx.contactId}, channel: ${ctx.channel}, preview: "${content.substring(0, 80)}"`
     );
   } catch (err: any) {
     console.error(
-      `[Chatbot] ❌ Failed to send reply to contactId: ${ctx.contactId} — error: ${err.message}`
+      `[Chatbot] ❌ Failed to send text reply to contactId: ${ctx.contactId} — error: ${err.message}`
+    );
+  }
+}
+
+async function sendChatbotMedia(
+  ctx: TriggerContext,
+  mediaUrl: string,
+  contentType: string,
+  caption: string
+): Promise<void> {
+  console.log(
+    `[Chatbot] 📎 Entering media node — contactId: ${ctx.contactId}, contentType: ${contentType}, mediaUrl: "${mediaUrl.substring(0, 120)}"`
+  );
+  if (!mediaUrl) {
+    console.warn(
+      `[Chatbot] ⚠ Media node skipped — mediaUrl is missing for contactId: ${ctx.contactId}`
+    );
+    return;
+  }
+  try {
+    const { channelService } = await import("./channelService");
+    console.log(
+      `[Chatbot] 🚀 Attempting outbound media send — contactId: ${ctx.contactId}, channel: ${ctx.channel}, contentType: ${contentType}`
+    );
+    const result = await channelService.sendMessage({
+      userId: ctx.userId,
+      contactId: ctx.contactId,
+      content: caption || "",
+      contentType,
+      mediaUrl,
+    });
+    if (result.success) {
+      console.log(
+        `[Chatbot] ✅ Media reply sent — contactId: ${ctx.contactId}, channel: ${ctx.channel}, contentType: ${contentType}, externalId: ${result.externalMessageId}`
+      );
+    } else {
+      console.error(
+        `[Chatbot] ❌ Media send failed — contactId: ${ctx.contactId}, error: ${result.error}`
+      );
+    }
+  } catch (err: any) {
+    console.error(
+      `[Chatbot] ❌ Exception sending media to contactId: ${ctx.contactId} — error: ${err.message}`
     );
   }
 }
@@ -241,22 +284,51 @@ async function executeFlow(
     switch (currentNode.type) {
       case "message":
       case "question": {
-        const content = currentNode.data.content?.trim();
-        if (content) {
-          // Consume accumulated delay before this send
-          const delayToUse = Math.min(cumulativeDelayMs, MAX_DELAY_MS);
-          cumulativeDelayMs = 0;
-          if (delayToUse > 0) {
-            console.log(
-              `[Chatbot] Waiting ${delayToUse / 1000}s before sending node "${nodeId}"`
-            );
-            await new Promise((resolve) => setTimeout(resolve, delayToUse));
-          }
-          await sendChatbotReply(ctx, content);
-        } else {
+        const msgType = currentNode.data.messageType || "text";
+        const content = currentNode.data.content?.trim() || "";
+        const mediaUrl = currentNode.data.mediaUrl?.trim() || "";
+        const mediaCaption = currentNode.data.mediaCaption?.trim() || "";
+
+        // Determine whether this node has anything to send
+        const isMediaNode = msgType === "image" || msgType === "video" || msgType === "file";
+        const hasText = content.length > 0;
+        const hasMedia = mediaUrl.length > 0;
+
+        if (!hasText && !hasMedia) {
           console.log(
-            `[Chatbot] Node "${nodeId}" has no content — skipping send`
+            `[Chatbot] Node "${nodeId}" (type: ${msgType}) has no content or mediaUrl — skipping send`
           );
+          break;
+        }
+
+        // Consume accumulated delay before this send
+        const delayToUse = Math.min(cumulativeDelayMs, MAX_DELAY_MS);
+        cumulativeDelayMs = 0;
+        if (delayToUse > 0) {
+          console.log(
+            `[Chatbot] Waiting ${delayToUse / 1000}s before sending node "${nodeId}"`
+          );
+          await new Promise((resolve) => setTimeout(resolve, delayToUse));
+        }
+
+        if (isMediaNode) {
+          console.log(
+            `[Chatbot] 📎 Media node "${nodeId}" — messageType: ${msgType}, hasMediaUrl: ${hasMedia}, hasCaption: ${mediaCaption.length > 0}`
+          );
+          if (!hasMedia) {
+            console.warn(
+              `[Chatbot] ⚠ Media node "${nodeId}" has messageType "${msgType}" but no mediaUrl — skipping send`
+            );
+          } else {
+            await sendChatbotMedia(ctx, mediaUrl, msgType, mediaCaption);
+          }
+        } else {
+          // Plain text or buttons
+          if (hasText) {
+            await sendChatbotReply(ctx, content);
+          } else {
+            console.log(`[Chatbot] Node "${nodeId}" text node has no content — skipping send`);
+          }
         }
         break;
       }
