@@ -21,7 +21,6 @@ import {
   ClipboardCopy,
   Save,
   ChevronDown,
-  ChevronUp,
   Plus,
 } from "lucide-react";
 import type { ContactNote } from "@shared/schema";
@@ -612,18 +611,23 @@ export function InboxLeadDetailsPanel({
 
       {/* ══ COPILOT STICKY HEADER ════════════════════════════════════════ */}
       <div className={cn(
-        "bg-white sticky top-0 z-10 transition-colors",
-        copilotExpanded ? "border-b border-gray-200" : "border-b border-gray-100"
+        "sticky top-0 z-10 transition-all duration-200",
+        copilotExpanded
+          ? "bg-[#FAFAFB] border-b border-gray-200 border-l-2 border-l-violet-100"
+          : "bg-white border-b border-gray-100"
       )}>
         {/* Full-width clickable header row */}
         <div
           onClick={() => setCopilotExpanded(p => !p)}
-          className="px-3 pt-2.5 pb-2 flex items-center justify-between cursor-pointer hover:bg-gray-50 transition-colors select-none"
+          className={cn(
+            "px-3 pt-2.5 pb-2 flex items-center justify-between cursor-pointer transition-colors select-none",
+            copilotExpanded ? "hover:bg-black/[0.02]" : "hover:bg-gray-50"
+          )}
           data-testid="button-copilot-collapse"
         >
           <div className="flex items-center gap-1.5">
-            <Sparkles className="w-3 h-3 text-purple-500" />
-            <span className="text-[11px] font-semibold text-gray-700 tracking-wide">Copilot</span>
+            <Sparkles className={cn("w-3 h-3 transition-colors duration-200", copilotExpanded ? "text-violet-500" : "text-purple-400")} />
+            <span className={cn("text-[11px] tracking-wide transition-colors duration-200", copilotExpanded ? "font-bold text-gray-800" : "font-semibold text-gray-700")}>Copilot</span>
             {hasAIBrain && (
               <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-600 tracking-wide leading-none">AI Brain</span>
             )}
@@ -647,11 +651,8 @@ export function InboxLeadDetailsPanel({
               <span className="text-[10px] text-gray-300 font-medium">{copilotUpgradeTo}+</span>
             )}
 
-            <div className="flex items-center gap-0.5 text-gray-400/70">
-              {copilotExpanded
-                ? <ChevronUp className="w-[18px] h-[18px]" />
-                : <ChevronDown className="w-[18px] h-[18px]" />
-              }
+            <div className="flex items-center gap-0.5 text-gray-400">
+              <ChevronDown className={cn("w-[18px] h-[18px] transition-transform duration-200", copilotExpanded && "rotate-180")} />
               <span className="text-[10px] font-medium">
                 {copilotExpanded ? "Collapse" : "Expand"}
               </span>
@@ -695,7 +696,7 @@ export function InboxLeadDetailsPanel({
       </div>
 
       {copilotExpanded && (
-      <div className="px-3 py-2 border-b border-gray-100">
+      <div className="px-3 py-2 border-b border-gray-100 animate-in fade-in duration-150">
         <div className="grid grid-cols-4 gap-1">
 
           {/* ── BOOK ── */}
@@ -1035,7 +1036,7 @@ export function InboxLeadDetailsPanel({
 
           {/* ══ COPILOT EXPANDED PANEL ══════════════════════════════════ */}
           {copilotExpanded && (
-            <div className="-mx-3 -mt-3 bg-[#fafafa] border-b border-gray-200 px-4 pt-3 pb-4 space-y-3 animate-in fade-in slide-in-from-top-1 duration-200">
+            <div className="-mx-3 -mt-3 bg-[#FAFAFB] border-b border-gray-100 px-4 pt-4 pb-5 space-y-3 animate-in fade-in slide-in-from-top-1 duration-200">
 
               {!canSeeCopilot ? (
                 <AIUpgradePrompt
