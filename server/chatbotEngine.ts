@@ -131,14 +131,23 @@ async function sendChatbotReply(
   }
 }
 
+// Normalise chatbot node contentType values to the canonical set understood
+// by the channel adapters: "image" | "video" | "audio" | "document" | "text"
+// The builder uses "file" for document/PDF uploads; adapters expect "document".
+function normaliseMediaContentType(msgType: string): string {
+  if (msgType === "file") return "document";
+  return msgType; // image, video, audio already match
+}
+
 async function sendChatbotMedia(
   ctx: TriggerContext,
   mediaUrl: string,
   contentType: string,
   caption: string
 ): Promise<void> {
+  const normalisedType = normaliseMediaContentType(contentType);
   console.log(
-    `[Chatbot] 📎 Entering media node — contactId: ${ctx.contactId}, contentType: ${contentType}, mediaUrl: "${mediaUrl.substring(0, 120)}"`
+    `[Chatbot] 📎 Entering media node — contactId: ${ctx.contactId}, contentType: ${contentType} → normalised: ${normalisedType}, mediaUrl: "${mediaUrl.substring(0, 120)}"`
   );
   if (!mediaUrl) {
     console.warn(
@@ -149,18 +158,18 @@ async function sendChatbotMedia(
   try {
     const { channelService } = await import("./channelService");
     console.log(
-      `[Chatbot] 🚀 Attempting outbound media send — contactId: ${ctx.contactId}, channel: ${ctx.channel}, contentType: ${contentType}`
+      `[Chatbot] 🚀 Attempting outbound media send — contactId: ${ctx.contactId}, channel: ${ctx.channel}, contentType: ${normalisedType}`
     );
     const result = await channelService.sendMessage({
       userId: ctx.userId,
       contactId: ctx.contactId,
       content: caption || "",
-      contentType,
+      contentType: normalisedType,
       mediaUrl,
     });
     if (result.success) {
       console.log(
-        `[Chatbot] ✅ Media reply sent — contactId: ${ctx.contactId}, channel: ${ctx.channel}, contentType: ${contentType}, externalId: ${result.externalMessageId}`
+        `[Chatbot] ✅ Media reply sent — contactId: ${ctx.contactId}, channel: ${ctx.channel}, contentType: ${normalisedType}, externalId: ${result.externalMessageId}`
       );
     } else {
       console.error(
@@ -172,6 +181,33 @@ async function sendChatbotMedia(
       `[Chatbot] ❌ Exception sending media to contactId: ${ctx.contactId} — error: ${err.message}`
     );
   }
+}
+
+async function sendChatbotButtons(
+  ctx: TriggerContext,
+  promptText: string,
+  buttons: string[]
+): Promise<void> {
+  // Interactive button messages are NOT supported at the provider level.
+  // WhatsApp Business API interactive messages require pre-approved templates
+  // and a different API payload that is not wired in this stack.
+  // Runtime behaviour: send the prompt text followed by a numbered list of
+  // options as a plain text message. This degrades gracefully on all channels.
+  console.warn(
+    `[Chatbot] ⚠ Buttons node — interactive button messages are NOT supported by the channel adapters. ` +
+    `Falling back to plain-text numbered list. Buttons: [${buttons.join(", ")}]`
+  );
+  const numberedList = buttons
+    .map((label, i) => `${i + 1}. ${label}`)
+    .join("\n");
+  const fullText = promptText
+    ? `${promptText}\n\n${numberedList}`
+    : numberedList;
+
+  console.log(
+    `[Chatbot] 📋 Sending buttons as plain text — contactId: ${ctx.contactId}, options: ${buttons.length}`
+  );
+  await sendChatbotReply(ctx, fullText);
 }
 
 // ─── Action node ───────────────────────────────────────────────────────────
@@ -322,8 +358,14 @@ async function executeFlow(
           } else {
             await sendChatbotMedia(ctx, mediaUrl, msgType, mediaCaption);
           }
+        } else if (msgType === "buttons") {
+          const buttons = (currentNode.data.buttons as string[] | undefined) || [];
+          console.log(
+            `[Chatbot] 🔘 Buttons node "${nodeId}" — prompt: "${content.substring(0, 60)}", buttons: [${buttons.join(", ")}]`
+          );
+          await sendChatbotButtons(ctx, content, buttons);
         } else {
-          // Plain text or buttons
+          // Plain text
           if (hasText) {
             await sendChatbotReply(ctx, content);
           } else {
