@@ -49,7 +49,7 @@ export const PLAN_LIMITS = {
     workflowsEnabled: false,
     integrationsEnabled: true,
     maxWebhooks: 3,
-    templatesEnabled: false,
+    templatesEnabled: true,
     chatbotEnabled: true, // Visual chatbot builder
   },
   pro: {

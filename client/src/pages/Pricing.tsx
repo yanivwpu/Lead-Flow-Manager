@@ -199,7 +199,7 @@ export function Pricing() {
     { feature: t(`${p}.compare.aiAssistType`), free: false, starter: t(`${p}.compare.replyAndSentiment`), pro: t(`${p}.compare.enhancedAI`) },
     { feature: t(`${p}.compare.automations`), free: false, starter: t(`${p}.compare.basic`), pro: t(`${p}.compare.advanced`) },
     { feature: t(`${p}.compare.leadScoring`), free: false, starter: false, pro: true },
-    { feature: t(`${p}.compare.smartRetargeting`), free: false, starter: false, pro: true },
+    { feature: t(`${p}.compare.smartRetargeting`), free: false, starter: true, pro: true },
     { feature: t(`${p}.compare.integrationsWebhooks`), free: false, starter: true, pro: true },
     { feature: t(`${p}.compare.aiBrainAddon`), free: false, starter: true, pro: true },
   ];
@@ -525,6 +525,7 @@ export function Pricing() {
                     t(`${p}.plans.starter.f1`),
                     t(`${p}.plans.starter.f2`),
                     t(`${p}.plans.starter.f3`),
+                    t(`${p}.plans.starter.f4`),
                     t(`${p}.plans.starter.f5`),
                     t(`${p}.plans.starter.f6`),
                     t(`${p}.plans.starter.f7`),
