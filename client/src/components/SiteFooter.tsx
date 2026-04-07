@@ -31,7 +31,6 @@ export function SiteFooter() {
               <ul className="space-y-2.5 text-sm text-gray-500">
                 <li><Link href="/pricing"><span className="hover:text-gray-900 transition-colors cursor-pointer">{t('home.footer.pricing', 'Pricing')}</span></Link></li>
                 <li><Link href="/whatsapp-crm"><span className="hover:text-gray-900 transition-colors cursor-pointer">{t('home.footer.whatsappCrm', 'WhatsApp CRM')}</span></Link></li>
-                <li><Link href="/realtor-growth-engine"><span className="hover:text-gray-900 transition-colors cursor-pointer">{t('home.footer.realtorGrowthEngine', 'Realtor® Growth Engine')}</span></Link></li>
                 <li><Link href="/contact"><span className="hover:text-gray-900 transition-colors cursor-pointer">{t('home.footer.contact', 'Contact')}</span></Link></li>
               </ul>
             </div>
