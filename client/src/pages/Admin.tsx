@@ -35,6 +35,13 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { 
   Users, Calendar, DollarSign, Plus, Edit2, Trash2, 
   LogOut, Loader2, CheckCircle, XCircle, Lock, UserCircle,
@@ -146,6 +153,7 @@ export function Admin() {
   const [isAddingPartner, setIsAddingPartner] = useState(false);
   const [newPartner, setNewPartner] = useState({ name: "", email: "", password: "", commissionRate: "50.00", commissionDurationMonths: 6 });
   const [addPartnerError, setAddPartnerError] = useState("");
+  const [editingUserPlan, setEditingUserPlan] = useState<{ userId: string; plan: string } | null>(null);
   
   const queryClient = useQueryClient();
 
@@ -366,6 +374,22 @@ export function Admin() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/admin/conversions'] });
+    }
+  });
+
+  const updateUserPlan = useMutation({
+    mutationFn: async ({ userId, plan }: { userId: string; plan: string }) => {
+      const res = await adminFetch(`/api/admin/users/${userId}/plan`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ subscriptionPlan: plan })
+      });
+      if (!res.ok) throw new Error('Failed to update plan');
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/users'] });
+      setEditingUserPlan(null);
     }
   });
 
@@ -1074,20 +1098,63 @@ export function Admin() {
                               </div>
                             </TableCell>
                             <TableCell>
-                              <div className="flex flex-col gap-1">
-                                <Badge 
-                                  variant={
-                                    user.subscriptionPlan === 'scale' ? 'default' :
-                                    user.subscriptionPlan === 'pro' ? 'default' :
-                                    user.subscriptionPlan === 'starter' ? 'secondary' : 'outline'
-                                  }
-                                  className={
-                                    user.subscriptionPlan === 'scale' ? 'bg-purple-600' :
-                                    user.subscriptionPlan === 'pro' ? 'bg-brand-green' : ''
-                                  }
-                                >
-                                  {user.subscriptionPlan || 'free'}
-                                </Badge>
+                              <div className="flex flex-col gap-2">
+                                {editingUserPlan?.userId === user.id ? (
+                                  <Select 
+                                    value={editingUserPlan.plan}
+                                    onValueChange={(plan) => setEditingUserPlan({ userId: user.id, plan })}
+                                    disabled={updateUserPlan.isPending}
+                                  >
+                                    <SelectTrigger className="w-[120px] h-8">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="free">Free</SelectItem>
+                                      <SelectItem value="starter">Starter</SelectItem>
+                                      <SelectItem value="pro">Pro</SelectItem>
+                                      <SelectItem value="scale">Scale</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                ) : (
+                                  <Badge 
+                                    variant={
+                                      user.subscriptionPlan === 'scale' ? 'default' :
+                                      user.subscriptionPlan === 'pro' ? 'default' :
+                                      user.subscriptionPlan === 'starter' ? 'secondary' : 'outline'
+                                    }
+                                    className={cn(
+                                      'cursor-pointer w-fit',
+                                      user.subscriptionPlan === 'scale' && 'bg-purple-600',
+                                      user.subscriptionPlan === 'pro' && 'bg-brand-green'
+                                    )}
+                                    onClick={() => setEditingUserPlan({ userId: user.id, plan: user.subscriptionPlan || 'free' })}
+                                    data-testid={`badge-plan-${user.id}`}
+                                  >
+                                    {user.subscriptionPlan || 'free'}
+                                  </Badge>
+                                )}
+                                {editingUserPlan?.userId === user.id && (
+                                  <div className="flex gap-1.5">
+                                    <Button
+                                      size="sm"
+                                      variant="default"
+                                      className="h-6 px-2 text-xs bg-brand-green hover:bg-brand-dark"
+                                      onClick={() => updateUserPlan.mutate({ userId: user.id, plan: editingUserPlan.plan })}
+                                      disabled={updateUserPlan.isPending}
+                                    >
+                                      {updateUserPlan.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save'}
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="h-6 px-2 text-xs"
+                                      onClick={() => setEditingUserPlan(null)}
+                                      disabled={updateUserPlan.isPending}
+                                    >
+                                      Cancel
+                                    </Button>
+                                  </div>
+                                )}
                                 {user.subscriptionStatus && (
                                   <span className="text-xs text-gray-500">{user.subscriptionStatus}</span>
                                 )}

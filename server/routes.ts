@@ -4144,6 +4144,33 @@ export async function registerRoutes(
     }
   });
 
+  // Admin: Update user subscription plan
+  app.patch("/api/admin/users/:userId/plan", requireAdmin, async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const { subscriptionPlan } = req.body;
+
+      if (!subscriptionPlan || !['free', 'starter', 'pro', 'scale'].includes(subscriptionPlan)) {
+        return res.status(400).json({ error: 'Invalid subscription plan' });
+      }
+
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+
+      await storage.updateUser(userId, { subscriptionPlan });
+      
+      const updated = await storage.getUser(userId);
+      console.log(`[Admin] Updated user ${user.email} plan to ${subscriptionPlan}`);
+      
+      res.json({ success: true, plan: updated?.subscriptionPlan });
+    } catch (error: any) {
+      console.error("Error updating user plan:", error?.message || error);
+      res.status(500).json({ error: `Failed to update plan: ${error?.message || 'Unknown error'}` });
+    }
+  });
+
   // Admin: Get all support tickets
   app.get("/api/admin/support-tickets", requireAdmin, async (req, res) => {
     try {
