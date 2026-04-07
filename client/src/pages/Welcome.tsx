@@ -141,9 +141,6 @@ export function Welcome() {
           <Link href="/blog">
             <button className="text-sm font-medium text-gray-600 hover:text-gray-900 hidden sm:block">{t('landing.blog')}</button>
           </Link>
-          <Link href="/realtor-growth-engine">
-            <button className="text-sm font-medium text-gray-600 hover:text-gray-900 hidden md:block">{t('landing.realtorGrowthEngine')}</button>
-          </Link>
           <LanguageSelector variant="compact" className="text-gray-600 hover:text-gray-900 hover:bg-gray-100" />
           {user ? (
             <Link href="/app/chats">
