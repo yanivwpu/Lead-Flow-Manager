@@ -82,7 +82,10 @@ export function setupAuth(app: Express) {
               user = await storage.updateUser(user.id, { 
                 subscriptionPlan: 'pro',
                 onboardingCompleted: true,
-                twilioConnected: true
+                // twilioConnected intentionally NOT set here — demo user has no
+                // real Twilio credentials (accountSid/authToken/whatsappNumber).
+                // Setting twilioConnected=true without credentials causes a data
+                // inconsistency that breaks the "No user matched" webhook lookup.
               }) || user;
             }
             

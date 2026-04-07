@@ -25,7 +25,9 @@ import {
   FileText,
   Download,
   Edit,
-  History
+  History,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import {
   Dialog,
@@ -350,6 +352,7 @@ export function Chats() {
   const [newMessage, setNewMessage] = useState("");
   const [localNotes, setLocalNotes] = useState("");
   const [mobileCalendarOpen, setMobileCalendarOpen] = useState(false);
+  const [mobilePanelOpen, setMobilePanelOpen] = useState(false);
   const [desktopCalendarOpen, setDesktopCalendarOpen] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [filePreview, setFilePreview] = useState<string | null>(null);
@@ -1083,22 +1086,34 @@ export function Chats() {
               />
            </div>
 
-           {/* Mobile Lead Details Panel - Compact version for mobile */}
+           {/* Mobile Lead Details Panel - Collapsible compact version for mobile */}
            <div 
-             className="flex md:hidden bg-white border-t border-gray-200 overflow-y-auto max-h-[180px] shrink-0 flex-col"
+             className="flex md:hidden bg-white border-t border-gray-200 shrink-0 flex-col"
              data-testid="panel-lead-details-mobile"
            >
-              <div className="p-3 space-y-3 bg-brand-green/5">
-                 <div className="flex items-center justify-between">
-                   <div className="flex items-center gap-2">
-                     <UserCheck className="h-4 w-4 text-brand-green" />
-                     <h3 className="font-display font-bold text-gray-900 text-sm">Lead Details</h3>
-                   </div>
-                   <span className={cn("text-xs px-2 py-0.5 rounded-full", TAG_COLORS[selectedChat.tag as keyof typeof TAG_COLORS] || "bg-gray-100 text-gray-600")}>
-                     {selectedChat.tag || 'New'}
-                   </span>
-                 </div>
-                 
+              {/* Always-visible toggle header — collapsed by default */}
+              <button
+                className="flex items-center justify-between w-full px-3 py-2 bg-brand-green/5 active:bg-brand-green/10 transition-colors"
+                onClick={() => setMobilePanelOpen(o => !o)}
+                data-testid="button-mobile-panel-toggle"
+              >
+                <div className="flex items-center gap-2">
+                  <UserCheck className="h-4 w-4 text-brand-green" />
+                  <h3 className="font-display font-bold text-gray-900 text-sm">Lead Details</h3>
+                  <span className={cn("text-xs px-2 py-0.5 rounded-full", TAG_COLORS[selectedChat.tag as keyof typeof TAG_COLORS] || "bg-gray-100 text-gray-600")}>
+                    {selectedChat.tag || 'New'}
+                  </span>
+                </div>
+                {mobilePanelOpen ? (
+                  <ChevronDown className="h-4 w-4 text-gray-400" />
+                ) : (
+                  <ChevronUp className="h-4 w-4 text-gray-400" />
+                )}
+              </button>
+
+              {/* Collapsible content */}
+              {mobilePanelOpen && (
+              <div className="p-3 space-y-3 bg-brand-green/5 max-h-[220px] overflow-y-auto">
                  <div className="flex gap-2">
                    <Select value={selectedChat.pipelineStage} onValueChange={updatePipeline}>
                       <SelectTrigger className="flex-1 h-8 text-xs bg-gray-50 border-gray-200">
@@ -1188,6 +1203,7 @@ export function Chats() {
                    onBlur={() => handleUpdateChat({ notes: localNotes })}
                  />
               </div>
+              )}
            </div>
 
            {/* Desktop CRM Sidebar Panel */}

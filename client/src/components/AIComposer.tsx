@@ -17,6 +17,7 @@ import EmojiPicker from "emoji-picker-react";
 import { cn } from "@/lib/utils";
 import { AICreditBadge, AIUpgradePrompt } from "./AIUpgradePrompt";
 import type { AICapabilities } from "@/lib/useAICapabilities";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 type AIMode = "manual" | "suggest" | "auto";
 type AutoPhase = "idle" | "typing" | "replied" | "waiting";
@@ -91,6 +92,7 @@ export function AIComposer({
   handleFileSelect,
   className,
 }: AIComposerProps) {
+  const isMobile = useIsMobile();
   // Resolve effective access from capabilities (falls back to legacy aiEnabled prop)
   const effectiveCanSuggest = capabilities ? capabilities.canUseSuggest : aiEnabled;
   const effectiveCanAuto    = capabilities ? capabilities.canUseAuto    : (aiEnabled && hasFullAIBrain);
@@ -267,7 +269,10 @@ export function AIComposer({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
+    // On mobile, the virtual keyboard's Enter key should insert a newline,
+    // not send the message. Users send via the send button instead.
+    // On desktop, Enter sends; Shift+Enter inserts a newline.
+    if (e.key === "Enter" && !e.shiftKey && !isMobile) {
       e.preventDefault();
       if (setTyping) setTyping(false);
       onSend();
@@ -449,7 +454,9 @@ export function AIComposer({
             placeholder={
               isSuggestMode && isDrafting
                 ? "AI is drafting…"
-                : "Type a message… (Enter to send, Shift+Enter for new line)"
+                : isMobile
+                  ? "Type a message…"
+                  : "Type a message… (Enter to send, Shift+Enter for new line)"
             }
             className={cn(
               "w-full border rounded-xl px-3.5 py-2.5 text-base md:text-[13px] leading-relaxed focus:outline-none transition-colors resize-none",

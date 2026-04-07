@@ -1171,14 +1171,19 @@ export async function registerRoutes(
         return res.status(400).json({ error: result.error });
       }
 
+      // WhatsApp webhooks cannot be auto-configured via the Twilio REST API
+      // (the API only exposes SMS smsUrl, not the separate WhatsApp webhook).
+      // Always return the webhook URLs and direct the user to set them manually.
+      console.log(`[Twilio Connect] User ${req.user.id} connected. Webhook URL: ${webhookBaseUrl}/api/webhook/twilio/incoming`);
+
       res.json({ 
         success: true, 
-        message: result.webhooksConfigured 
-          ? "Twilio connected and webhooks configured automatically!"
-          : "Twilio connected successfully",
+        message: "Twilio connected. Configure the webhook URL below in your Twilio Console to receive inbound WhatsApp messages.",
         webhookUrl: `${webhookBaseUrl}/api/webhook/twilio/incoming`,
         statusCallbackUrl: `${webhookBaseUrl}/api/webhook/twilio/status`,
-        webhooksConfigured: result.webhooksConfigured,
+        webhooksConfigured: false,
+        manualSetupRequired: true,
+        manualSetupInstructions: "In your Twilio Console go to Messaging → Senders → WhatsApp Senders → select your sender → set the Incoming Messages webhook URL to the webhookUrl above.",
       });
     } catch (error: any) {
       console.error("Error connecting Twilio:", error);

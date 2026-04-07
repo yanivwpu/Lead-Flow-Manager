@@ -53,6 +53,10 @@
   }
   html, body, #root {
     height: 100%;
+    /* dvh (dynamic viewport height) adapts to browser chrome on mobile.
+       Use it as a progressive enhancement — browsers that don't support dvh
+       fall back to the height:100% above. */
+    height: 100dvh;
     width: 100%;
     margin: 0;
     padding: 0;

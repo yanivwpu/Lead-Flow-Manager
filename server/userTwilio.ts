@@ -169,53 +169,28 @@ export async function configureWebhooks(
 ): Promise<{ configured: boolean; method: string; error?: string }> {
   const incomingUrl = `${webhookBaseUrl}/api/webhook/twilio/incoming`;
   const statusUrl = `${webhookBaseUrl}/api/webhook/twilio/status`;
-  
-  try {
-    // Try to configure the WhatsApp sender directly
-    const whatsappNumber = `whatsapp:${phoneNumber}`;
-    
-    // First, try to find and update the phone number's messaging configuration
-    const incomingPhoneNumbers = await client.incomingPhoneNumbers.list({ phoneNumber });
-    
-    if (incomingPhoneNumbers.length > 0) {
-      // Update the phone number's webhook configuration
-      await client.incomingPhoneNumbers(incomingPhoneNumbers[0].sid).update({
-        smsUrl: incomingUrl,
-        smsMethod: 'POST',
-        statusCallback: statusUrl,
-        statusCallbackMethod: 'POST',
-      });
-      console.log(`Configured webhooks for phone number ${phoneNumber}`);
-      return { configured: true, method: 'phone_number' };
-    }
-    
-    // If no phone number found, try WhatsApp senders
-    try {
-      const senders = await client.messaging.v1.services.list({ limit: 10 });
-      for (const service of senders) {
-        try {
-          await client.messaging.v1.services(service.sid).update({
-            inboundRequestUrl: incomingUrl,
-            inboundMethod: 'POST',
-            statusCallback: statusUrl,
-          });
-          console.log(`Configured webhooks for messaging service ${service.sid}`);
-          return { configured: true, method: 'messaging_service' };
-        } catch (e) {
-          // Continue to next service
-        }
-      }
-    } catch (e) {
-      // Messaging services not available or no permission
-    }
-    
-    // If we can't auto-configure, return with instructions
-    console.log('Could not auto-configure webhooks - manual setup required');
-    return { configured: false, method: 'manual', error: 'Manual webhook configuration required' };
-  } catch (error: any) {
-    console.log('Webhook auto-configuration failed:', error.message);
-    return { configured: false, method: 'manual', error: error.message };
-  }
+
+  // WhatsApp webhooks in Twilio are configured SEPARATELY from SMS webhooks.
+  // The Twilio REST API does not expose a way to set WhatsApp inbound URLs
+  // programmatically via incomingPhoneNumbers or messaging services — those
+  // endpoints update the SMS (smsUrl) webhook only, which does NOT apply to
+  // WhatsApp messages. WhatsApp webhook configuration must be done manually:
+  //   • Sandbox:          console.twilio.com → Messaging → Try it out → Send a WhatsApp message
+  //   • Approved Senders: console.twilio.com → Messaging → Senders → WhatsApp Senders → [select sender] → Webhooks
+  //
+  // We intentionally do NOT attempt an auto-config so we never falsely report
+  // success to the user (which led to the "webhooks configured automatically!"
+  // message appearing even though WhatsApp webhooks remained unconfigured).
+  console.log(`[Twilio Webhook Config] Auto-configuration skipped for WhatsApp.`);
+  console.log(`[Twilio Webhook Config] Incoming URL the user must set manually: ${incomingUrl}`);
+  console.log(`[Twilio Webhook Config] Status Callback URL the user must set manually: ${statusUrl}`);
+  console.log(`[Twilio Webhook Config] Manual setup: Twilio Console → Messaging → Senders → WhatsApp Senders → Webhooks`);
+
+  return {
+    configured: false,
+    method: 'manual',
+    error: 'WhatsApp webhooks require manual configuration in the Twilio Console',
+  };
 }
 
 export async function connectUserTwilio(
@@ -229,7 +204,16 @@ export async function connectUserTwilio(
   }
 
   const encryptedAuthToken = encryptCredential(credentials.authToken);
-  const phoneNumber = credentials.whatsappNumber.replace(/[^\d+]/g, "");
+
+  // Normalise phone number: strip everything except digits and leading '+'
+  let phoneNumber = credentials.whatsappNumber.replace(/[^\d+]/g, "");
+  // Enforce '+' prefix so findUserByTwilioCredentials can match the webhook "To" field
+  if (!phoneNumber.startsWith("+")) {
+    phoneNumber = `+${phoneNumber}`;
+    console.warn(`[connectUserTwilio] Phone number missing '+' prefix — auto-corrected to: ${phoneNumber}`);
+  }
+
+  console.log(`[connectUserTwilio] Saving Twilio credentials — userId: ${userId}, number: ${phoneNumber}`);
 
   await storage.updateUser(userId, {
     twilioAccountSid: credentials.accountSid,
