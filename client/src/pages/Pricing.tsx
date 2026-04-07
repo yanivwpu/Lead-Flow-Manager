@@ -582,6 +582,7 @@ export function Pricing() {
                   <FeatureGroup
                     label={t(`${p}.sections.aiFeatures`)}
                     features={[
+                      t(`${p}.plans.starter.f9`),
                       t(`${p}.plans.starter.f7`),
                       t(`${p}.plans.starter.f8`),
                     ]}
