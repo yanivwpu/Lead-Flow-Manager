@@ -4155,7 +4155,7 @@ export async function registerRoutes(
       const { userId } = req.params;
       const { subscriptionPlan } = req.body;
 
-      if (!subscriptionPlan || !['free', 'starter', 'pro', 'scale'].includes(subscriptionPlan)) {
+      if (!subscriptionPlan || !['free', 'starter', 'pro'].includes(subscriptionPlan)) {
         return res.status(400).json({ error: 'Invalid subscription plan' });
       }
 

@@ -896,9 +896,9 @@ export function Admin() {
                         if (b.openTicketCount > 0 && a.openTicketCount === 0) return 1;
                         return new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime();
                       } else if (userSort === 'plan') {
-                        const planOrder = { 'scale': 0, 'pro': 1, 'starter': 2, 'free': 3 };
-                        const aOrder = planOrder[a.subscriptionPlan as keyof typeof planOrder] ?? 4;
-                        const bOrder = planOrder[b.subscriptionPlan as keyof typeof planOrder] ?? 4;
+                        const planOrder = { 'pro': 0, 'starter': 1, 'free': 2 };
+                        const aOrder = planOrder[a.subscriptionPlan as keyof typeof planOrder] ?? 3;
+                        const bOrder = planOrder[b.subscriptionPlan as keyof typeof planOrder] ?? 3;
                         return aOrder - bOrder;
                       }
                       return new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime();
@@ -935,13 +935,11 @@ export function Admin() {
                           )}
                           <Badge 
                             variant={
-                              user.subscriptionPlan === 'scale' ? 'default' :
                               user.subscriptionPlan === 'pro' ? 'default' :
                               user.subscriptionPlan === 'starter' ? 'secondary' : 'outline'
                             }
                             className={cn(
                               "text-xs",
-                              user.subscriptionPlan === 'scale' && 'bg-purple-600',
                               user.subscriptionPlan === 'pro' && 'bg-brand-green'
                             )}
                           >
@@ -1040,9 +1038,9 @@ export function Admin() {
                             if (b.openTicketCount > 0 && a.openTicketCount === 0) return 1;
                             return new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime();
                           } else if (userSort === 'plan') {
-                            const planOrder = { 'scale': 0, 'pro': 1, 'starter': 2, 'free': 3 };
-                            const aOrder = planOrder[a.subscriptionPlan as keyof typeof planOrder] ?? 4;
-                            const bOrder = planOrder[b.subscriptionPlan as keyof typeof planOrder] ?? 4;
+                            const planOrder = { 'pro': 0, 'starter': 1, 'free': 2 };
+                            const aOrder = planOrder[a.subscriptionPlan as keyof typeof planOrder] ?? 3;
+                            const bOrder = planOrder[b.subscriptionPlan as keyof typeof planOrder] ?? 3;
                             return aOrder - bOrder;
                           }
                           return new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime();
@@ -1104,18 +1102,15 @@ export function Admin() {
                                     <option value="free">Free</option>
                                     <option value="starter">Starter</option>
                                     <option value="pro">Pro</option>
-                                    <option value="scale">Scale</option>
                                   </select>
                                 ) : (
                                   <Badge 
                                     variant={
-                                      user.subscriptionPlan === 'scale' ? 'default' :
                                       user.subscriptionPlan === 'pro' ? 'default' :
                                       user.subscriptionPlan === 'starter' ? 'secondary' : 'outline'
                                     }
                                     className={cn(
                                       'cursor-pointer w-fit',
-                                      user.subscriptionPlan === 'scale' && 'bg-purple-600',
                                       user.subscriptionPlan === 'pro' && 'bg-brand-green'
                                     )}
                                     onClick={() => setEditingUserPlan({ userId: user.id, plan: user.subscriptionPlan || 'free' })}
