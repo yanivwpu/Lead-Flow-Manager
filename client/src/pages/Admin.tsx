@@ -35,13 +35,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+
 import { 
   Users, Calendar, DollarSign, Plus, Edit2, Trash2, 
   LogOut, Loader2, CheckCircle, XCircle, Lock, UserCircle,
@@ -1100,21 +1094,18 @@ export function Admin() {
                             <TableCell>
                               <div className="flex flex-col gap-2">
                                 {editingUserPlan?.userId === user.id ? (
-                                  <Select 
+                                  <select
                                     value={editingUserPlan.plan}
-                                    onValueChange={(plan) => setEditingUserPlan({ userId: user.id, plan })}
+                                    onChange={(e) => setEditingUserPlan({ userId: user.id, plan: e.target.value })}
                                     disabled={updateUserPlan.isPending}
+                                    className="w-[120px] h-8 border border-gray-300 rounded-md px-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-green disabled:opacity-50"
+                                    data-testid={`select-plan-${user.id}`}
                                   >
-                                    <SelectTrigger className="w-[120px] h-8">
-                                      <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      <SelectItem value="free">Free</SelectItem>
-                                      <SelectItem value="starter">Starter</SelectItem>
-                                      <SelectItem value="pro">Pro</SelectItem>
-                                      <SelectItem value="scale">Scale</SelectItem>
-                                    </SelectContent>
-                                  </Select>
+                                    <option value="free">Free</option>
+                                    <option value="starter">Starter</option>
+                                    <option value="pro">Pro</option>
+                                    <option value="scale">Scale</option>
+                                  </select>
                                 ) : (
                                   <Badge 
                                     variant={
