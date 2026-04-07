@@ -12,12 +12,7 @@ import { useAuth } from "@/lib/auth-context";
 import { useToast } from "@/hooks/use-toast";
 import { supportedLanguages } from "@/lib/i18n";
 
-// ─── Shared structural component ────────────────────────────────────────────
-// Used for every checkmark + text row throughout the page.
-// RTL: dir="rtl" on the <li> makes the browser place the first flex child
-// (Check icon) on the RIGHT and the text span to its LEFT automatically.
-// Wrapped text lines stay anchored under the text's right edge.
-// LTR: dir="ltr" — icon on left, text right of it, left-aligned.
+// ─── Shared structural components ───────────────────────────────────────────
 function FeatureItem({
   text,
   iconClass,
@@ -32,14 +27,37 @@ function FeatureItem({
       dir={isRTL ? "rtl" : "ltr"}
       className="flex items-start gap-2 text-sm text-gray-700"
     >
-      {/* With dir="rtl" the browser places the first flex child (Check) on the
-          RIGHT and the text span to its LEFT. Wrapped lines stay anchored under
-          the text's right edge — no manual flex-row-reverse needed. */}
       <Check className={`h-4 w-4 shrink-0 mt-0.5 ${iconClass}`} />
-      <span className="flex-1 leading-snug">
-        {text}
-      </span>
+      <span className="flex-1 leading-snug">{text}</span>
     </li>
+  );
+}
+
+function FeatureGroup({
+  label,
+  features,
+  iconClass,
+  isRTL,
+}: {
+  label: string;
+  features: string[];
+  iconClass: string;
+  isRTL: boolean;
+}) {
+  return (
+    <div>
+      <p
+        className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 mb-1.5"
+        dir={isRTL ? "rtl" : "ltr"}
+      >
+        {label}
+      </p>
+      <ul className="space-y-1.5">
+        {features.map((f) => (
+          <FeatureItem key={f} text={f} iconClass={iconClass} isRTL={isRTL} />
+        ))}
+      </ul>
+    </div>
   );
 }
 
@@ -456,24 +474,29 @@ export function Pricing() {
                     {t(`${p}.plans.free.desc`)}
                   </p>
                 </div>
-                <ul className="space-y-3 flex-1">
-                  {[
-                    t(`${p}.plans.free.f1`),
-                    t(`${p}.plans.free.f2`),
-                    t(`${p}.plans.free.f3`),
-                    t(`${p}.plans.free.f4`),
-                    t(`${p}.plans.free.f5`),
-                    t(`${p}.plans.free.f6`),
-                    t(`${p}.plans.free.f7`),
-                  ].map((f) => (
-                    <FeatureItem
-                      key={f}
-                      text={f}
-                      iconClass="text-emerald-500"
-                      isRTL={isRTL}
-                    />
-                  ))}
-                </ul>
+                <div className="flex-1 space-y-4">
+                  <FeatureGroup
+                    label={t(`${p}.sections.conversationsLimits`)}
+                    features={[
+                      t(`${p}.plans.free.f1`),
+                      t(`${p}.plans.free.f2`),
+                      t(`${p}.plans.free.f3`),
+                    ]}
+                    iconClass="text-emerald-500"
+                    isRTL={isRTL}
+                  />
+                  <FeatureGroup
+                    label={t(`${p}.sections.crmInbox`)}
+                    features={[
+                      t(`${p}.plans.free.f4`),
+                      t(`${p}.plans.free.f5`),
+                      t(`${p}.plans.free.f6`),
+                      t(`${p}.plans.free.f7`),
+                    ]}
+                    iconClass="text-emerald-500"
+                    isRTL={isRTL}
+                  />
+                </div>
                 <p className="text-xs text-gray-400 mt-4 mb-4">
                   {t(`${p}.plans.free.upsell`)}
                 </p>
@@ -500,7 +523,7 @@ export function Pricing() {
                 className="bg-white rounded-2xl border-2 border-blue-200 p-6 flex flex-col"
                 data-testid="plan-card-starter"
               >
-                <div className="mb-5">
+                <div className="mb-4">
                   <span className="text-xs font-semibold text-blue-600 uppercase tracking-wider">
                     {t(`${p}.plans.starter.name`)}
                   </span>
@@ -520,29 +543,52 @@ export function Pricing() {
                     {t(`${p}.plans.starter.desc`)}
                   </p>
                 </div>
-                <ul className="space-y-3 flex-1">
-                  {[
-                    t(`${p}.plans.starter.f1`),
-                    t(`${p}.plans.starter.f2`),
-                    t(`${p}.plans.starter.f3`),
-                    t(`${p}.plans.starter.f4`),
-                    t(`${p}.plans.starter.f5`),
-                    t(`${p}.plans.starter.f6`),
-                    t(`${p}.plans.starter.f7`),
-                    t(`${p}.plans.starter.f8`),
-                    t(`${p}.plans.starter.f9`),
-                    t(`${p}.plans.starter.f10`),
-                    t(`${p}.plans.starter.f11`),
-                    t(`${p}.plans.starter.f12`),
-                  ].map((f) => (
-                    <FeatureItem
-                      key={f}
-                      text={f}
-                      iconClass="text-blue-500"
-                      isRTL={isRTL}
-                    />
-                  ))}
-                </ul>
+                <div
+                  className={`flex items-center gap-1.5 mb-4 px-3 py-1.5 rounded-lg bg-blue-50 border border-blue-100 ${isRTL ? "flex-row-reverse" : ""}`}
+                  dir={isRTL ? "rtl" : "ltr"}
+                >
+                  <span className="text-xs font-bold text-blue-700">
+                    {t(`${p}.inherit.free`)}
+                  </span>
+                </div>
+                <div className="flex-1 space-y-4">
+                  <FeatureGroup
+                    label={t(`${p}.sections.conversationsLimits`)}
+                    features={[
+                      t(`${p}.plans.starter.f1`),
+                      t(`${p}.plans.starter.f2`),
+                    ]}
+                    iconClass="text-blue-500"
+                    isRTL={isRTL}
+                  />
+                  <FeatureGroup
+                    label={t(`${p}.sections.crmInbox`)}
+                    features={[
+                      t(`${p}.plans.starter.f3`),
+                      t(`${p}.plans.starter.f4`),
+                    ]}
+                    iconClass="text-blue-500"
+                    isRTL={isRTL}
+                  />
+                  <FeatureGroup
+                    label={t(`${p}.sections.automation`)}
+                    features={[
+                      t(`${p}.plans.starter.f5`),
+                      t(`${p}.plans.starter.f6`),
+                    ]}
+                    iconClass="text-blue-500"
+                    isRTL={isRTL}
+                  />
+                  <FeatureGroup
+                    label={t(`${p}.sections.aiFeatures`)}
+                    features={[
+                      t(`${p}.plans.starter.f7`),
+                      t(`${p}.plans.starter.f8`),
+                    ]}
+                    iconClass="text-blue-500"
+                    isRTL={isRTL}
+                  />
+                </div>
                 <p className="text-xs text-gray-400 mt-4 mb-2">
                   {t(`${p}.plans.starter.upsell`)}
                 </p>
@@ -580,11 +626,10 @@ export function Pricing() {
                 className="bg-white rounded-2xl border-2 border-brand-green shadow-lg p-6 flex flex-col relative"
                 data-testid="plan-card-pro"
               >
-                {/* Badge: centred regardless of LTR/RTL */}
                 <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-brand-green text-white text-xs font-semibold px-3 py-1 rounded-full whitespace-nowrap">
                   {t(`${p}.plans.pro.badge`)}
                 </div>
-                <div className="mb-5 mt-2">
+                <div className="mb-4 mt-2">
                   <span className="text-xs font-semibold text-brand-green uppercase tracking-wider">
                     {t(`${p}.plans.pro.name`)}
                   </span>
@@ -604,29 +649,43 @@ export function Pricing() {
                     {t(`${p}.plans.pro.desc`)}
                   </p>
                 </div>
-                <ul className="space-y-3 flex-1">
-                  {[
-                    t(`${p}.plans.pro.f1`),
-                    t(`${p}.plans.pro.f2`),
-                    t(`${p}.plans.pro.f3`),
-                    t(`${p}.plans.pro.f4`),
-                    t(`${p}.plans.pro.f5`),
-                    t(`${p}.plans.pro.f6`),
-                    t(`${p}.plans.pro.f7`),
-                    t(`${p}.plans.pro.f8`),
-                    t(`${p}.plans.pro.f9`),
-                    t(`${p}.plans.pro.f10`),
-                    t(`${p}.plans.pro.f11`),
-                    t(`${p}.plans.pro.f12`),
-                  ].map((f) => (
-                    <FeatureItem
-                      key={f}
-                      text={f}
-                      iconClass="text-brand-green"
-                      isRTL={isRTL}
-                    />
-                  ))}
-                </ul>
+                <div
+                  className={`flex items-center gap-1.5 mb-4 px-3 py-1.5 rounded-lg bg-emerald-50 border border-emerald-100 ${isRTL ? "flex-row-reverse" : ""}`}
+                  dir={isRTL ? "rtl" : "ltr"}
+                >
+                  <span className="text-xs font-bold text-brand-green">
+                    {t(`${p}.inherit.starter`)}
+                  </span>
+                </div>
+                <div className="flex-1 space-y-4">
+                  <FeatureGroup
+                    label={t(`${p}.sections.conversationsLimits`)}
+                    features={[
+                      t(`${p}.plans.pro.f1`),
+                      t(`${p}.plans.pro.f2`),
+                      t(`${p}.plans.pro.f3`),
+                    ]}
+                    iconClass="text-brand-green"
+                    isRTL={isRTL}
+                  />
+                  <FeatureGroup
+                    label={t(`${p}.sections.automation`)}
+                    features={[t(`${p}.plans.pro.f4`)]}
+                    iconClass="text-brand-green"
+                    isRTL={isRTL}
+                  />
+                  <FeatureGroup
+                    label={t(`${p}.sections.aiFeatures`)}
+                    features={[
+                      t(`${p}.plans.pro.f5`),
+                      t(`${p}.plans.pro.f6`),
+                      t(`${p}.plans.pro.f7`),
+                      t(`${p}.plans.pro.f8`),
+                    ]}
+                    iconClass="text-brand-green"
+                    isRTL={isRTL}
+                  />
+                </div>
                 <p className="text-xs text-gray-400 mt-4 mb-2">
                   {t(`${p}.plans.pro.upsell`)}
                 </p>
@@ -696,7 +755,11 @@ export function Pricing() {
                 />
               ))}
             </ul>
-            <p className="text-xs text-gray-400 mt-4 mb-4">
+            <p className="text-xs font-medium text-purple-700 mt-4 mb-1 flex items-center gap-1" dir={isRTL ? "rtl" : "ltr"}>
+              <Shield className="w-3 h-3 shrink-0" />
+              {t(`${p}.aiBrainNote`)}
+            </p>
+            <p className="text-xs text-gray-400 mb-4">
               {t(`${p}.plans.aiBrain.upsell`)}
             </p>
             {canAccessAIBrain ? (
