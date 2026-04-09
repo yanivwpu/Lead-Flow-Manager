@@ -81,6 +81,75 @@ function GrowthEnginesTab() {
 
   return (
     <div className="space-y-4">
+      <div>
+        <h2 className="text-lg font-semibold text-gray-900">Growth Engines</h2>
+        <p className="text-sm text-gray-500 mt-0.5">
+          Pre-built industry systems designed to capture, qualify, and convert leads automatically on WhatsApp.
+        </p>
+      </div>
+
+      <Card className="overflow-hidden border-emerald-200/60 shadow-sm" data-testid="card-realtor-growth-engine">
+        <div className="flex flex-col lg:flex-row">
+          <div className="flex-1 p-5 lg:p-6">
+            <div className="flex items-start justify-between mb-3">
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <Badge className="bg-gradient-to-r from-emerald-500 to-teal-500 text-white border-0 text-[10px] px-2 py-0">Premium</Badge>
+                </div>
+                <h3 className="text-lg font-bold text-gray-900" data-testid="text-engine-title"><RealtorMark /> Growth Engine</h3>
+              </div>
+              <div className="hidden sm:flex items-center justify-center w-10 h-10 rounded-lg bg-emerald-50">
+                <Rocket className="h-5 w-5 text-emerald-600" />
+              </div>
+            </div>
+
+            <p className="text-sm text-gray-600 mb-4 leading-relaxed">
+              Convert more WhatsApp inquiries into qualified buyers & booked showings — automatically.
+            </p>
+
+            <div className="space-y-2 mb-2">
+              {features.map((f, i) => (
+                <div key={i} className="flex items-center gap-2.5 text-sm text-gray-700">
+                  <div className="flex items-center justify-center w-5 h-5 rounded-full bg-emerald-50 shrink-0">
+                    <f.icon className="h-3 w-3 text-emerald-600" />
+                  </div>
+                  <span>{f.text}</span>
+                </div>
+              ))}
+            </div>
+            <p className="text-[11px] text-gray-400 mb-4">Includes onboarding + live setup call + system configuration</p>
+
+            <Button
+              className="bg-emerald-600 hover:bg-emerald-700 text-white w-full sm:w-auto"
+              onClick={() => setLocation("/app/templates/realtor-growth-engine")}
+              data-testid="button-view-activate-engine"
+            >
+              View & Activate
+              <ArrowRight className="ml-2 h-4 w-4" />
+            </Button>
+          </div>
+
+          <div className="lg:w-56 border-t lg:border-t-0 lg:border-l border-gray-100 bg-gray-50/50 p-5 lg:p-6 flex flex-col justify-center">
+            <div className="text-center lg:text-left">
+              <div className="flex items-baseline gap-1 justify-center lg:justify-start">
+                <span className="text-2xl font-bold text-gray-900">$199</span>
+              </div>
+              <p className="text-xs text-gray-500 mt-0.5">one-time template license</p>
+
+              <div className="mt-4 pt-3 border-t border-gray-200">
+                <div className="flex items-center gap-1.5 text-xs text-gray-600">
+                  <Crown className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+                  <span>Requires Pro + AI plan</span>
+                </div>
+              </div>
+
+              <p className="text-[10px] text-gray-400 mt-3 leading-snug">
+                WhatsApp conversation fees billed separately by Meta
+              </p>
+            </div>
+          </div>
+        </div>
+      </Card>
     </div>
   );
 }
