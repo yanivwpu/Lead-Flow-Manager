@@ -7,7 +7,8 @@ import {
   Loader2, Crown, Mail, Users, X, 
   MessageSquare, GitBranch, Webhook, ChevronRight,
   Sparkles, LayoutTemplate, MoveUp, MoveDown,
-  CheckCircle2, ArrowDown
+  CheckCircle2, ArrowDown, Globe, Smartphone, Send,
+  Timer, BellOff, PenLine, AlertCircle, CalendarClock
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -40,18 +41,70 @@ import { apiRequest } from "@/lib/queryClient";
 import { Link } from "wouter";
 import { cn } from "@/lib/utils";
 
-// ─── Constants ────────────────────────────────────────────────────────────────
+// ─── Channel Config ───────────────────────────────────────────────────────────
 
-const TRIGGER_TYPES = [
-  { value: "new_chat", label: "New Chat Created", icon: MessageSquare, description: "Triggers when a new conversation starts", color: "bg-blue-50 text-blue-600 border-blue-200" },
-  { value: "keyword", label: "Keyword Detected", icon: Tag, description: "Triggers when a message contains specific keywords", color: "bg-purple-50 text-purple-600 border-purple-200" },
-  { value: "tag_change", label: "Tag Changed", icon: GitBranch, description: "Triggers when a chat's tag is changed", color: "bg-orange-50 text-orange-600 border-orange-200" },
+const CHANNELS = [
+  { value: "any", label: "Any Channel", emoji: "🌐", color: "bg-gray-100 text-gray-700 border-gray-200" },
+  { value: "whatsapp", label: "WhatsApp", emoji: "💬", color: "bg-green-50 text-green-700 border-green-200" },
+  { value: "facebook", label: "Facebook", emoji: "📘", color: "bg-blue-50 text-blue-700 border-blue-200" },
+  { value: "instagram", label: "Instagram", emoji: "📸", color: "bg-pink-50 text-pink-700 border-pink-200" },
+  { value: "webchat", label: "Web Chat", emoji: "💻", color: "bg-indigo-50 text-indigo-700 border-indigo-200" },
+  { value: "sms", label: "SMS", emoji: "📱", color: "bg-purple-50 text-purple-700 border-purple-200" },
+  { value: "telegram", label: "Telegram", emoji: "✈️", color: "bg-sky-50 text-sky-700 border-sky-200" },
 ];
+
+// ─── Trigger Config ───────────────────────────────────────────────────────────
+
+const TRIGGER_GROUPS = [
+  {
+    label: "Conversations",
+    triggers: [
+      { value: "new_chat", label: "New Chat Created", icon: MessageSquare, description: "A brand new conversation or contact thread is created", hasChannel: true },
+      { value: "new_message", label: "New Message Received", icon: Mail, description: "An inbound message arrives in a conversation", hasChannel: true },
+    ],
+  },
+  {
+    label: "CRM",
+    triggers: [
+      { value: "tag_added", label: "Tag Added", icon: Tag, description: "A tag is applied to a conversation or contact", hasChannel: false },
+      { value: "tag_removed", label: "Tag Removed", icon: Tag, description: "A tag is removed from a conversation", hasChannel: false },
+      { value: "pipeline_change", label: "Pipeline Stage Changed", icon: ArrowRight, description: "A contact moves to a different pipeline stage", hasChannel: false },
+    ],
+  },
+  {
+    label: "Timing",
+    triggers: [
+      { value: "no_reply", label: "No Reply For", icon: BellOff, description: "No response received after a set duration", hasChannel: true },
+    ],
+  },
+  {
+    label: "Message Logic",
+    triggers: [
+      { value: "keyword", label: "Keyword Detected", icon: PenLine, description: "A message contains a specific keyword or phrase", hasChannel: true },
+    ],
+  },
+  {
+    label: "Integrations",
+    triggers: [
+      { value: "webhook", label: "Webhook Received", icon: Webhook, description: "An external system sends a webhook event", hasChannel: false },
+      { value: "form_submitted", label: "Form Submitted", icon: FileText, description: "A lead form or widget is submitted", hasChannel: false },
+    ],
+  },
+];
+
+const ALL_TRIGGERS = TRIGGER_GROUPS.flatMap(g => g.triggers);
+
+// Map legacy backend trigger types to the new normalized names (display-layer only)
+function normalizeTriggerType(raw: string): string {
+  if (raw === "tag_change") return "tag_added";
+  return raw;
+}
+
+// ─── Action Config ────────────────────────────────────────────────────────────
 
 const ACTION_CATEGORIES = [
   {
     label: "CRM",
-    color: "bg-blue-50 text-blue-700",
     actions: [
       { value: "assign", label: "Assign to Team Member", icon: User, description: "Route to a specific agent or round robin" },
       { value: "tag", label: "Set Tag", icon: Tag, description: "Apply a label to the contact" },
@@ -61,7 +114,6 @@ const ACTION_CATEGORIES = [
   },
   {
     label: "Tasks",
-    color: "bg-green-50 text-green-700",
     actions: [
       { value: "add_note", label: "Add Note", icon: FileText, description: "Attach a note to the conversation" },
       { value: "set_followup", label: "Set Follow-up", icon: Clock, description: "Schedule a future follow-up reminder" },
@@ -82,33 +134,36 @@ const WORKFLOW_TEMPLATES = [
   {
     id: "assign-leads",
     name: "Assign New Leads",
-    description: "Automatically assign every new chat using round robin",
+    description: "Auto-assign every new chat via round robin",
     icon: User,
     color: "bg-blue-50 border-blue-200",
     iconColor: "text-blue-600",
     triggerType: "new_chat",
+    triggerChannel: "any",
     triggerConditions: {},
     actions: [{ type: "assign", value: "round_robin" }, { type: "tag", value: "New" }],
   },
   {
     id: "tag-route",
     name: "Tag and Route Leads",
-    description: "Tag new chats and move them to the first pipeline stage",
+    description: "Tag new chats and move them to the pipeline",
     icon: Tag,
     color: "bg-purple-50 border-purple-200",
     iconColor: "text-purple-600",
     triggerType: "new_chat",
+    triggerChannel: "any",
     triggerConditions: {},
     actions: [{ type: "tag", value: "New" }, { type: "set_pipeline", value: "Lead" }],
   },
   {
     id: "keyword-followup",
     name: "Keyword Follow-up",
-    description: "Set a follow-up when a contact mentions a keyword",
-    icon: MessageSquare,
+    description: "Set a follow-up when a keyword is detected",
+    icon: PenLine,
     color: "bg-orange-50 border-orange-200",
     iconColor: "text-orange-600",
     triggerType: "keyword",
+    triggerChannel: "any",
     triggerConditions: { keywords: ["price", "quote"] },
     actions: [{ type: "set_followup", value: "3" }, { type: "set_pipeline", value: "Proposal" }],
   },
@@ -119,7 +174,8 @@ const WORKFLOW_TEMPLATES = [
     icon: CheckCircle2,
     color: "bg-green-50 border-green-200",
     iconColor: "text-green-600",
-    triggerType: "tag_change",
+    triggerType: "tag_added",
+    triggerChannel: "any",
     triggerConditions: {},
     actions: [{ type: "tag", value: "Paid" }, { type: "set_status", value: "resolved" }, { type: "set_pipeline", value: "Closed" }],
   },
@@ -222,11 +278,247 @@ interface DripEnrollment {
   completedAt: string | null;
 }
 
-// ─── Sub-components ───────────────────────────────────────────────────────────
+// ─── Channel Chip ─────────────────────────────────────────────────────────────
+
+function ChannelChip({ value, selected, onClick }: { value: string; selected: boolean; onClick: () => void }) {
+  const ch = CHANNELS.find(c => c.value === value)!;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-medium transition-all",
+        selected ? cn(ch.color, "ring-2 ring-offset-1 ring-current/30 shadow-sm") : "bg-white text-gray-500 border-gray-200 hover:border-gray-300"
+      )}
+    >
+      <span>{ch.emoji}</span>
+      <span>{ch.label}</span>
+    </button>
+  );
+}
+
+// ─── Trigger Picker Panel ─────────────────────────────────────────────────────
+
+function TriggerPickerPanel({ current, onSelect, onClose }: { current: string; onSelect: (type: string) => void; onClose: () => void }) {
+  return (
+    <div className="absolute inset-0 z-10 bg-white rounded-lg flex flex-col border">
+      <div className="flex items-center justify-between px-4 pt-4 pb-3 border-b">
+        <h3 className="font-semibold text-gray-900">Choose trigger</h3>
+        <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded-md">
+          <X className="h-4 w-4 text-gray-500" />
+        </button>
+      </div>
+      <div className="flex-1 overflow-y-auto p-4 space-y-5">
+        {TRIGGER_GROUPS.map((group) => (
+          <div key={group.label}>
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">{group.label}</p>
+            <div className="space-y-1">
+              {group.triggers.map((trigger) => {
+                const Icon = trigger.icon;
+                const isActive = normalizeTriggerType(current) === trigger.value;
+                return (
+                  <button
+                    key={trigger.value}
+                    onClick={() => { onSelect(trigger.value); onClose(); }}
+                    className={cn(
+                      "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-colors group",
+                      isActive ? "bg-brand-green/8 border border-brand-green/20" : "hover:bg-gray-50 border border-transparent"
+                    )}
+                  >
+                    <div className={cn(
+                      "h-8 w-8 rounded-lg flex items-center justify-center shrink-0 transition-colors",
+                      isActive ? "bg-brand-green/10" : "bg-gray-100 group-hover:bg-gray-200"
+                    )}>
+                      <Icon className={cn("h-4 w-4", isActive ? "text-brand-green" : "text-gray-500")} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className={cn("text-sm font-medium", isActive ? "text-brand-green" : "text-gray-900")}>{trigger.label}</p>
+                      <p className="text-xs text-gray-500 truncate">{trigger.description}</p>
+                    </div>
+                    {isActive
+                      ? <CheckCircle2 className="h-4 w-4 text-brand-green shrink-0" />
+                      : <ChevronRight className="h-4 w-4 text-gray-300 group-hover:text-gray-400 shrink-0" />}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Trigger Block (visual card showing selected trigger) ─────────────────────
+
+function TriggerBlock({
+  triggerType,
+  triggerChannel,
+  triggerKeywords,
+  triggerTag,
+  triggerToStage,
+  triggerDuration,
+  onEditTrigger,
+  onChangeChannel,
+  onChangeKeywords,
+  onChangeTag,
+  onChangeToStage,
+  onChangeDuration,
+  tags,
+  pipelineStages,
+}: {
+  triggerType: string;
+  triggerChannel: string;
+  triggerKeywords: string;
+  triggerTag: string;
+  triggerToStage: string;
+  triggerDuration: string;
+  onEditTrigger: () => void;
+  onChangeChannel: (v: string) => void;
+  onChangeKeywords: (v: string) => void;
+  onChangeTag: (v: string) => void;
+  onChangeToStage: (v: string) => void;
+  onChangeDuration: (v: string) => void;
+  tags: string[];
+  pipelineStages: string[];
+}) {
+  const normalized = normalizeTriggerType(triggerType);
+  const triggerDef = ALL_TRIGGERS.find(t => t.value === normalized);
+  const channelDef = CHANNELS.find(c => c.value === triggerChannel) || CHANNELS[0];
+  const Icon = triggerDef?.icon || Zap;
+
+  return (
+    <div className="border border-gray-200 rounded-xl bg-white overflow-hidden">
+      {/* Trigger header row */}
+      <div className="flex items-center gap-3 p-3.5 border-b border-gray-100 bg-gray-50/60">
+        <div className="h-8 w-8 rounded-lg bg-brand-green/10 flex items-center justify-center shrink-0">
+          <Icon className="h-4 w-4 text-brand-green" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-gray-900">{triggerDef?.label || triggerType}</p>
+          <p className="text-xs text-gray-500">
+            {channelDef.emoji} {channelDef.label}
+            {normalized === "keyword" && triggerKeywords && ` · "${triggerKeywords.split(",")[0].trim()}${triggerKeywords.includes(",") ? "…" : ""}"`}
+            {(normalized === "tag_added" || normalized === "tag_removed") && triggerTag && ` · ${triggerTag}`}
+            {normalized === "pipeline_change" && triggerToStage && ` · → ${triggerToStage}`}
+            {normalized === "no_reply" && triggerDuration && ` · ${triggerDuration}h`}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onEditTrigger}
+          className="text-xs text-gray-400 hover:text-brand-green font-medium px-2 py-1 rounded hover:bg-brand-green/5 transition-colors"
+        >
+          Change
+        </button>
+      </div>
+
+      {/* Trigger config body */}
+      <div className="p-3.5 space-y-3.5">
+        {/* Channel selector — show for triggers that support it */}
+        {triggerDef?.hasChannel && (
+          <div>
+            <p className="text-xs text-gray-500 mb-2">Channel</p>
+            <div className="flex flex-wrap gap-1.5">
+              {CHANNELS.map(ch => (
+                <ChannelChip
+                  key={ch.value}
+                  value={ch.value}
+                  selected={triggerChannel === ch.value}
+                  onClick={() => onChangeChannel(ch.value)}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Keyword input */}
+        {normalized === "keyword" && (
+          <div>
+            <p className="text-xs text-gray-500 mb-1.5">Keywords <span className="text-gray-400">(comma separated)</span></p>
+            <Input
+              value={triggerKeywords}
+              onChange={(e) => onChangeKeywords(e.target.value)}
+              placeholder="e.g. price, quote, tour"
+              className="h-8 text-sm"
+              data-testid="input-keywords"
+            />
+          </div>
+        )}
+
+        {/* Tag selector */}
+        {(normalized === "tag_added" || normalized === "tag_removed") && (
+          <div>
+            <p className="text-xs text-gray-500 mb-1.5">Tag</p>
+            <Select value={triggerTag} onValueChange={onChangeTag}>
+              <SelectTrigger className="h-8 text-sm" data-testid="select-trigger-tag">
+                <SelectValue placeholder="Any tag" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="any">Any tag</SelectItem>
+                {tags.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
+        {/* Pipeline stage selector */}
+        {normalized === "pipeline_change" && (
+          <div>
+            <p className="text-xs text-gray-500 mb-1.5">Moves to stage</p>
+            <Select value={triggerToStage} onValueChange={onChangeToStage}>
+              <SelectTrigger className="h-8 text-sm" data-testid="select-trigger-stage">
+                <SelectValue placeholder="Any stage" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="any">Any stage</SelectItem>
+                {pipelineStages.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
+        {/* No reply duration */}
+        {normalized === "no_reply" && (
+          <div>
+            <p className="text-xs text-gray-500 mb-1.5">After no reply for</p>
+            <Select value={triggerDuration} onValueChange={onChangeDuration}>
+              <SelectTrigger className="h-8 text-sm" data-testid="select-trigger-duration">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="1">1 hour</SelectItem>
+                <SelectItem value="2">2 hours</SelectItem>
+                <SelectItem value="4">4 hours</SelectItem>
+                <SelectItem value="8">8 hours</SelectItem>
+                <SelectItem value="12">12 hours</SelectItem>
+                <SelectItem value="24">24 hours</SelectItem>
+                <SelectItem value="48">48 hours</SelectItem>
+                <SelectItem value="72">3 days</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
+        {/* No config needed */}
+        {!triggerDef?.hasChannel
+          && normalized !== "keyword"
+          && normalized !== "tag_added"
+          && normalized !== "tag_removed"
+          && normalized !== "pipeline_change"
+          && normalized !== "no_reply" && (
+          <p className="text-xs text-gray-400 italic">No additional configuration needed for this trigger.</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Action Picker Panel ──────────────────────────────────────────────────────
 
 function ActionPickerPanel({ onSelect, onClose }: { onSelect: (type: string) => void; onClose: () => void }) {
   return (
-    <div className="absolute inset-0 z-10 bg-white rounded-lg flex flex-col">
+    <div className="absolute inset-0 z-10 bg-white rounded-lg flex flex-col border">
       <div className="flex items-center justify-between px-4 pt-4 pb-3 border-b">
         <h3 className="font-semibold text-gray-900">Choose an action</h3>
         <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded-md">
@@ -244,7 +536,7 @@ function ActionPickerPanel({ onSelect, onClose }: { onSelect: (type: string) => 
                   <button
                     key={action.value}
                     onClick={() => { onSelect(action.value); onClose(); }}
-                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-gray-50 text-left transition-colors group"
+                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-gray-50 text-left transition-colors group border border-transparent"
                   >
                     <div className="h-8 w-8 rounded-lg bg-gray-100 flex items-center justify-center shrink-0 group-hover:bg-gray-200 transition-colors">
                       <Icon className="h-4 w-4 text-gray-600" />
@@ -265,24 +557,14 @@ function ActionPickerPanel({ onSelect, onClose }: { onSelect: (type: string) => 
   );
 }
 
+// ─── Action Block ─────────────────────────────────────────────────────────────
+
 function ActionBlock({
-  action,
-  index,
-  total,
-  teamMembers,
-  onUpdate,
-  onRemove,
-  onMoveUp,
-  onMoveDown,
+  action, index, total, teamMembers, onUpdate, onRemove, onMoveUp, onMoveDown,
 }: {
-  action: WorkflowAction;
-  index: number;
-  total: number;
-  teamMembers: any[];
+  action: WorkflowAction; index: number; total: number; teamMembers: any[];
   onUpdate: (field: "type" | "value", value: string) => void;
-  onRemove: () => void;
-  onMoveUp: () => void;
-  onMoveDown: () => void;
+  onRemove: () => void; onMoveUp: () => void; onMoveDown: () => void;
 }) {
   const actionDef = ALL_ACTIONS.find(a => a.value === action.type);
   const Icon = actionDef?.icon || FileText;
@@ -368,12 +650,10 @@ function ActionBlock({
         <div className="h-9 w-9 rounded-lg bg-gray-100 flex items-center justify-center shrink-0">
           <Icon className="h-4 w-4 text-gray-600" />
         </div>
-        {index < total - 1 && (
-          <div className="w-px flex-1 bg-gray-200 my-1" />
-        )}
+        {index < total - 1 && <div className="w-px flex-1 bg-gray-200 my-1" />}
       </div>
       <div className="flex-1 pb-3">
-        <div className="border border-gray-200 rounded-lg bg-white p-3 space-y-2.5">
+        <div className="border border-gray-200 rounded-xl bg-white p-3 space-y-2.5">
           <div className="flex items-center justify-between">
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{actionDef?.label || "Action"}</p>
             <div className="flex items-center gap-0.5">
@@ -402,14 +682,21 @@ function ActionBlock({
   );
 }
 
-function WorkflowSummary({ triggerType, actions, keywords }: { triggerType: string; actions: WorkflowAction[]; keywords: string }) {
-  const trigger = TRIGGER_TYPES.find(t => t.value === triggerType);
+// ─── Workflow Summary ─────────────────────────────────────────────────────────
+
+function WorkflowSummary({
+  triggerType, triggerChannel, triggerKeywords, triggerTag, triggerToStage, triggerDuration, actions,
+}: {
+  triggerType: string; triggerChannel: string; triggerKeywords: string; triggerTag: string;
+  triggerToStage: string; triggerDuration: string; actions: WorkflowAction[];
+}) {
+  const normalized = normalizeTriggerType(triggerType);
+  const triggerDef = ALL_TRIGGERS.find(t => t.value === normalized);
+  const channelDef = CHANNELS.find(c => c.value === triggerChannel);
   const validActions = actions.filter(a => a.value);
-  if (!trigger || validActions.length === 0) return null;
+  if (!triggerDef || validActions.length === 0) return null;
 
   const actionPhrases = validActions.map(a => {
-    const def = ALL_ACTIONS.find(d => d.value === a.type);
-    if (!def) return "";
     switch (a.type) {
       case "assign": return `assign via ${a.value === "round_robin" ? "round robin" : a.value}`;
       case "tag": return `add tag "${a.value}"`;
@@ -417,35 +704,40 @@ function WorkflowSummary({ triggerType, actions, keywords }: { triggerType: stri
       case "set_pipeline": return `move to "${a.value}" stage`;
       case "add_note": return `add a note`;
       case "set_followup": return `schedule ${a.value}-day follow-up`;
-      default: return def.label.toLowerCase();
+      default: return "";
     }
   }).filter(Boolean);
 
-  const triggerPhrase = triggerType === "keyword"
-    ? `a keyword (${keywords || "..."}) is detected`
-    : trigger.label.toLowerCase();
+  let triggerPhrase = triggerDef.label.toLowerCase();
+  if (triggerChannel !== "any" && channelDef) triggerPhrase += ` on ${channelDef.label}`;
+  if (normalized === "keyword" && triggerKeywords) triggerPhrase += ` ("${triggerKeywords.split(",")[0].trim()}")`;
+  if ((normalized === "tag_added" || normalized === "tag_removed") && triggerTag && triggerTag !== "any") triggerPhrase += ` (${triggerTag})`;
+  if (normalized === "pipeline_change" && triggerToStage && triggerToStage !== "any") triggerPhrase += ` (→ ${triggerToStage})`;
+  if (normalized === "no_reply" && triggerDuration) triggerPhrase += ` for ${triggerDuration}h`;
 
   return (
-    <div className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-3">
+    <div className="rounded-xl bg-amber-50 border border-amber-200 px-4 py-3">
       <p className="text-xs font-semibold text-amber-700 uppercase tracking-wider mb-1">Summary</p>
-      <p className="text-sm text-amber-900">
+      <p className="text-sm text-amber-900 leading-relaxed">
         When <span className="font-medium">{triggerPhrase}</span>, {actionPhrases.join(", then ")}.
       </p>
     </div>
   );
 }
 
+// ─── Start Screen ─────────────────────────────────────────────────────────────
+
 function StartScreen({ type, onScratch, onTemplate }: { type: "workflow" | "sequence"; onScratch: () => void; onTemplate: (tpl: any) => void }) {
   const templates = type === "workflow" ? WORKFLOW_TEMPLATES : SEQUENCE_TEMPLATES;
   return (
-    <div className="space-y-5 py-2">
+    <div className="space-y-5 py-1">
       <button
         onClick={onScratch}
         className="w-full flex items-center gap-4 p-4 border-2 border-dashed border-gray-200 rounded-xl hover:border-brand-green hover:bg-green-50/50 transition-colors text-left group"
         data-testid="button-start-scratch"
       >
-        <div className="h-10 w-10 rounded-lg bg-gray-100 flex items-center justify-center group-hover:bg-green-100 transition-colors">
-          <Plus className="h-5 w-5 text-gray-500 group-hover:text-brand-green" />
+        <div className="h-10 w-10 rounded-lg bg-gray-100 flex items-center justify-center group-hover:bg-green-100 transition-colors shrink-0">
+          <Plus className="h-5 w-5 text-gray-400 group-hover:text-brand-green" />
         </div>
         <div>
           <p className="font-semibold text-gray-900">Start from scratch</p>
@@ -465,10 +757,7 @@ function StartScreen({ type, onScratch, onTemplate }: { type: "workflow" | "sequ
               <button
                 key={tpl.id}
                 onClick={() => onTemplate(tpl)}
-                className={cn(
-                  "flex flex-col items-start gap-2 p-4 border rounded-xl text-left hover:shadow-sm transition-all",
-                  tpl.color
-                )}
+                className={cn("flex flex-col items-start gap-2 p-4 border rounded-xl text-left hover:shadow-sm transition-all", tpl.color)}
                 data-testid={`button-template-${tpl.id}`}
               >
                 <div className={cn("h-8 w-8 rounded-lg bg-white/60 flex items-center justify-center", tpl.iconColor)}>
@@ -499,16 +788,23 @@ export function Workflows() {
   const [editingWorkflow, setEditingWorkflow] = useState<Workflow | null>(null);
   const [wfBuilderStep, setWfBuilderStep] = useState<"start" | "builder">("start");
   const [expandedWorkflow, setExpandedWorkflow] = useState<string | null>(null);
+  const [showTriggerPicker, setShowTriggerPicker] = useState(false);
   const [showActionPicker, setShowActionPicker] = useState(false);
 
-  // Workflow form state
+  // Workflow form — base
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [triggerType, setTriggerType] = useState("new_chat");
-  const [keywords, setKeywords] = useState("");
   const [actions, setActions] = useState<WorkflowAction[]>([{ type: "assign", value: "round_robin" }]);
 
-  // Drip campaign dialog state
+  // Workflow form — trigger (normalized)
+  const [triggerType, setTriggerType] = useState("new_chat");
+  const [triggerChannel, setTriggerChannel] = useState("any");
+  const [triggerKeywords, setTriggerKeywords] = useState("");
+  const [triggerTag, setTriggerTag] = useState("any");
+  const [triggerToStage, setTriggerToStage] = useState("any");
+  const [triggerDuration, setTriggerDuration] = useState("24");
+
+  // Drip campaign state
   const [isDripDialogOpen, setIsDripDialogOpen] = useState(false);
   const [editingCampaign, setEditingCampaign] = useState<DripCampaign | null>(null);
   const [dripBuilderStep, setDripBuilderStep] = useState<"start" | "builder">("start");
@@ -712,10 +1008,15 @@ export function Workflows() {
     setName("");
     setDescription("");
     setTriggerType("new_chat");
-    setKeywords("");
+    setTriggerChannel("any");
+    setTriggerKeywords("");
+    setTriggerTag("any");
+    setTriggerToStage("any");
+    setTriggerDuration("24");
     setActions([{ type: "assign", value: "round_robin" }]);
     setEditingWorkflow(null);
     setWfBuilderStep("start");
+    setShowTriggerPicker(false);
     setShowActionPicker(false);
   };
 
@@ -731,8 +1032,15 @@ export function Workflows() {
     setEditingWorkflow(workflow);
     setName(workflow.name);
     setDescription(workflow.description || "");
-    setTriggerType(workflow.triggerType);
-    setKeywords(workflow.triggerConditions?.keywords?.join(", ") || "");
+    // Normalize legacy trigger type for display
+    setTriggerType(normalizeTriggerType(workflow.triggerType));
+    // Restore trigger conditions
+    const cond = workflow.triggerConditions || {};
+    setTriggerChannel(cond.channel || "any");
+    setTriggerKeywords(cond.keywords?.join(", ") || "");
+    setTriggerTag(cond.tag || "any");
+    setTriggerToStage(cond.stage || "any");
+    setTriggerDuration(cond.durationHours ? String(cond.durationHours) : cond.durationMinutes ? String(Math.round(cond.durationMinutes / 60)) : "24");
     setActions(workflow.actions as WorkflowAction[] || [{ type: "assign", value: "round_robin" }]);
     setWfBuilderStep("builder");
     setIsDialogOpen(true);
@@ -758,20 +1066,47 @@ export function Workflows() {
     }
   };
 
+  // Build triggerConditions object from normalized state for API
+  const buildTriggerConditions = () => {
+    const cond: any = {};
+    if (triggerChannel && triggerChannel !== "any") cond.channel = triggerChannel;
+
+    const normalized = normalizeTriggerType(triggerType);
+    if (normalized === "keyword" && triggerKeywords.trim()) {
+      cond.keywords = triggerKeywords.split(",").map(k => k.trim()).filter(Boolean);
+    }
+    if ((normalized === "tag_added" || normalized === "tag_removed") && triggerTag && triggerTag !== "any") {
+      cond.tag = triggerTag;
+    }
+    if (normalized === "pipeline_change" && triggerToStage && triggerToStage !== "any") {
+      cond.stage = triggerToStage;
+    }
+    if (normalized === "no_reply" && triggerDuration) {
+      cond.durationHours = parseInt(triggerDuration);
+      cond.durationMinutes = parseInt(triggerDuration) * 60;
+    }
+    return cond;
+  };
+
+  // Map normalized trigger type back to legacy type if needed (for backward compat with engine)
+  const serializeTriggerType = () => {
+    // tag_added/tag_removed both map to tag_change for the backend engine
+    if (triggerType === "tag_added" || triggerType === "tag_removed") return "tag_change";
+    // keyword stays keyword
+    if (triggerType === "keyword") return "keyword";
+    return triggerType;
+  };
+
   const handleSubmit = () => {
     if (!name.trim()) {
       toast({ title: "Please enter a workflow name", variant: "destructive" });
       return;
     }
-    const triggerConditions: any = {};
-    if (triggerType === "keyword" && keywords.trim()) {
-      triggerConditions.keywords = keywords.split(",").map(k => k.trim()).filter(Boolean);
-    }
     const data = {
       name,
       description: description || null,
-      triggerType,
-      triggerConditions,
+      triggerType: serializeTriggerType(),
+      triggerConditions: buildTriggerConditions(),
       actions: actions.filter(a => a.value),
     };
     if (editingWorkflow) {
@@ -852,7 +1187,11 @@ export function Workflows() {
     setName(tpl.name);
     setDescription(tpl.description);
     setTriggerType(tpl.triggerType);
-    setKeywords(tpl.triggerConditions?.keywords?.join(", ") || "");
+    setTriggerChannel(tpl.triggerChannel || "any");
+    setTriggerKeywords(tpl.triggerConditions?.keywords?.join(", ") || "");
+    setTriggerTag(tpl.triggerConditions?.tag || "any");
+    setTriggerToStage(tpl.triggerConditions?.stage || "any");
+    setTriggerDuration("24");
     setActions(tpl.actions);
     setWfBuilderStep("builder");
   };
@@ -862,6 +1201,17 @@ export function Workflows() {
     setCampaignDescription(tpl.description);
     setCampaignSteps(tpl.steps);
     setDripBuilderStep("builder");
+  };
+
+  // Display helpers for workflow list
+  const getTriggerDisplayLabel = (wf: Workflow) => {
+    const normalized = normalizeTriggerType(wf.triggerType);
+    const def = ALL_TRIGGERS.find(t => t.value === normalized);
+    const cond = wf.triggerConditions || {};
+    const channel = cond.channel ? CHANNELS.find(c => c.value === cond.channel) : null;
+    let label = def?.label || wf.triggerType;
+    if (channel) label += ` · ${channel.emoji} ${channel.label}`;
+    return label;
   };
 
   const isUpgradeRequired = error && (error as any).message?.includes("Pro plan");
@@ -916,19 +1266,11 @@ export function Workflows() {
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
         <div className="border-b border-gray-200 px-4 sm:px-6 bg-white">
           <TabsList className="h-12 bg-transparent border-0 p-0 gap-6">
-            <TabsTrigger
-              value="workflows"
-              className="h-12 px-0 border-b-2 border-transparent data-[state=active]:border-brand-green data-[state=active]:bg-transparent data-[state=active]:shadow-none rounded-none text-sm font-medium"
-            >
-              <Zap className="h-4 w-4 mr-2" />
-              Workflows
+            <TabsTrigger value="workflows" className="h-12 px-0 border-b-2 border-transparent data-[state=active]:border-brand-green data-[state=active]:bg-transparent data-[state=active]:shadow-none rounded-none text-sm font-medium">
+              <Zap className="h-4 w-4 mr-2" />Workflows
             </TabsTrigger>
-            <TabsTrigger
-              value="drip"
-              className="h-12 px-0 border-b-2 border-transparent data-[state=active]:border-brand-green data-[state=active]:bg-transparent data-[state=active]:shadow-none rounded-none text-sm font-medium"
-            >
-              <Mail className="h-4 w-4 mr-2" />
-              Drip Sequences
+            <TabsTrigger value="drip" className="h-12 px-0 border-b-2 border-transparent data-[state=active]:border-brand-green data-[state=active]:bg-transparent data-[state=active]:shadow-none rounded-none text-sm font-medium">
+              <Mail className="h-4 w-4 mr-2" />Drip Sequences
             </TabsTrigger>
           </TabsList>
         </div>
@@ -937,7 +1279,7 @@ export function Workflows() {
         <TabsContent value="workflows" className="flex-1 overflow-auto m-0">
           <div className="p-4 sm:p-6 max-w-2xl mx-auto">
             <div className="flex items-center justify-between mb-5">
-              <p className="text-sm text-gray-500">
+              <p className="text-sm text-gray-400">
                 {workflows.length > 0 ? `${workflows.length} workflow${workflows.length !== 1 ? "s" : ""}` : ""}
               </p>
               <Button
@@ -945,8 +1287,7 @@ export function Workflows() {
                 className="bg-brand-green hover:bg-brand-green/90 h-9"
                 data-testid="button-create-workflow"
               >
-                <Plus className="h-4 w-4 mr-1.5" />
-                New Workflow
+                <Plus className="h-4 w-4 mr-1.5" />New Workflow
               </Button>
             </div>
 
@@ -961,113 +1302,73 @@ export function Workflows() {
                 </div>
                 <h3 className="text-base font-semibold text-gray-900 mb-1">No workflows yet</h3>
                 <p className="text-sm text-gray-500 mb-5 max-w-xs mx-auto">Create your first workflow to automate repetitive tasks like assignment and tagging.</p>
-                <Button
-                  onClick={() => { resetForm(); setIsDialogOpen(true); }}
-                  className="bg-brand-green hover:bg-brand-green/90"
-                  data-testid="button-create-workflow-empty"
-                >
-                  <Sparkles className="h-4 w-4 mr-2" />
-                  Create Workflow
+                <Button onClick={() => { resetForm(); setIsDialogOpen(true); }} className="bg-brand-green hover:bg-brand-green/90" data-testid="button-create-workflow-empty">
+                  <Sparkles className="h-4 w-4 mr-2" />Create Workflow
                 </Button>
               </div>
             ) : (
               <div className="space-y-3">
-                {workflows.map((workflow) => {
-                  const trigger = TRIGGER_TYPES.find(t => t.value === workflow.triggerType);
-                  return (
-                    <Collapsible
-                      key={workflow.id}
-                      open={expandedWorkflow === workflow.id}
-                      onOpenChange={(open) => setExpandedWorkflow(open ? workflow.id : null)}
-                    >
-                      <div className={cn(
-                        "border rounded-xl transition-all overflow-hidden",
-                        workflow.isActive ? "border-gray-200 bg-white shadow-sm" : "border-gray-100 bg-gray-50"
-                      )}>
-                        <div className="p-4 flex items-center gap-3">
-                          <div className={cn(
-                            "h-10 w-10 rounded-xl flex items-center justify-center shrink-0",
-                            workflow.isActive ? "bg-brand-green/10" : "bg-gray-100"
-                          )}>
-                            <Zap className={cn("h-5 w-5", workflow.isActive ? "text-brand-green" : "text-gray-300")} />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2">
-                              <p className={cn("font-semibold text-sm truncate", workflow.isActive ? "text-gray-900" : "text-gray-400")}>
-                                {workflow.name}
-                              </p>
-                              {!workflow.isActive && (
-                                <Badge variant="outline" className="text-xs text-gray-400 border-gray-200 shrink-0">Paused</Badge>
-                              )}
-                            </div>
-                            <p className="text-xs text-gray-500 truncate">
-                              {trigger?.label}
-                              {workflow.executionCount > 0 && ` · ${workflow.executionCount} runs`}
-                            </p>
-                          </div>
-                          <div className="flex items-center gap-1 shrink-0">
-                            <button
-                              onClick={() => toggleWorkflowMutation.mutate({ id: workflow.id, isActive: !workflow.isActive })}
-                              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                              data-testid={`button-toggle-workflow-${workflow.id}`}
-                              title={workflow.isActive ? "Pause" : "Activate"}
-                            >
-                              {workflow.isActive
-                                ? <ToggleRight className="h-5 w-5 text-brand-green" />
-                                : <ToggleLeft className="h-5 w-5 text-gray-300" />}
-                            </button>
-                            <button
-                              onClick={() => openEditDialog(workflow)}
-                              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                              data-testid={`button-edit-workflow-${workflow.id}`}
-                              title="Edit"
-                            >
-                              <Edit2 className="h-4 w-4 text-gray-400" />
-                            </button>
-                            <button
-                              onClick={() => deleteWorkflowMutation.mutate(workflow.id)}
-                              className="p-2 hover:bg-red-50 rounded-lg transition-colors"
-                              data-testid={`button-delete-workflow-${workflow.id}`}
-                              title="Delete"
-                            >
-                              <Trash2 className="h-4 w-4 text-red-400" />
-                            </button>
-                            <CollapsibleTrigger asChild>
-                              <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
-                                <ChevronDown className={cn("h-4 w-4 text-gray-400 transition-transform duration-200", expandedWorkflow === workflow.id && "rotate-180")} />
-                              </button>
-                            </CollapsibleTrigger>
-                          </div>
+                {workflows.map((workflow) => (
+                  <Collapsible
+                    key={workflow.id}
+                    open={expandedWorkflow === workflow.id}
+                    onOpenChange={(open) => setExpandedWorkflow(open ? workflow.id : null)}
+                  >
+                    <div className={cn("border rounded-xl transition-all overflow-hidden", workflow.isActive ? "border-gray-200 bg-white shadow-sm" : "border-gray-100 bg-gray-50")}>
+                      <div className="p-4 flex items-center gap-3">
+                        <div className={cn("h-10 w-10 rounded-xl flex items-center justify-center shrink-0", workflow.isActive ? "bg-brand-green/10" : "bg-gray-100")}>
+                          <Zap className={cn("h-5 w-5", workflow.isActive ? "text-brand-green" : "text-gray-300")} />
                         </div>
-
-                        <CollapsibleContent>
-                          <div className="px-4 pb-4 border-t border-gray-100 pt-3">
-                            <div className="space-y-1.5">
-                              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Actions</p>
-                              {(workflow.actions as WorkflowAction[])?.map((action, i) => {
-                                const def = ALL_ACTIONS.find(a => a.value === action.type);
-                                const Icon = def?.icon || FileText;
-                                return (
-                                  <div key={i} className="flex items-center gap-2 text-sm">
-                                    <Icon className="h-3.5 w-3.5 text-gray-400 shrink-0" />
-                                    <span className="text-gray-700">{def?.label}</span>
-                                    <ArrowRight className="h-3 w-3 text-gray-300" />
-                                    <span className="text-gray-500 capitalize">{action.value}</span>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                            {workflow.lastExecutedAt && (
-                              <p className="text-xs text-gray-400 mt-3">
-                                Last run: {new Date(workflow.lastExecutedAt).toLocaleString()}
-                              </p>
-                            )}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <p className={cn("font-semibold text-sm truncate", workflow.isActive ? "text-gray-900" : "text-gray-400")}>{workflow.name}</p>
+                            {!workflow.isActive && <Badge variant="outline" className="text-xs text-gray-400 border-gray-200 shrink-0">Paused</Badge>}
                           </div>
-                        </CollapsibleContent>
+                          <p className="text-xs text-gray-500 truncate">
+                            {getTriggerDisplayLabel(workflow)}
+                            {workflow.executionCount > 0 && ` · ${workflow.executionCount} runs`}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button onClick={() => toggleWorkflowMutation.mutate({ id: workflow.id, isActive: !workflow.isActive })} className="p-2 hover:bg-gray-100 rounded-lg transition-colors" data-testid={`button-toggle-workflow-${workflow.id}`}>
+                            {workflow.isActive ? <ToggleRight className="h-5 w-5 text-brand-green" /> : <ToggleLeft className="h-5 w-5 text-gray-300" />}
+                          </button>
+                          <button onClick={() => openEditDialog(workflow)} className="p-2 hover:bg-gray-100 rounded-lg transition-colors" data-testid={`button-edit-workflow-${workflow.id}`}>
+                            <Edit2 className="h-4 w-4 text-gray-400" />
+                          </button>
+                          <button onClick={() => deleteWorkflowMutation.mutate(workflow.id)} className="p-2 hover:bg-red-50 rounded-lg transition-colors" data-testid={`button-delete-workflow-${workflow.id}`}>
+                            <Trash2 className="h-4 w-4 text-red-400" />
+                          </button>
+                          <CollapsibleTrigger asChild>
+                            <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+                              <ChevronDown className={cn("h-4 w-4 text-gray-400 transition-transform duration-200", expandedWorkflow === workflow.id && "rotate-180")} />
+                            </button>
+                          </CollapsibleTrigger>
+                        </div>
                       </div>
-                    </Collapsible>
-                  );
-                })}
+                      <CollapsibleContent>
+                        <div className="px-4 pb-4 border-t border-gray-100 pt-3 space-y-1.5">
+                          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Actions</p>
+                          {(workflow.actions as WorkflowAction[])?.map((action, i) => {
+                            const def = ALL_ACTIONS.find(a => a.value === action.type);
+                            const Icon = def?.icon || FileText;
+                            return (
+                              <div key={i} className="flex items-center gap-2 text-sm">
+                                <Icon className="h-3.5 w-3.5 text-gray-400 shrink-0" />
+                                <span className="text-gray-700">{def?.label}</span>
+                                <ArrowRight className="h-3 w-3 text-gray-300" />
+                                <span className="text-gray-500 capitalize">{action.value}</span>
+                              </div>
+                            );
+                          })}
+                          {workflow.lastExecutedAt && (
+                            <p className="text-xs text-gray-400 pt-2">Last run: {new Date(workflow.lastExecutedAt).toLocaleString()}</p>
+                          )}
+                        </div>
+                      </CollapsibleContent>
+                    </div>
+                  </Collapsible>
+                ))}
               </div>
             )}
           </div>
@@ -1077,16 +1378,11 @@ export function Workflows() {
         <TabsContent value="drip" className="flex-1 overflow-auto m-0">
           <div className="p-4 sm:p-6 max-w-2xl mx-auto">
             <div className="flex items-center justify-between mb-5">
-              <p className="text-sm text-gray-500">
+              <p className="text-sm text-gray-400">
                 {dripCampaigns.length > 0 ? `${dripCampaigns.length} sequence${dripCampaigns.length !== 1 ? "s" : ""}` : ""}
               </p>
-              <Button
-                onClick={() => { resetCampaignForm(); setIsDripDialogOpen(true); }}
-                className="bg-brand-green hover:bg-brand-green/90 h-9"
-                data-testid="button-create-campaign"
-              >
-                <Plus className="h-4 w-4 mr-1.5" />
-                New Sequence
+              <Button onClick={() => { resetCampaignForm(); setIsDripDialogOpen(true); }} className="bg-brand-green hover:bg-brand-green/90 h-9" data-testid="button-create-campaign">
+                <Plus className="h-4 w-4 mr-1.5" />New Sequence
               </Button>
             </div>
 
@@ -1100,83 +1396,41 @@ export function Workflows() {
                   <Mail className="h-7 w-7 text-gray-300" />
                 </div>
                 <h3 className="text-base font-semibold text-gray-900 mb-1">No sequences yet</h3>
-                <p className="text-sm text-gray-500 mb-5 max-w-xs mx-auto">Create automated message sequences to nurture leads over time with scheduled follow-ups.</p>
-                <Button
-                  onClick={() => { resetCampaignForm(); setIsDripDialogOpen(true); }}
-                  className="bg-brand-green hover:bg-brand-green/90"
-                  data-testid="button-create-campaign-empty"
-                >
-                  <Sparkles className="h-4 w-4 mr-2" />
-                  Create Sequence
+                <p className="text-sm text-gray-500 mb-5 max-w-xs mx-auto">Create automated message sequences to nurture leads over time.</p>
+                <Button onClick={() => { resetCampaignForm(); setIsDripDialogOpen(true); }} className="bg-brand-green hover:bg-brand-green/90" data-testid="button-create-campaign-empty">
+                  <Sparkles className="h-4 w-4 mr-2" />Create Sequence
                 </Button>
               </div>
             ) : (
               <div className="space-y-3">
                 {dripCampaigns.map((campaign) => (
-                  <Collapsible
-                    key={campaign.id}
-                    open={expandedCampaign === campaign.id}
-                    onOpenChange={(open) => setExpandedCampaign(open ? campaign.id : null)}
-                  >
-                    <div className={cn(
-                      "border rounded-xl transition-all overflow-hidden",
-                      campaign.isActive ? "border-gray-200 bg-white shadow-sm" : "border-gray-100 bg-gray-50"
-                    )}>
+                  <Collapsible key={campaign.id} open={expandedCampaign === campaign.id} onOpenChange={(open) => setExpandedCampaign(open ? campaign.id : null)}>
+                    <div className={cn("border rounded-xl transition-all overflow-hidden", campaign.isActive ? "border-gray-200 bg-white shadow-sm" : "border-gray-100 bg-gray-50")}>
                       <div className="p-4 flex items-center gap-3">
-                        <div className={cn(
-                          "h-10 w-10 rounded-xl flex items-center justify-center shrink-0",
-                          campaign.isActive ? "bg-blue-50" : "bg-gray-100"
-                        )}>
+                        <div className={cn("h-10 w-10 rounded-xl flex items-center justify-center shrink-0", campaign.isActive ? "bg-blue-50" : "bg-gray-100")}>
                           <Mail className={cn("h-5 w-5", campaign.isActive ? "text-blue-500" : "text-gray-300")} />
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">
-                            <p className={cn("font-semibold text-sm truncate", campaign.isActive ? "text-gray-900" : "text-gray-400")}>
-                              {campaign.name}
-                            </p>
-                            {!campaign.isActive && (
-                              <Badge variant="outline" className="text-xs text-gray-400 border-gray-200 shrink-0">Paused</Badge>
-                            )}
+                            <p className={cn("font-semibold text-sm truncate", campaign.isActive ? "text-gray-900" : "text-gray-400")}>{campaign.name}</p>
+                            {!campaign.isActive && <Badge variant="outline" className="text-xs text-gray-400 border-gray-200 shrink-0">Paused</Badge>}
                           </div>
                           <p className="text-xs text-gray-500">
                             {campaign.steps?.length || 0} step{(campaign.steps?.length || 0) !== 1 ? "s" : ""}
-                            {campaign.enrollments && campaign.enrollments.filter(e => e.status === "active").length > 0 && (
-                              <span className="ml-2">· {campaign.enrollments.filter(e => e.status === "active").length} active</span>
-                            )}
+                            {campaign.enrollments && campaign.enrollments.filter(e => e.status === "active").length > 0 && ` · ${campaign.enrollments.filter(e => e.status === "active").length} active`}
                           </p>
                         </div>
                         <div className="flex items-center gap-1 shrink-0">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => { setEnrollCampaignId(campaign.id); setIsEnrollDialogOpen(true); }}
-                            disabled={!campaign.isActive}
-                            className="h-7 text-xs px-2.5"
-                          >
-                            <Users className="h-3 w-3 mr-1" />
-                            Enroll
+                          <Button variant="outline" size="sm" onClick={() => { setEnrollCampaignId(campaign.id); setIsEnrollDialogOpen(true); }} disabled={!campaign.isActive} className="h-7 text-xs px-2.5">
+                            <Users className="h-3 w-3 mr-1" />Enroll
                           </Button>
-                          <button
-                            onClick={() => toggleCampaignMutation.mutate({ id: campaign.id, isActive: !campaign.isActive })}
-                            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                            data-testid={`button-toggle-campaign-${campaign.id}`}
-                          >
-                            {campaign.isActive
-                              ? <ToggleRight className="h-5 w-5 text-brand-green" />
-                              : <ToggleLeft className="h-5 w-5 text-gray-300" />}
+                          <button onClick={() => toggleCampaignMutation.mutate({ id: campaign.id, isActive: !campaign.isActive })} className="p-2 hover:bg-gray-100 rounded-lg transition-colors" data-testid={`button-toggle-campaign-${campaign.id}`}>
+                            {campaign.isActive ? <ToggleRight className="h-5 w-5 text-brand-green" /> : <ToggleLeft className="h-5 w-5 text-gray-300" />}
                           </button>
-                          <button
-                            onClick={() => openEditCampaignDialog(campaign)}
-                            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                            data-testid={`button-edit-campaign-${campaign.id}`}
-                          >
+                          <button onClick={() => openEditCampaignDialog(campaign)} className="p-2 hover:bg-gray-100 rounded-lg transition-colors" data-testid={`button-edit-campaign-${campaign.id}`}>
                             <Edit2 className="h-4 w-4 text-gray-400" />
                           </button>
-                          <button
-                            onClick={() => deleteCampaignMutation.mutate(campaign.id)}
-                            className="p-2 hover:bg-red-50 rounded-lg transition-colors"
-                            data-testid={`button-delete-campaign-${campaign.id}`}
-                          >
+                          <button onClick={() => deleteCampaignMutation.mutate(campaign.id)} className="p-2 hover:bg-red-50 rounded-lg transition-colors" data-testid={`button-delete-campaign-${campaign.id}`}>
                             <Trash2 className="h-4 w-4 text-red-400" />
                           </button>
                           <CollapsibleTrigger asChild>
@@ -1186,7 +1440,6 @@ export function Workflows() {
                           </CollapsibleTrigger>
                         </div>
                       </div>
-
                       <CollapsibleContent>
                         <div className="px-4 pb-4 border-t border-gray-100 pt-3 space-y-4">
                           {campaign.steps && campaign.steps.length > 0 && (
@@ -1196,15 +1449,11 @@ export function Workflows() {
                                 {campaign.steps.map((step, i) => (
                                   <div key={step.id} className="flex items-start gap-3">
                                     <div className="flex flex-col items-center">
-                                      <div className="h-6 w-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-semibold shrink-0">
-                                        {i + 1}
-                                      </div>
+                                      <div className="h-6 w-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-semibold shrink-0">{i + 1}</div>
                                       {i < (campaign.steps?.length || 0) - 1 && <div className="w-px h-4 bg-gray-200 mt-1" />}
                                     </div>
                                     <div className="flex-1 pb-2">
-                                      <p className="text-xs text-gray-500 mb-0.5">
-                                        <Clock className="h-3 w-3 inline mr-1" />{formatDelay(step.delayMinutes)} after previous
-                                      </p>
+                                      <p className="text-xs text-gray-500 mb-0.5"><Clock className="h-3 w-3 inline mr-1" />{formatDelay(step.delayMinutes)} after previous</p>
                                       <p className="text-sm text-gray-700 line-clamp-2">{step.messageContent}</p>
                                     </div>
                                   </div>
@@ -1212,7 +1461,6 @@ export function Workflows() {
                               </div>
                             </div>
                           )}
-
                           {campaign.enrollments && campaign.enrollments.length > 0 && (
                             <div>
                               <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Enrolled Contacts</p>
@@ -1231,12 +1479,7 @@ export function Workflows() {
                                         </div>
                                       </div>
                                       {enrollment.status === "active" && (
-                                        <Button
-                                          variant="ghost"
-                                          size="sm"
-                                          onClick={() => cancelEnrollmentMutation.mutate(enrollment.id)}
-                                          className="h-7 text-xs text-red-500 hover:text-red-600 hover:bg-red-50"
-                                        >
+                                        <Button variant="ghost" size="sm" onClick={() => cancelEnrollmentMutation.mutate(enrollment.id)} className="h-7 text-xs text-red-500 hover:text-red-600 hover:bg-red-50">
                                           <X className="h-3 w-3 mr-1" />Cancel
                                         </Button>
                                       )}
@@ -1260,14 +1503,10 @@ export function Workflows() {
       {/* ── Workflow Builder Dialog ── */}
       <Dialog open={isDialogOpen} onOpenChange={(open) => { if (!open) resetForm(); setIsDialogOpen(open); }}>
         <DialogContent className="max-w-xl max-h-[90vh] flex flex-col p-0 gap-0 overflow-hidden">
-          {/* Dialog header */}
           <DialogHeader className="px-5 pt-5 pb-4 border-b shrink-0">
             <div className="flex items-center gap-2">
               {wfBuilderStep === "builder" && !editingWorkflow && (
-                <button
-                  onClick={() => setWfBuilderStep("start")}
-                  className="p-1 hover:bg-gray-100 rounded-md mr-1"
-                >
+                <button onClick={() => setWfBuilderStep("start")} className="p-1 hover:bg-gray-100 rounded-md mr-1">
                   <ChevronDown className="h-4 w-4 text-gray-500 -rotate-90" />
                 </button>
               )}
@@ -1276,24 +1515,25 @@ export function Workflows() {
                   {editingWorkflow ? "Edit Workflow" : wfBuilderStep === "start" ? "New Workflow" : "Build Workflow"}
                 </DialogTitle>
                 <DialogDescription className="text-xs mt-0.5">
-                  {wfBuilderStep === "start"
-                    ? "Start from scratch or use a quick template"
-                    : "Set your trigger and define what happens next"}
+                  {wfBuilderStep === "start" ? "Start from scratch or use a quick template" : "Set your trigger and define what happens next"}
                 </DialogDescription>
               </div>
             </div>
           </DialogHeader>
 
-          {/* Dialog body */}
           <div className="flex-1 overflow-y-auto px-5 py-4 relative">
             {wfBuilderStep === "start" ? (
-              <StartScreen
-                type="workflow"
-                onScratch={() => setWfBuilderStep("builder")}
-                onTemplate={applyWorkflowTemplate}
-              />
+              <StartScreen type="workflow" onScratch={() => setWfBuilderStep("builder")} onTemplate={applyWorkflowTemplate} />
             ) : (
               <>
+                {/* Layered pickers — rendered above content */}
+                {showTriggerPicker && (
+                  <TriggerPickerPanel
+                    current={triggerType}
+                    onSelect={(type) => { setTriggerType(type); setTriggerChannel("any"); }}
+                    onClose={() => setShowTriggerPicker(false)}
+                  />
+                )}
                 {showActionPicker && (
                   <ActionPickerPanel
                     onSelect={(type) => addAction(type)}
@@ -1306,22 +1546,11 @@ export function Workflows() {
                   <div className="grid gap-3">
                     <div>
                       <Label className="text-xs font-medium text-gray-600">Workflow name</Label>
-                      <Input
-                        value={name}
-                        onChange={(e) => setName(e.target.value)}
-                        placeholder="e.g., Auto-assign new leads"
-                        className="mt-1 h-9"
-                        data-testid="input-workflow-name"
-                      />
+                      <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g., Auto-assign new leads" className="mt-1 h-9" data-testid="input-workflow-name" />
                     </div>
                     <div>
                       <Label className="text-xs font-medium text-gray-600">Description <span className="text-gray-400">(optional)</span></Label>
-                      <Input
-                        value={description}
-                        onChange={(e) => setDescription(e.target.value)}
-                        placeholder="What does this workflow do?"
-                        className="mt-1 h-9"
-                      />
+                      <Input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="What does this workflow do?" className="mt-1 h-9" />
                     </div>
                   </div>
 
@@ -1329,58 +1558,45 @@ export function Workflows() {
                   <div>
                     <div className="flex items-center gap-2 mb-2.5">
                       <div className="h-5 w-5 rounded-full bg-gray-900 flex items-center justify-center shrink-0">
-                        <span className="text-white text-xs font-bold leading-none">W</span>
+                        <span className="text-white text-[10px] font-bold leading-none">W</span>
                       </div>
                       <p className="text-xs font-bold text-gray-900 uppercase tracking-widest">When</p>
                     </div>
 
-                    <div className="border border-gray-200 rounded-xl p-4 bg-gray-50/50 space-y-3">
-                      <div>
-                        <Label className="text-xs text-gray-500 mb-1.5 block">Trigger</Label>
-                        <Select value={triggerType} onValueChange={setTriggerType}>
-                          <SelectTrigger className="h-9 text-sm bg-white" data-testid="select-trigger-type">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {TRIGGER_TYPES.map(t => {
-                              const Icon = t.icon;
-                              return (
-                                <SelectItem key={t.value} value={t.value}>
-                                  <div className="flex items-center gap-2">
-                                    <Icon className="h-4 w-4" />
-                                    <span>{t.label}</span>
-                                  </div>
-                                </SelectItem>
-                              );
-                            })}
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      {triggerType === "keyword" && (
-                        <div>
-                          <Label className="text-xs text-gray-500 mb-1.5 block">Keywords <span className="text-gray-400">(comma separated)</span></Label>
-                          <Input
-                            value={keywords}
-                            onChange={(e) => setKeywords(e.target.value)}
-                            placeholder="price, quote, order"
-                            className="h-9 text-sm bg-white"
-                            data-testid="input-keywords"
-                          />
-                        </div>
-                      )}
-
-                      <p className="text-xs text-gray-400 italic">
-                        {TRIGGER_TYPES.find(t => t.value === triggerType)?.description}
-                      </p>
-                    </div>
+                    {/* No trigger selected yet */}
+                    {!triggerType ? (
+                      <button
+                        onClick={() => setShowTriggerPicker(true)}
+                        className="w-full flex items-center justify-center gap-2 py-4 border-2 border-dashed border-gray-200 rounded-xl text-sm text-gray-500 hover:border-brand-green hover:text-brand-green transition-colors"
+                        data-testid="button-choose-trigger"
+                      >
+                        <Plus className="h-4 w-4" />Choose a trigger
+                      </button>
+                    ) : (
+                      <TriggerBlock
+                        triggerType={triggerType}
+                        triggerChannel={triggerChannel}
+                        triggerKeywords={triggerKeywords}
+                        triggerTag={triggerTag}
+                        triggerToStage={triggerToStage}
+                        triggerDuration={triggerDuration}
+                        onEditTrigger={() => setShowTriggerPicker(true)}
+                        onChangeChannel={setTriggerChannel}
+                        onChangeKeywords={setTriggerKeywords}
+                        onChangeTag={setTriggerTag}
+                        onChangeToStage={setTriggerToStage}
+                        onChangeDuration={setTriggerDuration}
+                        tags={TAGS}
+                        pipelineStages={PIPELINE_STAGES}
+                      />
+                    )}
                   </div>
 
                   {/* THEN blocks */}
                   <div>
                     <div className="flex items-center gap-2 mb-2.5">
                       <div className="h-5 w-5 rounded-full bg-brand-green flex items-center justify-center shrink-0">
-                        <span className="text-white text-xs font-bold leading-none">T</span>
+                        <span className="text-white text-[10px] font-bold leading-none">T</span>
                       </div>
                       <p className="text-xs font-bold text-gray-900 uppercase tracking-widest">Then</p>
                     </div>
@@ -1405,14 +1621,21 @@ export function Workflows() {
                         className="w-full flex items-center justify-center gap-2 py-2.5 border-2 border-dashed border-gray-200 rounded-xl text-sm text-gray-500 hover:border-brand-green hover:text-brand-green transition-colors mt-1"
                         data-testid="button-add-action"
                       >
-                        <Plus className="h-4 w-4" />
-                        Add action
+                        <Plus className="h-4 w-4" />Add action
                       </button>
                     </div>
                   </div>
 
                   {/* Human-readable summary */}
-                  <WorkflowSummary triggerType={triggerType} actions={actions} keywords={keywords} />
+                  <WorkflowSummary
+                    triggerType={triggerType}
+                    triggerChannel={triggerChannel}
+                    triggerKeywords={triggerKeywords}
+                    triggerTag={triggerTag}
+                    triggerToStage={triggerToStage}
+                    triggerDuration={triggerDuration}
+                    actions={actions}
+                  />
                 </div>
               </>
             )}
@@ -1427,9 +1650,7 @@ export function Workflows() {
                 className="bg-brand-green hover:bg-brand-green/90 h-9"
                 data-testid="button-save-workflow"
               >
-                {(createWorkflowMutation.isPending || updateWorkflowMutation.isPending) && (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                )}
+                {(createWorkflowMutation.isPending || updateWorkflowMutation.isPending) && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                 {editingWorkflow ? "Save changes" : "Create workflow"}
               </Button>
             </DialogFooter>
@@ -1443,10 +1664,7 @@ export function Workflows() {
           <DialogHeader className="px-5 pt-5 pb-4 border-b shrink-0">
             <div className="flex items-center gap-2">
               {dripBuilderStep === "builder" && !editingCampaign && (
-                <button
-                  onClick={() => setDripBuilderStep("start")}
-                  className="p-1 hover:bg-gray-100 rounded-md mr-1"
-                >
+                <button onClick={() => setDripBuilderStep("start")} className="p-1 hover:bg-gray-100 rounded-md mr-1">
                   <ChevronDown className="h-4 w-4 text-gray-500 -rotate-90" />
                 </button>
               )}
@@ -1455,9 +1673,7 @@ export function Workflows() {
                   {editingCampaign ? "Edit Sequence" : dripBuilderStep === "start" ? "New Sequence" : "Build Sequence"}
                 </DialogTitle>
                 <DialogDescription className="text-xs mt-0.5">
-                  {dripBuilderStep === "start"
-                    ? "Start from scratch or use a quick template"
-                    : "Define your message steps and timing"}
+                  {dripBuilderStep === "start" ? "Start from scratch or use a quick template" : "Define your message steps and timing"}
                 </DialogDescription>
               </div>
             </div>
@@ -1465,41 +1681,24 @@ export function Workflows() {
 
           <div className="flex-1 overflow-y-auto px-5 py-4">
             {dripBuilderStep === "start" ? (
-              <StartScreen
-                type="sequence"
-                onScratch={() => setDripBuilderStep("builder")}
-                onTemplate={applySequenceTemplate}
-              />
+              <StartScreen type="sequence" onScratch={() => setDripBuilderStep("builder")} onTemplate={applySequenceTemplate} />
             ) : (
               <div className="space-y-5">
-                {/* Name + Description */}
                 <div className="grid gap-3">
                   <div>
                     <Label className="text-xs font-medium text-gray-600">Sequence name</Label>
-                    <Input
-                      value={campaignName}
-                      onChange={(e) => setCampaignName(e.target.value)}
-                      placeholder="e.g., Welcome Series"
-                      className="mt-1 h-9"
-                      data-testid="input-campaign-name"
-                    />
+                    <Input value={campaignName} onChange={(e) => setCampaignName(e.target.value)} placeholder="e.g., Welcome Series" className="mt-1 h-9" data-testid="input-campaign-name" />
                   </div>
                   <div>
                     <Label className="text-xs font-medium text-gray-600">Description <span className="text-gray-400">(optional)</span></Label>
-                    <Input
-                      value={campaignDescription}
-                      onChange={(e) => setCampaignDescription(e.target.value)}
-                      placeholder="What's this sequence for?"
-                      className="mt-1 h-9"
-                    />
+                    <Input value={campaignDescription} onChange={(e) => setCampaignDescription(e.target.value)} placeholder="What's this sequence for?" className="mt-1 h-9" />
                   </div>
                 </div>
 
-                {/* Steps */}
                 <div>
                   <div className="flex items-center gap-2 mb-3">
                     <div className="h-5 w-5 rounded-full bg-blue-600 flex items-center justify-center shrink-0">
-                      <span className="text-white text-xs font-bold leading-none">S</span>
+                      <span className="text-white text-[10px] font-bold leading-none">S</span>
                     </div>
                     <p className="text-xs font-bold text-gray-900 uppercase tracking-widest">Steps</p>
                   </div>
@@ -1508,12 +1707,8 @@ export function Workflows() {
                     {campaignSteps.map((step, index) => (
                       <div key={index} className="relative flex gap-3">
                         <div className="flex flex-col items-center">
-                          <div className="h-8 w-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-bold shrink-0">
-                            {index + 1}
-                          </div>
-                          {index < campaignSteps.length - 1 && (
-                            <div className="w-px flex-1 bg-blue-100 my-1" />
-                          )}
+                          <div className="h-8 w-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-bold shrink-0">{index + 1}</div>
+                          {index < campaignSteps.length - 1 && <div className="w-px flex-1 bg-blue-100 my-1" />}
                         </div>
                         <div className="flex-1 pb-4">
                           <div className="border border-gray-200 rounded-xl bg-white p-3.5 space-y-3">
@@ -1527,19 +1722,13 @@ export function Workflows() {
                                 </button>
                               )}
                             </div>
-
                             <div>
                               <Label className="text-xs text-gray-500 mb-1 block">
                                 <Clock className="h-3 w-3 inline mr-1" />
                                 {index === 0 ? "Send" : "Wait, then send"}
                               </Label>
-                              <Select
-                                value={String(step.delayMinutes)}
-                                onValueChange={(v) => updateCampaignStep(index, "delayMinutes", parseInt(v))}
-                              >
-                                <SelectTrigger className="h-8 text-sm">
-                                  <SelectValue />
-                                </SelectTrigger>
+                              <Select value={String(step.delayMinutes)} onValueChange={(v) => updateCampaignStep(index, "delayMinutes", parseInt(v))}>
+                                <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
                                 <SelectContent>
                                   <SelectItem value="0">Immediately</SelectItem>
                                   <SelectItem value="5">After 5 minutes</SelectItem>
@@ -1555,11 +1744,9 @@ export function Workflows() {
                                 </SelectContent>
                               </Select>
                             </div>
-
                             <div>
                               <Label className="text-xs text-gray-500 mb-1 block">
-                                <MessageSquare className="h-3 w-3 inline mr-1" />
-                                Message
+                                <MessageSquare className="h-3 w-3 inline mr-1" />Message
                               </Label>
                               <Textarea
                                 value={step.messageContent}
@@ -1571,7 +1758,6 @@ export function Workflows() {
                               />
                             </div>
                           </div>
-
                           {index < campaignSteps.length - 1 && (
                             <div className="flex items-center justify-center py-1">
                               <ArrowDown className="h-3.5 w-3.5 text-blue-300" />
@@ -1586,21 +1772,17 @@ export function Workflows() {
                       className="w-full flex items-center justify-center gap-2 py-2.5 border-2 border-dashed border-gray-200 rounded-xl text-sm text-gray-500 hover:border-blue-400 hover:text-blue-500 transition-colors mt-1"
                       data-testid="button-add-step"
                     >
-                      <Plus className="h-4 w-4" />
-                      Add step
+                      <Plus className="h-4 w-4" />Add step
                     </button>
                   </div>
                 </div>
 
-                {/* Sequence summary */}
                 {campaignSteps.filter(s => s.messageContent.trim()).length > 0 && (
-                  <div className="rounded-lg bg-blue-50 border border-blue-200 px-4 py-3">
+                  <div className="rounded-xl bg-blue-50 border border-blue-200 px-4 py-3">
                     <p className="text-xs font-semibold text-blue-700 uppercase tracking-wider mb-1">Summary</p>
                     <p className="text-sm text-blue-900">
                       Send <span className="font-medium">{campaignSteps.filter(s => s.messageContent.trim()).length} messages</span> over{" "}
-                      <span className="font-medium">
-                        {formatDelay(campaignSteps.reduce((sum, s) => sum + s.delayMinutes, 0))}
-                      </span>.
+                      <span className="font-medium">{formatDelay(campaignSteps.reduce((sum, s) => sum + s.delayMinutes, 0))}</span>.
                     </p>
                   </div>
                 )}
@@ -1617,9 +1799,7 @@ export function Workflows() {
                 className="bg-brand-green hover:bg-brand-green/90 h-9"
                 data-testid="button-save-campaign"
               >
-                {(createCampaignMutation.isPending || updateCampaignMutation.isPending) && (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                )}
+                {(createCampaignMutation.isPending || updateCampaignMutation.isPending) && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                 {editingCampaign ? "Save changes" : "Create sequence"}
               </Button>
             </DialogFooter>
@@ -1637,9 +1817,7 @@ export function Workflows() {
           <div className="py-4">
             <Label className="text-sm">Select Contact</Label>
             <Select value={selectedChatId} onValueChange={setSelectedChatId}>
-              <SelectTrigger className="mt-2">
-                <SelectValue placeholder="Choose a contact..." />
-              </SelectTrigger>
+              <SelectTrigger className="mt-2"><SelectValue placeholder="Choose a contact..." /></SelectTrigger>
               <SelectContent>
                 {chats.filter(c => c.whatsappPhone).map((chat) => (
                   <SelectItem key={chat.id} value={chat.id}>

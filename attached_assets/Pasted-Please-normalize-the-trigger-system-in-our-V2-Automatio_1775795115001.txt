@@ -1,0 +1,309 @@
+Please normalize the trigger system in our V2 Automation Builder so it is clean, scalable, and channel-aware.
+
+IMPORTANT CONCEPT
+Do NOT model channels as separate triggers.
+Instead use this structure:
+
+Trigger = WHAT happened
+Channel = WHERE it happened
+
+Examples:
+- Trigger: New Message Received
+  Channel: Instagram
+- Trigger: New Chat Created
+  Channel: Any
+- Trigger: Keyword Detected
+  Channel: WhatsApp
+
+This is the correct mental model for our product and should drive the V2 builder UX.
+
+GOAL
+We want users to choose triggers in a clean, simple, non-duplicated way, while still supporting channel-specific automations visually with icons.
+
+CORE UX RULE
+User first chooses the trigger/event type.
+Then, if relevant, they configure optional filters such as:
+- Channel
+- Keyword
+- Tag
+- Stage
+- Time/no-reply duration
+- Source/integration
+- Direction if applicable (incoming/outgoing)
+
+Do NOT create duplicated trigger entries like:
+- WhatsApp New Message
+- Facebook New Message
+- Instagram New Message
+
+Instead:
+- one “New Message Received” trigger
+- then a channel selector with icons
+
+V2 TRIGGER GROUPS
+
+1) CONVERSATION TRIGGERS
+These are the main inbox/chat events.
+
+A. New Chat Created
+Use when a brand new conversation/thread/contact conversation is created.
+Config:
+- Channel: Any / WhatsApp / Facebook / Instagram / Web Chat / SMS / Telegram
+- Optional source filter if needed later
+
+B. New Message Received
+Use when an inbound message arrives in an existing or new conversation.
+Config:
+- Channel: Any / WhatsApp / Facebook / Instagram / Web Chat / SMS / Telegram
+- Optional direction: inbound only by default
+- Optional “first message only” if already supported or easy to add safely
+
+C. Message Sent
+Use when an outbound message is sent from the system/user if needed.
+Config:
+- Channel: Any / WhatsApp / Facebook / Instagram / Web Chat / SMS / Telegram
+Only include if this event already exists or is useful.
+
+D. Conversation Opened / Replied / Updated
+Only include if these are real supported events and not confusing.
+If not already solid, do not add unnecessary triggers just for UI.
+
+2) CRM TRIGGERS
+These are changes in contact/conversation CRM state.
+
+A. Tag Added
+Config:
+- Tag selector
+- Optional channel filter if relevant
+
+B. Tag Removed
+Config:
+- Tag selector
+
+C. Pipeline Stage Changed
+Config:
+- Pipeline selector
+- Stage selector
+- Optional from/to stage if supported
+
+D. Status Changed
+Only if you already have a meaningful CRM status system.
+
+E. Contact Created
+If supported and meaningfully different from New Chat Created.
+
+F. Contact Updated
+Only include if there is a real stable use case and existing support.
+
+3) ENGAGEMENT / TIMING TRIGGERS
+These are timing-based behavior triggers.
+
+A. No Reply For
+Config:
+- Duration: X minutes / hours / days
+- Channel: Any / specific channel
+- Optional direction logic if needed
+
+B. Inactive Conversation For
+Config:
+- Duration
+- Channel filter
+
+C. Scheduled Time / Specific Date-Time
+Use for scheduled automations if already supported.
+Config:
+- Date / time / timezone / recurrence if relevant
+
+D. Sequence Step Delay
+This belongs inside sequence logic, not necessarily as a top-level workflow trigger.
+Do not confuse internal delays with trigger types.
+
+4) CONTENT / MESSAGE LOGIC TRIGGERS
+These are based on what the user says or message content.
+
+A. Keyword Detected
+Config:
+- Keyword or keyword list
+- Match mode: contains / exact / any of
+- Channel: Any / WhatsApp / Facebook / Instagram / Web Chat / SMS / Telegram
+
+B. Intent / AI Classification
+Only show if this is truly supported and stable.
+Do not expose fake/future logic in V2 if not production ready.
+
+C. Message Contains Media / Attachment
+Only if currently supported and useful.
+
+5) INTEGRATION / EXTERNAL TRIGGERS
+These are events coming from outside systems.
+
+A. Webhook Received
+Config:
+- Webhook source / event type if applicable
+
+B. Form Submitted
+Use for widget/site/source form events if already supported.
+Example:
+- Website widget submit
+- ShowcaseIDX form submit
+- Other lead form sources
+
+C. Integration Event
+For connected apps/platforms where external events can start automation.
+Only include real supported integrations.
+Do not clutter the builder with unsupported placeholders.
+
+CHANNEL SELECTOR UX
+For relevant triggers, show a channel selector directly inside the trigger configuration.
+
+Use icon + label options such as:
+- Any Channel
+- WhatsApp
+- Facebook
+- Instagram
+- Web Chat
+- SMS
+- Telegram
+
+Use visual icons next to each option.
+Example design intent:
+- icon + label chips
+or
+- icon + label dropdown/grid selector
+
+Requirements:
+- clean and quick to scan
+- icons should help recognition
+- support “Any Channel” as default
+- do not make channels feel like separate trigger families
+
+The trigger summary should read like:
+- New Message Received → Instagram
+- New Chat Created → Any Channel
+- Keyword Detected → WhatsApp
+- No Reply For 24 Hours → Any Channel
+
+RECOMMENDED V2 TRIGGER PICKER STRUCTURE
+
+Inside “Choose Trigger”, group triggers into categories:
+
+A. Conversations
+- New Chat Created
+- New Message Received
+- Message Sent (if supported)
+
+B. CRM
+- Tag Added
+- Tag Removed
+- Pipeline Stage Changed
+- Contact Created (if supported)
+
+C. Timing
+- No Reply For
+- Inactive Conversation For
+- Scheduled Time (if supported)
+
+D. Message Logic
+- Keyword Detected
+- AI Intent Detected (only if real)
+- Message Contains Attachment (only if real)
+
+E. Integrations
+- Webhook Received
+- Form Submitted
+- Integration Event(s)
+
+Do not show too many low-value triggers.
+Keep the picker clean and focused around common use cases.
+
+DEFAULT TRIGGER FLOW IN UI
+
+Step 1:
+User clicks “Choose Trigger”
+
+Step 2:
+User selects event type
+Example:
+- New Message Received
+
+Step 3:
+User configures trigger details
+Example:
+- Channel = Instagram
+- Optional keyword = “pricing”
+
+Step 4:
+Show visual trigger block summary
+Example:
+- 📸 New Message Received on Instagram
+or
+- 🟢 Keyword Detected on WhatsApp
+Keyword: “tour”
+
+TRIGGER BLOCK DESIGN REQUIREMENTS
+The trigger should render as a clean visual block/card, similar to action blocks.
+
+Example content:
+- Trigger name
+- Channel icon + label if selected
+- Small summary of trigger conditions
+- Edit button
+
+Examples:
+- New Chat Created
+  Any Channel
+
+- New Message Received
+  Instagram
+
+- Keyword Detected
+  WhatsApp
+  Keyword: showing, tour, available
+
+This must feel visual, readable, and lightweight.
+
+MAPPING PRINCIPLE FOR CURRENT SYSTEM
+Please audit all existing trigger types we already support and map them into this normalized V2 structure.
+
+If current implementation has duplicated trigger definitions by channel, refactor the UI layer so the user sees:
+- one generic trigger
+- plus channel selection
+
+Keep backward compatibility with existing saved workflows.
+
+Do not break existing workflows.
+If legacy workflows use old trigger naming, convert them safely in the UI display layer to the new normalized format where possible.
+
+IMPORTANT PRODUCT RULES
+- Channels are filters, not standalone trigger families
+- Chatbot is not a trigger category by itself
+- Messaging channels should appear visually through icons in trigger configuration
+- Keep the structure simple for non-technical SMB users
+- Avoid overloading the trigger list with edge-case or internal-only events
+
+DESIRED END RESULT
+Users should be able to build automations like:
+
+1.
+Trigger: New Message Received
+Channel: Instagram
+
+2.
+Trigger: New Chat Created
+Channel: Any Channel
+
+3.
+Trigger: Keyword Detected
+Channel: WhatsApp
+Keyword: “call”, “tour”, “showing”
+
+4.
+Trigger: Tag Added
+Tag: Hot Lead
+
+5.
+Trigger: No Reply For
+Duration: 24 hours
+Channel: Any Channel
+
+This should feel intuitive, visual, modern, and clean.
