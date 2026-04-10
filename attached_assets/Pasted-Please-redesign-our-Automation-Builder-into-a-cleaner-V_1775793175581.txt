@@ -1,0 +1,235 @@
+Please redesign our Automation Builder into a cleaner V2 UI/UX without changing the core automation logic or breaking existing workflows/sequences.
+
+GOAL
+We want the builder to feel more modern, guided, visual, and easier for non-technical users, while staying clean, lightweight, and fast. Do NOT build a freeform canvas or complex drag-and-drop system. Keep it structured and simple.
+
+IMPORTANT PRODUCT DIRECTION
+- Keep the current step-based builder model.
+- Do NOT rebuild the workflow engine from scratch.
+- Do NOT replace logic with a node/canvas builder.
+- This is mainly a UX/UI redesign and builder experience upgrade on top of the existing system.
+- Keep Workflows and Drip Sequences as separate user-facing tabs/categories for clarity.
+- Reuse as much backend logic, validation, and execution behavior as possible.
+- Do NOT include Growth Engines inside the builder creation flow because those are paid products and must stay separate.
+
+WHAT TO BUILD
+
+1) REDESIGN THE BUILDER INTO A VISUAL BLOCK FLOW
+Replace the current dropdown-heavy form feel with a structured vertical builder made of clean action blocks/cards.
+
+Target interaction:
+- User enters Name + optional Description
+- User selects Trigger
+- User adds one or more Actions
+- Each action appears as its own visual block/card in a vertical flow
+- User can edit, remove, and reorder actions
+- Keep the experience simple, linear, and guided
+
+Visual structure example:
+- Header: Workflow Name / Sequence Name
+- Trigger section
+- Actions section
+- Summary / Save area
+
+Builder should feel like:
+WHEN
+[ Trigger block ]
+
+THEN
+[ Action block 1 ]
+[ Action block 2 ]
+[ Action block 3 ]
+
+Use spacing, hierarchy, and block styling so it feels visual and productized, but still minimal and clean.
+
+2) ACTION BLOCKS INSTEAD OF LOOSE DROPDOWNS
+Each selected action should render as its own block/card with inline configuration.
+
+Examples:
+- Assign to Team Member
+  Method: Round Robin
+- Set Tag
+  Tag: New Lead
+- Set Pipeline Stage
+  Stage: Qualified
+- Add Note
+  Note: ...
+- Set Follow-up
+  Time: ...
+- Send Message
+  Content/template...
+- Wait / Delay
+  1 hour / 1 day / etc.
+
+Requirements:
+- Progressive disclosure: only show config fields relevant to the selected action
+- Keep the block compact but readable
+- Allow reorder and delete
+- Avoid showing too many raw fields at once
+- Keep labels short and clear
+
+3) ADD A CATEGORIZED ACTION PICKER
+When user clicks “Add Action” or “Add Step”, open a clean action picker instead of a long plain dropdown.
+
+Group actions into categories such as:
+- Messaging
+- CRM
+- Tasks
+- Timing
+- Logic
+- Integrations
+
+Example actions by category:
+Messaging:
+- Send Message
+- Send Template
+
+CRM:
+- Assign to Team Member
+- Set Tag
+- Set Pipeline Stage
+- Set Status
+
+Tasks:
+- Add Note
+- Set Follow-up
+
+Timing:
+- Wait / Delay
+
+Logic:
+- Condition / If Else (only if already supported or easy to support safely)
+
+Integrations:
+- Webhook / external actions that already exist or are planned
+
+Requirements:
+- Make it visually clean and fast to scan
+- Use icons where appropriate
+- Do not overwhelm the user
+- Keep the picker modern and easy to use
+
+4) INLINE QUICK TEMPLATES IN CREATION FLOW
+Add “Start from template” inside the create flow for Workflows and Sequences.
+
+Important:
+- These are simple quick-start templates only
+- Do NOT mix in Growth Engines
+- Do NOT position premium products here
+
+Required create flow:
+User clicks New Workflow or New Sequence and sees:
+- Start from scratch
+- Start from quick template
+
+Examples of quick templates:
+Workflow templates:
+- Assign new leads automatically
+- Tag and route new leads
+- Follow up if no reply
+- Move lead to stage on trigger
+
+Sequence templates:
+- Basic lead nurture
+- Re-engagement follow-up
+- Appointment reminder sequence
+
+Critical behavior:
+- Template selection should clone/prefill the builder
+- After loading a template, the workflow/sequence must be fully editable
+- User must be able to change trigger, actions, delays, tags, message content, assignee, etc.
+- Treat templates as starting points, not locked systems
+
+5) KEEP WORKFLOWS AND SEQUENCES CLEARLY POSITIONED
+Keep the two tabs or sections:
+- Workflows
+- Drip Sequences
+
+But visually unify them under the same overall Automation design language.
+
+Meaning:
+- same clean V2 style
+- same visual block philosophy
+- shared builder patterns where possible
+- sequence builder should feel like the simpler linear message-focused version of the workflow builder
+
+Sequence builder requirements:
+- Message steps should also render as visual blocks/cards
+- Each step should clearly show delay + action
+- Steps should be easy to add, remove, edit, and reorder
+- Keep it simple and linear
+
+6) IMPROVE READABILITY AND HIERARCHY
+Please clean up the UI so it feels less raw and less crowded.
+
+Improve:
+- spacing
+- section hierarchy
+- typography
+- labels
+- alignment
+- modal layout
+- use of icons
+- button consistency
+- empty states
+- clarity between Trigger / Action / Delay / Summary
+
+The overall look should feel:
+- clean
+- modern
+- lean
+- intuitive
+- not cluttered
+- not overly “enterprise heavy”
+- suitable for SMB users
+
+7) ADD HUMAN-READABLE SUMMARY
+Where useful, show a short readable summary of the automation.
+
+Example:
+- “When a new chat is created, assign to a team member using round robin and add tag New Lead.”
+- “Send 3 follow-up messages over 5 days unless the contact replies.”
+
+This should improve confidence before saving.
+
+8) DO NOT OVERCOMPLICATE
+Please avoid:
+- freeform node canvas
+- full drag-and-drop graph editor
+- complex zoom/pan interfaces
+- over-engineering
+- rebuilding existing execution logic unless absolutely necessary
+
+We want a polished, structured, block-based builder — not a developer workflow tool.
+
+TECHNICAL / SAFETY REQUIREMENTS
+- Preserve current functionality and existing workflows/sequences
+- Do not break current automation execution
+- Reuse backend models/logic as much as possible
+- Any migration must be safe and backward compatible
+- Existing workflows should still load and remain editable
+- Keep performance fast
+- Keep mobile/responsive behavior reasonable, but desktop-first is fine
+- If a full refactor is risky, implement V2 in a safe progressive way
+
+DESIGN INTENT
+This should feel like a V2 product polish upgrade:
+- cleaner than current
+- more visual than current
+- easier than current
+- still lean and practical
+- better for non-technical end users
+
+DELIVERABLE
+Please implement the V2 builder redesign for both:
+- Workflows
+- Drip Sequences
+
+with:
+- visual blocks
+- categorized action picker
+- inline quick templates
+- improved readability and UX
+- clean and lean overall design
+
+Do this in a way that preserves the current system and minimizes risk.
