@@ -394,16 +394,19 @@ function ActionBlock({
             </Select>
             {/* User dropdown — only when Specific User is chosen */}
             {assignMethod === "specific" && (
-              <Select value={action.value} onValueChange={(v) => onUpdate("value", v)}>
+              <Select
+                value={action.value || undefined}
+                onValueChange={(v) => onUpdate("value", v)}
+              >
                 <SelectTrigger className="h-8 text-sm bg-gray-50 border-gray-200" data-testid={`select-action-assign-user-${index}`}>
                   <SelectValue placeholder="Select team member..." />
                 </SelectTrigger>
                 <SelectContent>
                   {teamMembers.filter((m: any) => m.status === "active").map((m: any) => (
-                    <SelectItem key={m.id} value={m.memberId || m.id}>{m.name || m.email}</SelectItem>
+                    <SelectItem key={m.id} value={String(m.memberId || m.id)}>{m.name || m.email}</SelectItem>
                   ))}
                   {teamMembers.filter((m: any) => m.status === "active").length === 0 && (
-                    <SelectItem value="" disabled>No active members</SelectItem>
+                    <div className="px-3 py-2 text-xs text-gray-400">No active members found</div>
                   )}
                 </SelectContent>
               </Select>
