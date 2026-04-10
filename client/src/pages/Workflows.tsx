@@ -174,6 +174,21 @@ const SEQUENCE_TEMPLATES = [
   },
 ];
 
+// ─── Condition Config ─────────────────────────────────────────────────────────
+
+interface WorkflowCondition {
+  id: string;
+  type: "channel" | "keyword" | "tag" | "stage";
+  value: string;
+}
+
+const CONDITION_TYPES = [
+  { value: "channel", label: "Channel",  placeholder: "Select channel" },
+  { value: "keyword", label: "Keyword",  placeholder: "e.g. price, quote" },
+  { value: "tag",     label: "Tag",      placeholder: "Select tag" },
+  { value: "stage",   label: "Stage",    placeholder: "Select stage" },
+];
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface Workflow {
@@ -351,21 +366,49 @@ function ActionBlock({
   const def = ALL_ACTIONS.find(a => a.value === action.type);
   const Icon = def?.icon || FileText;
 
+  // For "assign": value === "round_robin" means round robin, any other value is a userId (specific user)
+  const assignMethod = action.type === "assign"
+    ? (action.value === "round_robin" ? "round_robin" : "specific")
+    : null;
+
   const renderValue = () => {
     switch (action.type) {
       case "assign":
         return (
-          <Select value={action.value} onValueChange={(v) => onUpdate("value", v)}>
-            <SelectTrigger className="h-8 text-sm flex-1 bg-gray-50 border-gray-200" data-testid={`select-action-assign-${index}`}>
-              <SelectValue placeholder="Select method..." />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="round_robin">Round Robin</SelectItem>
-              {teamMembers.filter((m: any) => m.status === "active").map((m: any) => (
-                <SelectItem key={m.id} value={m.memberId || m.id}>{m.name || m.email}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="flex-1 space-y-2">
+            {/* Method selector */}
+            <Select
+              value={assignMethod || "round_robin"}
+              onValueChange={(v) => {
+                if (v === "round_robin") onUpdate("value", "round_robin");
+                else onUpdate("value", ""); // clear until user picks a person
+              }}
+            >
+              <SelectTrigger className="h-8 text-sm bg-gray-50 border-gray-200" data-testid={`select-action-assign-method-${index}`}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="round_robin">Round Robin</SelectItem>
+                <SelectItem value="specific">Specific User</SelectItem>
+              </SelectContent>
+            </Select>
+            {/* User dropdown — only when Specific User is chosen */}
+            {assignMethod === "specific" && (
+              <Select value={action.value} onValueChange={(v) => onUpdate("value", v)}>
+                <SelectTrigger className="h-8 text-sm bg-gray-50 border-gray-200" data-testid={`select-action-assign-user-${index}`}>
+                  <SelectValue placeholder="Select team member..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {teamMembers.filter((m: any) => m.status === "active").map((m: any) => (
+                    <SelectItem key={m.id} value={m.memberId || m.id}>{m.name || m.email}</SelectItem>
+                  ))}
+                  {teamMembers.filter((m: any) => m.status === "active").length === 0 && (
+                    <SelectItem value="" disabled>No active members</SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
         );
       case "tag":
         return (
@@ -458,11 +501,135 @@ function ActionBlock({
               </button>
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            <Label className="text-xs text-gray-500 w-12 shrink-0">Value</Label>
-            {renderValue()}
-          </div>
+          {/* Assign renders two stacked selects; all others render a single row */}
+          {action.type === "assign" ? (
+            <div className="space-y-1.5">
+              <Label className="text-xs text-gray-500">Assignment method</Label>
+              {renderValue()}
+            </div>
+          ) : (
+            <div className="flex items-center gap-3">
+              <Label className="text-xs text-gray-500 w-12 shrink-0">Value</Label>
+              {renderValue()}
+            </div>
+          )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Conditions Block ─────────────────────────────────────────────────────────
+
+function ConditionsBlock({
+  conditions,
+  onAdd,
+  onUpdate,
+  onRemove,
+}: {
+  conditions: WorkflowCondition[];
+  onAdd: () => void;
+  onUpdate: (id: string, field: "type" | "value", value: string) => void;
+  onRemove: (id: string) => void;
+}) {
+  return (
+    <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
+      <div className="px-4 py-3 border-b border-gray-100 bg-gray-50/50 flex items-center justify-between">
+        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+          Conditions <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-gray-200 text-gray-600 font-bold text-[10px]">{conditions.length || "0"}</span>
+        </p>
+        <span className="text-[11px] text-gray-400">All conditions must match</span>
+      </div>
+
+      <div className="p-4 space-y-3">
+        {conditions.length === 0 && (
+          <p className="text-xs text-gray-400 text-center py-2">
+            No conditions — workflow runs on every trigger event.
+          </p>
+        )}
+
+        {conditions.map((cond) => (
+          <div key={cond.id} className="flex items-center gap-2">
+            {/* Type selector */}
+            <Select
+              value={cond.type}
+              onValueChange={(v) => onUpdate(cond.id, "type", v as any)}
+            >
+              <SelectTrigger className="h-8 text-sm w-32 shrink-0 bg-gray-50 border-gray-200">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {CONDITION_TYPES.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
+              </SelectContent>
+            </Select>
+
+            <span className="text-xs text-gray-400 shrink-0">is</span>
+
+            {/* Value selector — varies by type */}
+            {cond.type === "channel" && (
+              <Select value={cond.value} onValueChange={(v) => onUpdate(cond.id, "value", v)}>
+                <SelectTrigger className="h-8 text-sm flex-1 bg-gray-50 border-gray-200">
+                  <SelectValue placeholder="Select channel..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {CHANNELS.filter(c => c.value !== "any").map(c => (
+                    <SelectItem key={c.value} value={c.value}>
+                      <span className="flex items-center gap-1.5"><span>{c.emoji}</span><span>{c.label}</span></span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+
+            {cond.type === "keyword" && (
+              <Input
+                value={cond.value}
+                onChange={(e) => onUpdate(cond.id, "value", e.target.value)}
+                placeholder="e.g. price, quote"
+                className="h-8 text-sm flex-1 bg-gray-50 border-gray-200"
+              />
+            )}
+
+            {cond.type === "tag" && (
+              <Select value={cond.value} onValueChange={(v) => onUpdate(cond.id, "value", v)}>
+                <SelectTrigger className="h-8 text-sm flex-1 bg-gray-50 border-gray-200">
+                  <SelectValue placeholder="Select tag..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {TAGS.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            )}
+
+            {cond.type === "stage" && (
+              <Select value={cond.value} onValueChange={(v) => onUpdate(cond.id, "value", v)}>
+                <SelectTrigger className="h-8 text-sm flex-1 bg-gray-50 border-gray-200">
+                  <SelectValue placeholder="Select stage..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {PIPELINE_STAGES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            )}
+
+            <button
+              onClick={() => onRemove(cond.id)}
+              className="p-1.5 hover:bg-red-50 rounded-lg transition-colors shrink-0"
+            >
+              <Trash2 className="h-3.5 w-3.5 text-red-400" />
+            </button>
+          </div>
+        ))}
+
+        <button
+          type="button"
+          onClick={onAdd}
+          className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-brand-green transition-colors"
+          data-testid="button-add-condition"
+        >
+          <Plus className="h-3.5 w-3.5" />
+          Add condition
+        </button>
       </div>
     </div>
   );
@@ -471,41 +638,32 @@ function ActionBlock({
 // ─── Trigger Config Block ─────────────────────────────────────────────────────
 
 function TriggerConfigBlock({
-  triggerType, triggerChannel, triggerKeywords, triggerTag, triggerToStage, triggerDuration,
-  onSelectTrigger, onChangeChannel, onChangeKeywords, onChangeTag, onChangeToStage, onChangeDuration,
+  triggerType, triggerKeywords, triggerTag, triggerToStage, triggerDuration,
+  onSelectTrigger, onChangeKeywords, onChangeTag, onChangeToStage, onChangeDuration,
 }: {
-  triggerType: string; triggerChannel: string; triggerKeywords: string;
+  triggerType: string; triggerKeywords: string;
   triggerTag: string; triggerToStage: string; triggerDuration: string;
   onSelectTrigger: (v: string) => void;
-  onChangeChannel: (v: string) => void; onChangeKeywords: (v: string) => void;
+  onChangeKeywords: (v: string) => void;
   onChangeTag: (v: string) => void; onChangeToStage: (v: string) => void;
   onChangeDuration: (v: string) => void;
 }) {
   const normalized = normalizeTriggerType(triggerType);
   const def = ALL_TRIGGERS.find(t => t.value === normalized);
+  // Does this trigger need any config at all?
+  const hasConfig = normalized === "keyword" || normalized === "tag_added" || normalized === "tag_removed"
+    || normalized === "pipeline_change" || normalized === "no_reply";
 
   return (
     <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
       {/* Trigger selector row */}
       <div className="px-4 py-3.5 border-b border-gray-100 bg-gray-50/50">
-        <TriggerPicker current={triggerType} onSelect={(v) => { onSelectTrigger(v); onChangeChannel("any"); }} />
+        <TriggerPicker current={triggerType} onSelect={onSelectTrigger} />
       </div>
 
-      {/* Config area (only when a trigger is selected) */}
-      {def && (
+      {/* Config area (only for triggers that need it) */}
+      {def && hasConfig && (
         <div className="px-4 py-4 space-y-4">
-          {/* Channel chips */}
-          {def.hasChannel && (
-            <div>
-              <Label className="text-xs text-gray-500 mb-2 block">Channel</Label>
-              <div className="flex flex-wrap gap-1.5">
-                {CHANNELS.map(ch => (
-                  <ChannelChip key={ch.value} value={ch.value} selected={triggerChannel === ch.value} onClick={() => onChangeChannel(ch.value)} />
-                ))}
-              </div>
-            </div>
-          )}
-
           {/* Keyword */}
           {normalized === "keyword" && (
             <div>
@@ -517,7 +675,7 @@ function TriggerConfigBlock({
           {/* Tag */}
           {(normalized === "tag_added" || normalized === "tag_removed") && (
             <div>
-              <Label className="text-xs text-gray-500 mb-1.5 block">Tag</Label>
+              <Label className="text-xs text-gray-500 mb-1.5 block">Tag <span className="text-gray-400 font-normal">(which tag fires this)</span></Label>
               <Select value={triggerTag} onValueChange={onChangeTag}>
                 <SelectTrigger className="h-9 text-sm bg-gray-50 border-gray-200" data-testid="select-trigger-tag">
                   <SelectValue placeholder="Any tag" />
@@ -533,7 +691,7 @@ function TriggerConfigBlock({
           {/* Pipeline stage */}
           {normalized === "pipeline_change" && (
             <div>
-              <Label className="text-xs text-gray-500 mb-1.5 block">Moves to stage</Label>
+              <Label className="text-xs text-gray-500 mb-1.5 block">Moves to stage <span className="text-gray-400 font-normal">(which stage fires this)</span></Label>
               <Select value={triggerToStage} onValueChange={onChangeToStage}>
                 <SelectTrigger className="h-9 text-sm bg-gray-50 border-gray-200" data-testid="select-trigger-stage">
                   <SelectValue placeholder="Any stage" />
@@ -571,20 +729,20 @@ function TriggerConfigBlock({
 // ─── Workflow Summary ─────────────────────────────────────────────────────────
 
 function WorkflowSummary({
-  triggerType, triggerChannel, triggerKeywords, triggerTag, triggerToStage, triggerDuration, actions,
+  triggerType, triggerKeywords, triggerTag, triggerToStage, triggerDuration, conditions, actions,
 }: {
-  triggerType: string; triggerChannel: string; triggerKeywords: string; triggerTag: string;
-  triggerToStage: string; triggerDuration: string; actions: WorkflowAction[];
+  triggerType: string; triggerKeywords: string; triggerTag: string;
+  triggerToStage: string; triggerDuration: string;
+  conditions: WorkflowCondition[]; actions: WorkflowAction[];
 }) {
   const normalized = normalizeTriggerType(triggerType);
   const def = ALL_TRIGGERS.find(t => t.value === normalized);
-  const channelDef = CHANNELS.find(c => c.value === triggerChannel);
   const validActions = actions.filter(a => a.value);
   if (!def || validActions.length === 0) return null;
 
   const phrases = validActions.map(a => {
     switch (a.type) {
-      case "assign": return `assign via ${a.value === "round_robin" ? "round robin" : a.value}`;
+      case "assign": return a.value === "round_robin" ? "assign via round robin" : `assign to team member`;
       case "tag": return `add tag "${a.value}"`;
       case "set_status": return `set status to "${a.value}"`;
       case "set_pipeline": return `move to "${a.value}" stage`;
@@ -595,17 +753,28 @@ function WorkflowSummary({
   }).filter(Boolean);
 
   let triggerPhrase = def.label.toLowerCase();
-  if (triggerChannel !== "any" && channelDef) triggerPhrase += ` on ${channelDef.label}`;
-  if (normalized === "keyword" && triggerKeywords) triggerPhrase += ` ("${triggerKeywords.split(",")[0].trim()}")`;
+  if (normalized === "keyword" && triggerKeywords) triggerPhrase += ` matching "${triggerKeywords.split(",")[0].trim()}"`;
   if ((normalized === "tag_added" || normalized === "tag_removed") && triggerTag && triggerTag !== "any") triggerPhrase += ` (${triggerTag})`;
   if (normalized === "pipeline_change" && triggerToStage && triggerToStage !== "any") triggerPhrase += ` (→ ${triggerToStage})`;
   if (normalized === "no_reply" && triggerDuration) triggerPhrase += ` for ${triggerDuration}h`;
+
+  const conditionPhrases = conditions.filter(c => c.value).map(c => {
+    if (c.type === "channel") { const ch = CHANNELS.find(x => x.value === c.value); return ch ? `${ch.emoji} ${ch.label}` : c.value; }
+    if (c.type === "keyword") return `keyword contains "${c.value}"`;
+    if (c.type === "tag") return `tag is "${c.value}"`;
+    if (c.type === "stage") return `stage is "${c.value}"`;
+    return "";
+  }).filter(Boolean);
 
   return (
     <div className="rounded-2xl bg-amber-50 border border-amber-200 px-5 py-4">
       <p className="text-xs font-semibold text-amber-700 uppercase tracking-wider mb-1.5">What this does</p>
       <p className="text-sm text-amber-900 leading-relaxed">
-        When <span className="font-semibold">{triggerPhrase}</span>, {phrases.join(", then ")}.
+        When <span className="font-semibold">{triggerPhrase}</span>
+        {conditionPhrases.length > 0 && (
+          <>, if <span className="font-semibold">{conditionPhrases.join(" and ")}</span></>
+        )}
+        , {phrases.join(", then ")}.
       </p>
     </div>
   );
@@ -681,11 +850,11 @@ export function Workflows() {
   const [description, setDescription] = useState("");
   const [actions, setActions] = useState<WorkflowAction[]>([{ type: "assign", value: "round_robin" }]);
   const [triggerType, setTriggerType] = useState("new_chat");
-  const [triggerChannel, setTriggerChannel] = useState("any");
   const [triggerKeywords, setTriggerKeywords] = useState("");
   const [triggerTag, setTriggerTag] = useState("any");
   const [triggerToStage, setTriggerToStage] = useState("any");
   const [triggerDuration, setTriggerDuration] = useState("24");
+  const [conditions, setConditions] = useState<WorkflowCondition[]>([]);
 
   // ── Sequence form state ──────────────────────────────────────────────────
   const [campaignName, setCampaignName] = useState("");
@@ -771,8 +940,9 @@ export function Workflows() {
   // ─── Reset helpers ────────────────────────────────────────────────────────
 
   const resetWf = () => {
-    setName(""); setDescription(""); setTriggerType("new_chat"); setTriggerChannel("any");
+    setName(""); setDescription(""); setTriggerType("new_chat");
     setTriggerKeywords(""); setTriggerTag("any"); setTriggerToStage("any"); setTriggerDuration("24");
+    setConditions([]);
     setActions([{ type: "assign", value: "round_robin" }]); setEditingWorkflow(null);
   };
   const resetSeq = () => {
@@ -786,12 +956,17 @@ export function Workflows() {
     setEditingWorkflow(wf);
     setName(wf.name); setDescription(wf.description || "");
     setTriggerType(normalizeTriggerType(wf.triggerType));
-    const cond = wf.triggerConditions || {};
-    setTriggerChannel(cond.channel || "any");
-    setTriggerKeywords(cond.keywords?.join(", ") || "");
-    setTriggerTag(cond.tag || "any");
-    setTriggerToStage(cond.stage || "any");
-    setTriggerDuration(cond.durationHours ? String(cond.durationHours) : cond.durationMinutes ? String(Math.round(cond.durationMinutes / 60)) : "24");
+    const tc = wf.triggerConditions || {};
+    setTriggerKeywords(tc.keywords?.join(", ") || "");
+    setTriggerTag(tc.tag || "any");
+    setTriggerToStage(tc.stage || "any");
+    setTriggerDuration(tc.durationHours ? String(tc.durationHours) : tc.durationMinutes ? String(Math.round(tc.durationMinutes / 60)) : "24");
+    // Restore saved conditions (new format) + backward-compat: lift channel from triggerConditions
+    const savedConds: WorkflowCondition[] = tc.conditions || [];
+    if (savedConds.length === 0 && tc.channel && tc.channel !== "any") {
+      savedConds.push({ id: crypto.randomUUID(), type: "channel", value: tc.channel });
+    }
+    setConditions(savedConds);
     setActions(wf.actions as WorkflowAction[] || [{ type: "assign", value: "round_robin" }]);
     setActiveTab("workflows");
     setView("wf-builder");
@@ -818,11 +993,13 @@ export function Workflows() {
   const buildTriggerConditions = () => {
     const cond: any = {};
     const normalized = normalizeTriggerType(triggerType);
-    if (triggerChannel && triggerChannel !== "any") cond.channel = triggerChannel;
     if (normalized === "keyword" && triggerKeywords.trim()) cond.keywords = triggerKeywords.split(",").map(k => k.trim()).filter(Boolean);
     if ((normalized === "tag_added" || normalized === "tag_removed") && triggerTag !== "any") cond.tag = triggerTag;
     if (normalized === "pipeline_change" && triggerToStage !== "any") cond.stage = triggerToStage;
     if (normalized === "no_reply" && triggerDuration) { cond.durationHours = parseInt(triggerDuration); cond.durationMinutes = parseInt(triggerDuration) * 60; }
+    // Persist the conditions array (channel, tag, keyword, stage filters)
+    const validConditions = conditions.filter(c => c.value.trim());
+    if (validConditions.length > 0) cond.conditions = validConditions;
     return cond;
   };
 
@@ -845,6 +1022,14 @@ export function Workflows() {
     if (editingCampaign) updateCampaignMutation.mutate({ id: editingCampaign.id, ...data });
     else createCampaignMutation.mutate(data);
   };
+
+  // ─── Condition helpers ────────────────────────────────────────────────────
+
+  const addCondition = () => setConditions([...conditions, { id: crypto.randomUUID(), type: "channel", value: "" }]);
+  const updateCondition = (id: string, field: "type" | "value", value: string) => {
+    setConditions(conditions.map(c => c.id === id ? { ...c, [field]: value, ...(field === "type" ? { value: "" } : {}) } : c));
+  };
+  const removeCondition = (id: string) => setConditions(conditions.filter(c => c.id !== id));
 
   // ─── Action helpers ───────────────────────────────────────────────────────
 
@@ -872,11 +1057,11 @@ export function Workflows() {
 
   const applyWfTemplate = (tpl: any) => {
     setName(tpl.name); setDescription(tpl.description);
-    setTriggerType(tpl.triggerType); setTriggerChannel(tpl.triggerChannel || "any");
+    setTriggerType(tpl.triggerType);
     setTriggerKeywords(tpl.triggerConditions?.keywords?.join(", ") || "");
     setTriggerTag(tpl.triggerConditions?.tag || "any");
     setTriggerToStage(tpl.triggerConditions?.stage || "any");
-    setTriggerDuration("24"); setActions(tpl.actions);
+    setTriggerDuration("24"); setActions(tpl.actions); setConditions([]);
     setView("wf-builder");
   };
 
@@ -888,10 +1073,12 @@ export function Workflows() {
   const getTriggerLabel = (wf: Workflow) => {
     const norm = normalizeTriggerType(wf.triggerType);
     const def = ALL_TRIGGERS.find(t => t.value === norm);
-    const cond = wf.triggerConditions || {};
-    const ch = cond.channel ? CHANNELS.find(c => c.value === cond.channel) : null;
+    const tc = wf.triggerConditions || {};
     let label = def?.label || wf.triggerType;
-    if (ch) label += ` · ${ch.emoji} ${ch.label}`;
+    // Show channel from conditions array or legacy triggerConditions.channel
+    const savedConds: WorkflowCondition[] = tc.conditions || [];
+    const chCond = savedConds.find(c => c.type === "channel") || (tc.channel ? { value: tc.channel } : null);
+    if (chCond) { const ch = CHANNELS.find(c => c.value === chCond.value); if (ch) label += ` · ${ch.emoji} ${ch.label}`; }
     return label;
   };
 
@@ -1050,17 +1237,32 @@ export function Workflows() {
               </div>
               <TriggerConfigBlock
                 triggerType={triggerType}
-                triggerChannel={triggerChannel}
                 triggerKeywords={triggerKeywords}
                 triggerTag={triggerTag}
                 triggerToStage={triggerToStage}
                 triggerDuration={triggerDuration}
                 onSelectTrigger={setTriggerType}
-                onChangeChannel={setTriggerChannel}
                 onChangeKeywords={setTriggerKeywords}
                 onChangeTag={setTriggerTag}
                 onChangeToStage={setTriggerToStage}
                 onChangeDuration={setTriggerDuration}
+              />
+            </div>
+
+            {/* IF section — optional conditions */}
+            <div>
+              <div className="flex items-center gap-2.5 mb-3">
+                <div className="h-6 w-6 rounded-full bg-violet-600 flex items-center justify-center shrink-0">
+                  <span className="text-white text-[10px] font-bold">IF</span>
+                </div>
+                <p className="text-xs font-bold text-gray-900 uppercase tracking-widest">If these conditions match</p>
+                <span className="ml-auto text-[11px] text-gray-400 font-normal normal-case">Optional</span>
+              </div>
+              <ConditionsBlock
+                conditions={conditions}
+                onAdd={addCondition}
+                onUpdate={updateCondition}
+                onRemove={removeCondition}
               />
             </div>
 
@@ -1096,11 +1298,11 @@ export function Workflows() {
             {/* Summary */}
             <WorkflowSummary
               triggerType={triggerType}
-              triggerChannel={triggerChannel}
               triggerKeywords={triggerKeywords}
               triggerTag={triggerTag}
               triggerToStage={triggerToStage}
               triggerDuration={triggerDuration}
+              conditions={conditions}
               actions={actions}
             />
 
