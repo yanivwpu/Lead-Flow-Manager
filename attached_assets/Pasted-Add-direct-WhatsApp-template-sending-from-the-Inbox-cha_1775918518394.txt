@@ -1,0 +1,135 @@
+Add direct WhatsApp template sending from the Inbox chat composer for the currently open conversation.
+
+This should be a real inbox feature, not a redirect back to the Templates page.
+
+⸻
+
+Required behavior
+
+1. Inbox composer entry point
+
+In an active inbox conversation, add a clear Template / Use Template action in the chat composer area.
+
+Requirements:
+	•	visible where the agent actually sends messages
+	•	only show it when the active conversation/contact can use WhatsApp templates
+	•	if not eligible, either hide it or disable it with a clear explanation
+
+2. Current conversation context
+
+When the agent is already inside a conversation, clicking Template / Use Template must use the currently open contact/conversation.
+
+Do NOT ask the user to pick a contact again if they are already in a chat thread.
+
+Expected flow:
+Inbox conversation → click Template → choose template → fill variables → send into this same thread
+
+3. Template picker
+
+The inbox template picker should:
+	•	load the synced templates for the logged-in user’s active WhatsApp provider
+	•	show:
+	•	template name
+	•	language
+	•	category/status
+	•	preview text if available
+	•	be searchable if possible
+
+4. Variable handling
+
+If the selected template contains variables/placeholders:
+	•	open the variable input dialog
+	•	preserve the current conversation context
+	•	do not silently fail if variables are required
+
+If no variables are required:
+	•	allow direct send confirmation
+
+5. Send path
+
+Sending from the inbox must call the same real backend send path that was just fixed for templates:
+	•	Meta → actual Meta template send
+	•	Twilio → actual Twilio template send
+
+Do not create a fake success state.
+Do not only write to DB.
+It must actually hit the provider API and return the real provider result.
+
+6. Message display in the thread
+
+After successful send:
+	•	the template message should appear in the current conversation thread
+	•	message ordering should remain correct
+	•	no page refresh hacks
+	•	no duplicate message rows
+
+7. 24-hour WhatsApp window awareness
+
+This is important.
+
+Please make the inbox UX aware of WhatsApp sending rules:
+	•	If normal freeform sending is allowed in the current session window, template send can still be available but optional
+	•	If the session window is closed and a template is required, the UI should make that clear
+
+At minimum:
+	•	show a helpful message when template sending is the correct path
+	•	do not let the agent think freeform WhatsApp text should work if only templates are allowed
+
+8. Provider/channel eligibility
+
+This inbox template feature should be for WhatsApp conversations.
+
+Please confirm behavior for:
+	•	Meta WhatsApp conversation
+	•	Twilio WhatsApp conversation
+
+If the active conversation is not WhatsApp:
+	•	hide or disable the template action
+	•	explain clearly why
+
+9. Logging
+
+Add clear logs for the inbox template flow:
+	•	inbox template button clicked
+	•	current conversation/contact identified
+	•	template selected
+	•	variable dialog opened
+	•	send started
+	•	provider used
+	•	provider success/failure
+	•	thread updated
+
+10. Real validation required
+
+Do not mark complete until this exact real flow works:
+	1.	Open an existing WhatsApp conversation in Inbox
+	2.	Click Template / Use Template in the composer
+	3.	Select a synced template
+	4.	Fill variables if needed
+	5.	Send
+	6.	Confirm the template is delivered to the same user/conversation
+	7.	Confirm it appears correctly in the inbox thread
+
+⸻
+
+Important UX requirement
+
+The Templates page flow can remain for general template management and ad hoc sending.
+
+But the Inbox must also support:
+send template directly from the live conversation composer
+
+That is the expected CRM behavior.
+
+⸻
+
+Deliverables I want back
+
+Please return with:
+	1.	summary of what changed
+	2.	exact files changed
+	3.	screenshots or logs of the inbox template flow
+	4.	any remaining limitations clearly stated
+
+Priority:
+Make this a clean CRM-native experience, not a workaround.

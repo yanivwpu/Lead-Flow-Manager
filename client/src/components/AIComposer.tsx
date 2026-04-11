@@ -11,6 +11,7 @@ import {
   CheckCircle2,
   Clock,
   Lock,
+  LayoutTemplate,
 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import EmojiPicker from "emoji-picker-react";
@@ -58,6 +59,8 @@ export interface AIComposerProps {
   typingTimeoutRef?: React.MutableRefObject<NodeJS.Timeout | null>;
   fileInputRef?: React.RefObject<HTMLInputElement>;
   handleFileSelect?: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  /** Opens the inline template picker for WhatsApp template sends */
+  onTemplate?: () => void;
   className?: string;
 }
 
@@ -90,6 +93,7 @@ export function AIComposer({
   typingTimeoutRef,
   fileInputRef,
   handleFileSelect,
+  onTemplate,
   className,
 }: AIComposerProps) {
   const isMobile = useIsMobile();
@@ -514,6 +518,17 @@ export function AIComposer({
                   onChange={handleFileSelect}
                 />
               </>
+            )}
+
+            {onTemplate && (
+              <button
+                onClick={onTemplate}
+                className="p-1.5 rounded-md hover:bg-gray-100 hover:text-gray-600 transition-colors"
+                title="Send a WhatsApp template"
+                data-testid="button-use-template"
+              >
+                <LayoutTemplate className="h-4 w-4" />
+              </button>
             )}
           </div>
 

@@ -552,9 +552,9 @@ export function registerTemplateRoutes(app: Express): void {
         return res.status(403).json({ error: "Template messaging is a Pro feature" });
       }
 
-      const { templateId, chatId, variables } = req.body;
-      if (!templateId || !chatId) {
-        return res.status(400).json({ error: "Template ID and Chat ID are required" });
+      const { templateId, chatId, contactId, variables } = req.body;
+      if (!templateId || (!chatId && !contactId)) {
+        return res.status(400).json({ error: "Template ID and either Chat ID or Contact ID are required" });
       }
 
       const template = await storage.getMessageTemplate(templateId);
@@ -562,13 +562,32 @@ export function registerTemplateRoutes(app: Express): void {
         return res.status(404).json({ error: "Template not found" });
       }
 
-      const chat = await storage.getChat(chatId);
-      if (!chat || chat.userId !== req.user.id) {
-        return res.status(404).json({ error: "Chat not found" });
-      }
+      // Resolve recipient — either from legacy chats table or new contacts table
+      let recipientPhone: string;
+      let recipientName: string;
+      let legacyChatId: string | null = chatId || null;
 
-      if (!chat.whatsappPhone) {
-        return res.status(400).json({ error: "Chat does not have a WhatsApp number" });
+      if (contactId) {
+        const contact = await storage.getContact(contactId);
+        if (!contact || contact.userId !== req.user.id) {
+          return res.status(404).json({ error: "Contact not found" });
+        }
+        const phone = contact.whatsappId || contact.phone;
+        if (!phone) {
+          return res.status(400).json({ error: "Contact does not have a WhatsApp number" });
+        }
+        recipientPhone = phone;
+        recipientName = contact.name;
+      } else {
+        const chat = await storage.getChat(chatId);
+        if (!chat || chat.userId !== req.user.id) {
+          return res.status(404).json({ error: "Chat not found" });
+        }
+        if (!chat.whatsappPhone) {
+          return res.status(400).json({ error: "Chat does not have a WhatsApp number" });
+        }
+        recipientPhone = chat.whatsappPhone;
+        recipientName = chat.name;
       }
 
       const user = await storage.getUser(req.user.id);
@@ -579,7 +598,7 @@ export function registerTemplateRoutes(app: Express): void {
       const provider = user.whatsappProvider || "twilio";
       const variableValues: Record<string, string> = variables || {};
 
-      console.log(`[TemplateSend] template=${template.name} chat=${chat.name} phone=${chat.whatsappPhone} provider=${provider}`);
+      console.log(`[TemplateSend] template=${template.name} recipient=${recipientName} phone=${recipientPhone} provider=${provider}`);
       console.log(`[TemplateSend] variables=${JSON.stringify(variableValues)}`);
 
       let messageId = "";
@@ -609,7 +628,7 @@ export function registerTemplateRoutes(app: Express): void {
 
         const result = await sendMetaWhatsAppTemplate(
           req.user.id,
-          chat.whatsappPhone,
+          recipientPhone,
           template.name,
           template.language || "en",
           components.length > 0 ? components : undefined
@@ -625,9 +644,9 @@ export function registerTemplateRoutes(app: Express): void {
           return res.status(400).json({ error: "Twilio is not connected." });
         }
 
-        const toNumber = chat.whatsappPhone.startsWith("whatsapp:")
-          ? chat.whatsappPhone
-          : `whatsapp:${chat.whatsappPhone}`;
+        const toNumber = recipientPhone.startsWith("whatsapp:")
+          ? recipientPhone
+          : `whatsapp:${recipientPhone}`;
         const fromNumber = user.twilioWhatsappNumber?.startsWith("whatsapp:")
           ? user.twilioWhatsappNumber
           : `whatsapp:${user.twilioWhatsappNumber}`;
@@ -647,21 +666,26 @@ export function registerTemplateRoutes(app: Express): void {
         console.log(`[TemplateSend] Twilio success — sid=${messageId} status=${sendStatus}`);
       }
 
-      const templateSend = await storage.createTemplateSend({
-        userId: req.user.id,
-        chatId,
-        templateId,
-        variableValues: variableValues,
-        status: sendStatus,
-        twilioMessageSid: messageId || null,
-      });
-
-      console.log(`[TemplateSend] DB record created — sendId=${templateSend.id}`);
+      let sendId: string | undefined;
+      if (legacyChatId) {
+        const templateSend = await storage.createTemplateSend({
+          userId: req.user.id,
+          chatId: legacyChatId,
+          templateId,
+          variableValues: variableValues,
+          status: sendStatus,
+          twilioMessageSid: messageId || null,
+        });
+        sendId = templateSend.id;
+        console.log(`[TemplateSend] DB record created — sendId=${sendId}`);
+      } else {
+        console.log(`[TemplateSend] No legacy chatId — skipping analytics record`);
+      }
 
       res.json({
         success: true,
-        message: `Template "${template.name}" sent to ${chat.name}`,
-        sendId: templateSend.id,
+        message: `Template "${template.name}" sent to ${recipientName}`,
+        sendId,
         messageId,
         provider,
       });

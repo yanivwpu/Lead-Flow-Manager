@@ -28,6 +28,7 @@ import {
   X,
   Zap,
   PanelRight,
+  LayoutTemplate,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -156,6 +157,19 @@ interface WhatsAppAvailability {
   provider: "meta" | "twilio";
   reason?: string;
   message?: string;
+}
+
+interface MessageTemplate {
+  id: string;
+  name: string;
+  language: string;
+  category: string;
+  status: string;
+  bodyText: string;
+  headerType?: string | null;
+  headerContent?: string | null;
+  footerText?: string | null;
+  variables: string[];
 }
 
 const CHANNEL_CONFIG: Record<Channel, { icon: any; color: string; label: string }> = {
@@ -319,6 +333,12 @@ export function UnifiedInbox() {
   const prevContactIdRef = useRef<string | null>(null);
   const [showNewMsgBanner, setShowNewMsgBanner] = useState(false);
 
+  const [showTemplatePicker, setShowTemplatePicker] = useState(false);
+  const [templateSearch, setTemplateSearch] = useState("");
+  const [selectedInboxTemplate, setSelectedInboxTemplate] = useState<MessageTemplate | null>(null);
+  const [showVarDialog, setShowVarDialog] = useState(false);
+  const [varValues, setVarValues] = useState<Record<string, string>>({});
+
   const selectedContactId = match ? params?.contactId : null;
 
   const isDemoUser = user?.email === "demo@whachat.com";
@@ -450,6 +470,12 @@ export function UnifiedInbox() {
     queryKey: ["/api/channels/whatsapp/availability"],
     enabled: isWhatsAppContact && !!selectedContactId,
     refetchInterval: 30000,
+  });
+
+  const { data: inboxTemplates = [] } = useQuery<MessageTemplate[]>({
+    queryKey: ["/api/templates"],
+    enabled: isWhatsAppContact && !isDemoUser,
+    retry: false,
   });
 
   const { data: teamMembers = [] } = useQuery<TeamMember[]>({
@@ -711,6 +737,58 @@ export function UnifiedInbox() {
   const handleSaveEditContact = () => {
     if (!selectedContactId) return;
     updateContactMutation.mutate({ contactId: selectedContactId, ...editContactForm });
+  };
+
+  // --- Template from inbox ---
+
+  const sendTemplateFromInboxMutation = useMutation({
+    mutationFn: async (data: { templateId: string; contactId: string; variables: Record<string, string> }) => {
+      const res = await fetch("/api/templates/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(data),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Failed to send template");
+      return json;
+    },
+    onSuccess: (data) => {
+      toast({ title: "Template sent", description: data.message });
+      setShowVarDialog(false);
+      setShowTemplatePicker(false);
+      setSelectedInboxTemplate(null);
+      setVarValues({});
+      queryClient.invalidateQueries({ queryKey: ["/api/conversations", primaryConversation?.id, "messages"] });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Failed to send template", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const handleOpenTemplatePicker = () => {
+    setTemplateSearch("");
+    setSelectedInboxTemplate(null);
+    setVarValues({});
+    setShowTemplatePicker(true);
+  };
+
+  const handleSelectTemplate = (template: MessageTemplate) => {
+    setSelectedInboxTemplate(template);
+    const initVars: Record<string, string> = {};
+    (template.variables || []).forEach((v: string) => { initVars[v] = ""; });
+    setVarValues(initVars);
+    setShowTemplatePicker(false);
+    setShowVarDialog(true);
+  };
+
+  const handleSendTemplateFromInbox = () => {
+    if (!selectedInboxTemplate || !selectedContactId) return;
+    sendTemplateFromInboxMutation.mutate({
+      templateId: selectedInboxTemplate.id,
+      contactId: selectedContactId,
+      variables: varValues,
+    });
   };
 
   // --- Filtering ---
@@ -1047,7 +1125,17 @@ export function UnifiedInbox() {
             {windowStatus?.hasRestriction && !windowStatus.isActive && (
               <div className="px-3 py-2 bg-red-50 border-b border-red-200 flex items-center gap-2 text-xs text-red-700 flex-shrink-0">
                 <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
-                24-hour messaging window closed. Use a template to re-open.
+                <span className="flex-1">24-hour messaging window closed. Use a template to re-open.</span>
+                {isWhatsAppContact && !isDemoUser && (
+                  <button
+                    onClick={handleOpenTemplatePicker}
+                    className="flex items-center gap-1 px-2 py-0.5 bg-red-100 hover:bg-red-200 text-red-700 rounded font-medium transition-colors whitespace-nowrap"
+                    data-testid="button-use-template-banner"
+                  >
+                    <LayoutTemplate className="w-3 h-3" />
+                    Use Template
+                  </button>
+                )}
               </div>
             )}
             {windowStatus?.hasRestriction && windowStatus.isActive && windowStatus.isExpiringSoon && (
@@ -1142,6 +1230,7 @@ export function UnifiedInbox() {
                 role: m.direction === 'inbound' ? 'user' : 'assistant',
                 content: m.content || '',
               }))}
+              onTemplate={isWhatsAppContact && !isDemoUser ? handleOpenTemplatePicker : undefined}
             />
           </>
         ) : (
@@ -1298,6 +1387,132 @@ export function UnifiedInbox() {
               Delete Contact
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Template Picker Dialog */}
+      <Dialog open={showTemplatePicker} onOpenChange={setShowTemplatePicker}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <LayoutTemplate className="w-4 h-4 text-emerald-600" />
+              Send WhatsApp Template
+            </DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col gap-3">
+            <Input
+              placeholder="Search templates…"
+              value={templateSearch}
+              onChange={(e) => setTemplateSearch(e.target.value)}
+              data-testid="input-template-search"
+            />
+            {inboxTemplates.length === 0 ? (
+              <p className="text-sm text-gray-500 text-center py-6">
+                No templates found. Go to the Templates page to sync your WhatsApp templates.
+              </p>
+            ) : (
+              <div className="flex flex-col gap-2 max-h-80 overflow-y-auto">
+                {inboxTemplates
+                  .filter((t) =>
+                    t.status === "approved" &&
+                    (t.name.toLowerCase().includes(templateSearch.toLowerCase()) ||
+                      t.bodyText?.toLowerCase().includes(templateSearch.toLowerCase()))
+                  )
+                  .map((t) => (
+                    <button
+                      key={t.id}
+                      onClick={() => handleSelectTemplate(t)}
+                      className="text-left p-3 border border-gray-200 rounded-lg hover:border-emerald-300 hover:bg-emerald-50 transition-colors"
+                      data-testid={`template-item-${t.id}`}
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-sm font-medium text-gray-900">{t.name}</span>
+                        <span className="text-[10px] text-gray-400 uppercase">{t.language}</span>
+                      </div>
+                      <p className="text-xs text-gray-500 line-clamp-2">{t.bodyText}</p>
+                    </button>
+                  ))}
+                {inboxTemplates.filter((t) =>
+                  t.status === "approved" &&
+                  (t.name.toLowerCase().includes(templateSearch.toLowerCase()) ||
+                    t.bodyText?.toLowerCase().includes(templateSearch.toLowerCase()))
+                ).length === 0 && (
+                  <p className="text-sm text-gray-500 text-center py-4">No approved templates match your search.</p>
+                )}
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Variable Fill Dialog */}
+      <Dialog open={showVarDialog} onOpenChange={(open) => {
+        setShowVarDialog(open);
+        if (!open) setShowTemplatePicker(false);
+      }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <LayoutTemplate className="w-4 h-4 text-emerald-600" />
+              {selectedInboxTemplate?.name}
+            </DialogTitle>
+          </DialogHeader>
+          {selectedInboxTemplate && (
+            <div className="flex flex-col gap-4">
+              <div className="bg-gray-50 rounded-lg p-3 text-sm text-gray-700 whitespace-pre-wrap border border-gray-200">
+                {selectedInboxTemplate.bodyText}
+              </div>
+              {(selectedInboxTemplate.variables || []).length > 0 ? (
+                <div className="flex flex-col gap-3">
+                  <p className="text-xs text-gray-500 font-medium">Fill in the variables:</p>
+                  {(selectedInboxTemplate.variables || [])
+                    .slice()
+                    .sort((a, b) => {
+                      const na = parseInt(a.replace(/\D/g, ""), 10) || 0;
+                      const nb = parseInt(b.replace(/\D/g, ""), 10) || 0;
+                      return na - nb;
+                    })
+                    .map((v) => (
+                      <div key={v} className="flex flex-col gap-1">
+                        <label className="text-xs font-medium text-gray-600">{v}</label>
+                        <Input
+                          placeholder={`Value for ${v}`}
+                          value={varValues[v] || ""}
+                          onChange={(e) => setVarValues((prev) => ({ ...prev, [v]: e.target.value }))}
+                          data-testid={`input-template-var-${v.replace(/[{}]/g, "")}`}
+                        />
+                      </div>
+                    ))}
+                </div>
+              ) : (
+                <p className="text-xs text-gray-500">This template has no variables. Ready to send.</p>
+              )}
+              <div className="flex justify-end gap-2 mt-1">
+                <Button
+                  variant="outline"
+                  onClick={() => { setShowVarDialog(false); setShowTemplatePicker(true); }}
+                  data-testid="button-template-back"
+                >
+                  Back
+                </Button>
+                <Button
+                  onClick={handleSendTemplateFromInbox}
+                  disabled={sendTemplateFromInboxMutation.isPending}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                  data-testid="button-template-send"
+                >
+                  {sendTemplateFromInboxMutation.isPending ? (
+                    <><Loader2 className="w-4 h-4 animate-spin mr-2" />Sending…</>
+                  ) : (
+                    <>
+                      <Send className="w-4 h-4 mr-2" />
+                      Send Template
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>
