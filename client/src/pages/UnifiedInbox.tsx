@@ -1126,7 +1126,7 @@ export function UnifiedInbox() {
               <div className="px-3 py-2 bg-red-50 border-b border-red-200 flex items-center gap-2 text-xs text-red-700 flex-shrink-0">
                 <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
                 <span className="flex-1">24-hour messaging window closed. Use a template to re-open.</span>
-                {isWhatsAppContact && !isDemoUser && (
+                {isWhatsAppContact && (
                   <button
                     onClick={handleOpenTemplatePicker}
                     className="flex items-center gap-1 px-2 py-0.5 bg-red-100 hover:bg-red-200 text-red-700 rounded font-medium transition-colors whitespace-nowrap"
@@ -1230,7 +1230,7 @@ export function UnifiedInbox() {
                 role: m.direction === 'inbound' ? 'user' : 'assistant',
                 content: m.content || '',
               }))}
-              onTemplate={isWhatsAppContact && !isDemoUser ? handleOpenTemplatePicker : undefined}
+              onTemplate={isWhatsAppContact ? handleOpenTemplatePicker : undefined}
             />
           </>
         ) : (
@@ -1399,49 +1399,70 @@ export function UnifiedInbox() {
               Send WhatsApp Template
             </DialogTitle>
           </DialogHeader>
-          <div className="flex flex-col gap-3">
-            <Input
-              placeholder="Search templates…"
-              value={templateSearch}
-              onChange={(e) => setTemplateSearch(e.target.value)}
-              data-testid="input-template-search"
-            />
-            {inboxTemplates.length === 0 ? (
-              <p className="text-sm text-gray-500 text-center py-6">
-                No templates found. Go to the Templates page to sync your WhatsApp templates.
-              </p>
-            ) : (
-              <div className="flex flex-col gap-2 max-h-80 overflow-y-auto">
-                {inboxTemplates
-                  .filter((t) =>
+          {isDemoUser ? (
+            <div className="flex flex-col items-center gap-4 py-6 text-center">
+              <div className="w-12 h-12 rounded-full bg-emerald-50 flex items-center justify-center">
+                <LayoutTemplate className="w-6 h-6 text-emerald-500" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-800 mb-1">Connect WhatsApp to send templates</p>
+                <p className="text-xs text-gray-500 max-w-xs mx-auto">
+                  Template messaging lets you reach contacts outside the 24-hour window. Connect your WhatsApp account in Settings to use this feature.
+                </p>
+              </div>
+              <a
+                href="/app/settings"
+                className="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium rounded-lg transition-colors"
+                data-testid="link-connect-whatsapp"
+              >
+                Go to Settings
+              </a>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-3">
+              <Input
+                placeholder="Search templates…"
+                value={templateSearch}
+                onChange={(e) => setTemplateSearch(e.target.value)}
+                data-testid="input-template-search"
+              />
+              {inboxTemplates.length === 0 ? (
+                <p className="text-sm text-gray-500 text-center py-6">
+                  No templates found. Go to the Templates page to sync your WhatsApp templates.
+                </p>
+              ) : (
+                <div className="flex flex-col gap-2 max-h-80 overflow-y-auto">
+                  {inboxTemplates
+                    .filter((t) =>
+                      t.status === "approved" &&
+                      (t.name.toLowerCase().includes(templateSearch.toLowerCase()) ||
+                        t.bodyText?.toLowerCase().includes(templateSearch.toLowerCase()))
+                    )
+                    .map((t) => (
+                      <button
+                        key={t.id}
+                        onClick={() => handleSelectTemplate(t)}
+                        className="text-left p-3 border border-gray-200 rounded-lg hover:border-emerald-300 hover:bg-emerald-50 transition-colors"
+                        data-testid={`template-item-${t.id}`}
+                      >
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-sm font-medium text-gray-900">{t.name}</span>
+                          <span className="text-[10px] text-gray-400 uppercase">{t.language}</span>
+                        </div>
+                        <p className="text-xs text-gray-500 line-clamp-2">{t.bodyText}</p>
+                      </button>
+                    ))}
+                  {inboxTemplates.filter((t) =>
                     t.status === "approved" &&
                     (t.name.toLowerCase().includes(templateSearch.toLowerCase()) ||
                       t.bodyText?.toLowerCase().includes(templateSearch.toLowerCase()))
-                  )
-                  .map((t) => (
-                    <button
-                      key={t.id}
-                      onClick={() => handleSelectTemplate(t)}
-                      className="text-left p-3 border border-gray-200 rounded-lg hover:border-emerald-300 hover:bg-emerald-50 transition-colors"
-                      data-testid={`template-item-${t.id}`}
-                    >
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-sm font-medium text-gray-900">{t.name}</span>
-                        <span className="text-[10px] text-gray-400 uppercase">{t.language}</span>
-                      </div>
-                      <p className="text-xs text-gray-500 line-clamp-2">{t.bodyText}</p>
-                    </button>
-                  ))}
-                {inboxTemplates.filter((t) =>
-                  t.status === "approved" &&
-                  (t.name.toLowerCase().includes(templateSearch.toLowerCase()) ||
-                    t.bodyText?.toLowerCase().includes(templateSearch.toLowerCase()))
-                ).length === 0 && (
-                  <p className="text-sm text-gray-500 text-center py-4">No approved templates match your search.</p>
-                )}
-              </div>
-            )}
-          </div>
+                  ).length === 0 && (
+                    <p className="text-sm text-gray-500 text-center py-4">No approved templates match your search.</p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 
