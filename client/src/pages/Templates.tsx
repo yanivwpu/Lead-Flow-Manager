@@ -19,7 +19,8 @@ import { Link } from "wouter";
 import { 
   FileText, RefreshCw, Lock, Zap, Send, Clock, CheckCircle2, XCircle, 
   AlertCircle, Image, Video, FileIcon, LayoutGrid, ChevronLeft, ChevronRight,
-  Users, Target, Sparkles, Rocket, Crown, Bot, MessageSquare, CalendarCheck, ArrowRight
+  Users, Target, Sparkles, Rocket, Crown, Bot, MessageSquare, CalendarCheck, ArrowRight,
+  Search
 } from "lucide-react";
 import { LocalizedTemplateSelector } from "@/components/LocalizedTemplateSelector";
 import { apiRequest } from "@/lib/queryClient";
@@ -54,6 +55,14 @@ interface RetargetableChat {
   lastMessage: string;
   lastMessageAt: string;
   daysSinceLastMessage: number;
+}
+
+interface Chat {
+  id: string;
+  name: string;
+  avatar: string;
+  whatsappPhone: string | null;
+  lastMessage: string;
 }
 
 const CATEGORY_COLORS: Record<string, string> = {
@@ -161,9 +170,11 @@ export function Templates() {
   const { toast } = useToast();
   const [selectedTemplate, setSelectedTemplate] = useState<MessageTemplate | null>(null);
   const [sendDialogOpen, setSendDialogOpen] = useState(false);
-  const [selectedChat, setSelectedChat] = useState<RetargetableChat | null>(null);
+  const [selectedChat, setSelectedChat] = useState<Chat | null>(null);
   const [variableValues, setVariableValues] = useState<Record<string, string>>({});
   const [carouselIndex, setCarouselIndex] = useState(0);
+  const [contactPickerOpen, setContactPickerOpen] = useState(false);
+  const [contactSearch, setContactSearch] = useState("");
 
   const templatesEnabled = (subscription?.limits as any)?.templatesEnabled;
 
@@ -174,6 +185,11 @@ export function Templates() {
 
   const { data: retargetableChats = [], isLoading: chatsLoading } = useQuery<RetargetableChat[]>({
     queryKey: ["/api/templates/retargetable-chats"],
+    enabled: !!templatesEnabled,
+  });
+
+  const { data: allChats = [] } = useQuery<Chat[]>({
+    queryKey: ["/api/chats"],
     enabled: !!templatesEnabled,
   });
 
@@ -203,22 +219,47 @@ export function Templates() {
 
   const sendTemplateMutation = useMutation({
     mutationFn: async (data: { templateId: string; chatId: string; variables: Record<string, string> }) => {
-      return apiRequest("POST", "/api/templates/send", data);
+      const res = await apiRequest("POST", "/api/templates/send", data);
+      return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/templates/retargetable-chats"] });
       setSendDialogOpen(false);
       setSelectedTemplate(null);
       setSelectedChat(null);
       setVariableValues({});
+      toast({
+        title: "Template sent",
+        description: data?.message || "Template message sent successfully.",
+      });
+    },
+    onError: (error: any) => {
+      const msg = error?.message || "";
+      const clean = msg.replace(/^\d+:\s*/, "").replace(/^\{"error":"/, "").replace(/"\}$/, "");
+      toast({
+        title: "Send failed",
+        description: clean || "Failed to send template message.",
+        variant: "destructive",
+      });
     },
   });
 
-  const handleSendTemplate = (template: MessageTemplate, chat: RetargetableChat) => {
+  const handleSendTemplate = (template: MessageTemplate, chat: Chat | RetargetableChat) => {
+    console.log(`[UseTemplate] Template selected: ${template.name} (id=${template.id}, status=${template.status})`);
+    console.log(`[UseTemplate] Contact selected: ${chat.name} (id=${chat.id}, phone=${chat.whatsappPhone})`);
     setSelectedTemplate(template);
-    setSelectedChat(chat);
+    setSelectedChat(chat as Chat);
     setVariableValues({});
+    setContactPickerOpen(false);
     setSendDialogOpen(true);
+    console.log(`[UseTemplate] Send dialog opened — variables required: ${template.variables?.length ?? 0}`);
+  };
+
+  const handleUseTemplate = (template: MessageTemplate) => {
+    console.log(`[UseTemplate] Button clicked for template: ${template.name}`);
+    setSelectedTemplate(template);
+    setContactSearch("");
+    setContactPickerOpen(true);
   };
 
   const getTemplateIcon = (type: string) => {
@@ -473,7 +514,7 @@ export function Templates() {
                           size="sm" 
                           className="w-full bg-brand-green hover:bg-brand-green/90"
                           disabled={template.status !== "approved"}
-                          onClick={() => setSelectedTemplate(template)}
+                          onClick={() => handleUseTemplate(template)}
                           data-testid={`button-use-template-${template.id}`}
                         >
                           <Send className="h-3 w-3 mr-2" />
@@ -584,6 +625,61 @@ export function Templates() {
             <GrowthEnginesTab />
           </TabsContent>
         </Tabs>
+
+        {/* Contact Picker Dialog */}
+        <Dialog open={contactPickerOpen} onOpenChange={setContactPickerOpen}>
+          <DialogContent className="max-w-md" data-testid="dialog-contact-picker">
+            <DialogHeader>
+              <DialogTitle>Select a Contact</DialogTitle>
+              <DialogDescription>
+                Choose who to send <strong>{selectedTemplate?.name}</strong> to
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3 py-2">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Input
+                  className="pl-9"
+                  placeholder="Search contacts..."
+                  value={contactSearch}
+                  onChange={(e) => setContactSearch(e.target.value)}
+                  data-testid="input-contact-search"
+                />
+              </div>
+              <div className="max-h-[340px] overflow-y-auto space-y-1 pr-1" style={{ scrollbarWidth: "thin" }}>
+                {allChats
+                  .filter(c => c.whatsappPhone && (
+                    !contactSearch ||
+                    c.name.toLowerCase().includes(contactSearch.toLowerCase()) ||
+                    (c.whatsappPhone || "").includes(contactSearch)
+                  ))
+                  .map((chat) => (
+                    <button
+                      key={chat.id}
+                      className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 text-left border border-transparent hover:border-gray-200 transition-colors"
+                      onClick={() => selectedTemplate && handleSendTemplate(selectedTemplate, chat)}
+                      data-testid={`contact-picker-chat-${chat.id}`}
+                    >
+                      <div className="h-9 w-9 rounded-full bg-gray-200 flex items-center justify-center shrink-0 text-gray-600 font-medium text-sm">
+                        {chat.avatar ? (
+                          <img src={chat.avatar} alt="" className="h-9 w-9 rounded-full object-cover" />
+                        ) : (
+                          chat.name.charAt(0).toUpperCase()
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-gray-900 truncate">{chat.name}</p>
+                        <p className="text-xs text-gray-500 truncate">{chat.whatsappPhone}</p>
+                      </div>
+                    </button>
+                  ))}
+                {allChats.filter(c => c.whatsappPhone).length === 0 && (
+                  <p className="text-center text-sm text-gray-500 py-6">No contacts with WhatsApp numbers found.</p>
+                )}
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
 
         {/* Send Template Dialog */}
         <Dialog open={sendDialogOpen} onOpenChange={setSendDialogOpen}>

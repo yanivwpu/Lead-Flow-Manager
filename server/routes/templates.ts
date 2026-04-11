@@ -1,6 +1,6 @@
 import type { Express } from "express";
 import { storage } from "../storage";
-import { getMetaMessageTemplates } from "../userMeta";
+import { getMetaMessageTemplates, sendMetaWhatsAppTemplate } from "../userMeta";
 import { getUserTwilioClient } from "../userTwilio";
 import { subscriptionService } from "../subscriptionService";
 
@@ -540,7 +540,7 @@ export function registerTemplateRoutes(app: Express): void {
     }
   });
 
-  // Send a template message
+  // Send a template message via the active WhatsApp provider
   app.post("/api/templates/send", async (req, res) => {
     try {
       if (!req.user) {
@@ -571,24 +571,103 @@ export function registerTemplateRoutes(app: Express): void {
         return res.status(400).json({ error: "Chat does not have a WhatsApp number" });
       }
 
+      const user = await storage.getUser(req.user.id);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      const provider = user.whatsappProvider || "twilio";
+      const variableValues: Record<string, string> = variables || {};
+
+      console.log(`[TemplateSend] template=${template.name} chat=${chat.name} phone=${chat.whatsappPhone} provider=${provider}`);
+      console.log(`[TemplateSend] variables=${JSON.stringify(variableValues)}`);
+
+      let messageId = "";
+      let sendStatus = "sent";
+
+      if (provider === "meta") {
+        // Build components array from variable values
+        // Variables are stored as ["{{1}}", "{{2}}"] — sort by number and build params
+        const sortedVars = (template.variables as string[] || [])
+          .slice()
+          .sort((a, b) => {
+            const na = parseInt(a.replace(/\D/g, ""), 10) || 0;
+            const nb = parseInt(b.replace(/\D/g, ""), 10) || 0;
+            return na - nb;
+          });
+
+        const components: any[] = [];
+        if (sortedVars.length > 0) {
+          const bodyParams = sortedVars.map((v) => ({
+            type: "text",
+            text: variableValues[v] || "",
+          }));
+          components.push({ type: "body", parameters: bodyParams });
+        }
+
+        console.log(`[TemplateSend] Meta components: ${JSON.stringify(components)}`);
+
+        const result = await sendMetaWhatsAppTemplate(
+          req.user.id,
+          chat.whatsappPhone,
+          template.name,
+          template.language || "en",
+          components.length > 0 ? components : undefined
+        );
+        messageId = result.messageId;
+        sendStatus = result.status;
+        console.log(`[TemplateSend] Meta API success — messageId=${messageId}`);
+
+      } else {
+        // Twilio: use the Content API template SID
+        const twilioClient = await getUserTwilioClient(req.user.id);
+        if (!twilioClient) {
+          return res.status(400).json({ error: "Twilio is not connected." });
+        }
+
+        const toNumber = chat.whatsappPhone.startsWith("whatsapp:")
+          ? chat.whatsappPhone
+          : `whatsapp:${chat.whatsappPhone}`;
+        const fromNumber = user.twilioWhatsappNumber?.startsWith("whatsapp:")
+          ? user.twilioWhatsappNumber
+          : `whatsapp:${user.twilioWhatsappNumber}`;
+
+        const msgOptions: any = {
+          from: fromNumber,
+          to: toNumber,
+          contentSid: template.twilioSid,
+        };
+        if (Object.keys(variableValues).length > 0) {
+          msgOptions.contentVariables = JSON.stringify(variableValues);
+        }
+
+        const msg = await (twilioClient as any).messages.create(msgOptions);
+        messageId = msg.sid;
+        sendStatus = msg.status;
+        console.log(`[TemplateSend] Twilio success — sid=${messageId} status=${sendStatus}`);
+      }
+
       const templateSend = await storage.createTemplateSend({
         userId: req.user.id,
         chatId,
         templateId,
-        variableValues: variables || {},
-        status: "sent",
+        variableValues: variableValues,
+        status: sendStatus,
+        twilioMessageSid: messageId || null,
       });
 
-      console.log(`Template ${template.name} sent to ${chat.name} (${chat.whatsappPhone})`);
+      console.log(`[TemplateSend] DB record created — sendId=${templateSend.id}`);
 
       res.json({
         success: true,
         message: `Template "${template.name}" sent to ${chat.name}`,
         sendId: templateSend.id,
+        messageId,
+        provider,
       });
-    } catch (error) {
-      console.error("Error sending template:", error);
-      res.status(500).json({ error: "Failed to send template" });
+    } catch (error: any) {
+      console.error("[TemplateSend] Error:", error);
+      res.status(500).json({ error: error.message || "Failed to send template" });
     }
   });
 }
