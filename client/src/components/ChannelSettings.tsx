@@ -737,10 +737,37 @@ export function ChannelSettings() {
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 mt-4">
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-              <p className="text-sm text-blue-800">
-                To connect {configChannel === 'instagram' ? 'Instagram' : 'Facebook Messenger'}, 
-                you need to set up Meta (Facebook) integration first.
+            <div className="space-y-2">
+              <p className="text-sm font-medium text-gray-700">Step 1 — Save your credentials</p>
+              <p className="text-xs text-gray-500">
+                Go to the Integrations page and enter your{' '}
+                {configChannel === 'instagram' ? 'Instagram Graph Token + Instagram Account ID' : 'Page Access Token + Page ID'}.
+                Credentials are synced to the messaging engine automatically.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <p className="text-sm font-medium text-gray-700">Step 2 — Set your Meta webhook</p>
+              <p className="text-xs text-gray-500 mb-1">
+                In Meta Developer Portal, set the webhook URL to:
+              </p>
+              <div className="flex gap-2">
+                <Input
+                  readOnly
+                  value={`${webhookBaseUrl}/api/webhook/meta`}
+                  className="text-xs font-mono bg-gray-50"
+                  data-testid={`input-${configChannel}-webhook-url`}
+                />
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => copyWebhookUrl(`${webhookBaseUrl}/api/webhook/meta`)}
+                  data-testid={`button-copy-${configChannel}-webhook`}
+                >
+                  {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                </Button>
+              </div>
+              <p className="text-xs text-gray-400">
+                Subscribe to: <span className="font-mono">messages</span> and <span className="font-mono">messaging_postbacks</span>
               </p>
             </div>
             <Button
@@ -755,7 +782,7 @@ export function ChannelSettings() {
               data-testid="button-goto-integrations"
             >
               <ChevronRight className="h-4 w-4 mr-1" />
-              Go to Integrations
+              Go to Integrations to Enter Credentials
             </Button>
           </div>
         </DialogContent>

@@ -1,0 +1,53 @@
+Yes, fix this now.
+
+This is a critical integration bug because the current flow creates a false “connected” state while the actual messaging engine cannot use the saved credentials.
+
+Please implement a proper end-to-end fix for Facebook Messenger and Instagram so the connection flow writes credentials to the same source of truth used by inbound/outbound messaging.
+
+Requirements:
+
+Close the table mismatch
+When Facebook or Instagram credentials are saved from the Integrations page, also create/update the corresponding channelSettings record used by the messaging engine
+Do not leave the system in a state where Integrations says “connected” but messaging cannot work
+Single source of truth
+Confirm which table should be authoritative long-term:
+integrations
+or channelSettings
+For now, make the current product work reliably end-to-end
+If dual-write is needed temporarily, do it safely
+Support both channels
+Handle:
+facebook
+instagram
+Make sure the correct channel identifiers and credentials are stored for each
+Inbound validation
+After saving credentials, verify that webhook lookup by page/account ID can actually find the channel configuration
+Do not silently drop inbound messages if config is missing
+Add clear logs for config lookup failures
+Outbound validation
+After saving credentials, verify that the adapter can load the same credentials from channelSettings
+Replying from the inbox must work with the saved connection
+Connection status honesty
+Do not show “connected” unless the credentials are actually usable by the messaging engine
+If needed, add a post-save validation step before showing connected status
+Logging
+Add clear logs for:
+integration saved
+channelSettings created/updated
+inbound lookup success/failure
+outbound credential lookup success/failure
+Real-user validation
+Test the real end-to-end path:
+save token + page ID
+confirm channelSettings record exists
+simulate or verify inbound webhook lookup succeeds
+confirm outbound reply succeeds
+No silent failure
+If config is incomplete or mismatched, return a clear error in UI/logs
+Never silently drop the message
+
+Also, after fixing, please provide:
+
+exact files changed
+which table is used by which part of the system
+whether any other channels have the same split-table problem

@@ -253,19 +253,23 @@ class InstagramAdapter implements ChannelAdapter {
 
       const settings = await storage.getChannelSettings(conversation.userId);
       const instagramSettings = settings.find(s => s.channel === 'instagram');
-      
+
       if (!instagramSettings?.config) {
+        console.error(`[Outbound] Instagram credential lookup FAILED for userId=${conversation.userId} — no channelSettings record found for channel=instagram. Hint: Connect Instagram via Integrations page.`);
         return { success: false, error: "Instagram not configured. Please connect your Instagram account in Settings > Integrations." };
       }
 
       const config = instagramSettings.config as any;
       if (!config.accessToken) {
+        console.error(`[Outbound] Instagram credential lookup FAILED for userId=${conversation.userId} — accessToken missing from channelSettings.config.`);
         return { success: false, error: "Instagram access token missing. Please reconnect your Instagram account." };
       }
       if (!config.pageId) {
+        console.error(`[Outbound] Instagram credential lookup FAILED for userId=${conversation.userId} — pageId missing from channelSettings.config.`);
         return { success: false, error: "Instagram page ID missing. Please reconnect your Instagram account." };
       }
 
+      console.log(`[Outbound] Instagram credentials loaded — userId=${conversation.userId}, pageId=${config.pageId}`);
       const accessToken = config.accessToken;
       const pageId = config.pageId;
       const recipientId = contact.instagramId;
@@ -357,19 +361,23 @@ class FacebookAdapter implements ChannelAdapter {
 
       const settings = await storage.getChannelSettings(conversation.userId);
       const facebookSettings = settings.find(s => s.channel === 'facebook');
-      
+
       if (!facebookSettings?.config) {
+        console.error(`[Outbound] Facebook credential lookup FAILED for userId=${conversation.userId} — no channelSettings record found for channel=facebook. Hint: Connect Facebook via Integrations page.`);
         return { success: false, error: "Facebook Messenger not configured. Please connect your Facebook Page in Settings > Integrations." };
       }
 
       const config = facebookSettings.config as any;
       if (!config.accessToken) {
+        console.error(`[Outbound] Facebook credential lookup FAILED for userId=${conversation.userId} — accessToken missing from channelSettings.config.`);
         return { success: false, error: "Facebook access token missing. Please reconnect your Facebook Page." };
       }
       if (!config.pageId) {
+        console.error(`[Outbound] Facebook credential lookup FAILED for userId=${conversation.userId} — pageId missing from channelSettings.config.`);
         return { success: false, error: "Facebook page ID missing. Please reconnect your Facebook Page." };
       }
 
+      console.log(`[Outbound] Facebook credentials loaded — userId=${conversation.userId}, pageId=${config.pageId}`);
       const accessToken = config.accessToken;
       const pageId = config.pageId;
       const recipientId = contact.facebookId;

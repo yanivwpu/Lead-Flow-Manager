@@ -2106,6 +2106,8 @@ export async function registerRoutes(
                     console.log(`[Inbound] Webhook returned 200 — channel: instagram, messageId: ${messageId}`);
                   })
                 );
+              } else {
+                console.warn(`[Inbound] Instagram channel lookup FAILED — recipientId: ${recipientId}. No connected channelSettings record found with matching pageId or instagramAccountId. Message from senderId=${senderId} is being DROPPED. Hint: Save Instagram credentials via Integrations page to populate channelSettings.`);
               }
             }
           }
@@ -2153,6 +2155,8 @@ export async function registerRoutes(
                     console.log(`[Inbound] Webhook returned 200 — channel: facebook, messageId: ${messageId}`);
                   })
                 );
+              } else {
+                console.warn(`[Inbound] Facebook channel lookup FAILED — recipientId: ${recipientId}. No connected channelSettings record found with matching pageId. Message from senderId=${senderId} is being DROPPED. Hint: Save Facebook credentials via Integrations page to populate channelSettings.`);
               }
             }
           }
@@ -3242,6 +3246,61 @@ export async function registerRoutes(
 
   // Helper to encrypt sensitive integration config fields
   const SENSITIVE_CONFIG_KEYS = ['accessToken', 'secretKey', 'privateKey', 'clientSecret', 'refreshToken', 'apiKey', 'webhookSecret'];
+
+  // Startup backfill: repair any existing Facebook/Instagram integrations that
+  // pre-date the dual-write fix and never populated channelSettings.
+  async function backfillFacebookInstagramChannelSettings() {
+    try {
+      const types = ['meta_facebook', 'meta_instagram'];
+      let repaired = 0;
+      for (const type of types) {
+        const integrations = await storage.getIntegrationsByType(type);
+        for (const integration of integrations) {
+          if (!integration.isActive) continue;
+          const channel = type === 'meta_facebook' ? 'facebook' : 'instagram';
+          const existing = await storage.getChannelSetting(integration.userId, channel as any);
+          if (existing?.isConnected) continue; // already populated
+
+          const rawConfig = integration.config as Record<string, any>;
+          const decryptedConfig = decryptIntegrationConfig(rawConfig);
+
+          const channelConfig: Record<string, string> = {
+            accessToken: decryptedConfig.accessToken || '',
+            pageId: type === 'meta_facebook'
+              ? (decryptedConfig.pageId || '')
+              : (decryptedConfig.instagramId || decryptedConfig.pageId || ''),
+          };
+          if (type === 'meta_instagram') {
+            channelConfig.instagramAccountId = decryptedConfig.instagramId || decryptedConfig.pageId || '';
+          }
+          if (decryptedConfig.appSecret) channelConfig.appSecret = decryptedConfig.appSecret;
+
+          if (!channelConfig.accessToken || !channelConfig.pageId) {
+            console.warn(`[Backfill] Skipping ${channel} for userId=${integration.userId} — incomplete credentials in integrations record`);
+            continue;
+          }
+
+          await storage.upsertChannelSetting(integration.userId, channel as any, {
+            isConnected: true,
+            isEnabled: true,
+            config: channelConfig,
+          });
+          console.log(`[Backfill] ${channel} channelSettings created for userId=${integration.userId} — pageId: ${channelConfig.pageId}`);
+          repaired++;
+        }
+      }
+      if (repaired > 0) {
+        console.log(`[Backfill] Completed: repaired ${repaired} Facebook/Instagram channelSettings record(s)`);
+      } else {
+        console.log(`[Backfill] No Facebook/Instagram channelSettings repairs needed`);
+      }
+    } catch (err) {
+      console.error('[Backfill] Error during Facebook/Instagram channelSettings backfill:', err);
+    }
+  }
+
+  // Run backfill async at startup — does not block server from starting
+  backfillFacebookInstagramChannelSettings();
   
   function encryptIntegrationConfig(config: Record<string, any>): Record<string, any> {
     const encrypted: Record<string, any> = { ...config };
@@ -3332,7 +3391,32 @@ export async function registerRoutes(
         config: encryptedConfig,
         isActive: true,
       });
-      
+
+      // Dual-write to channelSettings for Facebook/Instagram so the messaging
+      // engine (adapters + webhook handler) can find the credentials.
+      // channelSettings is the single source of truth for inbound/outbound routing.
+      if (type === 'meta_facebook' || type === 'meta_instagram') {
+        const channel = type === 'meta_facebook' ? 'facebook' : 'instagram';
+        const channelConfig: Record<string, string> = {
+          accessToken: config.accessToken || '',
+          pageId: type === 'meta_facebook'
+            ? (config.pageId || '')
+            : (config.instagramId || config.pageId || ''),
+        };
+        if (type === 'meta_instagram') {
+          channelConfig.instagramAccountId = config.instagramId || config.pageId || '';
+        }
+        if (config.appSecret) {
+          channelConfig.appSecret = config.appSecret;
+        }
+        await storage.upsertChannelSetting(req.user.id, channel as any, {
+          isConnected: true,
+          isEnabled: true,
+          config: channelConfig,
+        });
+        console.log(`[Integration] ${channel} channelSettings created/updated for user ${req.user.id} — pageId: ${channelConfig.pageId}`);
+      }
+
       // Return with masked config
       res.status(201).json({
         ...integration,
@@ -3363,6 +3447,34 @@ export async function registerRoutes(
       if (isActive !== undefined) updates.isActive = isActive;
       
       const updated = await storage.updateIntegration(req.params.id, updates);
+
+      // Dual-write to channelSettings for Facebook/Instagram on update
+      if ((integration.type === 'meta_facebook' || integration.type === 'meta_instagram') && config !== undefined) {
+        const channel = integration.type === 'meta_facebook' ? 'facebook' : 'instagram';
+        const channelConfig: Record<string, string> = {
+          accessToken: config.accessToken || '',
+          pageId: integration.type === 'meta_facebook'
+            ? (config.pageId || '')
+            : (config.instagramId || config.pageId || ''),
+        };
+        if (integration.type === 'meta_instagram') {
+          channelConfig.instagramAccountId = config.instagramId || config.pageId || '';
+        }
+        if (config.appSecret) {
+          channelConfig.appSecret = config.appSecret;
+        }
+        const channelUpdates: any = { config: channelConfig };
+        if (isActive === false) {
+          channelUpdates.isConnected = false;
+          channelUpdates.isEnabled = false;
+        } else {
+          channelUpdates.isConnected = true;
+          channelUpdates.isEnabled = true;
+        }
+        await storage.upsertChannelSetting(req.user.id, channel as any, channelUpdates);
+        console.log(`[Integration] ${channel} channelSettings updated for user ${req.user.id} — pageId: ${channelConfig.pageId}`);
+      }
+
       // Return with masked config
       res.json({
         ...updated,
@@ -3387,6 +3499,18 @@ export async function registerRoutes(
       }
       
       await storage.deleteIntegration(req.params.id);
+
+      // Dual-write: disconnect channelSettings for Facebook/Instagram on delete
+      if (integration.type === 'meta_facebook' || integration.type === 'meta_instagram') {
+        const channel = integration.type === 'meta_facebook' ? 'facebook' : 'instagram';
+        await storage.upsertChannelSetting(req.user.id, channel as any, {
+          isConnected: false,
+          isEnabled: false,
+          config: {},
+        });
+        console.log(`[Integration] ${channel} channelSettings disconnected for user ${req.user.id} after integration deletion`);
+      }
+
       res.json({ success: true });
     } catch (error) {
       console.error("Error deleting integration:", error);
