@@ -16,7 +16,7 @@ import {
   Plug, Plus, Trash2, Copy, Check, ExternalLink, Zap, Lock,
   ShoppingCart, FileSpreadsheet, Users, CreditCard, Building2, Home,
   Webhook, Eye, EyeOff, RefreshCw, CheckCircle2, XCircle, Settings2,
-  Calendar, Mail, Facebook, Instagram, Link2
+  Calendar, Mail, Facebook, Instagram, Link2, AlertCircle, Info
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { toast } from "@/hooks/use-toast";
@@ -343,6 +343,13 @@ export function Integrations() {
   const [selectedSyncOptions, setSelectedSyncOptions] = useState<string[]>([]);
   const [showShopifyInfo, setShowShopifyInfo] = useState(false);
   const [checkingLcConnection, setCheckingLcConnection] = useState(false);
+  const [webhookSetupDialog, setWebhookSetupDialog] = useState<{
+    webhookUrl: string;
+    verifyToken: string;
+    channel: 'facebook' | 'instagram';
+    isNew: boolean;
+  } | null>(null);
+  const [showVerifyToken, setShowVerifyToken] = useState(false);
 
   const integrationsEnabled = subscription?.limits?.integrationsEnabled;
   const maxWebhooks = (subscription?.limits as any)?.maxWebhooks || 0;
@@ -354,6 +361,15 @@ export function Integrations() {
 
   const { data: integrations = [], isLoading: integrationsLoading } = useQuery<Integration[]>({
     queryKey: ["/api/integrations"],
+    enabled: !!integrationsEnabled,
+  });
+
+  const { data: metaWebhookConfig } = useQuery<{
+    webhookUrl: string;
+    facebook: { isConnected: boolean; verifyToken: string };
+    instagram: { isConnected: boolean; verifyToken: string };
+  }>({
+    queryKey: ["/api/integrations/meta-webhook-config"],
     enabled: !!integrationsEnabled,
   });
 
@@ -397,13 +413,25 @@ export function Integrations() {
 
   const createIntegrationMutation = useMutation({
     mutationFn: async (data: { type: string; name: string; config: Record<string, any> }) => {
-      return apiRequest("POST", "/api/integrations", data);
+      const res = await apiRequest("POST", "/api/integrations", data);
+      return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (responseData, variables) => {
       queryClient.invalidateQueries({ queryKey: ["/api/integrations"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/integrations/meta-webhook-config"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/channels"] });
       setConnectingIntegration(null);
       setIntegrationForm({});
       setSelectedSyncOptions([]);
+      if (responseData?.webhookSetup && (variables.type === 'meta_facebook' || variables.type === 'meta_instagram')) {
+        setShowVerifyToken(false);
+        setWebhookSetupDialog({
+          webhookUrl: responseData.webhookSetup.webhookUrl,
+          verifyToken: responseData.webhookSetup.verifyToken,
+          channel: variables.type === 'meta_facebook' ? 'facebook' : 'instagram',
+          isNew: true,
+        });
+      }
     },
   });
 
@@ -645,6 +673,36 @@ export function Integrations() {
                           )}
                           {['shopify', 'calendly', 'stripe', 'hubspot'].includes(integration.id) && (
                             <WebhookUrlDisplay integrationType={integration.id} />
+                          )}
+                          {(integration.id === 'meta_facebook' || integration.id === 'meta_instagram') && (
+                            <div className="py-1">
+                              <div className="flex items-center gap-2 p-2 bg-amber-50 border border-amber-200 rounded-md mb-2">
+                                <AlertCircle className="h-3.5 w-3.5 text-amber-600 flex-shrink-0" />
+                                <p className="text-xs text-amber-700">Webhook setup required for inbound messages</p>
+                              </div>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="w-full text-xs"
+                                onClick={() => {
+                                  const channel = integration.id === 'meta_facebook' ? 'facebook' : 'instagram';
+                                  const channelData = channel === 'facebook' ? metaWebhookConfig?.facebook : metaWebhookConfig?.instagram;
+                                  if (metaWebhookConfig && channelData) {
+                                    setShowVerifyToken(false);
+                                    setWebhookSetupDialog({
+                                      webhookUrl: metaWebhookConfig.webhookUrl,
+                                      verifyToken: channelData.verifyToken,
+                                      channel,
+                                      isNew: false,
+                                    });
+                                  }
+                                }}
+                                data-testid={`button-webhook-setup-${integration.id}`}
+                              >
+                                <Settings2 className="h-3 w-3 mr-1" />
+                                View Webhook Setup
+                              </Button>
+                            </div>
                           )}
                           <div className="flex gap-2 pt-2">
                             <Button 
@@ -1005,6 +1063,16 @@ export function Integrations() {
                     </div>
                   ))}
                   
+                  {(connectingIntegration.id === 'meta_facebook' || connectingIntegration.id === 'meta_instagram') && (
+                    <div className="flex items-start gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg mt-2">
+                      <Info className="h-4 w-4 text-blue-600 flex-shrink-0 mt-0.5" />
+                      <div className="text-xs text-blue-800 space-y-1">
+                        <p className="font-medium">Two-step setup</p>
+                        <p>After saving, you'll be shown webhook configuration instructions (Step 2) to complete in Meta Developer Portal — required for inbound messages.</p>
+                      </div>
+                    </div>
+                  )}
+
                   {connectingIntegration.syncOptions && connectingIntegration.syncOptions.length > 0 && (
                     <div className="space-y-2 pt-2">
                       <Label>Sync Options</Label>
@@ -1045,6 +1113,164 @@ export function Integrations() {
                 </DialogFooter>
               </>
             )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Meta Webhook Setup Dialog — shown after connecting Facebook/Instagram */}
+        <Dialog open={!!webhookSetupDialog} onOpenChange={(open) => !open && setWebhookSetupDialog(null)}>
+          <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <div className="flex items-center gap-3">
+                <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${webhookSetupDialog?.channel === 'facebook' ? 'bg-blue-700' : 'bg-pink-600'}`}>
+                  {webhookSetupDialog?.channel === 'facebook'
+                    ? <Facebook className="h-5 w-5 text-white" />
+                    : <Instagram className="h-5 w-5 text-white" />
+                  }
+                </div>
+                <div>
+                  <DialogTitle>Configure Webhook</DialogTitle>
+                  <DialogDescription>
+                    {webhookSetupDialog?.isNew
+                      ? 'Credentials saved! Complete webhook setup in Meta Developer Portal.'
+                      : 'Webhook configuration for Meta Developer Portal.'}
+                  </DialogDescription>
+                </div>
+              </div>
+            </DialogHeader>
+
+            <div className="space-y-5 mt-2">
+              {webhookSetupDialog?.isNew && (
+                <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-lg">
+                  <CheckCircle2 className="h-4 w-4 text-green-600 flex-shrink-0" />
+                  <p className="text-sm text-green-700 font-medium">
+                    Step 1 complete — credentials saved and messaging engine ready
+                  </p>
+                </div>
+              )}
+
+              <div className="space-y-4">
+                <p className="text-sm font-semibold text-gray-800">
+                  {webhookSetupDialog?.isNew ? 'Step 2' : 'Required'} — Configure Meta Developer Portal
+                </p>
+
+                <div className="space-y-4 text-sm text-gray-700">
+                  <div className="flex gap-3">
+                    <span className="flex-shrink-0 w-5 h-5 rounded-full bg-gray-200 text-gray-700 flex items-center justify-center text-xs font-bold">1</span>
+                    <p>
+                      Go to{' '}
+                      <a href="https://developers.facebook.com" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline font-medium">
+                        Meta Developer Portal
+                      </a>
+                      {' '}→ Your App →{' '}
+                      <strong>{webhookSetupDialog?.channel === 'facebook' ? 'Messenger' : 'Instagram'} Settings</strong>
+                    </p>
+                  </div>
+
+                  <div className="flex gap-3">
+                    <span className="flex-shrink-0 w-5 h-5 rounded-full bg-gray-200 text-gray-700 flex items-center justify-center text-xs font-bold">2</span>
+                    <p>Under <strong>Webhooks</strong>, click <strong>Edit Callback URL</strong> or <strong>Add Webhooks</strong></p>
+                  </div>
+
+                  <div className="flex gap-3">
+                    <span className="flex-shrink-0 w-5 h-5 rounded-full bg-gray-200 text-gray-700 flex items-center justify-center text-xs font-bold">3</span>
+                    <div className="flex-1 space-y-2">
+                      <p>Paste this <strong>Callback URL</strong>:</p>
+                      <div className="flex gap-2">
+                        <Input
+                          readOnly
+                          value={webhookSetupDialog?.webhookUrl || ''}
+                          className="text-xs font-mono bg-gray-50"
+                          data-testid="input-webhook-callback-url"
+                        />
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          onClick={() => copyToClipboard(webhookSetupDialog?.webhookUrl || '', 'webhookUrl')}
+                          data-testid="button-copy-webhook-url"
+                        >
+                          {copiedId === 'webhookUrl' ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-3">
+                    <span className="flex-shrink-0 w-5 h-5 rounded-full bg-gray-200 text-gray-700 flex items-center justify-center text-xs font-bold">4</span>
+                    <div className="flex-1 space-y-2">
+                      <p>Paste this <strong>Verify Token</strong>:</p>
+                      <div className="flex gap-2">
+                        <Input
+                          readOnly
+                          type={showVerifyToken ? 'text' : 'password'}
+                          value={webhookSetupDialog?.verifyToken || ''}
+                          className="text-xs font-mono bg-gray-50"
+                          data-testid="input-webhook-verify-token"
+                        />
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          onClick={() => setShowVerifyToken(v => !v)}
+                          data-testid="button-toggle-verify-token"
+                        >
+                          {showVerifyToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          onClick={() => copyToClipboard(webhookSetupDialog?.verifyToken || '', 'verifyToken')}
+                          data-testid="button-copy-verify-token"
+                        >
+                          {copiedId === 'verifyToken' ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-3">
+                    <span className="flex-shrink-0 w-5 h-5 rounded-full bg-gray-200 text-gray-700 flex items-center justify-center text-xs font-bold">5</span>
+                    <p>Click <strong>Verify and Save</strong> — Meta will ping your webhook URL to confirm it works</p>
+                  </div>
+
+                  <div className="flex gap-3">
+                    <span className="flex-shrink-0 w-5 h-5 rounded-full bg-gray-200 text-gray-700 flex items-center justify-center text-xs font-bold">6</span>
+                    <div className="flex-1 space-y-2">
+                      <p>Under <strong>Webhook Fields</strong>, subscribe to these events:</p>
+                      <div className="flex gap-2 flex-wrap">
+                        {['messages', 'messaging_postbacks', 'messaging_seen'].map(event => (
+                          <span key={event} className="text-xs bg-gray-100 border border-gray-200 text-gray-700 px-2 py-1 rounded font-mono">
+                            {event}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                <AlertCircle className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                <p className="text-xs text-amber-800">
+                  <strong>Inbound messages won't arrive until the webhook is verified and subscribed.</strong>{' '}
+                  The channel will show as connected, but you must complete these steps in Meta Developer Portal for messages to reach the inbox.
+                </p>
+              </div>
+
+              <div className="flex items-start gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <Info className="h-4 w-4 text-blue-600 flex-shrink-0 mt-0.5" />
+                <p className="text-xs text-blue-800">
+                  Your verify token is unique to your account. Keep it private — it's used to prove ownership of this webhook endpoint.
+                </p>
+              </div>
+            </div>
+
+            <DialogFooter>
+              <Button
+                onClick={() => setWebhookSetupDialog(null)}
+                data-testid="button-close-webhook-setup"
+              >
+                Done
+              </Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
       </div>

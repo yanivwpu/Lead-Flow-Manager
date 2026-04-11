@@ -1862,25 +1862,38 @@ export async function registerRoutes(
       console.log("Meta webhook verification attempt:", { mode, token });
 
       if (mode === "subscribe") {
-        // Find user with matching verify token
+        // Check 1: users table (WhatsApp Meta connections)
         const { db } = await import("../drizzle/db");
-        const { users } = await import("@shared/schema");
+        const { users, channelSettings: csTable } = await import("@shared/schema");
         const { eq } = await import("drizzle-orm");
 
         const allUsers = await db.select().from(users).where(eq(users.metaConnected, true));
         const matchingUser = allUsers.find(u => u.metaWebhookVerifyToken === token);
-
         if (matchingUser) {
-          console.log("Meta webhook verified for user:", matchingUser.id);
+          console.log(`[Webhook Verify] Matched via users.metaWebhookVerifyToken — userId: ${matchingUser.id}`);
           return res.status(200).send(challenge);
         }
 
-        // Also check against a global verify token from env if set
+        // Check 2: channelSettings.config.webhookVerifyToken (Facebook/Instagram connections)
+        const allChannelSettings = await db.select().from(csTable)
+          .where(eq(csTable.isConnected, true));
+        const matchingChannel = allChannelSettings.find(s => {
+          const cfg = s.config as any;
+          return cfg?.webhookVerifyToken === token;
+        });
+        if (matchingChannel) {
+          console.log(`[Webhook Verify] Matched via channelSettings.webhookVerifyToken — userId: ${matchingChannel.userId}, channel: ${matchingChannel.channel}`);
+          return res.status(200).send(challenge);
+        }
+
+        // Check 3: global verify token from env
         const globalToken = process.env.META_WEBHOOK_VERIFY_TOKEN;
         if (globalToken && token === globalToken) {
-          console.log("Meta webhook verified with global token");
+          console.log("[Webhook Verify] Matched via global META_WEBHOOK_VERIFY_TOKEN");
           return res.status(200).send(challenge);
         }
+
+        console.warn(`[Webhook Verify] FAILED — token did not match any user or channelSettings record. Token: ${String(token).slice(0, 8)}...`);
       }
 
       console.log("Meta webhook verification failed");
@@ -3357,6 +3370,46 @@ export async function registerRoutes(
     }
   });
 
+  // Return webhook URL + verify token for Facebook/Instagram channels
+  // The verify token is stored in channelSettings.config.webhookVerifyToken
+  app.get("/api/integrations/meta-webhook-config", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+
+      const webhookBaseUrl = process.env.APP_URL || `https://${process.env.REPLIT_DOMAINS?.split(',')[0]}`;
+      const webhookUrl = `${webhookBaseUrl}/api/webhook/meta`;
+
+      const fbSetting = await storage.getChannelSetting(req.user.id, 'facebook' as any);
+      const igSetting = await storage.getChannelSetting(req.user.id, 'instagram' as any);
+
+      const fbConfig = fbSetting?.config as any;
+      const igConfig = igSetting?.config as any;
+
+      // If no stored token yet, derive it the same way POST does
+      const cryptoMod = await import('crypto');
+      const salt = process.env.SESSION_SECRET || 'whachat-fb-verify-salt';
+      const deriveFbToken = () =>
+        cryptoMod.createHmac('sha256', salt).update(`${req.user!.id}:facebook`).digest('hex').slice(0, 32);
+      const deriveIgToken = () =>
+        cryptoMod.createHmac('sha256', salt).update(`${req.user!.id}:instagram`).digest('hex').slice(0, 32);
+
+      res.json({
+        webhookUrl,
+        facebook: {
+          isConnected: !!fbSetting?.isConnected,
+          verifyToken: fbConfig?.webhookVerifyToken || deriveFbToken(),
+        },
+        instagram: {
+          isConnected: !!igSetting?.isConnected,
+          verifyToken: igConfig?.webhookVerifyToken || deriveIgToken(),
+        },
+      });
+    } catch (error) {
+      console.error("Error fetching meta webhook config:", error);
+      res.status(500).json({ error: "Failed to fetch webhook config" });
+    }
+  });
+
   // Create an integration
   app.post("/api/integrations", async (req, res) => {
     try {
@@ -3395,13 +3448,24 @@ export async function registerRoutes(
       // Dual-write to channelSettings for Facebook/Instagram so the messaging
       // engine (adapters + webhook handler) can find the credentials.
       // channelSettings is the single source of truth for inbound/outbound routing.
+      let metaWebhookConfig: { webhookUrl: string; verifyToken: string } | undefined;
       if (type === 'meta_facebook' || type === 'meta_instagram') {
         const channel = type === 'meta_facebook' ? 'facebook' : 'instagram';
+
+        // Generate a stable per-user verify token using HMAC so it is always the
+        // same for this user regardless of how many times they reconnect.
+        const cryptoMod = await import('crypto');
+        const verifyTokenRaw = cryptoMod.createHmac(
+          'sha256',
+          process.env.SESSION_SECRET || 'whachat-fb-verify-salt'
+        ).update(`${req.user.id}:${channel}`).digest('hex').slice(0, 32);
+
         const channelConfig: Record<string, string> = {
           accessToken: config.accessToken || '',
           pageId: type === 'meta_facebook'
             ? (config.pageId || '')
             : (config.instagramId || config.pageId || ''),
+          webhookVerifyToken: verifyTokenRaw,
         };
         if (type === 'meta_instagram') {
           channelConfig.instagramAccountId = config.instagramId || config.pageId || '';
@@ -3414,13 +3478,19 @@ export async function registerRoutes(
           isEnabled: true,
           config: channelConfig,
         });
-        console.log(`[Integration] ${channel} channelSettings created/updated for user ${req.user.id} — pageId: ${channelConfig.pageId}`);
+        const webhookBaseUrl = process.env.APP_URL || `https://${process.env.REPLIT_DOMAINS?.split(',')[0]}`;
+        metaWebhookConfig = {
+          webhookUrl: `${webhookBaseUrl}/api/webhook/meta`,
+          verifyToken: verifyTokenRaw,
+        };
+        console.log(`[Integration] ${channel} channelSettings created/updated for user ${req.user.id} — pageId: ${channelConfig.pageId}, verifyToken stored`);
       }
 
-      // Return with masked config
+      // Return with masked config (+ webhook setup info for Meta channels)
       res.status(201).json({
         ...integration,
         config: maskIntegrationConfig(config),
+        ...(metaWebhookConfig ? { webhookSetup: metaWebhookConfig } : {}),
       });
     } catch (error) {
       console.error("Error creating integration:", error);
@@ -3451,11 +3521,17 @@ export async function registerRoutes(
       // Dual-write to channelSettings for Facebook/Instagram on update
       if ((integration.type === 'meta_facebook' || integration.type === 'meta_instagram') && config !== undefined) {
         const channel = integration.type === 'meta_facebook' ? 'facebook' : 'instagram';
+        const cryptoMod = await import('crypto');
+        const verifyTokenRaw = cryptoMod.createHmac(
+          'sha256',
+          process.env.SESSION_SECRET || 'whachat-fb-verify-salt'
+        ).update(`${req.user.id}:${channel}`).digest('hex').slice(0, 32);
         const channelConfig: Record<string, string> = {
           accessToken: config.accessToken || '',
           pageId: integration.type === 'meta_facebook'
             ? (config.pageId || '')
             : (config.instagramId || config.pageId || ''),
+          webhookVerifyToken: verifyTokenRaw,
         };
         if (integration.type === 'meta_instagram') {
           channelConfig.instagramAccountId = config.instagramId || config.pageId || '';
