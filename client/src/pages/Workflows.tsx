@@ -9,6 +9,7 @@ import {
   Sparkles, LayoutTemplate, MoveUp, MoveDown,
   CheckCircle2, ArrowDown, ArrowLeft,
   BellOff, PenLine,
+  MessageCircle, Instagram, Facebook, Smartphone, Globe, Send,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,13 +34,13 @@ import { cn } from "@/lib/utils";
 // ─── Channel Config ───────────────────────────────────────────────────────────
 
 const CHANNELS = [
-  { value: "any",       label: "Any Channel", emoji: "🌐", color: "bg-gray-100 text-gray-700 border-gray-300" },
-  { value: "whatsapp",  label: "WhatsApp",    emoji: "💬", color: "bg-green-50 text-green-700 border-green-300" },
-  { value: "facebook",  label: "Facebook",    emoji: "📘", color: "bg-blue-50 text-blue-700 border-blue-300" },
-  { value: "instagram", label: "Instagram",   emoji: "📸", color: "bg-pink-50 text-pink-700 border-pink-300" },
-  { value: "webchat",   label: "Web Chat",    emoji: "💻", color: "bg-indigo-50 text-indigo-700 border-indigo-300" },
-  { value: "sms",       label: "SMS",         emoji: "📱", color: "bg-purple-50 text-purple-700 border-purple-300" },
-  { value: "telegram",  label: "Telegram",    emoji: "✈️",  color: "bg-sky-50 text-sky-700 border-sky-300" },
+  { value: "any",       label: "Any Channel", icon: Globe,          iconColor: "#6B7280", color: "bg-gray-100 text-gray-700 border-gray-300" },
+  { value: "whatsapp",  label: "WhatsApp",    icon: MessageCircle,  iconColor: "#25D366", color: "bg-green-50 text-green-700 border-green-300" },
+  { value: "facebook",  label: "Messenger",   icon: Facebook,       iconColor: "#1877F2", color: "bg-blue-50 text-blue-700 border-blue-300" },
+  { value: "instagram", label: "Instagram",   icon: Instagram,      iconColor: "#E4405F", color: "bg-pink-50 text-pink-700 border-pink-300" },
+  { value: "webchat",   label: "Web Chat",    icon: Globe,          iconColor: "#3B82F6", color: "bg-indigo-50 text-indigo-700 border-indigo-300" },
+  { value: "sms",       label: "SMS",         icon: Smartphone,     iconColor: "#6B7280", color: "bg-purple-50 text-purple-700 border-purple-300" },
+  { value: "telegram",  label: "Telegram",    icon: Send,           iconColor: "#0088CC", color: "bg-sky-50 text-sky-700 border-sky-300" },
 ];
 
 // ─── Trigger Config ───────────────────────────────────────────────────────────
@@ -231,7 +232,7 @@ function ChannelChip({ value, selected, onClick }: { value: string; selected: bo
           : "bg-white text-gray-500 border-gray-200 hover:border-gray-300 hover:text-gray-700"
       )}
     >
-      <span className="text-sm">{ch.emoji}</span>
+      <ch.icon className="w-3.5 h-3.5 shrink-0" style={{ color: ch.iconColor }} />
       <span>{ch.label}</span>
     </button>
   );
@@ -577,7 +578,10 @@ function ConditionsBlock({
                 <SelectContent>
                   {CHANNELS.filter(c => c.value !== "any").map(c => (
                     <SelectItem key={c.value} value={c.value}>
-                      <span className="flex items-center gap-1.5"><span>{c.emoji}</span><span>{c.label}</span></span>
+                      <span className="flex items-center gap-1.5">
+                        <c.icon className="w-3.5 h-3.5 shrink-0" style={{ color: c.iconColor }} />
+                        <span>{c.label}</span>
+                      </span>
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -762,7 +766,7 @@ function WorkflowSummary({
   if (normalized === "no_reply" && triggerDuration) triggerPhrase += ` for ${triggerDuration}h`;
 
   const conditionPhrases = conditions.filter(c => c.value).map(c => {
-    if (c.type === "channel") { const ch = CHANNELS.find(x => x.value === c.value); return ch ? `${ch.emoji} ${ch.label}` : c.value; }
+    if (c.type === "channel") { const ch = CHANNELS.find(x => x.value === c.value); return ch ? ch.label : c.value; }
     if (c.type === "keyword") return `keyword contains "${c.value}"`;
     if (c.type === "tag") return `tag is "${c.value}"`;
     if (c.type === "stage") return `stage is "${c.value}"`;
@@ -1081,7 +1085,7 @@ export function Workflows() {
     // Show channel from conditions array or legacy triggerConditions.channel
     const savedConds: WorkflowCondition[] = tc.conditions || [];
     const chCond = savedConds.find(c => c.type === "channel") || (tc.channel ? { value: tc.channel } : null);
-    if (chCond) { const ch = CHANNELS.find(c => c.value === chCond.value); if (ch) label += ` · ${ch.emoji} ${ch.label}`; }
+    if (chCond) { const ch = CHANNELS.find(c => c.value === chCond.value); if (ch) label += ` · ${ch.label}`; }
     return label;
   };
 
