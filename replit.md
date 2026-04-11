@@ -15,6 +15,88 @@ The application is a full multi-tenant SaaS implementation with:
 - Notification system for follow-up reminders (push & email)
 - PWA capabilities (installable, offline-first)
 
+## Recent Changes (April 11, 2026) — Multi-WhatsApp Number Support (Production Fix)
+
+**Background:** The Pro plan allows up to 5 WhatsApp numbers per account. The schema had `channelAccountId` on the `conversations` table for this purpose, but the runtime never wrote or read it — all numbers shared the same conversation threads and replies always went from the primary number.
+
+**Root causes fixed:**
+1. `findUserByTwilioCredentials` only queried `users.twilioWhatsappNumber` (primary). Secondary numbers in `registeredPhones` were invisible to the webhook router → messages dropped.
+2. The matched destination number was never passed downstream → `channelAccountId` was always `NULL`.
+3. `getConversationByContactAndChannel` matched only on `contactId + channel` → same contact messaging two numbers collapsed into one thread.
+4. `WhatsAppAdapter.send()` always called `getUserTwilioNumber(userId)` (primary) → replies went from wrong number.
+
+**Fixes implemented (4 files, backward-compatible):**
+
+| Fix | File | Change |
+|-----|------|--------|
+| 1 — Secondary number routing | `server/userTwilio.ts` | `findUserByTwilioCredentials` now returns `{ user, matchedPhone }` and falls back to `registeredPhones` table lookup with `twilioAccountSid` cross-check |
+| 2 — `channelAccountId` through inbound pipeline | `server/routes.ts`, `server/routes/webhooks.ts`, `server/channelService.ts` | `matchedPhone` passed as `channelAccountId` to `processIncomingMessage`; stored on `createConversation` |
+| 3 — Conversation isolation per number | `server/storage.ts` | `getConversationByContactAndChannel` accepts optional `channelAccountId`; when provided, matches `(contactId, channel, channelAccountId)` OR `(contactId, channel, NULL)` (backward compat), preferring exact match; auto-backfills `NULL` rows on first contact |
+| 4 — Outbound from correct number | `server/channelAdapters.ts`, `server/whatsappService.ts`, `server/userTwilio.ts` | `WhatsAppAdapter` reads `conversation.channelAccountId` and passes it as `fromNumber` override all the way to Twilio `messages.create({ from: whatsapp:${fromNumber} })` |
+
+**One-time backfill run (April 11, 2026):** 6 existing WhatsApp conversations updated with `channelAccountId = users.twilio_whatsapp_number`. 6 Meta-only conversations left as `NULL` (correct — Meta uses `metaPhoneNumberId`, not a phone string).
+
+**Key files changed:** `server/userTwilio.ts`, `server/routes.ts`, `server/routes/webhooks.ts`, `server/channelService.ts`, `server/storage.ts`, `server/channelAdapters.ts`, `server/whatsappService.ts`
+
+---
+
+## ⚠️ PROTECTED PRODUCTION FEATURE — Multi-Number WhatsApp Isolation
+
+**Any future changes to the following files MUST preserve all behaviors listed below. Run the regression checklist before merging.**
+
+### Protected files
+- `server/userTwilio.ts` — `findUserByTwilioCredentials`, `sendUserWhatsAppMessage`, `sendUserWhatsAppMedia`
+- `server/routes.ts` — Twilio inbound webhook handler (lines ~1548–1685)
+- `server/routes/webhooks.ts` — Secondary Twilio inbound endpoint
+- `server/channelService.ts` — `processIncomingMessage`
+- `server/storage.ts` — `getConversationByContactAndChannel`
+- `server/channelAdapters.ts` — `WhatsAppAdapter.send()`
+- `server/whatsappService.ts` — `sendWhatsAppMessage`, `sendWhatsAppMedia`
+
+### Required behaviors (must never regress)
+
+1. **Secondary number routing** — `findUserByTwilioCredentials(accountSid, toPhone)` must check `registeredPhones` as a fallback when `toPhone` is not in `users.twilioWhatsappNumber`. Must verify `accountSid` matches the registered phone owner. Must return `{ user, matchedPhone }` (not just `user`).
+
+2. **`channelAccountId` persistence** — Every inbound WhatsApp/SMS message must have the destination business number (`matchedPhone`) passed as `channelAccountId` into `processIncomingMessage` and stored on the `conversations` row at creation time.
+
+3. **Conversation isolation** — `getConversationByContactAndChannel(contactId, channel, channelAccountId)` must return different conversation rows for different `channelAccountId` values. The same contact messaging two different numbers must produce two separate conversation IDs, not one merged thread.
+
+4. **Backward-compatible NULL handling** — When `channelAccountId` is not provided (non-WhatsApp channels, or older callers), the lookup must fall back to the original `contactId + channel` match. Existing conversations with `channelAccountId = NULL` must be backfilled on first match and not duplicated.
+
+5. **Outbound number selection** — `WhatsAppAdapter.send()` must read `conversation.channelAccountId` and pass it as `fromNumber` to `sendWhatsAppMessage / sendWhatsAppMedia`. When set, Twilio must receive `from: whatsapp:${channelAccountId}`, not `from: whatsapp:${users.twilioWhatsappNumber}`. Meta provider must remain unaffected (ignore `fromNumber`).
+
+### Regression checklist (run after any change to protected files)
+
+```sql
+-- 1. Confirm secondary number lookup works
+SELECT u.id, u.email, rp.phone_number, 'registered_phones' AS source
+FROM registered_phones rp
+JOIN users u ON u.id = rp.user_id AND u.twilio_account_sid = '<test_sid>'
+WHERE rp.phone_number = '<secondary_phone>';
+
+-- 2. Confirm conversation isolation: same contact, two numbers → two rows
+SELECT contact_id, channel, channel_account_id, COUNT(*) AS thread_count
+FROM conversations
+WHERE contact_id = '<contact_id>' AND channel = 'whatsapp'
+GROUP BY contact_id, channel, channel_account_id;
+-- Expected: 2 rows with distinct channel_account_id values, each count = 1
+
+-- 3. Confirm no NULL channelAccountId on new WhatsApp conversations
+SELECT COUNT(*) AS new_nulls
+FROM conversations
+WHERE channel = 'whatsapp' AND channel_account_id IS NULL
+  AND created_at > NOW() - INTERVAL '1 hour';
+-- Expected: 0
+
+-- 4. Confirm reply routing (conversation has channelAccountId set)
+SELECT id, channel_account_id FROM conversations
+WHERE channel = 'whatsapp' AND channel_account_id IS NOT NULL
+LIMIT 5;
+-- Expected: all rows show a phone number, not NULL
+```
+
+---
+
 ## Recent Changes (March 24, 2026) — Inbox Direct-Path & Redis Circuit Breaker
 
 **Root cause:** Upstash Redis hit its 500K free-tier request limit. The BullMQ worker was crash-looping, hammering Redis with reconnect attempts and dropping all inbound messages.
