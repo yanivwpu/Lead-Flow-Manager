@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { LocalizedTemplateSelector } from "@/components/LocalizedTemplateSelector";
 import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
 import { useTranslation } from "react-i18next";
 
@@ -157,6 +158,7 @@ function GrowthEnginesTab() {
 export function Templates() {
   const { data: subscription, isLoading: subLoading } = useSubscription();
   const queryClient = useQueryClient();
+  const { toast } = useToast();
   const [selectedTemplate, setSelectedTemplate] = useState<MessageTemplate | null>(null);
   const [sendDialogOpen, setSendDialogOpen] = useState(false);
   const [selectedChat, setSelectedChat] = useState<RetargetableChat | null>(null);
@@ -177,10 +179,25 @@ export function Templates() {
 
   const syncTemplatesMutation = useMutation({
     mutationFn: async () => {
-      return apiRequest("POST", "/api/templates/sync");
+      const res = await apiRequest("POST", "/api/templates/sync");
+      return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/templates"] });
+      const count = (data?.inserted ?? 0) + (data?.updated ?? 0);
+      toast({
+        title: "Templates synced",
+        description: data?.message || `${count} template(s) synced successfully.`,
+      });
+    },
+    onError: (error: any) => {
+      const msg = error?.message || "";
+      const clean = msg.replace(/^\d+:\s*/, "").replace(/^\{"error":"/, "").replace(/"\}$/, "");
+      toast({
+        title: "Sync failed",
+        description: clean || "Failed to sync templates. Check your WhatsApp connection in Settings.",
+        variant: "destructive",
+      });
     },
   });
 

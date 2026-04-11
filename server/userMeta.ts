@@ -473,7 +473,7 @@ export async function getMetaMessageTemplates(
   }
 
   const response = await fetch(
-    `${META_GRAPH_API_URL}/${user.metaBusinessAccountId}/message_templates?fields=name,status,language,category,components&limit=100&access_token=${accessToken}`
+    `${META_GRAPH_API_URL}/${user.metaBusinessAccountId}/message_templates?fields=id,name,status,language,category,components&limit=100&access_token=${accessToken}`
   );
 
   if (!response.ok) {

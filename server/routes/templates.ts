@@ -1,6 +1,7 @@
 import type { Express } from "express";
 import { storage } from "../storage";
 import { getMetaMessageTemplates } from "../userMeta";
+import { getUserTwilioClient } from "../userTwilio";
 import { subscriptionService } from "../subscriptionService";
 
 export function registerTemplateRoutes(app: Express): void {
@@ -270,7 +271,7 @@ export function registerTemplateRoutes(app: Express): void {
     }
   });
 
-  // Sync templates from Twilio Content API
+  // Sync templates from active WhatsApp provider (Meta or Twilio)
   app.post("/api/templates/sync", async (req, res) => {
     try {
       if (!req.user) {
@@ -283,23 +284,225 @@ export function registerTemplateRoutes(app: Express): void {
       }
 
       const user = await storage.getUser(req.user.id);
-      if (!user?.twilioConnected || !user.twilioAccountSid || !user.twilioAuthToken) {
-        return res
-          .status(400)
-          .json({ error: "Twilio is not connected. Connect Twilio in Settings first." });
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
       }
 
-      console.log(`Template sync requested for user ${req.user.id}`);
+      const provider = user.whatsappProvider || "twilio";
+      console.log(`[TemplateSync] Started — userId=${req.user.id} provider=${provider}`);
+
+      let fetched = 0;
+      let inserted = 0;
+      let updated = 0;
+      let skipped = 0;
+
+      // ===== META SYNC =====
+      if (provider === "meta") {
+        if (!user.metaConnected || !user.metaBusinessAccountId) {
+          return res.status(400).json({
+            error: "Meta WhatsApp is not connected. Connect Meta in Settings first.",
+          });
+        }
+
+        console.log(`[TemplateSync] Meta Business Account ID: ${user.metaBusinessAccountId}`);
+
+        const rawTemplates = await getMetaMessageTemplates(req.user.id);
+        fetched = rawTemplates.length;
+
+        console.log(
+          `[TemplateSync] Meta returned ${fetched} template(s): ${rawTemplates
+            .map((t: any) => `${t.name}[${t.status}/${t.language}]`)
+            .join(", ")}`
+        );
+
+        for (const t of rawTemplates) {
+          try {
+            const status = (t.status || "pending").toLowerCase();
+            const category = (t.category || "utility").toLowerCase();
+            const language = t.language || "en";
+            const metaId = `meta_${t.id || t.name}_${language}`;
+
+            // Extract components
+            let bodyText = "";
+            let headerType: string | null = null;
+            let headerContent: string | null = null;
+            let footerText: string | null = null;
+            let buttons: any[] = [];
+            const variables: string[] = [];
+
+            for (const comp of t.components || []) {
+              if (comp.type === "BODY") {
+                bodyText = comp.text || "";
+                const vars = bodyText.match(/\{\{\d+\}\}/g) || [];
+                vars.forEach((v: string) => {
+                  if (!variables.includes(v)) variables.push(v);
+                });
+              } else if (comp.type === "HEADER") {
+                headerType = (comp.format || "").toLowerCase() || null;
+                if (comp.format === "TEXT") {
+                  headerContent = comp.text || null;
+                } else if (comp.example?.header_handle?.[0]) {
+                  headerContent = comp.example.header_handle[0];
+                }
+              } else if (comp.type === "FOOTER") {
+                footerText = comp.text || null;
+              } else if (comp.type === "BUTTONS") {
+                buttons = comp.buttons || [];
+              }
+            }
+
+            const existing = await storage.getMessageTemplateByTwilioSid(req.user.id, metaId);
+
+            if (existing) {
+              await storage.updateMessageTemplate(existing.id, {
+                name: t.name,
+                status,
+                category,
+                bodyText,
+                headerType,
+                headerContent,
+                footerText,
+                buttons,
+                variables,
+                lastSyncedAt: new Date(),
+              });
+              updated++;
+              console.log(`[TemplateSync] Updated: ${t.name} [${status}]`);
+            } else {
+              await storage.createMessageTemplate({
+                userId: req.user.id,
+                twilioSid: metaId,
+                name: t.name,
+                language,
+                category,
+                status,
+                templateType: "text",
+                bodyText,
+                headerType,
+                headerContent,
+                footerText,
+                buttons,
+                carouselCards: [],
+                variables,
+              });
+              inserted++;
+              console.log(`[TemplateSync] Inserted: ${t.name} [${status}]`);
+            }
+          } catch (err) {
+            skipped++;
+            console.error(`[TemplateSync] Skipped template "${t.name}":`, err);
+          }
+        }
+
+      // ===== TWILIO SYNC =====
+      } else {
+        if (!user.twilioConnected || !user.twilioAccountSid || !user.twilioAuthToken) {
+          return res.status(400).json({
+            error: "Twilio is not connected. Connect Twilio in Settings first.",
+          });
+        }
+
+        console.log(`[TemplateSync] Twilio Account SID: ${user.twilioAccountSid}`);
+
+        const client = await getUserTwilioClient(req.user.id);
+        if (!client) {
+          return res.status(400).json({ error: "Failed to initialize Twilio client." });
+        }
+
+        let contents: any[] = [];
+        try {
+          contents = await (client as any).contentV1.contentAndApprovals.list({ limit: 100 });
+        } catch (err: any) {
+          console.error(`[TemplateSync] Twilio Content API error:`, err);
+          return res.status(500).json({
+            error: `Failed to fetch Twilio templates: ${err.message}`,
+          });
+        }
+
+        fetched = contents.length;
+        console.log(`[TemplateSync] Twilio returned ${fetched} template(s)`);
+
+        for (const t of contents) {
+          try {
+            const approvals = t.approvalRequests || {};
+            const whatsapp = approvals.whatsapp || {};
+            const status = (whatsapp.status || "pending").toLowerCase();
+            const category = (whatsapp.category || "utility").toLowerCase();
+            const language = whatsapp.language || "en";
+            const name = whatsapp.name || t.friendlyName || t.sid;
+
+            console.log(`[TemplateSync] Twilio template: ${name} sid=${t.sid} status=${status}`);
+
+            // Extract body text from types object
+            let bodyText = "";
+            const types = t.types || {};
+            for (const typeVal of Object.values(types) as any[]) {
+              if (typeVal?.body) {
+                bodyText = typeVal.body;
+                break;
+              }
+            }
+
+            const variables: string[] = [];
+            const vars = bodyText.match(/\{\{\d+\}\}/g) || [];
+            vars.forEach((v: string) => {
+              if (!variables.includes(v)) variables.push(v);
+            });
+
+            const existing = await storage.getMessageTemplateByTwilioSid(req.user.id, t.sid);
+
+            if (existing) {
+              await storage.updateMessageTemplate(existing.id, {
+                name,
+                status,
+                category,
+                bodyText,
+                variables,
+                lastSyncedAt: new Date(),
+              });
+              updated++;
+            } else {
+              await storage.createMessageTemplate({
+                userId: req.user.id,
+                twilioSid: t.sid,
+                name,
+                language,
+                category,
+                status,
+                templateType: "text",
+                bodyText,
+                headerType: null,
+                headerContent: null,
+                footerText: null,
+                buttons: [],
+                carouselCards: [],
+                variables,
+              });
+              inserted++;
+            }
+          } catch (err) {
+            skipped++;
+            console.error(`[TemplateSync] Skipped Twilio template ${t.sid}:`, err);
+          }
+        }
+      }
+
+      console.log(
+        `[TemplateSync] Done — fetched=${fetched} inserted=${inserted} updated=${updated} skipped=${skipped}`
+      );
 
       res.json({
         success: true,
-        message:
-          "Template sync initiated. Note: Templates must be created and approved in your Twilio console first.",
-        templatesFound: 0,
+        message: `Sync complete: ${inserted + updated} template(s) synced (${inserted} new, ${updated} updated${skipped > 0 ? `, ${skipped} skipped` : ""}).`,
+        provider,
+        templatesFound: fetched,
+        inserted,
+        updated,
+        skipped,
       });
-    } catch (error) {
-      console.error("Error syncing templates:", error);
-      res.status(500).json({ error: "Failed to sync templates" });
+    } catch (error: any) {
+      console.error("[TemplateSync] Unexpected error:", error);
+      res.status(500).json({ error: error.message || "Failed to sync templates" });
     }
   });
 
