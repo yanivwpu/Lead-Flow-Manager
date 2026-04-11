@@ -22,6 +22,7 @@ import {
   EyeOff,
   Facebook,
   Instagram,
+  Clock,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 
@@ -29,7 +30,11 @@ interface ConnectMetaFbIgWizardProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   channel: "facebook" | "instagram";
-  mode?: "connect" | "manage";
+  /** "connect" = full 3-step flow from credentials
+   *  "pending-webhook" = start at step 2 (credentials already saved)
+   *  "manage" = view-only webhook config for fully connected channel
+   */
+  mode?: "connect" | "pending-webhook" | "manage";
   existingWebhookUrl?: string;
   existingVerifyToken?: string;
 }
@@ -50,8 +55,11 @@ export function ConnectMetaFbIgWizard({
   const ChannelIcon = isFacebook ? Facebook : Instagram;
   const iconColor = isFacebook ? "#1877F2" : "#E4405F";
 
-  const [step, setStep] = useState<Step>(mode === "manage" ? 2 : 1);
+  const initialStep: Step = mode === "connect" ? 1 : 2;
+
+  const [step, setStep] = useState<Step>(initialStep);
   const [loading, setLoading] = useState(false);
+  const [confirmLoading, setConfirmLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [accessToken, setAccessToken] = useState("");
   const [pageId, setPageId] = useState("");
@@ -68,8 +76,9 @@ export function ConnectMetaFbIgWizard({
   };
 
   const reset = () => {
-    setStep(mode === "manage" ? 2 : 1);
+    setStep(initialStep);
     setLoading(false);
+    setConfirmLoading(false);
     setError(null);
     setAccessToken("");
     setPageId("");
@@ -96,11 +105,7 @@ export function ConnectMetaFbIgWizard({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({
-          type,
-          name: channelLabel,
-          config,
-        }),
+        body: JSON.stringify({ type, name: channelLabel, config }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -111,8 +116,8 @@ export function ConnectMetaFbIgWizard({
         setWebhookUrl(data.webhookSetup.webhookUrl);
         setVerifyToken(data.webhookSetup.verifyToken);
       }
+      // Invalidate integrations only — channel is NOT yet connected
       queryClient.invalidateQueries({ queryKey: ["/api/integrations"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/channels"] });
       queryClient.invalidateQueries({ queryKey: ["/api/integrations/meta-webhook-config"] });
       setStep(2);
     } catch (err: any) {
@@ -122,9 +127,37 @@ export function ConnectMetaFbIgWizard({
     }
   };
 
-  const handleDone = () => {
-    queryClient.invalidateQueries({ queryKey: ["/api/channels"] });
-    setStep(3);
+  const handleConfirmWebhook = async () => {
+    setConfirmLoading(true);
+    try {
+      const res = await fetch("/api/integrations/meta-webhook-confirm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ channel }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast({
+          title: "Could not confirm webhook",
+          description: data.error || "Please try again.",
+          variant: "destructive",
+        });
+        return;
+      }
+      // Channel is now fully connected
+      queryClient.invalidateQueries({ queryKey: ["/api/channels"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/integrations/meta-webhook-config"] });
+      setStep(3);
+    } catch (err: any) {
+      toast({
+        title: "Error",
+        description: err.message || "Failed to confirm webhook. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setConfirmLoading(false);
+    }
   };
 
   const webhookEvents = ["messages", "messaging_postbacks", "messaging_seen"];
@@ -133,7 +166,7 @@ export function ConnectMetaFbIgWizard({
     <Dialog
       open={open}
       onOpenChange={(v) => {
-        if (!loading) {
+        if (!loading && !confirmLoading) {
           if (!v) reset();
           onOpenChange(v);
         }
@@ -150,19 +183,24 @@ export function ConnectMetaFbIgWizard({
             </div>
             <div>
               <DialogTitle>
-                {step === 3 ? `${channelLabel} Connected!` : `Connect ${channelLabel}`}
+                {step === 3
+                  ? `${channelLabel} Connected!`
+                  : mode === "manage"
+                  ? `${channelLabel} — Webhook Config`
+                  : `Connect ${channelLabel}`}
               </DialogTitle>
               <DialogDescription>
                 {step === 1 && "Enter your credentials from Meta Developer Portal"}
-                {step === 2 && (mode === "manage"
-                  ? "Your webhook configuration for Meta Developer Portal"
-                  : "Configure the webhook in Meta Developer Portal")}
-                {step === 3 && "Your channel is set up and ready to use"}
+                {step === 2 &&
+                  (mode === "manage"
+                    ? "Your webhook configuration for Meta Developer Portal"
+                    : "Configure the webhook in Meta Developer Portal to activate inbound messages")}
+                {step === 3 && "Your channel is connected and receiving messages"}
               </DialogDescription>
             </div>
           </div>
 
-          {step !== 3 && (
+          {step !== 3 && mode !== "manage" && (
             <div className="flex items-center gap-1 mt-4">
               {([1, 2] as Step[]).map((s, i) => (
                 <div key={s} className="flex items-center gap-1">
@@ -191,6 +229,7 @@ export function ConnectMetaFbIgWizard({
           )}
         </DialogHeader>
 
+        {/* ── Step 1: Credentials ── */}
         {step === 1 && (
           <div className="space-y-4 py-2">
             <div className="bg-blue-50 border border-blue-100 rounded-lg p-3">
@@ -275,14 +314,20 @@ export function ConnectMetaFbIgWizard({
           </div>
         )}
 
+        {/* ── Step 2: Webhook Setup ── */}
         {step === 2 && (
           <div className="space-y-4 py-2">
             {mode !== "manage" && (
-              <div className="flex items-center gap-2 p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
-                <CheckCircle2 className="h-4 w-4 text-emerald-600 flex-shrink-0" />
-                <p className="text-sm text-emerald-800 font-medium">
-                  Credentials saved — messaging engine is ready
-                </p>
+              <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                <Clock className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm text-amber-800 font-medium">
+                    Credentials saved — complete webhook setup to start receiving messages
+                  </p>
+                  <p className="text-xs text-amber-700 mt-0.5">
+                    The channel won't show as connected until you confirm webhook setup below.
+                  </p>
+                </div>
               </div>
             )}
 
@@ -428,14 +473,6 @@ export function ConnectMetaFbIgWizard({
               </div>
             </div>
 
-            <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800">
-              <AlertCircle className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
-              <p>
-                <strong>Inbound messages won't arrive</strong> until the webhook
-                is verified and subscribed in Meta Developer Portal.
-              </p>
-            </div>
-
             <div className="flex gap-2">
               <Button
                 variant="outline"
@@ -448,17 +485,23 @@ export function ConnectMetaFbIgWizard({
               {mode !== "manage" && (
                 <Button
                   className="flex-1 bg-emerald-600 hover:bg-emerald-700"
-                  onClick={handleDone}
+                  onClick={handleConfirmWebhook}
+                  disabled={confirmLoading}
                   data-testid="button-webhook-done"
                 >
-                  <CheckCircle2 className="h-4 w-4 mr-1" />
-                  Done — Webhook Configured
+                  {confirmLoading ? (
+                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                  ) : (
+                    <CheckCircle2 className="h-4 w-4 mr-1" />
+                  )}
+                  I've completed webhook setup
                 </Button>
               )}
             </div>
           </div>
         )}
 
+        {/* ── Step 3: Success ── */}
         {step === 3 && (
           <div className="flex flex-col items-center justify-center py-8 gap-4">
             <div className="w-16 h-16 rounded-full bg-emerald-50 flex items-center justify-center">
@@ -468,7 +511,7 @@ export function ConnectMetaFbIgWizard({
               <p className="font-semibold text-gray-900">{channelLabel} is connected!</p>
               <p className="text-sm text-gray-500">
                 {isFacebook ? "Facebook Messenger" : "Instagram DM"} messages
-                will appear in your inbox once the webhook is active.
+                will now appear in your inbox.
               </p>
             </div>
             <Button

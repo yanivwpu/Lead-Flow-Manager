@@ -19,6 +19,7 @@ import {
   Eye,
   EyeOff,
   Trash2,
+  Clock,
 } from "lucide-react";
 import { ConnectMetaWizard } from "@/components/ConnectMetaWizard";
 import { ConnectTwilioWizard } from "@/components/ConnectTwilioWizard";
@@ -122,7 +123,10 @@ export function ChannelSettings() {
   const [copied, setCopied] = useState(false);
   const [connectMetaOpen, setConnectMetaOpen] = useState(false);
   const [connectTwilioOpen, setConnectTwilioOpen] = useState(false);
-  const [connectFbIgChannel, setConnectFbIgChannel] = useState<'facebook' | 'instagram' | null>(null);
+  const [connectFbIgConfig, setConnectFbIgConfig] = useState<{
+    channel: 'facebook' | 'instagram';
+    mode: 'connect' | 'pending-webhook';
+  } | null>(null);
   const [manageFbIgChannel, setManageFbIgChannel] = useState<'facebook' | 'instagram' | null>(null);
   const [showManageToken, setShowManageToken] = useState(false);
   const [manageCopiedUrl, setManageCopiedUrl] = useState(false);
@@ -267,7 +271,7 @@ export function ChannelSettings() {
     },
   });
 
-  const getChannelStatus = (channel: Channel) => {
+  const getChannelStatus = (channel: Channel): 'connected' | 'pending' | 'disconnected' => {
     const setting = channels.find(c => c.channel === channel);
 
     if (channel === 'whatsapp') {
@@ -278,6 +282,16 @@ export function ChannelSettings() {
 
     if (channel === 'sms') {
       return user?.twilioConnected ? 'connected' : 'disconnected';
+    }
+
+    // For Facebook/Instagram: credentials may be saved (integration exists) but
+    // webhook not yet confirmed — show a "pending" state.
+    if (channel === 'facebook' || channel === 'instagram') {
+      if (setting?.isConnected) return 'connected';
+      const integrationType = channel === 'facebook' ? 'meta_facebook' : 'meta_instagram';
+      const hasIntegration = integrations.some(i => i.type === integrationType);
+      if (hasIntegration) return 'pending';
+      return 'disconnected';
     }
 
     return setting?.isConnected ? 'connected' : 'disconnected';
@@ -315,8 +329,11 @@ export function ChannelSettings() {
   const copyWebhookUrl = (url: string) => copyText(url, setCopied);
   const webhookBaseUrl = window.location.origin;
 
-  const handleFbIgConnectClick = (channel: 'facebook' | 'instagram') => {
-    setConnectFbIgChannel(channel);
+  const handleFbIgConnectClick = (
+    channel: 'facebook' | 'instagram',
+    mode: 'connect' | 'pending-webhook' = 'connect'
+  ) => {
+    setConnectFbIgConfig({ channel, mode });
   };
 
   const handleFbIgSettingsClick = (channel: 'facebook' | 'instagram') => {
@@ -371,6 +388,8 @@ export function ChannelSettings() {
                   "flex items-center justify-between p-3 sm:p-4 rounded-lg border transition-colors",
                   status === 'connected'
                     ? "bg-gray-50 border-gray-200"
+                    : status === 'pending'
+                    ? "bg-amber-50/60 border-amber-200"
                     : "bg-gray-50/50 border-gray-100"
                 )}
               >
@@ -382,10 +401,15 @@ export function ChannelSettings() {
                     <Icon className="h-4 w-4" style={{ color: config.color }} />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-medium text-gray-900">{config.label}</span>
                       {status === 'connected' ? (
                         <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+                      ) : status === 'pending' ? (
+                        <span className="inline-flex items-center gap-1 text-[10px] bg-amber-100 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded font-medium">
+                          <Clock className="h-2.5 w-2.5" />
+                          Webhook pending
+                        </span>
                       ) : (
                         <XCircle className="h-3.5 w-3.5 text-gray-300" />
                       )}
@@ -395,7 +419,11 @@ export function ChannelSettings() {
                         </span>
                       )}
                     </div>
-                    <p className="text-xs text-gray-500 truncate">{config.description}</p>
+                    <p className="text-xs text-gray-500 truncate">
+                      {status === 'pending' && isFbIg
+                        ? "Credentials saved — webhook setup required to receive messages"
+                        : config.description}
+                    </p>
                   </div>
                 </div>
 
@@ -407,6 +435,17 @@ export function ChannelSettings() {
                       disabled={updateChannelMutation.isPending}
                       data-testid={`switch-channel-${channel}`}
                     />
+                  )}
+
+                  {status === 'pending' && isFbIg && (
+                    <Button
+                      size="sm"
+                      className="bg-amber-600 hover:bg-amber-700 text-white text-xs"
+                      onClick={() => handleFbIgConnectClick(channel as 'facebook' | 'instagram', 'pending-webhook')}
+                      data-testid={`button-complete-setup-${channel}`}
+                    >
+                      Complete Setup
+                    </Button>
                   )}
 
                   {status === 'disconnected' && isFbIg && (
@@ -482,13 +521,27 @@ export function ChannelSettings() {
           })}
       </div>
 
-      {/* Facebook / Instagram — full 3-step connect wizard */}
-      {connectFbIgChannel && (
+      {/* Facebook / Instagram — connect or complete-setup wizard */}
+      {connectFbIgConfig && (
         <ConnectMetaFbIgWizard
-          open={!!connectFbIgChannel}
-          onOpenChange={(v) => { if (!v) setConnectFbIgChannel(null); }}
-          channel={connectFbIgChannel}
-          mode="connect"
+          open={!!connectFbIgConfig}
+          onOpenChange={(v) => { if (!v) setConnectFbIgConfig(null); }}
+          channel={connectFbIgConfig.channel}
+          mode={connectFbIgConfig.mode}
+          existingWebhookUrl={
+            connectFbIgConfig.mode === 'pending-webhook'
+              ? (connectFbIgConfig.channel === 'facebook'
+                ? metaWebhookConfig?.facebook?.webhookUrl
+                : metaWebhookConfig?.instagram?.webhookUrl)
+              : undefined
+          }
+          existingVerifyToken={
+            connectFbIgConfig.mode === 'pending-webhook'
+              ? (connectFbIgConfig.channel === 'facebook'
+                ? metaWebhookConfig?.facebook?.verifyToken
+                : metaWebhookConfig?.instagram?.verifyToken)
+              : undefined
+          }
         />
       )}
 
