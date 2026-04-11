@@ -91,21 +91,24 @@ export async function verifyUserTwilioConnection(userId: string): Promise<boolea
 export async function sendUserWhatsAppMessage(
   userId: string,
   toPhone: string,
-  message: string
+  message: string,
+  fromNumber?: string // optional override — used when conversation.channelAccountId is a secondary number
 ): Promise<{ sid: string; status: string }> {
   const client = await getUserTwilioClient(userId);
-  const fromNumber = await getUserTwilioNumber(userId);
+  const defaultFromNumber = await getUserTwilioNumber(userId);
+  const actualFrom = fromNumber || defaultFromNumber;
 
-  if (!client || !fromNumber) {
+  if (!client || !actualFrom) {
     throw new Error("Twilio not connected. Please connect your Twilio account first.");
   }
 
   const result = await client.messages.create({
-    from: `whatsapp:${fromNumber}`,
+    from: `whatsapp:${actualFrom}`,
     to: `whatsapp:${toPhone}`,
     body: message,
   });
 
+  console.log(`[TwilioSend] Sent from ${actualFrom} to ${toPhone}, sid: ${result.sid}`);
   return { sid: result.sid, status: result.status };
 }
 
@@ -113,17 +116,19 @@ export async function sendUserWhatsAppMedia(
   userId: string,
   toPhone: string,
   mediaUrl: string,
-  caption?: string
+  caption?: string,
+  fromNumber?: string // optional override — used when conversation.channelAccountId is a secondary number
 ): Promise<{ sid: string; status: string }> {
   const client = await getUserTwilioClient(userId);
-  const fromNumber = await getUserTwilioNumber(userId);
+  const defaultFromNumber = await getUserTwilioNumber(userId);
+  const actualFrom = fromNumber || defaultFromNumber;
 
-  if (!client || !fromNumber) {
+  if (!client || !actualFrom) {
     throw new Error("Twilio not connected. Please connect your Twilio account first.");
   }
 
   const messageOptions: any = {
-    from: `whatsapp:${fromNumber}`,
+    from: `whatsapp:${actualFrom}`,
     to: `whatsapp:${toPhone}`,
     mediaUrl: [mediaUrl],
   };
@@ -302,21 +307,40 @@ export function parseStatusWebhook(body: any) {
 export async function findUserByTwilioCredentials(
   accountSid: string,
   twilioPhone: string
-): Promise<User | undefined> {
+): Promise<{ user: User; matchedPhone: string } | undefined> {
   const { db } = await import("../drizzle/db");
-  const { users } = await import("@shared/schema");
+  const { users, registeredPhones } = await import("@shared/schema");
   const { eq, and } = await import("drizzle-orm");
 
   const normalizedPhone = twilioPhone.replace(/[^\d+]/g, "");
 
-  const result = await db.select().from(users).where(
+  // 1. Check primary number in users table
+  const primaryResult = await db.select().from(users).where(
     and(
       eq(users.twilioAccountSid, accountSid),
       eq(users.twilioWhatsappNumber, normalizedPhone)
     )
   );
+  if (primaryResult[0]) {
+    return { user: primaryResult[0], matchedPhone: normalizedPhone };
+  }
 
-  return result[0];
+  // 2. Check registeredPhones table (secondary numbers)
+  const phoneRow = await db.select().from(registeredPhones)
+    .where(eq(registeredPhones.phoneNumber, normalizedPhone));
+  if (!phoneRow[0]) return undefined;
+
+  // Verify the accountSid belongs to the user who owns this registered phone
+  const userRow = await db.select().from(users).where(
+    and(
+      eq(users.id, phoneRow[0].userId),
+      eq(users.twilioAccountSid, accountSid)
+    )
+  );
+  if (!userRow[0]) return undefined;
+
+  console.log(`[TwilioRouter] Matched secondary number ${normalizedPhone} → userId: ${userRow[0].id}`);
+  return { user: userRow[0], matchedPhone: normalizedPhone };
 }
 
 export async function findOrCreateChatByPhone(

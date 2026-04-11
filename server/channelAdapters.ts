@@ -107,20 +107,26 @@ class WhatsAppAdapter implements ChannelAdapter {
       const phone = contact.phone.startsWith("+") ? contact.phone : `+${contact.phone}`;
       const isMedia = !!(params.mediaUrl && params.contentType !== "text");
 
+      // Multi-number: use the specific business number this conversation is tied to
+      const fromNumber = conversation.channelAccountId || undefined;
+      if (fromNumber) {
+        console.log(`[WhatsAppAdapter] Using channelAccountId=${fromNumber} as from-number (multi-number conversation)`);
+      }
+
       if (isMedia) {
         const mediaType = (params.contentType === "video" ? "video"
           : params.contentType === "audio" ? "audio"
           : params.contentType === "document" ? "document"
           : "image") as "image" | "video" | "audio" | "document";
         const result = await sendWhatsAppMedia(
-          conversation.userId, phone, params.mediaUrl!, mediaType, params.content
+          conversation.userId, phone, params.mediaUrl!, mediaType, params.content, fromNumber
         );
         console.log(`[WhatsAppAdapter] media sent via ${result.provider} to ${phone}`);
         if (!result.success) return { success: false, error: result.error };
         return { success: true, externalMessageId: result.messageId };
       }
 
-      const result = await sendWhatsAppMessage(conversation.userId, phone, params.content);
+      const result = await sendWhatsAppMessage(conversation.userId, phone, params.content, fromNumber);
       console.log(`[WhatsAppAdapter] text sent via ${result.provider} to ${phone}`);
       if (!result.success) return { success: false, error: result.error };
       return { success: true, externalMessageId: result.messageId };

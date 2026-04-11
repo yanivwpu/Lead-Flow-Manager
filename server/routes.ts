@@ -1544,16 +1544,17 @@ export async function registerRoutes(
 
       console.log(`[Twilio Webhook] Parsed — from: ${parsed.from}, to: ${parsed.to}, accountSid: ${parsed.accountSid}, channel: ${channel}, messageSid: ${parsed.messageSid}`);
 
-      // Find user by their Twilio Account SID and receiving phone number
-      const user = await findUserByTwilioCredentials(parsed.accountSid, parsed.to);
+      // Find user by their Twilio Account SID and receiving phone number (primary or secondary registered number)
+      const twilioMatch = await findUserByTwilioCredentials(parsed.accountSid, parsed.to);
       
-      if (!user) {
+      if (!twilioMatch) {
         console.warn(`[Twilio Webhook] WARNING: No user found — accountSid: ${parsed.accountSid}, to: ${parsed.to}. Message dropped.`);
         console.warn(`[Twilio Webhook] Hint: Ensure the user has connected Twilio with matching Account SID and WhatsApp number.`);
         return res.status(200).send("");
       }
 
-      console.log(`[Twilio Webhook] User matched — userId: ${user.id} (email: ${user.email})`);
+      const { user, matchedPhone } = twilioMatch;
+      console.log(`[Twilio Webhook] User matched — userId: ${user.id} (email: ${user.email}), matchedPhone: ${matchedPhone})`);
 
       // Environment mode — drives strict vs. permissive behaviour
       const isProduction = process.env.NODE_ENV === "production";
@@ -1672,6 +1673,7 @@ export async function registerRoutes(
         userId,
         channel,
         channelContactId: normalizedFrom,
+        channelAccountId: matchedPhone, // the business number that received the message
         contactName: parsed.profileName || normalizedFrom,
         content: parsed.body,
         contentType: 'text',

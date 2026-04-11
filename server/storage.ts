@@ -47,7 +47,7 @@ import {
 } from "@shared/schema";
 import { db } from "../drizzle/db";
 import { users, chats, registeredPhones, messageUsage, conversationWindows, teamMembers, workflows, workflowExecutions, recurringReminders, webhooks, webhookDeliveries, integrations, messageTemplates, templateSends, dripCampaigns, dripSteps, dripEnrollments, dripSends, chatbotFlows, chatbotSessions, salespeople, demoBookings, salesConversions, adminSettings, contacts, conversations, messages, activityEvents, channelSettings, supportTickets, partners, commissions, agreementAcceptances, contactNotes, type InsertConversationWindow, type ConversationWindow } from "@shared/schema";
-import { eq, and, lte, sql, isNotNull, asc, desc, gte, sum, gt, or, like, ilike } from "drizzle-orm";
+import { eq, and, lte, sql, isNotNull, isNull, asc, desc, gte, sum, gt, or, like, ilike } from "drizzle-orm";
 
 export interface IStorage {
   // User methods
@@ -194,7 +194,7 @@ export interface IStorage {
   // Conversation methods
   getConversations(userId: string, limit?: number): Promise<Conversation[]>;
   getConversation(id: string): Promise<Conversation | undefined>;
-  getConversationByContactAndChannel(contactId: string, channel: Channel): Promise<Conversation | undefined>;
+  getConversationByContactAndChannel(contactId: string, channel: Channel, channelAccountId?: string): Promise<Conversation | undefined>;
   createConversation(conversation: InsertConversation): Promise<Conversation>;
   updateConversation(id: string, updates: Partial<Conversation>): Promise<Conversation | undefined>;
   deleteConversation(id: string): Promise<void>;
@@ -1477,12 +1477,41 @@ export class DbStorage implements IStorage {
     return result[0];
   }
 
-  async getConversationByContactAndChannel(contactId: string, channel: Channel): Promise<Conversation | undefined> {
+  async getConversationByContactAndChannel(contactId: string, channel: Channel, channelAccountId?: string): Promise<Conversation | undefined> {
+    if (!channelAccountId) {
+      // Single-number or non-WhatsApp path: backward-compatible lookup
+      const result = await db.select().from(conversations)
+        .where(and(
+          eq(conversations.contactId, contactId),
+          eq(conversations.channel, channel)
+        ));
+      return result[0];
+    }
+
+    // Multi-number path: prefer exact channelAccountId match, fall back to NULL (pre-fix conversations)
     const result = await db.select().from(conversations)
       .where(and(
         eq(conversations.contactId, contactId),
-        eq(conversations.channel, channel)
-      ));
+        eq(conversations.channel, channel),
+        or(
+          eq(conversations.channelAccountId, channelAccountId),
+          isNull(conversations.channelAccountId)
+        )
+      ))
+      .orderBy(sql`CASE WHEN channel_account_id = ${channelAccountId} THEN 0 ELSE 1 END`)
+      .limit(1);
+
+    if (!result[0]) return undefined;
+
+    // Backfill channelAccountId on old conversations so subsequent lookups are isolated
+    if (!result[0].channelAccountId) {
+      await db.update(conversations)
+        .set({ channelAccountId })
+        .where(eq(conversations.id, result[0].id));
+      result[0] = { ...result[0], channelAccountId };
+      console.log(`[MultiNumber] Backfilled channelAccountId=${channelAccountId} on conversation ${result[0].id}`);
+    }
+
     return result[0];
   }
 

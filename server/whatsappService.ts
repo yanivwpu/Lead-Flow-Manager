@@ -97,7 +97,8 @@ export async function getWhatsAppAvailability(userId: string): Promise<Availabil
 export async function sendWhatsAppMessage(
   userId: string,
   to: string,
-  text: string
+  text: string,
+  fromNumber?: string // override the from-number (Twilio multi-number support)
 ): Promise<SendResult> {
   const availability = await getWhatsAppAvailability(userId);
 
@@ -111,11 +112,12 @@ export async function sendWhatsAppMessage(
   }
 
   if (availability.provider === "meta") {
+    // Meta doesn't use fromNumber override — it always uses the configured phone number ID
     const result = await sendMetaWhatsAppMessage(userId, to, text);
     return { success: true, messageId: result.messageId, provider: "meta" };
   }
 
-  const result = await sendUserWhatsAppMessage(userId, to, text);
+  const result = await sendUserWhatsAppMessage(userId, to, text, fromNumber);
   return { success: true, messageId: result.sid, provider: "twilio" };
 }
 
@@ -128,7 +130,8 @@ export async function sendWhatsAppMedia(
   to: string,
   mediaUrl: string,
   mediaType: "image" | "video" | "audio" | "document" = "image",
-  caption?: string
+  caption?: string,
+  fromNumber?: string // override the from-number (Twilio multi-number support)
 ): Promise<SendMediaResult> {
   const availability = await getWhatsAppAvailability(userId);
 
@@ -146,7 +149,7 @@ export async function sendWhatsAppMedia(
     return { success: true, messageId: result.messageId, provider: "meta" };
   }
 
-  const result = await sendUserWhatsAppMedia(userId, to, mediaUrl, caption);
+  const result = await sendUserWhatsAppMedia(userId, to, mediaUrl, caption, fromNumber);
   return { success: true, messageId: result.sid, provider: "twilio" };
 }
 

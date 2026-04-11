@@ -233,13 +233,14 @@ class ChannelService {
     userId: string;
     channel: Channel;
     channelContactId: string;
+    channelAccountId?: string; // the business number/account that received the message (for multi-number isolation)
     contactName?: string;
     content: string;
     contentType?: string;
     mediaUrl?: string;
     externalMessageId?: string;
   }): Promise<{ contact: Contact; conversation: Conversation; message: Message; isNewConversation: boolean; chatbotWillFire: boolean }> {
-    const { userId, channel, content, contentType = 'text', mediaUrl, externalMessageId } = params;
+    const { userId, channel, content, contentType = 'text', mediaUrl, externalMessageId, channelAccountId } = params;
     let { channelContactId, contactName } = params;
 
     // Normalise phone-based identifiers to digits-only so "+923364127888" and
@@ -301,14 +302,17 @@ class ChannelService {
       await storage.updateContact(contact.id, contactUpdates);
     }
 
-    let conversation = await storage.getConversationByContactAndChannel(contact.id, channel);
+    // For WhatsApp/SMS with a channelAccountId (multi-number), isolate by destination number
+    const acctId = (channel === 'whatsapp' || channel === 'sms') ? channelAccountId : undefined;
+    let conversation = await storage.getConversationByContactAndChannel(contact.id, channel, acctId);
     let isNewConversation = false;
     if (!conversation) {
-      console.log(`[Inbox Worker] No existing conversation, creating new one for contactId=${contact.id}, channel=${channel}`);
+      console.log(`[Inbox Worker] No existing conversation, creating new one for contactId=${contact.id}, channel=${channel}, channelAccountId=${acctId}`);
       conversation = await storage.createConversation({
         userId,
         contactId: contact.id,
         channel,
+        channelAccountId: acctId,
         status: 'open',
         windowActive: true,
         windowExpiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),

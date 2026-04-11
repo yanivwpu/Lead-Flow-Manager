@@ -169,14 +169,15 @@ export function registerWebhookRoutes(app: Express): void {
 
       console.log(`[Inbound] Webhook received — channel: ${channel}, from: ${parsed.from}, messageSid: ${parsed.messageSid}`);
 
-      const user = await findUserByTwilioCredentials(parsed.accountSid, parsed.to);
-      if (!user) {
+      const twilioMatch = await findUserByTwilioCredentials(parsed.accountSid, parsed.to);
+      if (!twilioMatch) {
         console.warn(`[Inbound] No user matched — accountSid: ${parsed.accountSid}, to: ${parsed.to}`);
         return res.status(200).send("");
       }
 
+      const { user, matchedPhone } = twilioMatch;
       const normalizedFrom = parsed.from.replace(/^\+/, "");
-      console.log(`[Inbound] Channel identified: ${channel} — userId: ${user.id}, from: ${normalizedFrom}`);
+      console.log(`[Inbound] Channel identified: ${channel} — userId: ${user.id}, from: ${normalizedFrom}, to: ${matchedPhone}`);
       console.log(`[Inbound] Starting processIncomingMessage — channel: ${channel}, messageSid: ${parsed.messageSid}`);
 
       const { channelService } = await import("../channelService");
@@ -184,6 +185,7 @@ export function registerWebhookRoutes(app: Express): void {
         userId: user.id,
         channel: channel as any,
         channelContactId: normalizedFrom,
+        channelAccountId: matchedPhone, // the business number that received the message
         contactName: parsed.profileName || normalizedFrom,
         content: parsed.body,
         contentType: 'text',
