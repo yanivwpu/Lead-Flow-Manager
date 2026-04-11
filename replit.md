@@ -65,7 +65,21 @@ The application is a full multi-tenant SaaS implementation with:
 
 5. **Outbound number selection** — `WhatsAppAdapter.send()` must read `conversation.channelAccountId` and pass it as `fromNumber` to `sendWhatsAppMessage / sendWhatsAppMedia`. When set, Twilio must receive `from: whatsapp:${channelAccountId}`, not `from: whatsapp:${users.twilioWhatsappNumber}`. Meta provider must remain unaffected (ignore `fromNumber`).
 
-### Regression checklist (run after any change to protected files)
+### Automated regression test file
+
+`tests/multi-number-whatsapp.test.ts` — run with:
+
+```bash
+npx tsx tests/multi-number-whatsapp.test.ts
+```
+
+**Expected output:** `Total: 8 | Passed: 8 | Failed: 0`
+
+The suite creates isolated test users and contacts, runs all assertions, and cleans up after itself. It is safe to run against the production database in read/write mode (teardown is guaranteed by a `finally` block).
+
+Exit code 1 = at least one failure. CI should gate on this command before merging any changes to the 7 protected files listed above.
+
+### SQL regression checklist (run after any change to protected files)
 
 ```sql
 -- 1. Confirm secondary number lookup works
