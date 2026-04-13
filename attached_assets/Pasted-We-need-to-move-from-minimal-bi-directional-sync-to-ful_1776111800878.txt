@@ -1,0 +1,91 @@
+We need to move from minimal bi-directional sync to full 2-way sync between WhachatCRM and GHL.
+
+Current state already working:
+
+* GHL -> WhachatCRM: contacts, tags, inbound messages, appointment events
+* WhachatCRM -> GHL: outbound messages, tag updates
+
+Now complete full 2-way sync with these exact requirements:
+
+1. Contact sync parity
+
+* Sync both directions for:
+
+  * name
+  * email
+  * phone
+  * tags
+  * custom fields we already use for qualification
+* Use ghlId as the source-of-truth link key
+* If ghlId is missing, attempt safe match by phone, then email, then stop
+* Never create duplicate contacts
+
+2. Conversation / message sync parity
+
+* GHL inbound message -> WhachatCRM thread/message
+* WhachatCRM outbound message -> GHL conversation timeline
+* Also store external message ids when available
+* Prevent duplicate message creation if the same event/message is retried
+* Preserve direction (inbound vs outbound), channel, timestamp, and sender metadata
+
+3. Opportunity / pipeline sync (both directions)
+
+* GHL opportunity created/updated/stage changed -> update matching WhachatCRM contact/pipeline/stage
+* WhachatCRM pipeline stage changes -> update/create matching GHL opportunity
+* Map stages safely between systems
+* If a matching opportunity does not exist, create it
+* Keep one primary active opportunity per contact unless explicitly designed otherwise
+
+4. Appointment sync parity
+
+* GHL appointment create/update/cancel -> log/update in WhachatCRM
+* If WhachatCRM creates or updates appointment-related state, reflect that in GHL where appropriate
+* Avoid duplicate appointment activity events
+
+5. Qualification field sync
+
+* Sync both directions for the qualification fields we care about:
+
+  * budget
+  * timeline
+  * intent
+  * financing
+  * lead score
+  * AI summary / notes only if safe and supported
+* Define the exact GHL custom field mapping for each one
+* Do not over-sync random fields; keep it intentional
+
+6. Retry + visibility
+
+* Silent failure is no longer enough for full sync
+* Add:
+
+  * retry queue or retry mechanism for failed syncs
+  * admin-visible logs for failed sync attempts
+  * last synced at / sync status on connected contacts if possible
+* Failed GHL syncs should not break the user flow, but they must be traceable
+
+7. Loop prevention / source tracking
+
+* Add source markers so a sync coming from GHL does not bounce back and create loops
+* Example:
+
+  * changes originating from GHL should not immediately re-sync back to GHL unless materially changed by WhachatCRM
+* Keep idempotency for webhook events and outbound sync jobs
+
+8. Safe scope definition
+
+* Before implementation, list the exact routes / services / models that will be touched
+* Reuse existing workflow, contact, conversation, and pipeline logic
+* Do not rebuild OAuth, install flow, marketplace config, or Shopify-related code
+* Keep changes minimal and scoped to sync layer only
+
+9. Deliverables
+   Please reply with:
+   A. Exact sync matrix of entity/field/event mappings in both directions
+   B. What is already covered vs missing
+   C. Implementation order from safest/highest impact to lowest
+   D. Any risks or ambiguous mappings that need approval before coding
+
+Goal:
+When a user updates contact, message, tag, appointment, or pipeline state in either GHL or WhachatCRM, the corresponding record stays aligned in the other system with no duplicates and no silent drift.
