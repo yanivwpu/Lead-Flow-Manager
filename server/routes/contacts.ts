@@ -126,6 +126,7 @@ export function registerContactRoutes(app: Express): void {
       const updated = await storage.updateContact(req.params.id, req.body);
 
       // Phase 1 + Phase 5: Diff-checked outbound sync to GHL.
+      // Phase 3: pipelineStage changes also sync to GHL opportunity.
       // Only fire for fields that actually changed value. This diff check is the
       // primary loop-prevention mechanism — the ghlRoutes.ts webhook path calls
       // storage.updateContact() directly and never reaches this code path, so
@@ -144,6 +145,21 @@ export function registerContactRoutes(app: Express): void {
         if (Object.keys(fieldsToSync).length > 0) {
           import('../ghlSync').then(({ ghlSyncContactFields }) => {
             ghlSyncContactFields(req.user!.id, contact.ghlId!, fieldsToSync).catch(() => {});
+          }).catch(() => {});
+        }
+
+        // Phase 3: Sync pipelineStage change → GHL opportunity (create or update)
+        if (
+          'pipelineStage' in req.body &&
+          req.body.pipelineStage !== (contact as any).pipelineStage
+        ) {
+          import('../ghlSync').then(({ ghlSyncPipelineStage }) => {
+            ghlSyncPipelineStage(
+              req.user!.id,
+              contact.id,
+              contact.ghlId!,
+              req.body.pipelineStage as string,
+            ).catch(() => {});
           }).catch(() => {});
         }
       }

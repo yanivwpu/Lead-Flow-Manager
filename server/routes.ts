@@ -4414,6 +4414,42 @@ export async function registerRoutes(
     }
   });
 
+  // Admin: GHL sync failure visibility (Phase 4)
+  app.get("/api/admin/ghl-sync-failures", requireAdmin, async (req, res) => {
+    try {
+      const userId = req.query.userId as string | undefined;
+      const limit = Math.min(Number(req.query.limit) || 100, 500);
+      const failures = await storage.getGhlSyncFailures(userId, limit);
+      res.json(failures);
+    } catch (error) {
+      console.error("Error fetching GHL sync failures:", error);
+      res.status(500).json({ error: "Failed to fetch GHL sync failures" });
+    }
+  });
+
+  // Admin: Mark a GHL sync failure as resolved
+  app.patch("/api/admin/ghl-sync-failures/:id/resolve", requireAdmin, async (req, res) => {
+    try {
+      await storage.resolveGhlSyncFailure(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error resolving GHL sync failure:", error);
+      res.status(500).json({ error: "Failed to resolve GHL sync failure" });
+    }
+  });
+
+  // User-facing: own GHL sync failures (last 50, unresolved)
+  app.get("/api/ghl-sync-failures", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+      const all = await storage.getGhlSyncFailures(req.user.id, 50);
+      res.json(all.filter(f => !f.resolvedAt));
+    } catch (error) {
+      console.error("Error fetching GHL sync failures:", error);
+      res.status(500).json({ error: "Failed to fetch sync failures" });
+    }
+  });
+
   // Admin: Create support ticket (for tracking incoming emails)
   app.post("/api/admin/support-tickets", requireAdmin, async (req, res) => {
     try {

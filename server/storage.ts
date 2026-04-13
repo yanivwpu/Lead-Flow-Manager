@@ -40,6 +40,7 @@ import {
   type UserTemplateData, type InsertUserTemplateData,
   type ContactNote, type InsertContactNote,
   type GhlEventDedup, type InsertGhlEventDedup,
+  type GhlSyncFailure, type InsertGhlSyncFailure, ghlSyncFailures,
   aiSettings, aiBusinessKnowledge, aiUsage, aiLeadScores,
   userAutomationTemplates, templateUsageAnalytics,
   templates as templatesTable, templateEntitlements, realtorOnboardingSubmissions,
@@ -143,6 +144,11 @@ export interface IStorage {
   // GHL event dedup (idempotency)
   checkAndRecordGhlEvent(integrationId: string, eventId: string, eventType: string): Promise<boolean>;
   getGhlEventDedup(integrationId: string, eventId: string): Promise<GhlEventDedup | undefined>;
+
+  // GHL sync failures (retry queue + admin visibility)
+  createGhlSyncFailure(failure: InsertGhlSyncFailure): Promise<GhlSyncFailure>;
+  getGhlSyncFailures(userId?: string, limit?: number): Promise<GhlSyncFailure[]>;
+  resolveGhlSyncFailure(id: string): Promise<void>;
   
   // Template methods
   getMessageTemplates(userId: string): Promise<MessageTemplate[]>;
@@ -731,6 +737,26 @@ export class DbStorage implements IStorage {
     const result = await db.select().from(ghlEventDedup)
       .where(and(eq(ghlEventDedup.integrationId, integrationId), eq(ghlEventDedup.eventId, eventId)));
     return result[0];
+  }
+
+  // GHL sync failures
+  async createGhlSyncFailure(failure: InsertGhlSyncFailure): Promise<GhlSyncFailure> {
+    const result = await db.insert(ghlSyncFailures).values(failure).returning();
+    return result[0];
+  }
+
+  async getGhlSyncFailures(userId?: string, limit = 100): Promise<GhlSyncFailure[]> {
+    const q = db.select().from(ghlSyncFailures)
+      .where(userId ? eq(ghlSyncFailures.userId, userId) : undefined)
+      .orderBy(desc(ghlSyncFailures.createdAt))
+      .limit(limit);
+    return await q;
+  }
+
+  async resolveGhlSyncFailure(id: string): Promise<void> {
+    await db.update(ghlSyncFailures)
+      .set({ resolvedAt: new Date(), updatedAt: new Date() })
+      .where(eq(ghlSyncFailures.id, id));
   }
 
   // Template methods

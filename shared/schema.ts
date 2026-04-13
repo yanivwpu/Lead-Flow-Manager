@@ -1315,6 +1315,27 @@ export const insertContactNoteSchema = createInsertSchema(contactNotes).omit({ i
 export type ContactNote = typeof contactNotes.$inferSelect;
 export type InsertContactNote = z.infer<typeof insertContactNoteSchema>;
 
+// ─── GHL Sync Failures (Retry queue + admin visibility for outbound sync) ────
+export const ghlSyncFailures = pgTable("ghl_sync_failures", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  entityType: text("entity_type").notNull(),   // 'contact' | 'opportunity' | 'message'
+  entityId: text("entity_id"),                 // WhachatCRM internal ID (contactId, messageId)
+  ghlContactId: text("ghl_contact_id"),        // GHL contact ID
+  operation: text("operation").notNull(),       // 'sync_contact_fields' | 'sync_outbound_message' | 'sync_pipeline_stage'
+  payload: jsonb("payload").default(sql`'{}'::jsonb`),
+  errorMessage: text("error_message"),
+  retryCount: integer("retry_count").default(0),
+  nextRetryAt: timestamp("next_retry_at"),
+  resolvedAt: timestamp("resolved_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertGhlSyncFailureSchema = createInsertSchema(ghlSyncFailures).omit({ id: true, createdAt: true, updatedAt: true });
+export type GhlSyncFailure = typeof ghlSyncFailures.$inferSelect;
+export type InsertGhlSyncFailure = z.infer<typeof insertGhlSyncFailureSchema>;
+
 // ─── GHL Event Dedup (Idempotency tracking for webhook events) ──────────────
 export const ghlEventDedup = pgTable("ghl_event_dedup", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

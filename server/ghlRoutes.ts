@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import crypto from 'crypto';
 import { storage } from './storage';
+import { GHL_TO_CRM_STAGE_MAP, GHL_STATUS_TO_CRM_STAGE } from './ghlSync';
 
 const router = Router();
 
@@ -446,11 +447,118 @@ router.post('/webhook', async (req: Request, res: Response) => {
       }
 
       case 'ContactDndUpdate':
+        console.log(`[LeadConnector Webhook] ${timestamp} | Event acknowledged (not synced): ContactDndUpdate`);
+        break;
+
+      // ── Phase 2: Inbound GHL opportunity/pipeline sync ─────────────────────
       case 'OpportunityCreate':
       case 'OpportunityUpdate':
-      case 'OpportunityDelete':
-      case 'OpportunityStatusUpdate':
       case 'OpportunityStageUpdate':
+      case 'OpportunityStatusUpdate': {
+        try {
+          const opp = body.opportunity || body;
+          const ghlContactId: string | undefined =
+            opp.contact?.id || opp.contactId || undefined;
+          if (!ghlContactId) {
+            console.log(
+              `[LeadConnector Webhook] ${timestamp} | ${type} — no contactId, skipping`,
+            );
+            break;
+          }
+
+          // Determine CRM stage:
+          // 1. Terminal status override (won/lost/abandoned) takes precedence
+          // 2. Else map GHL stage name explicitly
+          const ghlStatus: string | undefined = opp.status;
+          const ghlStageName: string | undefined = opp.stage?.name;
+          const ghlOpportunityId: string | undefined = opp.id;
+
+          let crmStage: string | undefined;
+          if (ghlStatus && GHL_STATUS_TO_CRM_STAGE[ghlStatus]) {
+            crmStage = GHL_STATUS_TO_CRM_STAGE[ghlStatus];
+          } else if (ghlStageName) {
+            const mapped = GHL_TO_CRM_STAGE_MAP[ghlStageName];
+            if (!mapped) {
+              console.warn(
+                `[LeadConnector Webhook] ${timestamp} | ${type} — unmapped GHL stage "${ghlStageName}" — pipelineStage not updated`,
+              );
+            } else {
+              crmStage = mapped;
+            }
+          }
+
+          // Find the WhachatCRM contact by ghlId
+          const allContacts = await storage.getContacts(userId);
+          const contact = allContacts.find((c: any) => c.ghlId === ghlContactId);
+          if (!contact) {
+            console.log(
+              `[LeadConnector Webhook] ${timestamp} | ${type} — no local contact with ghlId="${ghlContactId}", skipping`,
+            );
+            break;
+          }
+
+          // Build update payload
+          const updatePayload: Record<string, any> = {};
+          if (crmStage) updatePayload.pipelineStage = crmStage;
+
+          // Always keep ghlOpportunityId in sync on the contact's customFields
+          if (ghlOpportunityId) {
+            const existingCustomFields =
+              contact.customFields && typeof contact.customFields === 'object'
+                ? (contact.customFields as Record<string, any>)
+                : {};
+            if (existingCustomFields.ghlOpportunityId !== ghlOpportunityId) {
+              updatePayload.customFields = {
+                ...existingCustomFields,
+                ghlOpportunityId,
+              };
+            }
+          }
+
+          if (Object.keys(updatePayload).length > 0) {
+            // Call storage directly — never through API route (loop prevention)
+            await storage.updateContact(contact.id, updatePayload);
+            console.log(
+              `[LeadConnector Webhook] ${timestamp} | ${type} — contact "${contact.id}" ` +
+              `${crmStage ? `stage → "${crmStage}"` : '(no stage change)'}, ` +
+              `opportunityId=${ghlOpportunityId ?? 'n/a'}`,
+            );
+          }
+        } catch (e) {
+          console.error(`[LeadConnector Webhook] ${timestamp} | ${type} error:`, e);
+        }
+        break;
+      }
+
+      case 'OpportunityDelete': {
+        try {
+          const opp = body.opportunity || body;
+          const ghlContactId: string | undefined =
+            opp.contact?.id || opp.contactId || undefined;
+          const ghlOpportunityId: string | undefined = opp.id;
+          if (ghlContactId) {
+            const allContacts = await storage.getContacts(userId);
+            const contact = allContacts.find((c: any) => c.ghlId === ghlContactId);
+            if (contact) {
+              // Log as activity — do NOT change pipelineStage
+              await storage.createActivity({
+                userId,
+                contactId: contact.id,
+                eventType: 'opportunity_deleted',
+                description: `GHL opportunity deleted (id: ${ghlOpportunityId ?? 'unknown'})`,
+                metadata: JSON.stringify({ ghlOpportunityId }),
+              });
+              console.log(
+                `[LeadConnector Webhook] ${timestamp} | OpportunityDelete — activity logged for contact "${contact.id}"`,
+              );
+            }
+          }
+        } catch (e) {
+          console.error(`[LeadConnector Webhook] ${timestamp} | OpportunityDelete error:`, e);
+        }
+        break;
+      }
+
       case 'OutboundMessage':
       case 'ConversationUnreadUpdate':
       case 'ConversationProviderUpdate':
