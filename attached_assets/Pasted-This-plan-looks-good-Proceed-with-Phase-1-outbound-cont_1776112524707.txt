@@ -1,0 +1,50 @@
+This plan looks good. Proceed with:
+
+* Phase 1 — outbound contact field sync
+* Phase 2 — inbound opportunity / pipeline sync
+* Phase 3 — outbound opportunity / pipeline sync
+* Phase 4 — retry + visibility
+* Phase 5 — loop prevention source markers
+* Phase 7 — message-level dedup
+
+Do NOT start Phase 6 yet. Defer qualification field sync until we define and approve the GHL custom field mapping.
+
+Answers / decisions:
+
+1. Stage name mapping
+   Do NOT use fuzzy matching.
+   Use explicit mapping only.
+
+For now keep it simple and map by exact stage name where possible.
+If no exact mapped stage exists, do not guess — log it as an unmapped stage and skip the sync rather than writing bad data.
+
+Also keep one primary pipeline for sync, not multiple.
+
+2. Opportunity per contact
+   Yes, one active opportunity per contact is acceptable for now.
+   Keep this simple and maintain one primary active ghlOpportunityId per contact.
+
+3. ContactDelete handling
+   Do NOT hard delete.
+   Use soft-delete behavior only.
+   Mark the contact as deleted_in_ghl or equivalent non-destructive status so message history is preserved.
+
+4. AI summary sync
+   Do NOT sync AI summaries to GHL for now.
+   Keep AI summaries inside WhachatCRM only.
+
+Additional architecture rule:
+Use this ownership model:
+
+* GHL owns install/auth lifecycle and GHL-native opportunity metadata unless explicitly mapped
+* WhachatCRM owns conversation state, messaging logic, AI qualification, AI summaries/scoring, and unified inbox state
+* Shared fields sync both ways only when explicitly mapped
+
+Additional implementation rule:
+Do not implement generic field mirroring.
+Do not sync random custom fields by default.
+Do not rebuild OAuth, install flow, marketplace config, or Shopify-related code.
+
+Before coding Phases 2 and 3, please give me the exact proposed stage mapping table you plan to use.
+Before coding Phase 4, tell me whether you will store sync failures in a new table or existing logging model.
+Keep the implementation minimal, explicit, and safe.

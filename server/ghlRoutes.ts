@@ -205,34 +205,54 @@ router.post('/webhook', async (req: Request, res: Response) => {
         try {
           const contact = body.contact || body;
           const ghlId = contact.id || contact.contactId;
-          const name = contact.firstName && contact.lastName 
-            ? `${contact.firstName} ${contact.lastName}` 
-            : contact.firstName || contact.email || 'Unknown';
-          
-          const contacts = await storage.getContacts(userId);
-          const existingContact = contacts.find((c: any) => c.ghlId === ghlId);
-          
+          const incomingPhone: string | undefined = contact.phone || undefined;
+          const incomingEmail: string | undefined = contact.email || undefined;
+          const name = contact.firstName && contact.lastName
+            ? `${contact.firstName} ${contact.lastName}`
+            : contact.firstName || incomingEmail || 'Unknown';
+
+          const allContacts = await storage.getContacts(userId);
+
+          // Phase 1 safe match: ghlId → phone → email → create (never duplicate)
+          let existingContact =
+            (ghlId ? allContacts.find((c: any) => c.ghlId === ghlId) : undefined) ??
+            (incomingPhone ? allContacts.find((c: any) => c.phone && c.phone === incomingPhone) : undefined) ??
+            (incomingEmail ? allContacts.find((c: any) => c.email && c.email === incomingEmail) : undefined);
+
+          const sourceDetailsBase = existingContact?.sourceDetails
+            ? (typeof existingContact.sourceDetails === 'string'
+                ? JSON.parse(existingContact.sourceDetails)
+                : existingContact.sourceDetails)
+            : {};
+
           if (existingContact) {
             await storage.updateContact(existingContact.id, {
               name,
-              email: contact.email || existingContact.email,
-              phone: contact.phone || existingContact.phone,
+              ...(incomingEmail ? { email: incomingEmail } : {}),
+              ...(incomingPhone ? { phone: incomingPhone } : {}),
+              // Stamp ghlId if it wasn't set yet (matched via phone/email)
+              ...(ghlId && !existingContact.ghlId ? { ghlId } : {}),
               tag: contact.tags?.[0] || existingContact.tag,
               sourceDetails: JSON.stringify({
-                ...(existingContact.sourceDetails ? JSON.parse(existingContact.sourceDetails as any) : {}),
+                ...sourceDetailsBase,
                 customFields: contact.customFields,
                 allTags: contact.tags,
               }),
             });
-            console.log(`[LeadConnector Webhook] ${timestamp} | Updated contact: ${ghlId}`);
+            console.log(`[LeadConnector Webhook] ${timestamp} | Updated contact: ${ghlId || incomingPhone || incomingEmail}`);
           } else {
+            // No match — safe to create. Still require at least ghlId or an identifier.
+            if (!ghlId && !incomingPhone && !incomingEmail) {
+              console.log(`[LeadConnector Webhook] ${timestamp} | ContactCreate skipped — no usable identifier`);
+              break;
+            }
             await storage.createContact({
               userId,
               name,
-              email: contact.email,
-              phone: contact.phone,
+              email: incomingEmail,
+              phone: incomingPhone,
               primaryChannel: 'gohighlevel',
-              ghlId,
+              ghlId: ghlId || undefined,
               source: 'gohighlevel',
               sourceDetails: JSON.stringify({
                 customFields: contact.customFields,
@@ -278,25 +298,45 @@ router.post('/webhook', async (req: Request, res: Response) => {
           const msg = body.message || body;
           const ghlContactId = msg.contactId || msg.contact?.id;
           const conversationId = msg.conversationId || msg.conversation?.id;
-          
+          const msgPhone: string | undefined = msg.contact?.phone || undefined;
+          const msgEmail: string | undefined = msg.contact?.email || undefined;
+
           if (!ghlContactId) {
             console.log(`[LeadConnector Webhook] ${timestamp} | Missing contactId for InboundMessage`);
             break;
           }
 
-          const contacts = await storage.getContacts(userId);
-          let contact = contacts.find((c: any) => c.ghlId === ghlContactId);
-          
+          // Phase 1 safe match: ghlId → phone → email → create (no duplicates)
+          const allContacts = await storage.getContacts(userId);
+          let contact =
+            allContacts.find((c: any) => c.ghlId === ghlContactId) ??
+            (msgPhone ? allContacts.find((c: any) => c.phone && c.phone === msgPhone) : undefined) ??
+            (msgEmail ? allContacts.find((c: any) => c.email && c.email === msgEmail) : undefined);
+
           if (!contact) {
             contact = await storage.createContact({
               userId,
               name: msg.contactName || msg.contact?.firstName || 'Unknown',
-              phone: msg.contact?.phone,
-              email: msg.contact?.email,
+              phone: msgPhone,
+              email: msgEmail,
               primaryChannel: 'gohighlevel',
               ghlId: ghlContactId,
               source: 'gohighlevel',
             });
+          } else if (!contact.ghlId) {
+            // Stamp ghlId on a contact matched by phone/email
+            await storage.updateContact(contact.id, { ghlId: ghlContactId });
+          }
+
+          // Phase 7: Dedup by externalMessageId — GHL can echo outbound messages
+          // back as OutboundMessage events or retry InboundMessage events. Skip
+          // creation if this exact message ID has already been stored.
+          if (msg.messageId) {
+            const existing = await storage.getMessageByExternalId(msg.messageId);
+            if (existing) {
+              console.log(`[LeadConnector Webhook] ${timestamp} | Duplicate message skipped (externalId: ${msg.messageId})`);
+              break;
+            }
           }
 
           let conversation = await storage.getConversationByContactAndChannel(contact.id, 'gohighlevel');
@@ -356,7 +396,55 @@ router.post('/webhook', async (req: Request, res: Response) => {
         break;
       }
 
-      case 'ContactDelete':
+      case 'ContactDelete': {
+        // Phase 1 soft-delete: tag contact as deleted_in_ghl; never hard-delete
+        try {
+          const ghlId = body.contactId || body.contact?.id || body.id;
+          if (ghlId) {
+            const allContacts = await storage.getContacts(userId);
+            const target = allContacts.find((c: any) => c.ghlId === ghlId);
+            if (target) {
+              await storage.updateContact(target.id, { tag: 'deleted_in_ghl' });
+              console.log(`[LeadConnector Webhook] ${timestamp} | Soft-deleted contact: ${ghlId}`);
+            }
+          }
+        } catch (delErr) {
+          console.error(`[LeadConnector Webhook] ${timestamp} | Error soft-deleting contact:`, delErr);
+        }
+        break;
+      }
+
+      case 'AppointmentUpdate':
+      case 'AppointmentDelete': {
+        // Update existing appointment_created activity event with new status/outcome
+        try {
+          const apt = body.appointment || body;
+          const ghlContactId = apt.contactId || apt.contact?.id;
+          const appointmentId = apt.id || apt.appointmentId;
+          if (ghlContactId && appointmentId) {
+            const allContacts = await storage.getContacts(userId);
+            const contact = allContacts.find((c: any) => c.ghlId === ghlContactId);
+            if (contact) {
+              await storage.createActivityEvent({
+                userId,
+                contactId: contact.id,
+                eventType: type === 'AppointmentDelete' ? 'appointment_deleted' : 'appointment_updated',
+                eventData: {
+                  ghlAppointmentId: appointmentId,
+                  title: apt.title,
+                  startTime: apt.startTime,
+                  status: apt.status || (type === 'AppointmentDelete' ? 'deleted' : 'updated'),
+                } as any,
+              });
+              console.log(`[LeadConnector Webhook] ${timestamp} | Logged ${type} for contact: ${ghlContactId}`);
+            }
+          }
+        } catch (aptErr) {
+          console.error(`[LeadConnector Webhook] ${timestamp} | Error processing ${type}:`, aptErr);
+        }
+        break;
+      }
+
       case 'ContactDndUpdate':
       case 'OpportunityCreate':
       case 'OpportunityUpdate':
@@ -373,8 +461,6 @@ router.post('/webhook', async (req: Request, res: Response) => {
       case 'TaskUpdate':
       case 'TaskDelete':
       case 'TaskCompleted':
-      case 'AppointmentUpdate':
-      case 'AppointmentDelete':
         console.log(`[LeadConnector Webhook] ${timestamp} | Event acknowledged (not yet synced): ${type}`);
         break;
 

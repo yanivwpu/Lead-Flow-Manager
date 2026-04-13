@@ -125,12 +125,27 @@ export function registerContactRoutes(app: Express): void {
       }
       const updated = await storage.updateContact(req.params.id, req.body);
 
-      // Sync tag change back to GHL if contact has a GHL ID (fire-and-forget)
-      if ('tag' in req.body && contact.ghlId) {
-        const tags = req.body.tag ? [req.body.tag as string] : [];
-        import('../ghlSync').then(({ ghlSyncContactTags }) => {
-          ghlSyncContactTags(req.user!.id, contact.ghlId!, tags).catch(() => {});
-        }).catch(() => {});
+      // Phase 1 + Phase 5: Diff-checked outbound sync to GHL.
+      // Only fire for fields that actually changed value. This diff check is the
+      // primary loop-prevention mechanism — the ghlRoutes.ts webhook path calls
+      // storage.updateContact() directly and never reaches this code path, so
+      // changes originating from GHL cannot bounce back.
+      if (contact.ghlId) {
+        const fieldsToSync: import('../ghlSync').GhlContactFields = {};
+        if ('name' in req.body && req.body.name !== contact.name)
+          fieldsToSync.name = req.body.name;
+        if ('email' in req.body && req.body.email !== contact.email)
+          fieldsToSync.email = req.body.email;
+        if ('phone' in req.body && req.body.phone !== contact.phone)
+          fieldsToSync.phone = req.body.phone;
+        if ('tag' in req.body && req.body.tag !== contact.tag)
+          fieldsToSync.tags = req.body.tag ? [req.body.tag as string] : [];
+
+        if (Object.keys(fieldsToSync).length > 0) {
+          import('../ghlSync').then(({ ghlSyncContactFields }) => {
+            ghlSyncContactFields(req.user!.id, contact.ghlId!, fieldsToSync).catch(() => {});
+          }).catch(() => {});
+        }
       }
 
       res.json(updated);
