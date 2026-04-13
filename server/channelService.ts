@@ -132,6 +132,13 @@ class ChannelService {
         preview: content.substring(0, 100),
       });
 
+      // Mirror outbound message to GHL if contact has a GHL ID (fire-and-forget)
+      if (contact.ghlId) {
+        import('./ghlSync').then(({ ghlSyncOutboundMessage }) => {
+          ghlSyncOutboundMessage(userId, contact.ghlId!, content, targetChannel).catch(() => {});
+        }).catch(() => {});
+      }
+
       return {
         success: true,
         messageId: message.id,

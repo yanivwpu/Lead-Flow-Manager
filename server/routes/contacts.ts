@@ -124,6 +124,15 @@ export function registerContactRoutes(app: Express): void {
         return res.status(403).json({ error: "Forbidden" });
       }
       const updated = await storage.updateContact(req.params.id, req.body);
+
+      // Sync tag change back to GHL if contact has a GHL ID (fire-and-forget)
+      if ('tag' in req.body && contact.ghlId) {
+        const tags = req.body.tag ? [req.body.tag as string] : [];
+        import('../ghlSync').then(({ ghlSyncContactTags }) => {
+          ghlSyncContactTags(req.user!.id, contact.ghlId!, tags).catch(() => {});
+        }).catch(() => {});
+      }
+
       res.json(updated);
     } catch (error) {
       console.error("Error updating contact:", error);
