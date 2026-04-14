@@ -690,6 +690,202 @@ export async function registerRoutes(
     }
   });
 
+  // ============= Chatbot Widget Script =============
+  // Served as JavaScript to third-party websites via the embed snippet.
+  // Mobile-optimised: deferred init, lazy iframe, touch-friendly, minimal DOM footprint.
+  app.get("/widget.js", async (req, res) => {
+    const widgetId = req.query.id as string | undefined;
+    const origin = process.env.APP_URL ||
+      `https://${(process.env.REPLIT_DOMAINS || "").split(",")[0]}`;
+
+    // Fetch widget settings if widgetId is known (best-effort, skip on error)
+    let color = "#25D366";
+    let position = "right";
+    let welcomeMessage = "Hi there! How can we help you today?";
+    let enabled = true;
+
+    if (widgetId) {
+      try {
+        const widgetUser = await storage.getUser(widgetId);
+        const ws = (widgetUser?.widgetSettings as any) || {};
+        if (ws.enabled === false) { enabled = false; }
+        if (ws.color) color = ws.color;
+        if (ws.position) position = ws.position;
+        if (ws.welcomeMessage) welcomeMessage = ws.welcomeMessage;
+      } catch { /* non-fatal */ }
+    }
+
+    const js = enabled ? `
+(function() {
+  'use strict';
+  var COLOR = ${JSON.stringify(color)};
+  var POSITION = ${JSON.stringify(position)};
+  var WELCOME = ${JSON.stringify(welcomeMessage)};
+  var WIDGET_ID = ${JSON.stringify(widgetId || "")};
+  var ORIGIN = ${JSON.stringify(origin)};
+
+  // Guard against double-init
+  if (window.__wcwInit) return;
+  window.__wcwInit = true;
+
+  var btn, bubble, iframe, iframeLoaded = false;
+
+  function px(n) { return n + 'px'; }
+
+  function posStyle() {
+    return POSITION === 'left'
+      ? 'left:20px;right:auto;'
+      : 'right:20px;left:auto;';
+  }
+
+  function createButton() {
+    btn = document.createElement('button');
+    btn.setAttribute('aria-label', 'Open chat');
+    btn.setAttribute('data-wcw', 'toggle');
+    btn.style.cssText = [
+      'position:fixed;bottom:20px;' + posStyle(),
+      'width:56px;height:56px;border-radius:50%;border:none;cursor:pointer;',
+      'background:' + COLOR + ';color:#fff;',
+      'box-shadow:0 4px 16px rgba(0,0,0,.25);',
+      'display:flex;align-items:center;justify-content:center;',
+      'z-index:2147483647;transition:transform .15s;',
+      'touch-action:manipulation;-webkit-tap-highlight-color:transparent;',
+    ].join('');
+    btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>';
+    btn.addEventListener('click', toggleChat);
+    btn.addEventListener('mouseenter', function() { btn.style.transform = 'scale(1.1)'; });
+    btn.addEventListener('mouseleave', function() { btn.style.transform = 'scale(1)'; });
+    document.body.appendChild(btn);
+  }
+
+  function createBubble() {
+    bubble = document.createElement('div');
+    bubble.style.cssText = [
+      'position:fixed;bottom:90px;' + posStyle(),
+      'background:#fff;border-radius:12px;',
+      'box-shadow:0 4px 20px rgba(0,0,0,.18);',
+      'padding:12px 16px;max-width:240px;font-size:13px;',
+      'font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;',
+      'z-index:2147483646;opacity:0;pointer-events:none;',
+      'transition:opacity .2s;line-height:1.4;',
+    ].join('');
+    bubble.textContent = WELCOME;
+    document.body.appendChild(bubble);
+    // Show bubble briefly after 2 s
+    setTimeout(function() {
+      bubble.style.opacity = '1';
+      bubble.style.pointerEvents = 'auto';
+      setTimeout(function() {
+        if (!iframeLoaded) {
+          bubble.style.opacity = '0';
+          bubble.style.pointerEvents = 'none';
+        }
+      }, 5000);
+    }, 2000);
+  }
+
+  function loadIframe() {
+    if (iframeLoaded) return;
+    iframeLoaded = true;
+    var container = document.createElement('div');
+    var side = POSITION === 'left' ? 'left:20px;right:auto;' : 'right:20px;left:auto;';
+    container.style.cssText = [
+      'position:fixed;bottom:90px;' + side,
+      'width:min(360px,calc(100vw - 32px));',
+      'height:min(560px,calc(100vh - 110px));',
+      'border-radius:16px;overflow:hidden;',
+      'box-shadow:0 8px 32px rgba(0,0,0,.22);',
+      'z-index:2147483646;',
+      'transform:scale(0.9) translateY(16px);opacity:0;',
+      'transition:transform .2s,opacity .2s;',
+    ].join('');
+    container.setAttribute('data-wcw', 'frame-container');
+
+    var frame = document.createElement('iframe');
+    frame.src = ORIGIN + '/widget-frame/' + WIDGET_ID;
+    frame.style.cssText = 'width:100%;height:100%;border:none;display:block;';
+    frame.setAttribute('loading', 'lazy');
+    frame.setAttribute('title', 'Chat');
+    frame.setAttribute('allow', 'clipboard-write');
+    container.appendChild(frame);
+    document.body.appendChild(container);
+
+    // Animate in
+    requestAnimationFrame(function() {
+      requestAnimationFrame(function() {
+        container.style.transform = 'scale(1) translateY(0)';
+        container.style.opacity = '1';
+      });
+    });
+
+    return container;
+  }
+
+  var chatOpen = false;
+  var frameContainer = null;
+
+  function toggleChat() {
+    chatOpen = !chatOpen;
+    if (chatOpen) {
+      btn.setAttribute('aria-label', 'Close chat');
+      btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+      bubble.style.opacity = '0';
+      bubble.style.pointerEvents = 'none';
+      if (!frameContainer) {
+        frameContainer = loadIframe();
+      } else {
+        frameContainer.style.display = 'block';
+        requestAnimationFrame(function() {
+          requestAnimationFrame(function() {
+            frameContainer.style.transform = 'scale(1) translateY(0)';
+            frameContainer.style.opacity = '1';
+          });
+        });
+      }
+    } else {
+      btn.setAttribute('aria-label', 'Open chat');
+      btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>';
+      if (frameContainer) {
+        frameContainer.style.transform = 'scale(0.9) translateY(16px)';
+        frameContainer.style.opacity = '0';
+        setTimeout(function() {
+          if (frameContainer && !chatOpen) frameContainer.style.display = 'none';
+        }, 200);
+      }
+    }
+  }
+
+  function init() {
+    if (!document.body) return;
+    createButton();
+    createBubble();
+  }
+
+  // Defer initialisation until browser is idle (mobile perf)
+  if (typeof requestIdleCallback !== 'undefined') {
+    requestIdleCallback(function() {
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+      } else {
+        init();
+      }
+    }, { timeout: 3000 });
+  } else {
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', init);
+    } else {
+      setTimeout(init, 300);
+    }
+  }
+})();
+` : '/* widget disabled */';
+
+    res.setHeader("Content-Type", "application/javascript; charset=utf-8");
+    res.setHeader("Cache-Control", "public, max-age=300, stale-while-revalidate=3600");
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.send(js);
+  });
+
   // ============= Website Widget Settings Endpoints =============
   
   // Get widget settings
@@ -3407,6 +3603,135 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error fetching meta webhook config:", error);
       res.status(500).json({ error: "Failed to fetch webhook config" });
+    }
+  });
+
+  // Validate a Meta (FB/IG) page token before saving credentials.
+  // Checks: token validity, required scopes, page access, page subscription to webhook events.
+  // Does NOT require authentication — token is provided directly in the request.
+  app.post("/api/integrations/meta-validate", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+
+      const { accessToken, pageId, channel } = req.body as {
+        accessToken?: string;
+        pageId?: string;
+        channel?: string;
+      };
+      if (!accessToken || !pageId || !channel) {
+        return res.status(400).json({ error: "accessToken, pageId, and channel are required" });
+      }
+
+      const GRAPH = "https://graph.facebook.com/v19.0";
+
+      // Required scopes per channel
+      const REQUIRED_SCOPES: Record<string, string[]> = {
+        facebook: ["pages_messaging", "pages_read_engagement", "pages_manage_metadata"],
+        instagram: [
+          "instagram_basic",
+          "instagram_manage_messages",
+          "pages_show_list",
+          "instagram_manage_metadata",
+        ],
+      };
+
+      const result: {
+        tokenValid: boolean;
+        tokenOwner: string | null;
+        grantedScopes: string[];
+        missingScopes: string[];
+        pageAccessible: boolean;
+        pageName: string | null;
+        pageSubscribed: boolean;
+        pageSubscriptionError: string | null;
+        error?: string;
+      } = {
+        tokenValid: false,
+        tokenOwner: null,
+        grantedScopes: [],
+        missingScopes: REQUIRED_SCOPES[channel] ?? [],
+        pageAccessible: false,
+        pageName: null,
+        pageSubscribed: false,
+        pageSubscriptionError: null,
+      };
+
+      // 1. Verify token is valid by calling /me
+      const meResp = await fetch(
+        `${GRAPH}/me?fields=id,name&access_token=${encodeURIComponent(accessToken)}`,
+      );
+      const meData = (await meResp.json()) as any;
+      if (!meResp.ok || !meData.id) {
+        result.error = meData?.error?.message || "Invalid access token — please check and try again.";
+        return res.json(result);
+      }
+      result.tokenValid = true;
+      result.tokenOwner = meData.name || meData.id;
+
+      // 2. Check granted permissions (works for user tokens; page tokens return limited info — treat gracefully)
+      const permResp = await fetch(
+        `${GRAPH}/me/permissions?access_token=${encodeURIComponent(accessToken)}`,
+      );
+      const permData = (await permResp.json()) as any;
+      if (permResp.ok && Array.isArray(permData?.data)) {
+        result.grantedScopes = permData.data
+          .filter((p: any) => p.status === "granted")
+          .map((p: any) => p.permission as string);
+        const required = REQUIRED_SCOPES[channel] ?? [];
+        result.missingScopes = required.filter((s) => !result.grantedScopes.includes(s));
+      } else {
+        // Page access tokens don't expose /me/permissions — treat as no missing scopes
+        result.grantedScopes = [];
+        result.missingScopes = [];
+      }
+
+      // 3. Verify access to the specific page/account
+      const pageResp = await fetch(
+        `${GRAPH}/${encodeURIComponent(pageId)}?fields=id,name&access_token=${encodeURIComponent(accessToken)}`,
+      );
+      const pageData = (await pageResp.json()) as any;
+      if (pageResp.ok && pageData.id) {
+        result.pageAccessible = true;
+        result.pageName = pageData.name || pageId;
+      } else {
+        result.error = pageData?.error?.message ||
+          `Could not access ${channel === "instagram" ? "Instagram account" : "Facebook Page"} with ID "${pageId}". Verify the ID is correct and the token has page access.`;
+        return res.json(result);
+      }
+
+      // 4. Subscribe the page to webhook events (so GHL-side manual step is eliminated)
+      const subFields =
+        channel === "instagram"
+          ? "messages,messaging_seen,instagram_messages"
+          : "messages,messaging_postbacks,messaging_seen,messaging_referrals";
+      const subResp = await fetch(
+        `${GRAPH}/${encodeURIComponent(pageId)}/subscribed_apps`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: `subscribed_fields=${encodeURIComponent(subFields)}&access_token=${encodeURIComponent(accessToken)}`,
+        },
+      );
+      const subData = (await subResp.json()) as any;
+      if (subResp.ok && subData.success) {
+        result.pageSubscribed = true;
+      } else {
+        // Non-fatal — warn but let user proceed; they can subscribe manually
+        result.pageSubscriptionError =
+          subData?.error?.message ||
+          "Could not auto-subscribe page to webhook events. You can subscribe manually in Meta Developer Portal.";
+      }
+
+      console.log(
+        `[Meta Validate] user=${req.user.id} channel=${channel} ` +
+        `tokenValid=${result.tokenValid} pageAccessible=${result.pageAccessible} ` +
+        `pageSubscribed=${result.pageSubscribed} missingScopes=[${result.missingScopes.join(",")}]`,
+      );
+
+      return res.json(result);
+    } catch (error) {
+      console.error("Error validating Meta integration:", error);
+      res.status(500).json({ error: "Server error while validating. Please try again." });
     }
   });
 

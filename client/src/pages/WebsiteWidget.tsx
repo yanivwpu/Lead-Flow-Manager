@@ -237,14 +237,19 @@ export function WebsiteWidget() {
   };
   
   const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
+  // widget.js receives ?id= so the server can inline the user's colour/position/welcome settings.
+  // fetchpriority="low" tells the browser to deprioritise this script behind page-critical assets.
+  // The setTimeout(fn, 1) wrapper defers execution until after the first paint on mobile.
   const embedCode = user ? `<!-- WhachatCRM Chat Widget -->
 <script>
-  (function(w,d,s,o,f,js,fjs){
-    w['WhachatWidget']=o;w[o]=w[o]||function(){(w[o].q=w[o].q||[]).push(arguments)};
-    js=d.createElement(s);fjs=d.getElementsByTagName(s)[0];
-    js.id=o;js.src=f;js.async=1;fjs.parentNode.insertBefore(js,fjs);
-  }(window,document,'script','wcw','${baseUrl}/widget.js'));
-  wcw('init', '${user.id}');
+  (function(w,d,o,f){
+    w['WhachatWidget']=o;
+    var js=d.createElement('script');
+    js.src=f+'?id=${user.id}';
+    js.async=true;
+    js.setAttribute('fetchpriority','low');
+    d.head.appendChild(js);
+  }(window,document,'wcw','${baseUrl}/widget.js'));
 </script>` : '';
   
   const copyEmbedCode = () => {

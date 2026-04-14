@@ -23,6 +23,9 @@ import {
   Facebook,
   Instagram,
   Clock,
+  XCircle,
+  AlertTriangle,
+  Info,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 
@@ -40,6 +43,30 @@ interface ConnectMetaFbIgWizardProps {
 }
 
 type Step = 1 | 2 | 3;
+
+interface ValidationResult {
+  tokenValid: boolean;
+  tokenOwner: string | null;
+  grantedScopes: string[];
+  missingScopes: string[];
+  pageAccessible: boolean;
+  pageName: string | null;
+  pageSubscribed: boolean;
+  pageSubscriptionError: string | null;
+  error?: string;
+}
+
+type ValidationStatus = "idle" | "running" | "done";
+
+const REQUIRED_SCOPE_LABELS: Record<string, string> = {
+  pages_messaging: "Send/receive messages",
+  pages_read_engagement: "Read page engagement",
+  pages_manage_metadata: "Manage page metadata",
+  instagram_basic: "Instagram basic access",
+  instagram_manage_messages: "Manage Instagram messages",
+  pages_show_list: "List Facebook Pages",
+  instagram_manage_metadata: "Manage Instagram metadata",
+};
 
 export function ConnectMetaFbIgWizard({
   open,
@@ -69,6 +96,10 @@ export function ConnectMetaFbIgWizard({
   const [copiedToken, setCopiedToken] = useState(false);
   const [showToken, setShowToken] = useState(false);
 
+  // Validation state
+  const [validationStatus, setValidationStatus] = useState<ValidationStatus>("idle");
+  const [validationResult, setValidationResult] = useState<ValidationResult | null>(null);
+
   const copy = (text: string, setFn: (v: boolean) => void) => {
     navigator.clipboard.writeText(text);
     setFn(true);
@@ -85,6 +116,8 @@ export function ConnectMetaFbIgWizard({
     setWebhookUrl(existingWebhookUrl || "");
     setVerifyToken(existingVerifyToken || "");
     setShowToken(false);
+    setValidationStatus("idle");
+    setValidationResult(null);
   };
 
   const handleClose = () => {
@@ -92,36 +125,64 @@ export function ConnectMetaFbIgWizard({
     onOpenChange(false);
   };
 
-  const handleConnect = async () => {
+  // Phase A: Validate credentials against Facebook Graph API
+  const handleValidateAndSave = async () => {
+    if (!accessToken.trim() || !pageId.trim()) return;
+
     setLoading(true);
     setError(null);
+    setValidationStatus("running");
+    setValidationResult(null);
+
     try {
+      // Step A1: Validate token, check scopes, verify page access, subscribe page
+      const validateRes = await fetch("/api/integrations/meta-validate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ accessToken, pageId, channel }),
+      });
+      const vData: ValidationResult & { error?: string } = await validateRes.json();
+
+      setValidationResult(vData);
+      setValidationStatus("done");
+
+      // Critical failures: bad token or no page access — block proceeding
+      if (!vData.tokenValid || !vData.pageAccessible) {
+        setError(vData.error || "Validation failed. Please check your credentials.");
+        setLoading(false);
+        return;
+      }
+
+      // Token + page OK — save credentials
       const type = isFacebook ? "meta_facebook" : "meta_instagram";
       const config = isFacebook
         ? { accessToken, pageId }
         : { accessToken, instagramId: pageId };
 
-      const res = await fetch("/api/integrations", {
+      const saveRes = await fetch("/api/integrations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({ type, name: channelLabel, config }),
       });
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error || "Failed to save credentials. Check your token and ID.");
+      const saveData = await saveRes.json();
+      if (!saveRes.ok) {
+        setError(saveData.error || "Failed to save credentials.");
+        setLoading(false);
         return;
       }
-      if (data.webhookSetup) {
-        setWebhookUrl(data.webhookSetup.webhookUrl);
-        setVerifyToken(data.webhookSetup.verifyToken);
+      if (saveData.webhookSetup) {
+        setWebhookUrl(saveData.webhookSetup.webhookUrl);
+        setVerifyToken(saveData.webhookSetup.verifyToken);
       }
-      // Invalidate integrations only — channel is NOT yet connected
+
       queryClient.invalidateQueries({ queryKey: ["/api/integrations"] });
       queryClient.invalidateQueries({ queryKey: ["/api/integrations/meta-webhook-config"] });
       setStep(2);
     } catch (err: any) {
       setError(err.message || "Connection failed. Please try again.");
+      setValidationStatus("idle");
     } finally {
       setLoading(false);
     }
@@ -145,7 +206,6 @@ export function ConnectMetaFbIgWizard({
         });
         return;
       }
-      // Channel is now fully connected
       queryClient.invalidateQueries({ queryKey: ["/api/channels"] });
       queryClient.invalidateQueries({ queryKey: ["/api/integrations/meta-webhook-config"] });
       setStep(3);
@@ -160,7 +220,15 @@ export function ConnectMetaFbIgWizard({
     }
   };
 
-  const webhookEvents = ["messages", "messaging_postbacks", "messaging_seen"];
+  const webhookEvents = isFacebook
+    ? ["messages", "messaging_postbacks", "messaging_seen", "messaging_referrals"]
+    : ["messages", "messaging_seen"];
+
+  // Derived: can the user proceed to step 2?
+  const validationPassed =
+    validationResult !== null &&
+    validationResult.tokenValid &&
+    validationResult.pageAccessible;
 
   return (
     <Dialog
@@ -229,29 +297,50 @@ export function ConnectMetaFbIgWizard({
           )}
         </DialogHeader>
 
-        {/* ── Step 1: Credentials ── */}
+        {/* ── Step 1: Credentials + Validation ── */}
         {step === 1 && (
           <div className="space-y-4 py-2">
-            <div className="bg-blue-50 border border-blue-100 rounded-lg p-3">
-              <p className="text-xs font-semibold text-blue-900 mb-1">Before you start</p>
-              <p className="text-[11px] text-blue-800">
-                You need a Meta App with{" "}
-                {isFacebook ? "Messenger" : "Instagram"} enabled and a
-                {isFacebook ? " Facebook Page" : "n Instagram Business account"}.
-              </p>
-              <a
-                href={
-                  isFacebook
-                    ? "https://developers.facebook.com/docs/messenger-platform/getting-started"
-                    : "https://developers.facebook.com/docs/instagram-platform/instagram-api-with-instagram-login/get-started"
-                }
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-[11px] text-blue-600 hover:text-blue-700 mt-1.5 font-medium"
-              >
-                View setup guide <ExternalLink className="h-3 w-3" />
-              </a>
-            </div>
+            {/* Instagram prerequisite notice */}
+            {!isFacebook && (
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex gap-2">
+                <AlertTriangle className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-xs font-semibold text-amber-900 mb-1">
+                    Facebook Page required before connecting Instagram
+                  </p>
+                  <p className="text-[11px] text-amber-800">
+                    Your Instagram Professional account must be linked to a Facebook Page.
+                    Complete Facebook Messenger setup first (or confirm your Instagram account
+                    is already linked to a Page in Meta Business Suite).
+                  </p>
+                  <p className="text-[11px] text-amber-800 mt-1">
+                    The token you enter must have <strong>instagram_manage_messages</strong>{" "}
+                    and <strong>pages_show_list</strong> permissions.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Facebook: required scopes notice */}
+            {isFacebook && (
+              <div className="bg-blue-50 border border-blue-100 rounded-lg p-3">
+                <p className="text-xs font-semibold text-blue-900 mb-1">Before you start</p>
+                <p className="text-[11px] text-blue-800">
+                  You need a Meta App with Messenger enabled and a Facebook Page. Your Page
+                  Access Token must include:{" "}
+                  <strong>pages_messaging</strong>,{" "}
+                  <strong>pages_manage_metadata</strong>.
+                </p>
+                <a
+                  href="https://developers.facebook.com/docs/messenger-platform/getting-started"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-[11px] text-blue-600 hover:text-blue-700 mt-1.5 font-medium"
+                >
+                  View setup guide <ExternalLink className="h-3 w-3" />
+                </a>
+              </div>
+            )}
 
             <div className="space-y-1.5">
               <Label htmlFor="meta-access-token">
@@ -262,7 +351,14 @@ export function ConnectMetaFbIgWizard({
                 type="password"
                 placeholder={isFacebook ? "EAAGm..." : "IGQB..."}
                 value={accessToken}
-                onChange={(e) => setAccessToken(e.target.value)}
+                onChange={(e) => {
+                  setAccessToken(e.target.value);
+                  if (validationStatus === "done") {
+                    setValidationStatus("idle");
+                    setValidationResult(null);
+                  }
+                  setError(null);
+                }}
                 data-testid={`input-${channel}-access-token`}
               />
               <p className="text-[10px] text-gray-500">
@@ -280,7 +376,14 @@ export function ConnectMetaFbIgWizard({
                 id="meta-page-id"
                 placeholder={isFacebook ? "123456789" : "17841400000000000"}
                 value={pageId}
-                onChange={(e) => setPageId(e.target.value)}
+                onChange={(e) => {
+                  setPageId(e.target.value);
+                  if (validationStatus === "done") {
+                    setValidationStatus("idle");
+                    setValidationResult(null);
+                  }
+                  setError(null);
+                }}
                 data-testid={`input-${channel}-page-id`}
               />
               <p className="text-[10px] text-gray-500">
@@ -289,6 +392,72 @@ export function ConnectMetaFbIgWizard({
                   : "Found in Instagram → Settings → Professional account → Instagram account ID"}
               </p>
             </div>
+
+            {/* Validation results checklist */}
+            {validationStatus === "running" && (
+              <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 space-y-2">
+                <div className="flex items-center gap-2 text-xs text-gray-600">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  <span>Validating credentials with Meta…</span>
+                </div>
+              </div>
+            )}
+
+            {validationStatus === "done" && validationResult && (
+              <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 space-y-2">
+                <p className="text-xs font-semibold text-gray-700 mb-1">Validation results</p>
+
+                <ChecklistRow
+                  ok={validationResult.tokenValid}
+                  label={
+                    validationResult.tokenValid
+                      ? `Token valid${validationResult.tokenOwner ? ` — ${validationResult.tokenOwner}` : ""}`
+                      : "Token invalid — check your access token"
+                  }
+                />
+
+                <ChecklistRow
+                  ok={validationResult.pageAccessible}
+                  label={
+                    validationResult.pageAccessible
+                      ? `${isFacebook ? "Page" : "Account"} accessible${validationResult.pageName ? ` — ${validationResult.pageName}` : ""}`
+                      : `Cannot access ${isFacebook ? "Facebook Page" : "Instagram account"} with this ID`
+                  }
+                />
+
+                {validationResult.missingScopes.length > 0 ? (
+                  <div className="flex gap-2">
+                    <AlertTriangle className="h-3.5 w-3.5 text-amber-500 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-xs text-amber-800 font-medium">
+                        Missing permissions (you can still proceed, but some features may not work):
+                      </p>
+                      <ul className="mt-0.5 space-y-0.5">
+                        {validationResult.missingScopes.map((s) => (
+                          <li key={s} className="text-[10px] text-amber-700 font-mono">
+                            {s} — {REQUIRED_SCOPE_LABELS[s] ?? s}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                ) : validationResult.grantedScopes.length > 0 ? (
+                  <ChecklistRow ok label="Required permissions granted" />
+                ) : null}
+
+                {validationResult.pageSubscribed ? (
+                  <ChecklistRow ok label="Page auto-subscribed to webhook events" />
+                ) : validationResult.pageSubscriptionError ? (
+                  <div className="flex gap-2">
+                    <Info className="h-3.5 w-3.5 text-blue-500 flex-shrink-0 mt-0.5" />
+                    <p className="text-[10px] text-blue-800">
+                      Page subscription: {validationResult.pageSubscriptionError} — you can
+                      subscribe manually in Meta Developer Portal (webhook fields step).
+                    </p>
+                  </div>
+                ) : null}
+              </div>
+            )}
 
             {error && (
               <Alert variant="destructive">
@@ -301,15 +470,33 @@ export function ConnectMetaFbIgWizard({
               <Button variant="outline" className="flex-1" onClick={handleClose}>
                 Cancel
               </Button>
-              <Button
-                className="flex-1"
-                onClick={handleConnect}
-                disabled={loading || !accessToken.trim() || !pageId.trim()}
-                data-testid={`button-${channel}-save-credentials`}
-              >
-                {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Save & Continue
-              </Button>
+
+              {/* If validation passed — show "Save & Continue" to proceed to step 2 */}
+              {validationPassed ? (
+                <Button
+                  className="flex-1 bg-emerald-600 hover:bg-emerald-700"
+                  onClick={handleValidateAndSave}
+                  disabled={loading}
+                  data-testid={`button-${channel}-save-credentials`}
+                >
+                  {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Save & Continue
+                </Button>
+              ) : (
+                <Button
+                  className="flex-1"
+                  onClick={handleValidateAndSave}
+                  disabled={loading || !accessToken.trim() || !pageId.trim()}
+                  data-testid={`button-${channel}-validate`}
+                >
+                  {loading ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : null}
+                  {validationStatus === "done" && !validationPassed
+                    ? "Re-validate"
+                    : "Validate & Save"}
+                </Button>
+              )}
             </div>
           </div>
         )}
@@ -337,9 +524,7 @@ export function ConnectMetaFbIgWizard({
 
             <div className="space-y-4 text-sm text-gray-700">
               <div className="flex gap-3">
-                <span className="flex-shrink-0 w-5 h-5 rounded-full bg-gray-200 text-gray-700 flex items-center justify-center text-xs font-bold mt-0.5">
-                  1
-                </span>
+                <StepBadge n={1} />
                 <p>
                   Go to{" "}
                   <a
@@ -356,20 +541,15 @@ export function ConnectMetaFbIgWizard({
               </div>
 
               <div className="flex gap-3">
-                <span className="flex-shrink-0 w-5 h-5 rounded-full bg-gray-200 text-gray-700 flex items-center justify-center text-xs font-bold mt-0.5">
-                  2
-                </span>
+                <StepBadge n={2} />
                 <p>
                   Under <strong>Webhooks</strong>, click{" "}
-                  <strong>Edit Callback URL</strong> or{" "}
-                  <strong>Add Webhooks</strong>
+                  <strong>Edit Callback URL</strong> or <strong>Add Webhooks</strong>
                 </p>
               </div>
 
               <div className="flex gap-3">
-                <span className="flex-shrink-0 w-5 h-5 rounded-full bg-gray-200 text-gray-700 flex items-center justify-center text-xs font-bold mt-0.5">
-                  3
-                </span>
+                <StepBadge n={3} />
                 <div className="flex-1 space-y-2">
                   <p>
                     Paste this <strong>Callback URL</strong>:
@@ -398,9 +578,7 @@ export function ConnectMetaFbIgWizard({
               </div>
 
               <div className="flex gap-3">
-                <span className="flex-shrink-0 w-5 h-5 rounded-full bg-gray-200 text-gray-700 flex items-center justify-center text-xs font-bold mt-0.5">
-                  4
-                </span>
+                <StepBadge n={4} />
                 <div className="flex-1 space-y-2">
                   <p>
                     Paste this <strong>Verify Token</strong>:
@@ -442,19 +620,15 @@ export function ConnectMetaFbIgWizard({
               </div>
 
               <div className="flex gap-3">
-                <span className="flex-shrink-0 w-5 h-5 rounded-full bg-gray-200 text-gray-700 flex items-center justify-center text-xs font-bold mt-0.5">
-                  5
-                </span>
+                <StepBadge n={5} />
                 <p>
-                  Click <strong>Verify and Save</strong> — Meta will ping your
-                  webhook URL to confirm it works
+                  Click <strong>Verify and Save</strong> — Meta will ping your webhook URL
+                  to confirm it works
                 </p>
               </div>
 
               <div className="flex gap-3">
-                <span className="flex-shrink-0 w-5 h-5 rounded-full bg-gray-200 text-gray-700 flex items-center justify-center text-xs font-bold mt-0.5">
-                  6
-                </span>
+                <StepBadge n={6} />
                 <div className="flex-1 space-y-1.5">
                   <p>
                     Under <strong>Webhook Fields</strong>, subscribe to:
@@ -469,6 +643,10 @@ export function ConnectMetaFbIgWizard({
                       </span>
                     ))}
                   </div>
+                  <p className="text-[11px] text-gray-500 mt-1">
+                    Note: page subscription to webhook events was auto-attempted during
+                    validation. If it failed, complete this step manually.
+                  </p>
                 </div>
               </div>
             </div>
@@ -525,5 +703,30 @@ export function ConnectMetaFbIgWizard({
         )}
       </DialogContent>
     </Dialog>
+  );
+}
+
+// Small helper components
+
+function ChecklistRow({ ok, label }: { ok: boolean; label: string }) {
+  return (
+    <div className="flex items-start gap-2">
+      {ok ? (
+        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 flex-shrink-0 mt-0.5" />
+      ) : (
+        <XCircle className="h-3.5 w-3.5 text-red-500 flex-shrink-0 mt-0.5" />
+      )}
+      <p className={`text-xs ${ok ? "text-gray-700" : "text-red-700 font-medium"}`}>
+        {label}
+      </p>
+    </div>
+  );
+}
+
+function StepBadge({ n }: { n: number }) {
+  return (
+    <span className="flex-shrink-0 w-5 h-5 rounded-full bg-gray-200 text-gray-700 flex items-center justify-center text-xs font-bold mt-0.5">
+      {n}
+    </span>
   );
 }
