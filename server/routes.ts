@@ -2229,10 +2229,18 @@ export async function registerRoutes(
       const incomingMessage = parseMetaIncomingWebhook(req.body);
       const statusUpdate = parseMetaStatusWebhook(req.body);
 
+      // [Stage 2] Classify the payload by object type so downstream sections are easy to trace
+      const webhookObjectType = req.body.object as string | undefined;
+      const webhookEntry0 = req.body.entry?.[0];
+      const webhookHasMessaging = !!(webhookEntry0?.messaging?.length);
+      console.log(`[Meta Webhook] [Stage 2] Object type: "${webhookObjectType}" | has messaging array: ${webhookHasMessaging} | WhatsApp parse: ${incomingMessage ? "YES" : "no"} | status-update parse: ${statusUpdate ? "YES" : "no"}`);
+
       if (incomingMessage) {
-        console.log(`[Meta Webhook] Parsed inbound message — from: ${incomingMessage.from}, type: ${incomingMessage.type}, messageId: ${incomingMessage.messageId}, phoneNumberId: ${incomingMessage.phoneNumberId}, profileName: "${incomingMessage.profileName}"`);
-      } else if (!statusUpdate) {
+        console.log(`[Meta Webhook] [Stage 2a] WhatsApp inbound — from: ${incomingMessage.from}, type: ${incomingMessage.type}, messageId: ${incomingMessage.messageId}, phoneNumberId: ${incomingMessage.phoneNumberId}, profileName: "${incomingMessage.profileName}"`);
+      } else if (!statusUpdate && !webhookHasMessaging) {
         console.log("[Meta Webhook] Payload is neither a message nor a status update — likely a notification event, ignoring");
+      } else if (!incomingMessage && webhookHasMessaging) {
+        console.log(`[Meta Webhook] [Stage 2b] Non-WhatsApp messaging payload detected — routing to ${webhookObjectType === 'instagram' ? 'Instagram' : webhookObjectType === 'page' ? 'Facebook' : webhookObjectType ?? 'unknown'} handler`);
       }
 
       // Process all inbound messages directly to DB — no queue dependency
@@ -2273,14 +2281,17 @@ export async function registerRoutes(
         }
       }
 
-      // Parse Instagram Direct messages
+      // [Stage 3] Parse Instagram Direct messages
       const igEntry = req.body.entry?.[0];
       if (igEntry?.messaging && req.body.object === 'instagram') {
+        console.log(`[Meta Webhook] [Stage 3-IG] Instagram messaging block — ${igEntry.messaging.length} event(s)`);
         for (const event of igEntry.messaging) {
           if (event.message) {
             const senderId = event.sender?.id;
             const messageText = event.message.text || '';
             const messageId = event.message.mid;
+
+            console.log(`[Meta Webhook] [Stage 3-IG] Event: senderId=${senderId}, recipientId=${event.recipient?.id}, mid=${messageId}, text="${messageText.substring(0, 80)}"`);
 
             if (senderId && messageText) {
               const recipientId = event.recipient?.id;
@@ -2294,14 +2305,21 @@ export async function registerRoutes(
                   eqOp(channelSettingsTable.isConnected, true)
                 ));
 
+              console.log(`[Meta Webhook] [Stage 3-IG] Found ${allSettings.length} connected instagram channelSettings — looking for recipientId=${recipientId}`);
+              allSettings.forEach((s, i) => {
+                const cfg = s.config as any;
+                console.log(`[Meta Webhook] [Stage 3-IG]   [${i}] userId=${s.userId}, pageId=${cfg?.pageId}, instagramAccountId=${cfg?.instagramAccountId}`);
+              });
+
               const matchSetting = allSettings.find(s => {
                 const config = s.config as any;
                 return config?.pageId === recipientId || config?.instagramAccountId === recipientId;
               });
 
               if (matchSetting) {
-                console.log(`[Inbound] Webhook received — channel: instagram, from: ${senderId}, messageId: ${messageId}`);
-                console.log(`[Inbound] Channel identified: instagram — userId: ${matchSetting.userId}, starting processIncomingMessage`);
+                console.log(`[Meta Webhook] [Stage 3-IG] MATCHED channelSettings id=${matchSetting.id}, userId=${matchSetting.userId}`);
+                console.log(`[Inbound] [Stage 4-IG] Webhook received — channel: instagram, from: ${senderId}, messageId: ${messageId}`);
+                console.log(`[Inbound] [Stage 4-IG] Channel identified: instagram — userId: ${matchSetting.userId}, handing off to processIncomingMessage`);
                 directJobs.push(
                   metaCs.processIncomingMessage({
                     userId: matchSetting.userId,
@@ -2311,25 +2329,31 @@ export async function registerRoutes(
                     content: messageText,
                     contentType: 'text',
                     externalMessageId: messageId,
-                  }).then(() => {
-                    console.log(`[Inbound] Webhook returned 200 — channel: instagram, messageId: ${messageId}`);
+                  }).then((result) => {
+                    console.log(`[Inbound] [Stage 10-IG] Pipeline complete — channel: instagram, messageId: ${messageId}, contactId: ${result.contact.id}, conversationId: ${result.conversation.id}, messageId_db: ${result.message.id}, isNewConversation: ${result.isNewConversation}`);
                   })
                 );
               } else {
-                console.warn(`[Inbound] Instagram channel lookup FAILED — recipientId: ${recipientId}. No connected channelSettings record found with matching pageId or instagramAccountId. Message from senderId=${senderId} is being DROPPED. Hint: Save Instagram credentials via Integrations page to populate channelSettings.`);
+                console.warn(`[Meta Webhook] [Stage 3-IG] LOOKUP FAILED — recipientId: ${recipientId}. No connected Instagram channelSettings record matched. Message from senderId=${senderId} is being DROPPED.`);
+                console.warn(`[Meta Webhook] [Stage 3-IG] FIX: Go to Integrations → Instagram, enter your Page ID / Instagram Account ID (the one Meta calls as recipient="${recipientId}") and mark it connected.`);
               }
+            } else {
+              console.log(`[Meta Webhook] [Stage 3-IG] Skipping event — senderId or text missing (senderId=${senderId}, textLen=${messageText.length})`);
             }
           }
         }
       }
 
-      // Parse Facebook Messenger messages
+      // [Stage 3] Parse Facebook Messenger messages
       if (igEntry?.messaging && req.body.object === 'page') {
+        console.log(`[Meta Webhook] [Stage 3-FB] Facebook messaging block — ${igEntry.messaging.length} event(s)`);
         for (const event of igEntry.messaging) {
           if (event.message) {
             const senderId = event.sender?.id;
             const messageText = event.message.text || '';
             const messageId = event.message.mid;
+
+            console.log(`[Meta Webhook] [Stage 3-FB] Event: senderId=${senderId}, recipientId=${event.recipient?.id}, mid=${messageId}, text="${messageText.substring(0, 80)}"`);
 
             if (senderId && messageText) {
               const recipientId = event.recipient?.id;
@@ -2343,14 +2367,21 @@ export async function registerRoutes(
                   eqOp(channelSettingsTable.isConnected, true)
                 ));
 
+              console.log(`[Meta Webhook] [Stage 3-FB] Found ${allSettings.length} connected facebook channelSettings — looking for recipientId=${recipientId}`);
+              allSettings.forEach((s, i) => {
+                const cfg = s.config as any;
+                console.log(`[Meta Webhook] [Stage 3-FB]   [${i}] userId=${s.userId}, pageId=${cfg?.pageId}`);
+              });
+
               const matchSetting = allSettings.find(s => {
                 const config = s.config as any;
                 return config?.pageId === recipientId;
               });
 
               if (matchSetting) {
-                console.log(`[Inbound] Webhook received — channel: facebook, from: ${senderId}, messageId: ${messageId}`);
-                console.log(`[Inbound] Channel identified: facebook — userId: ${matchSetting.userId}, starting processIncomingMessage`);
+                console.log(`[Meta Webhook] [Stage 3-FB] MATCHED channelSettings id=${matchSetting.id}, userId=${matchSetting.userId}`);
+                console.log(`[Inbound] [Stage 4-FB] Webhook received — channel: facebook, from: ${senderId}, messageId: ${messageId}`);
+                console.log(`[Inbound] [Stage 4-FB] Channel identified: facebook — userId: ${matchSetting.userId}, handing off to processIncomingMessage`);
                 directJobs.push(
                   metaCs.processIncomingMessage({
                     userId: matchSetting.userId,
@@ -2360,13 +2391,16 @@ export async function registerRoutes(
                     content: messageText,
                     contentType: 'text',
                     externalMessageId: messageId,
-                  }).then(() => {
-                    console.log(`[Inbound] Webhook returned 200 — channel: facebook, messageId: ${messageId}`);
+                  }).then((result) => {
+                    console.log(`[Inbound] [Stage 10-FB] Pipeline complete — channel: facebook, messageId: ${messageId}, contactId: ${result.contact.id}, conversationId: ${result.conversation.id}, messageId_db: ${result.message.id}, isNewConversation: ${result.isNewConversation}`);
                   })
                 );
               } else {
-                console.warn(`[Inbound] Facebook channel lookup FAILED — recipientId: ${recipientId}. No connected channelSettings record found with matching pageId. Message from senderId=${senderId} is being DROPPED. Hint: Save Facebook credentials via Integrations page to populate channelSettings.`);
+                console.warn(`[Meta Webhook] [Stage 3-FB] LOOKUP FAILED — recipientId: ${recipientId}. No connected Facebook channelSettings record matched. Message from senderId=${senderId} is being DROPPED.`);
+                console.warn(`[Meta Webhook] [Stage 3-FB] FIX: Go to Integrations → Facebook, enter the Page ID that Meta calls as recipient="${recipientId}" and mark it connected.`);
               }
+            } else {
+              console.log(`[Meta Webhook] [Stage 3-FB] Skipping event — senderId or text missing (senderId=${senderId}, textLen=${messageText.length})`);
             }
           }
         }
