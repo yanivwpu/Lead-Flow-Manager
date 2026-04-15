@@ -502,7 +502,7 @@ export function Pricing() {
                 </p>
                 <Button
                   className="w-full bg-gray-100 text-gray-700 hover:bg-gray-200"
-                  onClick={() => setLocation(user ? "/app/chats" : "/auth")}
+                  onClick={() => setLocation(user ? "/app/inbox" : "/auth")}
                   disabled={isCurrentPlan}
                   data-testid="button-upgrade-free"
                 >
@@ -899,7 +899,7 @@ export function Pricing() {
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
             <Button
               className="h-12 px-8 bg-brand-green hover:bg-emerald-700 text-white font-semibold rounded-full"
-              onClick={() => setLocation(user ? "/app/chats" : "/auth")}
+              onClick={() => setLocation(user ? "/app/inbox" : "/auth")}
               data-testid="button-cta-start-free"
             >
               {t(`${p}.cta.startFree`)}

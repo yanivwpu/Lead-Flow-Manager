@@ -3502,7 +3502,7 @@ export async function registerRoutes(
           if (!integration.isActive) continue;
           const channel = type === 'meta_facebook' ? 'facebook' : 'instagram';
           const existing = await storage.getChannelSetting(integration.userId, channel as any);
-          if (existing?.isConnected) continue; // already populated
+          if (existing) continue; // already has a record (connected or pending) — never overwrite
 
           const rawConfig = integration.config as Record<string, any>;
           const decryptedConfig = decryptIntegrationConfig(rawConfig);
@@ -3929,14 +3929,14 @@ export async function registerRoutes(
         }
         const channelUpdates: any = { config: channelConfig };
         if (isActive === false) {
+          // Explicit deactivation — disconnect and disable
           channelUpdates.isConnected = false;
           channelUpdates.isEnabled = false;
-        } else {
-          channelUpdates.isConnected = true;
-          channelUpdates.isEnabled = true;
         }
+        // When updating credentials only: preserve the existing isConnected value.
+        // Only meta-webhook-confirm may promote a channel to isConnected: true.
         await storage.upsertChannelSetting(req.user.id, channel as any, channelUpdates);
-        console.log(`[Integration] ${channel} channelSettings updated for user ${req.user.id} — pageId: ${channelConfig.pageId}`);
+        console.log(`[Integration] ${channel} channelSettings config updated for user ${req.user.id} — pageId: ${channelConfig.pageId}`);
       }
 
       // Return with masked config

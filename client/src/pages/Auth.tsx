@@ -74,7 +74,7 @@ export function AuthPage() {
     setIsSubmitting(true);
 
     try {
-      const postAuthRedirect = redirectTo || "/app/chats";
+      const postAuthRedirect = redirectTo || "/app/inbox";
       if (isLogin) {
         const success = await login(email, password, rememberMe);
         if (success) {

@@ -2013,7 +2013,7 @@ export function RealtorGrowthEngine() {
                     </div>
                   ))}
                 </div>
-                <Button variant="outline" size="sm" className="w-full mt-4 text-xs" onClick={() => setLocation("/app/chats")}>
+                <Button variant="outline" size="sm" className="w-full mt-4 text-xs" onClick={() => setLocation("/app/inbox")}>
                   Open CRM
                 </Button>
               </CardContent>

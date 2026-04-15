@@ -112,7 +112,7 @@ export function RealtorLanding() {
           <Link href="/blog">
             <button className="text-sm font-medium text-gray-600 hover:text-gray-900 hidden sm:block">{t("rge.nav.blog")}</button>
           </Link>
-          <Link href={user ? "/app/chats" : "/auth"}>
+          <Link href={user ? "/app/inbox" : "/auth"}>
             <button className="text-sm font-medium px-4 py-2 bg-brand-green text-white rounded-full hover:bg-emerald-700">
               {user ? t("rge.nav.dashboard") : t("rge.nav.startFree")}
             </button>

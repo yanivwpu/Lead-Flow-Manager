@@ -143,7 +143,7 @@ export function Welcome() {
           </Link>
           <LanguageSelector variant="compact" className="text-gray-600 hover:text-gray-900 hover:bg-gray-100" />
           {user ? (
-            <Link href="/app/chats">
+            <Link href="/app/inbox">
               <button className="text-sm font-medium px-4 py-2 bg-brand-green text-white rounded-full hover:bg-emerald-700">
                 {t('landing.dashboard')}
               </button>
@@ -177,7 +177,7 @@ export function Welcome() {
             {/* Stacked CTAs for mobile */}
             <div className="flex flex-col gap-3 mb-4">
               <div className="w-full sm:w-auto">
-                <Link href={user ? "/app/chats" : "/auth"}>
+                <Link href={user ? "/app/inbox" : "/auth"}>
                   <button className="w-full sm:w-auto h-14 px-8 bg-brand-green hover:bg-emerald-700 text-white font-semibold rounded-full flex items-center justify-center gap-2 transition-all shadow-lg hover:shadow-xl" data-testid="button-hero-cta">
                     {t('landing.startTrial')}
                     <ArrowRight className="h-5 w-5" />
@@ -495,7 +495,7 @@ export function Welcome() {
           </p>
           
           <div className="flex flex-col sm:flex-row gap-4 justify-center mb-6">
-            <Link href={user ? "/app/chats" : "/auth"}>
+            <Link href={user ? "/app/inbox" : "/auth"}>
               <button className="h-14 px-8 bg-brand-green hover:bg-emerald-700 text-white font-semibold rounded-full inline-flex items-center justify-center gap-2 transition-all shadow-lg hover:shadow-xl" data-testid="button-final-cta">
                 {t('home.cta.primary')}
                 <ArrowRight className="h-5 w-5" />
