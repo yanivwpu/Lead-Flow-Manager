@@ -380,6 +380,10 @@ export function ChannelSettings() {
             const status = getChannelStatus(channel);
             const enabled = isChannelEnabled(channel);
             const isFbIg = channel === 'facebook' || channel === 'instagram';
+            // Resolved page/account name stored during wizard validation
+            const channelSetting = channels.find(s => s.channel === channel);
+            const savedPageName = channelSetting?.config?.pageName as string | undefined;
+            const savedPageId = channelSetting?.config?.pageId as string | undefined;
 
             return (
               <div
@@ -404,7 +408,14 @@ export function ChannelSettings() {
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-medium text-gray-900">{config.label}</span>
                       {status === 'connected' ? (
-                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+                        isFbIg ? (
+                          <span className="inline-flex items-center gap-1 text-[10px] bg-emerald-100 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 rounded font-medium">
+                            <CheckCircle2 className="h-2.5 w-2.5" />
+                            Ready to receive messages
+                          </span>
+                        ) : (
+                          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+                        )
                       ) : status === 'pending' ? (
                         <span className="inline-flex items-center gap-1 text-[10px] bg-amber-100 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded font-medium">
                           <Clock className="h-2.5 w-2.5" />
@@ -419,11 +430,31 @@ export function ChannelSettings() {
                         </span>
                       )}
                     </div>
-                    <p className="text-xs text-gray-500 truncate">
-                      {status === 'pending' && isFbIg
-                        ? "Credentials saved — webhook setup required to receive messages"
-                        : config.description}
-                    </p>
+                    {/* Description line — varies by state */}
+                    {status === 'connected' && isFbIg ? (
+                      <div className="mt-0.5 space-y-0.5">
+                        {savedPageName ? (
+                          <p className="text-xs text-gray-600 truncate">
+                            {channel === 'facebook' ? 'Page' : 'Account'}:{' '}
+                            <span className="font-medium">{savedPageName}</span>
+                            {savedPageId && (
+                              <span className="text-gray-400 ml-1 font-mono text-[10px]">
+                                ({savedPageId})
+                              </span>
+                            )}
+                          </p>
+                        ) : null}
+                        <p className="text-[10px] text-gray-400">
+                          New inbound messages only — history not imported
+                        </p>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-gray-500 truncate">
+                        {status === 'pending' && isFbIg
+                          ? "Credentials saved — webhook setup required to receive messages"
+                          : config.description}
+                      </p>
+                    )}
                   </div>
                 </div>
 

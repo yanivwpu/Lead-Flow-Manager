@@ -3853,6 +3853,10 @@ export async function registerRoutes(
         if (config.appSecret) {
           channelConfig.appSecret = config.appSecret;
         }
+        // Persist the resolved account/page name so the channel card can display it
+        if (config.pageName) {
+          channelConfig.pageName = config.pageName;
+        }
         // Start as NOT connected — channel is only marked connected after the user
         // confirms webhook setup via POST /api/integrations/meta-webhook-confirm.
         // This prevents a false "connected" state when inbound messages are not

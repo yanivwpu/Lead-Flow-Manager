@@ -26,6 +26,8 @@ import {
   XCircle,
   AlertTriangle,
   Info,
+  Inbox,
+  MessageSquare,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 
@@ -96,6 +98,9 @@ export function ConnectMetaFbIgWizard({
   const [copiedToken, setCopiedToken] = useState(false);
   const [showToken, setShowToken] = useState(false);
 
+  // Resolved page/account name from validation — persisted for the test step
+  const [savedPageName, setSavedPageName] = useState<string>("");
+
   // Validation state
   const [validationStatus, setValidationStatus] = useState<ValidationStatus>("idle");
   const [validationResult, setValidationResult] = useState<ValidationResult | null>(null);
@@ -118,6 +123,7 @@ export function ConnectMetaFbIgWizard({
     setShowToken(false);
     setValidationStatus("idle");
     setValidationResult(null);
+    setSavedPageName("");
   };
 
   const handleClose = () => {
@@ -146,6 +152,7 @@ export function ConnectMetaFbIgWizard({
 
       setValidationResult(vData);
       setValidationStatus("done");
+      if (vData.pageName) setSavedPageName(vData.pageName);
 
       // Critical failures: bad token or no page access — block proceeding
       if (!vData.tokenValid || !vData.pageAccessible) {
@@ -154,11 +161,11 @@ export function ConnectMetaFbIgWizard({
         return;
       }
 
-      // Token + page OK — save credentials
+      // Token + page OK — save credentials (include pageName so channel card can display it)
       const type = isFacebook ? "meta_facebook" : "meta_instagram";
       const config = isFacebook
-        ? { accessToken, pageId }
-        : { accessToken, instagramId: pageId };
+        ? { accessToken, pageId, pageName: vData.pageName || "" }
+        : { accessToken, instagramId: pageId, pageName: vData.pageName || "" };
 
       const saveRes = await fetch("/api/integrations", {
         method: "POST",
@@ -252,7 +259,7 @@ export function ConnectMetaFbIgWizard({
             <div>
               <DialogTitle>
                 {step === 3
-                  ? `${channelLabel} Connected!`
+                  ? `${channelLabel} — Ready to receive messages`
                   : mode === "manage"
                   ? `${channelLabel} — Webhook Config`
                   : `Connect ${channelLabel}`}
@@ -263,14 +270,14 @@ export function ConnectMetaFbIgWizard({
                   (mode === "manage"
                     ? "Your webhook configuration for Meta Developer Portal"
                     : "Configure the webhook in Meta Developer Portal to activate inbound messages")}
-                {step === 3 && "Your channel is connected and receiving messages"}
+                {step === 3 && "Send a test message to confirm the pipeline is live"}
               </DialogDescription>
             </div>
           </div>
 
-          {step !== 3 && mode !== "manage" && (
+          {mode !== "manage" && (
             <div className="flex items-center gap-1 mt-4">
-              {([1, 2] as Step[]).map((s, i) => (
+              {([1, 2, 3] as Step[]).map((s, i) => (
                 <div key={s} className="flex items-center gap-1">
                   <div
                     className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold transition-colors ${
@@ -288,9 +295,9 @@ export function ConnectMetaFbIgWizard({
                       step === s ? "text-gray-900 font-medium" : "text-gray-400"
                     }`}
                   >
-                    {s === 1 ? "Credentials" : "Webhook"}
+                    {s === 1 ? "Credentials" : s === 2 ? "Webhook" : "Test"}
                   </span>
-                  {i < 1 && <div className="w-8 h-px bg-gray-200 mx-1" />}
+                  {i < 2 && <div className="w-6 h-px bg-gray-200 mx-1" />}
                 </div>
               ))}
             </div>
@@ -679,26 +686,124 @@ export function ConnectMetaFbIgWizard({
           </div>
         )}
 
-        {/* ── Step 3: Success ── */}
+        {/* ── Step 3: Test & Ready ── */}
         {step === 3 && (
-          <div className="flex flex-col items-center justify-center py-8 gap-4">
-            <div className="w-16 h-16 rounded-full bg-emerald-50 flex items-center justify-center">
-              <CheckCircle2 className="h-8 w-8 text-emerald-600" />
+          <div className="space-y-4 py-2">
+            {/* Status banner */}
+            <div className="flex items-center gap-3 p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
+              <div className="w-9 h-9 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0">
+                <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-emerald-900">
+                  Ready to receive messages
+                </p>
+                {savedPageName ? (
+                  <p className="text-xs text-emerald-700 truncate">
+                    {isFacebook ? "Page" : "Account"}:{" "}
+                    <span className="font-medium">{savedPageName}</span>
+                    {pageId && (
+                      <span className="text-emerald-600 ml-1 font-mono">({pageId})</span>
+                    )}
+                  </p>
+                ) : (
+                  <p className="text-xs text-emerald-700">
+                    {isFacebook ? "Facebook Messenger" : "Instagram DM"} channel active
+                  </p>
+                )}
+              </div>
             </div>
-            <div className="text-center space-y-1">
-              <p className="font-semibold text-gray-900">{channelLabel} is connected!</p>
-              <p className="text-sm text-gray-500">
-                {isFacebook ? "Facebook Messenger" : "Instagram DM"} messages
-                will now appear in your inbox.
+
+            {/* Sync scope caveat */}
+            <div className="flex gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+              <Info className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-xs font-semibold text-amber-900">
+                  Only new messages will sync
+                </p>
+                <p className="text-[11px] text-amber-800 mt-0.5">
+                  Historical conversations and past messages are{" "}
+                  <strong>not</strong> imported. Only new inbound messages arriving
+                  after this setup will appear in your inbox. Contact support if
+                  you need historical message import.
+                </p>
+              </div>
+            </div>
+
+            {/* Live test instructions */}
+            <div className="rounded-lg border border-gray-200 p-3 space-y-2">
+              <div className="flex items-center gap-2">
+                <MessageSquare className="h-4 w-4 text-gray-500 flex-shrink-0" />
+                <p className="text-sm font-semibold text-gray-800">
+                  Confirm with a live test message
+                </p>
+              </div>
+              <ol className="space-y-1.5 pl-1">
+                <li className="flex gap-2 text-xs text-gray-700">
+                  <StepBadge n={1} />
+                  <span>
+                    {isFacebook
+                      ? "Open Facebook on your personal account and go to your Page"
+                      : "Open Instagram and go to your Professional account"}
+                  </span>
+                </li>
+                <li className="flex gap-2 text-xs text-gray-700">
+                  <StepBadge n={2} />
+                  <span>
+                    {isFacebook
+                      ? 'Send a message to the Page from a different account (or use Facebook\'s "Test User" feature in Meta Developer Portal)'
+                      : "Send a Direct Message to your Instagram Professional account from a different account"}
+                  </span>
+                </li>
+                <li className="flex gap-2 text-xs text-gray-700">
+                  <StepBadge n={3} />
+                  <span>
+                    Open your{" "}
+                    <a
+                      href="/inbox"
+                      className="text-blue-600 hover:underline font-medium"
+                      onClick={handleClose}
+                    >
+                      Unified Inbox
+                    </a>{" "}
+                    — the message should appear within a few seconds
+                  </span>
+                </li>
+              </ol>
+            </div>
+
+            {/* What appears in inbox */}
+            <div className="flex gap-2 p-3 bg-blue-50 border border-blue-100 rounded-lg">
+              <Inbox className="h-4 w-4 text-blue-500 flex-shrink-0 mt-0.5" />
+              <p className="text-[11px] text-blue-800">
+                Each message from a new sender automatically creates a contact and
+                opens a conversation in your inbox. Replies you send from the inbox
+                are delivered back through{" "}
+                {isFacebook ? "Messenger" : "Instagram DM"}.
               </p>
             </div>
-            <Button
-              className="w-full"
-              onClick={handleClose}
-              data-testid="button-close-success"
-            >
-              Close
-            </Button>
+
+            <div className="flex gap-2 pt-1">
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={handleClose}
+                data-testid="button-close-success"
+              >
+                Close
+              </Button>
+              <Button
+                className="flex-1 bg-emerald-600 hover:bg-emerald-700"
+                onClick={() => {
+                  handleClose();
+                  window.location.href = "/inbox";
+                }}
+                data-testid="button-go-to-inbox"
+              >
+                <Inbox className="h-4 w-4 mr-1.5" />
+                Go to Inbox
+              </Button>
+            </div>
           </div>
         )}
       </DialogContent>
