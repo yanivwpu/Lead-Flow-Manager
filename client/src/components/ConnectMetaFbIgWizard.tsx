@@ -760,7 +760,7 @@ export function ConnectMetaFbIgWizard({
                   <span>
                     Open your{" "}
                     <a
-                      href="/inbox"
+                      href="/app/inbox"
                       className="text-blue-600 hover:underline font-medium"
                       onClick={handleClose}
                     >
@@ -796,7 +796,7 @@ export function ConnectMetaFbIgWizard({
                 className="flex-1 bg-emerald-600 hover:bg-emerald-700"
                 onClick={() => {
                   handleClose();
-                  window.location.href = "/inbox";
+                  window.location.href = "/app/inbox";
                 }}
                 data-testid="button-go-to-inbox"
               >
