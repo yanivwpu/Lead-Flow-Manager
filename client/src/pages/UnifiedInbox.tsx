@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useRoute, useLocation } from "wouter";
 import { useAuth } from "@/lib/auth-context";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { useSubscription } from "@/lib/subscription-context";
 import { AIComposer } from "@/components/AIComposer";
 import {
@@ -348,6 +348,7 @@ export function UnifiedInbox() {
     queryKey: ["/api/inbox"],
     refetchInterval: 5000,
     refetchIntervalInBackground: true,
+    placeholderData: keepPreviousData,
   });
 
   const { data: demoChats = [] } = useQuery<any[]>({
@@ -397,6 +398,7 @@ export function UnifiedInbox() {
   const { data: realContactData } = useQuery<{ contact: Contact; conversations: Conversation[] }>({
     queryKey: ["/api/contacts", selectedContactId],
     enabled: !!selectedContactId && (!isDemoUser || !selectedDemoChat),
+    placeholderData: keepPreviousData,
   });
 
   const contactData = useMemo(() => {
@@ -437,11 +439,12 @@ export function UnifiedInbox() {
     (c) => c.channel === (contactData?.contact?.primaryChannelOverride || contactData?.contact?.primaryChannel)
   ) || contactData?.conversations?.[0];
 
-  const { data: realMessages = [] } = useQuery<Message[]>({
+  const { data: realMessages = [], isLoading: messagesLoading, isFetching: messagesFetching } = useQuery<Message[]>({
     queryKey: ["/api/conversations", primaryConversation?.id, "messages"],
     enabled: !!primaryConversation?.id && (!isDemoUser || !selectedDemoChat),
     refetchInterval: 4000,
     refetchIntervalInBackground: true,
+    placeholderData: keepPreviousData,
   });
 
   const messages: Message[] = useMemo(() => {
@@ -1154,7 +1157,15 @@ export function UnifiedInbox() {
             >
               <div className="absolute inset-0 bg-[#efeae2]/90 pointer-events-none" />
               <div className="relative z-10 p-3 flex flex-col gap-1.5 min-h-full justify-end">
-                {messages.length === 0 ? (
+                {messagesLoading && messages.length === 0 ? (
+                  <div className="flex flex-col gap-3 pb-4">
+                    {[80, 55, 120, 45, 90].map((w, i) => (
+                      <div key={i} className={`flex ${i % 2 === 0 ? 'justify-start' : 'justify-end'}`}>
+                        <div className={`h-8 bg-white/70 rounded-lg animate-pulse`} style={{ width: `${w}%`, maxWidth: '65%' }} />
+                      </div>
+                    ))}
+                  </div>
+                ) : !messagesLoading && messages.length === 0 ? (
                   <div className="text-center text-gray-500 py-8 self-center">
                     <MessageCircle className="w-10 h-10 mx-auto mb-2 opacity-30" />
                     <p className="text-sm">No messages yet</p>
