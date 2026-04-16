@@ -3900,6 +3900,54 @@ export async function registerRoutes(
     }
   });
 
+  // Debug endpoint: check live page subscription status directly from Meta's API.
+  // Returns what Meta currently knows about our app's subscription to this page.
+  app.get("/api/integrations/meta-debug-subscription", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+
+      const fbSetting = await storage.getChannelSetting(req.user.id, 'facebook' as any);
+      if (!fbSetting?.isConnected) return res.status(404).json({ error: "No connected Facebook page" });
+
+      const cfg = fbSetting.config as any;
+      const pageId = cfg?.pageId;
+      const accessToken = cfg?.accessToken;
+
+      if (!pageId || !accessToken) return res.status(400).json({ error: "Missing pageId or accessToken in channelSettings" });
+
+      const GRAPH = "https://graph.facebook.com/v19.0";
+
+      // 1. Check current page subscriptions
+      const subCheckUrl = `${GRAPH}/${pageId}/subscribed_apps?access_token=${encodeURIComponent(accessToken)}`;
+      console.log(`[Meta Debug] GET ${GRAPH}/${pageId}/subscribed_apps`);
+      const subResp = await fetch(subCheckUrl);
+      const subData = (await subResp.json()) as any;
+      console.log(`[Meta Debug] subscribed_apps GET response:`, JSON.stringify(subData));
+
+      // 2. Verify the page token is still valid via debug_token
+      const appToken = `${process.env.META_APP_ID}|${process.env.META_APP_SECRET}`;
+      const debugUrl = `${GRAPH}/debug_token?input_token=${encodeURIComponent(accessToken)}&access_token=${encodeURIComponent(appToken)}`;
+      console.log(`[Meta Debug] GET ${GRAPH}/debug_token for pageId=${pageId}`);
+      const debugResp = await fetch(debugUrl);
+      const debugData = (await debugResp.json()) as any;
+      console.log(`[Meta Debug] debug_token response:`, JSON.stringify({ is_valid: debugData?.data?.is_valid, type: debugData?.data?.type, scopes: debugData?.data?.scopes, error: debugData?.data?.error }));
+
+      res.json({
+        pageId,
+        pageName: cfg?.pageName,
+        tokenValid: debugData?.data?.is_valid ?? false,
+        tokenType: debugData?.data?.type,
+        grantedScopes: debugData?.data?.scopes ?? [],
+        tokenError: debugData?.data?.error ?? null,
+        subscriptions: subData?.data ?? [],
+        subscriptionError: subData?.error ?? null,
+      });
+    } catch (err: any) {
+      console.error("[Meta Debug] subscription check error:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // Validate a Meta (FB/IG) page token before saving credentials.
   // Checks: token validity, required scopes, page access, page subscription to webhook events.
   // Does NOT require authentication — token is provided directly in the request.
