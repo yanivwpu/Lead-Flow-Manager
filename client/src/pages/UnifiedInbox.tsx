@@ -66,7 +66,7 @@ import { useAICapabilities } from "@/lib/useAICapabilities";
 import { analyzeConversation } from "@/lib/conversationIntelligence";
 import type { ContactContext } from "@/components/AIComposer";
 
-type Channel = 'whatsapp' | 'instagram' | 'facebook' | 'sms' | 'webchat' | 'telegram' | 'tiktok';
+type Channel = 'whatsapp' | 'instagram' | 'facebook' | 'sms' | 'webchat' | 'telegram' | 'tiktok' | 'gohighlevel' | string;
 type FilterTab = 'all' | 'unread' | 'mine';
 
 interface Contact {
@@ -172,7 +172,7 @@ interface MessageTemplate {
   variables: string[];
 }
 
-const CHANNEL_CONFIG: Record<Channel, { icon: any; color: string; label: string }> = {
+const CHANNEL_CONFIG: Record<string, { icon: any; color: string; label: string }> = {
   whatsapp: { icon: MessageCircle, color: '#25D366', label: 'WhatsApp' },
   instagram: { icon: Instagram, color: '#E4405F', label: 'Instagram' },
   facebook: { icon: Facebook, color: '#1877F2', label: 'Messenger' },
@@ -180,6 +180,7 @@ const CHANNEL_CONFIG: Record<Channel, { icon: any; color: string; label: string 
   webchat: { icon: Globe, color: '#3B82F6', label: 'Web Chat' },
   telegram: { icon: Send, color: '#0088CC', label: 'Telegram' },
   tiktok: { icon: Video, color: '#000000', label: 'TikTok' },
+  gohighlevel: { icon: Zap, color: '#F97316', label: 'GoHighLevel' },
 };
 
 const CONVERSATION_STATUSES = [
@@ -810,7 +811,7 @@ export function UnifiedInbox() {
   // --- Helpers ---
 
   const getChannelIcon = (channel: Channel, size = "w-3 h-3") => {
-    const config = CHANNEL_CONFIG[channel];
+    const config = CHANNEL_CONFIG[channel] || { icon: User, color: '#6B7280' };
     const Icon = config.icon;
     return <Icon className={size} style={{ color: config.color }} />;
   };
