@@ -56,7 +56,5 @@ GHL_ADMIN_KEY = "ghl-cleanup-0fond86jndmpzp47ldzo1d"
 
 [userenv.production]
 NODE_ENV = "production"
-GHL_CLEANUP_USER_ID = "51f64011-eb3a-48a4-bb10-031abd3c0cdc"
-GHL_CLEANUP_MODE = "all_ghl"
 
 [userenv.development]
