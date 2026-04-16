@@ -3600,6 +3600,200 @@ export async function registerRoutes(
     }
   });
 
+  // ── Meta OAuth flow ──────────────────────────────────────────────────────
+
+  // GET /api/integrations/meta/auth-url?channel=facebook|instagram
+  // Returns the Meta OAuth redirect URL. Stores CSRF state in session.
+  app.get("/api/integrations/meta/auth-url", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+      const channel = req.query.channel as string;
+      if (channel !== "facebook" && channel !== "instagram") {
+        return res.status(400).json({ error: "channel must be facebook or instagram" });
+      }
+      const { buildMetaOAuthUrl } = await import("./metaOAuth");
+      const appUrl = process.env.APP_URL || `https://${(process.env.REPLIT_DOMAINS || "").split(",")[0]}`;
+      const redirectUri = `${appUrl}/api/integrations/meta/callback`;
+      const stateToken = crypto.randomBytes(16).toString("hex");
+      (req.session as any).metaOAuthState = { stateToken, channel, userId: req.user.id };
+      const url = buildMetaOAuthUrl(`${stateToken}:${channel}`, redirectUri);
+      res.json({ url, redirectUri });
+    } catch (err: any) {
+      console.error("[Meta OAuth] auth-url error:", err);
+      res.status(500).json({ error: err.message || "Failed to build OAuth URL" });
+    }
+  });
+
+  // GET /api/integrations/meta/callback?code=...&state=...
+  // Handles the OAuth redirect from Meta. Exchanges code, fetches pages,
+  // enriches with IG data, stores result in session, redirects to app.
+  app.get("/api/integrations/meta/callback", async (req, res) => {
+    try {
+      const { code, state, error: oauthError } = req.query as Record<string, string>;
+
+      if (oauthError) {
+        return res.redirect(`/app/settings?meta_oauth=denied`);
+      }
+      if (!code || !state) {
+        return res.redirect(`/app/settings?meta_oauth=error&reason=missing_params`);
+      }
+
+      const sessionState = (req.session as any).metaOAuthState as
+        | { stateToken: string; channel: string; userId: string }
+        | undefined;
+      const [stateToken, channel] = state.split(":");
+      if (!sessionState || sessionState.stateToken !== stateToken) {
+        return res.redirect(`/app/settings?meta_oauth=error&reason=invalid_state`);
+      }
+
+      const { exchangeCodeForToken, exchangeForLongLivedToken, fetchUserPages, enrichWithInstagramData } =
+        await import("./metaOAuth");
+
+      const appUrl = process.env.APP_URL || `https://${(process.env.REPLIT_DOMAINS || "").split(",")[0]}`;
+      const redirectUri = `${appUrl}/api/integrations/meta/callback`;
+
+      const shortToken = await exchangeCodeForToken(code, redirectUri);
+      const userAccessToken = await exchangeForLongLivedToken(shortToken);
+      let pages = await fetchUserPages(userAccessToken);
+      pages = await enrichWithInstagramData(pages);
+
+      (req.session as any).metaOAuthPending = {
+        channel,
+        userAccessToken,
+        pages,
+        userId: sessionState.userId,
+        expiresAt: Date.now() + 10 * 60 * 1000, // 10 min TTL
+      };
+      delete (req.session as any).metaOAuthState;
+
+      console.log(`[Meta OAuth] callback success for user ${sessionState.userId} — ${pages.length} page(s) fetched`);
+      res.redirect(`/app/settings?meta_oauth=ready&channel=${encodeURIComponent(channel)}`);
+    } catch (err: any) {
+      console.error("[Meta OAuth] callback error:", err);
+      res.redirect(`/app/settings?meta_oauth=error&reason=${encodeURIComponent(err.message || "unknown")}`);
+    }
+  });
+
+  // GET /api/integrations/meta/oauth-pages
+  // Returns the pages stored in session after OAuth callback.
+  app.get("/api/integrations/meta/oauth-pages", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+      const pending = (req.session as any).metaOAuthPending as
+        | { channel: string; pages: any[]; userId: string; expiresAt: number }
+        | undefined;
+      if (!pending) return res.status(404).json({ error: "No OAuth session found — please reconnect" });
+      if (pending.userId !== req.user.id) return res.status(403).json({ error: "Session mismatch" });
+      if (Date.now() > pending.expiresAt) {
+        delete (req.session as any).metaOAuthPending;
+        return res.status(410).json({ error: "OAuth session expired — please reconnect" });
+      }
+      res.json({ channel: pending.channel, pages: pending.pages });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || "Failed to retrieve OAuth pages" });
+    }
+  });
+
+  // POST /api/integrations/meta/connect-page
+  // Body: { pageId }
+  // Validates the selected page, subscribes webhooks, detects IG account,
+  // saves credentials and marks isConnected=true.
+  app.post("/api/integrations/meta/connect-page", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+
+      const { pageId } = req.body as { pageId: string };
+      if (!pageId) return res.status(400).json({ error: "pageId is required" });
+
+      const pending = (req.session as any).metaOAuthPending as
+        | { channel: string; pages: any[]; userId: string; expiresAt: number; userAccessToken: string }
+        | undefined;
+      if (!pending) return res.status(404).json({ error: "No OAuth session — please reconnect" });
+      if (pending.userId !== req.user.id) return res.status(403).json({ error: "Session mismatch" });
+      if (Date.now() > pending.expiresAt) {
+        delete (req.session as any).metaOAuthPending;
+        return res.status(410).json({ error: "Session expired — please reconnect" });
+      }
+
+      const { connectPage } = await import("./metaOAuth");
+      const channel = pending.channel as "facebook" | "instagram";
+      const page = pending.pages.find((p: any) => p.id === pageId);
+      if (!page) return res.status(404).json({ error: "Page not found in OAuth session" });
+
+      const result = await connectPage(req.user.id, channel, page);
+
+      if (!result.success) {
+        return res.status(422).json(result);
+      }
+
+      // Persist: generate stable webhook verify token
+      const cryptoMod = await import("crypto");
+      const verifyTokenRaw = cryptoMod
+        .createHmac("sha256", process.env.SESSION_SECRET || "whachat-fb-verify-salt")
+        .update(`${req.user.id}:${channel}`)
+        .digest("hex")
+        .slice(0, 32);
+
+      const channelConfig: Record<string, string> = {
+        accessToken: page.accessToken,
+        pageId: channel === "facebook" ? page.id : (result.instagramAccountId || page.id),
+        pageName: result.pageName || page.name,
+        webhookVerifyToken: verifyTokenRaw,
+      };
+      if (channel === "instagram" && result.instagramAccountId) {
+        channelConfig.instagramAccountId = result.instagramAccountId;
+        if (result.instagramUsername) channelConfig.instagramUsername = result.instagramUsername;
+      }
+
+      // Upsert channelSettings — isConnected true only now (all steps passed)
+      await storage.upsertChannelSetting(req.user.id, channel, {
+        isConnected: true,
+        isEnabled: true,
+        config: channelConfig,
+      });
+
+      // Upsert integration record for credential storage (encrypted)
+      const integrationConfig: Record<string, string> = {
+        accessToken: page.accessToken,
+        pageId: page.id,
+        pageName: result.pageName || page.name,
+        webhookVerifyToken: verifyTokenRaw,
+      };
+      if (channel === "instagram" && result.instagramAccountId) {
+        integrationConfig.instagramId = result.instagramAccountId;
+        if (result.instagramUsername) integrationConfig.instagramUsername = result.instagramUsername;
+      }
+
+      const existingIntegrations = await storage.getIntegrationsByType(
+        channel === "facebook" ? "meta_facebook" : "meta_instagram"
+      );
+      const existing = existingIntegrations.find((i: any) => i.userId === req.user!.id);
+      const integrationType = channel === "facebook" ? "meta_facebook" : "meta_instagram";
+      const encryptedConfig = encryptIntegrationConfig(integrationConfig);
+
+      if (existing) {
+        await storage.updateIntegration(existing.id, { config: encryptedConfig, isActive: true });
+      } else {
+        await storage.createIntegration({
+          userId: req.user.id,
+          type: integrationType,
+          name: channel === "facebook" ? `Facebook — ${result.pageName}` : `Instagram — ${result.instagramUsername || result.pageName}`,
+          config: encryptedConfig,
+          isActive: true,
+        });
+      }
+
+      delete (req.session as any).metaOAuthPending;
+      console.log(`[Meta OAuth] connect-page success: user=${req.user.id} channel=${channel} page=${result.pageName}`);
+      res.json(result);
+    } catch (err: any) {
+      console.error("[Meta OAuth] connect-page error:", err);
+      res.status(500).json({ error: err.message || "Failed to connect page" });
+    }
+  });
+
+  // ── End Meta OAuth flow ───────────────────────────────────────────────────
+
   // Return webhook URL + verify token for Facebook/Instagram channels
   // The verify token is stored in channelSettings.config.webhookVerifyToken
   app.get("/api/integrations/meta-webhook-config", async (req, res) => {
@@ -3628,10 +3822,14 @@ export async function registerRoutes(
         facebook: {
           isConnected: !!fbSetting?.isConnected,
           verifyToken: fbConfig?.webhookVerifyToken || deriveFbToken(),
+          pageName: fbConfig?.pageName ?? null,
+          pageId: fbConfig?.pageId ?? null,
         },
         instagram: {
           isConnected: !!igSetting?.isConnected,
           verifyToken: igConfig?.webhookVerifyToken || deriveIgToken(),
+          pageName: igConfig?.pageName ?? null,
+          pageId: igConfig?.instagramAccountId ?? igConfig?.pageId ?? null,
         },
       });
     } catch (error) {

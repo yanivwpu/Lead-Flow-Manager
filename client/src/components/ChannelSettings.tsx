@@ -125,7 +125,7 @@ export function ChannelSettings() {
   const [connectTwilioOpen, setConnectTwilioOpen] = useState(false);
   const [connectFbIgConfig, setConnectFbIgConfig] = useState<{
     channel: 'facebook' | 'instagram';
-    mode: 'connect' | 'pending-webhook';
+    initialStage?: 'idle' | 'page_select';
   } | null>(null);
   const [manageFbIgChannel, setManageFbIgChannel] = useState<'facebook' | 'instagram' | null>(null);
   const [showManageToken, setShowManageToken] = useState(false);
@@ -170,6 +170,37 @@ export function ChannelSettings() {
     }
   }, [connectTwilioOpen]);
 
+  // Detect OAuth callback: ?meta_oauth=ready&channel=facebook|instagram
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const oauthStatus = params.get("meta_oauth");
+    const oauthChannel = params.get("channel") as 'facebook' | 'instagram' | null;
+
+    if (!oauthStatus) return;
+
+    // Strip OAuth params from URL without triggering a navigation
+    const cleanUrl = window.location.pathname;
+    window.history.replaceState({}, "", cleanUrl);
+
+    if (oauthStatus === "ready" && (oauthChannel === "facebook" || oauthChannel === "instagram")) {
+      // Open the wizard in page_select stage — pages are stored in server session
+      setConnectFbIgConfig({ channel: oauthChannel, initialStage: "page_select" });
+    } else if (oauthStatus === "denied") {
+      toast({
+        title: "Permission denied",
+        description: "Facebook access was not granted. You can try again at any time.",
+        variant: "destructive",
+      });
+    } else if (oauthStatus === "error") {
+      const reason = params.get("reason") || "unknown error";
+      toast({
+        title: "Connection failed",
+        description: `Something went wrong during the Facebook login (${reason}). Please try again.`,
+        variant: "destructive",
+      });
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   const { data: channels = [], isLoading } = useQuery<ChannelSetting[]>({
     queryKey: ["/api/channels"],
   });
@@ -189,8 +220,8 @@ export function ChannelSettings() {
 
   const { data: metaWebhookConfig } = useQuery<{
     webhookUrl: string;
-    facebook: { isConnected: boolean; verifyToken: string };
-    instagram: { isConnected: boolean; verifyToken: string };
+    facebook: { isConnected: boolean; verifyToken: string; pageName?: string | null; pageId?: string | null };
+    instagram: { isConnected: boolean; verifyToken: string; pageName?: string | null; pageId?: string | null };
   }>({
     queryKey: ["/api/integrations/meta-webhook-config"],
   });
@@ -329,11 +360,8 @@ export function ChannelSettings() {
   const copyWebhookUrl = (url: string) => copyText(url, setCopied);
   const webhookBaseUrl = window.location.origin;
 
-  const handleFbIgConnectClick = (
-    channel: 'facebook' | 'instagram',
-    mode: 'connect' | 'pending-webhook' = 'connect'
-  ) => {
-    setConnectFbIgConfig({ channel, mode });
+  const handleFbIgConnectClick = (channel: 'facebook' | 'instagram') => {
+    setConnectFbIgConfig({ channel, initialStage: 'idle' });
   };
 
   const handleFbIgSettingsClick = (channel: 'facebook' | 'instagram') => {
@@ -472,10 +500,10 @@ export function ChannelSettings() {
                     <Button
                       size="sm"
                       className="bg-amber-600 hover:bg-amber-700 text-white text-xs"
-                      onClick={() => handleFbIgConnectClick(channel as 'facebook' | 'instagram', 'pending-webhook')}
+                      onClick={() => handleFbIgConnectClick(channel as 'facebook' | 'instagram')}
                       data-testid={`button-complete-setup-${channel}`}
                     >
-                      Complete Setup
+                      Reconnect
                     </Button>
                   )}
 
@@ -552,27 +580,13 @@ export function ChannelSettings() {
           })}
       </div>
 
-      {/* Facebook / Instagram — connect or complete-setup wizard */}
+      {/* Facebook / Instagram — OAuth connect wizard */}
       {connectFbIgConfig && (
         <ConnectMetaFbIgWizard
           open={!!connectFbIgConfig}
           onOpenChange={(v) => { if (!v) setConnectFbIgConfig(null); }}
           channel={connectFbIgConfig.channel}
-          mode={connectFbIgConfig.mode}
-          existingWebhookUrl={
-            connectFbIgConfig.mode === 'pending-webhook'
-              ? (connectFbIgConfig.channel === 'facebook'
-                ? metaWebhookConfig?.facebook?.webhookUrl
-                : metaWebhookConfig?.instagram?.webhookUrl)
-              : undefined
-          }
-          existingVerifyToken={
-            connectFbIgConfig.mode === 'pending-webhook'
-              ? (connectFbIgConfig.channel === 'facebook'
-                ? metaWebhookConfig?.facebook?.verifyToken
-                : metaWebhookConfig?.instagram?.verifyToken)
-              : undefined
-          }
+          initialStage={connectFbIgConfig.initialStage}
         />
       )}
 
@@ -607,85 +621,39 @@ export function ChannelSettings() {
           <div className="space-y-5 py-2">
             <div className="flex items-center gap-2 p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
               <CheckCircle2 className="h-4 w-4 text-emerald-600 flex-shrink-0" />
-              <p className="text-sm text-emerald-800 font-medium">Channel is connected and active</p>
+              <div>
+                <p className="text-sm text-emerald-800 font-medium">Channel is connected and active</p>
+                {manageChannelData?.pageName && (
+                  <p className="text-xs text-emerald-700 mt-0.5">
+                    {manageChannelData.pageName}
+                    {manageChannelData.pageId && (
+                      <span className="ml-1.5 font-mono text-emerald-500">({manageChannelData.pageId})</span>
+                    )}
+                  </p>
+                )}
+              </div>
             </div>
 
-            {metaWebhookConfig && manageChannelData && (
-              <div className="space-y-4">
-                <p className="text-sm font-semibold text-gray-800">Webhook Configuration</p>
-                <p className="text-xs text-gray-500">
-                  Use these values in Meta Developer Portal to configure your webhook.
-                </p>
+            <div className="p-3 bg-gray-50 rounded-lg text-xs text-gray-600 space-y-1">
+              <p className="font-medium text-gray-700">New inbound messages only</p>
+              <p>Existing conversation history is not imported — only messages received after connecting will appear in your inbox.</p>
+            </div>
 
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-gray-600">Callback URL</Label>
-                  <div className="flex gap-2">
-                    <Input
-                      readOnly
-                      value={metaWebhookConfig.webhookUrl}
-                      className="text-xs font-mono bg-gray-50"
-                      data-testid="input-manage-webhook-url"
-                    />
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      onClick={() => copyText(metaWebhookConfig.webhookUrl, setManageCopiedUrl)}
-                      data-testid="button-copy-manage-webhook-url"
-                    >
-                      {manageCopiedUrl
-                        ? <Check className="h-4 w-4 text-emerald-600" />
-                        : <Copy className="h-4 w-4" />
-                      }
-                    </Button>
-                  </div>
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-gray-600">Verify Token</Label>
-                  <div className="flex gap-2">
-                    <Input
-                      readOnly
-                      type={showManageToken ? "text" : "password"}
-                      value={manageChannelData.verifyToken}
-                      className="text-xs font-mono bg-gray-50"
-                      data-testid="input-manage-verify-token"
-                    />
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      onClick={() => setShowManageToken(v => !v)}
-                      data-testid="button-toggle-manage-verify-token"
-                    >
-                      {showManageToken
-                        ? <EyeOff className="h-4 w-4" />
-                        : <Eye className="h-4 w-4" />
-                      }
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      onClick={() => copyText(manageChannelData.verifyToken, setManageCopiedToken)}
-                      data-testid="button-copy-manage-verify-token"
-                    >
-                      {manageCopiedToken
-                        ? <Check className="h-4 w-4 text-emerald-600" />
-                        : <Copy className="h-4 w-4" />
-                      }
-                    </Button>
-                  </div>
-                  <p className="text-[10px] text-gray-400">Keep this private — it proves ownership of your webhook endpoint</p>
-                </div>
-
-                <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800">
-                  <AlertCircle className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
-                  <p>
-                    Subscribe to <span className="font-mono font-semibold">messages</span>,{' '}
-                    <span className="font-mono font-semibold">messaging_postbacks</span>, and{' '}
-                    <span className="font-mono font-semibold">messaging_seen</span> under Webhook Fields in Meta Developer Portal.
-                  </p>
-                </div>
-              </div>
-            )}
+            <div className="pt-1 border-t">
+              <p className="text-xs text-gray-500 mb-2">Need to switch to a different page or re-grant permissions?</p>
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full"
+                onClick={() => {
+                  setManageFbIgChannel(null);
+                  handleFbIgConnectClick(manageFbIgChannel!);
+                }}
+                data-testid="button-reconnect-meta"
+              >
+                Reconnect with Facebook
+              </Button>
+            </div>
 
             <div className="pt-2 border-t space-y-2">
               <p className="text-xs font-semibold text-red-600">Danger Zone</p>
