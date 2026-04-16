@@ -9,7 +9,6 @@ const SCOPES = [
   "pages_manage_metadata",
   "instagram_basic",
   "instagram_manage_messages",
-  "instagram_manage_metadata",
 ].join(",");
 
 export interface MetaPage {

@@ -3863,7 +3863,6 @@ export async function registerRoutes(
           "instagram_basic",
           "instagram_manage_messages",
           "pages_show_list",
-          "instagram_manage_metadata",
         ],
       };
 
