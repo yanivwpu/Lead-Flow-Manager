@@ -226,89 +226,103 @@ export async function connectPage(
     instagram: ["pages_show_list", "pages_messaging"],
   };
 
-  // Step 1: Verify token
-  // Only hard-fail on genuine invalid/expired token errors (codes 190, 102, 104).
-  // Permission-missing errors (#100) mean the token IS valid but the app lacks a
-  // feature (Page Public Metadata Access) — treat as valid since the token was just
-  // obtained from our OAuth flow moments ago.
+  // Step 1 + 2: Verify token AND check scopes using /debug_token with the APP access token.
+  // This uses app-level credentials (APP_ID|APP_SECRET), so it requires NO page permissions.
+  // It is the correct Meta-compliant way to inspect any token.
+  const appToken = `${process.env.META_APP_ID}|${process.env.META_APP_SECRET}`;
+  const debugEndpoint = `${GRAPH}/debug_token?input_token=<page_token>&access_token=<app_token>`;
+  console.log(`[MetaOAuth] Step 1: GET ${debugEndpoint}`);
   try {
-    const meResp = await fetch(
-      `${GRAPH}/me?fields=id,name&access_token=${encodeURIComponent(page.accessToken)}`
+    const debugResp = await fetch(
+      `${GRAPH}/debug_token` +
+      `?input_token=${encodeURIComponent(page.accessToken)}` +
+      `&access_token=${encodeURIComponent(appToken)}`
     );
-    const meData = (await meResp.json()) as any;
-    const errCode = meData?.error?.code;
-    const isTokenError = !meResp.ok && errCode && [190, 102, 104, 463, 467].includes(Number(errCode));
-    if (isTokenError) {
-      result.error = meData?.error?.message || "Page access token is invalid or expired";
+    const debugData = (await debugResp.json()) as any;
+    const td = debugData?.data ?? {};
+    console.log(`[MetaOAuth] debug_token result:`, JSON.stringify({
+      is_valid: td.is_valid,
+      type: td.type,
+      app_id: td.app_id,
+      scopes: td.scopes,
+      granular_scopes: td.granular_scopes,
+      error: td.error ?? debugData?.error,
+    }));
+
+    if (!debugResp.ok || !td.is_valid) {
+      const errMsg = td.error?.message ?? debugData?.error?.message ?? "Page access token is invalid or expired";
+      result.error = errMsg;
       result.failedAt = "token";
       return result;
     }
-    // Permission/feature errors (#100) are non-fatal — the token is still valid
     result.steps.tokenValid = true;
-  } catch (e: any) {
-    // Network error — assume token is fine, continue
-    result.steps.tokenValid = true;
-    result.warnings.push("Could not verify token via API (non-fatal): " + (e.message || "network error"));
-  }
 
-  // Step 2: Check permissions
-  try {
-    const permResp = await fetch(
-      `${GRAPH}/me/permissions?access_token=${encodeURIComponent(page.accessToken)}`
-    );
-    const permData = (await permResp.json()) as any;
-    if (permResp.ok && Array.isArray(permData?.data)) {
-      const granted = permData.data
-        .filter((p: any) => p.status === "granted")
-        .map((p: any) => p.permission as string);
-      const required = REQUIRED_SCOPES[channel] ?? [];
-      const missing = required.filter((s) => !granted.includes(s));
-      if (missing.length > 0) {
-        result.warnings.push(`Some permissions were not granted: ${missing.join(", ")}`);
-      }
+    // Step 2: Scopes come directly from the debug response — no extra API call needed.
+    // For page tokens, scopes list shows permissions on the token.
+    const grantedScopes: string[] = Array.isArray(td.scopes) ? td.scopes : [];
+    const required = REQUIRED_SCOPES[channel] ?? [];
+    const missing = required.filter((s) => !grantedScopes.includes(s));
+    console.log(`[MetaOAuth] Step 2: granted=${grantedScopes.join(",") || "(none)"} required=${required.join(",")} missing=${missing.join(",") || "none"}`);
+    if (missing.length > 0) {
+      result.warnings.push(`Missing permissions: ${missing.join(", ")} — some features may not work`);
     }
     result.steps.permissionsOk = true;
-  } catch {
-    result.steps.permissionsOk = true; // Non-fatal for page tokens
+  } catch (e: any) {
+    result.error = e.message || "Token verification failed";
+    result.failedAt = "token";
+    return result;
   }
 
-  // Step 3: Subscribe page to webhooks
-  // Use the minimal "messages" field only — broader fields (messaging_referrals, etc.)
-  // require Page Public Metadata Access feature which needs Meta app review.
+  // Step 3: Subscribe page to webhooks.
+  // Endpoint: POST /{page_id}/subscribed_apps
+  // Fields: messages only (pages_manage_metadata is sufficient; no pages_read_engagement needed)
+  const subEndpoint = `${GRAPH}/${page.id}/subscribed_apps`;
+  console.log(`[MetaOAuth] Step 3: POST ${subEndpoint} subscribed_fields=messages`);
   try {
-    const subFields = "messages";
-    const subResp = await fetch(
-      `${GRAPH}/${encodeURIComponent(page.id)}/subscribed_apps`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: `subscribed_fields=${encodeURIComponent(subFields)}&access_token=${encodeURIComponent(page.accessToken)}`,
-      }
-    );
+    const subResp = await fetch(subEndpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: `subscribed_fields=messages&access_token=${encodeURIComponent(page.accessToken)}`,
+    });
     const subData = (await subResp.json()) as any;
-    console.log(`[MetaOAuth] subscribed_apps response for page ${page.id}:`, JSON.stringify({
-      ok: subResp.ok, success: subData?.success, error: subData?.error?.message
+    console.log(`[MetaOAuth] subscribed_apps response:`, JSON.stringify({
+      http_status: subResp.status,
+      success: subData?.success,
+      error_code: subData?.error?.code,
+      error_type: subData?.error?.type,
+      error_message: subData?.error?.message,
     }));
     if (subResp.ok && subData.success) {
       result.steps.webhookSubscribed = true;
     } else {
       result.warnings.push(
-        subData?.error?.message || "Webhook subscription failed — messages may not be received until resolved"
+        `Webhook subscription failed [${subData?.error?.code ?? subResp.status}]: ` +
+        (subData?.error?.message ?? "unknown — messages may not arrive until resolved")
       );
     }
   } catch (e: any) {
     result.warnings.push("Webhook subscription failed: " + (e.message || "unknown error"));
   }
 
-  // Step 4: IG detection (always run for instagram channel; also run for facebook in case IG is linked)
+  // Step 4: Instagram detection — only for instagram channel, all via the page token.
+  // Fields requested: instagram_business_account (id only) — no broad metadata needed.
   let instagramAccountId = page.instagramAccountId;
   let instagramUsername = page.instagramUsername;
   if (channel === "instagram" && !instagramAccountId) {
+    const igEndpoint = `${GRAPH}/${page.id}?fields=instagram_business_account`;
+    console.log(`[MetaOAuth] Step 4: GET ${igEndpoint}`);
     try {
       const igPageResp = await fetch(
         `${GRAPH}/${page.id}?fields=instagram_business_account&access_token=${encodeURIComponent(page.accessToken)}`
       );
       const igPageData = (await igPageResp.json()) as any;
+      console.log(`[MetaOAuth] instagram_business_account response:`, JSON.stringify({
+        ok: igPageResp.ok,
+        status: igPageResp.status,
+        ig_id: igPageData?.instagram_business_account?.id,
+        error_code: igPageData?.error?.code,
+        error: igPageData?.error?.message,
+      }));
       if (igPageResp.ok && igPageData.instagram_business_account?.id) {
         instagramAccountId = igPageData.instagram_business_account.id as string;
         const igResp = await fetch(
@@ -326,7 +340,7 @@ export async function connectPage(
   } else if (instagramAccountId) {
     result.steps.instagramDetected = true;
   } else {
-    result.steps.instagramDetected = true; // Not needed for Facebook-only
+    result.steps.instagramDetected = true; // Not required for Facebook-only
   }
 
   result.success = true;
@@ -336,8 +350,9 @@ export async function connectPage(
   result.instagramUsername = instagramUsername;
 
   console.log(
-    `[MetaOAuth] connectPage userId=${userId} channel=${channel} page=${page.name}(${page.id}) ` +
-    `webhookSubscribed=${result.steps.webhookSubscribed} igDetected=${result.steps.instagramDetected}`
+    `[MetaOAuth] connectPage DONE userId=${userId} channel=${channel} ` +
+    `page=${page.name}(${page.id}) webhookSubscribed=${result.steps.webhookSubscribed} ` +
+    `igDetected=${result.steps.instagramDetected} warnings=${result.warnings.length}`
   );
 
   return result;
