@@ -2345,63 +2345,111 @@ export async function registerRoutes(
       }
 
       // [Stage 3] Parse Facebook Messenger messages
-      if (igEntry?.messaging && req.body.object === 'page') {
-        console.log(`[Meta Webhook] [Stage 3-FB] Facebook messaging block — ${igEntry.messaging.length} event(s)`);
-        for (const event of igEntry.messaging) {
-          if (event.message) {
-            const senderId = event.sender?.id;
-            const messageText = event.message.text || '';
-            const messageId = event.message.mid;
+      // object=page covers all Messenger DMs to a Facebook Page
+      if (req.body.object === 'page') {
+        const fbEntries: any[] = Array.isArray(req.body.entry) ? req.body.entry : [];
+        console.log(`[Meta Webhook] [Stage 3-FB] object=page, ${fbEntries.length} entry(s)`);
+        for (const fbEntry of fbEntries) {
+          const fbPageId = fbEntry.id; // The Page that received the message
+          const messagingEvents: any[] = Array.isArray(fbEntry.messaging) ? fbEntry.messaging : [];
+          console.log(`[Meta Webhook] [Stage 3-FB] Entry pageId=${fbPageId}, ${messagingEvents.length} messaging event(s)`);
 
-            console.log(`[Meta Webhook] [Stage 3-FB] Event: senderId=${senderId}, recipientId=${event.recipient?.id}, mid=${messageId}, text="${messageText.substring(0, 80)}"`);
-
-            if (senderId && messageText) {
-              const recipientId = event.recipient?.id;
-              const { db: database } = await import("../drizzle/db");
-              const { channelSettings: channelSettingsTable } = await import("@shared/schema");
-              const { eq: eqOp, and: andOp } = await import("drizzle-orm");
-
-              const allSettings = await database.select().from(channelSettingsTable)
-                .where(andOp(
-                  eqOp(channelSettingsTable.channel, 'facebook'),
-                  eqOp(channelSettingsTable.isConnected, true)
-                ));
-
-              console.log(`[Meta Webhook] [Stage 3-FB] Found ${allSettings.length} connected facebook channelSettings — looking for recipientId=${recipientId}`);
-              allSettings.forEach((s, i) => {
-                const cfg = s.config as any;
-                console.log(`[Meta Webhook] [Stage 3-FB]   [${i}] userId=${s.userId}, pageId=${cfg?.pageId}`);
-              });
-
-              const matchSetting = allSettings.find(s => {
-                const config = s.config as any;
-                return config?.pageId === recipientId;
-              });
-
-              if (matchSetting) {
-                console.log(`[Meta Webhook] [Stage 3-FB] MATCHED channelSettings id=${matchSetting.id}, userId=${matchSetting.userId}`);
-                console.log(`[Inbound] [Stage 4-FB] Webhook received — channel: facebook, from: ${senderId}, messageId: ${messageId}`);
-                console.log(`[Inbound] [Stage 4-FB] Channel identified: facebook — userId: ${matchSetting.userId}, handing off to processIncomingMessage`);
-                directJobs.push(
-                  metaCs.processIncomingMessage({
-                    userId: matchSetting.userId,
-                    channel: 'facebook',
-                    channelContactId: senderId,
-                    contactName: event.sender?.name || senderId,
-                    content: messageText,
-                    contentType: 'text',
-                    externalMessageId: messageId,
-                  }).then((result) => {
-                    console.log(`[Inbound] [Stage 10-FB] Pipeline complete — channel: facebook, messageId: ${messageId}, contactId: ${result.contact.id}, conversationId: ${result.conversation.id}, messageId_db: ${result.message.id}, isNewConversation: ${result.isNewConversation}`);
-                  })
-                );
-              } else {
-                console.warn(`[Meta Webhook] [Stage 3-FB] LOOKUP FAILED — recipientId: ${recipientId}. No connected Facebook channelSettings record matched. Message from senderId=${senderId} is being DROPPED.`);
-                console.warn(`[Meta Webhook] [Stage 3-FB] FIX: Go to Integrations → Facebook, enter the Page ID that Meta calls as recipient="${recipientId}" and mark it connected.`);
-              }
-            } else {
-              console.log(`[Meta Webhook] [Stage 3-FB] Skipping event — senderId or text missing (senderId=${senderId}, textLen=${messageText.length})`);
+          for (const event of messagingEvents) {
+            // Skip echo messages (messages the Page itself sent — these are outbound echoes)
+            if (event.message?.is_echo) {
+              console.log(`[Meta Webhook] [Stage 3-FB] Skipping echo message mid=${event.message?.mid}`);
+              continue;
             }
+
+            // Must be an actual message event
+            if (!event.message) {
+              console.log(`[Meta Webhook] [Stage 3-FB] Skipping non-message event (keys: ${Object.keys(event).join(",")})`);
+              continue;
+            }
+
+            const senderId = event.sender?.id as string | undefined;
+            const recipientId = event.recipient?.id as string | undefined; // This is the Page ID
+            const messageId = event.message.mid as string | undefined;
+            const messageText: string = event.message.text || '';
+            const attachments: any[] = Array.isArray(event.message.attachments) ? event.message.attachments : [];
+            const hasContent = messageText.length > 0 || attachments.length > 0;
+
+            console.log(`[Meta Webhook] [Stage 3-FB] Event: senderId=${senderId} recipientId=${recipientId} mid=${messageId} text="${messageText.substring(0, 80)}" attachments=${attachments.length}`);
+
+            if (!senderId || !hasContent) {
+              console.log(`[Meta Webhook] [Stage 3-FB] Skipping — no senderId or no content (senderId=${senderId}, hasContent=${hasContent})`);
+              continue;
+            }
+
+            const { db: database } = await import("../drizzle/db");
+            const { channelSettings: channelSettingsTable } = await import("@shared/schema");
+            const { eq: eqOp, and: andOp } = await import("drizzle-orm");
+
+            const allSettings = await database.select().from(channelSettingsTable)
+              .where(andOp(
+                eqOp(channelSettingsTable.channel, 'facebook'),
+                eqOp(channelSettingsTable.isConnected, true)
+              ));
+
+            console.log(`[Meta Webhook] [Stage 3-FB] Found ${allSettings.length} connected facebook channelSettings — looking for recipientId=${recipientId} or pageId=${fbPageId}`);
+            allSettings.forEach((s, i) => {
+              const cfg = s.config as any;
+              console.log(`[Meta Webhook] [Stage 3-FB]   [${i}] userId=${s.userId}, pageId=${cfg?.pageId}`);
+            });
+
+            // Match by recipient ID (page ID in webhook) or entry page ID
+            const matchSetting = allSettings.find(s => {
+              const config = s.config as any;
+              return config?.pageId === recipientId || config?.pageId === fbPageId;
+            });
+
+            if (!matchSetting) {
+              console.warn(`[Meta Webhook] [Stage 3-FB] LOOKUP FAILED — no Facebook channelSettings matched recipientId=${recipientId} or pageId=${fbPageId}. Message from senderId=${senderId} DROPPED.`);
+              continue;
+            }
+
+            const matchedConfig = matchSetting.config as any;
+            console.log(`[Meta Webhook] [Stage 3-FB] MATCHED: channelSettings id=${matchSetting.id}, userId=${matchSetting.userId}, savedPageId=${matchedConfig?.pageId}`);
+
+            // Resolve sender display name via Graph API (PSID → name)
+            let contactName = senderId;
+            try {
+              const nameResp = await fetch(
+                `https://graph.facebook.com/v19.0/${senderId}?fields=name&access_token=${encodeURIComponent(matchedConfig.accessToken)}`
+              );
+              const nameData = (await nameResp.json()) as any;
+              if (nameResp.ok && nameData.name) {
+                contactName = nameData.name as string;
+                console.log(`[Meta Webhook] [Stage 3-FB] Resolved sender name: "${contactName}"`);
+              } else {
+                console.log(`[Meta Webhook] [Stage 3-FB] Could not resolve sender name (${nameData?.error?.message || 'no name field'}) — using PSID`);
+              }
+            } catch {
+              console.log(`[Meta Webhook] [Stage 3-FB] Name lookup failed — using PSID as contactName`);
+            }
+
+            // Derive content — text takes priority, then attachment type labels
+            const content = messageText ||
+              attachments.map((a: any) => `[${a.type || 'attachment'}]`).join(' ') ||
+              '[message]';
+            const contentType = messageText ? 'text' : (attachments[0]?.type || 'attachment');
+
+            console.log(`[Inbound] [Stage 4-FB] Handing off to processIncomingMessage — channel: facebook, from: ${senderId} ("${contactName}"), content: "${content.substring(0, 60)}"`);
+            directJobs.push(
+              metaCs.processIncomingMessage({
+                userId: matchSetting.userId,
+                channel: 'facebook',
+                channelContactId: senderId,
+                contactName,
+                content,
+                contentType,
+                externalMessageId: messageId,
+              }).then((result) => {
+                console.log(`[Inbound] [Stage 10-FB] Pipeline complete — channel: facebook, mid=${messageId}, contactId=${result.contact.id}, conversationId=${result.conversation.id}, dbMessageId=${result.message.id}, isNew=${result.isNewConversation}`);
+              }).catch((err: any) => {
+                console.error(`[Inbound] [Stage 10-FB] processIncomingMessage FAILED — mid=${messageId}, error:`, err?.message || err);
+              })
+            );
           }
         }
       }
