@@ -512,7 +512,9 @@ export function UnifiedInbox() {
 
     if (isNearBottom) {
       setShowNewMsgBanner(false);
-      if (isNew) messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+      if (isNew) {
+        container.scrollTop = container.scrollHeight;
+      }
     } else if (isNew) {
       setShowNewMsgBanner(true);
     }
@@ -534,7 +536,8 @@ export function UnifiedInbox() {
   useEffect(() => {
     if (selectedContactId) {
       setTimeout(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
+        const container = messagesContainerRef.current;
+        if (container) container.scrollTop = container.scrollHeight;
       }, 50);
     }
   }, [selectedContactId]);
@@ -619,6 +622,12 @@ export function UnifiedInbox() {
 
       // Clear input immediately — message is "in flight"
       setMessageInput("");
+
+      // Scroll to bottom immediately after optimistic append (important on mobile/iOS)
+      setTimeout(() => {
+        const container = messagesContainerRef.current;
+        if (container) container.scrollTop = container.scrollHeight;
+      }, 0);
 
       return { previousMessages, previousInbox, conversationId };
     },
