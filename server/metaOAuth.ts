@@ -5,6 +5,7 @@ const SCOPES = [
   "pages_show_list",
   "pages_messaging",
   "pages_manage_metadata",
+  "business_management",
 ].join(",");
 
 export interface MetaPage {
@@ -100,6 +101,7 @@ export async function fetchUserPages(userToken: string): Promise<MetaPage[]> {
     console.warn('[Meta OAuth] Token debug failed (non-fatal):', e);
   }
 
+  // --- Try /me/accounts first (works for pages directly administered by the personal FB account) ---
   const url =
     `${GRAPH}/me/accounts` +
     `?fields=id,name,category,picture,access_token` +
@@ -111,18 +113,73 @@ export async function fetchUserPages(userToken: string): Promise<MetaPage[]> {
     status: resp.status,
     data_length: Array.isArray(data?.data) ? data.data.length : 'not-array',
     error: data?.error,
-    paging: data?.paging,
   }));
+  if (resp.ok && Array.isArray(data.data) && data.data.length > 0) {
+    return data.data.map((p: any) => ({
+      id: p.id as string,
+      name: p.name as string,
+      category: (p.category as string) || "",
+      picture: p.picture?.data?.url as string | undefined,
+      accessToken: p.access_token as string,
+    }));
+  }
+
+  // --- Fallback: Business Portfolio pages (pages managed via Meta Business Suite) ---
+  console.log('[Meta OAuth] /me/accounts returned 0 pages — trying Business Portfolio API fallback');
+  try {
+    const bizResp = await fetch(
+      `${GRAPH}/me/businesses?fields=id,name&access_token=${encodeURIComponent(userToken)}&limit=10`
+    );
+    const bizData = (await bizResp.json()) as any;
+    console.log('[Meta OAuth] /me/businesses response:', JSON.stringify({
+      status: bizResp.status,
+      biz_count: Array.isArray(bizData?.data) ? bizData.data.length : 'not-array',
+      error: bizData?.error,
+    }));
+
+    if (bizResp.ok && Array.isArray(bizData?.data) && bizData.data.length > 0) {
+      const allPages: MetaPage[] = [];
+      for (const biz of bizData.data) {
+        try {
+          const pagesResp = await fetch(
+            `${GRAPH}/${biz.id}/owned_pages?fields=id,name,category,picture,access_token&access_token=${encodeURIComponent(userToken)}&limit=50`
+          );
+          const pagesData = (await pagesResp.json()) as any;
+          console.log(`[Meta OAuth] Business ${biz.id} owned_pages:`, JSON.stringify({
+            status: pagesResp.status,
+            count: Array.isArray(pagesData?.data) ? pagesData.data.length : 'not-array',
+            error: pagesData?.error,
+          }));
+          if (pagesResp.ok && Array.isArray(pagesData?.data)) {
+            for (const p of pagesData.data) {
+              if (p.access_token) {
+                allPages.push({
+                  id: p.id as string,
+                  name: p.name as string,
+                  category: (p.category as string) || "",
+                  picture: p.picture?.data?.url as string | undefined,
+                  accessToken: p.access_token as string,
+                });
+              }
+            }
+          }
+        } catch (e) {
+          console.warn(`[Meta OAuth] Failed to fetch pages for business ${biz.id}:`, e);
+        }
+      }
+      if (allPages.length > 0) {
+        console.log(`[Meta OAuth] Business Portfolio fallback found ${allPages.length} page(s)`);
+        return allPages;
+      }
+    }
+  } catch (e) {
+    console.warn('[Meta OAuth] Business Portfolio fallback failed:', e);
+  }
+
   if (!resp.ok || !Array.isArray(data.data)) {
     throw new Error(data.error?.message || "Failed to fetch your Facebook Pages");
   }
-  return data.data.map((p: any) => ({
-    id: p.id as string,
-    name: p.name as string,
-    category: (p.category as string) || "",
-    picture: p.picture?.data?.url as string | undefined,
-    accessToken: p.access_token as string,
-  }));
+  return [];
 }
 
 export async function enrichWithInstagramData(pages: MetaPage[]): Promise<MetaPage[]> {
