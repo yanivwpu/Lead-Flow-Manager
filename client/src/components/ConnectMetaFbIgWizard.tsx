@@ -523,9 +523,6 @@ export function ConnectMetaFbIgWizard({
                 {channel === "instagram" && connectResult.instagramUsername
                   ? `@${connectResult.instagramUsername}`
                   : connectResult.pageName}
-                <span className="text-emerald-500 text-xs ml-2 font-mono">
-                  ({connectResult.pageId})
-                </span>
               </p>
               {channel === "instagram" && connectResult.instagramUsername && (
                 <p className="text-xs text-emerald-600 pl-7">via {connectResult.pageName}</p>

@@ -465,11 +465,6 @@ export function ChannelSettings() {
                           <p className="text-xs text-gray-600 truncate">
                             {channel === 'facebook' ? 'Page' : 'Account'}:{' '}
                             <span className="font-medium">{savedPageName}</span>
-                            {savedPageId && (
-                              <span className="text-gray-400 ml-1 font-mono text-[10px]">
-                                ({savedPageId})
-                              </span>
-                            )}
                           </p>
                         ) : null}
                         <p className="text-[10px] text-gray-400">
@@ -613,7 +608,7 @@ export function ChannelSettings() {
                 <DialogTitle>
                   {manageFbIgChannel === 'facebook' ? 'Facebook Messenger' : 'Instagram'} Settings
                 </DialogTitle>
-                <p className="text-xs text-gray-500 mt-0.5">Manage your connection and webhook</p>
+                <p className="text-xs text-gray-500 mt-0.5">Connection settings</p>
               </div>
             </div>
           </DialogHeader>
@@ -622,14 +617,11 @@ export function ChannelSettings() {
             <div className="flex items-center gap-2 p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
               <CheckCircle2 className="h-4 w-4 text-emerald-600 flex-shrink-0" />
               <div>
-                <p className="text-sm text-emerald-800 font-medium">Channel is connected and active</p>
+                <p className="text-sm text-emerald-800 font-medium">
+                  {manageFbIgChannel === 'facebook' ? 'Facebook Messenger' : 'Instagram'} is connected
+                </p>
                 {manageChannelData?.pageName && (
-                  <p className="text-xs text-emerald-700 mt-0.5">
-                    {manageChannelData.pageName}
-                    {manageChannelData.pageId && (
-                      <span className="ml-1.5 font-mono text-emerald-500">({manageChannelData.pageId})</span>
-                    )}
-                  </p>
+                  <p className="text-xs text-emerald-700 mt-0.5">{manageChannelData.pageName}</p>
                 )}
               </div>
             </div>
@@ -639,8 +631,7 @@ export function ChannelSettings() {
               <p>Existing conversation history is not imported — only messages received after connecting will appear in your inbox.</p>
             </div>
 
-            <div className="pt-1 border-t">
-              <p className="text-xs text-gray-500 mb-2">Need to switch to a different page or re-grant permissions?</p>
+            <div className="pt-1 border-t space-y-2">
               <Button
                 variant="outline"
                 size="sm"
@@ -653,6 +644,9 @@ export function ChannelSettings() {
               >
                 Reconnect with Facebook
               </Button>
+              <p className="text-[11px] text-gray-400 text-center">
+                Use this to switch to a different {manageFbIgChannel === 'facebook' ? 'Page' : 'Instagram account'} or refresh your permissions.
+              </p>
             </div>
 
             <div className="pt-2 border-t space-y-2">
