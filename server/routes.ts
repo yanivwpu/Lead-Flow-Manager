@@ -3746,11 +3746,18 @@ export async function registerRoutes(
       }
 
       // Upsert channelSettings — isConnected true only now (all steps passed)
+      const channelSavePayload = {
+        isConnected: true,
+        isEnabled: true,
+        config: { ...channelConfig, accessToken: "[REDACTED]" },
+      };
+      console.log(`[MetaOAuth] Step 5a: DB upsertChannelSetting userId=${req.user.id} channel=${channel}`, JSON.stringify(channelSavePayload));
       await storage.upsertChannelSetting(req.user.id, channel, {
         isConnected: true,
         isEnabled: true,
         config: channelConfig,
       });
+      console.log(`[MetaOAuth] Step 5a: upsertChannelSetting OK`);
 
       // Upsert integration record for credential storage (encrypted)
       const integrationConfig: Record<string, string> = {
@@ -3772,19 +3779,26 @@ export async function registerRoutes(
       const encryptedConfig = encryptIntegrationConfig(integrationConfig);
 
       if (existing) {
+        console.log(`[MetaOAuth] Step 5b: DB updateIntegration existing id=${existing.id} type=${integrationType}`);
         await storage.updateIntegration(existing.id, { config: encryptedConfig, isActive: true });
+        console.log(`[MetaOAuth] Step 5b: updateIntegration OK`);
       } else {
+        const integrationName = channel === "facebook"
+          ? `Facebook — ${result.pageName}`
+          : `Instagram — ${result.instagramUsername || result.pageName}`;
+        console.log(`[MetaOAuth] Step 5b: DB createIntegration type=${integrationType} name="${integrationName}"`);
         await storage.createIntegration({
           userId: req.user.id,
           type: integrationType,
-          name: channel === "facebook" ? `Facebook — ${result.pageName}` : `Instagram — ${result.instagramUsername || result.pageName}`,
+          name: integrationName,
           config: encryptedConfig,
           isActive: true,
         });
+        console.log(`[MetaOAuth] Step 5b: createIntegration OK`);
       }
 
       delete (req.session as any).metaOAuthPending;
-      console.log(`[Meta OAuth] connect-page success: user=${req.user.id} channel=${channel} page=${result.pageName}`);
+      console.log(`[MetaOAuth] connect-page COMPLETE user=${req.user.id} channel=${channel} page=${result.pageName}(${result.pageId}) webhookSubscribed=${result.steps.webhookSubscribed} warnings=${result.warnings.join(" | ") || "none"}`);
       res.json(result);
     } catch (err: any) {
       console.error("[Meta OAuth] connect-page error:", err);
