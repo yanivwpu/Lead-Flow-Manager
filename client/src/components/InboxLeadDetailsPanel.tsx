@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   Phone,
   Mail,
@@ -43,6 +44,7 @@ import {
   runVerification,
   buildAIMemorySummary,
   type ConversationMessage,
+  type QualifyingCriterion,
 } from "@/lib/conversationIntelligence";
 import { AIUpgradePrompt } from "./AIUpgradePrompt";
 import type { AICapabilities } from "@/lib/useAICapabilities";
@@ -411,6 +413,32 @@ export function InboxLeadDetailsPanel({
   const [completedActions, setCompletedActions] = useState<Set<string>>(new Set());
   const [fadingAction, setFadingAction] = useState<string | null>(null);
 
+  // Custom qualifying criteria answered by the agent (resets per contact)
+  const [answeredCriteriaKeys, setAnsweredCriteriaKeys] = useState<Set<string>>(new Set());
+  useEffect(() => { setAnsweredCriteriaKeys(new Set()); }, [contact.id]);
+
+  // Business knowledge — used to drive qualifying questions in the Copilot panel
+  const { data: businessKnowledge } = useQuery<{
+    qualifyingQuestions?: Array<{ key?: string; label?: string; question: string; required?: boolean }>;
+    industry?: string;
+  }>({
+    queryKey: ["/api/ai/business-knowledge"],
+    staleTime: 5 * 60 * 1000, // cache for 5 minutes
+  });
+
+  // Normalise qualifying questions to QualifyingCriterion shape
+  const qualifyingCriteria: QualifyingCriterion[] = useMemo(() => {
+    const raw = businessKnowledge?.qualifyingQuestions ?? [];
+    return raw
+      .filter(q => q.question?.trim())
+      .map((q, i) => ({
+        key:      q.key   || `q_${i}`,
+        label:    q.label || `Question ${i + 1}`,
+        question: q.question,
+        required: q.required ?? true,
+      }));
+  }, [businessKnowledge]);
+
   // AI Memory — AI-generated natural-language summary
   const [aiMemory, setAiMemory] = useState<string>('');
   const [aiMemoryLoading, setAiMemoryLoading] = useState(false);
@@ -502,12 +530,17 @@ export function InboxLeadDetailsPanel({
   const intel = useMemo(() => analyzeConversation(messages), [messages]);
 
   // ── Workflow layer — computes recommended actions from intel + contact state ──
-  const workflow = useMemo(() => computeWorkflow(intel, {
-    tag:           contact.tag || '',
-    pipelineStage: contact.pipelineStage || 'Lead',
-    followUpDate:  contact.followUpDate,
-    assignedTo:    contact.assignedTo,
-  }), [intel, contact.tag, contact.pipelineStage, contact.followUpDate, contact.assignedTo]);
+  const workflow = useMemo(() => computeWorkflow(
+    intel,
+    {
+      tag:           contact.tag || '',
+      pipelineStage: contact.pipelineStage || 'Lead',
+      followUpDate:  contact.followUpDate,
+      assignedTo:    contact.assignedTo,
+    },
+    qualifyingCriteria.length > 0 ? qualifyingCriteria : undefined,
+    answeredCriteriaKeys,
+  ), [intel, contact.tag, contact.pipelineStage, contact.followUpDate, contact.assignedTo, qualifyingCriteria, answeredCriteriaKeys]);
 
   // ── AI Memory: fetch AI-generated summary whenever messages change meaningfully ──
   useEffect(() => {
@@ -1062,25 +1095,57 @@ export function InboxLeadDetailsPanel({
                     </div>
 
                     <div className="flex flex-col gap-1">
-                      {[
-                        { ok: intel.hasBudget,    label: 'Budget',    value: intel.budget },
-                        { ok: intel.hasTimeline,  label: 'Timeline',  value: intel.timeline },
-                        { ok: intel.hasFinancing, label: 'Financing', value: intel.financing },
-                      ].map(({ ok, label, value }) => (
-                        <div key={label} className="flex items-center gap-1.5 min-w-0">
-                          {ok
-                            ? <CheckCircle2 className="w-3 h-3 text-emerald-500 shrink-0" />
-                            : <Circle className="w-3 h-3 text-gray-300 shrink-0" />
-                          }
-                          <span className={cn("text-[11px] truncate", ok ? "text-gray-700" : "text-gray-400")}>
-                            <span className="font-medium">{label}</span>
-                            {ok && value
-                              ? <span className="font-normal">: {value}</span>
-                              : <span className="text-gray-300"> —</span>
+                      {qualifyingCriteria.length > 0 ? (
+                        // Business-defined qualifying criteria — agent manually marks answered
+                        qualifyingCriteria.map((criterion) => {
+                          const isAnswered = answeredCriteriaKeys.has(criterion.key);
+                          return (
+                            <button
+                              key={criterion.key}
+                              onClick={() => {
+                                setAnsweredCriteriaKeys(prev => {
+                                  const next = new Set(prev);
+                                  if (next.has(criterion.key)) next.delete(criterion.key);
+                                  else next.add(criterion.key);
+                                  return next;
+                                });
+                              }}
+                              className="flex items-center gap-1.5 min-w-0 text-left hover:opacity-70 transition-opacity"
+                              title={isAnswered ? "Mark as unanswered" : "Mark as answered"}
+                            >
+                              {isAnswered
+                                ? <CheckCircle2 className="w-3 h-3 text-emerald-500 shrink-0" />
+                                : <Circle className="w-3 h-3 text-gray-300 shrink-0" />
+                              }
+                              <span className={cn("text-[11px] truncate", isAnswered ? "text-gray-700" : "text-gray-400")}>
+                                <span className="font-medium">{criterion.label}</span>
+                                {!isAnswered && <span className="text-gray-300"> —</span>}
+                              </span>
+                            </button>
+                          );
+                        })
+                      ) : (
+                        // Default: pattern-detected real-estate qualifications
+                        [
+                          { ok: intel.hasBudget,    label: 'Budget',    value: intel.budget },
+                          { ok: intel.hasTimeline,  label: 'Timeline',  value: intel.timeline },
+                          { ok: intel.hasFinancing, label: 'Financing', value: intel.financing },
+                        ].map(({ ok, label, value }) => (
+                          <div key={label} className="flex items-center gap-1.5 min-w-0">
+                            {ok
+                              ? <CheckCircle2 className="w-3 h-3 text-emerald-500 shrink-0" />
+                              : <Circle className="w-3 h-3 text-gray-300 shrink-0" />
                             }
-                          </span>
-                        </div>
-                      ))}
+                            <span className={cn("text-[11px] truncate", ok ? "text-gray-700" : "text-gray-400")}>
+                              <span className="font-medium">{label}</span>
+                              {ok && value
+                                ? <span className="font-normal">: {value}</span>
+                                : <span className="text-gray-300"> —</span>
+                              }
+                            </span>
+                          </div>
+                        ))
+                      )}
                     </div>
                   </div>
 
@@ -1137,7 +1202,15 @@ export function InboxLeadDetailsPanel({
                                 } else if (qualifyAction!.value) {
                                   navigator.clipboard.writeText(qualifyAction!.value).catch(() => {});
                                 }
-                                completeAction('qualify', "Message inserted");
+                                // Mark the current custom criterion as answered so the next one shows
+                                if (qualifyingCriteria.length > 0) {
+                                  const nextCriterion = qualifyingCriteria.find(c => !answeredCriteriaKeys.has(c.key));
+                                  if (nextCriterion) {
+                                    setAnsweredCriteriaKeys(prev => { const n = new Set(Array.from(prev)); n.add(nextCriterion.key); return n; });
+                                  }
+                                } else {
+                                  completeAction('qualify', "Message inserted");
+                                }
                               }}
                               className="mt-2 text-[11px] font-semibold text-emerald-600 hover:text-emerald-700 transition-colors flex items-center gap-1"
                               data-testid="button-insert-suggested-message"

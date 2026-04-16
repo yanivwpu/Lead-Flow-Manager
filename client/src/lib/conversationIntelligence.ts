@@ -10,6 +10,17 @@ export interface ConversationMessage {
   createdAt?: string;
 }
 
+/**
+ * A single business-defined qualification criterion.
+ * Stored in aiBusinessKnowledge.qualifyingQuestions.
+ */
+export interface QualifyingCriterion {
+  key: string;        // machine-readable (e.g. "budget", "team_size")
+  label: string;      // display label (e.g. "Budget", "Team Size")
+  question: string;   // what to ask (e.g. "What's your budget range?")
+  required?: boolean; // whether it must be answered to qualify the lead
+}
+
 export interface QualificationData {
   // Raw extracted values (null = not found)
   budget: string | null;
@@ -360,6 +371,8 @@ export function computeWorkflow(
     followUpDate?: string | null;
     assignedTo?: string | null;
   },
+  qualifyingCriteria?: QualifyingCriterion[], // Business-defined custom qualification layers
+  answeredCriteriaKeys?: Set<string>,          // Which criteria the agent has already asked/answered
 ): WorkflowResult {
   const actions: WorkflowAction[] = [];
 
@@ -407,26 +420,46 @@ export function computeWorkflow(
 
   // Only suggest qualification questions once there is enough conversational context.
   // A single opening message ("test", "hi", etc.) gives no signal — don't interrogate.
-  // Require at least 2 messages exchanged before asking budget/timeline/financing questions.
+  // Require at least 2 messages exchanged before asking qualifying questions.
   if (intel.messageCount >= 2) {
-    if (missing.length === 3) {
-      nextQuestion = "What's your budget range and ideal timeline for making a move?";
-    } else if (missing.includes('financing')) {
-      nextQuestion = "Have you been pre-approved for financing, or are you planning to pay cash?";
-    } else if (missing.includes('budget')) {
-      nextQuestion = "What's your budget range for this?";
-    } else if (missing.includes('timeline')) {
-      nextQuestion = "What's your ideal timeline for making a move?";
-    }
+    const answered = answeredCriteriaKeys ?? new Set<string>();
 
-    if (nextQuestion) {
-      actions.push({
-        type: 'qualify',
-        label: 'Ask qualifying question',
-        priority: intel.signalCount === 0 ? 'high' : 'medium',
-        reason: `Missing: ${missing.join(', ')} — ask to complete lead profile`,
-        value: nextQuestion,
-      });
+    if (qualifyingCriteria && qualifyingCriteria.length > 0) {
+      // ── Business-defined qualification criteria ──
+      // Find the first criterion the agent hasn't answered/completed yet.
+      const nextCriterion = qualifyingCriteria.find(c => !answered.has(c.key));
+      if (nextCriterion) {
+        nextQuestion = nextCriterion.question;
+        const remaining = qualifyingCriteria.filter(c => !answered.has(c.key));
+        actions.push({
+          type: 'qualify',
+          label: nextCriterion.label,
+          priority: answered.size === 0 ? 'medium' : 'medium',
+          reason: `${remaining.length} qualification${remaining.length !== 1 ? 's' : ''} remaining`,
+          value: nextCriterion.question,
+        });
+      }
+    } else {
+      // ── Default: hardcoded real-estate style qualifications ──
+      if (missing.length === 3) {
+        nextQuestion = "What's your budget range and ideal timeline for making a move?";
+      } else if (missing.includes('financing')) {
+        nextQuestion = "Have you been pre-approved for financing, or are you planning to pay cash?";
+      } else if (missing.includes('budget')) {
+        nextQuestion = "What's your budget range for this?";
+      } else if (missing.includes('timeline')) {
+        nextQuestion = "What's your ideal timeline for making a move?";
+      }
+
+      if (nextQuestion) {
+        actions.push({
+          type: 'qualify',
+          label: 'Ask qualifying question',
+          priority: intel.signalCount === 0 ? 'high' : 'medium',
+          reason: `Missing: ${missing.join(', ')} — ask to complete lead profile`,
+          value: nextQuestion,
+        });
+      }
     }
   }
 

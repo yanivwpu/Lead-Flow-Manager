@@ -24,7 +24,9 @@ import {
   TrendingUp,
   Crown,
   Lock,
-  ChevronDown
+  ChevronDown,
+  Trash2,
+  ListChecks,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -57,7 +59,7 @@ interface BusinessKnowledge {
   faqs: Array<{ question: string; answer: string }>;
   salesGoals: string;
   customInstructions: string;
-  qualifyingQuestions: Array<{ question: string; required: boolean }>;
+  qualifyingQuestions: Array<{ key: string; label: string; question: string; required: boolean }>;
 }
 
 interface AIHealth {
@@ -97,6 +99,67 @@ const SALES_GOAL_OPTIONS = [
   { value: "get_quote", label: "Provide Quote" },
   { value: "answer_questions", label: "Answer Questions" },
 ];
+
+type QualifyingQuestion = { key: string; label: string; question: string; required: boolean };
+
+const INDUSTRY_QUALIFY_TEMPLATES: Record<string, QualifyingQuestion[]> = {
+  real_estate: [
+    { key: "intent",    label: "Intent",     question: "Are you looking to buy, rent, or invest?",                                  required: true  },
+    { key: "budget",    label: "Budget",      question: "Do you have a target price range or budget in mind?",                       required: true  },
+    { key: "timeline",  label: "Timeline",    question: "What's your ideal timeline for making a move?",                             required: true  },
+    { key: "financing", label: "Financing",   question: "Have you been pre-approved for financing, or are you paying cash?",         required: false },
+    { key: "location",  label: "Location",    question: "Do you have a preferred area or neighbourhood in mind?",                    required: false },
+  ],
+  healthcare: [
+    { key: "service",   label: "Service",     question: "What type of care or treatment are you looking for?",                       required: true  },
+    { key: "insurance", label: "Insurance",   question: "Do you have health insurance, and if so which provider?",                   required: true  },
+    { key: "urgency",   label: "Urgency",     question: "Is this urgent or are you looking to schedule a routine appointment?",      required: true  },
+    { key: "location",  label: "Location",    question: "Which of our locations is most convenient for you?",                        required: false },
+  ],
+  travel: [
+    { key: "destination", label: "Destination", question: "Where are you looking to travel?",                                       required: true  },
+    { key: "dates",       label: "Dates",        question: "When are you planning to travel, and for how long?",                    required: true  },
+    { key: "group_size",  label: "Group Size",   question: "How many people will be travelling?",                                   required: true  },
+    { key: "budget",      label: "Budget",        question: "Do you have a rough budget per person in mind?",                       required: false },
+    { key: "preferences", label: "Preferences",  question: "Any special preferences — accommodation type, activities, diet, etc.?", required: false },
+  ],
+  contractor: [
+    { key: "project",   label: "Project",    question: "What type of project are you looking to get done?",                         required: true  },
+    { key: "timeline",  label: "Timeline",   question: "When would you like the work to start?",                                    required: true  },
+    { key: "budget",    label: "Budget",     question: "Do you have a budget in mind for this project?",                            required: false },
+    { key: "location",  label: "Location",   question: "What's the property address or general area?",                              required: true  },
+  ],
+  ecommerce: [
+    { key: "product",   label: "Product",    question: "Which product or category are you interested in?",                          required: true  },
+    { key: "quantity",  label: "Quantity",   question: "How many units are you looking to order?",                                   required: false },
+    { key: "shipping",  label: "Shipping",   question: "Do you need standard or expedited shipping?",                               required: false },
+    { key: "budget",    label: "Budget",     question: "Do you have a budget range in mind?",                                       required: false },
+  ],
+  finance: [
+    { key: "service",   label: "Service",    question: "What financial service are you looking for — insurance, investments, loans?", required: true  },
+    { key: "amount",    label: "Amount",     question: "What amount or coverage level are you considering?",                          required: true  },
+    { key: "timeline",  label: "Timeline",   question: "When do you need this in place?",                                            required: false },
+    { key: "situation", label: "Situation",  question: "Can you briefly describe your current financial situation?",                  required: false },
+  ],
+  education: [
+    { key: "course",    label: "Course",     question: "Which course or program are you interested in?",                            required: true  },
+    { key: "level",     label: "Level",      question: "What's your current level — beginner, intermediate, or advanced?",          required: true  },
+    { key: "schedule",  label: "Schedule",   question: "Are you looking for full-time, part-time, or self-paced learning?",         required: false },
+    { key: "budget",    label: "Budget",     question: "Do you have a budget or are you looking for financing options?",             required: false },
+  ],
+  automotive: [
+    { key: "vehicle",   label: "Vehicle",    question: "Are you looking to buy, lease, or service a vehicle?",                      required: true  },
+    { key: "type",      label: "Type",       question: "What type of vehicle are you interested in — new or used?",                 required: true  },
+    { key: "budget",    label: "Budget",     question: "Do you have a budget range in mind?",                                       required: false },
+    { key: "timeline",  label: "Timeline",   question: "When are you looking to make a decision?",                                  required: false },
+  ],
+  hospitality: [
+    { key: "dates",     label: "Dates",      question: "What dates are you looking to book?",                                       required: true  },
+    { key: "guests",    label: "Guests",     question: "How many guests will be staying?",                                          required: true  },
+    { key: "room_type", label: "Room Type",  question: "Do you have a preference for room type or amenities?",                      required: false },
+    { key: "budget",    label: "Budget",     question: "Do you have a nightly budget in mind?",                                     required: false },
+  ],
+};
 
 function AIBrainContent() {
   const queryClient = useQueryClient();
@@ -144,6 +207,7 @@ function AIBrainContent() {
   });
   
   const [newFaq, setNewFaq] = useState({ question: "", answer: "" });
+  const [newQQ, setNewQQ] = useState({ label: "", question: "", required: true });
   const [newKeyword, setNewKeyword] = useState("");
   const [automationPrompt, setAutomationPrompt] = useState("");
   const [generatingAutomation, setGeneratingAutomation] = useState(false);
@@ -246,7 +310,12 @@ function AIBrainContent() {
         faqs: k.faqs || [],
         salesGoals: k.salesGoals || "",
         customInstructions: k.customInstructions || "",
-        qualifyingQuestions: k.qualifyingQuestions || [],
+        qualifyingQuestions: (k.qualifyingQuestions || []).map((q: any, i: number) => ({
+          key:      q.key      || `q_${i}`,
+          label:    q.label    || `Question ${i + 1}`,
+          question: q.question || "",
+          required: q.required ?? true,
+        })),
       });
     }
   }, [businessKnowledge]);
@@ -888,6 +957,137 @@ function AIBrainContent() {
                   </Select>
                 </div>
                 
+                {/* ── Qualifying Questions ─────────────────────────────── */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label className="flex items-center gap-1.5">
+                        <ListChecks className="w-3.5 h-3.5 text-purple-500" />
+                        Qualification Questions
+                      </Label>
+                      <p className="text-xs text-gray-400 mt-0.5">
+                        Define what information the AI should collect from each lead, in order.
+                      </p>
+                    </div>
+                    {knowledge.industry && INDUSTRY_QUALIFY_TEMPLATES[knowledge.industry] && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const template = INDUSTRY_QUALIFY_TEMPLATES[knowledge.industry];
+                          if (template) setKnowledge(prev => ({ ...prev, qualifyingQuestions: [...template] }));
+                        }}
+                        className="text-[11px] font-semibold text-purple-600 hover:text-purple-700 border border-purple-200 hover:border-purple-300 px-2 py-1 rounded-lg transition-colors whitespace-nowrap"
+                        data-testid="button-apply-industry-template"
+                      >
+                        Apply {INDUSTRY_OPTIONS.find(o => o.value === knowledge.industry)?.label} template
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Current questions list */}
+                  {knowledge.qualifyingQuestions.length > 0 && (
+                    <div className="space-y-2">
+                      {knowledge.qualifyingQuestions.map((qq, idx) => (
+                        <div key={qq.key} className="flex items-start gap-2 bg-gray-50 border border-gray-100 rounded-lg px-3 py-2.5 group">
+                          <span className="text-[11px] font-bold text-gray-300 w-4 pt-0.5 shrink-0">{idx + 1}</span>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-0.5">
+                              <span className="text-[11px] font-semibold text-gray-700">{qq.label}</span>
+                              <span className={cn(
+                                "text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide",
+                                qq.required ? "bg-red-50 text-red-500" : "bg-gray-100 text-gray-400"
+                              )}>
+                                {qq.required ? "required" : "optional"}
+                              </span>
+                            </div>
+                            <p className="text-[12px] text-gray-500 leading-relaxed truncate">{qq.question}</p>
+                          </div>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => setKnowledge(prev => ({
+                                ...prev,
+                                qualifyingQuestions: prev.qualifyingQuestions.map((q, i) =>
+                                  i === idx ? { ...q, required: !q.required } : q
+                                )
+                              }))}
+                              className="text-[10px] text-gray-400 hover:text-gray-600 transition-colors px-1"
+                              title="Toggle required"
+                            >
+                              {qq.required ? "✓req" : "opt"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setKnowledge(prev => ({
+                                ...prev,
+                                qualifyingQuestions: prev.qualifyingQuestions.filter((_, i) => i !== idx)
+                              }))}
+                              className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-300 hover:text-red-400"
+                              data-testid={`button-remove-qualifying-question-${idx}`}
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Add new question form */}
+                  <div className="border border-dashed border-gray-200 rounded-lg p-3 space-y-2">
+                    <p className="text-[10px] uppercase tracking-widest text-gray-400 font-semibold">Add question</p>
+                    <div className="grid grid-cols-3 gap-2">
+                      <Input
+                        value={newQQ.label}
+                        onChange={(e) => setNewQQ(prev => ({ ...prev, label: e.target.value }))}
+                        placeholder="Label (e.g. Budget)"
+                        className="text-sm col-span-1"
+                        data-testid="input-new-qq-label"
+                      />
+                      <Input
+                        value={newQQ.question}
+                        onChange={(e) => setNewQQ(prev => ({ ...prev, question: e.target.value }))}
+                        placeholder="Question to ask the lead..."
+                        className="text-sm col-span-2"
+                        data-testid="input-new-qq-question"
+                      />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <label className="flex items-center gap-2 text-xs text-gray-500 cursor-pointer">
+                        <Switch
+                          checked={newQQ.required}
+                          onCheckedChange={(v) => setNewQQ(prev => ({ ...prev, required: v }))}
+                        />
+                        Required to qualify lead
+                      </label>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={!newQQ.label.trim() || !newQQ.question.trim()}
+                        onClick={() => {
+                          if (!newQQ.label.trim() || !newQQ.question.trim()) return;
+                          const key = newQQ.label.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+                          setKnowledge(prev => ({
+                            ...prev,
+                            qualifyingQuestions: [...prev.qualifyingQuestions, {
+                              key: `${key}_${Date.now()}`,
+                              label: newQQ.label.trim(),
+                              question: newQQ.question.trim(),
+                              required: newQQ.required,
+                            }]
+                          }));
+                          setNewQQ({ label: "", question: "", required: true });
+                        }}
+                        data-testid="button-add-qualifying-question"
+                      >
+                        <Plus className="w-3.5 h-3.5 mr-1" />
+                        Add
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+
                 <div>
                   <Label>Custom AI Instructions</Label>
                   <Textarea

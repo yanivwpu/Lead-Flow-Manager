@@ -453,6 +453,20 @@ BAD: "Thank you! Could you provide more details about which listing?"
 GOOD: "Got it — the 5th Avenue property with the garden. Are you looking to schedule a viewing, or still comparing options right now?"`;
     }
 
+    // Business-defined qualification criteria — override the generic goal when present
+    const qualifyingQuestions = (businessKnowledge as any)?.qualifyingQuestions as Array<{
+      key?: string; label?: string; question: string; required?: boolean;
+    }> | undefined;
+    const hasCustomCriteria = Array.isArray(qualifyingQuestions) && qualifyingQuestions.length > 0;
+    if (hasCustomCriteria) {
+      prompt += `
+
+QUALIFICATION CRITERIA — This business qualifies leads using these specific questions (in priority order):
+${qualifyingQuestions!.map((q, i) => `${i + 1}. [${q.label || `Q${i+1}`}] "${q.question}"${q.required ? ' (required)' : ' (optional)'}`).join('\n')}
+
+When replying, work through these qualification questions in order. Ask only ONE at a time. Skip any that have already been answered in the conversation.`;
+    }
+
     if (businessKnowledge?.customInstructions) {
       prompt += `\n\nADDITIONAL INSTRUCTIONS: ${businessKnowledge.customInstructions}`;
     }
