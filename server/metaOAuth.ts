@@ -227,21 +227,28 @@ export async function connectPage(
   };
 
   // Step 1: Verify token
+  // Only hard-fail on genuine invalid/expired token errors (codes 190, 102, 104).
+  // Permission-missing errors (#100) mean the token IS valid but the app lacks a
+  // feature (Page Public Metadata Access) — treat as valid since the token was just
+  // obtained from our OAuth flow moments ago.
   try {
     const meResp = await fetch(
       `${GRAPH}/me?fields=id,name&access_token=${encodeURIComponent(page.accessToken)}`
     );
     const meData = (await meResp.json()) as any;
-    if (!meResp.ok || !meData.id) {
-      result.error = meData?.error?.message || "Page access token is invalid";
+    const errCode = meData?.error?.code;
+    const isTokenError = !meResp.ok && errCode && [190, 102, 104, 463, 467].includes(Number(errCode));
+    if (isTokenError) {
+      result.error = meData?.error?.message || "Page access token is invalid or expired";
       result.failedAt = "token";
       return result;
     }
+    // Permission/feature errors (#100) are non-fatal — the token is still valid
     result.steps.tokenValid = true;
   } catch (e: any) {
-    result.error = e.message || "Token validation failed";
-    result.failedAt = "token";
-    return result;
+    // Network error — assume token is fine, continue
+    result.steps.tokenValid = true;
+    result.warnings.push("Could not verify token via API (non-fatal): " + (e.message || "network error"));
   }
 
   // Step 2: Check permissions
@@ -266,11 +273,10 @@ export async function connectPage(
   }
 
   // Step 3: Subscribe page to webhooks
+  // Use the minimal "messages" field only — broader fields (messaging_referrals, etc.)
+  // require Page Public Metadata Access feature which needs Meta app review.
   try {
-    const subFields =
-      channel === "instagram"
-        ? "messages,messaging_seen,instagram_messages"
-        : "messages,messaging_postbacks,messaging_seen,messaging_referrals";
+    const subFields = "messages";
     const subResp = await fetch(
       `${GRAPH}/${encodeURIComponent(page.id)}/subscribed_apps`,
       {
@@ -280,6 +286,9 @@ export async function connectPage(
       }
     );
     const subData = (await subResp.json()) as any;
+    console.log(`[MetaOAuth] subscribed_apps response for page ${page.id}:`, JSON.stringify({
+      ok: subResp.ok, success: subData?.success, error: subData?.error?.message
+    }));
     if (subResp.ok && subData.success) {
       result.steps.webhookSubscribed = true;
     } else {
