@@ -41,6 +41,24 @@ export interface ConnectPageResult {
 export function buildMetaOAuthUrl(state: string, redirectUri: string): string {
   const appId = process.env.META_APP_ID;
   if (!appId) throw new Error("META_APP_ID is not configured on this server");
+
+  const configId = process.env.META_CONFIG_ID;
+
+  if (configId) {
+    // Facebook Login for Business — uses a saved permission configuration
+    // rather than a raw scope list. Required for Pages + Instagram messaging permissions.
+    return (
+      `https://www.facebook.com/dialog/oauth` +
+      `?client_id=${encodeURIComponent(appId)}` +
+      `&config_id=${encodeURIComponent(configId)}` +
+      `&response_type=code` +
+      `&override_default_response_type=true` +
+      `&redirect_uri=${encodeURIComponent(redirectUri)}` +
+      `&state=${encodeURIComponent(state)}`
+    );
+  }
+
+  // Fallback: standard Facebook Login (development / no config_id set)
   return (
     `https://www.facebook.com/dialog/oauth` +
     `?client_id=${encodeURIComponent(appId)}` +
