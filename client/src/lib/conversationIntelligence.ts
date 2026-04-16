@@ -405,7 +405,10 @@ export function computeWorkflow(
     !intel.hasFinancing && 'financing',
   ].filter(Boolean) as string[];
 
-  if (intel.messageCount > 0) {
+  // Only suggest qualification questions once there is enough conversational context.
+  // A single opening message ("test", "hi", etc.) gives no signal — don't interrogate.
+  // Require at least 2 messages exchanged before asking budget/timeline/financing questions.
+  if (intel.messageCount >= 2) {
     if (missing.length === 3) {
       nextQuestion = "What's your budget range and ideal timeline for making a move?";
     } else if (missing.includes('financing')) {

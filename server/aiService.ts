@@ -51,8 +51,19 @@ export class AIService {
     }
   ): Promise<{ suggestion: string; confidence: number }> {
     const lastMessage = conversationHistory[conversationHistory.length - 1]?.content || "";
+
+    // Don't suggest when there is no real conversational context yet.
+    // A single trivial opener ("test", "hi", "hey", "hello") doesn't give the AI
+    // enough signal — it will hallucinate qualification questions out of thin air.
+    const TRIVIAL_OPENERS = /^(test|hi|hey|hello|yo|sup|hola|ping|check|checking|ola|shalom|ahlan|مرحبا|שלום|hola|buenos dias|good morning|good afternoon|good evening|gm|gn)[\s!?.]*$/i;
+    const isTrivialSingleMessage = conversationHistory.length <= 1 && TRIVIAL_OPENERS.test(lastMessage.trim());
+    if (isTrivialSingleMessage) {
+      return { suggestion: "", confidence: 0 };
+    }
+
     const detectedLanguage = language || await this.detectMessageLanguage(lastMessage);
-    const systemPrompt = this.buildSystemPrompt(businessKnowledge, settings, tone, detectedLanguage, contactContext);
+    const isFirstMessage = conversationHistory.length <= 2;
+    const systemPrompt = this.buildSystemPrompt(businessKnowledge, settings, tone, detectedLanguage, contactContext, isFirstMessage);
     
     try {
       const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
@@ -348,7 +359,8 @@ Write a short natural summary of what this lead wants.`;
       financing?: string;
       intent?: string;
       leadScore?: string;
-    }
+    },
+    isFirstMessage?: boolean
   ): string {
     const langInstruction = language ? LANGUAGE_PROMPTS[language].instruction : LANGUAGE_PROMPTS.en.instruction;
     const industry = (businessKnowledge?.industry || "general").toLowerCase();
@@ -414,7 +426,14 @@ ${contactContext.notes ? `- Agent notes: ${contactContext.notes}` : ''}
    - Uncover budget, timeline, or financing readiness
    - Confirm next step or route them to action
 
-7. ASK ONLY ONE QUESTION — the single most useful next question. Not a list.`;
+7. ASK ONLY ONE QUESTION — the single most useful next question. Not a list.${isFirstMessage ? `
+
+FIRST MESSAGE RULE: This is the very start of the conversation. The lead has just made contact.
+- DO NOT jump to budget, timeline, or financing questions — there is no relationship yet.
+- Respond with a warm, natural acknowledgment of what they said.
+- Ask ONE simple, open-ended question to understand why they reached out.
+- Example: if they said "hi" or something vague, reply warmly and ask what brings them here today.
+- Never cold-open with qualification questions on a first message.` : ''}`;
 
     if (isRealEstate) {
       prompt += `
