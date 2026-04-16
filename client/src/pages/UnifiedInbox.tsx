@@ -539,6 +539,24 @@ export function UnifiedInbox() {
     }
   }, [selectedContactId]);
 
+  // Mark conversation as read when opened
+  useEffect(() => {
+    if (!primaryConversation?.id || isDemoUser) return;
+    fetch(`/api/conversations/${primaryConversation.id}/read`, {
+      method: "POST",
+      credentials: "include",
+    }).then(() => {
+      queryClient.setQueryData<InboxItem[]>(["/api/inbox"], (old) => {
+        if (!old) return old;
+        return old.map((item) =>
+          item.contact.id === selectedContactId
+            ? { ...item, unreadCount: 0, conversation: item.conversation ? { ...item.conversation, unreadCount: 0 } : item.conversation }
+            : item
+        );
+      });
+    }).catch(() => {});
+  }, [primaryConversation?.id, isDemoUser]);
+
   // --- Mutations ---
 
   const sendMessageMutation = useMutation({
