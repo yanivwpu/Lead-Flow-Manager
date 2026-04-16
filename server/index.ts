@@ -17,6 +17,62 @@ import "./worker";
 import oidcRouter from "./oidc";
 import bcrypt from "bcryptjs";
 import { storage } from "./storage";
+
+async function runStartupGhlCleanup() {
+  const targetUserId = process.env.GHL_CLEANUP_USER_ID;
+  if (!targetUserId) return;
+  const mode = process.env.GHL_CLEANUP_MODE || 'no_messages';
+  console.log(`[GHL Startup Cleanup] Running cleanup for user ${targetUserId}, mode=${mode}`);
+  try {
+    const { db } = await import('../drizzle/db');
+    const { contacts, conversations } = await import('../shared/schema');
+    const { eq, and, inArray } = await import('drizzle-orm');
+
+    const userIntegrations = await storage.getIntegrations(targetUserId);
+    const ghlIntegrations = userIntegrations.filter((i: any) => i.type === 'gohighlevel');
+    let disabledCount = 0;
+    for (const integration of ghlIntegrations) {
+      await storage.updateIntegration(integration.id, { isActive: false });
+      disabledCount++;
+    }
+    console.log(`[GHL Startup Cleanup] Disabled ${disabledCount} GHL integrations`);
+
+    const allGhlContacts = await db
+      .select({ id: contacts.id })
+      .from(contacts)
+      .where(and(eq(contacts.userId, targetUserId), eq(contacts.source, 'gohighlevel')));
+
+    if (allGhlContacts.length === 0) {
+      console.log(`[GHL Startup Cleanup] No GHL contacts found for user`);
+      return;
+    }
+
+    const allGhlContactIds = allGhlContacts.map((c: any) => c.id);
+    let toDeleteIds: string[] = [];
+
+    if (mode === 'no_messages') {
+      const convWithMessages = await db
+        .select({ contactId: conversations.contactId })
+        .from(conversations)
+        .where(and(inArray(conversations.contactId, allGhlContactIds), eq(conversations.channel, 'gohighlevel')));
+      const contactIdsWithConvs = new Set(convWithMessages.map((c: any) => c.contactId));
+      toDeleteIds = allGhlContactIds.filter((id: string) => !contactIdsWithConvs.has(id));
+    } else if (mode === 'all_ghl') {
+      toDeleteIds = allGhlContactIds;
+    }
+
+    let deleted = 0;
+    const BATCH = 500;
+    for (let i = 0; i < toDeleteIds.length; i += BATCH) {
+      const batch = toDeleteIds.slice(i, i + BATCH);
+      await db.delete(contacts).where(inArray(contacts.id, batch));
+      deleted += batch.length;
+    }
+    console.log(`[GHL Startup Cleanup] Deleted ${deleted} contacts (mode=${mode}), ${allGhlContacts.length - deleted} remain`);
+  } catch (err) {
+    console.error('[GHL Startup Cleanup] Error:', err);
+  }
+}
 import { seedRealtorTemplate } from "./seedRealtorTemplate";
 import { createBullBoard } from "@bull-board/api";
 import { BullMQAdapter } from "@bull-board/api/bullMQAdapter";
@@ -403,6 +459,7 @@ app.use((req, res, next) => {
     },
     () => {
       log(`serving on port ${port}`);
+      runStartupGhlCleanup().catch(err => console.error('[GHL Startup Cleanup] Unhandled error:', err));
     },
   );
 })();

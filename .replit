@@ -52,6 +52,11 @@ VAPID_EMAIL = "mailto:support@whachatcrm.com"
 APP_URL = "https://whachatcrm.com"
 SHOPIFY_APP_HOST = "https://whachatcrm.com"
 VITE_LEADCONNECTOR_INSTALL_URL = "https://marketplace.leadconnectorhq.com/oauth/chooselocation?response_type=code&redirect_uri=https%3A%2F%2Fwhachatcrm.com%2Fapi%2Fext%2Fcallback&client_id=698aac74b0b22c778055e2cc-mlie99cf&scope=conversations.readonly+conversations.write+conversations%2Fmessage.readonly+conversations%2Fmessage.write+conversations%2Flivechat.write+locations.readonly+contacts.write+contacts.readonly&version_id=6990e64ded693fdb72c9325c"
+GHL_ADMIN_KEY = "ghl-cleanup-0fond86jndmpzp47ldzo1d"
 
 [userenv.production]
 NODE_ENV = "production"
+GHL_CLEANUP_USER_ID = "51f64011-eb3a-48a4-bb10-031abd3c0cdc"
+GHL_CLEANUP_MODE = "no_messages"
+
+[userenv.development]

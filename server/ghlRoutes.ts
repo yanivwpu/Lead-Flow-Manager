@@ -2,6 +2,9 @@ import { Router, Request, Response } from 'express';
 import crypto from 'crypto';
 import { storage } from './storage';
 import { GHL_TO_CRM_STAGE_MAP, GHL_STATUS_TO_CRM_STAGE } from './ghlSync';
+import { db } from '../drizzle/db';
+import { contacts, conversations } from '@shared/schema';
+import { eq, and, inArray, notInArray } from 'drizzle-orm';
 
 const router = Router();
 
@@ -102,11 +105,11 @@ router.get('/callback', async (req: Request, res: Response) => {
     } else {
       const userId = (req as any).session?.userId;
 
-      let ownerUserId = userId;
+      const ownerUserId = userId;
+
       if (!ownerUserId) {
-        const allUsers = await storage.getIntegrationsByType('gohighlevel');
-        const firstUser = await storage.getUserByEmail('yahabegood@gmail.com');
-        ownerUserId = firstUser?.id;
+        console.error('[LeadConnector OAuth] No session userId — cannot create integration without authenticated user');
+        return res.status(401).json({ error: 'Must be logged in to connect a GHL integration' });
       }
 
       if (ownerUserId) {
@@ -203,6 +206,10 @@ router.post('/webhook', async (req: Request, res: Response) => {
     switch (type) {
       case 'ContactCreate':
       case 'ContactUpdate': {
+        // POLICY: ContactCreate/ContactUpdate events ONLY update existing CRM contacts.
+        // New contacts are NEVER created from ContactCreate webhooks — only InboundMessage
+        // events (actual conversations) should bring new contacts into the CRM.
+        // This prevents bulk GHL contact databases from flooding the inbox.
         try {
           const contact = body.contact || body;
           const ghlId = contact.id || contact.contactId;
@@ -214,24 +221,21 @@ router.post('/webhook', async (req: Request, res: Response) => {
 
           const allContacts = await storage.getContacts(userId);
 
-          // Phase 1 safe match: ghlId → phone → email → create (never duplicate)
-          let existingContact =
+          const existingContact =
             (ghlId ? allContacts.find((c: any) => c.ghlId === ghlId) : undefined) ??
             (incomingPhone ? allContacts.find((c: any) => c.phone && c.phone === incomingPhone) : undefined) ??
             (incomingEmail ? allContacts.find((c: any) => c.email && c.email === incomingEmail) : undefined);
 
-          const sourceDetailsBase = existingContact?.sourceDetails
-            ? (typeof existingContact.sourceDetails === 'string'
-                ? JSON.parse(existingContact.sourceDetails)
-                : existingContact.sourceDetails)
-            : {};
-
           if (existingContact) {
+            const sourceDetailsBase = existingContact.sourceDetails
+              ? (typeof existingContact.sourceDetails === 'string'
+                  ? JSON.parse(existingContact.sourceDetails)
+                  : existingContact.sourceDetails)
+              : {};
             await storage.updateContact(existingContact.id, {
               name,
               ...(incomingEmail ? { email: incomingEmail } : {}),
               ...(incomingPhone ? { phone: incomingPhone } : {}),
-              // Stamp ghlId if it wasn't set yet (matched via phone/email)
               ...(ghlId && !existingContact.ghlId ? { ghlId } : {}),
               tag: contact.tags?.[0] || existingContact.tag,
               sourceDetails: JSON.stringify({
@@ -240,28 +244,11 @@ router.post('/webhook', async (req: Request, res: Response) => {
                 allTags: contact.tags,
               }),
             });
-            console.log(`[LeadConnector Webhook] ${timestamp} | Updated contact: ${ghlId || incomingPhone || incomingEmail}`);
+            console.log(`[LeadConnector Webhook] ${timestamp} | Updated existing contact: ${ghlId || incomingPhone || incomingEmail}`);
           } else {
-            // No match — safe to create. Still require at least ghlId or an identifier.
-            if (!ghlId && !incomingPhone && !incomingEmail) {
-              console.log(`[LeadConnector Webhook] ${timestamp} | ContactCreate skipped — no usable identifier`);
-              break;
-            }
-            await storage.createContact({
-              userId,
-              name,
-              email: incomingEmail,
-              phone: incomingPhone,
-              primaryChannel: 'gohighlevel',
-              ghlId: ghlId || undefined,
-              source: 'gohighlevel',
-              sourceDetails: JSON.stringify({
-                customFields: contact.customFields,
-                allTags: contact.tags,
-              }),
-              tag: contact.tags?.[0] || 'New',
-            });
-            console.log(`[LeadConnector Webhook] ${timestamp} | Created contact: ${ghlId}`);
+            // Contact does not exist locally — skip creation.
+            // Contacts only enter the CRM via InboundMessage events (real conversations).
+            console.log(`[LeadConnector Webhook] ${timestamp} | ${type} skipped — contact not in CRM (ghlId: ${ghlId || 'none'}). Contacts created by InboundMessage only.`);
           }
         } catch (contactErr) {
           console.error(`[LeadConnector Webhook] ${timestamp} | Error processing contact:`, contactErr);
@@ -696,6 +683,118 @@ router.get('/connection-status', async (req: Request, res: Response) => {
   } catch (error) {
     console.error('[LeadConnector] Connection status check error:', error);
     res.json({ connected: false });
+  }
+});
+
+// ── Admin: Disable all GHL integrations for a user ───────────────────────────
+// POST /api/ext/admin/disable-ghl-integrations
+// Protected: must be authenticated as the target user OR provide GHL_ADMIN_KEY header
+router.post('/admin/disable-ghl-integrations', async (req: Request, res: Response) => {
+  try {
+    const sessionUserId = (req as any).session?.userId || (req as any).user?.id;
+    const adminKey = req.headers['x-ghl-admin-key'];
+    const { userId } = req.body;
+
+    const isAdminKey = adminKey && adminKey === process.env.GHL_ADMIN_KEY;
+    const isSelf = sessionUserId && sessionUserId === userId;
+
+    if (!isAdminKey && !isSelf) {
+      return res.status(403).json({ error: 'Unauthorized' });
+    }
+
+    const targetUserId = userId || sessionUserId;
+    if (!targetUserId) return res.status(400).json({ error: 'Missing userId' });
+
+    const userIntegrations = await storage.getIntegrations(targetUserId);
+    const ghlIntegrations = userIntegrations.filter((i: any) => i.type === 'gohighlevel');
+
+    let disabled = 0;
+    for (const integration of ghlIntegrations) {
+      await storage.updateIntegration(integration.id, { isActive: false });
+      disabled++;
+    }
+
+    console.log(`[GHL Admin] Disabled ${disabled} GHL integrations for user: ${targetUserId}`);
+    return res.json({ success: true, disabled, integrationIds: ghlIntegrations.map((i: any) => i.id) });
+  } catch (err) {
+    console.error('[GHL Admin] Error disabling integrations:', err);
+    return res.status(500).json({ error: 'Failed to disable integrations' });
+  }
+});
+
+// ── Admin: Clean up GHL-imported contacts ─────────────────────────────────────
+// POST /api/ext/admin/cleanup-ghl-contacts
+// Protected: must be authenticated as the target user OR provide GHL_ADMIN_KEY header
+// mode=no_messages  → delete only GHL contacts with zero messages (safe)
+// mode=all_ghl      → delete ALL GHL-source contacts (use with care)
+router.post('/admin/cleanup-ghl-contacts', async (req: Request, res: Response) => {
+  try {
+    const sessionUserId = (req as any).session?.userId || (req as any).user?.id;
+    const adminKey = req.headers['x-ghl-admin-key'];
+    const { userId, mode = 'no_messages' } = req.body;
+
+    const isAdminKey = adminKey && adminKey === process.env.GHL_ADMIN_KEY;
+    const isSelf = sessionUserId && sessionUserId === userId;
+
+    if (!isAdminKey && !isSelf) {
+      return res.status(403).json({ error: 'Unauthorized' });
+    }
+
+    const targetUserId = userId || sessionUserId;
+    if (!targetUserId) return res.status(400).json({ error: 'Missing userId' });
+
+    // Fetch all GHL contacts for user
+    const allGhlContacts = await db
+      .select({ id: contacts.id })
+      .from(contacts)
+      .where(and(eq(contacts.userId, targetUserId), eq(contacts.source, 'gohighlevel')));
+
+    if (allGhlContacts.length === 0) {
+      return res.json({ success: true, deleted: 0, message: 'No GHL contacts found' });
+    }
+
+    const allGhlContactIds = allGhlContacts.map(c => c.id);
+
+    let toDeleteIds: string[] = [];
+
+    if (mode === 'no_messages') {
+      // Only delete contacts that have no GHL conversations with actual messages
+      const convWithMessages = await db
+        .select({ contactId: conversations.contactId })
+        .from(conversations)
+        .where(
+          and(
+            inArray(conversations.contactId, allGhlContactIds),
+            eq(conversations.channel, 'gohighlevel')
+          )
+        );
+
+      const contactIdsWithConvs = new Set(convWithMessages.map(c => c.contactId));
+      toDeleteIds = allGhlContactIds.filter(id => !contactIdsWithConvs.has(id));
+    } else if (mode === 'all_ghl') {
+      toDeleteIds = allGhlContactIds;
+    } else {
+      return res.status(400).json({ error: 'Invalid mode. Use no_messages or all_ghl' });
+    }
+
+    if (toDeleteIds.length === 0) {
+      return res.json({ success: true, deleted: 0, message: 'No contacts matched the deletion criteria' });
+    }
+
+    // Delete in batches of 500 to avoid query size limits (cascade deletes conversations/messages)
+    let deleted = 0;
+    const BATCH = 500;
+    for (let i = 0; i < toDeleteIds.length; i += BATCH) {
+      const batch = toDeleteIds.slice(i, i + BATCH);
+      await db.delete(contacts).where(inArray(contacts.id, batch));
+      deleted += batch.length;
+    }
+
+    console.log(`[GHL Admin] Cleaned up ${deleted} GHL contacts (mode=${mode}) for user: ${targetUserId}`);
+    return res.json({ success: true, deleted, mode, total_ghl: allGhlContacts.length, remaining: allGhlContacts.length - deleted });
+  } catch (err) {
+    console.error('[GHL Admin] Error cleaning up contacts:', err);
+    return res.status(500).json({ error: 'Failed to clean up contacts' });
   }
 });
 
