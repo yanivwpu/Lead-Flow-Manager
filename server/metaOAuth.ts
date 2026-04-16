@@ -102,13 +102,35 @@ export async function exchangeForLongLivedToken(shortToken: string): Promise<str
 }
 
 export async function fetchUserPages(userToken: string): Promise<MetaPage[]> {
+  // First debug the token to understand what permissions were actually granted
+  const debugUrl = `${GRAPH}/debug_token?input_token=${encodeURIComponent(userToken)}&access_token=${encodeURIComponent(process.env.META_APP_ID + '|' + process.env.META_APP_SECRET)}`;
+  try {
+    const debugResp = await fetch(debugUrl);
+    const debugData = (await debugResp.json()) as any;
+    console.log('[Meta OAuth] Token debug:', JSON.stringify({
+      app_id: debugData?.data?.app_id,
+      type: debugData?.data?.type,
+      scopes: debugData?.data?.scopes,
+      is_valid: debugData?.data?.is_valid,
+      error: debugData?.data?.error,
+    }));
+  } catch (e) {
+    console.warn('[Meta OAuth] Token debug failed (non-fatal):', e);
+  }
+
   const url =
     `${GRAPH}/me/accounts` +
-    `?fields=id,name,category,picture` +
+    `?fields=id,name,category,picture,access_token` +
     `&access_token=${encodeURIComponent(userToken)}` +
     `&limit=50`;
   const resp = await fetch(url);
   const data = (await resp.json()) as any;
+  console.log('[Meta OAuth] /me/accounts raw response:', JSON.stringify({
+    status: resp.status,
+    data_length: Array.isArray(data?.data) ? data.data.length : 'not-array',
+    error: data?.error,
+    paging: data?.paging,
+  }));
   if (!resp.ok || !Array.isArray(data.data)) {
     throw new Error(data.error?.message || "Failed to fetch your Facebook Pages");
   }
