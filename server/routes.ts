@@ -3858,12 +3858,8 @@ export async function registerRoutes(
 
       // Required scopes per channel
       const REQUIRED_SCOPES: Record<string, string[]> = {
-        facebook: ["pages_messaging", "pages_read_engagement", "pages_manage_metadata"],
-        instagram: [
-          "instagram_basic",
-          "instagram_manage_messages",
-          "pages_show_list",
-        ],
+        facebook: ["pages_messaging", "pages_manage_metadata"],
+        instagram: ["pages_show_list", "pages_messaging"],
       };
 
       const result: {

@@ -1,14 +1,10 @@
 const GRAPH = "https://graph.facebook.com/v19.0";
 
 const SCOPES = [
-  "email",
   "public_profile",
   "pages_show_list",
-  "pages_read_engagement",
   "pages_messaging",
   "pages_manage_metadata",
-  "instagram_basic",
-  "instagram_manage_messages",
 ].join(",");
 
 export interface MetaPage {
@@ -169,8 +165,8 @@ export async function connectPage(
   };
 
   const REQUIRED_SCOPES: Record<string, string[]> = {
-    facebook: ["pages_messaging", "pages_read_engagement", "pages_manage_metadata"],
-    instagram: ["instagram_basic", "instagram_manage_messages", "pages_show_list"],
+    facebook: ["pages_messaging", "pages_manage_metadata"],
+    instagram: ["pages_show_list", "pages_messaging"],
   };
 
   // Step 1: Verify token
