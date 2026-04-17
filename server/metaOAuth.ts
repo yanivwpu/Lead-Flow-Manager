@@ -422,12 +422,12 @@ export async function connectPage(
 
   // Step 3: Subscribe page to webhooks.
   // Endpoint: POST /{page_id}/subscribed_apps
-  // For Instagram DMs via the Messenger Platform we must include the `instagram`
-  // subscribed field in addition to `messages` — without it Meta will not forward
-  // Instagram DM events even though `messages` is on in the developer console.
-  const subscribedFields = channel === "instagram"
-    ? "messages,instagram"
-    : "messages";
+  // Both Facebook Messenger and Instagram DMs (via Messenger Platform) use `messages`
+  // as the subscribed_field. The `instagram` value is NOT a valid page subscription
+  // field — it's an app-level webhook product setting in the developer console.
+  // Instagram DMs are distinguished from Facebook DMs by the webhook payload shape
+  // (object: "instagram" vs object: "page") not by the subscription field.
+  const subscribedFields = "messages";
   const subEndpoint = `${GRAPH}/${page.id}/subscribed_apps`;
   console.log(`[MetaOAuth] Step 3: POST ${subEndpoint} subscribed_fields=${subscribedFields}`);
   try {
