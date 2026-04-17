@@ -340,14 +340,19 @@ export async function connectPage(
 
   // Step 3: Subscribe page to webhooks.
   // Endpoint: POST /{page_id}/subscribed_apps
-  // Fields: messages only (pages_manage_metadata is sufficient; no pages_read_engagement needed)
+  // For Instagram DMs via the Messenger Platform we must include the `instagram`
+  // subscribed field in addition to `messages` — without it Meta will not forward
+  // Instagram DM events even though `messages` is on in the developer console.
+  const subscribedFields = channel === "instagram"
+    ? "messages,instagram"
+    : "messages";
   const subEndpoint = `${GRAPH}/${page.id}/subscribed_apps`;
-  console.log(`[MetaOAuth] Step 3: POST ${subEndpoint} subscribed_fields=messages`);
+  console.log(`[MetaOAuth] Step 3: POST ${subEndpoint} subscribed_fields=${subscribedFields}`);
   try {
     const subResp = await fetch(subEndpoint, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: `subscribed_fields=messages&access_token=${encodeURIComponent(page.accessToken)}`,
+      body: `subscribed_fields=${subscribedFields}&access_token=${encodeURIComponent(page.accessToken)}`,
     });
     const subData = (await subResp.json()) as any;
     console.log(`[MetaOAuth] subscribed_apps response:`, JSON.stringify({
