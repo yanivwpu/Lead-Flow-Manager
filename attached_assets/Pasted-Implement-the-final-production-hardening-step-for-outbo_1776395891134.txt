@@ -1,0 +1,71 @@
+Implement the final production hardening step for outbound media: move uploaded files from local disk storage to persistent object storage.
+
+Current problem:
+
+* uploads are currently saved to local disk at /uploads
+* this works in dev, but files will be lost on restart/redeploy because deployment disk is ephemeral
+* outbound media links therefore are not production-safe yet
+
+Goal:
+Replace the current disk-based upload flow with persistent object storage so uploaded media survives deploys/restarts and remains publicly accessible to Twilio and Meta.
+
+Requirements:
+
+1. Replace local disk writes in POST /api/media/upload
+
+* Do not save uploaded files to /uploads on local disk
+* Upload the file directly to the project’s object storage / bucket instead
+* Return a permanent public HTTPS URL
+
+2. Preserve current validation behavior
+
+* keep the same allowed MIME types
+* keep 16 MB max size
+* keep sanitized server-generated filenames/extensions based on MIME type
+* keep clean JSON errors
+
+3. Preserve current response contract
+    Return:
+
+* mediaUrl
+* mediaType
+* mediaFilename
+
+So the rest of the composer/send pipeline does not need to change.
+
+4. Public URL requirements
+
+* returned URL must be fetchable by Twilio and Meta without auth
+* no signed short-lived URLs unless they are guaranteed valid long enough for provider fetch
+* URL must remain stable after send so chat history still renders correctly later
+
+5. Keep current send flow unchanged
+
+* composer upload flow stays the same
+* send API stays the same
+* channelService stays the same
+* Twilio/Meta adapters stay the same
+    Only the upload storage backend should change.
+
+6. Backward compatibility
+
+* already-sent messages that point to existing /uploads URLs can remain as-is for now
+* do not break rendering of historical outbound media
+* new uploads should use object storage URLs
+
+7. Confirm these tests after implementation
+
+* upload returns persistent public URL
+* Twilio can fetch and send image/PDF/audio/video from new URL
+* Meta can fetch and send image/document/audio/video from new URL
+* outbound media still renders immediately and after refresh
+* uploaded files survive redeploy/restart
+* no regression in text-only sending
+
+8. Optional but recommended
+
+* add a small storage abstraction/helper so upload destination is not hardcoded again
+* optionally leave local disk only as a dev fallback when object storage is unavailable
+
+Final goal:
+Outbound media should be fully production-ready: upload file → get persistent public URL → send through provider → render in chat now and later → survive redeploys.

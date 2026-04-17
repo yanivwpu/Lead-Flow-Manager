@@ -2,6 +2,7 @@ import type { Express } from "express";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
+import { objectStorageClient } from "../replit_integrations/object_storage/objectStorage";
 
 const ALLOWED_MIME_TYPES: Record<string, string> = {
   "image/jpeg":        "image",
@@ -34,21 +35,66 @@ const MIME_TO_EXT: Record<string, string> = {
   "video/mp4":         ".mp4",
 };
 
-export function registerMediaRoutes(app: Express): void {
+// ---------------------------------------------------------------------------
+// Storage helper — uploads buffer to object storage, returns a permanent URL.
+// Falls back to local disk when PRIVATE_OBJECT_DIR is not configured.
+// ---------------------------------------------------------------------------
+interface UploadResult {
+  mediaUrl: string;
+  storedOn: "object-storage" | "local-disk";
+}
+
+async function uploadMediaBuffer(
+  buffer: Buffer,
+  mimeType: string,
+  filename: string, // already safe (MIME-derived extension)
+  appUrl: string
+): Promise<UploadResult> {
+  const privateObjectDir = process.env.PRIVATE_OBJECT_DIR;
+
+  if (privateObjectDir) {
+    // ---- Object Storage path ------------------------------------------------
+    // PRIVATE_OBJECT_DIR looks like: /replit-objstore-<id>/.private
+    // Parse bucket + object name from it
+    const dirParts = privateObjectDir.split("/").filter(Boolean);
+    // dirParts[0] = bucket name, dirParts[1..] = prefix within bucket
+    const bucketName = dirParts[0];
+    const prefix = dirParts.slice(1).join("/"); // e.g. ".private"
+    const objectName = `${prefix}/uploads/${filename}`; // e.g. ".private/uploads/123.jpg"
+
+    const bucket = objectStorageClient.bucket(bucketName);
+    const file = bucket.file(objectName);
+
+    await file.save(buffer, {
+      contentType: mimeType,
+      metadata: {
+        "Cache-Control": "public, max-age=31536000",
+      },
+    });
+
+    // The /objects/ route in the existing storage router serves any path under
+    // PRIVATE_OBJECT_DIR without requiring auth — Twilio/Meta can fetch freely.
+    const mediaUrl = `${appUrl}/objects/uploads/${filename}`;
+    return { mediaUrl, storedOn: "object-storage" };
+  }
+
+  // ---- Local disk fallback (dev only) ---------------------------------------
   const uploadDir = path.join(process.cwd(), "uploads");
   if (!fs.existsSync(uploadDir)) {
     fs.mkdirSync(uploadDir, { recursive: true });
   }
+  const filePath = path.join(uploadDir, filename);
+  fs.writeFileSync(filePath, buffer);
+  const mediaUrl = `${appUrl}/uploads/${filename}`;
+  return { mediaUrl, storedOn: "local-disk" };
+}
 
+// ---------------------------------------------------------------------------
+
+export function registerMediaRoutes(app: Express): void {
+  // Use memory storage — no disk writes in the multer layer
   const upload = multer({
-    storage: multer.diskStorage({
-      destination: uploadDir,
-      filename: (_req, file, cb) => {
-        const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-        const ext = MIME_TO_EXT[file.mimetype] || ".bin";
-        cb(null, uniqueSuffix + ext);
-      },
-    }),
+    storage: multer.memoryStorage(),
     limits: { fileSize: 16 * 1024 * 1024 },
     fileFilter: (_req, file, cb) => {
       if (ALLOWED_MIME_TYPES[file.mimetype]) {
@@ -74,7 +120,6 @@ export function registerMediaRoutes(app: Express): void {
       if (!req.user) {
         return res.status(401).json({ error: "Unauthorized" });
       }
-
       if (!req.file) {
         return res.status(400).json({ error: "No file provided" });
       }
@@ -83,12 +128,20 @@ export function registerMediaRoutes(app: Express): void {
         process.env.APP_URL ||
         `https://${(process.env.REPLIT_DOMAINS || "").split(",")[0]}`;
 
-      const mediaUrl = `${appUrl}/uploads/${path.basename(req.file.path)}`;
+      const ext = MIME_TO_EXT[req.file.mimetype] || ".bin";
+      const filename = `${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`;
       const mediaType = ALLOWED_MIME_TYPES[req.file.mimetype] || "document";
+
+      const { mediaUrl, storedOn } = await uploadMediaBuffer(
+        req.file.buffer,
+        req.file.mimetype,
+        filename,
+        appUrl
+      );
 
       console.log(
         `[MediaUpload] userId=${req.user.id} file=${req.file.originalname} ` +
-        `size=${req.file.size} mime=${req.file.mimetype} url=${mediaUrl}`
+        `size=${req.file.size} mime=${req.file.mimetype} storedOn=${storedOn} url=${mediaUrl}`
       );
 
       return res.json({
@@ -98,9 +151,6 @@ export function registerMediaRoutes(app: Express): void {
         mimeType: req.file.mimetype,
       });
     } catch (error: any) {
-      if (req.file && fs.existsSync(req.file.path)) {
-        try { fs.unlinkSync(req.file.path); } catch {}
-      }
       console.error("[MediaUpload] Error:", error);
       return res.status(500).json({ error: error.message || "Upload failed" });
     }
