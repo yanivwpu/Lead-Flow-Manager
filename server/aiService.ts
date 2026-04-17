@@ -53,11 +53,14 @@ export class AIService {
     const lastMessage = conversationHistory[conversationHistory.length - 1]?.content || "";
 
     // Don't suggest when there is no real conversational context yet.
-    // A single trivial opener ("test", "hi", "hey", "hello") doesn't give the AI
-    // enough signal — it will hallucinate qualification questions out of thin air.
-    const TRIVIAL_OPENERS = /^(test|hi|hey|hello|yo|sup|hola|ping|check|checking|ola|shalom|ahlan|مرحبا|שלום|hola|buenos dias|good morning|good afternoon|good evening|gm|gn)[\s!?.]*$/i;
-    const isTrivialSingleMessage = conversationHistory.length <= 1 && TRIVIAL_OPENERS.test(lastMessage.trim());
-    if (isTrivialSingleMessage) {
+    // Trivial openers ("test", "hi", "hey", "hello") give the AI no signal —
+    // it will hallucinate qualification questions out of thin air.
+    // We suppress suggestions when ALL messages in a short conversation (≤4 messages)
+    // are trivial openers, not just when there is one message.
+    const TRIVIAL_OPENERS = /^(test|hi|hey|hello|yo|sup|hola|ping|check|checking|ola|shalom|ahlan|مرحبا|שלום|buenos dias|good morning|good afternoon|good evening|gm|gn)[\s!?.]*$/i;
+    const inboundMessages = conversationHistory.filter(m => m.role === 'user');
+    const allTrivial = inboundMessages.length > 0 && inboundMessages.every(m => TRIVIAL_OPENERS.test((m.content || "").trim()));
+    if (allTrivial && conversationHistory.length <= 4) {
       return { suggestion: "", confidence: 0 };
     }
 
