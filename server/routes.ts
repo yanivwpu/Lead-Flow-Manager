@@ -2295,10 +2295,12 @@ export async function registerRoutes(
             const senderId = event.sender?.id;
             const messageText = event.message.text || '';
             const messageId = event.message.mid;
+            const attachments: any[] = Array.isArray(event.message.attachments) ? event.message.attachments : [];
+            const hasContent = messageText.length > 0 || attachments.length > 0;
 
-            console.log(`[Meta Webhook] [Stage 3-IG] Event: senderId=${senderId}, recipientId=${event.recipient?.id}, mid=${messageId}, text="${messageText.substring(0, 80)}"`);
+            console.log(`[Meta Webhook] [Stage 3-IG] Event: senderId=${senderId}, recipientId=${event.recipient?.id}, mid=${messageId}, text="${messageText.substring(0, 80)}", attachments=${attachments.length}`);
 
-            if (senderId && messageText) {
+            if (senderId && hasContent) {
               const recipientId = event.recipient?.id;
               const { db: database } = await import("../drizzle/db");
               const { channelSettings: channelSettingsTable } = await import("@shared/schema");
@@ -2325,14 +2327,25 @@ export async function registerRoutes(
                 console.log(`[Meta Webhook] [Stage 3-IG] MATCHED channelSettings id=${matchSetting.id}, userId=${matchSetting.userId}`);
                 console.log(`[Inbound] [Stage 4-IG] Webhook received — channel: instagram, from: ${senderId}, messageId: ${messageId}`);
                 console.log(`[Inbound] [Stage 4-IG] Channel identified: instagram — userId: ${matchSetting.userId}, handing off to processIncomingMessage`);
+
+                const firstAttachment = attachments[0] as any | undefined;
+                const attachmentMediaUrl: string | undefined = firstAttachment?.payload?.url;
+                const attachmentType: string | undefined = firstAttachment?.type;
+                const content = messageText || firstAttachment?.payload?.title || '';
+                const contentType = messageText ? 'text' : (attachmentType || 'attachment');
+
+                console.log(`[Inbound] [Stage 4-IG] content="${content.substring(0, 60)}", contentType=${contentType}, hasMedia=${!!attachmentMediaUrl}, attachmentType=${attachmentType}`);
+
                 directJobs.push(
                   metaCs.processIncomingMessage({
                     userId: matchSetting.userId,
                     channel: 'instagram',
                     channelContactId: senderId,
                     contactName: event.sender?.username || senderId,
-                    content: messageText,
-                    contentType: 'text',
+                    content,
+                    contentType,
+                    mediaUrl: attachmentMediaUrl,
+                    mediaType: attachmentType,
                     externalMessageId: messageId,
                   }).then((result) => {
                     console.log(`[Inbound] [Stage 10-IG] Pipeline complete — channel: instagram, messageId: ${messageId}, contactId: ${result.contact.id}, conversationId: ${result.conversation.id}, messageId_db: ${result.message.id}, isNewConversation: ${result.isNewConversation}`);
@@ -2343,7 +2356,7 @@ export async function registerRoutes(
                 console.warn(`[Meta Webhook] [Stage 3-IG] FIX: Go to Integrations → Instagram, enter your Page ID / Instagram Account ID (the one Meta calls as recipient="${recipientId}") and mark it connected.`);
               }
             } else {
-              console.log(`[Meta Webhook] [Stage 3-IG] Skipping event — senderId or text missing (senderId=${senderId}, textLen=${messageText.length})`);
+              console.log(`[Meta Webhook] [Stage 3-IG] Skipping event — senderId or content missing (senderId=${senderId}, textLen=${messageText.length}, attachments=${attachments.length})`);
             }
           }
         }
