@@ -109,6 +109,7 @@ interface Message {
   contentType: string;
   mediaUrl?: string;
   mediaType?: string;
+  mediaFilename?: string;
   status: string;
   createdAt: string;
   sentViaFallback?: boolean;
@@ -1208,23 +1209,34 @@ export function UnifiedInbox() {
                           isOut ? "bg-[#d9fdd3] text-gray-900 rounded-tr-none" : "bg-white text-gray-900 rounded-tl-none",
                           isSending && "opacity-75"
                         )}>
-                          {msg.mediaUrl && (msg.mediaType?.startsWith('image') || msg.contentType === 'image') ? (
-                            <div>
-                              <img src={msg.mediaUrl} alt="Media" className="max-w-full rounded cursor-pointer max-h-64 object-cover" onClick={() => window.open(msg.mediaUrl, '_blank')} />
-                              {msg.content && <p className="leading-snug mt-1 text-sm">{msg.content}</p>}
-                            </div>
-                          ) : msg.mediaUrl && (msg.mediaType?.startsWith('video') || msg.contentType === 'video') ? (
-                            <video src={msg.mediaUrl} controls className="max-w-full rounded max-h-64" />
-                          ) : msg.mediaUrl && (msg.mediaType?.startsWith('audio') || msg.contentType === 'audio') ? (
-                            <audio src={msg.mediaUrl} controls className="max-w-full" />
-                          ) : msg.mediaUrl && (msg.mediaType === 'document' || msg.contentType === 'document') ? (
-                            <a href={msg.mediaUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-blue-600 underline">
-                              <FileText className="w-4 h-4 flex-shrink-0" />
-                              <span>{msg.content || 'Document'}</span>
-                            </a>
-                          ) : (
-                            <p className="leading-snug">{msg.content}</p>
-                          )}
+                          {(() => {
+                            const hasMedia = msg.mediaUrl || msg.mediaFilename;
+                            const proxyUrl = `/api/media/proxy?messageId=${msg.id}`;
+                            const ct = msg.contentType;
+                            const isImage = ct === 'image' || msg.mediaType?.startsWith('image');
+                            const isVideo = ct === 'video' || msg.mediaType?.startsWith('video');
+                            const isAudio = ct === 'audio' || msg.mediaType?.startsWith('audio');
+                            const isDoc = ct === 'document' || msg.mediaType === 'document';
+                            if (hasMedia && isImage) return (
+                              <div>
+                                <img src={proxyUrl} alt="Image" className="max-w-full rounded cursor-pointer max-h-64 object-cover" onClick={() => window.open(proxyUrl, '_blank')} />
+                                {msg.content && <p className="leading-snug mt-1 text-sm">{msg.content}</p>}
+                              </div>
+                            );
+                            if (hasMedia && isVideo) return (
+                              <video src={proxyUrl} controls className="max-w-full rounded max-h-64" />
+                            );
+                            if (hasMedia && isAudio) return (
+                              <audio src={proxyUrl} controls className="max-w-full" />
+                            );
+                            if (hasMedia && isDoc) return (
+                              <a href={proxyUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-blue-600 underline">
+                                <FileText className="w-4 h-4 flex-shrink-0" />
+                                <span>{msg.content || 'Document'}</span>
+                              </a>
+                            );
+                            return <p className="leading-snug">{msg.content}</p>;
+                          })()}
                           <div className="flex items-center justify-end gap-1 mt-0.5">
                             {msg.sentViaFallback && (
                               <span className="text-[10px] text-amber-600">via {msg.fallbackChannel}</span>

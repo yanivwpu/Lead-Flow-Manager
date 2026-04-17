@@ -2262,46 +2262,22 @@ export async function registerRoutes(
           console.log(`[Inbound] Webhook received — channel: whatsapp, from: ${incomingMessage.from}, messageId: ${incomingMessage.messageId}`);
           console.log(`[Inbound] Channel identified: whatsapp — userId: ${user.id}, starting processIncomingMessage`);
           directJobs.push(
-            (async () => {
-              let localMediaUrl: string | undefined;
-              if (incomingMessage.mediaId) {
-                try {
-                  const metaUrl = await getMediaUrl(user.id, incomingMessage.mediaId);
-                  if (metaUrl) {
-                    const mediaBuffer = await downloadMedia(user.id, metaUrl);
-                    if (mediaBuffer) {
-                      const uploadDir = path.join(process.cwd(), 'uploads');
-                      if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
-                      const ext = incomingMessage.type === 'image' ? '.jpg'
-                        : incomingMessage.type === 'video' ? '.mp4'
-                        : incomingMessage.type === 'audio' ? '.ogg'
-                        : incomingMessage.type === 'document' ? '.pdf' : '.bin';
-                      const filename = `wa-${Date.now()}-${incomingMessage.mediaId.slice(-8)}${ext}`;
-                      fs.writeFileSync(path.join(uploadDir, filename), mediaBuffer);
-                      const appUrl = process.env.APP_URL || `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co`;
-                      localMediaUrl = `${appUrl}/uploads/${filename}`;
-                      console.log(`[Inbound] Media saved — type: ${incomingMessage.type}, file: ${filename}`);
-                    }
-                  }
-                } catch (err: any) {
-                  console.warn(`[Inbound] Failed to download media for messageId ${incomingMessage.messageId}: ${err?.message}`);
-                }
-              }
-              const result = await metaCs.processIncomingMessage({
-                userId: user.id,
-                channel: 'whatsapp',
-                channelContactId: incomingMessage.from,
-                contactName: incomingMessage.profileName || incomingMessage.from,
-                content: incomingMessage.text || incomingMessage.caption || (incomingMessage.mediaId ? '' : `[${incomingMessage.type}]`),
-                contentType: incomingMessage.type === 'text' ? 'text' : incomingMessage.type,
-                mediaUrl: localMediaUrl,
-                externalMessageId: incomingMessage.messageId,
-              });
+            metaCs.processIncomingMessage({
+              userId: user.id,
+              channel: 'whatsapp',
+              channelContactId: incomingMessage.from,
+              contactName: incomingMessage.profileName || incomingMessage.from,
+              content: incomingMessage.text || incomingMessage.caption || '',
+              contentType: incomingMessage.type === 'text' ? 'text' : incomingMessage.type,
+              // Store media ID so the proxy endpoint can fetch it on demand
+              mediaFilename: incomingMessage.mediaId,
+              externalMessageId: incomingMessage.messageId,
+            }).then((result) => {
               metaInboxResult = { chatbotWillFire: result.chatbotWillFire, isNewConversation: result.isNewConversation };
               metaInboxContact = result.contact;
               metaInboxConversationId = result.conversation.id;
               console.log(`[Inbound] Webhook returned 200 — channel: whatsapp, messageId: ${incomingMessage.messageId}, userId: ${user.id}`);
-            })()
+            })
           );
         } else {
           console.warn(`[Meta Webhook] WARNING: No user found for phoneNumberId=${incomingMessage.phoneNumberId}. Message from ${incomingMessage.from} will be dropped.`);
@@ -2456,13 +2432,13 @@ export async function registerRoutes(
               console.log(`[Meta Webhook] [Stage 3-FB] Name lookup failed — using PSID as contactName`);
             }
 
-            // Derive content — text takes priority, then attachment type labels
-            const content = messageText ||
-              attachments.map((a: any) => `[${a.type || 'attachment'}]`).join(' ') ||
-              '[message]';
-            const contentType = messageText ? 'text' : (attachments[0]?.type || 'attachment');
+            // Derive content and media info
+            const firstAttachment = attachments[0] as any | undefined;
+            const attachmentMediaUrl: string | undefined = firstAttachment?.payload?.url;
+            const content = messageText || firstAttachment?.payload?.title || '';
+            const contentType = messageText ? 'text' : (firstAttachment?.type || 'attachment');
 
-            console.log(`[Inbound] [Stage 4-FB] Handing off to processIncomingMessage — channel: facebook, from: ${senderId} ("${contactName}"), content: "${content.substring(0, 60)}"`);
+            console.log(`[Inbound] [Stage 4-FB] Handing off to processIncomingMessage — channel: facebook, from: ${senderId} ("${contactName}"), content: "${content.substring(0, 60)}", hasMedia: ${!!attachmentMediaUrl}`);
             directJobs.push(
               metaCs.processIncomingMessage({
                 userId: matchSetting.userId,
@@ -2471,6 +2447,7 @@ export async function registerRoutes(
                 contactName,
                 content,
                 contentType,
+                mediaUrl: attachmentMediaUrl,
                 externalMessageId: messageId,
               }).then((result) => {
                 console.log(`[Inbound] [Stage 10-FB] Pipeline complete — channel: facebook, mid=${messageId}, contactId=${result.contact.id}, conversationId=${result.conversation.id}, dbMessageId=${result.message.id}, isNew=${result.isNewConversation}`);

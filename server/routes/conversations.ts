@@ -1,5 +1,6 @@
 import type { Express } from "express";
 import { storage } from "../storage";
+import { getMediaUrl, downloadMedia } from "../userMeta";
 
 export function registerConversationRoutes(app: Express): void {
   // Get conversation messages
@@ -69,6 +70,59 @@ export function registerConversationRoutes(app: Express): void {
     } catch (error) {
       console.error("Error marking conversation as read:", error);
       res.status(500).json({ error: "Failed to mark as read" });
+    }
+  });
+
+  // Media proxy — streams media for a given message ID
+  // WhatsApp media requires a fresh URL + Bearer auth; Facebook CDN URLs may expire too.
+  app.get("/api/media/proxy", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+
+      const messageId = req.query.messageId as string;
+      if (!messageId) return res.status(400).json({ error: "messageId required" });
+
+      const message = await storage.getMessage(messageId);
+      if (!message) return res.status(404).json({ error: "Message not found" });
+
+      // Security: ensure this message belongs to the requesting user
+      const conversation = await storage.getConversation(message.conversationId);
+      if (!conversation || conversation.userId !== req.user.id) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+
+      const userId = req.user.id;
+
+      // WhatsApp media: mediaFilename holds the Meta media ID
+      if (message.mediaFilename && !message.mediaUrl) {
+        const freshUrl = await getMediaUrl(userId, message.mediaFilename);
+        if (!freshUrl) return res.status(502).json({ error: "Could not retrieve media URL" });
+        const buffer = await downloadMedia(userId, freshUrl);
+        if (!buffer) return res.status(502).json({ error: "Could not download media" });
+        const contentType = message.contentType === 'image' ? 'image/jpeg'
+          : message.contentType === 'video' ? 'video/mp4'
+          : message.contentType === 'audio' ? 'audio/ogg'
+          : 'application/octet-stream';
+        res.set('Content-Type', contentType);
+        res.set('Cache-Control', 'private, max-age=300');
+        return res.send(buffer);
+      }
+
+      // Facebook / other: mediaUrl is a direct CDN URL
+      if (message.mediaUrl) {
+        const response = await fetch(message.mediaUrl);
+        if (!response.ok) return res.status(502).json({ error: "Could not fetch media" });
+        const ct = response.headers.get('content-type') || 'application/octet-stream';
+        res.set('Content-Type', ct);
+        res.set('Cache-Control', 'private, max-age=300');
+        const arrayBuffer = await response.arrayBuffer();
+        return res.send(Buffer.from(arrayBuffer));
+      }
+
+      return res.status(404).json({ error: "No media available for this message" });
+    } catch (error) {
+      console.error("Media proxy error:", error);
+      res.status(500).json({ error: "Media proxy failed" });
     }
   });
 

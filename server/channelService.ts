@@ -245,9 +245,10 @@ class ChannelService {
     content: string;
     contentType?: string;
     mediaUrl?: string;
+    mediaFilename?: string; // Used to store platform media ID for proxy fetching (e.g. WhatsApp mediaId)
     externalMessageId?: string;
   }): Promise<{ contact: Contact; conversation: Conversation; message: Message; isNewConversation: boolean; chatbotWillFire: boolean }> {
-    const { userId, channel, content, contentType = 'text', mediaUrl, externalMessageId, channelAccountId } = params;
+    const { userId, channel, content, contentType = 'text', mediaUrl, mediaFilename, externalMessageId, channelAccountId } = params;
     let { channelContactId, contactName } = params;
 
     // Normalise phone-based identifiers to digits-only so "+923364127888" and
@@ -343,6 +344,7 @@ class ChannelService {
       content,
       contentType,
       mediaUrl,
+      mediaFilename,
       status: 'delivered',
       externalMessageId,
     });
