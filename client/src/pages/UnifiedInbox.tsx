@@ -1208,13 +1208,20 @@ export function UnifiedInbox() {
                           isOut ? "bg-[#d9fdd3] text-gray-900 rounded-tr-none" : "bg-white text-gray-900 rounded-tl-none",
                           isSending && "opacity-75"
                         )}>
-                          {msg.mediaUrl && msg.mediaType?.startsWith('image') ? (
-                            <img src={msg.mediaUrl} alt="Media" className="max-w-full rounded cursor-pointer" onClick={() => window.open(msg.mediaUrl, '_blank')} />
-                          ) : msg.mediaType === 'document' ? (
-                            <div className="flex items-center gap-2">
-                              <FileText className="w-4 h-4 text-gray-500" />
-                              <span>{msg.content}</span>
+                          {msg.mediaUrl && (msg.mediaType?.startsWith('image') || msg.contentType === 'image') ? (
+                            <div>
+                              <img src={msg.mediaUrl} alt="Media" className="max-w-full rounded cursor-pointer max-h-64 object-cover" onClick={() => window.open(msg.mediaUrl, '_blank')} />
+                              {msg.content && <p className="leading-snug mt-1 text-sm">{msg.content}</p>}
                             </div>
+                          ) : msg.mediaUrl && (msg.mediaType?.startsWith('video') || msg.contentType === 'video') ? (
+                            <video src={msg.mediaUrl} controls className="max-w-full rounded max-h-64" />
+                          ) : msg.mediaUrl && (msg.mediaType?.startsWith('audio') || msg.contentType === 'audio') ? (
+                            <audio src={msg.mediaUrl} controls className="max-w-full" />
+                          ) : msg.mediaUrl && (msg.mediaType === 'document' || msg.contentType === 'document') ? (
+                            <a href={msg.mediaUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-blue-600 underline">
+                              <FileText className="w-4 h-4 flex-shrink-0" />
+                              <span>{msg.content || 'Document'}</span>
+                            </a>
                           ) : (
                             <p className="leading-snug">{msg.content}</p>
                           )}

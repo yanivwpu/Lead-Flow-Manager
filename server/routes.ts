@@ -47,6 +47,8 @@ import {
   verifyMetaWebhookSignature,
   decryptCredential as decryptMetaCredential,
   isEncrypted as isMetaEncrypted,
+  getMediaUrl,
+  downloadMedia,
   type MetaCredentials,
 } from "./userMeta";
 import multer from "multer";
@@ -2260,20 +2262,46 @@ export async function registerRoutes(
           console.log(`[Inbound] Webhook received — channel: whatsapp, from: ${incomingMessage.from}, messageId: ${incomingMessage.messageId}`);
           console.log(`[Inbound] Channel identified: whatsapp — userId: ${user.id}, starting processIncomingMessage`);
           directJobs.push(
-            metaCs.processIncomingMessage({
-              userId: user.id,
-              channel: 'whatsapp',
-              channelContactId: incomingMessage.from,
-              contactName: incomingMessage.profileName || incomingMessage.from,
-              content: incomingMessage.text || incomingMessage.caption || `[${incomingMessage.type}]`,
-              contentType: incomingMessage.type === 'text' ? 'text' : incomingMessage.type,
-              externalMessageId: incomingMessage.messageId,
-            }).then((result) => {
+            (async () => {
+              let localMediaUrl: string | undefined;
+              if (incomingMessage.mediaId) {
+                try {
+                  const metaUrl = await getMediaUrl(user.id, incomingMessage.mediaId);
+                  if (metaUrl) {
+                    const mediaBuffer = await downloadMedia(user.id, metaUrl);
+                    if (mediaBuffer) {
+                      const uploadDir = path.join(process.cwd(), 'uploads');
+                      if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+                      const ext = incomingMessage.type === 'image' ? '.jpg'
+                        : incomingMessage.type === 'video' ? '.mp4'
+                        : incomingMessage.type === 'audio' ? '.ogg'
+                        : incomingMessage.type === 'document' ? '.pdf' : '.bin';
+                      const filename = `wa-${Date.now()}-${incomingMessage.mediaId.slice(-8)}${ext}`;
+                      fs.writeFileSync(path.join(uploadDir, filename), mediaBuffer);
+                      const appUrl = process.env.APP_URL || `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co`;
+                      localMediaUrl = `${appUrl}/uploads/${filename}`;
+                      console.log(`[Inbound] Media saved — type: ${incomingMessage.type}, file: ${filename}`);
+                    }
+                  }
+                } catch (err: any) {
+                  console.warn(`[Inbound] Failed to download media for messageId ${incomingMessage.messageId}: ${err?.message}`);
+                }
+              }
+              const result = await metaCs.processIncomingMessage({
+                userId: user.id,
+                channel: 'whatsapp',
+                channelContactId: incomingMessage.from,
+                contactName: incomingMessage.profileName || incomingMessage.from,
+                content: incomingMessage.text || incomingMessage.caption || (incomingMessage.mediaId ? '' : `[${incomingMessage.type}]`),
+                contentType: incomingMessage.type === 'text' ? 'text' : incomingMessage.type,
+                mediaUrl: localMediaUrl,
+                externalMessageId: incomingMessage.messageId,
+              });
               metaInboxResult = { chatbotWillFire: result.chatbotWillFire, isNewConversation: result.isNewConversation };
               metaInboxContact = result.contact;
               metaInboxConversationId = result.conversation.id;
               console.log(`[Inbound] Webhook returned 200 — channel: whatsapp, messageId: ${incomingMessage.messageId}, userId: ${user.id}`);
-            })
+            })()
           );
         } else {
           console.warn(`[Meta Webhook] WARNING: No user found for phoneNumberId=${incomingMessage.phoneNumberId}. Message from ${incomingMessage.from} will be dropped.`);
