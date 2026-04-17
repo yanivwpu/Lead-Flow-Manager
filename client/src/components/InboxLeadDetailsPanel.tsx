@@ -742,7 +742,7 @@ export function InboxLeadDetailsPanel({
                 <span className="text-[9px] text-gray-500 font-medium">Book</span>
               </button>
             </PopoverTrigger>
-            <PopoverContent className="w-64 p-3" align="start" side="bottom">
+            <PopoverContent className="w-64 p-3" align="start" side="bottom" onInteractOutside={(e) => e.preventDefault()}>
               <div className="mb-2 flex items-center justify-between">
                 <span className="text-[11px] font-semibold text-gray-700">Schedule Appointment</span>
                 <button onClick={() => setBookOpen(false)} className="text-gray-300 hover:text-gray-500">
@@ -917,7 +917,7 @@ export function InboxLeadDetailsPanel({
               className="w-64 p-1.5 max-h-[80vh] overflow-y-auto flex flex-col" 
               align="start" 
               side="bottom"
-              onInteractOutside={() => setFollowOpen(false)}
+              onInteractOutside={(e) => e.preventDefault()}
             >
 
               {/* ─ QUICK OPTIONS VIEW ─ */}

@@ -514,12 +514,20 @@ export function UnifiedInbox() {
     const container = messagesContainerRef.current;
     if (!container || messages.length === 0) return;
 
-    // On conversation switch: scroll to bottom immediately once messages arrive
+    // On conversation switch: scroll to bottom immediately once messages arrive,
+    // then retry a few times to catch images/media whose heights aren't known yet.
     if (selectedContactId !== prevContactIdRef.current) {
       prevContactIdRef.current = selectedContactId;
       prevMsgCountRef.current = messages.length;
       setShowNewMsgBanner(false);
       container.scrollTop = container.scrollHeight;
+      // Deferred retries: catch images/audio/video that render after first paint
+      [80, 250, 600, 1200].forEach(delay => {
+        setTimeout(() => {
+          const c = messagesContainerRef.current;
+          if (c) c.scrollTop = c.scrollHeight;
+        }, delay);
+      });
       return;
     }
 
