@@ -1,0 +1,146 @@
+Implement outbound media sending in WhachatCRM using the existing unified inbox pipeline (no shortcuts or fake UI).
+
+GOAL:
+Allow users to send images, PDFs, audio, and video from the composer via WhatsApp (Twilio + Meta), with optional caption, and have it persist + render correctly in the chat.
+
+⸻
+
+1. FRONTEND (Composer)
+
+* Add attachment button (📎)
+* Allow file selection (mobile + desktop)
+* Show selected file preview
+* On send:
+    1. Upload file to backend
+    2. Receive public mediaUrl
+    3. Call send API with media + optional text
+* Keep optimistic UI behavior
+
+⸻
+
+2. FILE UPLOAD (Backend)
+
+* Create endpoint (multipart upload)
+* Store file in a PUBLIC HTTPS location
+* Return:
+    mediaUrl, mediaType, fileName
+* MUST be publicly accessible (no auth, no localhost)
+
+⸻
+
+3. SEND MESSAGE API
+    Extend existing /api/messages/send:
+
+* Accept:
+    conversationId, contactId, text, mediaUrl, mediaType, fileName
+* Support:
+    * text only
+    * media only
+    * media + caption
+* Reject empty (no text + no media)
+
+⸻
+
+4. UNIFIED PIPELINE
+
+* Pass media fields through existing flow (channelService / adapters)
+* Do NOT create separate media logic
+* Preserve:
+    * conversation routing
+    * correct sender number
+    * DB persistence
+    * realtime updates
+
+⸻
+
+5. TWILIO WHATSAPP
+
+* If media → mediaUrl: [mediaUrl]
+* If caption → body = text
+
+Example:
+client.messages.create({
+from,
+to,
+body: text || undefined,
+mediaUrl: mediaUrl ? [mediaUrl] : undefined
+})
+
+⸻
+
+6. META WHATSAPP (Cloud API)
+
+* Send via public URL (no media_id yet)
+* Detect type from MIME:
+    image/, video/, audio/*, document
+
+Example (image):
+{
+messaging_product: “whatsapp”,
+to,
+type: “image”,
+image: {
+link: mediaUrl,
+caption: text
+}
+}
+
+⸻
+
+7. DATABASE
+    Save outbound media in messages table:
+
+* media_url
+* media_type
+* media_filename
+* platform_media_id (optional future use)
+* direction = outbound
+
+⸻
+
+8. UI RENDERING
+
+* Ensure outbound media renders same as inbound
+* images preview
+* audio player
+* document block
+* caption visible
+* Must persist after refresh
+
+⸻
+
+9. VALIDATION + ERRORS
+
+* Reject unsupported file types
+* Handle upload failure
+* Handle provider failure
+* Do NOT mark failed sends as success
+
+⸻
+
+10. FILE TYPES (v1)
+    Support:
+
+* images: jpg, jpeg, png, webp
+* documents: pdf
+* audio: mp3, m4a, ogg
+* video: mp4
+
+⸻
+
+11. TEST CHECKLIST
+
+* Twilio text still works
+* Twilio image sends
+* Twilio PDF sends
+* Image + caption works
+* Meta image sends
+* Saved in DB correctly
+* Renders after refresh
+* Mobile upload works
+* No regression in inbound media
+
+⸻
+
+FINAL RESULT:
+User can open a conversation → attach file → (optional text) → send → message goes through real provider → appears instantly in chat → persists after reload.
