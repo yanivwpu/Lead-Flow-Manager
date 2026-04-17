@@ -450,8 +450,29 @@ export function UnifiedInbox() {
     return realContactData;
   }, [isDemoUser, selectedDemoChat, realContactData, demoChats, demoChannelOverrides]);
 
+  // Mirror the backend's getPrimaryChannel logic: respect primaryChannelOverride only when
+  // the contact actually has an identifier for that channel. Otherwise fall through to
+  // lastIncomingChannel / primaryChannel to avoid routing to a dead-end channel.
+  const effectiveChannel = useMemo(() => {
+    const c = contactData?.contact as Contact | undefined;
+    if (!c) return undefined;
+    const override = c.primaryChannelOverride as Channel | undefined;
+    if (override) {
+      const channelIdMap: Record<string, string | undefined> = {
+        whatsapp:  c.whatsappId,
+        instagram: c.instagramId,
+        facebook:  c.facebookId,
+        telegram:  c.telegramId,
+      };
+      // Only use the override if the contact has an actual ID for that channel
+      const hasId = !(override in channelIdMap) || !!channelIdMap[override];
+      if (hasId) return override;
+    }
+    return c.primaryChannel as Channel;
+  }, [contactData?.contact]);
+
   const primaryConversation = contactData?.conversations?.find(
-    (c) => c.channel === (contactData?.contact?.primaryChannelOverride || contactData?.contact?.primaryChannel)
+    (c) => c.channel === effectiveChannel
   ) || contactData?.conversations?.[0];
 
   const { data: realMessages = [], isLoading: messagesLoading, isFetching: messagesFetching } = useQuery<Message[]>({
@@ -482,8 +503,7 @@ export function UnifiedInbox() {
     refetchInterval: 60000,
   });
 
-  const isWhatsAppContact = contactData?.contact?.primaryChannel === 'whatsapp' ||
-    contactData?.contact?.primaryChannelOverride === 'whatsapp';
+  const isWhatsAppContact = effectiveChannel === 'whatsapp';
 
   const { data: whatsappAvailability } = useQuery<WhatsAppAvailability>({
     queryKey: ["/api/channels/whatsapp/availability"],
@@ -982,7 +1002,9 @@ export function UnifiedInbox() {
     };
   }, [contact, messages]);
 
-  const activeChannel = contact?.primaryChannelOverride as Channel || contact?.primaryChannel as Channel;
+  // Use the same smart channel resolution as the backend (effectiveChannel) so the
+  // header, window-status banner, and send path all agree on the channel being used.
+  const activeChannel: Channel = (effectiveChannel || contact?.primaryChannel || 'whatsapp') as Channel;
   const convStatus = primaryConversation?.status || 'open';
   const statusConfig = CONVERSATION_STATUSES.find(s => s.value === convStatus) || CONVERSATION_STATUSES[0];
 
