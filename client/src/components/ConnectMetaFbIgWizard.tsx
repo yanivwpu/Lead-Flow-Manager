@@ -383,13 +383,20 @@ export function ConnectMetaFbIgWizard({
                   <div className="text-xs text-amber-800 space-y-1.5">
                     {channel === "instagram" ? (
                       <>
-                        <p className="font-medium">No Instagram professional accounts found.</p>
-                        <p>Check the following, then reconnect with Facebook below:</p>
-                        <ol className="list-decimal list-inside space-y-1 pl-1">
-                          <li>Your Instagram must be a <strong>Business</strong> or <strong>Creator</strong> account (not a personal account).</li>
-                          <li>That Instagram account must be <strong>linked to a Facebook Page</strong> you manage.</li>
-                          <li>When prompted by Facebook, make sure to grant <strong>Instagram messages</strong> permission.</li>
+                        <p className="font-medium">No linked Instagram account found.</p>
+                        <p>To connect Instagram DMs your setup needs two things:</p>
+                        <ol className="list-decimal list-inside space-y-1.5 pl-1">
+                          <li>
+                            <strong>Instagram must be a Business or Creator account.</strong> Go to Instagram → Settings → Account → Switch to Professional Account.
+                          </li>
+                          <li>
+                            <strong>That Instagram account must be linked to your Facebook Page.</strong> Go to your Facebook Page → Settings → Linked Accounts → Instagram, and connect it there.
+                          </li>
+                          <li>
+                            <strong>Instagram product must be added to your Meta App.</strong> In the Meta Developer Console, go to your App → Add Product → Instagram, then enable the <em>instagram_manage_messages</em> permission.
+                          </li>
                         </ol>
+                        <p>Once done, click Reconnect below.</p>
                       </>
                     ) : (
                       <p>No Facebook Pages found. Make sure you manage at least one Facebook Page and granted the requested permissions.</p>

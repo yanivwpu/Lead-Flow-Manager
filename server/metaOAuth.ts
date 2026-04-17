@@ -8,13 +8,8 @@ const BASE_SCOPES = [
   "business_management",
 ];
 
-const INSTAGRAM_EXTRA_SCOPES = [
-  "instagram_basic",
-  "instagram_manage_messages",
-];
-
 const SCOPES = BASE_SCOPES.join(",");
-const INSTAGRAM_SCOPES = [...BASE_SCOPES, ...INSTAGRAM_EXTRA_SCOPES].join(",");
+const INSTAGRAM_SCOPES = SCOPES;
 
 export interface MetaPage {
   id: string;
