@@ -17,6 +17,7 @@ const INSTAGRAM_SCOPES = [
   "pages_show_list",
   "pages_manage_metadata",
   "pages_messaging",
+  "pages_read_engagement",
 ].join(",");
 
 export interface MetaPage {
