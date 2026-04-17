@@ -123,7 +123,12 @@ export function registerContactRoutes(app: Express): void {
       if (contact.userId !== req.user.id) {
         return res.status(403).json({ error: "Forbidden" });
       }
-      const updated = await storage.updateContact(req.params.id, req.body);
+      // Coerce date strings → Date objects for timestamp columns
+      const body = { ...req.body };
+      if (body.followUpDate !== undefined) {
+        body.followUpDate = body.followUpDate ? new Date(body.followUpDate) : null;
+      }
+      const updated = await storage.updateContact(req.params.id, body);
 
       // Phase 1 + Phase 5: Diff-checked outbound sync to GHL.
       // Phase 3: pipelineStage changes also sync to GHL opportunity.

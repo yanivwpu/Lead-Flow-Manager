@@ -5,6 +5,7 @@ const BASE_SCOPES = [
   "pages_show_list",
   "pages_messaging",
   "pages_manage_metadata",
+  "pages_read_engagement",
   "business_management",
 ];
 
@@ -279,7 +280,7 @@ export async function connectPage(
 
   const REQUIRED_SCOPES: Record<string, string[]> = {
     facebook: ["pages_messaging", "pages_manage_metadata"],
-    instagram: ["pages_show_list", "pages_messaging"],
+    instagram: ["pages_show_list", "pages_messaging", "pages_read_engagement"],
   };
 
   // Step 1 + 2: Verify token AND check scopes using /debug_token with the APP access token.
