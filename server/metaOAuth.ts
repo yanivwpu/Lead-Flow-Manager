@@ -294,23 +294,28 @@ export async function enrichWithInstagramData(pages: MetaPage[], userAccessToken
         // Collect all IG accounts across all businesses in the portfolio
         const allBizIgAccounts: Array<{ id: string; username?: string; bizId: string }> = [];
         for (const biz of bizData.data) {
-          try {
-            const igResp = await fetch(
-              `${GRAPH}/${biz.id}/instagram_accounts?fields=id,username&access_token=${encodeURIComponent(userAccessToken)}&limit=10`
-            );
-            const igData = (await igResp.json()) as any;
-            console.log(`[Meta OAuth] enrichWithInstagramData — Business ${biz.id} instagram_accounts:`, JSON.stringify({
-              status: igResp.status,
-              count: Array.isArray(igData?.data) ? igData.data.length : 'not-array',
-              error: igData?.error,
-            }));
-            if (igResp.ok && Array.isArray(igData?.data)) {
-              for (const ig of igData.data) {
-                if (ig.id) allBizIgAccounts.push({ id: ig.id, username: ig.username, bizId: biz.id });
+          // Try both owned_instagram_accounts and client_instagram_accounts edges
+          for (const edge of ['owned_instagram_accounts', 'client_instagram_accounts'] as const) {
+            try {
+              const igResp = await fetch(
+                `${GRAPH}/${biz.id}/${edge}?fields=id,username&access_token=${encodeURIComponent(userAccessToken)}&limit=10`
+              );
+              const igData = (await igResp.json()) as any;
+              console.log(`[Meta OAuth] enrichWithInstagramData — Business ${biz.id} ${edge}:`, JSON.stringify({
+                status: igResp.status,
+                count: Array.isArray(igData?.data) ? igData.data.length : 'not-array',
+                error: igData?.error,
+              }));
+              if (igResp.ok && Array.isArray(igData?.data)) {
+                for (const ig of igData.data) {
+                  if (ig.id && !allBizIgAccounts.find(a => a.id === ig.id)) {
+                    allBizIgAccounts.push({ id: ig.id, username: ig.username, bizId: biz.id });
+                  }
+                }
               }
+            } catch (e) {
+              console.warn(`[Meta OAuth] enrichWithInstagramData — failed to fetch ${edge} for business ${biz.id}:`, e);
             }
-          } catch (e) {
-            console.warn(`[Meta OAuth] enrichWithInstagramData — failed to fetch IG accounts for business ${biz.id}:`, e);
           }
         }
 
