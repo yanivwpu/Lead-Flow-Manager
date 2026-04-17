@@ -79,9 +79,11 @@ export function registerConversationRoutes(app: Express): void {
   // Media proxy — streams inbound media for a given message
   //
   // Strategy per channel:
-  //   WhatsApp  : media_filename holds the Meta media ID. We call getMediaUrl()
+  //   WhatsApp  : platform_media_id holds the Meta media ID. We call getMediaUrl()
   //               to get a fresh signed URL, then download with Bearer auth.
   //               Works across restarts/redeploys indefinitely (Meta keeps IDs).
+  //               Backward compat: falls back to media_filename for rows created
+  //               before the platform_media_id column was added.
   //
   //   Facebook  : media_url holds the Facebook CDN URL (stored at receipt time).
   //               These are publicly accessible but expire after ~hours/days.
@@ -127,11 +129,14 @@ export function registerConversationRoutes(app: Express): void {
       }
 
       // ------------------------------------------------------------------
-      // WhatsApp: media_filename = Meta media ID → fetch fresh URL on demand
+      // WhatsApp: platform_media_id = Meta media ID → fetch fresh URL on demand
+      // Backward compat: fall back to media_filename for pre-migration rows
       // ------------------------------------------------------------------
-      if (message.mediaFilename && !message.mediaUrl) {
-        console.log(`[MediaProxy] messageId=${messageId} channel=whatsapp mediaId=${message.mediaFilename} — fetching fresh URL`);
-        const freshUrl = await getMediaUrl(req.user.id, message.mediaFilename);
+      const whatsappMediaId = message.platformMediaId || (!message.mediaUrl ? message.mediaFilename : null);
+      if (whatsappMediaId && !message.mediaUrl) {
+        const idSource = message.platformMediaId ? 'platform_media_id' : 'media_filename (legacy)';
+        console.log(`[MediaProxy] messageId=${messageId} channel=whatsapp mediaId=${whatsappMediaId} (from ${idSource}) — fetching fresh URL`);
+        const freshUrl = await getMediaUrl(req.user.id, whatsappMediaId);
         if (!freshUrl) {
           console.error(`[MediaProxy] messageId=${messageId} channel=whatsapp — getMediaUrl returned null (token invalid or mediaId expired)`);
           return res.status(502).json({ error: "Could not retrieve WhatsApp media URL. Check Meta credentials." });

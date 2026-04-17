@@ -877,7 +877,8 @@ export const messages = pgTable("messages", {
   mediaUrl: text("media_url"),
   mediaType: text("media_type"), // image/jpeg, video/mp4, etc.
   mediaThumbnail: text("media_thumbnail"),
-  mediaFilename: text("media_filename"),
+  mediaFilename: text("media_filename"), // Actual filename for documents/attachments
+  platformMediaId: text("platform_media_id"), // Platform-assigned media ID (e.g. WhatsApp Meta mediaId) for on-demand proxy fetching
   
   // Template message (for outbound templates)
   templateId: varchar("template_id"),

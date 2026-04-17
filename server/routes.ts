@@ -2269,8 +2269,8 @@ export async function registerRoutes(
               contactName: incomingMessage.profileName || incomingMessage.from,
               content: incomingMessage.text || incomingMessage.caption || '',
               contentType: incomingMessage.type === 'text' ? 'text' : incomingMessage.type,
-              // Store media ID so the proxy endpoint can fetch it on demand
-              mediaFilename: incomingMessage.mediaId,
+              // Store Meta media ID in platform_media_id so the proxy can fetch it on demand
+              platformMediaId: incomingMessage.mediaId,
               externalMessageId: incomingMessage.messageId,
             }).then((result) => {
               metaInboxResult = { chatbotWillFire: result.chatbotWillFire, isNewConversation: result.isNewConversation };
