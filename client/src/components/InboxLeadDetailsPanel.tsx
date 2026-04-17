@@ -33,7 +33,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { format, parseISO } from "date-fns";
@@ -787,12 +786,13 @@ export function InboxLeadDetailsPanel({
                   </div>
                   <div>
                     <p className="text-[10px] text-gray-400 mb-1 uppercase tracking-wide font-semibold">Date</p>
-                    <Calendar
-                      mode="single"
-                      selected={bookingDate}
-                      onSelect={setBookingDate}
-                      disabled={d => { const t = new Date(); t.setHours(0,0,0,0); return d < t; }}
-                      className="rounded-lg border border-gray-100 p-1 [&_.rdp]:m-0"
+                    <input
+                      type="date"
+                      min={format(new Date(), 'yyyy-MM-dd')}
+                      value={bookingDate ? format(bookingDate, 'yyyy-MM-dd') : ''}
+                      onChange={e => setBookingDate(e.target.value ? new Date(e.target.value + 'T12:00:00') : undefined)}
+                      className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-200 focus:border-purple-400"
+                      data-testid="input-booking-date"
                     />
                   </div>
                   <div>
@@ -970,56 +970,54 @@ export function InboxLeadDetailsPanel({
 
               {/* ─ CUSTOM DATE & TIME VIEW ─ */}
               {followView === 'custom' && (
-                <div className="flex flex-col h-full">
-                  {/* Scrollable content area */}
-                  <div className="flex-1 overflow-y-auto pr-1 space-y-2 min-h-0">
-                    {/* Back button */}
-                    <button
-                      onClick={() => setFollowView('quick')}
-                      className="flex items-center gap-1 text-[10px] text-gray-400 hover:text-gray-600 transition-colors mb-1"
-                      data-testid="followup-custom-back"
-                    >
-                      <ArrowLeft className="w-3 h-3" />
-                      Back
-                    </button>
+                <div className="space-y-2">
+                  {/* Back button */}
+                  <button
+                    onClick={() => setFollowView('quick')}
+                    className="flex items-center gap-1 text-[10px] text-gray-400 hover:text-gray-600 transition-colors"
+                    data-testid="followup-custom-back"
+                  >
+                    <ArrowLeft className="w-3 h-3" />
+                    Back
+                  </button>
 
-                    {/* Date picker */}
-                    <div>
-                      <p className="text-[10px] text-gray-400 mb-1 uppercase tracking-wide font-semibold">Date</p>
-                      <Calendar
-                        mode="single"
-                        selected={customFollowDate}
-                        onSelect={setCustomFollowDate}
-                        disabled={d => { const t = new Date(); t.setHours(0,0,0,0); return d < t; }}
-                        className="rounded-lg border border-gray-100 p-1 [&_.rdp]:m-0"
-                      />
-                    </div>
+                  {/* Date picker */}
+                  <div>
+                    <p className="text-[10px] text-gray-400 mb-1 uppercase tracking-wide font-semibold">Date</p>
+                    <input
+                      type="date"
+                      min={format(new Date(), 'yyyy-MM-dd')}
+                      value={customFollowDate ? format(customFollowDate, 'yyyy-MM-dd') : ''}
+                      onChange={e => setCustomFollowDate(e.target.value ? new Date(e.target.value + 'T12:00:00') : undefined)}
+                      className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-amber-200 focus:border-amber-400"
+                      data-testid="input-followup-date"
+                    />
+                  </div>
 
-                    {/* Time picker */}
-                    <div>
-                      <p className="text-[10px] text-gray-400 mb-1 uppercase tracking-wide font-semibold">Time</p>
-                      <div className="flex flex-wrap gap-1">
-                        {TIME_SLOTS.map(t => (
-                          <button
-                            key={t}
-                            onClick={() => setCustomFollowTime(t)}
-                            className={cn(
-                              "text-[10px] px-1.5 py-0.5 rounded border transition-colors",
-                              customFollowTime === t
-                                ? "bg-amber-50 text-amber-700 border-amber-300 font-semibold"
-                                : "bg-white text-gray-500 border-gray-200 hover:border-gray-300"
-                            )}
-                            data-testid={`followup-time-${t}`}
-                          >
-                            {formatTime24to12(t)}
-                          </button>
-                        ))}
-                      </div>
+                  {/* Time picker */}
+                  <div>
+                    <p className="text-[10px] text-gray-400 mb-1 uppercase tracking-wide font-semibold">Time</p>
+                    <div className="flex flex-wrap gap-1">
+                      {TIME_SLOTS.map(t => (
+                        <button
+                          key={t}
+                          onClick={() => setCustomFollowTime(t)}
+                          className={cn(
+                            "text-[10px] px-1.5 py-0.5 rounded border transition-colors",
+                            customFollowTime === t
+                              ? "bg-amber-50 text-amber-700 border-amber-300 font-semibold"
+                              : "bg-white text-gray-500 border-gray-200 hover:border-gray-300"
+                          )}
+                          data-testid={`followup-time-${t}`}
+                        >
+                          {formatTime24to12(t)}
+                        </button>
+                      ))}
                     </div>
                   </div>
 
-                  {/* Sticky confirm button at bottom */}
-                  <div className="mt-2 pt-2 border-t border-gray-100 flex-shrink-0">
+                  {/* Confirm button */}
+                  <div className="pt-1 border-t border-gray-100">
                     <button
                       disabled={!customFollowDate}
                       onClick={confirmCustomFollowUp}
