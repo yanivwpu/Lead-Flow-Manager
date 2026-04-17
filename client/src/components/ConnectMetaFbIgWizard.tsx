@@ -193,11 +193,17 @@ export function ConnectMetaFbIgWizard({
 
   // Called when user picks a page. For Instagram without auto-detected IG account
   // ID, we first collect it manually before proceeding to the connecting stage.
+  const LS_KEY = "whachat_ig_account_id_hint";
+
   const handlePageSelect = (page: MetaPage) => {
     setSelectedPage(page);
     setConnectError(null);
     if (channel === "instagram" && !page.instagramAccountId) {
-      setManualInstagramId(existingInstagramAccountId || "");
+      // Pre-fill order: server-stored ID → localStorage hint → empty
+      const hint =
+        existingInstagramAccountId ||
+        (typeof localStorage !== "undefined" ? localStorage.getItem(LS_KEY) || "" : "");
+      setManualInstagramId(hint);
       setStage("ig_account_id");
     } else {
       void handleDoConnect(page, undefined);
@@ -206,6 +212,11 @@ export function ConnectMetaFbIgWizard({
 
   const handleDoConnect = async (page: MetaPage, manualIgId: string | undefined) => {
     setStage("connecting");
+
+    // Persist the entered Instagram account ID so reconnects are pre-filled
+    if (manualIgId && typeof localStorage !== "undefined") {
+      localStorage.setItem(LS_KEY, manualIgId);
+    }
 
     // Animate steps optimistically, fire request in background
     setProgress({ ...BLANK_PROGRESS, token: "running" });
@@ -485,9 +496,9 @@ export function ConnectMetaFbIgWizard({
 
             <div className="p-3 bg-blue-50 border border-blue-100 rounded-lg space-y-1.5">
               <p className="text-xs font-medium text-blue-800">Instagram Account ID</p>
-              {existingInstagramAccountId ? (
+              {manualInstagramId ? (
                 <p className="text-xs text-blue-700">
-                  Your previously connected Instagram Account ID has been pre-filled. Click <strong>Connect</strong> to continue.
+                  Your Instagram Account ID has been pre-filled from a previous connection. Click <strong>Connect</strong> to continue, or paste a different ID below.
                 </p>
               ) : (
                 <p className="text-xs text-blue-700">
