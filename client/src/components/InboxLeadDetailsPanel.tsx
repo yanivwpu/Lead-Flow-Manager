@@ -707,6 +707,13 @@ export function InboxLeadDetailsPanel({
               </div>
               <span className="text-[10px] text-gray-400 ml-3">
                 {(() => {
+                  if (qualifyingCriteria.length > 0) {
+                    const firstUnanswered = qualifyingCriteria.find(c => !answeredCriteriaKeys.has(c.key));
+                    return firstUnanswered ? `Needs ${firstUnanswered.label}` : aiStateLabel;
+                  }
+                  const industry = (businessKnowledge?.industry || "").toLowerCase();
+                  const isRealEstate = industry.includes("real estate") || industry.includes("realtor") || industry.includes("property");
+                  if (!isRealEstate) return aiStateLabel;
                   const missing = [
                     !intel.hasBudget    && "budget",
                     !intel.hasTimeline  && "timeline",
@@ -1120,9 +1127,12 @@ export function InboxLeadDetailsPanel({
                             </button>
                           );
                         })
-                      ) : (
-                        // Default: pattern-detected real-estate qualifications
-                        [
+                      ) : (() => {
+                        const industry = (businessKnowledge?.industry || "").toLowerCase();
+                        const isRealEstate = industry.includes("real estate") || industry.includes("realtor") || industry.includes("property");
+                        if (!isRealEstate) return null;
+                        // Only show real-estate defaults when the business is configured as real estate
+                        return [
                           { ok: intel.hasBudget,    label: 'Budget',    value: intel.budget },
                           { ok: intel.hasTimeline,  label: 'Timeline',  value: intel.timeline },
                           { ok: intel.hasFinancing, label: 'Financing', value: intel.financing },
@@ -1140,14 +1150,30 @@ export function InboxLeadDetailsPanel({
                               }
                             </span>
                           </div>
-                        ))
-                      )}
+                        ));
+                      })()}
                     </div>
                   </div>
 
                   {/* B. ACTION — NBA + Suggested Reply unified in one block */}
                   {canSeeWorkflow && (() => {
                     const nbaData = hasAIBrain ? (() => {
+                      const industry = (businessKnowledge?.industry || "").toLowerCase();
+                      const isRealEstate = industry.includes("real estate") || industry.includes("realtor") || industry.includes("property");
+
+                      if (qualifyingCriteria.length > 0) {
+                        // Use custom qualifying criteria for NBA
+                        const firstUnanswered = qualifyingCriteria.find(c => !answeredCriteriaKeys.has(c.key));
+                        if (!firstUnanswered) return null;
+                        return {
+                          missing: [firstUnanswered.label],
+                          recommendation: firstUnanswered.question,
+                        };
+                      }
+
+                      if (!isRealEstate) return null;
+
+                      // Real-estate defaults only when industry is configured as real estate
                       const missingLabels = [
                         !intel.hasBudget    && "Budget",
                         !intel.hasTimeline  && "Timeline",
