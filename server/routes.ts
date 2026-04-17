@@ -3609,8 +3609,65 @@ export async function registerRoutes(
     }
   }
 
+  // Startup backfill: fix Instagram channelSettings where pageId was incorrectly stored
+  // as the Instagram account ID instead of the Facebook Page ID.
+  // Detects the condition by checking if config.pageId === config.instagramAccountId.
+  // Uses the stored page access token to call /me to discover the real Facebook Page ID.
+  async function backfillInstagramPageId() {
+    try {
+      const { channelSettings: csTable } = await import("@shared/schema");
+      const { eq: eqOp } = await import("drizzle-orm");
+      const allIgSettings = await database
+        .select()
+        .from(csTable)
+        .where(eqOp(csTable.channel, 'instagram'));
+
+      let fixed = 0;
+      for (const row of allIgSettings) {
+        const cfg = row.config as Record<string, any> | null;
+        if (!cfg) continue;
+        const { pageId, instagramAccountId, accessToken } = cfg;
+        // Skip rows that don't have the wrong condition
+        if (!pageId || !instagramAccountId || !accessToken) continue;
+        if (pageId !== instagramAccountId) continue;
+
+        // pageId is wrong — it holds the IG account ID. Resolve the real Facebook Page ID.
+        try {
+          const meResp = await fetch(
+            `https://graph.facebook.com/v19.0/me?fields=id,name&access_token=${encodeURIComponent(accessToken)}`
+          );
+          const meData = (await meResp.json()) as any;
+          if (!meResp.ok || !meData?.id) {
+            console.warn(`[Backfill:PageId] Could not resolve real pageId for userId=${row.userId} — /me error: ${meData?.error?.message}`);
+            continue;
+          }
+          const realPageId: string = meData.id;
+          if (realPageId === instagramAccountId) {
+            console.warn(`[Backfill:PageId] /me returned same ID as instagramAccountId for userId=${row.userId} — token may be a user token, skipping`);
+            continue;
+          }
+          // Update the stored config with the correct Facebook Page ID
+          const updatedConfig = { ...cfg, pageId: realPageId };
+          await database.update(csTable).set({ config: updatedConfig }).where(eqOp(csTable.id, row.id));
+          console.log(`[Backfill:PageId] Fixed Instagram channelSettings for userId=${row.userId}: pageId ${pageId} → ${realPageId}`);
+          fixed++;
+        } catch (e: any) {
+          console.warn(`[Backfill:PageId] Error fixing pageId for userId=${row.userId}:`, e.message);
+        }
+      }
+      if (fixed > 0) {
+        console.log(`[Backfill:PageId] Done — fixed ${fixed} Instagram channelSettings record(s)`);
+      } else {
+        console.log(`[Backfill:PageId] No Instagram pageId repairs needed`);
+      }
+    } catch (err) {
+      console.error('[Backfill:PageId] Error during Instagram pageId backfill:', err);
+    }
+  }
+
   // Run backfill async at startup — does not block server from starting
   backfillFacebookInstagramChannelSettings();
+  backfillInstagramPageId();
   
   function encryptIntegrationConfig(config: Record<string, any>): Record<string, any> {
     const encrypted: Record<string, any> = { ...config };
@@ -3809,7 +3866,9 @@ export async function registerRoutes(
 
       const channelConfig: Record<string, string> = {
         accessToken: page.accessToken,
-        pageId: channel === "facebook" ? page.id : (result.instagramAccountId || page.id),
+        // Always use the Facebook Page ID for the send API endpoint (/{pageId}/messages).
+        // For Instagram, the Instagram account ID is stored separately as instagramAccountId.
+        pageId: page.id,
         pageName: result.pageName || page.name,
         webhookVerifyToken: verifyTokenRaw,
       };
