@@ -15,6 +15,102 @@ The application is a full multi-tenant SaaS implementation with:
 - Notification system for follow-up reminders (push & email)
 - PWA capabilities (installable, offline-first)
 
+## Recent Changes (April 17, 2026) — Outbound Media Sending (Images, PDF, Audio, Video)
+
+### Overview
+Users can now attach and send media files (images, PDFs, audio clips, video) from the Unified Inbox composer. Files are stored permanently in Replit Object Storage and served via a public HTTPS URL that Twilio and Meta can fetch directly.
+
+### Supported file types and limits
+
+| MIME type | Media type | Max size |
+|-----------|------------|----------|
+| image/jpeg, image/png, image/webp | image | 16 MB |
+| application/pdf | document | 16 MB |
+| audio/mpeg, audio/m4a, audio/ogg | audio | 16 MB |
+| video/mp4 | video | 16 MB |
+
+Extension is derived from the MIME type — never from the original filename — to prevent extension spoofing.
+
+### Where files are stored
+
+**Production (Replit Object Storage):** Files land at `.private/uploads/<timestamp>-<random>.<ext>` inside the GCS bucket identified by `PRIVATE_OBJECT_DIR`. They are served through the existing Express `/objects/*` proxy route — **no auth required** so Twilio and Meta can fetch the URL freely. Files are permanent and survive restarts and redeploys.
+
+**Local dev fallback:** When `PRIVATE_OBJECT_DIR` is not set (bare Node.js without the Replit sidecar), files are written to `{cwd}/uploads/` and served from `/uploads/<filename>`. These URLs only work on the local machine and do not survive a restart. A `console.warn` fires when this path is taken.
+
+**Legacy URLs:** Outbound messages sent before April 17 2026 point to `/uploads/*` (local disk). These are still served by the static `/uploads` Express route. Only new uploads go to `/objects/*`.
+
+### Required environment variables (production)
+
+| Variable | Where to set | Description |
+|----------|-------------|-------------|
+| `PRIVATE_OBJECT_DIR` | Auto-set by Replit | Path into the GCS sidecar (e.g. `/replit-objstore-<id>/.private`). Identifies the bucket name and prefix. |
+| `APP_URL` | Secrets / Env vars | Base URL of the deployed app (e.g. `https://whachatcrm.com`). Used to build the `mediaUrl` returned to callers. Falls back to `REPLIT_DOMAINS` when unset — works in Replit-hosted environments but **must be set explicitly in custom domain deploys** so the URL builder doesn't produce a wrong domain. |
+
+### `/objects/*` route — intentionally public
+
+`server/replit_integrations/object_storage/routes.ts` mounts `GET /objects/:objectPath(*)` with **no authentication middleware**. This is intentional: Twilio and Meta require a publicly reachable HTTPS URL to fetch media before delivering it to the end user. Do not add session auth to this route.
+
+### Send pipeline (upload → provider)
+
+```
+POST /api/media/upload           ← authenticated, returns { mediaUrl, mediaType, mediaFilename }
+  └─ uploadMediaBuffer()         ← writes to GCS or local disk
+       └─ mediaUrl /objects/...  ← publicly reachable
+
+sendMessage() [channelService]
+  └─ dispatchMessage()
+       └─ WhatsAppAdapter.send()
+            └─ sendWhatsAppMedia() [whatsappService]
+                 ├─ provider=meta  → sendMetaWhatsAppMedia() [userMeta]
+                 │                   POST graph.facebook.com — passes url + filename for documents
+                 └─ provider=twilio → sendUserWhatsAppMedia() [userTwilio]
+                                      Twilio messages.create({ mediaUrl: [...] })
+```
+
+### Logging reference (what to look for when debugging)
+
+| Log prefix | Source | What it tells you |
+|------------|--------|-------------------|
+| `[MediaUpload] OK` | `server/routes/media.ts` | File accepted, stored, URL built |
+| `[MediaUpload] Storage failure` | `server/routes/media.ts` | GCS write error (includes size, mime, backend) |
+| `[WhatsAppAdapter] Sending media` | `server/channelAdapters.ts` | About to call provider (includes URL, type, filename) |
+| `[WhatsAppAdapter] Media sent OK` | `server/channelAdapters.ts` | Provider accepted the message (includes provider + messageId) |
+| `[WhatsAppAdapter] Media send failed` | `server/channelAdapters.ts` | Provider rejected (includes provider error string) |
+| `[WhatsAppService] Routing media` | `server/whatsappService.ts` | Provider routing decision (meta vs twilio) |
+| `[WhatsAppService] Media send skipped` | `server/whatsappService.ts` | No WhatsApp provider connected |
+| `[MetaWhatsApp] Sending media` | `server/userMeta.ts` | About to POST to Meta Graph API |
+| `[MetaWhatsApp] Media sent OK` | `server/userMeta.ts` | Meta returned a messageId |
+| `[MetaWhatsApp] Media send failed` | `server/userMeta.ts` | Meta HTTP error (includes status code + Meta error message) |
+
+No credentials (access tokens, auth tokens, account SIDs) appear in any log line.
+
+### Provider live verification checklist
+
+To verify a real send after deploy:
+1. Connect Twilio or Meta in Settings
+2. Open a conversation with a test contact who has a real WhatsApp number
+3. Click the paperclip, attach a JPEG
+4. Click Send
+5. Check server logs for `[WhatsAppAdapter] Media sent OK` + `[MetaWhatsApp] Media sent OK` (Meta) or Twilio SID in the Twilio path
+6. Confirm the image arrives on the physical device
+
+### Follow-up / known limitations
+
+- **No retention/TTL:** Uploaded files accumulate in object storage indefinitely. Add a periodic cleanup job when storage costs become significant.
+- **Single attachment per message:** The current UI allows one file at a time. WhatsApp supports up to 1 media item per message anyway; multiple attachments would require looping sends.
+
+### Key files changed
+
+| File | Change |
+|------|--------|
+| `server/routes/media.ts` | Upload endpoint — multer memoryStorage, GCS write, local-disk fallback, full JSDoc |
+| `server/channelAdapters.ts` | WhatsAppAdapter — richer logging on media send success/failure |
+| `server/whatsappService.ts` | `sendWhatsAppMedia` — provider routing log + availability warning log |
+| `server/userMeta.ts` | `sendMetaWhatsAppMedia` — pre/post/error logs without leaking tokens |
+| `client/src/pages/UnifiedInbox.tsx` | Composer — file picker, preview strip, optimistic media messages, failed-message UI |
+
+---
+
 ## Recent Changes (April 11, 2026) — Multi-WhatsApp Number Support (Production Fix)
 
 **Background:** The Pro plan allows up to 5 WhatsApp numbers per account. The schema had `channelAccountId` on the `conversations` table for this purpose, but the runtime never wrote or read it — all numbers shared the same conversation threads and replies always went from the primary number.

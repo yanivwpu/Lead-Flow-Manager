@@ -293,6 +293,11 @@ export async function sendMetaWhatsAppMedia(
     mediaPayload.filename = filename;
   }
 
+  console.log(
+    `[MetaWhatsApp] Sending media — to=${normalizedPhone} type=${mediaType}` +
+    ` filename="${filename || "(none)"}" url=${mediaUrl}`
+  );
+
   const response = await fetch(
     `${META_GRAPH_API_URL}/${phoneNumberId}/messages`,
     {
@@ -312,15 +317,22 @@ export async function sendMetaWhatsAppMedia(
   );
 
   if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error?.message || "Failed to send media via Meta WhatsApp API");
+    const errorBody = await response.json();
+    const errorMsg = errorBody.error?.message || "Failed to send media via Meta WhatsApp API";
+    console.error(
+      `[MetaWhatsApp] Media send failed — to=${normalizedPhone} type=${mediaType}` +
+      ` httpStatus=${response.status} metaError="${errorMsg}"`
+    );
+    throw new Error(errorMsg);
   }
 
   const result = await response.json();
-  return { 
-    messageId: result.messages?.[0]?.id || "", 
-    status: "sent" 
-  };
+  const messageId = result.messages?.[0]?.id || "";
+  console.log(
+    `[MetaWhatsApp] Media sent OK — to=${normalizedPhone} type=${mediaType}` +
+    ` messageId=${messageId}`
+  );
+  return { messageId, status: "sent" };
 }
 
 export async function sendMetaWhatsAppTemplate(

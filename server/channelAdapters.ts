@@ -119,20 +119,36 @@ class WhatsAppAdapter implements ChannelAdapter {
           : params.contentType === "audio" ? "audio"
           : params.contentType === "document" ? "document"
           : "image") as "image" | "video" | "audio" | "document";
+        console.log(
+          `[WhatsAppAdapter] Sending media — to=${phone} type=${mediaType}` +
+          ` filename="${params.mediaFilename || "(none)"}" url=${params.mediaUrl}`
+        );
         const result = await sendWhatsAppMedia(
           conversation.userId, phone, params.mediaUrl!, mediaType, params.content || undefined, fromNumber, params.mediaFilename
         );
-        console.log(`[WhatsAppAdapter] media sent via ${result.provider} to ${phone}`);
-        if (!result.success) return { success: false, error: result.error };
+        if (!result.success) {
+          console.error(
+            `[WhatsAppAdapter] Media send failed — provider=${result.provider} to=${phone}` +
+            ` type=${mediaType} error="${result.error}"`
+          );
+          return { success: false, error: result.error };
+        }
+        console.log(
+          `[WhatsAppAdapter] Media sent OK — provider=${result.provider} to=${phone}` +
+          ` type=${mediaType} messageId=${result.messageId}`
+        );
         return { success: true, externalMessageId: result.messageId };
       }
 
       const result = await sendWhatsAppMessage(conversation.userId, phone, params.content, fromNumber);
-      console.log(`[WhatsAppAdapter] text sent via ${result.provider} to ${phone}`);
-      if (!result.success) return { success: false, error: result.error };
+      if (!result.success) {
+        console.error(`[WhatsAppAdapter] Text send failed — provider=${result.provider} to=${phone} error="${result.error}"`);
+        return { success: false, error: result.error };
+      }
+      console.log(`[WhatsAppAdapter] Text sent OK — provider=${result.provider} to=${phone} messageId=${result.messageId}`);
       return { success: true, externalMessageId: result.messageId };
     } catch (error: any) {
-      console.error("WhatsApp send error:", error);
+      console.error(`[WhatsAppAdapter] Unexpected error — conversationId=${params.conversationId} error="${error.message}"`);
       return { success: false, error: error.message || "Failed to send WhatsApp message" };
     }
   }

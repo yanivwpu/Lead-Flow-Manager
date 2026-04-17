@@ -137,6 +137,10 @@ export async function sendWhatsAppMedia(
   const availability = await getWhatsAppAvailability(userId);
 
   if (!availability.available) {
+    console.warn(
+      `[WhatsAppService] Media send skipped — userId=${userId} provider=${availability.provider}` +
+      ` reason="${availability.reason}"`
+    );
     return {
       success: false,
       messageId: "",
@@ -144,6 +148,11 @@ export async function sendWhatsAppMedia(
       error: availability.reason,
     };
   }
+
+  console.log(
+    `[WhatsAppService] Routing media — userId=${userId} provider=${availability.provider}` +
+    ` to=${to} type=${mediaType} filename="${filename || "(none)"}"`
+  );
 
   if (availability.provider === "meta") {
     const result = await sendMetaWhatsAppMedia(userId, to, mediaUrl, mediaType, caption, filename);
