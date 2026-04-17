@@ -380,11 +380,21 @@ export function ConnectMetaFbIgWizard({
               <div className="space-y-3">
                 <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-100 rounded-lg">
                   <AlertCircle className="h-4 w-4 text-amber-500 flex-shrink-0 mt-0.5" />
-                  <p className="text-xs text-amber-800">
-                    {channel === "instagram"
-                      ? "No Instagram professional accounts found. Make sure your Instagram is set to a Business or Creator account and is linked to a Facebook Page you manage."
-                      : "No Facebook Pages found. Make sure you manage at least one Facebook Page and granted the requested permissions."}
-                  </p>
+                  <div className="text-xs text-amber-800 space-y-1.5">
+                    {channel === "instagram" ? (
+                      <>
+                        <p className="font-medium">No Instagram professional accounts found.</p>
+                        <p>Check the following, then reconnect with Facebook below:</p>
+                        <ol className="list-decimal list-inside space-y-1 pl-1">
+                          <li>Your Instagram must be a <strong>Business</strong> or <strong>Creator</strong> account (not a personal account).</li>
+                          <li>That Instagram account must be <strong>linked to a Facebook Page</strong> you manage.</li>
+                          <li>When prompted by Facebook, make sure to grant <strong>Instagram messages</strong> permission.</li>
+                        </ol>
+                      </>
+                    ) : (
+                      <p>No Facebook Pages found. Make sure you manage at least one Facebook Page and granted the requested permissions.</p>
+                    )}
+                  </div>
                 </div>
                 <Button
                   variant="outline"
@@ -393,7 +403,7 @@ export function ConnectMetaFbIgWizard({
                   data-testid="button-try-again"
                 >
                   <RefreshCcw className="h-4 w-4 mr-2" />
-                  Try again
+                  Reconnect with Facebook
                 </Button>
               </div>
             ) : (

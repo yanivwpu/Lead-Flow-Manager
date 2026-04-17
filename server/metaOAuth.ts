@@ -1,12 +1,20 @@
 const GRAPH = "https://graph.facebook.com/v19.0";
 
-const SCOPES = [
+const BASE_SCOPES = [
   "public_profile",
   "pages_show_list",
   "pages_messaging",
   "pages_manage_metadata",
   "business_management",
-].join(",");
+];
+
+const INSTAGRAM_EXTRA_SCOPES = [
+  "instagram_basic",
+  "instagram_manage_messages",
+];
+
+const SCOPES = BASE_SCOPES.join(",");
+const INSTAGRAM_SCOPES = [...BASE_SCOPES, ...INSTAGRAM_EXTRA_SCOPES].join(",");
 
 export interface MetaPage {
   id: string;
@@ -35,18 +43,18 @@ export interface ConnectPageResult {
   failedAt?: string;
 }
 
-export function buildMetaOAuthUrl(state: string, redirectUri: string): string {
+export function buildMetaOAuthUrl(state: string, redirectUri: string, channel: "facebook" | "instagram" = "facebook"): string {
   const appId = process.env.META_APP_ID;
   if (!appId) throw new Error("META_APP_ID is not configured on this server");
 
-  // Standard Facebook Login — shows the page-picker dialog so the user can
-  // choose which Pages to grant access to. /me/accounts then returns those
-  // pages with their per-page access tokens.
+  const scopes = channel === "instagram" ? INSTAGRAM_SCOPES : SCOPES;
+  console.log(`[Meta OAuth] Building auth URL — channel: ${channel}, scopes: ${scopes}`);
+
   return (
     `https://www.facebook.com/dialog/oauth` +
     `?client_id=${encodeURIComponent(appId)}` +
     `&redirect_uri=${encodeURIComponent(redirectUri)}` +
-    `&scope=${encodeURIComponent(SCOPES)}` +
+    `&scope=${encodeURIComponent(scopes)}` +
     `&state=${encodeURIComponent(state)}` +
     `&response_type=code`
   );
@@ -190,20 +198,22 @@ export async function enrichWithInstagramData(pages: MetaPage[]): Promise<MetaPa
           `${GRAPH}/${page.id}?fields=instagram_business_account&access_token=${encodeURIComponent(page.accessToken)}`
         );
         const data = (await resp.json()) as any;
+        console.log(`[Meta OAuth] enrichWithInstagramData — page "${page.name}" (${page.id}): ig_id=${data.instagram_business_account?.id ?? 'none'} ok=${resp.ok} err=${JSON.stringify(data.error ?? null)}`);
         if (resp.ok && data.instagram_business_account?.id) {
           const igId = data.instagram_business_account.id as string;
           const igResp = await fetch(
             `${GRAPH}/${igId}?fields=id,username&access_token=${encodeURIComponent(page.accessToken)}`
           );
           const igData = (await igResp.json()) as any;
+          console.log(`[Meta OAuth] enrichWithInstagramData — IG profile fetch for ${igId}: username=${igData.username ?? 'unknown'}`);
           return {
             ...page,
             instagramAccountId: igId,
             instagramUsername: (igData.username as string) || undefined,
           };
         }
-      } catch {
-        // Non-fatal — page simply has no linked IG account
+      } catch (e) {
+        console.warn(`[Meta OAuth] enrichWithInstagramData — failed for page "${page.name}":`, e);
       }
       return page;
     })

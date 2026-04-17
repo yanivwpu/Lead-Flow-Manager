@@ -3670,7 +3670,7 @@ export async function registerRoutes(
       const redirectUri = `${appUrl}/api/integrations/meta/callback`;
       const stateToken = crypto.randomBytes(16).toString("hex");
       (req.session as any).metaOAuthState = { stateToken, channel, userId: req.user.id };
-      const url = buildMetaOAuthUrl(`${stateToken}:${channel}`, redirectUri);
+      const url = buildMetaOAuthUrl(`${stateToken}:${channel}`, redirectUri, channel as "facebook" | "instagram");
       res.json({ url, redirectUri });
     } catch (err: any) {
       console.error("[Meta OAuth] auth-url error:", err);
