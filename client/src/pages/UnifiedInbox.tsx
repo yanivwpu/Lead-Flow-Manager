@@ -335,6 +335,9 @@ export function UnifiedInbox() {
   const prevMsgCountRef = useRef(0);
   const prevContactIdRef = useRef<string | null>(null);
   const [showNewMsgBanner, setShowNewMsgBanner] = useState(false);
+  // Set to true on every send so that all post-render scrolls are forced,
+  // regardless of where the user was scrolled before they sent.
+  const justSentRef = useRef(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [pendingFile, setPendingFile] = useState<{
@@ -504,7 +507,9 @@ export function UnifiedInbox() {
   });
 
 
-  // Smart scroll: auto-scroll when near bottom, show banner when not
+  // Smart scroll: auto-scroll when near bottom OR when we just sent a message.
+  // Shows the "new messages" banner only for incoming messages that arrive
+  // while the user is intentionally reading older content.
   useEffect(() => {
     const container = messagesContainerRef.current;
     if (!container) return;
@@ -522,12 +527,15 @@ export function UnifiedInbox() {
     const isNew = messages.length > prevMsgCountRef.current;
     prevMsgCountRef.current = messages.length;
 
-    if (isNearBottom) {
+    if (justSentRef.current || isNearBottom) {
+      // Always scroll for fresh outbound sends; also scroll for incoming
+      // messages when the user was already near the bottom.
       setShowNewMsgBanner(false);
       if (isNew) {
         container.scrollTop = container.scrollHeight;
       }
     } else if (isNew) {
+      // User is reading history — show the banner instead of yanking them down
       setShowNewMsgBanner(true);
     }
   }, [messages, selectedContactId]);
@@ -648,10 +656,24 @@ export function UnifiedInbox() {
       setMessageInput("");
       setPendingFile(null);
 
+      // Flag that a send just happened — forces all scroll checks to bypass
+      // the "near bottom?" guard until the bubble (+ any media) has fully
+      // painted and we've completed the final scroll.
+      justSentRef.current = true;
+
+      // Two-tick scroll: setTimeout(0) lets React flush the optimistic render,
+      // then requestAnimationFrame waits for the browser layout pass so that
+      // scrollHeight already includes the new bubble's full (text) height.
       setTimeout(() => {
-        const container = messagesContainerRef.current;
-        if (container) container.scrollTop = container.scrollHeight;
+        requestAnimationFrame(() => {
+          const container = messagesContainerRef.current;
+          if (container) container.scrollTop = container.scrollHeight;
+        });
       }, 0);
+
+      // Safety valve: clear the flag after 4 s so it never gets stuck.
+      // Image onLoad will clear it earlier when the image finishes loading.
+      setTimeout(() => { justSentRef.current = false; }, 4000);
 
       return { previousMessages, previousInbox, conversationId, content: data.content };
     },
@@ -1309,7 +1331,18 @@ export function UnifiedInbox() {
                                   alt="Image"
                                   className="max-w-full rounded cursor-pointer max-h-64 object-cover"
                                   onClick={() => window.open(mediaDisplayUrl, '_blank')}
+                                  onLoad={() => {
+                                    // Image has finished decoding and has a real height now.
+                                    // If this is the message we just sent, scroll again so the
+                                    // full bubble — including the image — is visible.
+                                    if (justSentRef.current) {
+                                      const container = messagesContainerRef.current;
+                                      if (container) container.scrollTop = container.scrollHeight;
+                                      justSentRef.current = false;
+                                    }
+                                  }}
                                   onError={(e) => {
+                                    justSentRef.current = false;
                                     if (!isOptimistic) {
                                       (e.currentTarget.parentElement!).innerHTML =
                                         '<span class="text-xs text-gray-400 italic">Media no longer available</span>';
@@ -1320,7 +1353,19 @@ export function UnifiedInbox() {
                               </div>
                             );
                             if (hasMedia && isVideo) return (
-                              <video src={mediaDisplayUrl} controls className="max-w-full rounded max-h-64" />
+                              <video
+                                src={mediaDisplayUrl}
+                                controls
+                                className="max-w-full rounded max-h-64"
+                                onLoadedMetadata={() => {
+                                  // Video dimensions are known after metadata loads.
+                                  if (justSentRef.current) {
+                                    const container = messagesContainerRef.current;
+                                    if (container) container.scrollTop = container.scrollHeight;
+                                    justSentRef.current = false;
+                                  }
+                                }}
+                              />
                             );
                             if (hasMedia && isAudio) return (
                               <audio src={mediaDisplayUrl} controls className="max-w-full" />
