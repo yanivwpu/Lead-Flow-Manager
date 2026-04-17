@@ -45,9 +45,11 @@ const UPLOAD_FILENAME_RE =
 
 /**
  * MIME types that should be forced to download rather than rendered inline.
- * Images and video are safe to display; PDFs and audio are better downloaded.
+ * Images are excluded — browsers handle them safely inline and the chat UI
+ * depends on inline rendering for the image preview bubble.
+ * PDFs, audio, and video are forced to download to avoid inline execution risks.
  */
-const FORCE_DOWNLOAD_MIME_PREFIXES = ["application/pdf", "audio/"];
+const FORCE_DOWNLOAD_MIME_PREFIXES = ["application/pdf", "audio/", "video/"];
 
 export function registerObjectStorageRoutes(app: Express): void {
   const objectStorageService = new ObjectStorageService();
