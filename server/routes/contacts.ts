@@ -278,14 +278,20 @@ export function registerContactRoutes(app: Express): void {
       if (!req.user) {
         return res.status(401).json({ error: "Unauthorized" });
       }
+      const { content, contentType, mediaUrl, mediaType, mediaFilename, channel } = req.body;
+      if (!content?.trim() && !mediaUrl) {
+        return res.status(400).json({ error: "Message must have content or a media attachment" });
+      }
       const { channelService } = await import("../channelService");
       const result = await channelService.sendMessage({
         userId: req.user.id,
         contactId: req.params.id,
-        content: req.body.content,
-        contentType: req.body.contentType || 'text',
-        mediaUrl: req.body.mediaUrl,
-        forceChannel: req.body.channel,
+        content: content || '',
+        contentType: contentType || mediaType || (mediaUrl ? 'image' : 'text'),
+        mediaUrl,
+        mediaType,
+        mediaFilename,
+        forceChannel: channel,
       });
       if (result.success) {
         res.json(result);

@@ -514,7 +514,7 @@ export function AIComposer({
                   ref={fileInputRef}
                   type="file"
                   className="hidden"
-                  accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx"
+                  accept="image/jpeg,image/png,image/webp,application/pdf,audio/mpeg,audio/mp3,audio/m4a,audio/x-m4a,audio/ogg,video/mp4"
                   onChange={handleFileSelect}
                 />
               </>

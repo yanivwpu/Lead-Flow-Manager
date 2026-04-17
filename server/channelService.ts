@@ -65,13 +65,20 @@ class ChannelService {
   async sendMessage(params: {
     userId: string;
     contactId: string;
-    content: string;
+    content?: string;
     contentType?: string;
     mediaUrl?: string;
+    mediaType?: string;
+    mediaFilename?: string;
     forceChannel?: Channel;
     templateVariables?: Record<string, any>;
   }): Promise<SendMessageResult> {
-    const { userId, contactId, content, contentType = 'text', mediaUrl, forceChannel, templateVariables } = params;
+    const { userId, contactId, contentType = 'text', mediaUrl, mediaType, mediaFilename, forceChannel, templateVariables } = params;
+    const content = params.content ?? '';
+
+    if (!content && !mediaUrl) {
+      return { success: false, channel: 'whatsapp', error: 'Message must have content or media' };
+    }
 
     const contact = await storage.getContact(contactId);
     if (!contact) {
@@ -99,6 +106,8 @@ class ChannelService {
       content,
       contentType,
       mediaUrl,
+      mediaType,
+      mediaFilename,
       status: 'pending',
       ...(templateVariables ? { templateVariables } : {}),
     });
@@ -111,6 +120,8 @@ class ChannelService {
       mediaUrl,
     });
 
+    const preview = content || (mediaUrl ? `[${contentType || 'media'}]` : '');
+
     if (sendResult.success) {
       console.log(`[Debug] Outgoing message sent — messageId: ${message.id}, conversationId: ${conversation.id}, channel: ${targetChannel}`);
       await storage.updateMessage(message.id, {
@@ -121,10 +132,10 @@ class ChannelService {
 
       await storage.updateConversation(conversation.id, {
         lastMessageAt: new Date(),
-        lastMessagePreview: content.substring(0, 100),
+        lastMessagePreview: preview.substring(0, 100),
         lastMessageDirection: 'outbound',
       });
-      console.log(`[Debug] Conversation summary updated after outbound — conversationId: ${conversation.id}, preview: "${content.substring(0, 60)}"`);
+      console.log(`[Debug] Conversation summary updated after outbound — conversationId: ${conversation.id}, preview: "${preview.substring(0, 60)}"`);
 
       await this.logActivity(userId, contactId, conversation.id, 'message', {
         direction: 'outbound',

@@ -336,6 +336,16 @@ export function UnifiedInbox() {
   const prevContactIdRef = useRef<string | null>(null);
   const [showNewMsgBanner, setShowNewMsgBanner] = useState(false);
 
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [pendingFile, setPendingFile] = useState<{
+    localPreview: string;
+    mediaUrl: string;
+    mediaType: string;
+    mediaFilename: string;
+    mimeType: string;
+  } | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+
   const [showTemplatePicker, setShowTemplatePicker] = useState(false);
   const [templateSearch, setTemplateSearch] = useState("");
   const [selectedInboxTemplate, setSelectedInboxTemplate] = useState<MessageTemplate | null>(null);
@@ -565,12 +575,25 @@ export function UnifiedInbox() {
   // --- Mutations ---
 
   const sendMessageMutation = useMutation({
-    mutationFn: async (data: { contactId: string; content: string }) => {
+    mutationFn: async (data: {
+      contactId: string;
+      content: string;
+      mediaUrl?: string;
+      mediaType?: string;
+      mediaFilename?: string;
+      contentType?: string;
+    }) => {
       const res = await fetch(`/api/contacts/${data.contactId}/send`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ content: data.content }),
+        body: JSON.stringify({
+          content: data.content,
+          contentType: data.contentType || (data.mediaType || 'text'),
+          mediaUrl: data.mediaUrl,
+          mediaType: data.mediaType ? `${data.mediaType}` : undefined,
+          mediaFilename: data.mediaFilename,
+        }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Failed to send message");
@@ -582,21 +605,21 @@ export function UnifiedInbox() {
       const messagesKey = ["/api/conversations", conversationId, "messages"];
       const inboxKey = ["/api/inbox"];
 
-      // Cancel in-flight refetches so they don't overwrite our optimistic state
       await queryClient.cancelQueries({ queryKey: messagesKey });
       await queryClient.cancelQueries({ queryKey: inboxKey });
 
-      // Snapshot for rollback on error
       const previousMessages = queryClient.getQueryData<Message[]>(messagesKey);
       const previousInbox = queryClient.getQueryData<InboxItem[]>(inboxKey);
 
-      // Optimistically append message to the conversation thread
       if (conversationId) {
         const optimisticMessage: Message = {
           id: `optimistic-${Date.now()}`,
           direction: 'outbound',
           content: data.content,
-          contentType: 'text',
+          contentType: data.contentType || (data.mediaType || 'text'),
+          mediaUrl: data.mediaUrl,
+          mediaType: data.mediaType,
+          mediaFilename: data.mediaFilename,
           status: 'sending',
           createdAt: now,
         };
@@ -606,12 +629,12 @@ export function UnifiedInbox() {
         ]);
       }
 
-      // Optimistically update inbox: refresh preview, timestamp, and move thread to top
+      const previewText = data.content || (data.mediaUrl ? `[${data.mediaType || 'media'}]` : '');
       queryClient.setQueryData<InboxItem[]>(inboxKey, (old) => {
         if (!old) return old;
         const list = old.map((item) =>
           item.contact.id === data.contactId
-            ? { ...item, lastMessage: data.content, lastMessageAt: now, unreadCount: 0 }
+            ? { ...item, lastMessage: previewText, lastMessageAt: now, unreadCount: 0 }
             : item
         );
         const idx = list.findIndex((item) => item.contact.id === data.contactId);
@@ -622,19 +645,17 @@ export function UnifiedInbox() {
         return list;
       });
 
-      // Clear input immediately — message is "in flight"
       setMessageInput("");
+      setPendingFile(null);
 
-      // Scroll to bottom immediately after optimistic append (important on mobile/iOS)
       setTimeout(() => {
         const container = messagesContainerRef.current;
         if (container) container.scrollTop = container.scrollHeight;
       }, 0);
 
-      return { previousMessages, previousInbox, conversationId };
+      return { previousMessages, previousInbox, conversationId, content: data.content };
     },
     onError: (error: Error, data, context) => {
-      // Roll back optimistic updates and restore the unsent text
       if (context?.conversationId && context.previousMessages !== undefined) {
         queryClient.setQueryData(
           ["/api/conversations", context.conversationId, "messages"],
@@ -648,7 +669,6 @@ export function UnifiedInbox() {
       toast({ title: "Message not sent", description: error.message, variant: "destructive" });
     },
     onSettled: (_data, _error, _vars, context) => {
-      // Sync with server regardless of success/failure — polling remains as safety net
       queryClient.invalidateQueries({ queryKey: ["/api/inbox"] });
       if (context?.conversationId) {
         queryClient.invalidateQueries({
@@ -747,14 +767,75 @@ export function UnifiedInbox() {
   }, [selectedContactId, updateContactMutation]);
 
   const handleSendMessage = () => {
-    if (!messageInput.trim() || !selectedContactId) return;
-    sendMessageMutation.mutate({ contactId: selectedContactId, content: messageInput });
+    if (!messageInput.trim() && !pendingFile) return;
+    if (!selectedContactId) return;
+    sendMessageMutation.mutate({
+      contactId: selectedContactId,
+      content: messageInput,
+      ...(pendingFile ? {
+        mediaUrl: pendingFile.mediaUrl,
+        mediaType: pendingFile.mediaType,
+        mediaFilename: pendingFile.mediaFilename,
+        contentType: pendingFile.mediaType,
+      } : {}),
+    });
   };
 
   const handleAutoSend = useCallback((message: string) => {
     if (!message.trim() || !selectedContactId) return;
     sendMessageMutation.mutate({ contactId: selectedContactId, content: message });
   }, [selectedContactId, sendMessageMutation]);
+
+  const ACCEPTED_TYPES: Record<string, string> = {
+    "image/jpeg": "image", "image/jpg": "image", "image/png": "image", "image/webp": "image",
+    "application/pdf": "document",
+    "audio/mpeg": "audio", "audio/mp3": "audio", "audio/m4a": "audio",
+    "audio/x-m4a": "audio", "audio/ogg": "audio",
+    "video/mp4": "video",
+  };
+
+  const handleFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (e.target) e.target.value = "";
+
+    const mediaType = ACCEPTED_TYPES[file.type];
+    if (!mediaType) {
+      toast({ title: "Unsupported file type", description: "Allowed: JPEG, PNG, WebP, PDF, MP3, M4A, OGG, MP4", variant: "destructive" });
+      return;
+    }
+    if (file.size > 16 * 1024 * 1024) {
+      toast({ title: "File too large", description: "Maximum file size is 16 MB", variant: "destructive" });
+      return;
+    }
+
+    const localPreview = URL.createObjectURL(file);
+    setIsUploading(true);
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/media/upload", {
+        method: "POST",
+        credentials: "include",
+        body: formData,
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Upload failed");
+      setPendingFile({
+        localPreview,
+        mediaUrl: json.mediaUrl,
+        mediaType: json.mediaType,
+        mediaFilename: json.mediaFilename,
+        mimeType: json.mimeType,
+      });
+    } catch (err: any) {
+      URL.revokeObjectURL(localPreview);
+      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+    } finally {
+      setIsUploading(false);
+    }
+  }, [toast]);
 
   const handleEditContact = () => {
     if (contactData?.contact) {
@@ -1212,42 +1293,42 @@ export function UnifiedInbox() {
                         )}>
                           {(() => {
                             const hasMedia = !!(msg.mediaUrl || msg.mediaFilename);
-                            const proxyUrl = `/api/media/proxy?messageId=${msg.id}`;
+                            const isOptimistic = msg.id.startsWith('optimistic-');
+                            const mediaDisplayUrl = isOut && msg.mediaUrl
+                              ? msg.mediaUrl
+                              : `/api/media/proxy?messageId=${msg.id}`;
                             const ct = msg.contentType;
                             const isImage = ct === 'image' || msg.mediaType?.startsWith('image');
                             const isVideo = ct === 'video' || msg.mediaType?.startsWith('video');
                             const isAudio = ct === 'audio' || msg.mediaType?.startsWith('audio');
                             const isDoc = ct === 'document' || msg.mediaType === 'document';
-                            const expiredFallback = (
-                              <div className="flex items-center gap-1.5 text-xs text-gray-400 italic py-1">
-                                <ImageOff className="w-3.5 h-3.5 flex-shrink-0" />
-                                <span>Media no longer available</span>
-                              </div>
-                            );
                             if (hasMedia && isImage) return (
                               <div>
                                 <img
-                                  src={proxyUrl}
+                                  src={mediaDisplayUrl}
                                   alt="Image"
                                   className="max-w-full rounded cursor-pointer max-h-64 object-cover"
-                                  onClick={() => window.open(proxyUrl, '_blank')}
-                                  onError={(e) => { (e.currentTarget.parentElement!).replaceWith(document.createTextNode('Media no longer available')); }}
+                                  onClick={() => window.open(mediaDisplayUrl, '_blank')}
+                                  onError={(e) => {
+                                    if (!isOptimistic) {
+                                      (e.currentTarget.parentElement!).innerHTML =
+                                        '<span class="text-xs text-gray-400 italic">Media no longer available</span>';
+                                    }
+                                  }}
                                 />
                                 {msg.content && <p className="leading-snug mt-1 text-sm">{msg.content}</p>}
                               </div>
                             );
                             if (hasMedia && isVideo) return (
-                              <video src={proxyUrl} controls className="max-w-full rounded max-h-64"
-                                onError={(e) => { (e.currentTarget as HTMLVideoElement).style.display='none'; }} />
+                              <video src={mediaDisplayUrl} controls className="max-w-full rounded max-h-64" />
                             );
                             if (hasMedia && isAudio) return (
-                              <audio src={proxyUrl} controls className="max-w-full"
-                                onError={(e) => { (e.currentTarget as HTMLAudioElement).style.display='none'; }} />
+                              <audio src={mediaDisplayUrl} controls className="max-w-full" />
                             );
                             if (hasMedia && isDoc) return (
-                              <a href={proxyUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-blue-600 underline">
+                              <a href={mediaDisplayUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-blue-600 underline">
                                 <FileText className="w-4 h-4 flex-shrink-0" />
-                                <span>{msg.content || 'Document'}</span>
+                                <span>{msg.mediaFilename || msg.content || 'Document'}</span>
                               </a>
                             );
                             return <p className="leading-snug">{msg.content}</p>;
@@ -1288,6 +1369,44 @@ export function UnifiedInbox() {
               )}
             </div>
 
+            {/* File preview strip */}
+            {(pendingFile || isUploading) && (
+              <div className="border-t border-gray-100 bg-gray-50 px-4 py-2 flex items-center gap-3">
+                {isUploading ? (
+                  <div className="flex items-center gap-2 text-sm text-gray-500">
+                    <Loader2 className="w-4 h-4 animate-spin text-emerald-600" />
+                    Uploading…
+                  </div>
+                ) : pendingFile ? (
+                  <>
+                    {pendingFile.mediaType === 'image' && (
+                      <img src={pendingFile.localPreview} alt="Preview" className="h-16 w-16 object-cover rounded border border-gray-200" />
+                    )}
+                    {pendingFile.mediaType === 'video' && (
+                      <video src={pendingFile.localPreview} className="h-16 w-16 object-cover rounded border border-gray-200" />
+                    )}
+                    {pendingFile.mediaType === 'audio' && (
+                      <audio src={pendingFile.localPreview} controls className="max-w-[200px] h-8" />
+                    )}
+                    {pendingFile.mediaType === 'document' && (
+                      <div className="flex items-center gap-1.5 bg-white border border-gray-200 rounded px-2 py-1.5">
+                        <FileText className="w-5 h-5 text-gray-500 flex-shrink-0" />
+                        <span className="text-xs text-gray-700 max-w-[140px] truncate">{pendingFile.mediaFilename}</span>
+                      </div>
+                    )}
+                    <button
+                      data-testid="button-remove-attachment"
+                      onClick={() => { setPendingFile(null); URL.revokeObjectURL(pendingFile.localPreview); }}
+                      className="ml-auto p-1 rounded-full hover:bg-gray-200 text-gray-500"
+                      title="Remove attachment"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </>
+                ) : null}
+              </div>
+            )}
+
             {/* Composer */}
             <AIComposer
               value={messageInput}
@@ -1304,6 +1423,8 @@ export function UnifiedInbox() {
                 content: m.content || '',
               }))}
               onTemplate={isWhatsAppContact ? handleOpenTemplatePicker : undefined}
+              fileInputRef={fileInputRef}
+              handleFileSelect={handleFileSelect}
             />
           </>
         ) : (

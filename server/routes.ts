@@ -63,6 +63,7 @@ import shopifyRoutes from "./shopifyRoutes";
 import ghlRoutes from "./ghlRoutes";
 
 import { registerTemplateRoutes } from "./templateRoutes";
+import { registerMediaRoutes } from "./routes/media";
 
 const TWILIO_BASE_COST_PER_MESSAGE = 0.005;
 const MARKUP_PERCENT = 5;
@@ -6400,6 +6401,7 @@ export async function registerRoutes(
   });
 
   // ============= ROUTE MODULES =============
+  registerMediaRoutes(app);
   registerContactRoutes(app);
   registerConversationRoutes(app);
   registerChannelRoutes(app);
