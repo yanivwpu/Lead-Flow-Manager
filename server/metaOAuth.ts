@@ -9,16 +9,14 @@ const FACEBOOK_SCOPES = [
 ].join(",");
 
 // ── Instagram DMs flow ────────────────────────────────────────────────────────
-// Uses "Facebook Login for Business for Instagram".
-// instagram_basic   → read the IG Business/Creator account linked to the page
-// instagram_manage_messages → send & receive Instagram DMs
-// pages_show_list   → enumerate the user's Facebook Pages (to find the linked page)
-// pages_manage_metadata → subscribe the page to webhook events
+// Instagram DMs route through the Messenger Platform — the same Facebook Login
+// scopes are used. instagram_basic / instagram_manage_messages are NOT valid
+// Facebook Login OAuth scopes; they are Messenger Platform app-level features
+// enabled in the Meta Developer Console, not dialog scopes.
 const INSTAGRAM_SCOPES = [
-  "instagram_basic",
-  "instagram_manage_messages",
   "pages_show_list",
   "pages_manage_metadata",
+  "pages_messaging",
 ].join(",");
 
 export interface MetaPage {

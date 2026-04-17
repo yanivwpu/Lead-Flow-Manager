@@ -3756,7 +3756,7 @@ export async function registerRoutes(
     try {
       if (!req.user) return res.status(401).json({ error: "Unauthorized" });
 
-      const { pageId } = req.body as { pageId: string };
+      const { pageId, manualInstagramAccountId } = req.body as { pageId: string; manualInstagramAccountId?: string };
       if (!pageId) return res.status(400).json({ error: "pageId is required" });
 
       const pending = (req.session as any).metaOAuthPending as
@@ -3773,6 +3773,12 @@ export async function registerRoutes(
       const channel = pending.channel as "facebook" | "instagram";
       const page = pending.pages.find((p: any) => p.id === pageId);
       if (!page) return res.status(404).json({ error: "Page not found in OAuth session" });
+
+      // Allow caller to supply Instagram Account ID manually (when auto-detection
+      // is not possible due to missing pages_read_engagement permission).
+      if (channel === "instagram" && manualInstagramAccountId && !page.instagramAccountId) {
+        page.instagramAccountId = manualInstagramAccountId.trim();
+      }
 
       const result = await connectPage(req.user.id, channel, page);
 

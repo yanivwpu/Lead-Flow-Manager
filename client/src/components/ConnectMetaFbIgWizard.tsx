@@ -47,7 +47,7 @@ interface ConnectPageResult {
   error?: string;
 }
 
-type WizardStage = "idle" | "page_select" | "connecting" | "success";
+type WizardStage = "idle" | "page_select" | "ig_account_id" | "connecting" | "success";
 
 type ProgressStatus = "pending" | "running" | "done" | "warn" | "error";
 
@@ -133,6 +133,7 @@ export function ConnectMetaFbIgWizard({
   const [connectResult, setConnectResult] = useState<ConnectPageResult | null>(null);
   const [connectError, setConnectError] = useState<string | null>(null);
   const [progress, setProgress] = useState<ProgressState>(BLANK_PROGRESS);
+  const [manualInstagramId, setManualInstagramId] = useState("");
 
   // Fetch pending pages from session when opened in page_select stage
   useEffect(() => {
@@ -153,10 +154,7 @@ export function ConnectMetaFbIgWizard({
         return;
       }
       const data = (await resp.json()) as { channel: string; pages: MetaPage[] };
-      let pageList = data.pages || [];
-      if (channel === "instagram") {
-        pageList = pageList.filter((p) => !!p.instagramAccountId);
-      }
+      const pageList = data.pages || [];
       setPages(pageList);
     } catch (e: any) {
       setPagesError(e.message || "Failed to load pages");
@@ -191,9 +189,20 @@ export function ConnectMetaFbIgWizard({
     }
   };
 
-  const handlePageSelect = async (page: MetaPage) => {
+  // Called when user picks a page. For Instagram without auto-detected IG account
+  // ID, we first collect it manually before proceeding to the connecting stage.
+  const handlePageSelect = (page: MetaPage) => {
     setSelectedPage(page);
     setConnectError(null);
+    if (channel === "instagram" && !page.instagramAccountId) {
+      setManualInstagramId("");
+      setStage("ig_account_id");
+    } else {
+      void handleDoConnect(page, undefined);
+    }
+  };
+
+  const handleDoConnect = async (page: MetaPage, manualIgId: string | undefined) => {
     setStage("connecting");
 
     // Animate steps optimistically, fire request in background
@@ -208,7 +217,10 @@ export function ConnectMetaFbIgWizard({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ pageId: page.id }),
+        body: JSON.stringify({
+          pageId: page.id,
+          ...(manualIgId ? { manualInstagramAccountId: manualIgId } : {}),
+        }),
       });
       result = (await resp.json()) as ConnectPageResult;
       if (!resp.ok || !result.success) {
@@ -274,6 +286,7 @@ export function ConnectMetaFbIgWizard({
       setConnectError(null);
       setPagesError(null);
       setProgress(BLANK_PROGRESS);
+      setManualInstagramId("");
     }, 300);
   };
 
@@ -329,9 +342,9 @@ export function ConnectMetaFbIgWizard({
                       "Subscribe to new message notifications",
                     ]
                   : [
-                      "Access your linked Instagram professional account",
-                      "Send and receive Instagram Direct Messages",
-                      "Read message history and engagement",
+                      "List and access your Facebook Pages",
+                      "Subscribe to Instagram DM notifications via your Page",
+                      "Send and receive messages through your Page",
                     ]
                 ).map((item) => (
                   <li key={item} className="flex items-center gap-2 text-xs text-gray-600">
@@ -381,26 +394,7 @@ export function ConnectMetaFbIgWizard({
                 <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-100 rounded-lg">
                   <AlertCircle className="h-4 w-4 text-amber-500 flex-shrink-0 mt-0.5" />
                   <div className="text-xs text-amber-800 space-y-1.5">
-                    {channel === "instagram" ? (
-                      <>
-                        <p className="font-medium">No linked Instagram account found.</p>
-                        <p>Three things must be in place before this works:</p>
-                        <ol className="list-decimal list-inside space-y-1.5 pl-1">
-                          <li>
-                            <strong>Instagram must be a Professional account.</strong> In the Instagram app go to Settings → Account → Switch to Professional Account (Business or Creator).
-                          </li>
-                          <li>
-                            <strong>Instagram must be linked to your Facebook Page.</strong> In Facebook, open your Page → Settings → Linked accounts → Instagram and connect it there.
-                          </li>
-                          <li>
-                            <strong>Grant permissions when the login dialog appears.</strong> The dialog will ask for <em>instagram_basic</em> and <em>instagram_manage_messages</em> — make sure you approve both.
-                          </li>
-                        </ol>
-                        <p>Once all three are done, click Reconnect below.</p>
-                      </>
-                    ) : (
-                      <p>No Facebook Pages found. Make sure you manage at least one Facebook Page and granted the requested permissions.</p>
-                    )}
+                    <p>No Facebook Pages found. Make sure you manage at least one Facebook Page and approved all requested permissions when prompted.</p>
                   </div>
                 </div>
                 <Button
@@ -460,6 +454,75 @@ export function ConnectMetaFbIgWizard({
                 </p>
               </>
             )}
+          </div>
+        )}
+
+        {/* ── IG ACCOUNT ID ── */}
+        {stage === "ig_account_id" && selectedPage && (
+          <div className="space-y-4">
+            <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+              {selectedPage.picture ? (
+                <img
+                  src={selectedPage.picture}
+                  alt={selectedPage.name}
+                  className="h-8 w-8 rounded-full object-cover"
+                />
+              ) : (
+                <div
+                  className="h-8 w-8 rounded-full flex items-center justify-center flex-shrink-0"
+                  style={{ backgroundColor: "#E4405F18" }}
+                >
+                  <Instagram className="h-4 w-4" style={{ color: "#E4405F" }} />
+                </div>
+              )}
+              <div className="min-w-0">
+                <p className="font-medium text-sm text-gray-900 truncate">{selectedPage.name}</p>
+                <p className="text-xs text-gray-500">Facebook Page selected</p>
+              </div>
+            </div>
+
+            <div className="p-3 bg-blue-50 border border-blue-100 rounded-lg space-y-1.5">
+              <p className="text-xs font-medium text-blue-800">Enter your Instagram Account ID</p>
+              <p className="text-xs text-blue-700">
+                We couldn't auto-detect the linked Instagram account. Paste your Instagram Business Account ID below.
+                Find it in <strong>Meta Business Suite → Settings → Instagram Accounts</strong> or in your Business Manager.
+              </p>
+              <p className="text-xs text-blue-600 font-mono mt-1">
+                Example: 17841480019232860
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-700">Instagram Account ID</label>
+              <input
+                type="text"
+                className="w-full border border-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-pink-300 focus:border-pink-400"
+                placeholder="e.g. 17841480019232860"
+                value={manualInstagramId}
+                onChange={(e) => setManualInstagramId(e.target.value.trim())}
+                data-testid="input-instagram-account-id"
+              />
+            </div>
+
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => setStage("page_select")}
+                data-testid="button-ig-id-back"
+              >
+                Back
+              </Button>
+              <Button
+                className="flex-1 text-white"
+                style={{ backgroundColor: "#E4405F" }}
+                disabled={!manualInstagramId}
+                onClick={() => void handleDoConnect(selectedPage, manualInstagramId)}
+                data-testid="button-ig-id-connect"
+              >
+                Connect
+              </Button>
+            </div>
           </div>
         )}
 
