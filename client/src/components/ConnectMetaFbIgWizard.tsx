@@ -384,19 +384,19 @@ export function ConnectMetaFbIgWizard({
                     {channel === "instagram" ? (
                       <>
                         <p className="font-medium">No linked Instagram account found.</p>
-                        <p>To connect Instagram DMs your setup needs two things:</p>
+                        <p>Three things must be in place before this works:</p>
                         <ol className="list-decimal list-inside space-y-1.5 pl-1">
                           <li>
-                            <strong>Instagram must be a Business or Creator account.</strong> Go to Instagram → Settings → Account → Switch to Professional Account.
+                            <strong>Instagram must be a Professional account.</strong> In the Instagram app go to Settings → Account → Switch to Professional Account (Business or Creator).
                           </li>
                           <li>
-                            <strong>That Instagram account must be linked to your Facebook Page.</strong> Go to your Facebook Page → Settings → Linked Accounts → Instagram, and connect it there.
+                            <strong>Instagram must be linked to your Facebook Page.</strong> In Facebook, open your Page → Settings → Linked accounts → Instagram and connect it there.
                           </li>
                           <li>
-                            <strong>Instagram product must be added to your Meta App.</strong> In the Meta Developer Console, go to your App → Add Product → Instagram, then enable the <em>instagram_manage_messages</em> permission.
+                            <strong>Grant permissions when the login dialog appears.</strong> The dialog will ask for <em>instagram_basic</em> and <em>instagram_manage_messages</em> — make sure you approve both.
                           </li>
                         </ol>
-                        <p>Once done, click Reconnect below.</p>
+                        <p>Once all three are done, click Reconnect below.</p>
                       </>
                     ) : (
                       <p>No Facebook Pages found. Make sure you manage at least one Facebook Page and granted the requested permissions.</p>
@@ -410,7 +410,7 @@ export function ConnectMetaFbIgWizard({
                   data-testid="button-try-again"
                 >
                   <RefreshCcw className="h-4 w-4 mr-2" />
-                  Reconnect with Facebook
+                  {channel === "instagram" ? "Reconnect with Instagram" : "Reconnect with Facebook"}
                 </Button>
               </div>
             ) : (
@@ -455,7 +455,7 @@ export function ConnectMetaFbIgWizard({
                     className="text-blue-500 hover:underline"
                     onClick={() => setStage("idle")}
                   >
-                    Reconnect with Facebook
+                    {channel === "instagram" ? "Reconnect with Instagram" : "Reconnect with Facebook"}
                   </button>
                 </p>
               </>

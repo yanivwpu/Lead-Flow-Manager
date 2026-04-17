@@ -1,16 +1,25 @@
 const GRAPH = "https://graph.facebook.com/v19.0";
 
-const BASE_SCOPES = [
-  "public_profile",
+// ── Facebook Messenger / Pages flow ──────────────────────────────────────────
+// Only the three permissions needed for Messenger webhooks + messaging.
+const FACEBOOK_SCOPES = [
   "pages_show_list",
-  "pages_messaging",
   "pages_manage_metadata",
-  "pages_read_engagement",
-  "business_management",
-];
+  "pages_messaging",
+].join(",");
 
-const SCOPES = BASE_SCOPES.join(",");
-const INSTAGRAM_SCOPES = SCOPES;
+// ── Instagram DMs flow ────────────────────────────────────────────────────────
+// Uses "Facebook Login for Business for Instagram".
+// instagram_basic   → read the IG Business/Creator account linked to the page
+// instagram_manage_messages → send & receive Instagram DMs
+// pages_show_list   → enumerate the user's Facebook Pages (to find the linked page)
+// pages_manage_metadata → subscribe the page to webhook events
+const INSTAGRAM_SCOPES = [
+  "instagram_basic",
+  "instagram_manage_messages",
+  "pages_show_list",
+  "pages_manage_metadata",
+].join(",");
 
 export interface MetaPage {
   id: string;
@@ -43,7 +52,7 @@ export function buildMetaOAuthUrl(state: string, redirectUri: string, channel: "
   const appId = process.env.META_APP_ID;
   if (!appId) throw new Error("META_APP_ID is not configured on this server");
 
-  const scopes = channel === "instagram" ? INSTAGRAM_SCOPES : SCOPES;
+  const scopes = channel === "instagram" ? INSTAGRAM_SCOPES : FACEBOOK_SCOPES;
   console.log(`[Meta OAuth] Building auth URL — channel: ${channel}, scopes: ${scopes}`);
 
   return (
@@ -279,8 +288,8 @@ export async function connectPage(
   };
 
   const REQUIRED_SCOPES: Record<string, string[]> = {
-    facebook: ["pages_messaging", "pages_manage_metadata"],
-    instagram: ["pages_show_list", "pages_messaging", "pages_read_engagement"],
+    facebook: ["pages_manage_metadata", "pages_messaging"],
+    instagram: ["pages_show_list", "pages_manage_metadata"],
   };
 
   // Step 1 + 2: Verify token AND check scopes using /debug_token with the APP access token.
