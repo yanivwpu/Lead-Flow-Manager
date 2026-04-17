@@ -791,9 +791,8 @@ export function InboxLeadDetailsPanel({
                       mode="single"
                       selected={bookingDate}
                       onSelect={setBookingDate}
-                      disabled={d => d < new Date()}
+                      disabled={d => { const t = new Date(); t.setHours(0,0,0,0); return d < t; }}
                       className="rounded-lg border border-gray-100 p-1 [&_.rdp]:m-0"
-                      initialFocus
                     />
                   </div>
                   <div>
@@ -915,9 +914,9 @@ export function InboxLeadDetailsPanel({
             </PopoverTrigger>
 
             <PopoverContent 
-              className="w-52 p-1.5 max-h-[70vh] overflow-y-auto flex flex-col" 
+              className="w-64 p-1.5 max-h-[80vh] overflow-y-auto flex flex-col" 
               align="start" 
-              side={followView === 'custom' ? 'top' : 'bottom'}
+              side="bottom"
               onInteractOutside={() => setFollowOpen(false)}
             >
 
@@ -991,9 +990,8 @@ export function InboxLeadDetailsPanel({
                         mode="single"
                         selected={customFollowDate}
                         onSelect={setCustomFollowDate}
-                        disabled={d => d < new Date()}
+                        disabled={d => { const t = new Date(); t.setHours(0,0,0,0); return d < t; }}
                         className="rounded-lg border border-gray-100 p-1 [&_.rdp]:m-0"
-                        initialFocus
                       />
                     </div>
 
