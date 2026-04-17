@@ -109,6 +109,7 @@ export interface ConnectMetaFbIgWizardProps {
   onOpenChange: (open: boolean) => void;
   channel: "facebook" | "instagram";
   initialStage?: "idle" | "page_select";
+  existingInstagramAccountId?: string;
 }
 
 export function ConnectMetaFbIgWizard({
@@ -116,6 +117,7 @@ export function ConnectMetaFbIgWizard({
   onOpenChange,
   channel,
   initialStage = "idle",
+  existingInstagramAccountId,
 }: ConnectMetaFbIgWizardProps) {
   const queryClient = useQueryClient();
   const isFacebook = channel === "facebook";
@@ -195,7 +197,7 @@ export function ConnectMetaFbIgWizard({
     setSelectedPage(page);
     setConnectError(null);
     if (channel === "instagram" && !page.instagramAccountId) {
-      setManualInstagramId("");
+      setManualInstagramId(existingInstagramAccountId || "");
       setStage("ig_account_id");
     } else {
       void handleDoConnect(page, undefined);
@@ -482,14 +484,17 @@ export function ConnectMetaFbIgWizard({
             </div>
 
             <div className="p-3 bg-blue-50 border border-blue-100 rounded-lg space-y-1.5">
-              <p className="text-xs font-medium text-blue-800">Enter your Instagram Account ID</p>
-              <p className="text-xs text-blue-700">
-                We couldn't auto-detect the linked Instagram account. Paste your Instagram Business Account ID below.
-                Find it in <strong>Meta Business Suite → Settings → Instagram Accounts</strong> or in your Business Manager.
-              </p>
-              <p className="text-xs text-blue-600 font-mono mt-1">
-                Example: 17841480019232860
-              </p>
+              <p className="text-xs font-medium text-blue-800">Instagram Account ID</p>
+              {existingInstagramAccountId ? (
+                <p className="text-xs text-blue-700">
+                  Your previously connected Instagram Account ID has been pre-filled. Click <strong>Connect</strong> to continue.
+                </p>
+              ) : (
+                <p className="text-xs text-blue-700">
+                  We couldn't auto-detect the linked Instagram account. Paste your Instagram Business Account ID below.
+                  Find it in <strong>Meta Business Suite → Settings → Instagram Accounts</strong> or in your Business Manager.
+                </p>
+              )}
             </div>
 
             <div className="space-y-1.5">

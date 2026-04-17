@@ -582,6 +582,11 @@ export function ChannelSettings() {
           onOpenChange={(v) => { if (!v) setConnectFbIgConfig(null); }}
           channel={connectFbIgConfig.channel}
           initialStage={connectFbIgConfig.initialStage}
+          existingInstagramAccountId={
+            connectFbIgConfig.channel === "instagram"
+              ? (metaWebhookConfig?.instagram?.pageId ?? undefined)
+              : undefined
+          }
         />
       )}
 
