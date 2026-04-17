@@ -1332,14 +1332,20 @@ export function UnifiedInbox() {
                                   className="max-w-full rounded cursor-pointer max-h-64 object-cover"
                                   onClick={() => window.open(mediaDisplayUrl, '_blank')}
                                   onLoad={() => {
-                                    // Image has finished decoding and has a real height now.
-                                    // If this is the message we just sent, scroll again so the
-                                    // full bubble — including the image — is visible.
-                                    if (justSentRef.current) {
-                                      const container = messagesContainerRef.current;
-                                      if (container) container.scrollTop = container.scrollHeight;
-                                      justSentRef.current = false;
+                                    // Image has finished decoding — its real height is now in
+                                    // the DOM.  Before load the scroll sat at the "old bottom"
+                                    // (0-height placeholder), so dist ≈ rendered image height.
+                                    // Threshold 400px covers max-h-64 (256px) + generous buffer.
+                                    // For outbound sends justSentRef forces the scroll.
+                                    // For inbound images we check dist so we only scroll when
+                                    // the user was already at the bottom, not when reading history.
+                                    const container = messagesContainerRef.current;
+                                    if (!container) return;
+                                    const dist = container.scrollHeight - container.scrollTop - container.clientHeight;
+                                    if (justSentRef.current || dist < 400) {
+                                      container.scrollTop = container.scrollHeight;
                                     }
+                                    justSentRef.current = false;
                                   }}
                                   onError={(e) => {
                                     justSentRef.current = false;
@@ -1358,12 +1364,14 @@ export function UnifiedInbox() {
                                 controls
                                 className="max-w-full rounded max-h-64"
                                 onLoadedMetadata={() => {
-                                  // Video dimensions are known after metadata loads.
-                                  if (justSentRef.current) {
-                                    const container = messagesContainerRef.current;
-                                    if (container) container.scrollTop = container.scrollHeight;
-                                    justSentRef.current = false;
+                                  // Same dist-based logic as images.
+                                  const container = messagesContainerRef.current;
+                                  if (!container) return;
+                                  const dist = container.scrollHeight - container.scrollTop - container.clientHeight;
+                                  if (justSentRef.current || dist < 400) {
+                                    container.scrollTop = container.scrollHeight;
                                   }
+                                  justSentRef.current = false;
                                 }}
                               />
                             );
