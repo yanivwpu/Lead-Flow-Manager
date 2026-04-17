@@ -512,13 +512,14 @@ export function UnifiedInbox() {
   // while the user is intentionally reading older content.
   useEffect(() => {
     const container = messagesContainerRef.current;
-    if (!container) return;
+    if (!container || messages.length === 0) return;
 
-    // On conversation switch: reset trackers, skip banner logic
+    // On conversation switch: scroll to bottom immediately once messages arrive
     if (selectedContactId !== prevContactIdRef.current) {
       prevContactIdRef.current = selectedContactId;
       prevMsgCountRef.current = messages.length;
       setShowNewMsgBanner(false);
+      container.scrollTop = container.scrollHeight;
       return;
     }
 
@@ -550,16 +551,6 @@ export function UnifiedInbox() {
     };
     container.addEventListener("scroll", onScroll, { passive: true });
     return () => container.removeEventListener("scroll", onScroll);
-  }, [selectedContactId]);
-
-  // Scroll to bottom immediately when switching conversations
-  useEffect(() => {
-    if (selectedContactId) {
-      setTimeout(() => {
-        const container = messagesContainerRef.current;
-        if (container) container.scrollTop = container.scrollHeight;
-      }, 50);
-    }
   }, [selectedContactId]);
 
   // Mark conversation as read when opened
