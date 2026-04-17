@@ -637,7 +637,8 @@ export function UnifiedInbox() {
         ]);
       }
 
-      const previewText = data.content || (data.mediaUrl ? `[${data.mediaType || 'media'}]` : '');
+      const mediaLabel = ({ image: 'Photo', video: 'Video', audio: 'Audio', document: 'Document' } as Record<string, string>)[data.mediaType || ''] ?? 'Media';
+      const previewText = data.content || (data.mediaUrl ? mediaLabel : '');
       queryClient.setQueryData<InboxItem[]>(inboxKey, (old) => {
         if (!old) return old;
         const list = old.map((item) =>

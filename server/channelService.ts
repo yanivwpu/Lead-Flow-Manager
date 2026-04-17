@@ -6,6 +6,17 @@ import {
   CHANNEL_INFO, CHANNELS 
 } from "@shared/schema";
 
+/** Human-readable last-message preview for media messages. */
+function mediaPreviewLabel(contentType?: string): string {
+  switch (contentType) {
+    case 'image':    return 'Photo';
+    case 'video':    return 'Video';
+    case 'audio':    return 'Audio';
+    case 'document': return 'Document';
+    default:         return 'Media';
+  }
+}
+
 export interface SendMessageResult {
   success: boolean;
   messageId?: string;
@@ -122,7 +133,7 @@ class ChannelService {
       mediaFilename,
     });
 
-    const preview = content || (mediaUrl ? `[${contentType || 'media'}]` : '');
+    const preview = content || (mediaUrl ? mediaPreviewLabel(contentType) : '');
 
     if (sendResult.success) {
       console.log(`[Debug] Outgoing message sent — messageId: ${message.id}, conversationId: ${conversation.id}, channel: ${targetChannel}`);
@@ -370,7 +381,7 @@ class ChannelService {
 
     await storage.updateConversation(conversation.id, {
       lastMessageAt: new Date(),
-      lastMessagePreview: content.substring(0, 100),
+      lastMessagePreview: (content || (mediaUrl ? mediaPreviewLabel(contentType) : '')).substring(0, 100),
       lastMessageDirection: 'inbound',
       unreadCount: (conversation.unreadCount || 0) + 1,
     });
