@@ -29,6 +29,7 @@ import {
   Zap,
   PanelRight,
   LayoutTemplate,
+  ImageOff,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -1210,24 +1211,38 @@ export function UnifiedInbox() {
                           isSending && "opacity-75"
                         )}>
                           {(() => {
-                            const hasMedia = msg.mediaUrl || msg.mediaFilename;
+                            const hasMedia = !!(msg.mediaUrl || msg.mediaFilename);
                             const proxyUrl = `/api/media/proxy?messageId=${msg.id}`;
                             const ct = msg.contentType;
                             const isImage = ct === 'image' || msg.mediaType?.startsWith('image');
                             const isVideo = ct === 'video' || msg.mediaType?.startsWith('video');
                             const isAudio = ct === 'audio' || msg.mediaType?.startsWith('audio');
                             const isDoc = ct === 'document' || msg.mediaType === 'document';
+                            const expiredFallback = (
+                              <div className="flex items-center gap-1.5 text-xs text-gray-400 italic py-1">
+                                <ImageOff className="w-3.5 h-3.5 flex-shrink-0" />
+                                <span>Media no longer available</span>
+                              </div>
+                            );
                             if (hasMedia && isImage) return (
                               <div>
-                                <img src={proxyUrl} alt="Image" className="max-w-full rounded cursor-pointer max-h-64 object-cover" onClick={() => window.open(proxyUrl, '_blank')} />
+                                <img
+                                  src={proxyUrl}
+                                  alt="Image"
+                                  className="max-w-full rounded cursor-pointer max-h-64 object-cover"
+                                  onClick={() => window.open(proxyUrl, '_blank')}
+                                  onError={(e) => { (e.currentTarget.parentElement!).replaceWith(document.createTextNode('Media no longer available')); }}
+                                />
                                 {msg.content && <p className="leading-snug mt-1 text-sm">{msg.content}</p>}
                               </div>
                             );
                             if (hasMedia && isVideo) return (
-                              <video src={proxyUrl} controls className="max-w-full rounded max-h-64" />
+                              <video src={proxyUrl} controls className="max-w-full rounded max-h-64"
+                                onError={(e) => { (e.currentTarget as HTMLVideoElement).style.display='none'; }} />
                             );
                             if (hasMedia && isAudio) return (
-                              <audio src={proxyUrl} controls className="max-w-full" />
+                              <audio src={proxyUrl} controls className="max-w-full"
+                                onError={(e) => { (e.currentTarget as HTMLAudioElement).style.display='none'; }} />
                             );
                             if (hasMedia && isDoc) return (
                               <a href={proxyUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-blue-600 underline">

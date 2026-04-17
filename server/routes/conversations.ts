@@ -1,6 +1,8 @@
 import type { Express } from "express";
 import { storage } from "../storage";
 import { getMediaUrl, downloadMedia } from "../userMeta";
+import fs from "fs";
+import path from "path";
 
 export function registerConversationRoutes(app: Express): void {
   // Get conversation messages
@@ -73,55 +75,149 @@ export function registerConversationRoutes(app: Express): void {
     }
   });
 
-  // Media proxy — streams media for a given message ID
-  // WhatsApp media requires a fresh URL + Bearer auth; Facebook CDN URLs may expire too.
+  // ---------------------------------------------------------------------------
+  // Media proxy — streams inbound media for a given message
+  //
+  // Strategy per channel:
+  //   WhatsApp  : media_filename holds the Meta media ID. We call getMediaUrl()
+  //               to get a fresh signed URL, then download with Bearer auth.
+  //               Works across restarts/redeploys indefinitely (Meta keeps IDs).
+  //
+  //   Facebook  : media_url holds the Facebook CDN URL (stored at receipt time).
+  //               These are publicly accessible but expire after ~hours/days.
+  //               We fetch and pipe them directly. If the URL has expired we
+  //               return 410 Gone so the UI can show a "media expired" notice.
+  //
+  //   Outbound  : media_url is a direct external or /uploads/ URL. We pipe it.
+  //
+  // All errors are logged with messageId, channel, and reason for easy debugging.
+  // ---------------------------------------------------------------------------
   app.get("/api/media/proxy", async (req, res) => {
+    const messageId = req.query.messageId as string;
     try {
       if (!req.user) return res.status(401).json({ error: "Unauthorized" });
-
-      const messageId = req.query.messageId as string;
       if (!messageId) return res.status(400).json({ error: "messageId required" });
 
       const message = await storage.getMessage(messageId);
-      if (!message) return res.status(404).json({ error: "Message not found" });
+      if (!message) {
+        console.warn(`[MediaProxy] messageId=${messageId} — not found in DB`);
+        return res.status(404).json({ error: "Message not found" });
+      }
 
-      // Security: ensure this message belongs to the requesting user
+      // Security: message must belong to the requesting user's account
       const conversation = await storage.getConversation(message.conversationId);
       if (!conversation || conversation.userId !== req.user.id) {
+        console.warn(`[MediaProxy] messageId=${messageId} — forbidden for userId=${req.user.id}`);
         return res.status(403).json({ error: "Forbidden" });
       }
 
-      const userId = req.user.id;
+      const channel = conversation.channel;
 
-      // WhatsApp media: mediaFilename holds the Meta media ID
+      // ------------------------------------------------------------------
+      // Determine MIME type from contentType field
+      // ------------------------------------------------------------------
+      function mimeFromContentType(ct: string | null): string {
+        switch (ct) {
+          case 'image':    return 'image/jpeg';
+          case 'video':    return 'video/mp4';
+          case 'audio':    return 'audio/ogg';
+          case 'document': return 'application/pdf';
+          default:         return 'application/octet-stream';
+        }
+      }
+
+      // ------------------------------------------------------------------
+      // WhatsApp: media_filename = Meta media ID → fetch fresh URL on demand
+      // ------------------------------------------------------------------
       if (message.mediaFilename && !message.mediaUrl) {
-        const freshUrl = await getMediaUrl(userId, message.mediaFilename);
-        if (!freshUrl) return res.status(502).json({ error: "Could not retrieve media URL" });
-        const buffer = await downloadMedia(userId, freshUrl);
-        if (!buffer) return res.status(502).json({ error: "Could not download media" });
-        const contentType = message.contentType === 'image' ? 'image/jpeg'
-          : message.contentType === 'video' ? 'video/mp4'
-          : message.contentType === 'audio' ? 'audio/ogg'
-          : 'application/octet-stream';
-        res.set('Content-Type', contentType);
+        console.log(`[MediaProxy] messageId=${messageId} channel=whatsapp mediaId=${message.mediaFilename} — fetching fresh URL`);
+        const freshUrl = await getMediaUrl(req.user.id, message.mediaFilename);
+        if (!freshUrl) {
+          console.error(`[MediaProxy] messageId=${messageId} channel=whatsapp — getMediaUrl returned null (token invalid or mediaId expired)`);
+          return res.status(502).json({ error: "Could not retrieve WhatsApp media URL. Check Meta credentials." });
+        }
+
+        const buffer = await downloadMedia(req.user.id, freshUrl);
+        if (!buffer) {
+          console.error(`[MediaProxy] messageId=${messageId} channel=whatsapp — downloadMedia failed for url=${freshUrl.substring(0, 80)}`);
+          return res.status(502).json({ error: "Could not download WhatsApp media." });
+        }
+
+        const mime = mimeFromContentType(message.contentType);
+        res.set('Content-Type', mime);
         res.set('Cache-Control', 'private, max-age=300');
+        if (message.contentType === 'document') {
+          res.set('Content-Disposition', `attachment; filename="document.pdf"`);
+        } else {
+          res.set('Content-Disposition', 'inline');
+        }
+        console.log(`[MediaProxy] messageId=${messageId} channel=whatsapp — served ${buffer.length} bytes, mime=${mime}`);
         return res.send(buffer);
       }
 
-      // Facebook / other: mediaUrl is a direct CDN URL
+      // ------------------------------------------------------------------
+      // Facebook / outbound / other: media_url is a direct URL
+      // ------------------------------------------------------------------
       if (message.mediaUrl) {
-        const response = await fetch(message.mediaUrl);
-        if (!response.ok) return res.status(502).json({ error: "Could not fetch media" });
-        const ct = response.headers.get('content-type') || 'application/octet-stream';
+        // Local /uploads/ files — serve directly from disk
+        if (message.mediaUrl.startsWith('/uploads/') || message.mediaUrl.includes('/uploads/')) {
+          const filename = path.basename(message.mediaUrl.split('/uploads/')[1] || '');
+          const filepath = path.join(process.cwd(), 'uploads', filename);
+          if (fs.existsSync(filepath)) {
+            const mime = mimeFromContentType(message.contentType);
+            res.set('Content-Type', mime);
+            res.set('Cache-Control', 'private, max-age=3600');
+            if (message.contentType === 'document') {
+              res.set('Content-Disposition', `attachment; filename="${filename}"`);
+            } else {
+              res.set('Content-Disposition', 'inline');
+            }
+            console.log(`[MediaProxy] messageId=${messageId} — served from local disk: ${filepath}`);
+            return res.sendFile(filepath);
+          }
+          // File not on disk (e.g. after redeploy) — fall through to remote fetch
+          console.warn(`[MediaProxy] messageId=${messageId} — local file missing: ${filepath}, falling through to remote`);
+        }
+
+        console.log(`[MediaProxy] messageId=${messageId} channel=${channel} — fetching remote url=${message.mediaUrl.substring(0, 80)}`);
+        let response: Response;
+        try {
+          response = await fetch(message.mediaUrl, { signal: AbortSignal.timeout(15000) });
+        } catch (fetchErr: any) {
+          console.error(`[MediaProxy] messageId=${messageId} channel=${channel} — fetch threw: ${fetchErr?.message}`);
+          return res.status(502).json({ error: "Network error fetching media." });
+        }
+
+        if (!response.ok) {
+          if (response.status === 403 || response.status === 410) {
+            console.warn(`[MediaProxy] messageId=${messageId} channel=${channel} — CDN URL expired (status ${response.status})`);
+            return res.status(410).json({ error: "Media has expired and is no longer available from the platform." });
+          }
+          console.error(`[MediaProxy] messageId=${messageId} channel=${channel} — remote returned HTTP ${response.status}`);
+          return res.status(502).json({ error: `Remote media server returned ${response.status}` });
+        }
+
+        const ct = response.headers.get('content-type') || mimeFromContentType(message.contentType);
+        const arrayBuffer = await response.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
+
         res.set('Content-Type', ct);
         res.set('Cache-Control', 'private, max-age=300');
-        const arrayBuffer = await response.arrayBuffer();
-        return res.send(Buffer.from(arrayBuffer));
+        if (message.contentType === 'document') {
+          res.set('Content-Disposition', `attachment; filename="document"`);
+        } else {
+          res.set('Content-Disposition', 'inline');
+        }
+        console.log(`[MediaProxy] messageId=${messageId} channel=${channel} — served ${buffer.length} bytes, mime=${ct}`);
+        return res.send(buffer);
       }
 
-      return res.status(404).json({ error: "No media available for this message" });
-    } catch (error) {
-      console.error("Media proxy error:", error);
+      // Nothing to serve
+      console.warn(`[MediaProxy] messageId=${messageId} channel=${channel} contentType=${message.contentType} — no mediaUrl or mediaFilename in DB`);
+      return res.status(404).json({ error: "No media available for this message." });
+
+    } catch (error: any) {
+      console.error(`[MediaProxy] messageId=${messageId} — unhandled error: ${error?.message || error}`);
       res.status(500).json({ error: "Media proxy failed" });
     }
   });
