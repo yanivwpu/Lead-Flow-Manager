@@ -251,6 +251,22 @@ export function registerContactRoutes(app: Express): void {
         return res.status(400).json({ error: "Invalid channel" });
       }
 
+      // Validate that the contact actually has an identifier for the requested channel
+      // to avoid setting an override that can never be used (e.g. facebook with no facebookId).
+      const channelIdField: Record<string, keyof typeof contact> = {
+        whatsapp:  'whatsappId',
+        instagram: 'instagramId',
+        facebook:  'facebookId',
+        sms:       'phone',
+        telegram:  'telegramId',
+      };
+      const requiredField = channelIdField[channel];
+      if (requiredField && !contact[requiredField]) {
+        return res.status(400).json({
+          error: `Contact has no ${channel} ID — cannot switch to ${channel} channel`,
+        });
+      }
+
       const updated = await storage.updateContact(req.params.id, {
         primaryChannelOverride: channel,
       });

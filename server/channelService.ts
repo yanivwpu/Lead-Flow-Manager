@@ -44,7 +44,21 @@ class ChannelService {
 
   getPrimaryChannel(contact: Contact): Channel {
     if (contact.primaryChannelOverride) {
-      return contact.primaryChannelOverride as Channel;
+      const override = contact.primaryChannelOverride as Channel;
+      // Only use the override if the contact actually has an identifier for that channel.
+      // If the override points to a channel with no contact ID (e.g. override="facebook"
+      // but facebookId is null), fall through to the natural channel so we don't send
+      // to a dead-end and get "Contact X ID not found" errors.
+      const channelIdField: Record<string, keyof Contact> = {
+        whatsapp:  'whatsappId',
+        instagram: 'instagramId',
+        facebook:  'facebookId',
+        sms:       'phone',
+        telegram:  'telegramId',
+      };
+      const idField = channelIdField[override];
+      const hasId = !idField || !!contact[idField];
+      if (hasId) return override;
     }
     return (contact.lastIncomingChannel || contact.primaryChannel || 'whatsapp') as Channel;
   }
