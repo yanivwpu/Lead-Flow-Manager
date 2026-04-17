@@ -185,27 +185,40 @@ export async function fetchUserPages(userToken: string): Promise<MetaPage[]> {
   return [];
 }
 
-export async function enrichWithInstagramData(pages: MetaPage[]): Promise<MetaPage[]> {
-  return Promise.all(
+export async function enrichWithInstagramData(pages: MetaPage[], userAccessToken?: string): Promise<MetaPage[]> {
+  // Helper: fetch IG profile (id + username) given an IG account ID and a page token
+  async function fetchIgProfile(igId: string, token: string): Promise<{ id: string; username?: string }> {
+    try {
+      const r = await fetch(`${GRAPH}/${igId}?fields=id,username&access_token=${encodeURIComponent(token)}`);
+      const d = (await r.json()) as any;
+      return { id: igId, username: (d.username as string) || undefined };
+    } catch {
+      return { id: igId };
+    }
+  }
+
+  const enriched = await Promise.all(
     pages.map(async (page) => {
       try {
+        // Attempt 1: instagram_business_account (Business accounts)
+        // Attempt 2: connected_instagram_account (Creator accounts)
         const resp = await fetch(
-          `${GRAPH}/${page.id}?fields=instagram_business_account&access_token=${encodeURIComponent(page.accessToken)}`
+          `${GRAPH}/${page.id}?fields=instagram_business_account,connected_instagram_account&access_token=${encodeURIComponent(page.accessToken)}`
         );
         const data = (await resp.json()) as any;
-        console.log(`[Meta OAuth] enrichWithInstagramData — page "${page.name}" (${page.id}): ig_id=${data.instagram_business_account?.id ?? 'none'} ok=${resp.ok} err=${JSON.stringify(data.error ?? null)}`);
-        if (resp.ok && data.instagram_business_account?.id) {
-          const igId = data.instagram_business_account.id as string;
-          const igResp = await fetch(
-            `${GRAPH}/${igId}?fields=id,username&access_token=${encodeURIComponent(page.accessToken)}`
-          );
-          const igData = (await igResp.json()) as any;
-          console.log(`[Meta OAuth] enrichWithInstagramData — IG profile fetch for ${igId}: username=${igData.username ?? 'unknown'}`);
-          return {
-            ...page,
-            instagramAccountId: igId,
-            instagramUsername: (igData.username as string) || undefined,
-          };
+        const igId: string | undefined =
+          data.instagram_business_account?.id ||
+          data.connected_instagram_account?.id;
+        console.log(
+          `[Meta OAuth] enrichWithInstagramData — page "${page.name}" (${page.id}): ` +
+          `business_ig=${data.instagram_business_account?.id ?? 'none'} ` +
+          `creator_ig=${data.connected_instagram_account?.id ?? 'none'} ` +
+          `ok=${resp.ok} err=${JSON.stringify(data.error ?? null)}`
+        );
+        if (resp.ok && igId) {
+          const profile = await fetchIgProfile(igId, page.accessToken);
+          console.log(`[Meta OAuth] enrichWithInstagramData — IG profile for ${igId}: username=${profile.username ?? 'unknown'}`);
+          return { ...page, instagramAccountId: igId, instagramUsername: profile.username };
         }
       } catch (e) {
         console.warn(`[Meta OAuth] enrichWithInstagramData — failed for page "${page.name}":`, e);
@@ -213,6 +226,44 @@ export async function enrichWithInstagramData(pages: MetaPage[]): Promise<MetaPa
       return page;
     })
   );
+
+  // Attempt 3: if no page yielded an IG account and we have a user token,
+  // try querying /me/accounts with instagram_business_account + connected_instagram_account fields.
+  // This catches accounts where the IG is in the Business Portfolio but the page token lacks the field.
+  if (userAccessToken && enriched.every((p) => !p.instagramAccountId)) {
+    console.log('[Meta OAuth] enrichWithInstagramData — no IG found via page tokens; trying user-level /me/accounts with IG fields');
+    try {
+      const r = await fetch(
+        `${GRAPH}/me/accounts?fields=id,name,access_token,instagram_business_account,connected_instagram_account&access_token=${encodeURIComponent(userAccessToken)}&limit=50`
+      );
+      const d = (await r.json()) as any;
+      console.log('[Meta OAuth] enrichWithInstagramData — user /me/accounts with IG fields:', JSON.stringify({
+        status: r.status,
+        count: Array.isArray(d?.data) ? d.data.length : 'not-array',
+        error: d?.error,
+      }));
+      if (r.ok && Array.isArray(d?.data)) {
+        for (let i = 0; i < enriched.length; i++) {
+          const match = d.data.find((p: any) => p.id === enriched[i].id);
+          if (match) {
+            const igId: string | undefined =
+              match.instagram_business_account?.id ||
+              match.connected_instagram_account?.id;
+            if (igId) {
+              const token = match.access_token || enriched[i].accessToken;
+              const profile = await fetchIgProfile(igId, token);
+              console.log(`[Meta OAuth] enrichWithInstagramData — user-level IG found for page ${enriched[i].id}: igId=${igId} username=${profile.username ?? 'unknown'}`);
+              enriched[i] = { ...enriched[i], instagramAccountId: igId, instagramUsername: profile.username };
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[Meta OAuth] enrichWithInstagramData — user-level IG fallback failed:', e);
+    }
+  }
+
+  return enriched;
 }
 
 export async function connectPage(
@@ -314,22 +365,26 @@ export async function connectPage(
   let instagramAccountId = page.instagramAccountId;
   let instagramUsername = page.instagramUsername;
   if (channel === "instagram" && !instagramAccountId) {
-    const igEndpoint = `${GRAPH}/${page.id}?fields=instagram_business_account`;
+    const igEndpoint = `${GRAPH}/${page.id}?fields=instagram_business_account,connected_instagram_account`;
     console.log(`[MetaOAuth] Step 4: GET ${igEndpoint}`);
     try {
       const igPageResp = await fetch(
-        `${GRAPH}/${page.id}?fields=instagram_business_account&access_token=${encodeURIComponent(page.accessToken)}`
+        `${GRAPH}/${page.id}?fields=instagram_business_account,connected_instagram_account&access_token=${encodeURIComponent(page.accessToken)}`
       );
       const igPageData = (await igPageResp.json()) as any;
-      console.log(`[MetaOAuth] instagram_business_account response:`, JSON.stringify({
+      const detectedIgId: string | undefined =
+        igPageData?.instagram_business_account?.id ||
+        igPageData?.connected_instagram_account?.id;
+      console.log(`[MetaOAuth] IG account detection response:`, JSON.stringify({
         ok: igPageResp.ok,
         status: igPageResp.status,
-        ig_id: igPageData?.instagram_business_account?.id,
+        business_ig: igPageData?.instagram_business_account?.id,
+        creator_ig: igPageData?.connected_instagram_account?.id,
         error_code: igPageData?.error?.code,
         error: igPageData?.error?.message,
       }));
-      if (igPageResp.ok && igPageData.instagram_business_account?.id) {
-        instagramAccountId = igPageData.instagram_business_account.id as string;
+      if (igPageResp.ok && detectedIgId) {
+        instagramAccountId = detectedIgId;
         const igResp = await fetch(
           `${GRAPH}/${instagramAccountId}?fields=id,username&access_token=${encodeURIComponent(page.accessToken)}`
         );

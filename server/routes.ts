@@ -3709,7 +3709,7 @@ export async function registerRoutes(
       const shortToken = await exchangeCodeForToken(code, redirectUri);
       const userAccessToken = await exchangeForLongLivedToken(shortToken);
       let pages = await fetchUserPages(userAccessToken);
-      pages = await enrichWithInstagramData(pages);
+      pages = await enrichWithInstagramData(pages, userAccessToken);
 
       (req.session as any).metaOAuthPending = {
         channel,
