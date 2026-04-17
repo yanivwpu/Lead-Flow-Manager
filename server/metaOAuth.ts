@@ -272,6 +272,83 @@ export async function enrichWithInstagramData(pages: MetaPage[], userAccessToken
     }
   }
 
+  // Attempt 4: Business Manager instagram_accounts edge.
+  // When the Instagram account is attached via Business Manager (not directly linked at Page level),
+  // the previous attempts return nothing. Here we query /me/businesses → /{biz_id}/instagram_accounts
+  // to collect all IG accounts in the portfolio, then try to match them to the enriched pages.
+  // Requires business_management scope (often already granted via prior OAuth sessions).
+  if (userAccessToken && enriched.every((p) => !p.instagramAccountId)) {
+    console.log('[Meta OAuth] enrichWithInstagramData — Attempt 4: Business Manager instagram_accounts edge');
+    try {
+      const bizResp = await fetch(
+        `${GRAPH}/me/businesses?fields=id,name&access_token=${encodeURIComponent(userAccessToken)}&limit=10`
+      );
+      const bizData = (await bizResp.json()) as any;
+      console.log('[Meta OAuth] enrichWithInstagramData — /me/businesses:', JSON.stringify({
+        status: bizResp.status,
+        count: Array.isArray(bizData?.data) ? bizData.data.length : 'not-array',
+        error: bizData?.error,
+      }));
+
+      if (bizResp.ok && Array.isArray(bizData?.data)) {
+        // Collect all IG accounts across all businesses in the portfolio
+        const allBizIgAccounts: Array<{ id: string; username?: string; bizId: string }> = [];
+        for (const biz of bizData.data) {
+          try {
+            const igResp = await fetch(
+              `${GRAPH}/${biz.id}/instagram_accounts?fields=id,username&access_token=${encodeURIComponent(userAccessToken)}&limit=10`
+            );
+            const igData = (await igResp.json()) as any;
+            console.log(`[Meta OAuth] enrichWithInstagramData — Business ${biz.id} instagram_accounts:`, JSON.stringify({
+              status: igResp.status,
+              count: Array.isArray(igData?.data) ? igData.data.length : 'not-array',
+              error: igData?.error,
+            }));
+            if (igResp.ok && Array.isArray(igData?.data)) {
+              for (const ig of igData.data) {
+                if (ig.id) allBizIgAccounts.push({ id: ig.id, username: ig.username, bizId: biz.id });
+              }
+            }
+          } catch (e) {
+            console.warn(`[Meta OAuth] enrichWithInstagramData — failed to fetch IG accounts for business ${biz.id}:`, e);
+          }
+        }
+
+        console.log('[Meta OAuth] enrichWithInstagramData — total BizManager IG accounts found:', allBizIgAccounts.length);
+
+        if (allBizIgAccounts.length === 1 && enriched.length === 1) {
+          // Unambiguous: one page, one IG account → auto-assign
+          const ig = allBizIgAccounts[0];
+          console.log(`[Meta OAuth] enrichWithInstagramData — unambiguous BizManager match: igId=${ig.id} username=${ig.username ?? 'unknown'}`);
+          enriched[0] = { ...enriched[0], instagramAccountId: ig.id, instagramUsername: ig.username };
+        } else if (allBizIgAccounts.length >= 1 && enriched.length >= 1) {
+          // Multiple accounts/pages: try to narrow down by querying each IG account's connected pages
+          for (let i = 0; i < enriched.length; i++) {
+            if (enriched[i].instagramAccountId) continue;
+            for (const ig of allBizIgAccounts) {
+              try {
+                const connResp = await fetch(
+                  `${GRAPH}/${ig.id}?fields=connected_page&access_token=${encodeURIComponent(enriched[i].accessToken)}`
+                );
+                const connData = (await connResp.json()) as any;
+                const connectedPageId = connData?.connected_page?.id;
+                if (connectedPageId === enriched[i].id) {
+                  console.log(`[Meta OAuth] enrichWithInstagramData — BizManager connected_page match: page=${enriched[i].id} igId=${ig.id}`);
+                  enriched[i] = { ...enriched[i], instagramAccountId: ig.id, instagramUsername: ig.username };
+                  break;
+                }
+              } catch {
+                // ignore — try next
+              }
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[Meta OAuth] enrichWithInstagramData — Business Manager IG fallback failed:', e);
+    }
+  }
+
   return enriched;
 }
 
