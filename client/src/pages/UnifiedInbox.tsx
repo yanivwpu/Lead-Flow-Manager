@@ -1341,11 +1341,18 @@ export function UnifiedInbox() {
                             {isOut && (
                               isSending
                                 ? <Loader2 className="w-2.5 h-2.5 text-gray-400 animate-spin" />
-                                : <span className="text-[10px] text-gray-400">
-                                    {msg.status === 'read' ? '✓✓' : msg.status === 'delivered' ? '✓✓' : '✓'}
-                                  </span>
+                                : msg.status === 'failed'
+                                  ? <span className="text-[10px] text-red-500 font-medium">Not sent</span>
+                                  : <span className="text-[10px] text-gray-400">
+                                      {msg.status === 'read' ? '✓✓' : msg.status === 'delivered' ? '✓✓' : '✓'}
+                                    </span>
                             )}
                           </div>
+                          {isOut && msg.status === 'failed' && (
+                            <div className="text-[10px] text-red-400 text-right mt-0.5">
+                              Delivery failed — check channel settings
+                            </div>
+                          )}
                         </div>
                       </div>
                     );

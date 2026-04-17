@@ -131,7 +131,8 @@ export async function sendWhatsAppMedia(
   mediaUrl: string,
   mediaType: "image" | "video" | "audio" | "document" = "image",
   caption?: string,
-  fromNumber?: string // override the from-number (Twilio multi-number support)
+  fromNumber?: string, // override the from-number (Twilio multi-number support)
+  filename?: string    // original filename — passed to Meta for document messages
 ): Promise<SendMediaResult> {
   const availability = await getWhatsAppAvailability(userId);
 
@@ -145,7 +146,7 @@ export async function sendWhatsAppMedia(
   }
 
   if (availability.provider === "meta") {
-    const result = await sendMetaWhatsAppMedia(userId, to, mediaUrl, mediaType, caption);
+    const result = await sendMetaWhatsAppMedia(userId, to, mediaUrl, mediaType, caption, filename);
     return { success: true, messageId: result.messageId, provider: "meta" };
   }
 

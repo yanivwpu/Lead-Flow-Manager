@@ -1,0 +1,82 @@
+That sounds solid. This reads like a real implementation, not a fake UI patch.
+
+What stands out as good:
+
+* upload is a real backend endpoint
+* send pipeline was extended instead of bypassed
+* validation covers text-or-media required
+* composer is wired to the actual upload/send flow
+* optimistic outbound media rendering was considered
+* inbound and outbound paths are intentionally separated where needed
+
+The main thing I would ask Replit to verify now is the last-mile production behavior, not the code summary.
+
+Send him this follow-up:
+
+Please now verify and confirm these exact items with real tests, not just code inspection:
+
+1. Twilio WhatsApp
+
+* text-only still sends
+* image sends
+* PDF sends
+* image + caption sends
+* audio sends if supported by current adapter logic
+* video sends if supported by current adapter logic
+
+2. Meta WhatsApp
+
+* image sends successfully by public URL
+* PDF/document sends successfully
+* audio/video sends successfully if implemented
+* caption only attaches for supported message types
+* correct message type is chosen from MIME type
+
+3. Public media delivery
+
+* the returned upload URL is actually reachable by external services
+* Twilio can fetch it successfully
+* Meta can fetch it successfully
+* no localhost/private/auth-protected URLs are being returned in any environment
+
+4. Database persistence
+
+* outbound rows correctly save:
+    * media_url
+    * media_type
+    * media_filename
+* message direction stays outbound
+* normal sent/failed status behavior still works
+
+5. Failure handling
+
+* failed upload does not create fake sent message
+* failed provider send does not remain stuck as successful optimistic message
+* user sees a usable error message
+
+6. Mobile behavior
+
+* attachment picker works on mobile Safari and Chrome
+* preview strip works correctly on mobile
+* send button works with media-only and media+caption
+* no layout break in the composer area
+
+7. Refresh / history
+
+* outbound media is still visible after reload
+* old inbound media still renders correctly
+* no regression in existing text messages
+
+8. Security / cleanup
+
+* uploaded filenames are sanitized
+* unsupported MIME/file extensions are rejected server-side
+* max 16 MB is enforced server-side
+* confirm whether uploaded files need cleanup/retention handling later
+
+Also please tell me:
+
+* where files are physically stored right now
+* what public base URL is used in production
+* whether this will survive deployment/restarts
+* whether we should move uploads to object storage/CDN next

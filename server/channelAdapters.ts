@@ -92,6 +92,7 @@ class WhatsAppAdapter implements ChannelAdapter {
     content: string;
     contentType?: string;
     mediaUrl?: string;
+    mediaFilename?: string;
   }): Promise<{ success: boolean; externalMessageId?: string; error?: string }> {
     try {
       const conversation = await storage.getConversation(params.conversationId);
@@ -119,7 +120,7 @@ class WhatsAppAdapter implements ChannelAdapter {
           : params.contentType === "document" ? "document"
           : "image") as "image" | "video" | "audio" | "document";
         const result = await sendWhatsAppMedia(
-          conversation.userId, phone, params.mediaUrl!, mediaType, params.content, fromNumber
+          conversation.userId, phone, params.mediaUrl!, mediaType, params.content || undefined, fromNumber, params.mediaFilename
         );
         console.log(`[WhatsAppAdapter] media sent via ${result.provider} to ${phone}`);
         if (!result.success) return { success: false, error: result.error };
@@ -150,6 +151,7 @@ class SMSAdapter implements ChannelAdapter {
     content: string;
     contentType?: string;
     mediaUrl?: string;
+    mediaFilename?: string;
   }): Promise<{ success: boolean; externalMessageId?: string; error?: string }> {
     try {
       const conversation = await storage.getConversation(params.conversationId);
@@ -210,6 +212,7 @@ class WebChatAdapter implements ChannelAdapter {
     content: string;
     contentType?: string;
     mediaUrl?: string;
+    mediaFilename?: string;
   }): Promise<{ success: boolean; externalMessageId?: string; error?: string }> {
     return {
       success: true,
@@ -229,6 +232,7 @@ class InstagramAdapter implements ChannelAdapter {
     content: string;
     contentType?: string;
     mediaUrl?: string;
+    mediaFilename?: string;
   }): Promise<{ success: boolean; externalMessageId?: string; error?: string; windowStatus?: WindowStatus }> {
     try {
       const conversation = await storage.getConversation(params.conversationId);
@@ -337,6 +341,7 @@ class FacebookAdapter implements ChannelAdapter {
     content: string;
     contentType?: string;
     mediaUrl?: string;
+    mediaFilename?: string;
   }): Promise<{ success: boolean; externalMessageId?: string; error?: string; windowStatus?: WindowStatus }> {
     try {
       const conversation = await storage.getConversation(params.conversationId);
@@ -445,6 +450,7 @@ class TiktokAdapter implements ChannelAdapter {
     content: string;
     contentType?: string;
     mediaUrl?: string;
+    mediaFilename?: string;
   }): Promise<{ success: boolean; externalMessageId?: string; error?: string }> {
     return { 
       success: false, 
@@ -464,6 +470,7 @@ class TelegramAdapter implements ChannelAdapter {
     content: string;
     contentType?: string;
     mediaUrl?: string;
+    mediaFilename?: string;
   }): Promise<{ success: boolean; externalMessageId?: string; error?: string }> {
     try {
       const conversation = await storage.getConversation(params.conversationId);

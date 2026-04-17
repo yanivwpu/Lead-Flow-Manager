@@ -22,6 +22,7 @@ export interface ChannelAdapter {
     content: string;
     contentType?: string;
     mediaUrl?: string;
+    mediaFilename?: string;
   }): Promise<{ success: boolean; externalMessageId?: string; error?: string }>;
   
   isAvailable(userId: string): Promise<boolean>;
@@ -118,6 +119,7 @@ class ChannelService {
       content,
       contentType,
       mediaUrl,
+      mediaFilename,
     });
 
     const preview = content || (mediaUrl ? `[${contentType || 'media'}]` : '');
@@ -179,6 +181,7 @@ class ChannelService {
         content,
         contentType,
         mediaUrl,
+        mediaFilename,
       });
 
       if (fallbackResult.success) {
@@ -234,6 +237,7 @@ class ChannelService {
       content: string;
       contentType?: string;
       mediaUrl?: string;
+      mediaFilename?: string;
     }
   ): Promise<{ success: boolean; externalMessageId?: string; error?: string }> {
     const adapter = this.adapters.get(channel);

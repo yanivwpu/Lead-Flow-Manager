@@ -18,6 +18,22 @@ const ALLOWED_MIME_TYPES: Record<string, string> = {
   "video/mp4":         "video",
 };
 
+// Derive a safe extension from the MIME type — never trust the original filename extension
+const MIME_TO_EXT: Record<string, string> = {
+  "image/jpeg":        ".jpg",
+  "image/jpg":         ".jpg",
+  "image/png":         ".png",
+  "image/webp":        ".webp",
+  "application/pdf":   ".pdf",
+  "audio/mpeg":        ".mp3",
+  "audio/mp3":         ".mp3",
+  "audio/m4a":         ".m4a",
+  "audio/x-m4a":       ".m4a",
+  "audio/ogg":         ".ogg",
+  "audio/opus":        ".ogg",
+  "video/mp4":         ".mp4",
+};
+
 export function registerMediaRoutes(app: Express): void {
   const uploadDir = path.join(process.cwd(), "uploads");
   if (!fs.existsSync(uploadDir)) {
@@ -29,7 +45,8 @@ export function registerMediaRoutes(app: Express): void {
       destination: uploadDir,
       filename: (_req, file, cb) => {
         const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-        cb(null, uniqueSuffix + path.extname(file.originalname));
+        const ext = MIME_TO_EXT[file.mimetype] || ".bin";
+        cb(null, uniqueSuffix + ext);
       },
     }),
     limits: { fileSize: 16 * 1024 * 1024 },
@@ -42,7 +59,17 @@ export function registerMediaRoutes(app: Express): void {
     },
   });
 
-  app.post("/api/media/upload", upload.single("file"), async (req: any, res) => {
+  app.post("/api/media/upload", (req: any, res: any, next: any) => {
+    upload.single("file")(req, res, (err: any) => {
+      if (err) {
+        if (err.code === "LIMIT_FILE_SIZE") {
+          return res.status(413).json({ error: "File too large. Maximum size is 16 MB." });
+        }
+        return res.status(400).json({ error: err.message || "Upload error" });
+      }
+      next();
+    });
+  }, async (req: any, res) => {
     try {
       if (!req.user) {
         return res.status(401).json({ error: "Unauthorized" });
