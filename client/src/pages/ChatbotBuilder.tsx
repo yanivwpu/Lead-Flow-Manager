@@ -303,7 +303,6 @@ export function ChatbotBuilder() {
     onSuccess: (updated) => {
       queryClient.invalidateQueries({ queryKey: ["/api/chatbot-flows"] });
       if (selectedFlow?.id === updated.id) setSelectedFlow(updated);
-      toast({ title: updated.isActive ? "Flow activated" : "Flow set to draft" });
     },
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
@@ -387,7 +386,6 @@ export function ChatbotBuilder() {
     });
     setSelectedStepId(newNode.id);
     setUnsavedChanges(true);
-    toast({ title: "Step added", description: meta?.label });
   };
 
   const updateStep = (nodeId: string, updates: Partial<ChatbotNode["data"]>) => {
@@ -428,7 +426,6 @@ export function ChatbotBuilder() {
     if (selectedFlow.triggerKeywords.includes(clean)) return;
     setSelectedFlow({ ...selectedFlow, triggerKeywords: [...selectedFlow.triggerKeywords, clean] });
     setUnsavedChanges(true);
-    toast({ title: "Trigger keyword added" });
   };
 
   const removeKeyword = (kw: string) => {
@@ -794,7 +791,6 @@ export function ChatbotBuilder() {
                       onCheckedChange={(checked) => {
                         setSelectedFlow({ ...selectedFlow, triggerOnNewChat: checked });
                         setUnsavedChanges(true);
-                        toast({ title: checked ? "Trigger enabled" : "Trigger disabled" });
                       }}
                       data-testid="switch-trigger-new-chat"
                     />
