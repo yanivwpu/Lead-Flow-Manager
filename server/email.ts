@@ -629,7 +629,8 @@ export async function sendTrialCheckinEmail(firstName: string, email: string): P
   });
 }
 
-export async function sendFollowUpReminderEmail(email: string, chatName: string, followUp: string, notes: string, chatId: string): Promise<boolean> {
+export async function sendFollowUpReminderEmail(email: string, chatName: string, followUp: string, notes: string, linkPath: string): Promise<boolean> {
+  const href = linkPath.startsWith('http') ? linkPath : `${APP_URL}${linkPath}`;
   return sendEmail({
     to: email,
     subject: `Follow-up Reminder: ${chatName}`,
@@ -655,7 +656,7 @@ export async function sendFollowUpReminderEmail(email: string, chatName: string,
                 ${notes ? `<p style="margin: 8px 0; color: #475569; font-size: 15px;"><strong>Notes:</strong> ${notes}</p>` : ''}
               </div>
               <div style="text-align: center;">
-                <a href="${APP_URL}/chats/${chatId}" style="display: inline-block; background: #059669; color: white; padding: 14px 32px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px; margin: 24px 0;">View Chat</a>
+                <a href="${href}" style="display: inline-block; background: #059669; color: white; padding: 14px 32px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px; margin: 24px 0;">View Contact</a>
               </div>
             </div>
             <div style="text-align: center; padding: 24px 30px; background: #f8fafc; border-top: 1px solid #e2e8f0;">

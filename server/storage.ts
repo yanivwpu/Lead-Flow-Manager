@@ -72,6 +72,7 @@ export interface IStorage {
   
   // Notification methods
   getDueFollowUps(): Promise<Chat[]>;
+  getDueContactFollowUps(): Promise<Contact[]>;
   
   // Phone registration methods
   getRegisteredPhones(userId: string): Promise<RegisteredPhone[]>;
@@ -372,6 +373,19 @@ export class DbStorage implements IStorage {
         and(
           isNotNull(chats.followUpDate),
           lte(chats.followUpDate, now)
+        )
+      );
+  }
+
+  async getDueContactFollowUps(): Promise<Contact[]> {
+    const now = new Date();
+    return await db
+      .select()
+      .from(contacts)
+      .where(
+        and(
+          isNotNull(contacts.followUpDate),
+          lte(contacts.followUpDate, now)
         )
       );
   }

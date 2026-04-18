@@ -2,7 +2,7 @@ import webPush from 'web-push';
 import cron from 'node-cron';
 import { storage } from './storage';
 import { sendWhatsAppMessage } from './whatsappService';
-import type { Chat, User } from '@shared/schema';
+import type { Chat, User, Contact } from '@shared/schema';
 
 // Generate VAPID keys if not set
 // Run: npx web-push generate-vapid-keys
@@ -31,64 +31,58 @@ async function sendPushNotification(subscription: any, payload: string) {
   }
 }
 
-async function sendEmailNotification(chatId: string, email: string, chatName: string, followUp: string, notes: string) {
+async function sendEmailNotification(linkUrl: string, email: string, contactName: string, followUp: string, notes: string) {
   try {
     const { sendFollowUpReminderEmail } = await import('./email');
-    await sendFollowUpReminderEmail(email, chatName, followUp, notes, chatId);
+    await sendFollowUpReminderEmail(email, contactName, followUp, notes, linkUrl);
   } catch (error) {
     console.error('Error sending email notification:', error);
   }
 }
 
+async function notify(user: User, contactName: string, followUpText: string, linkUrl: string, notes: string) {
+  const body = `Follow-up reminder: ${contactName} — ${followUpText}`;
+  if (user.pushEnabled && user.pushSubscription) {
+    await sendPushNotification(
+      user.pushSubscription,
+      JSON.stringify({
+        title: 'Follow-up Reminder',
+        body,
+        icon: '/pwa-icon.png',
+        badge: '/favicon.png',
+        data: { url: linkUrl },
+      })
+    );
+  }
+  if (user.emailEnabled) {
+    await sendEmailNotification(linkUrl, user.email, contactName, followUpText, notes);
+  }
+}
+
 async function checkFollowUps() {
   try {
-    const dueFollowUps = await storage.getDueFollowUps();
-    
-    if (dueFollowUps.length === 0) {
-      return;
+    // ── Source 1: legacy chats table ──────────────────────────────────────────
+    const dueChats = await storage.getDueFollowUps();
+    if (dueChats.length > 0) {
+      console.log(`[FollowUp] ${dueChats.length} due from chats`);
+      for (const chat of dueChats) {
+        const user = await storage.getUser(chat.userId);
+        if (!user) continue;
+        await notify(user, chat.name, chat.followUp || '', `/chats/${chat.id}`, chat.notes || '');
+        await storage.updateChat(chat.id, { followUp: null, followUpDate: null });
+      }
     }
 
-    console.log(`Found ${dueFollowUps.length} due follow-ups`);
-
-    for (const chat of dueFollowUps) {
-      const user = await storage.getUser(chat.userId);
-      if (!user) continue;
-
-      const message = `Follow-up reminder: ${chat.name} - ${chat.followUp}`;
-      
-      // Send push notification if enabled
-      if (user.pushEnabled && user.pushSubscription) {
-        await sendPushNotification(
-          user.pushSubscription,
-          JSON.stringify({
-            title: 'Follow-up Reminder',
-            body: message,
-            icon: '/icon-192x192.png',
-            badge: '/icon-192x192.png',
-            data: {
-              chatId: chat.id,
-              url: `/chats/${chat.id}`
-            }
-          })
-        );
+    // ── Source 2: contacts table ───────────────────────────────────────────────
+    const dueContacts = await storage.getDueContactFollowUps();
+    if (dueContacts.length > 0) {
+      console.log(`[FollowUp] ${dueContacts.length} due from contacts`);
+      for (const contact of dueContacts) {
+        const user = await storage.getUser(contact.userId);
+        if (!user) continue;
+        await notify(user, contact.name, contact.followUp || '', `/contacts/${contact.id}`, contact.notes || '');
+        await storage.updateContact(contact.id, { followUp: null, followUpDate: null });
       }
-
-      // Send email notification if enabled
-      if (user.emailEnabled) {
-        await sendEmailNotification(
-          chat.id,
-          user.email,
-          chat.name,
-          chat.followUp || '',
-          chat.notes || ''
-        );
-      }
-
-      // Clear the follow-up after sending notification
-      await storage.updateChat(chat.id, {
-        followUp: null,
-        followUpDate: null
-      });
     }
   } catch (error) {
     console.error('Error checking follow-ups:', error);
