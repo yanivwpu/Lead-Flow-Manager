@@ -1,0 +1,434 @@
+We need a **production readiness checklist** for the new Flow Builder before we treat it as real-user ready. The UI direction is good, but I do **not** want to assume that a nice builder means the backend, persistence, and execution engine are safe for production.
+
+Please go through this checklist and confirm each item with actual testing, not assumptions.
+
+## Goal
+
+Validate that the Flow Builder is not only visually complete, but also:
+
+* correctly connected to the database
+* stable after refresh/reload
+* safe for real user execution
+* reliable when flows actually run
+* isolated per account/user
+* ready for real-world usage
+
+---
+
+## 1. Database persistence
+
+Confirm that flows are fully persisted in the database.
+
+Test and verify:
+
+* creating a flow saves to DB
+* editing flow name saves to DB
+* editing description saves to DB
+* changing draft/active status saves to DB
+* trigger settings save to DB
+* all step data saves to DB
+* step order saves to DB
+* deleting a step persists correctly
+* deleting a flow persists correctly
+* duplicated flows persist correctly
+
+### Required proof
+
+Please test:
+
+1. Create a flow
+2. Add multiple different steps
+3. Save
+4. Refresh the page
+5. Confirm everything reloads exactly the same from DB
+
+If anything disappears, resets, or changes unexpectedly after refresh, it is not production ready.
+
+---
+
+## 2. Data model validation
+
+Please confirm the DB structure properly supports the builder.
+
+Each flow should persist at minimum:
+
+* id
+* user/account id
+* name
+* description
+* status (draft/active)
+* trigger config
+* createdAt / updatedAt
+
+Each step should persist at minimum:
+
+* id
+* flow id
+* type
+* title or label if applicable
+* order/index
+* config payload / structured fields
+* createdAt / updatedAt
+
+Please verify that:
+
+* steps are linked correctly to the parent flow
+* step ordering is stable
+* no orphan records are created
+* deleting a flow handles child steps correctly
+
+---
+
+## 3. Duplicate Flow behavior
+
+Fix and verify Duplicate Flow fully.
+
+Expected behavior:
+
+* Duplicate Flow creates a full copy
+* copies:
+
+  * name
+  * description
+  * trigger settings
+  * all steps
+  * all step configurations
+  * step order
+* new name:
+
+  * `{Original Name} (Copy)`
+* duplicated flow starts as draft/inactive
+* sidebar refreshes
+* new copied flow is automatically selected/opened
+* success message appears
+* failure shows visible error
+
+Please test duplicate end-to-end with real DB persistence.
+
+If Duplicate Flow is not fully working, remove it from the UI until complete.
+
+---
+
+## 4. Save behavior and unsaved state
+
+Confirm the save system is real and reliable.
+
+Verify:
+
+* unsaved badge appears when changes are made
+* save button becomes enabled only when needed
+* clicking Save persists changes
+* unsaved badge clears after successful save
+* failed save shows error
+* refresh before saving does not pretend data was saved
+
+Please ensure there is no fake “saved-looking” UI if the DB write did not actually succeed.
+
+---
+
+## 5. Flow execution trigger logic
+
+The builder UI is only useful if backend trigger logic actually works.
+
+Please test that flows truly start when configured triggers are met.
+
+### Test cases
+
+1. Start on new conversation = ON
+
+   * New inbound conversation arrives
+   * Flow starts
+
+2. Keyword trigger only
+
+   * Inbound message contains matching keyword
+   * Flow starts
+
+3. Both enabled
+
+   * Flow starts appropriately based on configured logic
+
+4. No trigger set
+
+   * Flow does not run
+
+5. Draft/inactive flow
+
+   * Flow does not run even if trigger matches
+
+Please test with real inbound messages where possible.
+
+---
+
+## 6. Flow execution engine
+
+This is the most important part.
+
+Please confirm that the execution engine can actually process saved flows correctly.
+
+### Test step types individually
+
+* Send Message
+* Ask Question
+* Wait
+* Action
+
+### Required verification
+
+#### Send Message
+
+* sends correct content
+* supports saved message types correctly
+* does not send blank or broken payloads
+
+#### Ask Question
+
+* stores and executes correct question config
+* behaves correctly in actual conversation flow
+
+#### Wait
+
+* delay is honored correctly
+* next step executes after delay
+* wait still works if server restarts or process reloads
+
+  * this is very important
+
+#### Action
+
+Confirm each supported action actually works:
+
+* Add Tag
+* Set Status
+* Assign to Team
+* Move Pipeline Stage
+
+If any action is currently only UI-level and not actually wired, mark it clearly and do not expose it as production-ready.
+
+---
+
+## 7. Step execution order
+
+Please verify step order is always respected.
+
+Test:
+
+* create flow with 4–5 steps
+* save
+* run flow
+* confirm execution happens in exact correct order
+
+Also test:
+
+* delete middle step
+* reorder if supported
+* duplicate flow
+* save and reload
+
+We need to ensure order is deterministic and stable.
+
+---
+
+## 8. Account/user isolation
+
+Critical for production.
+
+Please verify:
+
+* one user/account only sees their own flows
+* one user/account cannot trigger or load another account’s flows
+* flow execution is scoped to the correct account
+* actions apply only to that account’s contacts/conversations
+
+This must be tested explicitly. No assumptions.
+
+---
+
+## 9. Draft vs active safety
+
+The Draft/Active toggle must control real execution, not just UI appearance.
+
+Please verify:
+
+* Draft/inactive flows never execute
+* Active flows execute when matching triggers occur
+* toggling state persists correctly
+* toggling state survives refresh and reload
+
+---
+
+## 10. Validation and guardrails
+
+Please add or verify guardrails so broken flows cannot silently exist.
+
+Examples:
+
+* cannot activate a flow with no trigger
+* cannot save invalid step config without warning
+* cannot run a message step with empty content
+* invalid action config should show error
+
+The UI should guide the user before a broken flow reaches runtime.
+
+---
+
+## 11. Error handling
+
+Please verify runtime and save errors are handled properly.
+
+Need visible handling for:
+
+* failed save
+* failed duplicate
+* invalid trigger config
+* invalid step config
+* failed step execution
+* missing referenced data (team member, tag, pipeline stage, etc.)
+
+At minimum:
+
+* useful logs on server
+* visible UI errors where relevant
+* no silent failures
+
+---
+
+## 12. Logging and observability
+
+Please add or confirm server logs for execution.
+
+Examples:
+
+* flow started
+* trigger matched
+* step 1 executed
+* wait scheduled
+* action executed
+* flow completed
+* flow failed
+
+Example format:
+
+* `[FlowEngine] Flow {id} started`
+* `[FlowEngine] Step 2 Send Message executed`
+* `[FlowEngine] Step 3 Wait scheduled for 10 minutes`
+* `[FlowEngine] Flow {id} completed`
+
+This is necessary for debugging real user issues.
+
+---
+
+## 13. Wait step reliability
+
+This deserves special testing.
+
+Please verify:
+
+* wait is not only client-side
+* wait survives browser refresh
+* wait survives user leaving the page
+* wait survives server restart or process restart, if architecture supports that
+* delayed next step still executes correctly
+
+If waits currently depend on the browser session or in-memory frontend state, this is not production safe.
+
+---
+
+## 14. Test Flow button
+
+Please confirm what Test Flow actually does.
+
+We need one of these:
+
+* true simulation mode
+* or execution on a selected test contact/conversation
+
+If Test Flow is currently only a button with no real behavior, do not treat it as complete.
+
+Please document current behavior clearly.
+
+---
+
+## 15. Real-world QA scenarios
+
+Please run realistic end-to-end tests, not just single-click UI checks.
+
+### Scenario A
+
+* Create welcome flow
+* Start on new conversation ON
+* Step 1 Send Message
+* Step 2 Wait 1 minute
+* Step 3 Assign to Team
+* Save
+* Trigger with real inbound conversation
+* Confirm all steps execute correctly
+
+### Scenario B
+
+* Create keyword-trigger flow
+* Trigger keyword = pricing
+* Step 1 Send Message
+* Step 2 Add Tag
+* Save
+* Send inbound message containing keyword
+* Confirm correct execution
+
+### Scenario C
+
+* Duplicate a flow
+* Edit copied version
+* Save
+* Refresh
+* Confirm original and copy remain separate and correct
+
+### Scenario D
+
+* Set flow to Draft
+* Trigger matching inbound message
+* Confirm flow does not execute
+
+---
+
+## 16. UI trust checks
+
+Please verify the interface always reflects real backend state.
+
+Examples:
+
+* Save button reflects actual saved state
+* flow list reflects real DB values after create/edit/delete/duplicate
+* status toggle reflects actual saved state
+* no stale UI after actions
+
+The UI should never give a false impression that an action succeeded if backend failed.
+
+---
+
+## 17. Production readiness decision
+
+After testing all of the above, please classify the builder honestly as one of these:
+
+1. **Production ready**
+2. **Beta / early access**
+3. **UI complete but backend execution incomplete**
+
+Do not mark it production ready unless the full persistence + execution path is truly tested.
+
+---
+
+## Deliverable I want back
+
+Please give me a structured report with:
+
+### A. What is fully working
+
+### B. What is partially working
+
+### C. What is UI-only and not yet wired
+
+### D. What bugs were found
+
+### E. What must be fixed before real users use it
+
+Do not give a vague “it should work” answer. I want actual validation based on code + testing.

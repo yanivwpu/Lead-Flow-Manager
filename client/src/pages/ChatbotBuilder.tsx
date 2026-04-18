@@ -7,7 +7,7 @@ import {
   X, CheckCircle2, Image, Video,
   FileText, ListOrdered, Upload, MoreHorizontal,
   Play, Search, Settings2, Copy,
-  ChevronUp, ChevronDown, MousePointer2, ArrowDown
+  ChevronUp, ChevronDown, MousePointer2, ArrowDown, Info
 } from "lucide-react";
 import { useUpload } from "@/hooks/use-upload";
 import { Button } from "@/components/ui/button";
@@ -516,7 +516,22 @@ export function ChatbotBuilder() {
           <div className="flex items-center gap-2 flex-shrink-0">
             {/* Status toggle */}
             <button
-              onClick={() => toggleFlowMutation.mutate({ id: selectedFlow.id, isActive: !selectedFlow.isActive })}
+              onClick={() => {
+                const goingActive = !selectedFlow.isActive;
+                if (goingActive) {
+                  const hasKeywords = (selectedFlow.triggerKeywords as string[])?.length > 0;
+                  const hasNewChat = selectedFlow.triggerOnNewChat;
+                  if (!hasKeywords && !hasNewChat) {
+                    toast({
+                      title: "No trigger configured",
+                      description: "Set at least one keyword or enable 'Start on new conversation' before activating this flow.",
+                      variant: "destructive",
+                    });
+                    return;
+                  }
+                }
+                toggleFlowMutation.mutate({ id: selectedFlow.id, isActive: goingActive });
+              }}
               className={cn(
                 "flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all",
                 selectedFlow.isActive
@@ -529,10 +544,25 @@ export function ChatbotBuilder() {
               {selectedFlow.isActive ? "Active" : "Draft"}
             </button>
 
-            <Button variant="outline" size="sm" className="h-8 text-xs font-medium gap-1.5 text-gray-600" data-testid="button-test-flow">
-              <Play className="h-3 w-3" />
-              Test Flow
-            </Button>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="sm" className="h-8 text-xs font-medium gap-1.5 text-gray-600" data-testid="button-test-flow">
+                  <Play className="h-3 w-3" />
+                  Test Flow
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-72 p-4" side="bottom" align="end">
+                <div className="flex gap-2.5">
+                  <Info className="h-4 w-4 text-amber-500 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="text-sm font-semibold text-gray-800 mb-1">Test mode coming soon</p>
+                    <p className="text-xs text-gray-500 leading-relaxed">
+                      To test this flow today, activate it and send a real message from a test contact that matches your trigger keyword — or enable "Start on new conversation" and open a fresh chat.
+                    </p>
+                  </div>
+                </div>
+              </PopoverContent>
+            </Popover>
 
             <Button
               size="sm"
@@ -1281,6 +1311,14 @@ export function ChatbotBuilder() {
                     <span className="text-sm text-gray-500 font-medium">minutes</span>
                   </div>
                   <p className="text-[11px] text-gray-400 mt-2 leading-relaxed">The flow will pause before continuing to the next step.</p>
+                  {(selectedStep.data.delayMinutes || 0) > 5 && (
+                    <div className="flex gap-2 mt-2.5 p-2.5 bg-amber-50 rounded-lg border border-amber-200">
+                      <AlertCircle className="h-3.5 w-3.5 text-amber-500 mt-0.5 flex-shrink-0" />
+                      <p className="text-[11px] text-amber-700 leading-relaxed">
+                        <strong>Maximum is 5 minutes.</strong> Delays longer than 5 minutes are automatically capped. Server-side waits do not survive a process restart.
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
 
