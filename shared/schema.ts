@@ -1349,3 +1349,20 @@ export const ghlEventDedup = pgTable("ghl_event_dedup", {
 export const insertGhlEventDedupSchema = createInsertSchema(ghlEventDedup).omit({ id: true, processedAt: true });
 export type GhlEventDedup = typeof ghlEventDedup.$inferSelect;
 export type InsertGhlEventDedup = z.infer<typeof insertGhlEventDedupSchema>;
+
+// ─── Appointments (multiple per contact) ──────────────────────────────────────
+export const appointments = pgTable("appointments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  contactId: varchar("contact_id").notNull(),
+  contactName: text("contact_name").notNull().default(""),
+  appointmentType: varchar("appointment_type").notNull().default("Appointment"),
+  appointmentDate: timestamp("appointment_date").notNull(),
+  title: text("title").notNull().default(""),
+  status: varchar("status").notNull().default("scheduled"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertAppointmentSchema = createInsertSchema(appointments).omit({ id: true, createdAt: true });
+export type Appointment = typeof appointments.$inferSelect;
+export type InsertAppointment = z.infer<typeof insertAppointmentSchema>;

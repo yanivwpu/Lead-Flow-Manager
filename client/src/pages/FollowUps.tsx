@@ -22,6 +22,20 @@ interface Chat {
   pipelineStage: string;
   messages: any[];
   lastMessageDirection?: string;
+  appointmentId?: string;
+  contactId?: string;
+  appointmentType?: string;
+  isAppointment?: boolean;
+}
+
+interface AppointmentRecord {
+  id: string;
+  contactId: string;
+  contactName: string;
+  appointmentType: string;
+  appointmentDate: string;
+  title: string;
+  status: string;
 }
 
 interface InboxItem {
@@ -221,7 +235,7 @@ function TaskListItem({
           )}
         </p>
         <p className="text-sm text-gray-500 truncate" data-testid={`text-lastmessage-${chat.id}`}>
-          Last message: "{chat.lastMessage}"
+          Last message: {chat.lastMessage}
         </p>
         {chat.notes && (
           <p className="text-xs text-gray-400 truncate mt-1">
@@ -559,9 +573,12 @@ function TaskCalendarView({
                         draggedTask?.id === task.id && "opacity-50"
                       )}
                       data-testid={`calendar-task-${task.id}`}
-                      title={task.name}
+                      title={task.isAppointment ? `${task.appointmentType} · ${task.name}` : (task.followUp ? `${task.name} · ${task.followUp}` : task.name)}
                     >
-                      {isMobile ? task.name.split(' ')[0] : task.name}
+                      {task.isAppointment
+                        ? (isMobile ? task.appointmentType! : `${task.appointmentType} · ${task.name}`)
+                        : (isMobile ? task.name.split(' ')[0] : (task.followUp ? `${task.name} · ${task.followUp.split(' · ')[0]}` : task.name))
+                      }
                     </div>
                   );
                 })}
@@ -630,6 +647,11 @@ export function FollowUps() {
   });
 
   const isLoading = isDemoUser ? chatsLoading : inboxLoading;
+
+  const { data: appointmentsData = [] } = useQuery<AppointmentRecord[]>({
+    queryKey: ['/api/appointments'],
+    enabled: !!user && !isDemoUser,
+  });
 
   // Map /api/inbox items to the Chat shape used by this page
   const chats = useMemo<Chat[]>(() => {
@@ -749,13 +771,40 @@ export function FollowUps() {
     return followUps.filter(t => !aiRecommendedIds.has(t.id));
   }, [followUps, aiRecommendedTasks]);
 
+  const appointmentTasks = useMemo<Chat[]>(() => {
+    return appointmentsData.map(appt => ({
+      id: appt.id,
+      name: appt.contactName,
+      avatar: '',
+      lastMessage: '',
+      time: '',
+      unread: 0,
+      tag: '',
+      followUp: appt.appointmentType,
+      followUpDate: appt.appointmentDate,
+      notes: '',
+      pipelineStage: '',
+      messages: [],
+      appointmentId: appt.id,
+      contactId: appt.contactId,
+      appointmentType: appt.appointmentType,
+      isAppointment: true,
+    }));
+  }, [appointmentsData]);
+
+  const calendarTasks = useMemo<Chat[]>(() => {
+    const followUpEvents = followUps.filter(f => !f.isAppointment);
+    return [...followUpEvents, ...appointmentTasks];
+  }, [followUps, appointmentTasks]);
+
   const handleMarkDone = async (e: React.MouseEvent, chatId: string) => {
     e.stopPropagation();
     await clearFollowUpMutation.mutateAsync(chatId);
   };
 
   const handleRowClick = (chatId: string) => {
-    setLocation(`/app/inbox/${chatId}`);
+    const appt = appointmentsData.find(a => a.id === chatId);
+    setLocation(`/app/inbox/${appt ? appt.contactId : chatId}`);
   };
 
   const handleReschedule = (chatId: string, newDate: Date) => {
@@ -919,7 +968,7 @@ export function FollowUps() {
           </div>
         ) : viewMode === 'calendar' ? (
           <TaskCalendarView
-            tasks={followUps}
+            tasks={calendarTasks}
             onTaskClick={handleRowClick}
             onReschedule={handleReschedule}
             isMobile={isMobile}

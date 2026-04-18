@@ -39,6 +39,7 @@ import {
   type TemplateAsset, type InsertTemplateAsset,
   type UserTemplateData, type InsertUserTemplateData,
   type ContactNote, type InsertContactNote,
+  type Appointment, type InsertAppointment,
   type GhlEventDedup, type InsertGhlEventDedup,
   type GhlSyncFailure, type InsertGhlSyncFailure, ghlSyncFailures,
   aiSettings, aiBusinessKnowledge, aiUsage, aiLeadScores,
@@ -47,7 +48,7 @@ import {
   templateInstalls, templateAssets, userTemplateData, ghlEventDedup
 } from "@shared/schema";
 import { db } from "../drizzle/db";
-import { users, chats, registeredPhones, messageUsage, conversationWindows, teamMembers, workflows, workflowExecutions, recurringReminders, webhooks, webhookDeliveries, integrations, messageTemplates, templateSends, dripCampaigns, dripSteps, dripEnrollments, dripSends, chatbotFlows, chatbotSessions, salespeople, demoBookings, salesConversions, adminSettings, contacts, conversations, messages, activityEvents, channelSettings, supportTickets, partners, commissions, agreementAcceptances, contactNotes, type InsertConversationWindow, type ConversationWindow } from "@shared/schema";
+import { users, chats, registeredPhones, messageUsage, conversationWindows, teamMembers, workflows, workflowExecutions, recurringReminders, webhooks, webhookDeliveries, integrations, messageTemplates, templateSends, dripCampaigns, dripSteps, dripEnrollments, dripSends, chatbotFlows, chatbotSessions, salespeople, demoBookings, salesConversions, adminSettings, contacts, conversations, messages, activityEvents, channelSettings, supportTickets, partners, commissions, agreementAcceptances, contactNotes, appointments, type InsertConversationWindow, type ConversationWindow } from "@shared/schema";
 import { eq, and, lte, sql, isNotNull, isNull, asc, desc, gte, sum, gt, or, like, ilike } from "drizzle-orm";
 
 export interface IStorage {
@@ -196,6 +197,10 @@ export interface IStorage {
   addContactNote(data: InsertContactNote): Promise<ContactNote>;
   getContactNoteById(noteId: string): Promise<ContactNote | undefined>;
   deleteContactNote(noteId: string): Promise<boolean>;
+  createAppointment(data: InsertAppointment): Promise<Appointment>;
+  getAppointmentsByUser(userId: string): Promise<Appointment[]>;
+  getAppointmentsByContact(userId: string, contactId: string): Promise<Appointment[]>;
+  deleteAppointment(id: string): Promise<boolean>;
   
   // Conversation methods
   getConversations(userId: string, limit?: number): Promise<Conversation[]>;
@@ -1487,6 +1492,28 @@ export class DbStorage implements IStorage {
 
   async deleteContactNote(noteId: string): Promise<boolean> {
     const result = await db.delete(contactNotes).where(eq(contactNotes.id, noteId)).returning();
+    return result.length > 0;
+  }
+
+  async createAppointment(data: InsertAppointment): Promise<Appointment> {
+    const [appt] = await db.insert(appointments).values(data).returning();
+    return appt;
+  }
+
+  async getAppointmentsByUser(userId: string): Promise<Appointment[]> {
+    return await db.select().from(appointments)
+      .where(eq(appointments.userId, userId))
+      .orderBy(asc(appointments.appointmentDate));
+  }
+
+  async getAppointmentsByContact(userId: string, contactId: string): Promise<Appointment[]> {
+    return await db.select().from(appointments)
+      .where(and(eq(appointments.userId, userId), eq(appointments.contactId, contactId)))
+      .orderBy(asc(appointments.appointmentDate));
+  }
+
+  async deleteAppointment(id: string): Promise<boolean> {
+    const result = await db.delete(appointments).where(eq(appointments.id, id)).returning();
     return result.length > 0;
   }
 

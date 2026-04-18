@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Phone,
   Mail,
@@ -416,6 +416,19 @@ export function InboxLeadDetailsPanel({
   const [answeredCriteriaKeys, setAnsweredCriteriaKeys] = useState<Set<string>>(new Set());
   useEffect(() => { setAnsweredCriteriaKeys(new Set()); }, [contact.id]);
 
+  const queryClient = useQueryClient();
+
+  const { data: contactAppointments = [] } = useQuery<Array<{
+    id: string;
+    appointmentType: string;
+    appointmentDate: string;
+    title: string;
+    status: string;
+  }>>({
+    queryKey: [`/api/contacts/${contact.id}/appointments`],
+    enabled: !!contact.id,
+  });
+
   // Business knowledge — used to drive qualifying questions in the Copilot panel
   const { data: businessKnowledge } = useQuery<{
     qualifyingQuestions?: Array<{ key?: string; label?: string; question: string; required?: boolean }>;
@@ -814,16 +827,25 @@ export function InboxLeadDetailsPanel({
                 </button>
               </div>
               {bookingConfirmed ? (
-                <div className="flex flex-col items-center gap-1.5 py-3">
-                  <CheckCircle2 className="w-5 h-5 text-emerald-500" />
-                  <p className="text-[12px] font-medium text-emerald-700">Appointment saved</p>
-                  {bookingDate && (
-                    <p className="text-[11px] text-gray-500">
-                      {format(bookingDate, 'MMM d')} at {formatTime24to12(bookingTime)} · {bookingType}
-                    </p>
+                <div className="flex flex-col gap-1.5 py-2">
+                  <div className="flex items-center gap-1.5">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                    <p className="text-[12px] font-semibold text-emerald-700">Appointment saved</p>
+                  </div>
+                  {contactAppointments.length > 0 && (
+                    <div className="mt-1 space-y-1">
+                      <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold">All appointments</p>
+                      {contactAppointments.map(a => (
+                        <div key={a.id} className="flex items-start gap-1 text-[11px] text-gray-600">
+                          <span className="text-purple-500 font-medium shrink-0">{a.appointmentType}</span>
+                          <span className="text-gray-400">·</span>
+                          <span>{format(new Date(a.appointmentDate), 'MMM d · h:mm a')}</span>
+                        </div>
+                      ))}
+                    </div>
                   )}
                   <button
-                    className="mt-1 text-[10px] text-gray-400 hover:text-gray-600 underline"
+                    className="mt-1 text-[10px] text-gray-400 hover:text-gray-600 underline self-start"
                     onClick={() => { setBookingConfirmed(false); setBookingDate(undefined); }}
                   >
                     Schedule another
@@ -831,6 +853,18 @@ export function InboxLeadDetailsPanel({
                 </div>
               ) : (
                 <div className="space-y-2">
+                  {contactAppointments.length > 0 && (
+                    <div className="pb-2 border-b border-gray-100">
+                      <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold mb-1">Upcoming</p>
+                      {contactAppointments.slice(0, 3).map(a => (
+                        <div key={a.id} className="flex items-center gap-1 text-[11px] text-gray-600">
+                          <span className="text-purple-500 font-medium">{a.appointmentType}</span>
+                          <span className="text-gray-300">·</span>
+                          <span>{format(new Date(a.appointmentDate), 'MMM d, h:mm a')}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   <div>
                     <p className="text-[10px] text-gray-400 mb-1 uppercase tracking-wide font-semibold">Type</p>
                     <div className="flex gap-1 flex-wrap">
@@ -878,16 +912,31 @@ export function InboxLeadDetailsPanel({
                   </div>
                   <button
                     disabled={!bookingDate}
-                    onClick={() => {
+                    onClick={async () => {
                     if (bookingDate) {
-                      // Build the appointment datetime from date + time picker
                       const [hh, mm] = bookingTime.split(':').map(Number);
                       const apptDate = new Date(bookingDate);
                       apptDate.setHours(hh, mm, 0, 0);
                       const dateStr = format(bookingDate, 'MMM d') + ' at ' + formatTime24to12(bookingTime);
                       const apptLabel = `${bookingType} · ${dateStr}`;
 
-                      // Save to contact as followUp + followUpDate so it appears in the Calendar
+                      try {
+                        await fetch('/api/appointments', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          credentials: 'include',
+                          body: JSON.stringify({
+                            contactId: contact.id,
+                            contactName: contact.name,
+                            appointmentType: bookingType,
+                            appointmentDate: apptDate.toISOString(),
+                            title: apptLabel,
+                          }),
+                        });
+                        queryClient.invalidateQueries({ queryKey: [`/api/contacts/${contact.id}/appointments`] });
+                        queryClient.invalidateQueries({ queryKey: ['/api/appointments'] });
+                      } catch (_) {}
+
                       onUpdateContact({
                         followUp: apptLabel,
                         followUpDate: apptDate.toISOString(),
@@ -1291,7 +1340,7 @@ export function InboxLeadDetailsPanel({
                             ) : (
                               <>
                                 <p className="text-[12px] text-gray-700 leading-relaxed">
-                                  "{aiCopilotReply}"
+                                  {aiCopilotReply}
                                 </p>
                                 <button
                                   onClick={() => {

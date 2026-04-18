@@ -445,6 +445,64 @@ export function registerContactRoutes(app: Express): void {
     }
   });
 
+  // ── Appointments ───────────────────────────────────────────────────────────
+  app.get("/api/appointments", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+      const appts = await storage.getAppointmentsByUser(req.user.id);
+      res.json(appts);
+    } catch (err) {
+      console.error("Error fetching appointments:", err);
+      res.status(500).json({ error: "Failed to fetch appointments" });
+    }
+  });
+
+  app.get("/api/contacts/:id/appointments", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+      const appts = await storage.getAppointmentsByContact(req.user.id, req.params.id);
+      res.json(appts);
+    } catch (err) {
+      console.error("Error fetching contact appointments:", err);
+      res.status(500).json({ error: "Failed to fetch appointments" });
+    }
+  });
+
+  app.post("/api/appointments", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+      const { contactId, contactName, appointmentType, appointmentDate, title } = req.body;
+      if (!contactId || !appointmentDate) {
+        return res.status(400).json({ error: "contactId and appointmentDate are required" });
+      }
+      const appt = await storage.createAppointment({
+        userId: req.user.id,
+        contactId,
+        contactName: contactName || "",
+        appointmentType: appointmentType || "Appointment",
+        appointmentDate: new Date(appointmentDate),
+        title: title || "",
+        status: "scheduled",
+      });
+      res.json(appt);
+    } catch (err) {
+      console.error("Error creating appointment:", err);
+      res.status(500).json({ error: "Failed to create appointment" });
+    }
+  });
+
+  app.delete("/api/appointments/:id", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+      const ok = await storage.deleteAppointment(req.params.id);
+      if (!ok) return res.status(404).json({ error: "Appointment not found" });
+      res.json({ success: true });
+    } catch (err) {
+      console.error("Error deleting appointment:", err);
+      res.status(500).json({ error: "Failed to delete appointment" });
+    }
+  });
+
   // Get activity timeline for a contact
   app.get("/api/contacts/:id/timeline", async (req, res) => {
     try {
