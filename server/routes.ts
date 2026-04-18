@@ -4083,10 +4083,10 @@ export async function registerRoutes(
       console.log(`[Resubscribe] Current page subscriptions for pageId=${pageId}: ${JSON.stringify(existingSubs)}`);
       console.log(`[Resubscribe] Subscribed fields: [${existingFields.join(',')}]`);
 
-      // 3. Re-subscribe with full set of fields
-      const subFields = channel === 'instagram'
-        ? "messages,messaging_seen,instagram_messages"
-        : "messages,messaging_postbacks,messaging_seen,messaging_referrals";
+      // 3. Re-subscribe — use only "messages" which is universally valid.
+      // Other fields (messaging_postbacks, messaging_referrals, etc.) require
+      // additional permissions that may not be granted for this app.
+      const subFields = "messages";
 
       const subResp = await fetch(`${GRAPH}/${pageId}/subscribed_apps`, {
         method: "POST",
