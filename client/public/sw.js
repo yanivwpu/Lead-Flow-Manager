@@ -1,4 +1,4 @@
-const CACHE_NAME = 'chatcrm-v5';
+const CACHE_NAME = 'chatcrm-v6';
 const urlsToCache = [
   '/favicon.png',
   '/pwa-icon.png'
@@ -24,6 +24,39 @@ self.addEventListener('activate', (event) => {
     })
   );
   self.clients.claim();
+});
+
+// Push notification handler
+self.addEventListener('push', (event) => {
+  let data = { title: 'WhachatCRM', body: 'You have a new notification' };
+  try {
+    data = event.data ? event.data.json() : data;
+  } catch (e) {}
+  event.waitUntil(
+    self.registration.showNotification(data.title || 'WhachatCRM', {
+      body: data.body || '',
+      icon: '/pwa-icon.png',
+      badge: '/favicon.png',
+      data: data.data || {},
+      vibrate: [200, 100, 200],
+    })
+  );
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const url = (event.notification.data && event.notification.data.url) ? event.notification.data.url : '/';
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
+      for (const client of windowClients) {
+        if (client.url.includes(self.location.origin) && 'focus' in client) {
+          client.navigate(url);
+          return client.focus();
+        }
+      }
+      return clients.openWindow(url);
+    })
+  );
 });
 
 self.addEventListener('fetch', (event) => {

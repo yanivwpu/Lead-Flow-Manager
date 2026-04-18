@@ -598,11 +598,14 @@ export function Settings() {
   });
 
   useEffect(() => {
-    const savedPush = localStorage.getItem("chatcrm_push_enabled") === "true";
-    const savedEmail = localStorage.getItem("chatcrm_email_enabled") === "true";
     const notificationGranted = typeof Notification !== 'undefined' && Notification.permission === "granted";
-    setPushEnabled(savedPush && notificationGranted);
-    setEmailEnabled(savedEmail);
+    fetch("/api/users/preferences", { credentials: "include" })
+      .then(r => r.json())
+      .then(prefs => {
+        setPushEnabled(!!(prefs.pushEnabled && notificationGranted));
+        setEmailEnabled(!!(prefs.emailEnabled));
+      })
+      .catch(() => {});
   }, []);
 
   const handleRegisterPhone = () => {
@@ -620,28 +623,57 @@ export function Settings() {
   };
 
   const handlePushToggle = async (checked: boolean) => {
-    if (typeof Notification === 'undefined') {
+    if (typeof Notification === 'undefined' || !('serviceWorker' in navigator) || !('PushManager' in window)) {
       toast({ title: "Not Supported", description: "Your browser doesn't support push notifications.", variant: "destructive" });
       return;
     }
-    if (checked) {
-      const result = await Notification.requestPermission();
-      setPermission(result);
-      if (result === 'granted') {
-        setPushEnabled(true);
-        localStorage.setItem("chatcrm_push_enabled", "true");
-      } else {
-        setPushEnabled(false);
-      }
-    } else {
+    if (!checked) {
       setPushEnabled(false);
-      localStorage.setItem("chatcrm_push_enabled", "false");
+      await fetch("/api/users/preferences", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pushEnabled: false }),
+        credentials: "include",
+      });
+      return;
+    }
+    const permission = await Notification.requestPermission();
+    setPermission(permission);
+    if (permission !== 'granted') {
+      toast({ title: "Permission Denied", description: "Allow notifications in your browser settings to enable this.", variant: "destructive" });
+      return;
+    }
+    try {
+      const keyRes = await fetch("/api/vapid-public-key", { credentials: "include" });
+      if (!keyRes.ok) throw new Error("Push not configured");
+      const { publicKey } = await keyRes.json();
+      const reg = await navigator.serviceWorker.ready;
+      const subscription = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: publicKey,
+      });
+      await fetch("/api/users/preferences", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pushEnabled: true, pushSubscription: subscription.toJSON() }),
+        credentials: "include",
+      });
+      setPushEnabled(true);
+      toast({ title: "Push Notifications Enabled", description: "You'll be notified about follow-up reminders." });
+    } catch (err: any) {
+      toast({ title: "Setup Failed", description: err.message || "Could not enable push notifications.", variant: "destructive" });
+      setPushEnabled(false);
     }
   };
 
-  const handleEmailToggle = (checked: boolean) => {
+  const handleEmailToggle = async (checked: boolean) => {
     setEmailEnabled(checked);
-    localStorage.setItem("chatcrm_email_enabled", checked.toString());
+    await fetch("/api/users/preferences", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ emailEnabled: checked }),
+      credentials: "include",
+    });
   };
 
   return (
@@ -684,7 +716,7 @@ export function Settings() {
               <div className="flex items-center justify-between gap-3">
                 <div className="space-y-0.5 min-w-0 flex-1">
                   <Label className="text-sm sm:text-base font-medium">Email Reminders</Label>
-                  <p className="text-xs sm:text-sm text-gray-500">Get a daily summary sent to your inbox.</p>
+                  <p className="text-xs sm:text-sm text-gray-500">Get follow-up reminders sent to your inbox.</p>
                 </div>
                 <Switch checked={emailEnabled} onCheckedChange={handleEmailToggle} className="flex-shrink-0" />
               </div>

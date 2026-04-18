@@ -46,8 +46,8 @@ integrations = ["twilio:1.0.0", "stripe:2.0.0", "resend:1.0.0", "javascript_open
 [userenv]
 
 [userenv.shared]
-VAPID_PUBLIC_KEY = "BFPzTJh87JHoq7y-Pn0adv2b4vRBOXouLmqrZO46DGcDHRMdEh_MNFMSlTbWl-_C1aO_cSrfabPgri5FJJhiyrw"
-VAPID_PRIVATE_KEY = "NoLYiJ4lztcATms8h7lhqaABpJHA1kyYHXtBTGDWTbk"
+VAPID_PUBLIC_KEY = "BPCzfM2M3g8pZe0iA7QtsJ3wyGGhxJuuMutzZlNJANxTSH-kL8ar4U2lY32grKcx-Fpn-AowBvLu9r6heYb_puA"
+VAPID_PRIVATE_KEY = "n44UWM80v9GcaqIL6l61BStvFvsUsdvxFytutUEIGwY"
 VAPID_EMAIL = "mailto:support@whachatcrm.com"
 APP_URL = "https://whachatcrm.com"
 SHOPIFY_APP_HOST = "https://whachatcrm.com"
