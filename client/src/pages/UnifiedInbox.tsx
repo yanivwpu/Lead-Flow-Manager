@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback } from "react";
 import { useRoute, useLocation } from "wouter";
 import { useAuth } from "@/lib/auth-context";
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
@@ -332,12 +332,20 @@ export function UnifiedInbox() {
   const [editContactForm, setEditContactForm] = useState({ name: "", phone: "", email: "" });
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const messagesInnerRef = useRef<HTMLDivElement>(null);
   const prevMsgCountRef = useRef(0);
   const prevContactIdRef = useRef<string | null>(null);
   const [showNewMsgBanner, setShowNewMsgBanner] = useState(false);
+  // true when user is at/near the bottom — auto-scroll should happen
+  const shouldPinRef = useRef(true);
   // Set to true on every send so that all post-render scrolls are forced,
   // regardless of where the user was scrolled before they sent.
   const justSentRef = useRef(false);
+
+  const scrollToBottom = useCallback(() => {
+    const c = messagesContainerRef.current;
+    if (c) c.scrollTop = c.scrollHeight;
+  }, []);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [pendingFile, setPendingFile] = useState<{
@@ -556,59 +564,64 @@ export function UnifiedInbox() {
   const showHealthAlert = unhealthyChannels.length > 0 && dismissedHealthAlert !== alertKey;
 
 
-  // Smart scroll: auto-scroll when near bottom OR when we just sent a message.
-  // Shows the "new messages" banner only for incoming messages that arrive
-  // while the user is intentionally reading older content.
-  useEffect(() => {
+  // Smart scroll: runs synchronously after DOM commit (useLayoutEffect) so
+  // scrollHeight already reflects the new message text. Images/media are handled
+  // separately via onLoad + ResizeObserver below.
+  useLayoutEffect(() => {
     const container = messagesContainerRef.current;
     if (!container || messages.length === 0) return;
 
-    // On conversation switch: scroll to bottom immediately once messages arrive,
-    // then retry a few times to catch images/media whose heights aren't known yet.
+    // Conversation switch: pin to bottom immediately.
     if (selectedContactId !== prevContactIdRef.current) {
       prevContactIdRef.current = selectedContactId;
       prevMsgCountRef.current = messages.length;
+      shouldPinRef.current = true;
       setShowNewMsgBanner(false);
       container.scrollTop = container.scrollHeight;
-      // Deferred retries: catch images/audio/video that render after first paint
-      [80, 250, 600, 1200].forEach(delay => {
-        setTimeout(() => {
-          const c = messagesContainerRef.current;
-          if (c) c.scrollTop = c.scrollHeight;
-        }, delay);
-      });
       return;
     }
 
-    const dist = container.scrollHeight - container.scrollTop - container.clientHeight;
-    const isNearBottom = dist < 120;
     const isNew = messages.length > prevMsgCountRef.current;
     prevMsgCountRef.current = messages.length;
 
-    if (justSentRef.current || isNearBottom) {
-      // Always scroll for fresh outbound sends; also scroll for incoming
-      // messages when the user was already near the bottom.
+    if (!isNew) return;
+
+    if (justSentRef.current || shouldPinRef.current) {
       setShowNewMsgBanner(false);
-      if (isNew) {
-        container.scrollTop = container.scrollHeight;
-      }
-    } else if (isNew) {
-      // User is reading history — show the banner instead of yanking them down
+      container.scrollTop = container.scrollHeight;
+    } else {
+      // User is reading history — show banner instead of yanking them down.
       setShowNewMsgBanner(true);
     }
   }, [messages, selectedContactId]);
 
-  // Hide banner when user manually scrolls near bottom
+  // Track pin state and hide banner when user scrolls near bottom.
   useEffect(() => {
     const container = messagesContainerRef.current;
     if (!container) return;
     const onScroll = () => {
       const dist = container.scrollHeight - container.scrollTop - container.clientHeight;
-      if (dist < 120) setShowNewMsgBanner(false);
+      const nearBottom = dist < 150;
+      shouldPinRef.current = nearBottom;
+      if (nearBottom) setShowNewMsgBanner(false);
     };
     container.addEventListener("scroll", onScroll, { passive: true });
     return () => container.removeEventListener("scroll", onScroll);
   }, [selectedContactId]);
+
+  // ResizeObserver: catches async height changes (images/media decoding, window
+  // resize). Re-scrolls whenever content grows and the user was pinned to bottom.
+  useEffect(() => {
+    const inner = messagesInnerRef.current;
+    if (!inner) return;
+    const ro = new ResizeObserver(() => {
+      if (shouldPinRef.current || justSentRef.current) {
+        scrollToBottom();
+      }
+    });
+    ro.observe(inner);
+    return () => ro.disconnect();
+  }, [selectedContactId, scrollToBottom]);
 
   // Mark conversation as read when opened
   useEffect(() => {
@@ -705,18 +718,18 @@ export function UnifiedInbox() {
       setMessageInput("");
       setPendingFile(null);
 
-      // Flag that a send just happened — forces all scroll checks to bypass
-      // the "near bottom?" guard until the bubble (+ any media) has fully
-      // painted and we've completed the final scroll.
+      // Flag that a send just happened — forces scroll even if user somehow
+      // wasn't pinned. Also ensures the ResizeObserver keeps scrolling while
+      // media is still loading.
       justSentRef.current = true;
+      shouldPinRef.current = true;
 
       // Two-tick scroll: setTimeout(0) lets React flush the optimistic render,
       // then requestAnimationFrame waits for the browser layout pass so that
       // scrollHeight already includes the new bubble's full (text) height.
       setTimeout(() => {
         requestAnimationFrame(() => {
-          const container = messagesContainerRef.current;
-          if (container) container.scrollTop = container.scrollHeight;
+          scrollToBottom();
         });
       }, 0);
 
@@ -1427,7 +1440,7 @@ export function UnifiedInbox() {
               style={{ backgroundImage: 'url("https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png")', backgroundRepeat: 'repeat', backgroundSize: '400px' }}
             >
               <div className="absolute inset-0 bg-[#efeae2]/90 pointer-events-none" />
-              <div className="relative z-10 p-3 flex flex-col gap-1.5 min-h-full justify-end">
+              <div ref={messagesInnerRef} className="relative z-10 p-3 pb-5 flex flex-col gap-1.5 min-h-full justify-end">
                 {messagesLoading && messages.length === 0 ? (
                   <div className="flex flex-col gap-3 pb-4">
                     {[80, 55, 120, 45, 90].map((w, i) => (
@@ -1471,18 +1484,10 @@ export function UnifiedInbox() {
                                   className="max-w-full rounded cursor-pointer max-h-64 object-cover"
                                   onClick={() => window.open(mediaDisplayUrl, '_blank')}
                                   onLoad={() => {
-                                    // Image has finished decoding — its real height is now in
-                                    // the DOM.  Before load the scroll sat at the "old bottom"
-                                    // (0-height placeholder), so dist ≈ rendered image height.
-                                    // Threshold 400px covers max-h-64 (256px) + generous buffer.
-                                    // For outbound sends justSentRef forces the scroll.
-                                    // For inbound images we check dist so we only scroll when
-                                    // the user was already at the bottom, not when reading history.
-                                    const container = messagesContainerRef.current;
-                                    if (!container) return;
-                                    const dist = container.scrollHeight - container.scrollTop - container.clientHeight;
-                                    if (justSentRef.current || dist < 400) {
-                                      container.scrollTop = container.scrollHeight;
+                                    // ResizeObserver handles the re-scroll for most cases.
+                                    // This is a direct backup for the first frame after decode.
+                                    if (shouldPinRef.current || justSentRef.current) {
+                                      scrollToBottom();
                                     }
                                     justSentRef.current = false;
                                   }}
@@ -1503,12 +1508,8 @@ export function UnifiedInbox() {
                                 controls
                                 className="max-w-full rounded max-h-64"
                                 onLoadedMetadata={() => {
-                                  // Same dist-based logic as images.
-                                  const container = messagesContainerRef.current;
-                                  if (!container) return;
-                                  const dist = container.scrollHeight - container.scrollTop - container.clientHeight;
-                                  if (justSentRef.current || dist < 400) {
-                                    container.scrollTop = container.scrollHeight;
+                                  if (shouldPinRef.current || justSentRef.current) {
+                                    scrollToBottom();
                                   }
                                   justSentRef.current = false;
                                 }}
@@ -1550,7 +1551,7 @@ export function UnifiedInbox() {
                     );
                   })
                 )}
-                <div ref={messagesEndRef} />
+                <div ref={messagesEndRef} className="h-1 shrink-0" />
               </div>
 
               {/* New messages banner — shown when user is scrolled up */}

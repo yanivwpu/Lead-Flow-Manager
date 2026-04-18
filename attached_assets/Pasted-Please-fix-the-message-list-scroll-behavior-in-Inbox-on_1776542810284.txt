@@ -1,0 +1,35 @@
+Please fix the message-list scroll behavior in Inbox once and for all so new incoming messages are immediately readable without the user having to manually scroll.
+
+Current problem:
+When a new inbound message arrives, the conversation does not reliably stay pinned to the bottom / latest message. Sometimes the newest message lands partially off-screen, so the user has to scroll manually to read it. This makes real-time messaging feel broken.
+
+Expected behavior:
+
+If the user is already at or near the bottom of the conversation, any new inbound or outbound message should automatically scroll fully into view.
+The newest message bubble must be completely visible, with a small bottom buffer/padding so it is not cut off by the composer.
+If the user has intentionally scrolled up to read older messages, do not force-jump them to the bottom. Instead show a ‘New messages’ indicator/button that scrolls to the latest message when clicked.
+Outbound messages should also stay fully visible after send.
+Image/media messages must also scroll correctly after the media height finishes rendering, not only before layout settles.
+This should work consistently for:
+text messages
+image/media messages
+quick inbound replies
+auto-replies / workflow messages
+optimistic sent messages
+
+Implementation intent:
+
+Treat ‘near bottom’ as a threshold (for example ~100–150px from bottom)
+If within threshold, auto-scroll after message render/layout completes
+Re-run scroll after media/image load if message height changes
+Keep a small bottom spacer so the last bubble never sits hidden behind the composer
+Do not rely on one-time scroll on mount only; this needs to react to newly appended messages and post-render layout changes
+
+Success criteria:
+
+When a new message arrives and I’m already at the bottom, I can read it immediately with no manual scrolling
+No message bubble is partially hidden behind the composer
+If I’m reading older messages, I’m not yanked down automatically
+A clear ‘New messages’ jump-to-latest control appears in that case
+
+Please treat this as a UX bug in the core chat experience, not just a minor polish item.
