@@ -45,8 +45,8 @@ const TOUR_STEPS: TourStep[] = [
   },
   {
     id: "chatbot",
-    title: "Visual Chatbot Builder",
-    description: "Build automated WhatsApp flows with our drag-and-drop builder. Create welcome messages, FAQs, and lead qualification bots.",
+    title: "Flow Builder",
+    description: "Design automated conversation flows across your channels. Create welcome messages, lead qualification paths, and routing flows.",
     icon: Bot,
     sidebarTestId: "sidebar-chatbot",
     helpArticleId: "chatbot-automation",
