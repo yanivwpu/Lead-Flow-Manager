@@ -1,7 +1,97 @@
 import { db } from '../drizzle/db';
-import { users, chats, contacts, templateEntitlements } from '@shared/schema';
-import { eq, and, lte, gte, isNotNull, or, desc, ne } from 'drizzle-orm';
+import { users, chats, contacts, templateEntitlements, channelSettings } from '@shared/schema';
+import { eq, and, lte, gte, isNotNull, or, desc, ne, inArray } from 'drizzle-orm';
 import { sendTrialCheckinEmail, sendDailyHotListEmail, type HotLeadEntry } from './email';
+
+const GRAPH = "https://graph.facebook.com/v19.0";
+
+// ─── Meta Webhook Auto-Heal ───────────────────────────────────────────────────
+// Runs every hour. For every connected Facebook / Instagram channel, verifies
+// that the page is still subscribed to the "messages" field.  If not, it
+// re-subscribes automatically so inbound messages keep flowing.
+export async function runMetaWebhookHealthCheck(): Promise<{ checked: number; repaired: number; errors: number }> {
+  console.log('[WebhookHealth] Starting Meta webhook health check...');
+  let checked = 0;
+  let repaired = 0;
+  let errors = 0;
+
+  try {
+    // Find all connected Facebook / Instagram channel settings
+    const metaSettings = await db
+      .select()
+      .from(channelSettings)
+      .where(
+        and(
+          eq(channelSettings.isConnected, true),
+          inArray(channelSettings.channel, ['facebook', 'instagram'])
+        )
+      );
+
+    console.log(`[WebhookHealth] Found ${metaSettings.length} connected Meta channel(s) to check`);
+
+    for (const setting of metaSettings) {
+      const cfg = setting.config as any;
+      const pageId: string | undefined = cfg?.pageId;
+      const accessToken: string | undefined = cfg?.accessToken;
+
+      if (!pageId || !accessToken) {
+        console.warn(`[WebhookHealth] Skipping userId=${setting.userId} channel=${setting.channel} — missing pageId or accessToken`);
+        continue;
+      }
+
+      checked++;
+
+      try {
+        // 1. Check current subscription
+        const checkResp = await fetch(
+          `${GRAPH}/${pageId}/subscribed_apps?access_token=${encodeURIComponent(accessToken)}`
+        );
+        if (!checkResp.ok) {
+          console.warn(`[WebhookHealth] GET subscribed_apps failed for pageId=${pageId} — HTTP ${checkResp.status}`);
+          errors++;
+          continue;
+        }
+        const checkData = (await checkResp.json()) as any;
+        const existingSubs: any[] = checkData?.data ?? [];
+        const existingFields: string[] = existingSubs.flatMap((s: any) => s.subscribed_fields ?? []);
+
+        const hasMessages = existingFields.includes('messages');
+        console.log(`[WebhookHealth] pageId=${pageId} channel=${setting.channel} subscribed_fields=[${existingFields.join(',')}] hasMessages=${hasMessages}`);
+
+        if (hasMessages) {
+          // Subscription is healthy — nothing to do
+          continue;
+        }
+
+        // 2. Missing "messages" — auto-resubscribe
+        console.log(`[WebhookHealth] ⚠ pageId=${pageId} missing "messages" subscription — auto-repairing...`);
+        const subResp = await fetch(`${GRAPH}/${pageId}/subscribed_apps`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: `subscribed_fields=messages&access_token=${encodeURIComponent(accessToken)}`,
+        });
+        const subData = (await subResp.json()) as any;
+
+        if (subResp.ok && subData?.success === true) {
+          repaired++;
+          console.log(`[WebhookHealth] ✓ Auto-repaired webhook for pageId=${pageId} (userId=${setting.userId})`);
+        } else {
+          errors++;
+          console.error(`[WebhookHealth] ✗ Auto-repair failed for pageId=${pageId} — ${subData?.error?.message ?? 'unknown error'}`);
+        }
+      } catch (pageErr) {
+        errors++;
+        console.error(`[WebhookHealth] Error checking pageId=${pageId}:`, pageErr);
+      }
+    }
+
+    console.log(`[WebhookHealth] Done — checked=${checked} repaired=${repaired} errors=${errors}`);
+    return { checked, repaired, errors };
+  } catch (err) {
+    console.error('[WebhookHealth] Fatal error in webhook health check:', err);
+    throw err;
+  }
+}
 
 export async function runTrialCheckinEmails(): Promise<{ sent: number; errors: number }> {
   console.log('[Cron] Starting trial check-in email job...');
@@ -188,30 +278,44 @@ export async function runDailyHotListEmails(): Promise<{ sent: number; errors: n
 
 let cronInterval: NodeJS.Timeout | null = null;
 let hotListRanToday = false;
+let lastWebhookHealthHour = -1;
 
 export function startCronJobs() {
   console.log('[Cron] Starting cron scheduler...');
   
   runTrialCheckinEmails().catch(err => console.error('[Cron] Initial run error:', err));
+
+  // Run webhook health check once at startup (after 30 s to let DB settle)
+  setTimeout(() => {
+    runMetaWebhookHealthCheck().catch(err => console.error('[WebhookHealth] Startup check error:', err));
+  }, 30_000);
   
   cronInterval = setInterval(() => {
     const now = new Date();
+    const utcHour = now.getUTCHours();
+    const utcMin  = now.getUTCMinutes();
 
-    if (now.getUTCHours() === 14 && now.getUTCMinutes() === 0) {
+    if (utcHour === 14 && utcMin === 0) {
       runTrialCheckinEmails().catch(err => console.error('[Cron] Scheduled run error:', err));
     }
 
-    if (now.getUTCHours() === 13 && now.getUTCMinutes() === 0 && !hotListRanToday) {
+    if (utcHour === 13 && utcMin === 0 && !hotListRanToday) {
       hotListRanToday = true;
       runDailyHotListEmails().catch(err => console.error('[Cron/HotList] Scheduled run error:', err));
     }
 
-    if (now.getUTCHours() === 0 && now.getUTCMinutes() === 0) {
+    if (utcHour === 0 && utcMin === 0) {
       hotListRanToday = false;
+    }
+
+    // Webhook health check — once per hour on the hour
+    if (utcMin === 0 && utcHour !== lastWebhookHealthHour) {
+      lastWebhookHealthHour = utcHour;
+      runMetaWebhookHealthCheck().catch(err => console.error('[WebhookHealth] Hourly check error:', err));
     }
   }, 60000);
   
-  console.log('[Cron] Cron scheduler started (trial check-in: 10 AM EST, hot list: 9 AM EST)');
+  console.log('[Cron] Cron scheduler started (trial check-in: 10 AM EST, hot list: 9 AM EST, webhook health: hourly)');
 }
 
 export function stopCronJobs() {

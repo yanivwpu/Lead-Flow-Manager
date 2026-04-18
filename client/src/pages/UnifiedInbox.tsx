@@ -526,6 +526,19 @@ export function UnifiedInbox() {
     enabled: !!selectedContactId && showTimeline,
   });
 
+  type ChannelHealthEntry = {
+    channel: string;
+    isConnected: boolean;
+    isEnabled: boolean;
+    webhookOk: boolean | null;
+    pageName: string | null;
+  };
+  const { data: channelHealth = [] } = useQuery<ChannelHealthEntry[]>({
+    queryKey: ["/api/channel-health"],
+    refetchInterval: 5 * 60 * 1000, // re-check every 5 minutes
+    staleTime: 4 * 60 * 1000,
+  });
+
 
   // Smart scroll: auto-scroll when near bottom OR when we just sent a message.
   // Shows the "new messages" banner only for incoming messages that arrive
@@ -1095,6 +1108,31 @@ export function UnifiedInbox() {
               </button>
             ))}
           </div>
+
+          {/* Channel health bar — shows connected channels and their webhook status */}
+          {channelHealth.filter(c => c.isConnected).length > 0 && (
+            <div className="flex items-center gap-2 mt-2 pt-2 border-t flex-wrap" data-testid="channel-health-bar">
+              {channelHealth.filter(c => c.isConnected).map(ch => {
+                const isOk = ch.webhookOk === true;
+                const isUnknown = ch.webhookOk === null;
+                const isBad = ch.webhookOk === false;
+                const dotColor = isOk ? "bg-emerald-500" : isUnknown ? "bg-gray-400" : "bg-red-500";
+                const label = ch.channel.charAt(0).toUpperCase() + ch.channel.slice(1);
+                const tooltip = isOk ? `${label}: receiving messages` : isBad ? `${label}: webhook issue — check Settings` : `${label}: status unknown`;
+                return (
+                  <div
+                    key={ch.channel}
+                    title={tooltip}
+                    className="flex items-center gap-1 text-[10px] text-gray-500"
+                    data-testid={`channel-health-${ch.channel}`}
+                  >
+                    <span className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", dotColor)} />
+                    <span>{label}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* List */}

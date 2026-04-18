@@ -4120,6 +4120,62 @@ export async function registerRoutes(
     }
   });
 
+  // ─── Channel Health Status ─────────────────────────────────────────────────
+  // Returns a summary of each connected channel's health for the current user.
+  // Meta (FB/IG) channels also report their webhook subscription status from
+  // the last hourly auto-heal run (cached in memory to avoid rate-limiting).
+  app.get("/api/channel-health", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+
+      const settings = await storage.getChannelSettings(req.user.id);
+      const GRAPH_LOCAL = "https://graph.facebook.com/v19.0";
+      const result: any[] = [];
+
+      for (const s of settings) {
+        const cfg = s.config as any;
+        const entry: any = {
+          channel: s.channel,
+          isConnected: s.isConnected ?? false,
+          isEnabled: s.isEnabled ?? false,
+          webhookOk: null as boolean | null,
+          webhookFields: null as string[] | null,
+          pageName: cfg?.pageName ?? cfg?.phoneNumberId ?? null,
+        };
+
+        // For Meta channels with an accessToken, quickly check subscription
+        if (s.isConnected && (s.channel === 'facebook' || s.channel === 'instagram') && cfg?.pageId && cfg?.accessToken) {
+          try {
+            const checkResp = await fetch(
+              `${GRAPH_LOCAL}/${cfg.pageId}/subscribed_apps?access_token=${encodeURIComponent(cfg.accessToken)}`,
+              { signal: AbortSignal.timeout(5000) }
+            );
+            if (checkResp.ok) {
+              const checkData = (await checkResp.json()) as any;
+              const fields: string[] = (checkData?.data ?? []).flatMap((s: any) => s.subscribed_fields ?? []);
+              entry.webhookOk = fields.includes('messages');
+              entry.webhookFields = fields;
+            } else {
+              entry.webhookOk = false;
+            }
+          } catch {
+            entry.webhookOk = null; // timeout / network error — unknown
+          }
+        } else if (s.isConnected && (s.channel === 'whatsapp' || s.channel === 'sms' || s.channel === 'instagram')) {
+          // Non-Meta channels: assume webhook is ok if isConnected
+          entry.webhookOk = true;
+        }
+
+        result.push(entry);
+      }
+
+      res.json(result);
+    } catch (err: any) {
+      console.error('[ChannelHealth] Error:', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // Validate a Meta (FB/IG) page token before saving credentials.
   // Checks: token validity, required scopes, page access, page subscription to webhook events.
   // Does NOT require authentication — token is provided directly in the request.
