@@ -565,6 +565,7 @@ export const chatbotFlows = pgTable("chatbot_flows", {
   isActive: boolean("is_active").default(false),
   triggerKeywords: text("trigger_keywords").array().default(sql`'{}'::text[]`), // Keywords that trigger this flow
   triggerOnNewChat: boolean("trigger_on_new_chat").default(false), // Trigger when new chat starts
+  triggerChannels: text("trigger_channels").array().default(sql`'{}'::text[]`), // Empty = all channels; non-empty = channel filter
   nodes: jsonb("nodes").notNull().default(sql`'[]'::jsonb`), // Array of flow nodes
   edges: jsonb("edges").notNull().default(sql`'[]'::jsonb`), // Connections between nodes
   executionCount: integer("execution_count").default(0),

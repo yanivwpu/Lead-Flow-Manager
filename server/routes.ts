@@ -4875,7 +4875,7 @@ export async function registerRoutes(
         return res.status(403).json({ error: "Visual chatbot builder requires a paid plan" });
       }
       
-      const { name, description, nodes, edges, triggerKeywords, triggerOnNewChat } = req.body;
+      const { name, description, nodes, edges, triggerKeywords, triggerOnNewChat, triggerChannels } = req.body;
       
       if (!name) {
         return res.status(400).json({ error: "Flow name is required" });
@@ -4889,6 +4889,7 @@ export async function registerRoutes(
         edges: edges || [],
         triggerKeywords: triggerKeywords || [],
         triggerOnNewChat: triggerOnNewChat || false,
+        triggerChannels: triggerChannels || [],
         isActive: false,
       });
       
@@ -4911,7 +4912,7 @@ export async function registerRoutes(
         return res.status(404).json({ error: "Flow not found" });
       }
       
-      const { name, description, nodes, edges, triggerKeywords, triggerOnNewChat, isActive } = req.body;
+      const { name, description, nodes, edges, triggerKeywords, triggerOnNewChat, triggerChannels, isActive } = req.body;
       
       const flow = await storage.updateChatbotFlow(req.params.id, {
         ...(name !== undefined && { name }),
@@ -4920,6 +4921,7 @@ export async function registerRoutes(
         ...(edges !== undefined && { edges }),
         ...(triggerKeywords !== undefined && { triggerKeywords }),
         ...(triggerOnNewChat !== undefined && { triggerOnNewChat }),
+        ...(triggerChannels !== undefined && { triggerChannels }),
         ...(isActive !== undefined && { isActive }),
       });
       

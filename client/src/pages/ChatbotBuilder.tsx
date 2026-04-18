@@ -41,7 +41,7 @@ import { cn } from "@/lib/utils";
 
 /* ─── Types ─────────────────────────────────────────────────────────── */
 
-type MessageType = "text" | "image" | "video" | "file" | "buttons";
+type MessageType = "text" | "image" | "video" | "file" | "buttons" | "template";
 
 export interface ButtonOption {
   label: string;
@@ -71,6 +71,10 @@ interface ChatbotNode {
     action?: { type: string; value: string };
     delayMinutes?: number;
     variableName?: string;
+    templateId?: string;
+    templateName?: string;
+    templateLanguage?: string;
+    templateVariables?: Record<string, string>;
   };
 }
 
@@ -89,6 +93,7 @@ interface ChatbotFlow {
   isActive: boolean;
   triggerKeywords: string[];
   triggerOnNewChat: boolean;
+  triggerChannels: string[];
   nodes: ChatbotNode[];
   edges: ChatbotEdge[];
   executionCount: number;
@@ -97,29 +102,58 @@ interface ChatbotFlow {
   updatedAt: string;
 }
 
+interface TeamMember {
+  id: string;
+  memberId: string;
+  name: string;
+  email: string;
+  role: string;
+  status: string;
+}
+
+interface MessageTemplate {
+  id: string;
+  name: string;
+  language: string;
+  status: string;
+  templateType: string;
+  bodyText: string;
+  variables: string[] | null;
+}
+
 /* ─── Constants ──────────────────────────────────────────────────────── */
 
 const STEP_TYPES = [
   {
     type: "message", label: "Send Message", icon: MessageSquare,
     color: "text-blue-600", bg: "bg-blue-50", border: "border-blue-100",
-    description: "Send a text, image, or file",
+    description: "Send text, media, files, buttons, or templates",
   },
   {
     type: "question", label: "Ask Question", icon: GitBranch,
     color: "text-violet-600", bg: "bg-violet-50", border: "border-violet-100",
-    description: "Ask with quick-reply options",
+    description: "Ask a question and optionally save the reply",
   },
   {
     type: "delay", label: "Wait", icon: Clock,
     color: "text-amber-600", bg: "bg-amber-50", border: "border-amber-100",
-    description: "Pause before continuing",
+    description: "Pause before continuing (up to 5 min)",
   },
   {
     type: "action", label: "Action", icon: Tag,
     color: "text-emerald-600", bg: "bg-emerald-50", border: "border-emerald-100",
-    description: "Tag, assign, or move a lead",
+    description: "Tag, assign, update status, or move pipeline",
   },
+];
+
+const CHANNEL_OPTIONS: { value: string; label: string; icon: string }[] = [
+  { value: "whatsapp",     label: "WhatsApp",           icon: "📱" },
+  { value: "instagram",   label: "Instagram",           icon: "📷" },
+  { value: "facebook",    label: "Facebook Messenger",  icon: "💬" },
+  { value: "sms",         label: "SMS",                 icon: "✉️"  },
+  { value: "webchat",     label: "Web Chat",            icon: "🌐" },
+  { value: "telegram",    label: "Telegram",            icon: "✈️"  },
+  { value: "gohighlevel", label: "GoHighLevel",         icon: "🔁" },
 ];
 
 const MESSAGE_TYPES: { value: MessageType; label: string; icon: any }[] = [
@@ -128,6 +162,7 @@ const MESSAGE_TYPES: { value: MessageType; label: string; icon: any }[] = [
   { value: "video", label: "Video", icon: Video },
   { value: "file", label: "File", icon: FileText },
   { value: "buttons", label: "Buttons", icon: ListOrdered },
+  { value: "template", label: "Template", icon: FileText },
 ];
 
 const ACTION_TYPES = [
@@ -260,6 +295,19 @@ export function ChatbotBuilder() {
     retry: false,
   });
 
+  const { data: teamMembers = [] } = useQuery<TeamMember[]>({
+    queryKey: ["/api/team"],
+    retry: false,
+    select: (members: any[]) =>
+      members.filter((m) => m.status === "active" || m.role === "owner"),
+  });
+
+  const { data: messageTemplates = [] } = useQuery<MessageTemplate[]>({
+    queryKey: ["/api/templates"],
+    retry: false,
+    select: (tpls: any[]) => tpls.filter((t) => t.status === "approved"),
+  });
+
   /* ── Mutations ── */
   const createFlowMutation = useMutation({
     mutationFn: async (data: any) => (await apiRequest("POST", "/api/chatbot-flows", data)).json(),
@@ -316,6 +364,7 @@ export function ChatbotBuilder() {
         edges: flow.edges,
         triggerKeywords: flow.triggerKeywords,
         triggerOnNewChat: flow.triggerOnNewChat,
+        triggerChannels: flow.triggerChannels || [],
         isActive: false,
       };
       return (await apiRequest("POST", "/api/chatbot-flows", payload)).json();
@@ -340,6 +389,7 @@ export function ChatbotBuilder() {
       edges: selectedFlow.edges,
       triggerKeywords: selectedFlow.triggerKeywords,
       triggerOnNewChat: selectedFlow.triggerOnNewChat,
+      triggerChannels: selectedFlow.triggerChannels || [],
     });
   };
 
@@ -358,6 +408,7 @@ export function ChatbotBuilder() {
       edges: [],
       triggerKeywords: [],
       triggerOnNewChat: false,
+      triggerChannels: [],
     });
   };
 
@@ -878,6 +929,46 @@ export function ChatbotBuilder() {
                     </div>
                   </div>
 
+                  {/* Channel filter */}
+                  <div className="h-px bg-gray-100" />
+                  <div>
+                    <div className="text-xs font-semibold text-gray-700 mb-1.5">Channel filter</div>
+                    <p className="text-[11px] text-gray-400 mb-2 leading-relaxed">
+                      Run on all channels, or limit to specific ones.
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {CHANNEL_OPTIONS.map((ch) => {
+                        const selected = (selectedFlow.triggerChannels || []).includes(ch.value);
+                        return (
+                          <button
+                            key={ch.value}
+                            onClick={() => {
+                              const current = selectedFlow.triggerChannels || [];
+                              const next = selected
+                                ? current.filter((c) => c !== ch.value)
+                                : [...current, ch.value];
+                              setSelectedFlow({ ...selectedFlow, triggerChannels: next });
+                              setUnsavedChanges(true);
+                            }}
+                            className={cn(
+                              "flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-all",
+                              selected
+                                ? "bg-violet-100 border-violet-300 text-violet-700"
+                                : "bg-gray-50 border-gray-200 text-gray-500 hover:bg-gray-100"
+                            )}
+                            data-testid={`channel-chip-${ch.value}`}
+                          >
+                            <span>{ch.icon}</span>
+                            {ch.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {(selectedFlow.triggerChannels || []).length === 0 && (
+                      <p className="text-[11px] text-gray-400 mt-1.5">All channels active</p>
+                    )}
+                  </div>
+
                   {/* Trigger status banner */}
                   {(() => {
                     const hasKw = selectedFlow.triggerKeywords.length > 0;
@@ -1255,6 +1346,92 @@ export function ChatbotBuilder() {
                 </>
               )}
 
+              {/* ── TEMPLATE ── */}
+              {(selectedStep.type === "message" || selectedStep.type === "question") &&
+                selectedStep.data.messageType === "template" && (
+                <div className="space-y-4">
+                  {/* WhatsApp-only warning */}
+                  <div className="p-3 rounded-xl bg-slate-50 border border-slate-100 text-[11px] text-slate-600 space-y-1">
+                    <p className="font-bold text-slate-700 mb-1">Channel support</p>
+                    <p>✅ WhatsApp only (Meta provider)</p>
+                    <p>✖ Not supported on Instagram, Facebook, SMS, or WebChat</p>
+                  </div>
+                  {(selectedFlow.triggerChannels || []).length > 0 &&
+                    !(selectedFlow.triggerChannels || []).includes("whatsapp") && (
+                    <div className="flex gap-2 p-2.5 rounded-xl bg-amber-50 border border-amber-200">
+                      <AlertCircle className="h-3.5 w-3.5 text-amber-500 mt-0.5 flex-shrink-0" />
+                      <p className="text-[11px] text-amber-700 leading-relaxed">
+                        This flow's channel filter does not include WhatsApp. Template steps will be skipped on the configured channels.
+                      </p>
+                    </div>
+                  )}
+                  <div>
+                    <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 block">Template</Label>
+                    {messageTemplates.length === 0 ? (
+                      <div className="p-3 rounded-xl bg-gray-50 border border-gray-200 text-[11px] text-gray-500">
+                        No approved templates found. Sync or create templates in your Templates section first.
+                      </div>
+                    ) : (
+                      <Select
+                        value={selectedStep.data.templateId || ""}
+                        onValueChange={(val) => {
+                          const tpl = messageTemplates.find((t) => t.id === val);
+                          updateStep(selectedStep.id, {
+                            templateId: val,
+                            templateName: tpl?.name,
+                            templateLanguage: tpl?.language,
+                            templateVariables: {},
+                          });
+                        }}
+                      >
+                        <SelectTrigger className="text-sm border-gray-200 bg-gray-50" data-testid={`select-template-${selectedStep.id}`}>
+                          <SelectValue placeholder="Select approved template…" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {messageTemplates.map((t) => (
+                            <SelectItem key={t.id} value={t.id}>
+                              {t.name} <span className="text-gray-400 text-xs ml-1">({t.language})</span>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                  </div>
+                  {selectedStep.data.templateId && (() => {
+                    const tpl = messageTemplates.find((t) => t.id === selectedStep.data.templateId);
+                    if (!tpl) return null;
+                    const vars = (tpl.variables as string[] | null) || [];
+                    return (
+                      <div className="space-y-3">
+                        <div className="p-3 rounded-xl bg-violet-50 border border-violet-100 text-[11px] text-violet-700 leading-relaxed whitespace-pre-wrap font-mono">
+                          {tpl.bodyText || "(Template body not available)"}
+                        </div>
+                        {vars.length > 0 && (
+                          <div className="space-y-2">
+                            <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Variables</Label>
+                            {vars.map((varName) => (
+                              <div key={varName} className="flex items-center gap-2">
+                                <span className="text-[11px] font-mono text-violet-600 w-20 flex-shrink-0">{`{{${varName}}}`}</span>
+                                <Input
+                                  value={(selectedStep.data.templateVariables || {})[varName] || ""}
+                                  onChange={(e) => {
+                                    const vars = { ...(selectedStep.data.templateVariables || {}), [varName]: e.target.value };
+                                    updateStep(selectedStep.id, { templateVariables: vars });
+                                  }}
+                                  placeholder={`Value for ${varName}`}
+                                  className="text-sm border-gray-200 h-8 flex-1"
+                                  data-testid={`input-template-var-${selectedStep.id}-${varName}`}
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+
               {/* ── ASK QUESTION ── */}
               {selectedStep.type === "question" && (
                 <>
@@ -1338,10 +1515,48 @@ export function ChatbotBuilder() {
                     </Select>
                   </div>
                   <div>
-                    <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 block">Value</Label>
-                    <Input value={selectedStep.data.action?.value || ""}
-                      onChange={(e) => updateStep(selectedStep.id, { action: { type: selectedStep.data.action?.type || "set_tag", value: e.target.value } })}
-                      placeholder="Enter value…" className="text-sm border-gray-200" data-testid={`input-action-value-${selectedStep.id}`} />
+                    <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 block">
+                      {selectedStep.data.action?.type === "assign" ? "Team member" : "Value"}
+                    </Label>
+                    {selectedStep.data.action?.type === "assign" ? (
+                      <div>
+                        <Select
+                          value={selectedStep.data.action?.value || ""}
+                          onValueChange={(val) => updateStep(selectedStep.id, { action: { type: "assign", value: val } })}
+                        >
+                          <SelectTrigger className="text-sm border-gray-200 bg-gray-50" data-testid={`select-assign-member-${selectedStep.id}`}>
+                            <SelectValue placeholder="Select team member…" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {teamMembers.length === 0 && (
+                              <SelectItem value="__none__" disabled>No team members found</SelectItem>
+                            )}
+                            {teamMembers.map((m) => (
+                              <SelectItem key={m.memberId} value={m.memberId}>
+                                {m.name || m.email} {m.role === "owner" ? "(Owner)" : ""}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {selectedStep.data.action?.value &&
+                          !teamMembers.find((m) => m.memberId === selectedStep.data.action?.value) && (
+                          <div className="flex gap-1.5 mt-2 p-2 rounded-lg bg-amber-50 border border-amber-200">
+                            <AlertCircle className="h-3.5 w-3.5 text-amber-500 mt-0.5 flex-shrink-0" />
+                            <p className="text-[11px] text-amber-700">Previously saved team member no longer exists. Please re-select.</p>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <Input value={selectedStep.data.action?.value || ""}
+                        onChange={(e) => updateStep(selectedStep.id, { action: { type: selectedStep.data.action?.type || "set_tag", value: e.target.value } })}
+                        placeholder={
+                          selectedStep.data.action?.type === "set_tag" ? "e.g. lead, vip, interested…" :
+                          selectedStep.data.action?.type === "set_status" ? "open / resolved / pending" :
+                          selectedStep.data.action?.type === "set_pipeline" ? "Stage name or ID" :
+                          "Enter value…"
+                        }
+                        className="text-sm border-gray-200" data-testid={`input-action-value-${selectedStep.id}`} />
+                    )}
                   </div>
                 </div>
               )}

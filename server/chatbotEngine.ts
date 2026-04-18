@@ -576,7 +576,41 @@ async function executeFlow(
           await new Promise((resolve) => setTimeout(resolve, delayToUse));
         }
 
-        if (isMediaNode) {
+        if (msgType === "template") {
+          // Template message — interpolate variables and send as text
+          // WhatsApp template API sends are channel-specific; here we interpolate body text as a safe fallback
+          const templateId = (currentNode.data as any).templateId as string | undefined;
+          const templateVariables = ((currentNode.data as any).templateVariables || {}) as Record<string, string>;
+          if (!templateId) {
+            console.warn(`[Chatbot] ⚠ Template node "${nodeId}" has no templateId — skipping`);
+            break;
+          }
+          if (ctx.channel !== "whatsapp") {
+            console.warn(`[Chatbot] ⚠ Template node "${nodeId}" on channel "${ctx.channel}" — templates only supported on WhatsApp, skipping`);
+            break;
+          }
+          const delayToUseTemplate = Math.min(cumulativeDelayMs, MAX_DELAY_MS);
+          cumulativeDelayMs = 0;
+          if (delayToUseTemplate > 0) {
+            await new Promise((resolve) => setTimeout(resolve, delayToUseTemplate));
+          }
+          try {
+            const tpl = await storage.getMessageTemplate(templateId);
+            if (!tpl) {
+              console.warn(`[Chatbot] ⚠ Template "${templateId}" not found — skipping`);
+              break;
+            }
+            let body = tpl.bodyText || "";
+            for (const [k, v] of Object.entries(templateVariables)) {
+              body = body.replace(new RegExp(`\\{\\{${k}\\}\\}`, "g"), v);
+            }
+            console.log(`[Chatbot] 📨 Template node "${nodeId}" — sending template "${tpl.name}" (${tpl.language})`);
+            await sendChatbotReply(ctx, body);
+          } catch (err: any) {
+            console.error(`[Chatbot] ❌ Template node "${nodeId}" send error: ${err.message}`);
+          }
+          break;
+        } else if (isMediaNode) {
           console.log(
             `[Chatbot] 📎 Media node "${nodeId}" — messageType: ${msgType}, hasMediaUrl: ${hasMedia}, hasCaption: ${mediaCaption.length > 0}`
           );
@@ -739,6 +773,15 @@ export async function triggerChatbotFlows(ctx: TriggerContext): Promise<void> {
     for (const flow of activeFlows) {
       const keywords = (flow.triggerKeywords as string[]) || [];
       const triggerOnNewChat = flow.triggerOnNewChat ?? false;
+      const triggerChannels = (flow.triggerChannels as string[] | null) || [];
+
+      // ── Channel filter ────────────────────────────────────────────────────
+      if (triggerChannels.length > 0 && !triggerChannels.includes(ctx.channel)) {
+        console.log(
+          `[Chatbot] Flow "${flow.name}" — channel "${ctx.channel}" not in triggerChannels [${triggerChannels.join(", ")}] — skipping`
+        );
+        continue;
+      }
 
       let shouldTrigger = false;
       let triggerReason = "";

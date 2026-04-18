@@ -1,0 +1,333 @@
+We need to do a **practical production-focused upgrade pass** on Flow Builder so real users can actually use it safely, especially Shopify and GHL users. Do not overbuild enterprise infrastructure right now. Focus on the most important fixes and additions that remove real user risk and make the flows useful across channels.
+
+## Goal
+
+Make Flow Builder safe and usable for real early users by fixing the biggest functional gaps first.
+
+Priority order matters. Please work in this order:
+
+---
+
+## Priority 1 — Fix the Assign action properly
+
+This is the most important functional issue to fix before real users rely on flows.
+
+### Current problem
+
+The **Assign to Team** action currently accepts free text, but the backend expects a real internal user ID. This means users can type a name like “Yaniv” and the action may silently save an invalid value.
+
+### Required fix
+
+Replace the free-text field in the Action step inspector with a proper selector.
+
+### What to build
+
+For action type **Assign to Team**:
+
+* show a dropdown / searchable select
+* load real assignable users/team members for that account
+* store the correct internal user ID
+* display the user’s readable name in the UI
+* on existing flows, if a saved value is invalid or no longer exists, show a warning state
+
+### Validation
+
+* do not allow save of invalid assign value
+* do not silently write bad assignment values
+
+This is a must-fix before wider real user usage.
+
+---
+
+## Priority 2 — Add channel-based triggers
+
+We need flows to support different behavior per channel. This is especially important for Shopify, GHL, WhatsApp, Instagram, Messenger, SMS, and web chat scenarios.
+
+### Current problem
+
+Flows appear to be globally triggered without channel filtering. That is too broad and will create wrong behavior across channels.
+
+### Required fix
+
+Add **channel filtering inside the Trigger section**.
+
+### In Trigger section add:
+
+* All channels (default)
+* WhatsApp
+* Instagram
+* Facebook Messenger
+* SMS
+* Web Chat
+* GHL inbound source if applicable
+* Shopify chat / storefront source if applicable, if your architecture exposes it separately
+
+Use the channel/source definitions that already exist in our system. Do not invent disconnected labels if a canonical enum already exists.
+
+### Trigger logic
+
+A flow should run only when:
+
+* trigger condition matches
+
+  * keyword match and/or start on new conversation
+    AND
+* inbound channel/source matches the selected channel filter
+
+### UX
+
+Add a clear Trigger subsection:
+
+* **Channels**
+* default state: **All channels**
+* allow single-select or multi-select, whichever fits our data model best
+* show selected channels as chips/tags or compact pills
+
+### Important examples this must support
+
+* WhatsApp-only flow using templates
+* Instagram-only flow using casual DM message
+* Web chat lead capture flow
+* GHL inbound lead flow
+* Shopify storefront inquiry flow
+
+---
+
+## Priority 3 — Add Templates to Send Message
+
+This is critical, especially for WhatsApp use cases and for serious automation credibility.
+
+### Current problem
+
+Send Message supports text, image, video, file, and buttons, but there is no Template option. That limits real-world outbound automation and WhatsApp compliance use cases.
+
+### Required fix
+
+Extend **Send Message** with a **Template** type.
+
+### In the Send Message step inspector
+
+Add a message type option:
+
+* Text
+* Image
+* Video
+* File
+* Buttons
+* **Template**
+
+### When Template is selected
+
+Allow:
+
+* selecting a saved approved template
+* choosing the template source/provider if needed based on existing architecture
+* filling template variables/placeholders
+* previewing the mapped variables
+* saving template ID/name + variables in step config
+
+### Execution behavior
+
+At runtime:
+
+* if channel is WhatsApp and Template step is configured correctly, use the template send path
+* if the chosen channel does not support templates, block or warn clearly in the UI
+* do not silently downgrade a template to normal text
+
+### Validation
+
+* do not allow activation of a Template step without required template selection
+* do not allow save if required template variables are missing
+
+### UX note
+
+Templates belong inside **Send Message**, not as a separate step type.
+
+---
+
+## Priority 4 — Add channel-aware guardrails in the builder
+
+Once channels and templates exist, the builder must help prevent invalid flow design.
+
+### Required guardrails
+
+* If channel filter is WhatsApp only, Template should be available normally
+* If channel filter excludes WhatsApp, Template should either:
+
+  * be disabled
+  * or show clear warning that templates are only supported on relevant channels
+* If message type or step type is unsupported for selected channels, show inline warning
+* Do not let users build flows that look valid but will fail at runtime
+
+### Examples
+
+* SMS flow should not misleadingly support unsupported button behavior if not actually supported in runtime
+* Template step should not appear valid for Instagram-only flow
+* If channel is All channels and Template is selected, user should be warned that this step is channel-specific and may require WhatsApp-only trigger or future fallback logic
+
+---
+
+## Priority 5 — Clarify and improve Send Message vs Ask Question
+
+We need cleaner step responsibilities.
+
+### Required UX clarification
+
+* **Send Message** = all outbound communication
+
+  * text
+  * media
+  * file
+  * buttons
+  * template
+* **Ask Question** = prompt expecting a reply / qualification input
+
+### Builder improvement
+
+Make sure the Add Step picker and inspector descriptions reflect this clearly so users know where to add media or templates.
+
+Suggested descriptions:
+
+* **Send Message** — Send text, media, files, buttons, or templates
+* **Ask Question** — Ask a question and optionally save the reply
+
+---
+
+## Priority 6 — Improve Ask Question persistence and confidence
+
+Users must feel confident that typing in the right panel actually saves.
+
+### Required behavior
+
+Use a clean auto-save model:
+
+* user edits field
+* Unsaved state appears
+* save runs on blur and/or debounce
+* after success, show subtle Saved state
+* no extra popup for every tiny field update
+
+### Important
+
+The flow preview card should update immediately while typing, but actual persistence must still occur in the background and confirm properly.
+
+---
+
+## Priority 7 — Remove excessive micro-toasts
+
+Keep the builder calm and premium.
+
+### Remove toasts for:
+
+* keyword added
+* keyword removed
+* step added
+* step deleted
+* simple field edits
+* dropdown changes
+
+### Keep toasts only for:
+
+* Flow saved
+* Flow duplicated
+* major backend-confirmed actions
+* errors
+
+If the result is already visible on screen, do not show a toast.
+
+---
+
+## Priority 8 — Keep Duplicate only if fully working
+
+Duplicate is useful, but only if reliable.
+
+### Confirm behavior
+
+* Duplicate Flow creates full copy
+* copies trigger config, steps, and settings
+* new flow name = `{Original Name} (Copy)`
+* duplicated flow opens immediately
+* duplicated flow starts as Draft
+* success feedback shows
+* failure shows real error
+
+If any part still fails, remove Duplicate Flow until complete.
+
+---
+
+## Priority 9 — Improve production usability for Shopify and GHL users
+
+We need this builder to work for real integration-driven users, not only generic chat users.
+
+### Specifically verify:
+
+* flows can trigger correctly from Shopify-originated conversations if those come through our existing inbound channel pipeline
+* flows can trigger correctly from GHL-originated inbound events/messages if those are part of supported inbound messaging paths
+* channel/source filtering works for these cases based on the actual inbound source values in our system
+* action steps still apply correctly to contacts/conversations created via these integrations
+
+### Important
+
+Do not hardcode fake “Shopify” or “GHL” behavior if those integrations already normalize into a channel/source field. Reuse the real system model.
+
+---
+
+## Priority 10 — Be honest about what is still beta
+
+Do not waste time pretending unfinished things are production-ready.
+
+### Keep as beta / acceptable limitation for now
+
+These can stay as known early limitations if needed:
+
+* wait/delay over 5 minutes not durable
+* pending button state in memory
+* Test Flow not fully implemented
+
+### But:
+
+* if a limitation exists, communicate it clearly in UI or internal docs
+* do not expose misleading functionality
+
+---
+
+## Final deliverable I want from this pass
+
+Please implement and then report back with:
+
+### 1. What was fixed
+
+* Assign to Team selector
+* channel trigger filtering
+* Template in Send Message
+* guardrails for invalid channel/message combinations
+* Ask Question save clarity
+* toast cleanup
+
+### 2. What is now safe for real users
+
+Especially:
+
+* WhatsApp users
+* Shopify users
+* GHL users
+
+### 3. What is still beta / limited
+
+For example:
+
+* long waits
+* button persistence on restart
+* Test Flow
+
+## Summary
+
+The main goal is not to overbuild. The main goal is to make Flow Builder actually usable and trustworthy for early real users.
+
+Most important fixes:
+
+1. **Assign to Team must use real user IDs via selector**
+2. **Add per-channel trigger filtering**
+3. **Add Template as a Send Message type**
+4. **Add guardrails so users cannot build invalid cross-channel flows**
+5. **Make editing/saving feel clear and trustworthy**
