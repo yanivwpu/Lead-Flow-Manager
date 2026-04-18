@@ -547,7 +547,16 @@ export function AIComposer({
                 </button>
               )}
               <button
-                onClick={() => { onSend(); requestAnimationFrame(() => textareaRef.current?.focus()); }}
+                onClick={() => {
+                  onSend();
+                  if (isMobile) {
+                    // On mobile: blur to dismiss keyboard so the viewport snaps back to normal size
+                    requestAnimationFrame(() => textareaRef.current?.blur());
+                  } else {
+                    // On desktop: keep focus so the user can keep typing without clicking again
+                    requestAnimationFrame(() => textareaRef.current?.focus());
+                  }
+                }}
                 className="h-8 px-3.5 bg-brand-green hover:bg-emerald-700 rounded-lg flex items-center gap-1.5 text-white text-xs font-semibold transition-colors shadow-sm"
                 data-testid="button-send-message"
               >
