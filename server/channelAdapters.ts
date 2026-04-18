@@ -72,6 +72,9 @@ function parseMetaError(error: any, channel: string): string {
   if (code === 100 && message.includes('recipient')) {
     return `Cannot reach this user on ${channel}. They may have blocked messages or their account is unavailable.`;
   }
+  if (code === 100 && message.toLowerCase().includes('upload attachment')) {
+    return `${channel} does not support this file type. Only images, videos, and audio can be sent — documents and PDFs are not supported.`;
+  }
   if (code === 190) {
     return `${channel} access token expired. Please reconnect your account in Settings.`;
   }
@@ -460,6 +463,35 @@ class FacebookAdapter implements ChannelAdapter {
       const pageId = config.pageId;
       const recipientId = contact.facebookId;
 
+      // Facebook Messenger only supports image, video, and audio attachments.
+      // Documents (PDF, DOCX, etc.) are NOT supported via the Messenger API.
+      if (params.mediaUrl) {
+        const ct = (params.contentType || '').toLowerCase();
+        const ext = (params.mediaUrl.split('?')[0].split('.').pop() || '').toLowerCase();
+        const isDocByContentType = ct === 'document' || ct.includes('pdf') || ct.includes('msword') ||
+          ct.includes('spreadsheet') || ct.includes('presentation') || ct.includes('text/plain');
+        const isDocByExt = ['pdf','doc','docx','xls','xlsx','ppt','pptx','txt','csv','zip'].includes(ext);
+        if (isDocByContentType || isDocByExt) {
+          return {
+            success: false,
+            error: 'Facebook Messenger does not support sending documents or PDF files. You can send images, videos, or audio only.',
+            windowStatus,
+          };
+        }
+      }
+
+      // Map contentType to the correct Messenger attachment type (default: image)
+      let fbAttachmentType = 'image';
+      if (params.contentType) {
+        const ct = params.contentType.toLowerCase();
+        if (ct === 'video' || ct.includes('video')) fbAttachmentType = 'video';
+        else if (ct === 'audio' || ct.includes('audio')) fbAttachmentType = 'audio';
+      } else if (params.mediaUrl) {
+        const ext = (params.mediaUrl.split('?')[0].split('.').pop() || '').toLowerCase();
+        if (['mp4','mov','avi','webm'].includes(ext)) fbAttachmentType = 'video';
+        else if (['mp3','ogg','wav','aac','m4a'].includes(ext)) fbAttachmentType = 'audio';
+      }
+
       // Use RESPONSE messaging type (within 24-hour window)
       const messagingType = 'RESPONSE';
 
@@ -473,8 +505,8 @@ class FacebookAdapter implements ChannelAdapter {
           },
           body: JSON.stringify({
             recipient: { id: recipientId },
-            message: params.mediaUrl 
-              ? { attachment: { type: 'image', payload: { url: params.mediaUrl } } }
+            message: params.mediaUrl
+              ? { attachment: { type: fbAttachmentType, payload: { url: params.mediaUrl } } }
               : { text: params.content },
             messaging_type: messagingType,
           }),
