@@ -643,20 +643,6 @@ export function Settings() {
       toast({ title: "Permission Denied", description: "Allow notifications in your browser settings to enable this.", variant: "destructive" });
       return;
     }
-    // Detect Brave before attempting — its shields block Google's push service by default
-    let isBrave = false;
-    try { isBrave = !!((navigator as any).brave && await (navigator as any).brave.isBrave()); } catch {}
-
-    if (isBrave) {
-      toast({
-        title: "Brave Browser Detected",
-        description: "Go to brave://settings/privacy and turn on \"Use Google services for push messaging\", then try again.",
-        variant: "destructive",
-        duration: 8000,
-      });
-      return;
-    }
-
     try {
       const keyRes = await fetch("/api/vapid-public-key", { credentials: "include" });
       if (!keyRes.ok) throw new Error("Push not configured on the server");
@@ -685,16 +671,21 @@ export function Settings() {
       setPushEnabled(true);
       toast({ title: "Push Notifications Enabled", description: "You'll be notified about follow-up reminders." });
     } catch (err: any) {
-      // Give a helpful hint for common browser-level failures
+      // Detect Brave on failure — only relevant if the subscription actually failed
+      let isBrave = false;
+      try { isBrave = !!((navigator as any).brave && await (navigator as any).brave.isBrave()); } catch {}
+
       const msg: string = err?.message || '';
-      const isServiceError = msg.toLowerCase().includes('registration') || msg.toLowerCase().includes('push service');
+      const isServiceError = msg.toLowerCase().includes('registration') || msg.toLowerCase().includes('push service') || msg.toLowerCase().includes('subscribe');
       toast({
         title: "Setup Failed",
-        description: isServiceError
-          ? "Your browser blocked the push service. If you use Brave, enable \"Use Google services for push messaging\" in brave://settings/privacy."
-          : (msg || "Could not enable push notifications."),
+        description: isBrave
+          ? "Push subscription failed. Make sure \"Use Google services for push messaging\" is on in brave://settings/privacy, then try again."
+          : isServiceError
+            ? "Your browser blocked the push service registration. Try a different browser or check your browser's notification settings."
+            : (msg || "Could not enable push notifications."),
         variant: "destructive",
-        duration: 8000,
+        duration: 10000,
       });
       setPushEnabled(false);
     }
