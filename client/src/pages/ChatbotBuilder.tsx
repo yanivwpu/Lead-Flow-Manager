@@ -679,16 +679,8 @@ export function ChatbotBuilder() {
         )}>
           {/* Sidebar header */}
           <div className="px-3.5 pt-4 pb-3 border-b border-gray-100">
-            <div className="flex items-center justify-between mb-3">
+            <div className="mb-3">
               <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Your Flows</span>
-              <button
-                onClick={() => { setIsCreating(true); setSelectedFlow(null); setSelectedStepId(null); }}
-                className="h-6 w-6 rounded-md flex items-center justify-center hover:bg-brand-green/8 text-gray-400 hover:text-brand-green transition-colors"
-                data-testid="button-new-flow-sidebar"
-                title="New Flow"
-              >
-                <Plus className="h-3.5 w-3.5" />
-              </button>
             </div>
             <div className="relative">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-300 pointer-events-none" />
