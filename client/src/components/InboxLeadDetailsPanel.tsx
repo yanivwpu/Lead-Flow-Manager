@@ -823,8 +823,20 @@ export function InboxLeadDetailsPanel({
                     disabled={!bookingDate}
                     onClick={() => {
                     if (bookingDate) {
-                      setBookingConfirmed(true);
+                      // Build the appointment datetime from date + time picker
+                      const [hh, mm] = bookingTime.split(':').map(Number);
+                      const apptDate = new Date(bookingDate);
+                      apptDate.setHours(hh, mm, 0, 0);
                       const dateStr = format(bookingDate, 'MMM d') + ' at ' + formatTime24to12(bookingTime);
+                      const apptLabel = `${bookingType} · ${dateStr}`;
+
+                      // Save to contact as followUp + followUpDate so it appears in the Calendar
+                      onUpdateContact({
+                        followUp: apptLabel,
+                        followUpDate: apptDate.toISOString(),
+                      });
+
+                      setBookingConfirmed(true);
                       toast({ title: `${bookingType} booked`, description: `${contact.name} · ${dateStr}`, duration: 3500 });
                     }
                   }}
