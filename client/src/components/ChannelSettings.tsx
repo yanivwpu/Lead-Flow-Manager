@@ -120,6 +120,9 @@ export function ChannelSettings() {
   const queryClient = useQueryClient();
   const [configChannel, setConfigChannel] = useState<Channel | null>(null);
   const [telegramToken, setTelegramToken] = useState("");
+  const [telegramStep, setTelegramStep] = useState<1 | 2 | 3>(1);
+  const [telegramError, setTelegramError] = useState<string | null>(null);
+  const [telegramConnectResult, setTelegramConnectResult] = useState<{ username: string; botLink: string } | null>(null);
   const [copied, setCopied] = useState(false);
   const [connectMetaOpen, setConnectMetaOpen] = useState(false);
   const [connectTwilioOpen, setConnectTwilioOpen] = useState(false);
@@ -358,18 +361,34 @@ export function ChannelSettings() {
     updateChannelMutation.mutate({ channel, data: { isEnabled: enabled } });
   };
 
-  const connectTelegram = () => {
-    if (!telegramToken.trim()) return;
-    updateChannelMutation.mutate({
-      channel: 'telegram',
-      data: { isConnected: true, isEnabled: true, config: { botToken: telegramToken } },
-    }, {
-      onSuccess: () => {
-        setConfigChannel(null);
-        setTelegramToken("");
-        toast({ title: "Telegram bot connected!" });
-      },
-    });
+  const connectTelegramMutation = useMutation({
+    mutationFn: async (token: string) => {
+      const res = await fetch("/api/integrations/telegram/connect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ botToken: token }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Connection failed");
+      return data as { username: string; firstName: string; botLink: string };
+    },
+    onSuccess: (data) => {
+      setTelegramConnectResult({ username: data.username, botLink: data.botLink });
+      setTelegramError(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/channels"] });
+      toast({ title: `Connected as @${data.username}` });
+    },
+    onError: (err: Error) => {
+      setTelegramError(err.message);
+    },
+  });
+
+  const resetTelegramDialog = () => {
+    setTelegramStep(1);
+    setTelegramToken("");
+    setTelegramError(null);
+    setTelegramConnectResult(null);
   };
 
   const copyText = (text: string, setFn: (v: boolean) => void) => {
@@ -873,59 +892,208 @@ export function ChannelSettings() {
       />
 
       {/* Telegram */}
-      <Dialog open={configChannel === 'telegram'} onOpenChange={() => setConfigChannel(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Send className="h-5 w-5" style={{ color: CHANNEL_CONFIG.telegram.color }} />
-              Connect Telegram Bot
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 mt-4">
-            <div>
-              <Label>Bot Token</Label>
-              <p className="text-xs text-gray-500 mb-2">Get this from @BotFather on Telegram</p>
-              <Input
-                placeholder="123456789:ABCdefGHIjklMNOpqrsTUVwxyz"
-                value={telegramToken}
-                onChange={(e) => setTelegramToken(e.target.value)}
-                data-testid="input-telegram-token"
-              />
-            </div>
-            <div>
-              <Label>Webhook URL</Label>
-              <p className="text-xs text-gray-500 mb-2">Set this as your bot's webhook URL</p>
-              <div className="flex gap-2">
-                <Input
-                  readOnly
-                  value={`${webhookBaseUrl}/api/webhook/telegram/${user?.id || 'YOUR_USER_ID'}`}
-                  className="text-xs font-mono bg-gray-50"
-                />
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => copyWebhookUrl(`${webhookBaseUrl}/api/webhook/telegram/${user?.id}`)}
-                  data-testid="button-copy-telegram-webhook"
-                >
-                  {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                </Button>
-              </div>
-            </div>
-            <Button
-              className="w-full"
-              onClick={connectTelegram}
-              disabled={!telegramToken.trim() || updateChannelMutation.isPending}
-              data-testid="button-save-telegram"
-            >
-              {updateChannelMutation.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
+      {(() => {
+        const telegramChannel = channels.find(c => c.channel === 'telegram');
+        const existingUsername = (telegramChannel?.config as any)?.botUsername as string | undefined;
+        const isAlreadyConnected = telegramChannel?.isConnected && existingUsername;
+        const activeResult = telegramConnectResult ?? (isAlreadyConnected ? { username: existingUsername!, botLink: `https://t.me/${existingUsername}` } : null);
+
+        return (
+          <Dialog
+            open={configChannel === 'telegram'}
+            onOpenChange={(open) => {
+              if (!open) {
+                setConfigChannel(null);
+                resetTelegramDialog();
+              }
+            }}
+          >
+            <DialogContent className="max-w-sm">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <Send className="h-5 w-5" style={{ color: CHANNEL_CONFIG.telegram.color }} />
+                  {activeResult ? 'Telegram Connected' : 'Connect Telegram'}
+                </DialogTitle>
+              </DialogHeader>
+
+              {/* ── Already / just connected ── */}
+              {activeResult ? (
+                <div className="space-y-4 mt-2">
+                  <div className="flex items-center gap-3 p-3 rounded-lg bg-green-50 border border-green-200">
+                    <CheckCircle2 className="h-5 w-5 text-green-600 shrink-0" />
+                    <div>
+                      <p className="text-sm font-medium text-green-800">Connected successfully</p>
+                      <p className="text-sm text-green-700">@{activeResult.username}</p>
+                    </div>
+                  </div>
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => window.open(activeResult.botLink, '_blank')}
+                    data-testid="button-open-telegram-bot"
+                  >
+                    Open @{activeResult.username}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    className="w-full text-sm text-gray-500"
+                    onClick={() => {
+                      resetTelegramDialog();
+                    }}
+                    data-testid="button-reconnect-telegram"
+                  >
+                    Connect a different bot
+                  </Button>
+                </div>
               ) : (
-                "Connect Telegram"
+                <div className="mt-2">
+                  {/* Step indicators */}
+                  <div className="flex items-center gap-2 mb-5">
+                    {[1, 2, 3].map((s) => (
+                      <div key={s} className="flex items-center gap-2">
+                        <div className={cn(
+                          "w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold",
+                          telegramStep === s
+                            ? "bg-blue-600 text-white"
+                            : telegramStep > s
+                            ? "bg-green-500 text-white"
+                            : "bg-gray-200 text-gray-500"
+                        )}>
+                          {telegramStep > s ? <Check className="h-3 w-3" /> : s}
+                        </div>
+                        {s < 3 && <div className={cn("flex-1 h-px w-8", telegramStep > s ? "bg-green-400" : "bg-gray-200")} />}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Step 1: BotFather instructions */}
+                  {telegramStep === 1 && (
+                    <div className="space-y-4">
+                      <div>
+                        <p className="text-sm font-medium text-gray-900 mb-1">Create a Telegram bot</p>
+                        <p className="text-sm text-gray-500">
+                          You'll need a Telegram bot to receive messages. Create one in under 2 minutes using Telegram's official tool.
+                        </p>
+                      </div>
+                      <ol className="space-y-2 text-sm text-gray-600">
+                        <li className="flex gap-2"><span className="font-semibold text-gray-800 shrink-0">1.</span> Open BotFather in Telegram</li>
+                        <li className="flex gap-2"><span className="font-semibold text-gray-800 shrink-0">2.</span> Send <code className="bg-gray-100 px-1 rounded text-xs">/newbot</code> and follow the prompts</li>
+                        <li className="flex gap-2"><span className="font-semibold text-gray-800 shrink-0">3.</span> Copy the bot token it gives you</li>
+                      </ol>
+                      <Button
+                        className="w-full"
+                        onClick={() => window.open('https://t.me/BotFather', '_blank')}
+                        data-testid="button-open-botfather"
+                        style={{ backgroundColor: CHANNEL_CONFIG.telegram.color }}
+                      >
+                        Open BotFather
+                      </Button>
+                      <Button
+                        variant="outline"
+                        className="w-full"
+                        onClick={() => setTelegramStep(2)}
+                        data-testid="button-telegram-step1-next"
+                      >
+                        I already have a bot token →
+                      </Button>
+                    </div>
+                  )}
+
+                  {/* Step 2: Token input */}
+                  {telegramStep === 2 && (
+                    <div className="space-y-4">
+                      <div>
+                        <p className="text-sm font-medium text-gray-900 mb-1">Enter your bot token</p>
+                        <p className="text-sm text-gray-500 mb-3">
+                          Paste the token you received from BotFather. It looks like <span className="font-mono text-xs bg-gray-100 px-1 rounded">123456:ABC-DEF...</span>
+                        </p>
+                        <Input
+                          placeholder="123456789:ABCdefGHIjklMNOpqrsTUVwxyz"
+                          value={telegramToken}
+                          onChange={(e) => { setTelegramToken(e.target.value); setTelegramError(null); }}
+                          autoFocus
+                          data-testid="input-telegram-token"
+                        />
+                        {telegramError && (
+                          <p className="text-xs text-red-600 mt-2 flex items-center gap-1">
+                            <AlertCircle className="h-3 w-3 shrink-0" />
+                            {telegramError}
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          className="flex-1"
+                          onClick={() => { setTelegramStep(1); setTelegramError(null); }}
+                          data-testid="button-telegram-step2-back"
+                        >
+                          ← Back
+                        </Button>
+                        <Button
+                          className="flex-1"
+                          disabled={!telegramToken.trim()}
+                          onClick={() => setTelegramStep(3)}
+                          data-testid="button-telegram-step2-next"
+                        >
+                          Next →
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Step 3: Confirm & connect */}
+                  {telegramStep === 3 && (
+                    <div className="space-y-4">
+                      <div>
+                        <p className="text-sm font-medium text-gray-900 mb-1">Ready to connect</p>
+                        <p className="text-sm text-gray-500">
+                          We'll verify your bot token and set everything up automatically. No technical steps needed.
+                        </p>
+                      </div>
+                      <div className="bg-gray-50 rounded-lg p-3 text-xs text-gray-600 space-y-1">
+                        <p>✓ Validate your bot token</p>
+                        <p>✓ Configure message delivery automatically</p>
+                        <p>✓ Start receiving messages in your inbox</p>
+                      </div>
+                      {telegramError && (
+                        <p className="text-xs text-red-600 flex items-center gap-1">
+                          <AlertCircle className="h-3 w-3 shrink-0" />
+                          {telegramError}
+                        </p>
+                      )}
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          className="flex-1"
+                          onClick={() => { setTelegramStep(2); setTelegramError(null); }}
+                          disabled={connectTelegramMutation.isPending}
+                          data-testid="button-telegram-step3-back"
+                        >
+                          ← Back
+                        </Button>
+                        <Button
+                          className="flex-1"
+                          onClick={() => connectTelegramMutation.mutate(telegramToken)}
+                          disabled={connectTelegramMutation.isPending}
+                          data-testid="button-connect-telegram"
+                          style={{ backgroundColor: CHANNEL_CONFIG.telegram.color }}
+                        >
+                          {connectTelegramMutation.isPending ? (
+                            <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Connecting…</>
+                          ) : (
+                            "Connect Bot"
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
               )}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+            </DialogContent>
+          </Dialog>
+        );
+      })()}
 
       {/* Web Chat */}
       <Dialog open={configChannel === 'webchat'} onOpenChange={() => setConfigChannel(null)}>

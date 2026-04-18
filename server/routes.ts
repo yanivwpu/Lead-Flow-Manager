@@ -4267,6 +4267,78 @@ export async function registerRoutes(
     }
   });
 
+  // ─── Telegram Connect ─────────────────────────────────────────────────────
+  // Validates a bot token via Telegram's getMe API, auto-sets the webhook,
+  // then saves the channel config. Returns bot info on success.
+  app.post("/api/integrations/telegram/connect", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+
+      const { botToken } = req.body as { botToken?: string };
+      if (!botToken?.trim()) return res.status(400).json({ error: "botToken is required" });
+
+      const token = botToken.trim();
+
+      // 1. Validate token via getMe
+      const getMeResp = await fetch(`https://api.telegram.org/bot${token}/getMe`);
+      const getMeData = (await getMeResp.json()) as any;
+
+      if (!getMeResp.ok || !getMeData.ok) {
+        return res.status(400).json({
+          error: getMeData?.description ?? "Invalid bot token. Please check it and try again.",
+        });
+      }
+
+      const botInfo = getMeData.result;
+      const botUsername = botInfo.username as string;
+      const botFirstName = botInfo.first_name as string;
+      const botId = botInfo.id as number;
+
+      // 2. Auto-set webhook to this server's endpoint
+      const protocol = req.headers['x-forwarded-proto'] ?? req.protocol;
+      const host     = req.headers['x-forwarded-host']  ?? req.get('host');
+      const webhookUrl = `${protocol}://${host}/api/webhook/telegram/${req.user.id}`;
+
+      const setWebhookResp = await fetch(
+        `https://api.telegram.org/bot${token}/setWebhook`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url: webhookUrl, drop_pending_updates: true }),
+        }
+      );
+      const setWebhookData = (await setWebhookResp.json()) as any;
+
+      if (!setWebhookResp.ok || !setWebhookData.ok) {
+        console.error("[Telegram Connect] setWebhook failed:", setWebhookData);
+        return res.status(500).json({
+          error: `Bot token is valid but webhook setup failed: ${setWebhookData?.description ?? "unknown error"}`,
+        });
+      }
+
+      console.log(`[Telegram Connect] Webhook set for @${botUsername} → ${webhookUrl}`);
+
+      // 3. Save to channel settings
+      const configData = { botToken: token, botUsername, botFirstName, botId, webhookUrl };
+      await storage.upsertChannelSetting(req.user.id, 'telegram', {
+        isConnected: true,
+        isEnabled: true,
+        config: configData,
+      });
+
+      res.json({
+        username: botUsername,
+        firstName: botFirstName,
+        botId,
+        botLink: `https://t.me/${botUsername}`,
+        webhookUrl,
+      });
+    } catch (err: any) {
+      console.error("[Telegram Connect] error:", err);
+      res.status(500).json({ error: err.message ?? "Unexpected error" });
+    }
+  });
+
   // Validate a Meta (FB/IG) page token before saving credentials.
   // Checks: token validity, required scopes, page access, page subscription to webhook events.
   // Does NOT require authentication — token is provided directly in the request.
