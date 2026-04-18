@@ -4032,6 +4032,94 @@ export async function registerRoutes(
     }
   });
 
+  // Re-subscribe a Facebook or Instagram page to webhook messages events.
+  // Useful when the page subscription is missing or broken without a full OAuth reconnect.
+  app.post("/api/integrations/meta/resubscribe", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+      const { channel = 'facebook' } = req.body as { channel?: 'facebook' | 'instagram' };
+
+      const fbSetting = await storage.getChannelSetting(req.user.id, channel as any);
+      if (!fbSetting?.isConnected) return res.status(404).json({ error: `No connected ${channel} page` });
+
+      const cfg = fbSetting.config as any;
+      const pageId = cfg?.pageId;
+      const accessToken = cfg?.accessToken;
+
+      if (!pageId || !accessToken) {
+        return res.status(400).json({ error: "Missing pageId or accessToken in channelSettings" });
+      }
+
+      const GRAPH = "https://graph.facebook.com/v19.0";
+
+      // 1. Validate the page token
+      const appId = process.env.META_APP_ID;
+      const appSecret = process.env.META_APP_SECRET;
+      let tokenValid = false;
+      let tokenScopes: string[] = [];
+      let tokenError: string | null = null;
+      let tokenExpiry: number | null = null;
+
+      if (appId && appSecret) {
+        const appToken = `${appId}|${appSecret}`;
+        const debugResp = await fetch(
+          `${GRAPH}/debug_token?input_token=${encodeURIComponent(accessToken)}&access_token=${encodeURIComponent(appToken)}`
+        );
+        const debugData = (await debugResp.json()) as any;
+        tokenValid = debugData?.data?.is_valid === true;
+        tokenScopes = debugData?.data?.scopes ?? [];
+        tokenExpiry = debugData?.data?.expires_at ?? null;
+        tokenError = debugData?.data?.error?.message ?? null;
+        console.log(`[Resubscribe] Token debug — valid=${tokenValid}, scopes=[${tokenScopes.join(',')}], expires=${tokenExpiry}, error=${tokenError}`);
+      } else {
+        console.warn(`[Resubscribe] META_APP_ID or META_APP_SECRET not set — skipping token validation`);
+      }
+
+      // 2. Check current subscription
+      const checkResp = await fetch(`${GRAPH}/${pageId}/subscribed_apps?access_token=${encodeURIComponent(accessToken)}`);
+      const checkData = (await checkResp.json()) as any;
+      const existingSubs: any[] = checkData?.data ?? [];
+      const existingFields: string[] = existingSubs.flatMap((s: any) => s.subscribed_fields ?? []);
+      console.log(`[Resubscribe] Current page subscriptions for pageId=${pageId}: ${JSON.stringify(existingSubs)}`);
+      console.log(`[Resubscribe] Subscribed fields: [${existingFields.join(',')}]`);
+
+      // 3. Re-subscribe with full set of fields
+      const subFields = channel === 'instagram'
+        ? "messages,messaging_seen,instagram_messages"
+        : "messages,messaging_postbacks,messaging_seen,messaging_referrals";
+
+      const subResp = await fetch(`${GRAPH}/${pageId}/subscribed_apps`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: `subscribed_fields=${encodeURIComponent(subFields)}&access_token=${encodeURIComponent(accessToken)}`,
+      });
+      const subData = (await subResp.json()) as any;
+      const resubscribed = subResp.ok && subData?.success === true;
+      const subError = subData?.error?.message ?? null;
+
+      console.log(`[Resubscribe] POST subscribed_apps — success=${resubscribed}, error=${subError}, pageId=${pageId}, fields=${subFields}`);
+
+      res.json({
+        channel,
+        pageId,
+        pageName: cfg?.pageName,
+        tokenValid,
+        tokenScopes,
+        tokenExpiry,
+        tokenError,
+        previousFields: existingFields,
+        resubscribed,
+        subError,
+        message: resubscribed
+          ? `Webhook re-subscribed successfully. Facebook will now deliver messages to your inbox.`
+          : `Re-subscribe failed: ${subError || 'Unknown error'}. Check the server logs for details.`,
+      });
+    } catch (err: any) {
+      console.error("[Resubscribe] error:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // Validate a Meta (FB/IG) page token before saving credentials.
   // Checks: token validity, required scopes, page access, page subscription to webhook events.
   // Does NOT require authentication — token is provided directly in the request.

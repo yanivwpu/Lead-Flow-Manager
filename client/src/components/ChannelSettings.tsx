@@ -129,6 +129,7 @@ export function ChannelSettings() {
   } | null>(null);
   const [manageFbIgChannel, setManageFbIgChannel] = useState<'facebook' | 'instagram' | null>(null);
   const [showManageToken, setShowManageToken] = useState(false);
+  const [resubscribeResult, setResubscribeResult] = useState<{ success: boolean; message: string } | null>(null);
   const [manageCopiedUrl, setManageCopiedUrl] = useState(false);
   const [manageCopiedToken, setManageCopiedToken] = useState(false);
 
@@ -299,6 +300,26 @@ export function ChannelSettings() {
     },
     onError: () => {
       toast({ title: "Error", description: "Failed to disconnect. Please try again.", variant: "destructive" });
+    },
+  });
+
+  const resubscribeMutation = useMutation({
+    mutationFn: async (channel: 'facebook' | 'instagram') => {
+      const res = await fetch(`/api/integrations/meta/resubscribe`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ channel }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to re-subscribe");
+      return data;
+    },
+    onSuccess: (data) => {
+      setResubscribeResult({ success: data.resubscribed, message: data.message });
+    },
+    onError: (err: any) => {
+      setResubscribeResult({ success: false, message: err.message || "Failed to refresh webhook subscription." });
     },
   });
 
@@ -593,7 +614,7 @@ export function ChannelSettings() {
       {/* Facebook / Instagram — manage dialog (already connected) */}
       <Dialog
         open={!!manageFbIgChannel}
-        onOpenChange={(v) => { if (!v) setManageFbIgChannel(null); }}
+        onOpenChange={(v) => { if (!v) { setManageFbIgChannel(null); setResubscribeResult(null); } }}
       >
         <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -642,12 +663,39 @@ export function ChannelSettings() {
                 size="sm"
                 className="w-full"
                 onClick={() => {
+                  setResubscribeResult(null);
+                  resubscribeMutation.mutate(manageFbIgChannel!);
+                }}
+                disabled={resubscribeMutation.isPending}
+                data-testid="button-refresh-webhook"
+              >
+                {resubscribeMutation.isPending
+                  ? <><Loader2 className="h-4 w-4 animate-spin mr-2" />Checking…</>
+                  : "Refresh Webhook Subscription"
+                }
+              </Button>
+              {resubscribeResult && (
+                <div className={`p-2 rounded text-xs ${resubscribeResult.success ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-red-50 text-red-800 border border-red-200'}`}>
+                  {resubscribeResult.message}
+                </div>
+              )}
+              <p className="text-[11px] text-gray-400 text-center">
+                Use this if you connected your page but inbound messages aren't arriving.
+              </p>
+            </div>
+
+            <div className="pt-1 border-t space-y-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full"
+                onClick={() => {
                   setManageFbIgChannel(null);
                   handleFbIgConnectClick(manageFbIgChannel!);
                 }}
                 data-testid="button-reconnect-meta"
               >
-                Reconnect with Facebook
+                Reconnect with {manageFbIgChannel === 'facebook' ? 'Facebook' : 'Instagram'}
               </Button>
               <p className="text-[11px] text-gray-400 text-center">
                 Use this to switch to a different {manageFbIgChannel === 'facebook' ? 'Page' : 'Instagram account'} or refresh your permissions.
