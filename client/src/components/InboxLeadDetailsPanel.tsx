@@ -444,6 +444,11 @@ export function InboxLeadDetailsPanel({
   // Track which contact+message fingerprint the memory was generated for (avoid redundant calls)
   const aiMemoryKeyRef = useRef<string>('');
 
+  // AI Copilot Reply — context-aware reply suggestion from the AI
+  const [aiCopilotReply, setAiCopilotReply] = useState<string>('');
+  const [aiCopilotReplyLoading, setAiCopilotReplyLoading] = useState(false);
+  const aiCopilotReplyKeyRef = useRef<string>('');
+
   // Follow popover: 'quick' shows the quick options; 'custom' shows date+time picker
   const [followView,       setFollowView]       = useState<'quick' | 'custom'>('quick');
   const [customFollowDate, setCustomFollowDate] = useState<Date | undefined>(undefined);
@@ -588,6 +593,58 @@ export function InboxLeadDetailsPanel({
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messages.length, contact.id]);
+
+  // ── AI Copilot Reply: generate context-aware suggested reply when new inbound message arrives ──
+  useEffect(() => {
+    // Reset when contact changes
+    setAiCopilotReply('');
+    aiCopilotReplyKeyRef.current = '';
+  }, [contact.id]);
+
+  useEffect(() => {
+    if (!hasAIBrain || messages.length === 0) return;
+    // Only suggest a reply when the last message is inbound (i.e. the lead wrote last)
+    const lastMsg = messages[messages.length - 1];
+    if (!lastMsg || lastMsg.direction !== 'inbound') return;
+
+    const key = `${contact.id}:${messages.length}`;
+    if (aiCopilotReplyKeyRef.current === key) return;
+    aiCopilotReplyKeyRef.current = key;
+
+    let cancelled = false;
+    setAiCopilotReplyLoading(true);
+
+    const conversationHistory = messages.map(m => ({
+      role: m.direction === 'outbound' ? 'assistant' : 'user',
+      content: m.content || '',
+    }));
+
+    fetch('/api/ai/suggest-reply', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({
+        chatId: contact.id,
+        conversationHistory,
+        contactContext: {
+          name:          contact.name,
+          pipelineStage: contact.pipelineStage,
+          intent:        intel.intent,
+          budget:        intel.hasBudget    ? intel.budget    : null,
+          timeline:      intel.hasTimeline  ? intel.timeline  : null,
+          financing:     intel.hasFinancing ? intel.financing : null,
+          notes:         contact.notes,
+        },
+      }),
+    })
+      .then(r => r.ok ? r.json() : Promise.reject(r.status))
+      .then(data => { if (!cancelled && data.reply) setAiCopilotReply(data.reply); })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setAiCopilotReplyLoading(false); });
+
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages.length, contact.id, hasAIBrain]);
 
   // ── Auto-tag: apply tag automatically when signal is strong + current tag is neutral ──
   const autoTagAppliedRef = useRef<string | null>(null);
@@ -1203,8 +1260,8 @@ export function InboxLeadDetailsPanel({
                       };
                     })() : null;
 
-                    const hasReply = !!qualifyAction?.value;
-                    if (!nbaData && !hasReply) return null;
+                    const hasAiReply = !!aiCopilotReply || aiCopilotReplyLoading;
+                    if (!nbaData && !hasAiReply) return null;
 
                     return (
                       <div className="bg-gray-50 border border-gray-100 rounded-xl px-3 py-3 space-y-2">
@@ -1224,34 +1281,35 @@ export function InboxLeadDetailsPanel({
                           </div>
                         )}
 
-                        {hasReply && (
+                        {hasAiReply && (
                           <div className={cn(nbaData && "pt-2 border-t border-gray-200")}>
-                            <p className="text-[12px] text-gray-700 leading-relaxed">
-                              "{qualifyAction!.value}"
-                            </p>
-                            <button
-                              onClick={() => {
-                                if (onInsertMessage && qualifyAction!.value) {
-                                  onInsertMessage(qualifyAction!.value);
-                                } else if (qualifyAction!.value) {
-                                  navigator.clipboard.writeText(qualifyAction!.value).catch(() => {});
-                                }
-                                // Mark the current custom criterion as answered so the next one shows
-                                if (qualifyingCriteria.length > 0) {
-                                  const nextCriterion = qualifyingCriteria.find(c => !answeredCriteriaKeys.has(c.key));
-                                  if (nextCriterion) {
-                                    setAnsweredCriteriaKeys(prev => { const n = new Set(Array.from(prev)); n.add(nextCriterion.key); return n; });
-                                  }
-                                } else {
-                                  completeAction('qualify', "Message inserted");
-                                }
-                              }}
-                              className="mt-2 text-[11px] font-semibold text-emerald-600 hover:text-emerald-700 transition-colors flex items-center gap-1"
-                              data-testid="button-insert-suggested-message"
-                            >
-                              Insert reply
-                              <span className="text-emerald-400">→</span>
-                            </button>
+                            {aiCopilotReplyLoading && !aiCopilotReply ? (
+                              <div className="flex items-center gap-1.5 py-1">
+                                <div className="w-1.5 h-1.5 rounded-full bg-purple-300 animate-pulse" />
+                                <span className="text-[11px] text-gray-400 italic">Generating reply…</span>
+                              </div>
+                            ) : (
+                              <>
+                                <p className="text-[12px] text-gray-700 leading-relaxed">
+                                  "{aiCopilotReply}"
+                                </p>
+                                <button
+                                  onClick={() => {
+                                    if (onInsertMessage) {
+                                      onInsertMessage(aiCopilotReply);
+                                    } else {
+                                      navigator.clipboard.writeText(aiCopilotReply).catch(() => {});
+                                    }
+                                    completeAction('qualify', "Message inserted");
+                                  }}
+                                  className="mt-2 text-[11px] font-semibold text-emerald-600 hover:text-emerald-700 transition-colors flex items-center gap-1"
+                                  data-testid="button-insert-suggested-message"
+                                >
+                                  Insert reply
+                                  <span className="text-emerald-400">→</span>
+                                </button>
+                              </>
+                            )}
                           </div>
                         )}
                       </div>
