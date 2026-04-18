@@ -1017,7 +1017,7 @@ export function UnifiedInbox() {
   }
 
   return (
-    <div className="flex h-full bg-white md:overflow-hidden w-full max-w-full" data-testid="unified-inbox">
+    <div className="flex h-full bg-white overflow-hidden w-full max-w-full" data-testid="unified-inbox">
 
       {/* ── LEFT COLUMN: Conversation List ── */}
       <div className={cn(

@@ -60,7 +60,7 @@ function AppContent() {
   const isRTL = supportedLanguages[currentLang]?.dir === 'rtl';
 
   return (
-    <div className="fixed inset-0 flex bg-gray-50 overflow-hidden" dir={isRTL ? 'rtl' : 'ltr'}>
+    <div className="fixed top-0 left-0 right-0 flex bg-gray-50 overflow-hidden" style={{ height: '100dvh' }} dir={isRTL ? 'rtl' : 'ltr'}>
       <Sidebar />
       <main className="flex-1 flex flex-col min-w-0 bg-white md:mx-3 md:rounded-2xl md:shadow-sm border-gray-200 md:border overflow-hidden relative pb-14 md:pb-0">
         {showTrialBanner && subscription?.limits && (
