@@ -1,0 +1,469 @@
+We need to redesign the current **Chatbot Builder** into a modern, premium, open-page workflow experience. The current UI feels dated because it relies on popups, stacked cards, and a step-by-step “node builder” pattern. I want this reworked to match the cleaner Stripe-style direction we discussed for automations: spacious, visual, calm, and easier to understand.
+
+## Primary goal
+
+Turn the current chatbot builder into a **full-page visual flow builder** that feels modern and AI-era, not like an old modal-based bot builder.
+
+## Rename
+
+Do not call this page **Chatbot Builder** anymore.
+
+Use one of these names instead, with this priority order:
+
+1. **Flow Builder**
+2. **Conversation Flow Builder**
+3. **Automation Flow Builder**
+
+My preference is **Flow Builder** because it is cleaner, broader, and more premium.
+
+Also update the subtitle accordingly.
+
+Suggested subtitle:
+
+* **Design automated conversation flows across your channels**
+  or
+* **Build message, qualification, and routing flows in one place**
+
+## Core product direction
+
+This should no longer feel like “add chatbot nodes.”
+It should feel like:
+
+* designing conversation logic
+* building qualification flows
+* routing leads intelligently
+* creating proactive automation paths
+
+## Critical UX changes
+
+1. **No popup for creating a flow**
+
+   * Remove the “Create New Chatbot Flow” modal
+   * Clicking “New Flow” should open a proper full-page creation state or inline creation experience
+   * Flow name, description, trigger settings, and first step should all be editable directly on the page
+
+2. **Move to one-page open builder**
+
+   * Do not split core setup across modal + editor
+   * Everything important should live in the same page:
+
+     * flow name
+     * status
+     * trigger settings
+     * steps
+     * node settings
+     * save/test/publish actions
+
+3. **Make it visually modern and premium**
+
+   * Use more whitespace
+   * Reduce border-heavy, boxed, clunky UI
+   * Better spacing and hierarchy
+   * Cleaner icon treatment
+   * Less “form screen,” more “builder canvas”
+   * Aim for a Stripe / Linear / modern SaaS feel, but still aligned with our app style
+
+4. **Replace the old top “Add Node” button row**
+
+   * Remove the current row of large buttons:
+
+     * Send Message
+     * Ask Question
+     * Wait
+     * Action
+   * Instead use contextual **+ Add Step** controls between blocks or below blocks
+   * Clicking + Add Step opens a compact menu/popover with the step types
+
+5. **Triggers should be elevated, not buried**
+
+   * Trigger setup is too important to hide in a modal or bottom form
+   * The trigger area should be a clearly visible first section at the top of the page
+
+6. **Use a visual builder structure**
+
+   * Keep the first version mostly vertical if needed for implementation simplicity
+   * But it should visually feel like a flow, not stacked random cards
+   * Steps should feel connected in sequence
+   * Leave room in structure for future branching / conditions / yes-no paths
+
+7. **Use right-side settings panel or inline panel**
+
+   * When a step is selected, its settings should appear in a clean side panel or a structured detail panel
+   * Do not make each step expand into a giant bulky editor block unless it is very clean
+   * Goal: keep the flow visible while editing settings
+
+8. **Unify trigger logic**
+
+   * Right now keywords and “auto-reply on new conversations” feel disconnected
+   * They should live together in one clean trigger block
+   * The explanatory note should be more polished and concise
+
+9. **Prepare it for AI assistance**
+
+   * We do not need to fully build AI suggestions now unless easy
+   * But the design should leave room for future additions like:
+
+     * Suggest next step
+     * Improve message
+     * Add no-reply follow-up
+     * Turn this into a qualification flow
+
+## New page wireframe structure (section by section)
+
+### 1. Page Header
+
+Top of page should look premium and clean.
+
+Include:
+
+* New page name: **Flow Builder**
+* Small subtitle under it
+* Right-side actions:
+
+  * Status toggle (Draft / Active or Off / On)
+  * Test Flow button
+  * Save button
+  * Optional overflow menu for duplicate / delete
+
+Suggested layout:
+
+Left:
+
+* Flow Builder
+* Build message, qualification, and routing flows in one place
+
+Right:
+
+* Status toggle
+* Test Flow
+* Save
+* More menu
+
+Important:
+
+* Delete should not sit as a loud red standalone button in the main area like it does now
+* Move destructive actions into overflow menu or secondary location
+
+---
+
+### 2. Left Sidebar: Flow List
+
+Keep a sidebar for existing flows, but redesign it to feel lighter and more premium.
+
+Sidebar should include:
+
+* Section title: **Your Flows**
+* Search input if easy
+* Flow cards/list items with:
+
+  * Flow name
+  * short metadata like number of steps, status, runs
+  * active/inactive state
+* Selected flow should be highlighted cleanly, not with a heavy old-school box look
+
+Add a clear **+ New Flow** action at top of sidebar or near page header
+
+Do not make the sidebar too wide.
+It should feel similar to a clean workspace navigation.
+
+---
+
+### 3. Main Canvas: Trigger Section
+
+At the very top of the builder canvas, create a dedicated section/card for **Trigger**.
+
+Section title:
+
+* **Trigger**
+  Subtitle:
+* **Choose when this flow starts**
+
+This block should include:
+
+* Trigger on new conversation toggle
+* Keyword trigger input
+* Optional future-ready space for:
+
+  * channel selection
+  * source selection
+  * conditions
+
+Proposed layout:
+
+* left side: label + short explanation
+* right side: controls
+
+For keywords:
+
+* Make them feel like tags/chips, not a plain giant old input
+* Example chips: info, help, pricing
+
+For the new conversation trigger:
+
+* Present it cleanly as a rule, not as a buried checkbox
+
+Replace the current long note with something cleaner like:
+
+* **This flow runs when a new conversation starts or when a message matches one of the trigger keywords.**
+  Only show this if both are active.
+
+---
+
+### 4. Main Canvas: Flow Path
+
+Below the Trigger section, show the actual flow path.
+
+Structure:
+
+* Trigger block at top
+* connector line downward
+* sequential step blocks
+* each step separated by spacing and a centered **+ Add Step** control
+
+The flow should visually read top-to-bottom like a system.
+
+For now, step block types should support:
+
+* Send Message
+* Ask Question
+* Wait
+* Action
+* Condition (important to prepare now, even if basic)
+
+If Condition is too much for first pass, at least structure the UI so we can add it easily next.
+
+---
+
+### 5. Step Block Design
+
+Every step block should be redesigned.
+
+Current blocks are too bulky and form-heavy.
+
+New step block should have:
+
+* small icon
+* step type label
+* step title
+* small preview/summary of its content
+* expand/edit affordance
+* duplicate / delete in a subtle menu
+* drag handle if easy to support later
+
+Examples:
+
+* **Send Message**
+  Preview: “Hello! How can I help you today?”
+* **Ask Question**
+  Preview: “What type of property are you looking for?”
+* **Wait**
+  Preview: “Wait 10 minutes”
+* **Action**
+  Preview: “Add tag: Hot Lead”
+
+Do not show every field expanded by default.
+
+---
+
+### 6. Step Editing Experience
+
+When a user clicks a step, open editing in one of these ways:
+
+Preferred:
+
+* right-side inspector panel
+
+Acceptable:
+
+* clean inline detail panel below the selected step
+
+The editing UI must feel cleaner than the current stacked input-card style.
+
+#### For Send Message step
+
+Support tabs or segmented options for:
+
+* Text
+* Image
+* Video
+* File
+* Buttons
+
+But make them more refined and less chunky.
+Use a modern segmented control or tab style.
+
+Fields:
+
+* Message content
+* media upload if relevant
+* optional buttons / CTA if relevant
+
+#### For Ask Question step
+
+Fields like:
+
+* Question text
+* Expected answer type if supported later
+* Save response to field if supported later
+* Optional quick replies
+
+#### For Wait step
+
+Fields:
+
+* delay amount
+* unit (minutes/hours/days)
+
+#### For Action step
+
+Fields:
+
+* choose action type
+* examples:
+
+  * add tag
+  * assign conversation
+  * move stage
+  * send template
+  * notify user
+
+---
+
+### 7. Add Step Interaction
+
+Between steps and at bottom of flow, use a centered **+ Add Step** button.
+
+When clicked, show compact step picker:
+
+* Send Message
+* Ask Question
+* Wait
+* Action
+* Condition
+
+This should feel contextual and lightweight.
+Do not keep the old permanent large button row at the top.
+
+---
+
+### 8. Empty State for New Flow
+
+When creating a new flow, show an elegant empty state in the main canvas.
+
+Suggested first-time structure:
+
+* Flow name field at top
+* Optional description under it
+* Trigger section
+* Empty flow area with:
+
+  * “Start building your flow”
+  * * Add first step
+
+This should happen directly in the page, not in a popup.
+
+---
+
+### 9. Naming / terminology cleanup
+
+Replace outdated wording across the page.
+
+Use:
+
+* Flow
+* Step
+* Trigger
+* Path
+* Action
+* Status
+
+Avoid overusing:
+
+* Node
+* Bot
+* Chatbot Flow
+
+We still support chatbot use cases, but the product language should feel broader and more premium.
+
+Examples:
+
+* “Add Node” → **Add Step**
+* “Create New Chatbot Flow” → **Create Flow**
+* “Bot fires…” → **This flow runs when…**
+* “Auto-reply on new conversations” → **Start on new conversation**
+
+---
+
+### 10. Visual design rules
+
+Please make the redesign follow these principles:
+
+* softer borders
+* more whitespace
+* fewer heavy boxes
+* more polished typography hierarchy
+* cleaner toggles and buttons
+* consistent card radius
+* less cramped controls
+* better alignment
+* subtle dividers instead of hard sections where possible
+
+It should feel modern and calm, not busy.
+
+---
+
+### 11. Technical / implementation preference
+
+If easiest, keep the first release as:
+
+* left sidebar
+* main vertical flow canvas
+* right settings panel
+
+That structure is already a big upgrade and is scalable.
+
+So ideal layout becomes:
+
+**Left sidebar**
+
+* flow list
+
+**Center canvas**
+
+* trigger + visual flow
+
+**Right panel**
+
+* selected step settings
+
+This is probably the best balance between speed to build and modern UX.
+
+---
+
+### 12. Future-proofing
+
+Please structure the code/UI so it is easy later to add:
+
+* branching conditions
+* yes/no paths
+* channel-specific triggers
+* AI-generated steps
+* analytics per step
+* test mode / simulate flow
+* templates / starter flows
+
+Even if not fully implemented now, the layout should not block these later.
+
+## Summary of what I want
+
+Redesign the current Chatbot Builder into a more modern **Flow Builder** that:
+
+* opens as a full page, not popup
+* feels like a premium visual workflow editor
+* unifies trigger setup and flow editing in one screen
+* replaces “Add Node” with contextual “Add Step”
+* uses a clean flow canvas instead of bulky stacked form cards
+* uses modern naming and cleaner hierarchy
+* prepares the experience for AI-assisted automation building
+
+Please keep the implementation practical, but the UX direction should clearly move away from the current dated chatbot-builder feel.
