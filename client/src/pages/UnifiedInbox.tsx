@@ -1283,7 +1283,7 @@ export function UnifiedInbox() {
             {windowStatus?.hasRestriction && !windowStatus.isActive && (
               <div className="px-3 py-2 bg-red-50 border-b border-red-200 flex items-center gap-2 text-xs text-red-700 flex-shrink-0">
                 <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
-                <span className="flex-1">24-hour messaging window closed. Use a template to re-open.</span>
+                <span className="flex-1">24-hour reply window closed — you can't send new messages until they message you first. You can still receive their messages.</span>
                 {isWhatsAppContact && (
                   <button
                     onClick={handleOpenTemplatePicker}
@@ -1299,7 +1299,7 @@ export function UnifiedInbox() {
             {windowStatus?.hasRestriction && windowStatus.isActive && windowStatus.isExpiringSoon && (
               <div className="px-3 py-2 bg-amber-50 border-b border-amber-200 flex items-center gap-2 text-xs text-amber-700 flex-shrink-0">
                 <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
-                Messaging window closes in {windowStatus.hoursRemaining}h
+                Reply window closes in {windowStatus.hoursRemaining}h — reply soon. You can always receive their messages.
               </div>
             )}
 

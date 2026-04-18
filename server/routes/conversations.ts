@@ -271,9 +271,9 @@ export function registerConversationRoutes(app: Express): void {
         isExpiringSoon,
         channel: conversation.channel,
         message: !isActive
-          ? `The 24-hour messaging window has expired. The customer must message you first before you can reply.`
+          ? `24-hour reply window closed. You can still receive their messages, but you can't send new ones until they message you first.`
           : isExpiringSoon
-          ? `Messaging window expires in ${Math.round(hoursRemaining)} hours. Reply soon!`
+          ? `Reply window closes in ${Math.round(hoursRemaining)} hour${Math.round(hoursRemaining) === 1 ? '' : 's'} — reply soon. You can always receive their messages.`
           : null,
       });
     } catch (error) {
