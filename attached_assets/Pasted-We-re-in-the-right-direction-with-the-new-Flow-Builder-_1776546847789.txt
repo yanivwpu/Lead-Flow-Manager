@@ -1,0 +1,430 @@
+We’re in the right direction with the new Flow Builder, but now we need a **v2 polish pass** to make it feel more premium, more intentional, and more trustworthy. The current redesign is already much better than the old Chatbot Builder, but it still feels like an in-between state: cleaner, but not yet fully polished or “wow.”
+
+Please do a focused polish pass on the current Flow Builder UI and behavior.
+
+## Overall goal
+
+Push the current Flow Builder from “good redesign” to “premium product feel.”
+
+This pass should focus on:
+
+* stronger visual hierarchy
+* better clarity
+* more confident system feedback
+* slightly more personality and guidance
+* fixing broken / unclear actions like Duplicate
+
+Do not redesign from scratch again. Build on the current Flow Builder structure.
+
+---
+
+## 1. Fix the Duplicate issue first
+
+Current problem:
+
+* The overflow menu shows **Duplicate**
+* It either does nothing or gives no visible result
+* This makes the product feel broken and lowers trust immediately
+
+### Required fix
+
+Change **Duplicate** to **Duplicate Flow**
+
+When clicked:
+
+1. Create a full copy of the current flow
+2. Copy all:
+
+   * flow name
+   * description
+   * trigger settings
+   * steps
+   * step settings/configurations
+   * step order
+3. Name the new flow:
+
+   * `{Original Name} (Copy)`
+4. Set duplicated flow status to:
+
+   * Draft / inactive
+5. Automatically refresh the sidebar
+6. Automatically select and open the duplicated flow
+7. Show visible confirmation:
+
+   * toast or inline success message:
+
+     * **Flow duplicated**
+8. If duplication fails:
+
+   * show proper error message
+   * do not fail silently
+
+### Important
+
+If duplication cannot be fully implemented right now, remove the Duplicate Flow option temporarily from the menu until it works properly.
+
+Do not leave non-working actions in the UI.
+
+---
+
+## 2. Improve top header hierarchy
+
+The current header is clean, but still a little flat.
+
+### Update the top header so it feels more premium:
+
+* Keep **Flow Builder**
+* Keep subtitle, but slightly tighten the styling
+* Flow name should feel more important once a flow is selected
+* The unsaved badge is good, but style it more intentionally so it feels like a product state, not a random tag
+
+### Suggested improvements
+
+* Slightly stronger separation between product title and active flow name
+* Better spacing between:
+
+  * draft toggle
+  * test flow
+  * save
+  * overflow menu
+* Make the active flow name more visually central to the experience
+
+The user should immediately understand:
+
+* where they are
+* what flow they are editing
+* whether it is saved / draft / active
+
+---
+
+## 3. Make Trigger feel more important
+
+The Trigger card is correct in structure, but currently it still feels like just another form card.
+
+Trigger is the most important logic block in the flow. It should feel like the starting brain of the automation.
+
+### Please improve the Trigger block:
+
+* Stronger title hierarchy
+* Better supporting copy
+* Slightly stronger visual emphasis than regular step cards
+* Make it feel like the entry point of the flow
+
+### Copy improvements
+
+Replace:
+
+* **Choose when this flow starts**
+
+With something like:
+
+* **This flow runs when these conditions are met**
+  or
+* **Set when this flow should start**
+
+For the “Start on new conversation” description, make it slightly tighter and clearer.
+
+For example:
+
+* **Runs when a contact starts a new conversation**
+
+### Trigger warning state
+
+The warning is useful, but should be more polished.
+
+Current idea is correct, but improve copy to something cleaner:
+
+* **No trigger set. Add a keyword or enable “Start on new conversation” so this flow can run.**
+
+The warning should feel helpful, not alarming or clunky.
+
+---
+
+## 4. Improve step card hierarchy
+
+The step cards are heading in the right direction, but still feel a little generic and too soft.
+
+We need clearer information hierarchy so a user can scan the flow faster.
+
+### Current problem
+
+Right now the structure often reads like:
+
+* Welcome Message
+* Send Message
+* Hello! How can I help you today?
+
+But the most important thing is often the **action type**, not the custom title.
+
+### Improve card hierarchy so it is easier to scan
+
+Examples:
+
+* Action type should stand out more
+* Step name should still exist, but not compete awkwardly
+* Preview text should be easier to read at a glance
+
+### Goal
+
+A user should quickly understand:
+
+* what type of step it is
+* what it does
+* what comes next
+
+### Suggested direction
+
+For example, a message step should visually read more like:
+
+* **Send Message**
+* Welcome Message
+* Hello! How can I help you today?
+
+Or another clean hierarchy that makes action type more obvious than today.
+
+Apply similar logic to:
+
+* Ask Question
+* Wait
+* Action
+
+---
+
+## 5. Add stronger summary text for steps
+
+Each step should show a short, useful preview that reads like a real automation action.
+
+Examples:
+
+* **Send Message** → “Hello! How can I help you today?”
+* **Ask Question** → “What type of property are you looking for?”
+* **Wait** → “Wait 10 minutes”
+* **Action** → “Assign to team: Yaniv” or “Add tag: Hot Lead”
+
+These summaries should feel intentional and readable, not placeholder-like.
+
+---
+
+## 6. Make the canvas feel less empty
+
+The current canvas is cleaner, but still has too much dead space and doesn’t guide the user enough.
+
+### Add subtle builder guidance
+
+This can be lightweight. We do not need a huge AI system yet.
+
+Examples:
+
+* Near add step areas, use subtle helper text like:
+
+  * **Continue the flow**
+  * **Add the next step**
+  * **Most flows add a follow-up, question, or action here**
+* For brand new flows, improve the empty experience slightly so it feels more intentional
+
+The canvas should feel supportive, not just empty.
+
+---
+
+## 7. Improve “End of flow”
+
+The current end state is fine, but weak.
+
+### Improve label/copy
+
+Instead of only:
+
+* **End of flow**
+
+Use something slightly more helpful, such as:
+
+* **Flow ends here**
+  or
+* **No more steps**
+
+It should still be subtle, but clearer and more polished.
+
+---
+
+## 8. Improve right-side inspector panel
+
+The right-side panel is the correct pattern, but it needs a bit more polish and clarity.
+
+### Please improve:
+
+* title hierarchy
+* spacing between controls
+* visual consistency of segmented options
+* reduce cramped feeling
+
+### Message type switcher
+
+The current tabs/buttons for:
+
+* Text
+* Image
+* Video
+* File
+* Buttons
+
+are correct functionally, but should feel slightly more refined and less chunky.
+
+Aim for a cleaner segmented-control feel.
+
+### Action step panel
+
+The dropdown and value areas are useful, but still feel very raw.
+
+Please make the controls look more intentional and premium.
+
+---
+
+## 9. Improve Add Step experience
+
+The current Add Step control is correct conceptually, but can feel slightly floating / disconnected.
+
+### Improve it so:
+
+* it feels clearly attached to the flow path
+* spacing above and below feels more deliberate
+* picker menu feels polished and trustworthy
+
+### Add Step menu
+
+The menu structure is good, but polish:
+
+* spacing
+* hover states
+* icon consistency
+* labels and descriptions
+
+It should feel like a premium action menu, not a basic dropdown.
+
+---
+
+## 10. Sidebar polish
+
+The sidebar structure is correct, but still feels slightly default.
+
+### Improve:
+
+* flow item spacing
+* selected state polish
+* hover states
+* metadata readability
+* search field styling consistency
+
+### Flow cards/list items
+
+Make them easier to scan:
+
+* name
+* status or dot
+* step count / runs
+
+Keep it light, but sharper.
+
+---
+
+## 11. Add stronger product-state feedback
+
+The builder needs to feel more trustworthy through feedback.
+
+### Please improve user feedback for:
+
+* Save success
+* Duplicate success
+* validation errors
+* missing trigger state
+* unsaved changes
+* creation success
+
+Examples:
+
+* **Flow saved**
+* **Flow duplicated**
+* **Step added**
+* **Trigger updated**
+
+These can be small toasts or subtle inline confirmations.
+
+The product should never feel silent after an important action.
+
+---
+
+## 12. Tighten language throughout the page
+
+Please refine wording across the builder so it feels less generic and less clunky.
+
+### Examples
+
+Change unclear wording into cleaner product language.
+
+Good language patterns:
+
+* **This flow runs when…**
+* **Start on new conversation**
+* **Keyword triggers**
+* **Add step**
+* **Flow duplicated**
+* **Flow saved**
+* **Flow ends here**
+
+Avoid anything that feels overly technical, robotic, or legacy-builder style.
+
+---
+
+## 13. Premium polish details
+
+Please do a pass on the small visual details:
+
+* border weight consistency
+* card shadows
+* radius consistency
+* toggle alignment
+* button spacing
+* icon sizing consistency
+* muted text colors
+* divider subtlety
+* empty state spacing
+
+The goal is to make the whole page feel calmer, more deliberate, and more expensive.
+
+---
+
+## 14. Keep the current structure
+
+Do not change the overall architecture again.
+
+Keep:
+
+* left sidebar
+* center canvas
+* right inspector panel
+
+That structure is right.
+
+This is now a **polish + clarity + trust** pass, not a structural rewrite.
+
+---
+
+## 15. Final outcome we want
+
+After this pass, the Flow Builder should feel:
+
+* modern
+* trustworthy
+* calm
+* easier to scan
+* more premium
+* more intentional
+* more aligned with a smart automation product, not just a generic bot editor
+
+Especially important:
+
+* fix Duplicate Flow or remove it until it works
+* improve visual hierarchy
+* make the builder feel more alive and guided
+* improve feedback after user actions
+
+Please implement this as a focused v2 polish pass on the current Flow Builder.
