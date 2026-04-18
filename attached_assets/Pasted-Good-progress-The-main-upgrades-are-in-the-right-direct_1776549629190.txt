@@ -1,0 +1,55 @@
+Good progress. The main upgrades are in the right direction, especially Assign to Team and channel-based triggers.
+
+However, there is one important gap we still need to fix before we can confidently position template flows for WhatsApp users.
+
+## Critical next fix — official WhatsApp template send path
+
+Current issue:
+The new Template message type in Flow Builder currently interpolates variables and sends the result as a plain WhatsApp message body. That is not the same as sending an official approved WhatsApp template through the proper template API path.
+
+This means the current implementation does NOT truly solve:
+
+* sending outside the 24-hour window
+* official template compliance
+* real approved-template automation behavior
+
+## Required fix
+
+Wire Template steps to the actual WhatsApp template send path used elsewhere in our system.
+
+### At runtime, when message type = Template:
+
+* use the approved template name / ID
+* use the correct template language
+* map variables into the provider's template payload
+* send through the official WhatsApp template API path, not plain text interpolation
+
+### Important
+
+Do not downgrade template steps into plain text sends on WhatsApp.
+If official template sending cannot be completed for that flow/runtime case:
+
+* log it clearly
+* fail clearly
+* or block activation if needed
+
+## UI / UX requirement
+
+Update wording so we are honest until this is fully complete.
+
+If official template sending is not yet fully wired:
+
+* do not present it as fully compliant WhatsApp template automation
+* label it more carefully until the backend is complete
+
+## Also verify
+
+Please confirm whether the official send path supports:
+
+* Meta Cloud API templates
+* Twilio WhatsApp templates, if applicable in our architecture
+* variable mapping for both paths if both are supported
+
+## Goal
+
+Template steps in Flow Builder must behave like real WhatsApp template sends, especially for outside-24h scenarios, not like plain text messages that only look like templates.

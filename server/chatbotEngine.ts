@@ -1,5 +1,7 @@
 import { storage } from "./storage";
 import { type ChatbotFlow } from "@shared/schema";
+import { sendMetaWhatsAppTemplate } from "./userMeta";
+import { getUserTwilioClient } from "./userTwilio";
 
 // ─── Button types ──────────────────────────────────────────────────────────
 
@@ -492,6 +494,104 @@ async function executeActionNode(
   }
 }
 
+// ─── Official WhatsApp template sender ────────────────────────────────────
+/**
+ * Sends a WhatsApp template message through the correct provider (Meta or Twilio).
+ * Uses the same logic as the /api/templates/send route. Does NOT fall back to
+ * plain text — throws on failure so the caller can log/handle explicitly.
+ */
+async function sendFlowTemplate(
+  ctx: TriggerContext,
+  templateId: string,
+  templateVariables: Record<string, string>
+): Promise<void> {
+  const [user, template, contact] = await Promise.all([
+    storage.getUser(ctx.userId),
+    storage.getMessageTemplate(templateId),
+    storage.getContact(ctx.contactId),
+  ]);
+
+  if (!user) throw new Error(`User ${ctx.userId} not found`);
+  if (!template) throw new Error(`Template ${templateId} not found`);
+  if (!contact) throw new Error(`Contact ${ctx.contactId} not found`);
+
+  // Resolve recipient phone number
+  const recipientPhone: string =
+    (contact as any).whatsappPhone ||
+    (contact as any).phone ||
+    (contact as any).whatsappId ||
+    "";
+
+  if (!recipientPhone) {
+    throw new Error(`Contact ${ctx.contactId} has no phone number — cannot send template`);
+  }
+
+  const provider = (user as any).whatsappProvider || "twilio";
+
+  console.log(
+    `[Chatbot] 📨 Template send — template="${template.name}" lang="${template.language}" provider="${provider}" to="${recipientPhone}"`
+  );
+
+  if (provider === "meta") {
+    // Build Meta components array from positional variable list ({{1}}, {{2}}, …)
+    const sortedVars = ((template.variables as string[]) || [])
+      .slice()
+      .sort((a, b) => {
+        const na = parseInt(a.replace(/\D/g, ""), 10) || 0;
+        const nb = parseInt(b.replace(/\D/g, ""), 10) || 0;
+        return na - nb;
+      });
+
+    const components: any[] = [];
+    if (sortedVars.length > 0) {
+      const bodyParams = sortedVars.map((v) => ({
+        type: "text",
+        text: templateVariables[v] || "",
+      }));
+      components.push({ type: "body", parameters: bodyParams });
+    }
+
+    const result = await sendMetaWhatsAppTemplate(
+      ctx.userId,
+      recipientPhone,
+      template.name,
+      template.language || "en",
+      components.length > 0 ? components : undefined
+    );
+
+    console.log(`[Chatbot] ✅ Meta template sent — messageId=${result.messageId} status=${result.status}`);
+
+  } else {
+    // Twilio Content API
+    const twilioClient = await getUserTwilioClient(ctx.userId);
+    if (!twilioClient) {
+      throw new Error("Twilio is not connected — cannot send template");
+    }
+    if (!template.twilioSid) {
+      throw new Error(`Template "${template.name}" has no Twilio Content SID — cannot send via Twilio`);
+    }
+
+    const fromNumber = (user as any).twilioWhatsappNumber?.startsWith("whatsapp:")
+      ? (user as any).twilioWhatsappNumber
+      : `whatsapp:${(user as any).twilioWhatsappNumber}`;
+    const toNumber = recipientPhone.startsWith("whatsapp:")
+      ? recipientPhone
+      : `whatsapp:${recipientPhone}`;
+
+    const msgOptions: any = {
+      from: fromNumber,
+      to: toNumber,
+      contentSid: template.twilioSid,
+    };
+    if (Object.keys(templateVariables).length > 0) {
+      msgOptions.contentVariables = JSON.stringify(templateVariables);
+    }
+
+    const msg = await (twilioClient as any).messages.create(msgOptions);
+    console.log(`[Chatbot] ✅ Twilio template sent — sid=${msg.sid} status=${msg.status}`);
+  }
+}
+
 // ─── Flow executor ─────────────────────────────────────────────────────────
 
 async function executeFlow(
@@ -577,8 +677,7 @@ async function executeFlow(
         }
 
         if (msgType === "template") {
-          // Template message — interpolate variables and send as text
-          // WhatsApp template API sends are channel-specific; here we interpolate body text as a safe fallback
+          // Official WhatsApp template send — uses Meta Cloud API or Twilio Content API
           const templateId = (currentNode.data as any).templateId as string | undefined;
           const templateVariables = ((currentNode.data as any).templateVariables || {}) as Record<string, string>;
           if (!templateId) {
@@ -586,7 +685,9 @@ async function executeFlow(
             break;
           }
           if (ctx.channel !== "whatsapp") {
-            console.warn(`[Chatbot] ⚠ Template node "${nodeId}" on channel "${ctx.channel}" — templates only supported on WhatsApp, skipping`);
+            console.warn(
+              `[Chatbot] ⚠ Template node "${nodeId}" on channel "${ctx.channel}" — templates are WhatsApp-only, skipping`
+            );
             break;
           }
           const delayToUseTemplate = Math.min(cumulativeDelayMs, MAX_DELAY_MS);
@@ -595,19 +696,10 @@ async function executeFlow(
             await new Promise((resolve) => setTimeout(resolve, delayToUseTemplate));
           }
           try {
-            const tpl = await storage.getMessageTemplate(templateId);
-            if (!tpl) {
-              console.warn(`[Chatbot] ⚠ Template "${templateId}" not found — skipping`);
-              break;
-            }
-            let body = tpl.bodyText || "";
-            for (const [k, v] of Object.entries(templateVariables)) {
-              body = body.replace(new RegExp(`\\{\\{${k}\\}\\}`, "g"), v);
-            }
-            console.log(`[Chatbot] 📨 Template node "${nodeId}" — sending template "${tpl.name}" (${tpl.language})`);
-            await sendChatbotReply(ctx, body);
+            await sendFlowTemplate(ctx, templateId, templateVariables);
           } catch (err: any) {
-            console.error(`[Chatbot] ❌ Template node "${nodeId}" send error: ${err.message}`);
+            console.error(`[Chatbot] ❌ Template node "${nodeId}" failed: ${err.message}`);
+            // Do NOT fall back to plain text — log the failure clearly and stop this step
           }
           break;
         } else if (isMediaNode) {

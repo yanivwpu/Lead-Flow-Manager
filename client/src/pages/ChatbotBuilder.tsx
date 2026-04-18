@@ -1342,11 +1342,13 @@ export function ChatbotBuilder() {
               {(selectedStep.type === "message" || selectedStep.type === "question") &&
                 selectedStep.data.messageType === "template" && (
                 <div className="space-y-4">
-                  {/* WhatsApp-only warning */}
+                  {/* WhatsApp-only info */}
                   <div className="p-3 rounded-xl bg-slate-50 border border-slate-100 text-[11px] text-slate-600 space-y-1">
-                    <p className="font-bold text-slate-700 mb-1">Channel support</p>
-                    <p>✅ WhatsApp only (Meta provider)</p>
-                    <p>✖ Not supported on Instagram, Facebook, SMS, or WebChat</p>
+                    <p className="font-bold text-slate-700 mb-1">Official WhatsApp template send</p>
+                    <p>✅ Sends via Meta Cloud API or Twilio Content API</p>
+                    <p>✅ Works outside the 24-hour conversation window</p>
+                    <p>✅ Supports Meta and Twilio providers automatically</p>
+                    <p>✖ WhatsApp only — skipped on all other channels</p>
                   </div>
                   {(selectedFlow.triggerChannels || []).length > 0 &&
                     !(selectedFlow.triggerChannels || []).includes("whatsapp") && (
