@@ -2265,6 +2265,7 @@ export async function registerRoutes(
 
                 console.log(`[Inbound] [Stage 4-IG] content="${content.substring(0, 60)}", contentType=${contentType}, hasMedia=${!!attachmentMediaUrl}, attachmentType=${attachmentType}`);
 
+                const igAccessToken: string = (matchSetting.config as any)?.accessToken ?? '';
                 directJobs.push(
                   metaCs.processIncomingMessage({
                     userId: matchSetting.userId,
@@ -2276,8 +2277,15 @@ export async function registerRoutes(
                     mediaUrl: attachmentMediaUrl,
                     mediaType: attachmentType,
                     externalMessageId: messageId,
-                  }).then((result) => {
+                  }).then(async (result) => {
                     console.log(`[Inbound] [Stage 10-IG] Pipeline complete — channel: instagram, messageId: ${messageId}, contactId: ${result.contact.id}, conversationId: ${result.conversation.id}, messageId_db: ${result.message.id}, isNewConversation: ${result.isNewConversation}`);
+                    // Fire-and-forget avatar fetch
+                    if (igAccessToken) {
+                      const { shouldRefreshAvatar, fetchInstagramAvatar } = await import("./avatarService");
+                      if (shouldRefreshAvatar(result.contact)) {
+                        fetchInstagramAvatar(result.contact.id, senderId, igAccessToken).catch(() => {});
+                      }
+                    }
                   })
                 );
               } else {
@@ -2358,11 +2366,12 @@ export async function registerRoutes(
             const matchedConfig = matchSetting.config as any;
             console.log(`[Meta Webhook] [Stage 3-FB] MATCHED: channelSettings id=${matchSetting.id}, userId=${matchSetting.userId}, savedPageId=${matchedConfig?.pageId}`);
 
-            // Resolve sender display name via Graph API (PSID → name)
+            // Resolve sender display name + profile picture via Graph API in one call
             let contactName = senderId;
+            let fbProfilePic: string | undefined;
             try {
               const nameResp = await fetch(
-                `https://graph.facebook.com/v19.0/${senderId}?fields=name&access_token=${encodeURIComponent(matchedConfig.accessToken)}`
+                `https://graph.facebook.com/v19.0/${senderId}?fields=name,profile_pic&access_token=${encodeURIComponent(matchedConfig.accessToken)}`
               );
               const nameData = (await nameResp.json()) as any;
               if (nameResp.ok && nameData.name) {
@@ -2370,6 +2379,9 @@ export async function registerRoutes(
                 console.log(`[Meta Webhook] [Stage 3-FB] Resolved sender name: "${contactName}"`);
               } else {
                 console.log(`[Meta Webhook] [Stage 3-FB] Could not resolve sender name (${nameData?.error?.message || 'no name field'}) — using PSID`);
+              }
+              if (nameResp.ok && typeof nameData.profile_pic === 'string') {
+                fbProfilePic = nameData.profile_pic as string;
               }
             } catch {
               console.log(`[Meta Webhook] [Stage 3-FB] Name lookup failed — using PSID as contactName`);
@@ -2392,8 +2404,18 @@ export async function registerRoutes(
                 contentType,
                 mediaUrl: attachmentMediaUrl,
                 externalMessageId: messageId,
-              }).then((result) => {
+              }).then(async (result) => {
                 console.log(`[Inbound] [Stage 10-FB] Pipeline complete — channel: facebook, mid=${messageId}, contactId=${result.contact.id}, conversationId=${result.conversation.id}, dbMessageId=${result.message.id}, isNew=${result.isNewConversation}`);
+                // Update avatar if we got one from the Graph API call and it's due for refresh
+                const { shouldRefreshAvatar } = await import("./avatarService");
+                if (shouldRefreshAvatar(result.contact)) {
+                  if (fbProfilePic) {
+                    storage.updateContact(result.contact.id, { avatar: fbProfilePic, avatarFetchedAt: new Date() }).catch(() => {});
+                  } else {
+                    const { fetchFacebookAvatar } = await import("./avatarService");
+                    fetchFacebookAvatar(result.contact.id, senderId, matchedConfig.accessToken).catch(() => {});
+                  }
+                }
               }).catch((err: any) => {
                 console.error(`[Inbound] [Stage 10-FB] processIncomingMessage FAILED — mid=${messageId}, error:`, err?.message || err);
               })

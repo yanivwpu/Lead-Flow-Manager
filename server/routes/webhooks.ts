@@ -24,7 +24,7 @@ export function registerWebhookRoutes(app: Express): void {
         console.log(`[Inbound] Starting processIncomingMessage — channel: telegram, userId: ${userId}`);
 
         const { channelService } = await import("../channelService");
-        await channelService.processIncomingMessage({
+        const result = await channelService.processIncomingMessage({
           userId,
           channel: 'telegram',
           channelContactId: chatId,
@@ -33,6 +33,16 @@ export function registerWebhookRoutes(app: Express): void {
           contentType: 'text',
           externalMessageId: String(message.message_id),
         });
+
+        // Fire-and-forget avatar fetch — only if due for refresh
+        const { shouldRefreshAvatar, fetchTelegramAvatar } = await import("../avatarService");
+        if (shouldRefreshAvatar(result.contact)) {
+          const tgSetting = await storage.getChannelSetting(userId, 'telegram');
+          const botToken: string | undefined = (tgSetting?.config as any)?.botToken;
+          if (botToken) {
+            fetchTelegramAvatar(result.contact.id, chatId, botToken).catch(() => {});
+          }
+        }
       }
 
       console.log(`[Inbound] Webhook returned 200 — channel: telegram, userId: ${userId}`);

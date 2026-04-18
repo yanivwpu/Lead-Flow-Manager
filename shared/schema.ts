@@ -796,6 +796,7 @@ export const contacts = pgTable("contacts", {
   email: text("email"),
   phone: text("phone"), // Primary phone number (E.164 format)
   avatar: text("avatar"),
+  avatarFetchedAt: timestamp("avatar_fetched_at"), // When avatar was last fetched from channel API
   
   // Channel identifiers (platform-specific IDs)
   whatsappId: text("whatsapp_id"), // WhatsApp phone number
