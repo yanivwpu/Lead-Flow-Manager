@@ -1258,8 +1258,8 @@ export function ChannelSettings() {
                   <div className="flex items-center gap-3 p-3 rounded-lg bg-green-50 border border-green-200">
                     <CheckCircle2 className="h-5 w-5 text-green-600 shrink-0" />
                     <div>
-                      <p className="text-sm font-medium text-green-800">Lead capture is active</p>
-                      <p className="text-xs text-green-700">New TikTok leads flow directly into your inbox</p>
+                      <p className="text-sm font-medium text-green-800">TikTok lead capture is active</p>
+                      <p className="text-xs text-green-700">New leads will appear in your inbox automatically</p>
                     </div>
                   </div>
                   <TiktokWebhookRow />
@@ -1326,8 +1326,8 @@ export function ChannelSettings() {
                       <div className="flex items-center gap-3 p-3 rounded-lg bg-green-50 border border-green-200">
                         <CheckCircle2 className="h-5 w-5 text-green-600 shrink-0" />
                         <div>
-                          <p className="text-sm font-medium text-green-800">Leads are flowing!</p>
-                          <p className="text-xs text-green-700">Your Zap is connected and ready</p>
+                          <p className="text-sm font-medium text-green-800">TikTok lead capture is active</p>
+                          <p className="text-xs text-green-700">New leads will appear in your inbox automatically</p>
                         </div>
                       </div>
                       <TestLeadButton />
@@ -1341,7 +1341,7 @@ export function ChannelSettings() {
                           {[
                             { n: 1, text: 'Open the Zap template below and click "Use this Zap"' },
                             { n: 2, text: "Connect your TikTok account when prompted" },
-                            { n: 3, text: "When asked for a destination URL, paste this:" },
+                            { n: 3, text: "Use this URL in Zapier to send leads into WhachatCRM:" },
                           ].map(({ n, text }) => (
                             <li key={n} className="flex gap-3 text-sm text-gray-600">
                               <span className="flex-shrink-0 w-5 h-5 rounded-full bg-gray-100 text-gray-700 text-xs flex items-center justify-center font-semibold">{n}</span>
@@ -1418,7 +1418,7 @@ export function ChannelSettings() {
                       disabled={updateChannelMutation.isPending}
                       data-testid="button-enable-tiktok"
                     >
-                      {updateChannelMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Mark as Active"}
+                      {updateChannelMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Enable Lead Intake"}
                     </Button>
                   </div>
                 </div>

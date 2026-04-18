@@ -4347,17 +4347,18 @@ export async function registerRoutes(
       if (!req.user) return res.status(401).json({ error: "Unauthorized" });
 
       const names = ["Alex Johnson", "Jamie Rivera", "Sam Chen", "Taylor Brooks", "Morgan Lee"];
-      const randomName = names[Math.floor(Math.random() * names.length)];
+      const baseName = names[Math.floor(Math.random() * names.length)];
+      const randomName = `[Test] ${baseName}`;
       const randomPhone = `+1555${Math.floor(1000000 + Math.random() * 9000000)}`;
 
       const contact = await storage.createContact({
         userId: req.user.id,
         name: randomName,
         phone: randomPhone,
-        email: `${randomName.toLowerCase().replace(" ", ".")}@example.com`,
+        email: `test.${baseName.toLowerCase().replace(" ", ".")}@example.com`,
         primaryChannel: 'whatsapp',
         source: 'tiktok',
-        notes: 'Test lead — sent from Settings to verify TikTok intake is working',
+        notes: '⚠️ This is a test lead created from Settings. You can safely delete it.',
       });
 
       const { channelService } = await import("./channelService");
