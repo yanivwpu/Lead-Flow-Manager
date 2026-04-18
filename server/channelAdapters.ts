@@ -289,9 +289,37 @@ class InstagramAdapter implements ChannelAdapter {
         return { success: false, error: "Instagram page ID missing. Please reconnect your Instagram account." };
       }
 
-      console.log(`[Outbound] Instagram credentials loaded — userId=${conversation.userId}, pageId=${config.pageId}`);
-      const accessToken = config.accessToken;
-      const pageId = config.pageId;
+      let accessToken: string = config.accessToken;
+      let pageId: string = config.pageId;
+
+      // Self-healing: if pageId was incorrectly stored as the Instagram account ID
+      // (a known historical bug), resolve the real Facebook Page ID via Meta's /me endpoint
+      // using the stored page access token, then persist the fix so it only runs once.
+      if (config.instagramAccountId && pageId === config.instagramAccountId) {
+        console.warn(`[Outbound] Instagram pageId equals instagramAccountId (${pageId}) — this is wrong. Attempting auto-repair via /me API…`);
+        try {
+          const meResp = await fetch(
+            `https://graph.facebook.com/v19.0/me?fields=id,name&access_token=${encodeURIComponent(accessToken)}`
+          );
+          const meData = (await meResp.json()) as any;
+          if (meResp.ok && meData?.id && meData.id !== config.instagramAccountId) {
+            const realPageId: string = meData.id;
+            pageId = realPageId;
+            // Persist the fix so subsequent sends use the correct ID immediately
+            const updatedConfig = { ...config, pageId: realPageId };
+            await storage.upsertChannelSetting(conversation.userId, 'instagram', {
+              config: updatedConfig,
+            });
+            console.log(`[Outbound] Auto-repaired Instagram pageId: ${config.pageId} → ${realPageId}`);
+          } else {
+            console.warn(`[Outbound] /me did not return a usable page ID — response: ${JSON.stringify(meData)}`);
+          }
+        } catch (repairErr: any) {
+          console.warn(`[Outbound] Auto-repair fetch failed (non-fatal):`, repairErr.message);
+        }
+      }
+
+      console.log(`[Outbound] Instagram credentials loaded — userId=${conversation.userId}, pageId=${pageId}`);
       const recipientId = contact.instagramId;
 
       // Use RESPONSE messaging type (within 24-hour window) or MESSAGE_TAG for allowed cases
