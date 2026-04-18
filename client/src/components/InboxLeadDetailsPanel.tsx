@@ -1463,13 +1463,7 @@ export function InboxLeadDetailsPanel({
                 </span>
               </button>
             ) : (
-              <p className="mt-1 text-[11px] text-gray-400 italic">
-                Not set · <button
-                  onClick={() => setFollowOpen(true)}
-                  className="underline hover:text-gray-600 transition-colors"
-                  data-testid="followup-not-set-link"
-                >Schedule</button>
-              </p>
+              <p className="mt-1 text-[11px] text-gray-400 italic">Not set</p>
             )}
           </div>
 
