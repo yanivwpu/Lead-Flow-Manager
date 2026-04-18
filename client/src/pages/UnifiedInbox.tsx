@@ -1125,31 +1125,57 @@ export function UnifiedInbox() {
             ))}
           </div>
 
-          {/* Channel health bar — shows connected channels and their confirmed subscription status */}
-          {channelHealth.filter(c => c.isConnected).length > 0 && (
-            <div className="flex items-center gap-2 mt-2 pt-2 border-t flex-wrap" data-testid="channel-health-bar">
-              {channelHealth.filter(c => c.isConnected).map(ch => {
-                const dotColor = ch.healthy === true ? "bg-emerald-500" : ch.healthy === false ? "bg-red-500" : "bg-gray-400";
-                const label = ch.channel.charAt(0).toUpperCase() + ch.channel.slice(1);
-                const tooltip = ch.healthy === true
-                  ? `${label}: subscription confirmed (token valid, page accessible, webhook active)`
-                  : ch.healthy === false
-                  ? `${label} issue: ${ch.issues[0] ?? 'check Settings'}`
-                  : `${label}: status unknown`;
-                return (
-                  <div
-                    key={ch.channel}
-                    title={tooltip}
-                    className="flex items-center gap-1 text-[10px] text-gray-500"
-                    data-testid={`channel-health-${ch.channel}`}
-                  >
-                    <span className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", dotColor)} />
-                    <span>{label}</span>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+          {/* Channel health bar — always shows all 5 channels; gray = not configured */}
+          {(() => {
+            const ORDERED = ['whatsapp', 'facebook', 'instagram', 'telegram', 'tiktok'];
+            const LABELS: Record<string, string> = {
+              whatsapp: 'WhatsApp', facebook: 'Facebook', instagram: 'Instagram',
+              telegram: 'Telegram', tiktok: 'TikTok',
+            };
+            // Build a map from health data; channels missing from data = not configured
+            const healthMap = new Map(channelHealth.map(ch => [ch.channel, ch]));
+            const rows = ORDERED.map(key => healthMap.get(key) ?? {
+              channel: key, isConnected: false, isEnabled: false,
+              pageName: null, healthy: null, issues: [], checks: {},
+            });
+
+            const getTooltip = (ch: typeof rows[0]) => {
+              const label = LABELS[ch.channel] ?? ch.channel;
+              if (!ch.isConnected) return `${label}: not configured — set up in Settings`;
+              if (ch.healthy === true) {
+                if (ch.channel === 'whatsapp') return `${label}: account verified and ready`;
+                if (ch.channel === 'telegram') return `${label}: bot token valid, webhook active`;
+                if (ch.channel === 'tiktok')   return `${label}: lead intake is active`;
+                return `${label}: token valid, page accessible, webhook subscribed`;
+              }
+              if (ch.healthy === false) return `${label} issue: ${ch.issues[0] ?? 'check Settings'}`;
+              return `${label}: status unknown`;
+            };
+
+            return (
+              <div className="flex items-center gap-2 mt-2 pt-2 border-t flex-wrap" data-testid="channel-health-bar">
+                {rows.map(ch => {
+                  const dotColor = !ch.isConnected
+                    ? "bg-gray-300"
+                    : ch.healthy === true ? "bg-emerald-500"
+                    : ch.healthy === false ? "bg-red-500"
+                    : "bg-gray-400";
+                  const textColor = !ch.isConnected ? "text-gray-400" : "text-gray-500";
+                  return (
+                    <div
+                      key={ch.channel}
+                      title={getTooltip(ch)}
+                      className={cn("flex items-center gap-1 text-[10px]", textColor)}
+                      data-testid={`channel-health-${ch.channel}`}
+                    >
+                      <span className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", dotColor)} />
+                      <span>{LABELS[ch.channel] ?? ch.channel}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
         </div>
 
         {/* ── Channel health alert banner ── */}

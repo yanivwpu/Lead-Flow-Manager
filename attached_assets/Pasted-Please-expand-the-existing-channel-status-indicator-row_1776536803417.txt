@@ -1,0 +1,49 @@
+Please expand the existing channel status indicator row in the Inbox so it covers all supported integrations, not just Facebook and Instagram.
+Goal:
+Create one unified channel health/status row that gives users immediate trust and visibility across every communication source connected to WhachatCRM.
+What to include in the row:
+•	WhatsApp 
+•	Facebook 
+•	Instagram 
+•	Telegram 
+•	TikTok 
+Preferred display order:
+1.	WhatsApp 
+2.	Facebook 
+3.	Instagram 
+4.	Telegram 
+5.	TikTok 
+Visual behavior:
+•	Green dot = connected and healthy 
+•	Red dot = connected but an issue is detected 
+•	Gray dot = not connected / not configured 
+•	Keep styling visually consistent with the current Facebook/Instagram dots 
+Health logic by channel:
+•	WhatsApp: 
+o	Green only if the WhatsApp connection is active and usable for messaging 
+o	Red if connected but token/API/account/number is not healthy 
+o	Gray if not connected 
+•	Facebook: 
+o	Keep current deeper health logic already built 
+•	Instagram: 
+o	Keep current deeper health logic already built 
+•	Telegram: 
+o	Green if bot token/webhook is configured and Telegram is reachable/healthy 
+o	Red if configured but webhook/bot health check fails 
+o	Gray if not connected 
+•	TikTok: 
+o	Green if lead intake is enabled and healthy 
+o	Red if enabled but intake/webhook health check fails 
+o	Gray if not configured 
+Important:
+•	Do not regress or simplify the existing Facebook/Instagram health logic 
+•	Reuse the same deeper-health approach where possible instead of just showing a basic connected flag 
+•	For TikTok, if full health verification is limited, use the most reliable available signal without overpromising. If needed, green can mean enabled/active and red can mean a detected endpoint/config issue 
+•	For Telegram, use the most reliable health signal available from the existing integration logic 
+UX details:
+•	Keep this row under the Inbox filter tabs where it currently appears 
+•	Make the status meaning trustworthy: green should mean actually healthy, not just “saved in settings” 
+•	If a channel is red, hovering should explain the specific issue if that already exists or is easy to support 
+•	If not already supported, at minimum the row should visually reflect actual health state for all five channels 
+This is meant to make the inbox feel complete and reliable as a true multi-channel unified inbox. Please implement this as a single consistent channel status system across all integrations, with WhatsApp included as the first and most prominent channel
+

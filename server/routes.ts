@@ -4250,15 +4250,139 @@ export async function registerRoutes(
             entry.healthy = null;
           }
 
-        // ── Non-Meta connected channels (WhatsApp, SMS, etc.) ─────────────────
+        // ── WhatsApp ──────────────────────────────────────────────────────────
+        } else if (s.channel === 'whatsapp' && s.isConnected) {
+          const user = await storage.getUser(req.user.id);
+          const provider: string = (user as any)?.whatsappProvider ?? 'twilio';
+
+          if (provider === 'meta') {
+            const metaOk = !!(user as any)?.metaConnected;
+            entry.checks.tokenValid = metaOk;
+            if (!metaOk) entry.issues.push('Meta WhatsApp is not connected — reconnect in Settings');
+            entry.healthy = metaOk ? true : false;
+
+          } else {
+            // Twilio — validate credentials against Twilio API
+            const accountSid: string | undefined = (user as any)?.twilioAccountSid;
+            const authToken:  string | undefined = (user as any)?.twilioAuthToken;
+
+            if (accountSid && authToken) {
+              try {
+                const r = await fetch(
+                  `https://api.twilio.com/2010-04-01/Accounts/${accountSid}.json`,
+                  {
+                    headers: { Authorization: `Basic ${Buffer.from(`${accountSid}:${authToken}`).toString('base64')}` },
+                    signal: AbortSignal.timeout(5000),
+                  }
+                );
+                if (r.ok) {
+                  const data = (await r.json()) as any;
+                  const active = data?.status === 'active';
+                  entry.checks.tokenValid = active;
+                  if (!active) entry.issues.push(`Twilio account status: ${data?.status ?? 'unknown'}`);
+                  entry.healthy = active;
+                } else {
+                  entry.checks.tokenValid = false;
+                  entry.issues.push('Twilio credentials are invalid or rejected');
+                  entry.healthy = false;
+                }
+              } catch {
+                entry.healthy = null;
+                entry.issues.push('Could not reach Twilio to verify credentials');
+              }
+            } else {
+              entry.checks.tokenValid = false;
+              entry.issues.push('Twilio credentials missing — reconnect in Settings');
+              entry.healthy = false;
+            }
+          }
+
+        // ── Telegram ──────────────────────────────────────────────────────────
+        } else if (s.channel === 'telegram' && s.isConnected) {
+          const botToken: string | undefined = cfg?.botToken;
+
+          if (!botToken) {
+            entry.checks.tokenValid = false;
+            entry.issues.push('Bot token not found — reconnect Telegram in Settings');
+            entry.healthy = false;
+          } else {
+            try {
+              const [getMeData, webhookData] = await Promise.all([
+                fetch(`https://api.telegram.org/bot${botToken}/getMe`, { signal: AbortSignal.timeout(5000) })
+                  .then(r => r.ok ? r.json() : null).catch(() => null),
+                fetch(`https://api.telegram.org/bot${botToken}/getWebhookInfo`, { signal: AbortSignal.timeout(5000) })
+                  .then(r => r.ok ? r.json() : null).catch(() => null),
+              ]);
+
+              entry.checks.tokenValid = getMeData?.ok === true;
+              if (!entry.checks.tokenValid) entry.issues.push('Bot token is invalid or revoked');
+
+              const webhookUrl: string = webhookData?.result?.url ?? '';
+              const webhookErr: string = webhookData?.result?.last_error_message ?? '';
+              entry.checks.subscriptionOk = webhookUrl.length > 0;
+              if (!entry.checks.subscriptionOk) entry.issues.push('Webhook URL is not configured');
+              if (webhookErr) entry.issues.push(`Telegram last error: ${webhookErr}`);
+
+              const ran = [entry.checks.tokenValid, entry.checks.subscriptionOk].filter(v => v !== null);
+              entry.healthy = ran.length > 0 ? ran.every(Boolean) && entry.issues.length === 0 : null;
+
+            } catch {
+              entry.healthy = null;
+              entry.issues.push('Could not reach Telegram API');
+            }
+          }
+
+        // ── TikTok ────────────────────────────────────────────────────────────
+        } else if (s.channel === 'tiktok' && s.isConnected) {
+          // TikTok is a passive inbound webhook — the health signal is whether
+          // lead intake is enabled and the channel is marked connected.
+          if (s.isEnabled) {
+            entry.checks.subscriptionOk = true;
+            entry.healthy = true;
+          } else {
+            entry.checks.subscriptionOk = false;
+            entry.issues.push('Lead intake is not enabled — enable it in Settings');
+            entry.healthy = false;
+          }
+
+        // ── Other connected channels (SMS, Webchat, …) ────────────────────────
         } else if (s.isConnected) {
-          // These channels use server-managed webhooks — health tracks isConnected
           entry.checks.subscriptionOk = true;
           entry.healthy = true;
         }
 
         result.push(entry);
       }
+
+      // ── Always surface all five main channels (gray if not configured) ──────
+      const MAIN_CHANNELS = ['whatsapp', 'facebook', 'instagram', 'telegram', 'tiktok'];
+      for (const ch of MAIN_CHANNELS) {
+        if (!result.find(r => r.channel === ch)) {
+          result.push({
+            channel: ch,
+            isConnected: false,
+            isEnabled: false,
+            pageName: null,
+            healthy: null,
+            issues: [],
+            checks: {
+              tokenValid: null,
+              tokenScopes: null,
+              missingScopes: null,
+              pageAccessible: null,
+              subscriptionOk: null,
+              subscriptionFields: null,
+            },
+          });
+        }
+      }
+
+      // Sort in display order: WhatsApp, Facebook, Instagram, Telegram, TikTok, then others
+      result.sort((a, b) => {
+        const ai = MAIN_CHANNELS.indexOf(a.channel);
+        const bi = MAIN_CHANNELS.indexOf(b.channel);
+        return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+      });
 
       res.json(result);
     } catch (err: any) {
