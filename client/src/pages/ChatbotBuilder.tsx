@@ -7,7 +7,7 @@ import {
   X, CheckCircle2, Image, Video,
   FileText, ListOrdered, Upload, MoreHorizontal,
   Play, Search, Settings2, Copy,
-  ChevronUp, ChevronDown, MousePointer2, ArrowDown, Info
+  ChevronUp, ChevronDown, MousePointer2, ArrowDown, Info, ArrowLeft
 } from "lucide-react";
 import { useUpload } from "@/hooks/use-upload";
 import { Button } from "@/components/ui/button";
@@ -532,9 +532,19 @@ export function ChatbotBuilder() {
       </Helmet>
 
       {/* ══ Page Header ════════════════════════════════════════════════ */}
-      <header className="bg-white border-b border-gray-200/80 px-5 py-3 flex items-center gap-4 flex-shrink-0 z-10">
+      <header className="bg-white border-b border-gray-200/80 px-3 md:px-5 py-3 flex items-center gap-2 md:gap-4 flex-shrink-0 z-10">
+        {/* Mobile back button */}
+        {(selectedFlow || isCreating) && (
+          <button
+            className="flex md:hidden items-center justify-center h-8 w-8 rounded-lg hover:bg-gray-100 transition-colors flex-shrink-0"
+            onClick={() => { setSelectedFlow(null); setIsCreating(false); setSelectedStepId(null); setUnsavedChanges(false); }}
+            data-testid="button-back-to-flows"
+          >
+            <ArrowLeft className="h-4 w-4 text-gray-600" />
+          </button>
+        )}
         {/* Left: product identity */}
-        <div className="flex items-center gap-2.5 min-w-0">
+        <div className="flex items-center gap-2 md:gap-2.5 min-w-0">
           <div className="h-7 w-7 bg-gradient-to-br from-brand-green to-brand-teal rounded-lg flex items-center justify-center flex-shrink-0">
             <Zap className="h-3.5 w-3.5 text-white" />
           </div>
@@ -546,7 +556,7 @@ export function ChatbotBuilder() {
                 <input
                   value={selectedFlow.name}
                   onChange={(e) => { setSelectedFlow({ ...selectedFlow, name: e.target.value }); setUnsavedChanges(true); }}
-                  className="text-[13px] font-semibold text-gray-900 bg-transparent border-0 focus:outline-none focus:ring-0 min-w-0 max-w-[200px]"
+                  className="text-[13px] font-semibold text-gray-900 bg-transparent border-0 focus:outline-none focus:ring-0 min-w-0 max-w-[100px] md:max-w-[200px]"
                   placeholder="Untitled Flow"
                   data-testid="input-flow-name"
                 />
@@ -674,8 +684,8 @@ export function ChatbotBuilder() {
       <div className="flex-1 flex overflow-hidden">
         {/* ══ Left Sidebar ════════════════════════════════════════════ */}
         <aside className={cn(
-          "w-56 bg-white border-r border-gray-200/80 flex flex-col flex-shrink-0",
-          selectedFlow ? "hidden md:flex" : "flex"
+          "w-full md:w-56 bg-white border-r border-gray-200/80 flex flex-col flex-shrink-0",
+          (selectedFlow || isCreating) ? "hidden md:flex" : "flex"
         )}>
           {/* Sidebar header */}
           <div className="px-3.5 pt-4 pb-3 border-b border-gray-100">
@@ -757,11 +767,15 @@ export function ChatbotBuilder() {
         </aside>
 
         {/* ══ Center Canvas ════════════════════════════════════════════ */}
-        <main className={cn("flex-1 overflow-y-auto", selectedStep ? "border-r border-gray-200/80" : "")}>
+        <main className={cn(
+          "flex-1 overflow-y-auto",
+          selectedStep ? "border-r border-gray-200/80" : "",
+          (!selectedFlow && !isCreating) ? "hidden md:block" : ""
+        )}>
 
           {/* Create flow inline */}
           {isCreating && (
-            <div className="max-w-lg mx-auto p-8">
+            <div className="max-w-lg mx-auto p-4 md:p-8">
               <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
                 <div className="px-6 pt-6 pb-4 border-b border-gray-100">
                   <div className="h-10 w-10 bg-gradient-to-br from-brand-green to-brand-teal rounded-xl flex items-center justify-center mb-4">
