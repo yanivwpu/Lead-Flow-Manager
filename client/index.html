@@ -11,7 +11,7 @@
     </script>
 
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <meta name="msvalidate.01" content="D34136A426046C3430F8378418B1F090" />
 
     <title>WhachatCRM – WhatsApp CRM & Automation Platform</title>
@@ -142,6 +142,27 @@
           img.setAttribute('loading', i === 0 ? 'eager' : 'lazy');
         });
       });
+    </script>
+
+    <!-- Mobile keyboard / viewport fix:
+         iOS Safari and Brave on iPhone do not resize fixed containers when
+         the virtual keyboard opens.  We track the visual-viewport height and
+         write it to a CSS custom property so the app shell can use it instead
+         of 100dvh / 100vh (which are unreliable across iOS browser versions). -->
+    <script>
+      (function () {
+        function setVh() {
+          var vp = window.visualViewport;
+          var h = vp ? vp.height : window.innerHeight;
+          document.documentElement.style.setProperty('--app-height', h + 'px');
+        }
+        setVh();
+        if (window.visualViewport) {
+          window.visualViewport.addEventListener('resize', setVh);
+          window.visualViewport.addEventListener('scroll', setVh);
+        }
+        window.addEventListener('resize', setVh);
+      })();
     </script>
   </body>
 </html>
