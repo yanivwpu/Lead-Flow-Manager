@@ -322,6 +322,35 @@ class InstagramAdapter implements ChannelAdapter {
       console.log(`[Outbound] Instagram credentials loaded — userId=${conversation.userId}, pageId=${pageId}`);
       const recipientId = contact.instagramId;
 
+      // Instagram via Messenger Platform only supports image, video, and audio attachments.
+      // Documents (PDF, DOCX, etc.) are NOT supported — detect early and return a clear error.
+      if (params.mediaUrl) {
+        const ct = (params.contentType || '').toLowerCase();
+        const ext = (params.mediaUrl.split('?')[0].split('.').pop() || '').toLowerCase();
+        const isDocByContentType = ct === 'document' || ct.includes('pdf') || ct.includes('msword') ||
+          ct.includes('spreadsheet') || ct.includes('presentation') || ct.includes('text/plain');
+        const isDocByExt = ['pdf','doc','docx','xls','xlsx','ppt','pptx','txt','csv','zip'].includes(ext);
+        if (isDocByContentType || isDocByExt) {
+          return {
+            success: false,
+            error: 'Instagram does not support sending documents or PDF files. You can send images, videos, or audio only.',
+            windowStatus,
+          };
+        }
+      }
+
+      // Map contentType to the correct Instagram attachment type (default: image)
+      let igAttachmentType = 'image';
+      if (params.contentType) {
+        const ct = params.contentType.toLowerCase();
+        if (ct === 'video' || ct.includes('video')) igAttachmentType = 'video';
+        else if (ct === 'audio' || ct.includes('audio')) igAttachmentType = 'audio';
+      } else if (params.mediaUrl) {
+        const ext = (params.mediaUrl.split('?')[0].split('.').pop() || '').toLowerCase();
+        if (['mp4','mov','avi','webm'].includes(ext)) igAttachmentType = 'video';
+        else if (['mp3','ogg','wav','aac','m4a'].includes(ext)) igAttachmentType = 'audio';
+      }
+
       // Use RESPONSE messaging type (within 24-hour window) or MESSAGE_TAG for allowed cases
       const messagingType = windowStatus.isExpiringSoon ? 'RESPONSE' : 'RESPONSE';
 
@@ -335,8 +364,8 @@ class InstagramAdapter implements ChannelAdapter {
           },
           body: JSON.stringify({
             recipient: { id: recipientId },
-            message: params.mediaUrl 
-              ? { attachment: { type: 'image', payload: { url: params.mediaUrl } } }
+            message: params.mediaUrl
+              ? { attachment: { type: igAttachmentType, payload: { url: params.mediaUrl } } }
               : { text: params.content },
             messaging_type: messagingType,
           }),
