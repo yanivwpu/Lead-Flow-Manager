@@ -430,7 +430,83 @@ class ChannelService {
       console.error('[Chatbot] triggerChatbotFlows error:', err.message)
     );
 
+    // ── Auto-Reply & Business Hours — runs for every channel ─────────────────
+    // Chatbot takes full priority: skip auto-reply when a flow will fire.
+    if (!chatbotWillFire) {
+      this._scheduleAutoReply({ userId, contact, conversation, channel }).catch(
+        (err: Error) => console.error('[AutoReply] Scheduling error:', err.message)
+      );
+    } else {
+      console.log(`[AutoReply] Suppressed — chatbot will fire for userId: ${userId}, channel: ${channel}`);
+    }
+
     return { contact, conversation, message, isNewConversation, chatbotWillFire };
+  }
+
+  private async _scheduleAutoReply(params: {
+    userId: string;
+    contact: Contact;
+    conversation: Conversation;
+    channel: Channel;
+  }): Promise<void> {
+    const { userId, contact, conversation, channel } = params;
+
+    try {
+      const user = await storage.getUser(userId);
+      if (!user) return;
+
+      let shouldReply = false;
+      let replyText = '';
+
+      // 1. Away message (outside business hours) takes priority
+      if (user.businessHoursEnabled && user.awayMessageEnabled) {
+        const now = new Date();
+        const tz = user.timezone || 'America/New_York';
+        const local = new Date(now.toLocaleString('en-US', { timeZone: tz }));
+        const day = local.getDay();
+        const time = local.toTimeString().slice(0, 5); // "HH:mm"
+        const days = (user.businessDays as number[]) || [1, 2, 3, 4, 5];
+        const start = user.businessHoursStart || '09:00';
+        const end = user.businessHoursEnd || '17:00';
+
+        if (!days.includes(day) || time < start || time > end) {
+          shouldReply = true;
+          replyText = user.awayMessage || "Thanks for reaching out! We're currently away but will respond as soon as we're back.";
+        }
+      }
+
+      // 2. Always-on auto-reply (when not already handled by away message)
+      if (!shouldReply && user.autoReplyEnabled) {
+        shouldReply = true;
+        replyText = user.autoReplyMessage || "Thanks for your message! We'll get back to you shortly.";
+      }
+
+      if (!shouldReply || !replyText) return;
+
+      const delayMs = (user.autoReplyDelay || 0) * 1000;
+      const self = this;
+
+      setTimeout(async () => {
+        try {
+          const result = await self.sendMessage({
+            userId,
+            contactId: contact.id,
+            content: replyText,
+            forceChannel: channel,
+          });
+          if (result.success) {
+            console.log(`[AutoReply] ✓ Sent via ${channel} to "${contact.name}" (conversationId: ${conversation.id})`);
+          } else {
+            console.error(`[AutoReply] ✗ Send failed via ${channel}: ${result.error}`);
+          }
+        } catch (err) {
+          console.error('[AutoReply] Send error:', err);
+        }
+      }, delayMs);
+
+    } catch (err) {
+      console.error('[AutoReply] _scheduleAutoReply error:', err);
+    }
   }
 
   private getChannelIdField(channel: Channel): string {

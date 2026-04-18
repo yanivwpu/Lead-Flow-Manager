@@ -1955,79 +1955,8 @@ export async function registerRoutes(
         })();
       }
 
-      // Auto-reply & Business Hours handling
-      // chatbotWillFire was determined once inside processIncomingMessage —
-      // no extra DB round-trip needed here.
-      try {
-        if (inboxChatbotWillFire) {
-          console.log(`[AutoReply] Suppressed (Twilio) — chatbot owns this reply for userId: ${userId}`);
-        }
-        const userSettings = await storage.getUser(userId);
-        if (userSettings && !inboxChatbotWillFire) {
-          let shouldSendAutoReply = false;
-          let autoReplyText = "";
-
-          // Check if outside business hours and away message is enabled
-          if (userSettings.businessHoursEnabled && userSettings.awayMessageEnabled) {
-            const now = new Date();
-            const userTimezone = userSettings.timezone || "America/New_York";
-            const nowInTimezone = new Date(now.toLocaleString("en-US", { timeZone: userTimezone }));
-            const currentDay = nowInTimezone.getDay();
-            const currentTime = nowInTimezone.toTimeString().slice(0, 5); // HH:mm
-            
-            const businessDays = (userSettings.businessDays as number[]) || [1, 2, 3, 4, 5];
-            const startTime = userSettings.businessHoursStart || "09:00";
-            const endTime = userSettings.businessHoursEnd || "17:00";
-            
-            const isBusinessDay = businessDays.includes(currentDay);
-            const isWithinHours = currentTime >= startTime && currentTime <= endTime;
-            
-            if (!isBusinessDay || !isWithinHours) {
-              shouldSendAutoReply = true;
-              autoReplyText = userSettings.awayMessage || "Thanks for reaching out! We're currently away but will respond as soon as we're back.";
-            }
-          }
-
-          // If within business hours but auto-reply is enabled, send auto-reply
-          if (!shouldSendAutoReply && userSettings.autoReplyEnabled) {
-            shouldSendAutoReply = true;
-            autoReplyText = userSettings.autoReplyMessage || "Thanks for your message! We'll get back to you shortly.";
-          }
-
-          // Auto-reply goes back through Twilio directly — this handler is the
-          // Twilio-specific webhook so we know the inbound channel is Twilio.
-          // Using sendWhatsAppMessage here would be wrong if the user has since
-          // switched providers; the reply must go back the same way it arrived.
-          if (shouldSendAutoReply && autoReplyText && chat.whatsappPhone) {
-            const delay = userSettings.autoReplyDelay || 0;
-            setTimeout(async () => {
-              try {
-                await sendUserWhatsAppMessage(userId, chat.whatsappPhone!, autoReplyText);
-                console.log("Auto-reply sent to:", chat.whatsappPhone);
-                
-                // Record the auto-reply message in chat history
-                const autoReplyMessage = {
-                  id: `auto-${Date.now()}`,
-                  text: autoReplyText,
-                  time: new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
-                  sent: true,
-                  sender: "me",
-                };
-                const currentChat = await storage.getChat(chat.id);
-                if (currentChat) {
-                  const msgs = (currentChat.messages as any[]) || [];
-                  msgs.push(autoReplyMessage);
-                  await storage.updateChat(chat.id, { messages: msgs });
-                }
-              } catch (err) {
-                console.error("Failed to send auto-reply:", err);
-              }
-            }, delay * 1000);
-          }
-        }
-      } catch (autoReplyError) {
-        console.error("Auto-reply error:", autoReplyError);
-      }
+      // Auto-reply & Business Hours are now handled inside
+      // channelService.processIncomingMessage for all channels.
 
       res.status(200).send("");
     } catch (error) {
@@ -2598,40 +2527,8 @@ export async function registerRoutes(
               })();
             }
 
-            if (user.autoReplyEnabled && user.autoReplyMessage) {
-              // chatbotWillFire was determined once inside processIncomingMessage
-              // and captured in metaInboxResult — no extra DB round-trip needed.
-              const metaChatbotWillFire = (metaInboxResult as { chatbotWillFire: boolean } | null)?.chatbotWillFire ?? false;
-              if (metaChatbotWillFire) {
-                console.log(`[AutoReply] Suppressed (Meta) — chatbot owns this reply for userId: ${user.id}`);
-              } else {
-              const delay = user.autoReplyDelay || 0;
-              setTimeout(async () => {
-                try {
-                  // Auto-reply goes back through Meta directly — this handler is the
-                  // Meta-specific webhook so we know the inbound channel is Meta.
-                  // Using sendWhatsAppMessage would be wrong if the user had switched
-                  // providers; the reply must go back through the same channel.
-                  await sendMetaWhatsAppMessage(user.id, incomingMessage.from, user.autoReplyMessage!);
-                  const autoReplyMsg = {
-                    id: `auto-${Date.now()}`,
-                    text: user.autoReplyMessage,
-                    time: new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
-                    sent: true,
-                    sender: "me" as const,
-                  };
-                  const currentChat = await storage.getChat(chat.id);
-                  if (currentChat) {
-                    const msgs = (currentChat.messages as any[]) || [];
-                    msgs.push(autoReplyMsg);
-                    await storage.updateChat(chat.id, { messages: msgs });
-                  }
-                } catch (err) {
-                  console.error("Failed to send auto-reply via Meta:", err);
-                }
-              }, delay * 1000);
-              }
-            }
+            // Auto-reply & Business Hours are now handled inside
+            // channelService.processIncomingMessage for all channels.
 
             console.log("Meta message processed successfully");
           } catch (legacyErr) {
