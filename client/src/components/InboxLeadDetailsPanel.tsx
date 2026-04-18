@@ -836,10 +836,23 @@ export function InboxLeadDetailsPanel({
                     <div className="mt-1 space-y-1">
                       <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold">All appointments</p>
                       {contactAppointments.map(a => (
-                        <div key={a.id} className="flex items-start gap-1 text-[11px] text-gray-600">
-                          <span className="text-purple-500 font-medium shrink-0">{a.appointmentType}</span>
-                          <span className="text-gray-400">·</span>
-                          <span>{format(new Date(a.appointmentDate), 'MMM d · h:mm a')}</span>
+                        <div key={a.id} className="flex items-center justify-between gap-1 text-[11px] text-gray-600">
+                          <div className="flex items-center gap-1 min-w-0">
+                            <span className="text-purple-500 font-medium shrink-0">{a.appointmentType}</span>
+                            <span className="text-gray-400">·</span>
+                            <span className="truncate">{format(new Date(a.appointmentDate), 'MMM d · h:mm a')}</span>
+                          </div>
+                          <button
+                            onClick={async () => {
+                              await fetch(`/api/appointments/${a.id}`, { method: 'DELETE', credentials: 'include' });
+                              queryClient.invalidateQueries({ queryKey: [`/api/contacts/${contact.id}/appointments`] });
+                              queryClient.invalidateQueries({ queryKey: ['/api/appointments'] });
+                            }}
+                            className="shrink-0 text-gray-300 hover:text-red-400 transition-colors ml-1"
+                            title="Delete appointment"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
                         </div>
                       ))}
                     </div>
@@ -857,10 +870,24 @@ export function InboxLeadDetailsPanel({
                     <div className="pb-2 border-b border-gray-100">
                       <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold mb-1">Upcoming</p>
                       {contactAppointments.slice(0, 3).map(a => (
-                        <div key={a.id} className="flex items-center gap-1 text-[11px] text-gray-600">
-                          <span className="text-purple-500 font-medium">{a.appointmentType}</span>
-                          <span className="text-gray-300">·</span>
-                          <span>{format(new Date(a.appointmentDate), 'MMM d, h:mm a')}</span>
+                        <div key={a.id} className="flex items-center justify-between gap-1 text-[11px] text-gray-600">
+                          <div className="flex items-center gap-1 min-w-0">
+                            <span className="text-purple-500 font-medium shrink-0">{a.appointmentType}</span>
+                            <span className="text-gray-300">·</span>
+                            <span className="truncate">{format(new Date(a.appointmentDate), 'MMM d, h:mm a')}</span>
+                          </div>
+                          <button
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              await fetch(`/api/appointments/${a.id}`, { method: 'DELETE', credentials: 'include' });
+                              queryClient.invalidateQueries({ queryKey: [`/api/contacts/${contact.id}/appointments`] });
+                              queryClient.invalidateQueries({ queryKey: ['/api/appointments'] });
+                            }}
+                            className="shrink-0 text-gray-300 hover:text-red-400 transition-colors ml-1"
+                            title="Delete appointment"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
                         </div>
                       ))}
                     </div>

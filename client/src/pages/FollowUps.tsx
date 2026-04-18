@@ -793,9 +793,10 @@ export function FollowUps() {
   }, [appointmentsData]);
 
   const calendarTasks = useMemo<Chat[]>(() => {
-    const followUpEvents = followUps.filter(f => !f.isAppointment);
+    const contactsWithAppointments = new Set(appointmentsData.map(a => a.contactId));
+    const followUpEvents = followUps.filter(f => !f.isAppointment && !contactsWithAppointments.has(f.id));
     return [...followUpEvents, ...appointmentTasks];
-  }, [followUps, appointmentTasks]);
+  }, [followUps, appointmentTasks, appointmentsData]);
 
   const handleMarkDone = async (e: React.MouseEvent, chatId: string) => {
     e.stopPropagation();
