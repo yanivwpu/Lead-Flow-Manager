@@ -647,10 +647,20 @@ export function Settings() {
       const keyRes = await fetch("/api/vapid-public-key", { credentials: "include" });
       if (!keyRes.ok) throw new Error("Push not configured");
       const { publicKey } = await keyRes.json();
+
+      // Browser pushManager requires a Uint8Array, not a raw base64url string
+      const padding = '='.repeat((4 - publicKey.length % 4) % 4);
+      const base64 = (publicKey + padding).replace(/-/g, '+').replace(/_/g, '/');
+      const rawData = atob(base64);
+      const applicationServerKey = new Uint8Array(rawData.length);
+      for (let i = 0; i < rawData.length; i++) {
+        applicationServerKey[i] = rawData.charCodeAt(i);
+      }
+
       const reg = await navigator.serviceWorker.ready;
       const subscription = await reg.pushManager.subscribe({
         userVisibleOnly: true,
-        applicationServerKey: publicKey,
+        applicationServerKey,
       });
       await fetch("/api/users/preferences", {
         method: "PATCH",
