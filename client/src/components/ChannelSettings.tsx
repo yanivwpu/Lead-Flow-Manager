@@ -20,6 +20,13 @@ import {
   EyeOff,
   Trash2,
   Clock,
+  ChevronDown,
+  ChevronRight,
+  Zap,
+  Webhook,
+  ArrowLeft,
+  ExternalLink,
+  FlaskConical,
 } from "lucide-react";
 import { ConnectMetaWizard } from "@/components/ConnectMetaWizard";
 import { ConnectTwilioWizard } from "@/components/ConnectTwilioWizard";
@@ -124,6 +131,11 @@ export function ChannelSettings() {
   const [telegramError, setTelegramError] = useState<string | null>(null);
   const [telegramConnectResult, setTelegramConnectResult] = useState<{ username: string; botLink: string } | null>(null);
   const [copied, setCopied] = useState(false);
+  const [tiktokMode, setTiktokMode] = useState<'select' | 'zapier' | 'webhook'>('select');
+  const [tiktokZapierDone, setTiktokZapierDone] = useState(false);
+  const [tiktokWebhookExpanded, setTiktokWebhookExpanded] = useState(false);
+  const [tiktokCopied, setTiktokCopied] = useState(false);
+  const [tiktokTestLeadSent, setTiktokTestLeadSent] = useState(false);
   const [connectMetaOpen, setConnectMetaOpen] = useState(false);
   const [connectTwilioOpen, setConnectTwilioOpen] = useState(false);
   const [connectFbIgConfig, setConnectFbIgConfig] = useState<{
@@ -389,6 +401,32 @@ export function ChannelSettings() {
     setTelegramToken("");
     setTelegramError(null);
     setTelegramConnectResult(null);
+  };
+
+  const sendTestLeadMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/integrations/tiktok/test-lead", {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to send test lead");
+      return res.json();
+    },
+    onSuccess: () => {
+      setTiktokTestLeadSent(true);
+      toast({ title: "Test lead sent!", description: "Check your inbox — a new TikTok lead just arrived." });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Couldn't send test lead", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const resetTiktokDialog = () => {
+    setTiktokMode('select');
+    setTiktokZapierDone(false);
+    setTiktokWebhookExpanded(false);
+    setTiktokCopied(false);
+    setTiktokTestLeadSent(false);
   };
 
   const copyText = (text: string, setFn: (v: boolean) => void) => {
@@ -1152,45 +1190,212 @@ export function ChannelSettings() {
       </Dialog>
 
       {/* TikTok */}
-      <Dialog open={configChannel === 'tiktok'} onOpenChange={() => setConfigChannel(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Video className="h-5 w-5" />
-              TikTok Lead Intake
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 mt-4">
-            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
-              <p className="text-sm text-amber-800">
-                TikTok is for lead capture only. You cannot send messages through TikTok —
-                leads will be reached via WhatsApp, SMS, or other channels.
-              </p>
+      {(() => {
+        const tiktokChannel = channels.find(c => c.channel === 'tiktok');
+        const isAlreadyEnabled = tiktokChannel?.isConnected && tiktokChannel?.isEnabled;
+        const webhookUrl = `${webhookBaseUrl}/api/webhook/tiktok/lead`;
+
+        const TiktokWebhookRow = () => (
+          <div className="space-y-1">
+            <p className="text-xs font-medium text-gray-700">Where TikTok sends your leads</p>
+            <div className="flex gap-2">
+              <Input
+                readOnly
+                value={webhookUrl}
+                className="text-xs font-mono bg-gray-50"
+                data-testid="input-tiktok-webhook-url"
+              />
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => copyText(webhookUrl, setTiktokCopied)}
+                data-testid="button-copy-tiktok-webhook"
+              >
+                {tiktokCopied ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
+              </Button>
             </div>
-            <div>
-              <Label>Webhook URL</Label>
-              <p className="text-xs text-gray-500 mb-2">
-                Use this endpoint to send leads from TikTok Lead Gen forms or Zapier
-              </p>
-              <div className="flex gap-2">
-                <Input
-                  readOnly
-                  value={`${webhookBaseUrl}/api/webhook/tiktok/lead`}
-                  className="text-xs font-mono bg-gray-50"
-                />
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => copyWebhookUrl(`${webhookBaseUrl}/api/webhook/tiktok/lead`)}
-                  data-testid="button-copy-tiktok-webhook"
-                >
-                  {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                </Button>
-              </div>
-            </div>
-            <div>
-              <Label>Request Body Format</Label>
-              <div className="bg-gray-900 text-gray-100 p-3 rounded-lg text-xs font-mono overflow-x-auto">
+          </div>
+        );
+
+        const TestLeadButton = () => (
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-2"
+            onClick={() => sendTestLeadMutation.mutate()}
+            disabled={sendTestLeadMutation.isPending}
+            data-testid="button-tiktok-test-lead"
+          >
+            {sendTestLeadMutation.isPending ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : tiktokTestLeadSent ? (
+              <CheckCircle2 className="h-3.5 w-3.5 text-green-600" />
+            ) : (
+              <FlaskConical className="h-3.5 w-3.5" />
+            )}
+            {tiktokTestLeadSent ? "Test lead sent!" : "Send Test Lead"}
+          </Button>
+        );
+
+        return (
+          <Dialog
+            open={configChannel === 'tiktok'}
+            onOpenChange={(open) => {
+              if (!open) { setConfigChannel(null); resetTiktokDialog(); }
+            }}
+          >
+            <DialogContent className="max-w-sm">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <Video className="h-5 w-5" />
+                  TikTok Lead Capture
+                </DialogTitle>
+              </DialogHeader>
+
+              {/* ── Already active: success view ── */}
+              {isAlreadyEnabled && tiktokMode === 'select' ? (
+                <div className="space-y-4 mt-2">
+                  <div className="flex items-center gap-3 p-3 rounded-lg bg-green-50 border border-green-200">
+                    <CheckCircle2 className="h-5 w-5 text-green-600 shrink-0" />
+                    <div>
+                      <p className="text-sm font-medium text-green-800">Lead capture is active</p>
+                      <p className="text-xs text-green-700">New TikTok leads flow directly into your inbox</p>
+                    </div>
+                  </div>
+                  <TiktokWebhookRow />
+                  <TestLeadButton />
+                  <button
+                    className="text-xs text-gray-400 hover:text-gray-600 underline"
+                    onClick={() => setTiktokMode('webhook')}
+                    data-testid="button-tiktok-reconfigure"
+                  >
+                    Reconfigure
+                  </button>
+                </div>
+
+              /* ── Mode select ── */
+              ) : tiktokMode === 'select' ? (
+                <div className="space-y-3 mt-2">
+                  <p className="text-sm text-gray-500">
+                    TikTok Lead Gen forms send new leads straight into your inbox. Choose how you'd like to connect:
+                  </p>
+                  <button
+                    className="w-full text-left p-4 rounded-xl border-2 border-blue-200 bg-blue-50 hover:border-blue-400 hover:bg-blue-100 transition-colors group"
+                    onClick={() => setTiktokMode('zapier')}
+                    data-testid="button-tiktok-select-zapier"
+                  >
+                    <div className="flex items-start gap-3">
+                      <Zap className="h-5 w-5 text-blue-600 mt-0.5 shrink-0" />
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-semibold text-gray-900">Connect via Zapier</span>
+                          <span className="text-xs bg-blue-600 text-white px-1.5 py-0.5 rounded-full">Recommended</span>
+                        </div>
+                        <p className="text-xs text-gray-500 mt-0.5">No code needed — guided setup in minutes</p>
+                      </div>
+                    </div>
+                  </button>
+                  <button
+                    className="w-full text-left p-4 rounded-xl border border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50 transition-colors"
+                    onClick={() => setTiktokMode('webhook')}
+                    data-testid="button-tiktok-select-webhook"
+                  >
+                    <div className="flex items-start gap-3">
+                      <Globe className="h-5 w-5 text-gray-500 mt-0.5 shrink-0" />
+                      <div>
+                        <span className="text-sm font-medium text-gray-900">Use a webhook directly</span>
+                        <p className="text-xs text-gray-500 mt-0.5">For developers — paste URL into any platform</p>
+                      </div>
+                    </div>
+                  </button>
+                </div>
+
+              /* ── Zapier flow ── */
+              ) : tiktokMode === 'zapier' ? (
+                <div className="space-y-4 mt-2">
+                  <button
+                    className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700"
+                    onClick={() => setTiktokMode('select')}
+                  >
+                    <ArrowLeft className="h-3 w-3" /> Back
+                  </button>
+
+                  {tiktokZapierDone ? (
+                    /* Zapier success */
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-3 p-3 rounded-lg bg-green-50 border border-green-200">
+                        <CheckCircle2 className="h-5 w-5 text-green-600 shrink-0" />
+                        <div>
+                          <p className="text-sm font-medium text-green-800">Leads are flowing!</p>
+                          <p className="text-xs text-green-700">Your Zap is connected and ready</p>
+                        </div>
+                      </div>
+                      <TestLeadButton />
+                    </div>
+                  ) : (
+                    /* Zapier setup */
+                    <div className="space-y-4">
+                      <div>
+                        <p className="text-sm font-medium text-gray-900 mb-3">Set up your Zap</p>
+                        <ol className="space-y-3">
+                          {[
+                            { n: 1, text: 'Open the Zap template below and click "Use this Zap"' },
+                            { n: 2, text: "Connect your TikTok account when prompted" },
+                            { n: 3, text: "When asked for a destination URL, paste this:" },
+                          ].map(({ n, text }) => (
+                            <li key={n} className="flex gap-3 text-sm text-gray-600">
+                              <span className="flex-shrink-0 w-5 h-5 rounded-full bg-gray-100 text-gray-700 text-xs flex items-center justify-center font-semibold">{n}</span>
+                              <span>{text}</span>
+                            </li>
+                          ))}
+                        </ol>
+                      </div>
+                      <TiktokWebhookRow />
+                      <Button
+                        className="w-full gap-2"
+                        onClick={() => window.open('https://zapier.com/apps/tiktok-lead-generation/integrations/webhooks', '_blank')}
+                        data-testid="button-open-zap-template"
+                      >
+                        <ExternalLink className="h-4 w-4" />
+                        Open Zap Template
+                      </Button>
+                      <Button
+                        variant="outline"
+                        className="w-full"
+                        onClick={() => {
+                          setTiktokZapierDone(true);
+                          updateChannelMutation.mutate({ channel: 'tiktok', data: { isConnected: true, isEnabled: true } });
+                        }}
+                        data-testid="button-tiktok-zapier-done"
+                      >
+                        I've set up my Zap ✓
+                      </Button>
+                    </div>
+                  )}
+                </div>
+
+              /* ── Webhook flow ── */
+              ) : tiktokMode === 'webhook' ? (
+                <div className="space-y-4 mt-2">
+                  <button
+                    className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700"
+                    onClick={() => setTiktokMode('select')}
+                  >
+                    <ArrowLeft className="h-3 w-3" /> Back
+                  </button>
+                  <TiktokWebhookRow />
+
+                  {/* Collapsible JSON format */}
+                  <button
+                    className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700 w-full"
+                    onClick={() => setTiktokWebhookExpanded(v => !v)}
+                    data-testid="button-tiktok-toggle-json"
+                  >
+                    {tiktokWebhookExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                    View JSON format
+                  </button>
+                  {tiktokWebhookExpanded && (
+                    <div className="bg-gray-900 text-gray-100 p-3 rounded-lg text-xs font-mono overflow-x-auto">
 {`{
   "userId": "${user?.id || 'YOUR_USER_ID'}",
   "name": "Lead Name",
@@ -1198,25 +1403,30 @@ export function ChannelSettings() {
   "email": "lead@example.com",
   "source": "tiktok_ad"
 }`}
-              </div>
-            </div>
-            <Button
-              className="w-full"
-              onClick={() => {
-                updateChannelMutation.mutate({
-                  channel: 'tiktok',
-                  data: { isConnected: true, isEnabled: true },
-                });
-                setConfigChannel(null);
-              }}
-              disabled={updateChannelMutation.isPending}
-              data-testid="button-enable-tiktok"
-            >
-              Enable TikTok Lead Intake
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+                    </div>
+                  )}
+
+                  <div className="flex items-center gap-2 pt-1">
+                    <TestLeadButton />
+                    <Button
+                      className="flex-1"
+                      onClick={() => {
+                        updateChannelMutation.mutate({ channel: 'tiktok', data: { isConnected: true, isEnabled: true } });
+                        setConfigChannel(null);
+                        resetTiktokDialog();
+                      }}
+                      disabled={updateChannelMutation.isPending}
+                      data-testid="button-enable-tiktok"
+                    >
+                      {updateChannelMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Mark as Active"}
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
+            </DialogContent>
+          </Dialog>
+        );
+      })()}
     </div>
   );
 }

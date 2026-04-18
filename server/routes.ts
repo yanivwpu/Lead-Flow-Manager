@@ -4339,6 +4339,42 @@ export async function registerRoutes(
     }
   });
 
+  // ─── TikTok Test Lead ──────────────────────────────────────────────────────
+  // Creates a mock TikTok lead for the authenticated user so they can verify
+  // that lead intake is working without needing a real TikTok ad.
+  app.post("/api/integrations/tiktok/test-lead", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+
+      const names = ["Alex Johnson", "Jamie Rivera", "Sam Chen", "Taylor Brooks", "Morgan Lee"];
+      const randomName = names[Math.floor(Math.random() * names.length)];
+      const randomPhone = `+1555${Math.floor(1000000 + Math.random() * 9000000)}`;
+
+      const contact = await storage.createContact({
+        userId: req.user.id,
+        name: randomName,
+        phone: randomPhone,
+        email: `${randomName.toLowerCase().replace(" ", ".")}@example.com`,
+        primaryChannel: 'whatsapp',
+        source: 'tiktok',
+        notes: 'Test lead — sent from Settings to verify TikTok intake is working',
+      });
+
+      const { channelService } = await import("./channelService");
+      await channelService.logActivity(req.user.id, contact.id, undefined, 'lead_created', {
+        source: 'tiktok',
+        originalSource: 'test_lead',
+        metadata: { isTest: true },
+      });
+
+      console.log(`[TikTok Test Lead] Created test contact ${contact.id} for user ${req.user.id}`);
+      res.status(201).json({ success: true, contactId: contact.id, name: randomName });
+    } catch (err: any) {
+      console.error("[TikTok Test Lead] error:", err);
+      res.status(500).json({ error: err.message ?? "Unexpected error" });
+    }
+  });
+
   // Validate a Meta (FB/IG) page token before saving credentials.
   // Checks: token validity, required scopes, page access, page subscription to webhook events.
   // Does NOT require authentication — token is provided directly in the request.
