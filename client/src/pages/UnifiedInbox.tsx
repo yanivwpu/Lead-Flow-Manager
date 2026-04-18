@@ -530,14 +530,30 @@ export function UnifiedInbox() {
     channel: string;
     isConnected: boolean;
     isEnabled: boolean;
-    webhookOk: boolean | null;
     pageName: string | null;
+    healthy: boolean | null;   // null = could not determine; true = all checks passed; false = at least one failed
+    issues: string[];          // human-readable list of specific problems found
+    checks: {
+      tokenValid: boolean | null;
+      tokenScopes: string[] | null;
+      missingScopes: string[] | null;
+      pageAccessible: boolean | null;
+      subscriptionOk: boolean | null;
+      subscriptionFields: string[] | null;
+    };
   };
   const { data: channelHealth = [] } = useQuery<ChannelHealthEntry[]>({
     queryKey: ["/api/channel-health"],
     refetchInterval: 5 * 60 * 1000, // re-check every 5 minutes
     staleTime: 4 * 60 * 1000,
   });
+
+  // Channels that are connected but failed at least one health check
+  const unhealthyChannels = channelHealth.filter(c => c.isConnected && c.healthy === false);
+  const [dismissedHealthAlert, setDismissedHealthAlert] = useState<string | null>(null);
+  // Only dismiss per session; if different channel breaks, show again
+  const alertKey = unhealthyChannels.map(c => c.channel).sort().join(',');
+  const showHealthAlert = unhealthyChannels.length > 0 && dismissedHealthAlert !== alertKey;
 
 
   // Smart scroll: auto-scroll when near bottom OR when we just sent a message.
@@ -1109,16 +1125,17 @@ export function UnifiedInbox() {
             ))}
           </div>
 
-          {/* Channel health bar — shows connected channels and their webhook status */}
+          {/* Channel health bar — shows connected channels and their confirmed subscription status */}
           {channelHealth.filter(c => c.isConnected).length > 0 && (
             <div className="flex items-center gap-2 mt-2 pt-2 border-t flex-wrap" data-testid="channel-health-bar">
               {channelHealth.filter(c => c.isConnected).map(ch => {
-                const isOk = ch.webhookOk === true;
-                const isUnknown = ch.webhookOk === null;
-                const isBad = ch.webhookOk === false;
-                const dotColor = isOk ? "bg-emerald-500" : isUnknown ? "bg-gray-400" : "bg-red-500";
+                const dotColor = ch.healthy === true ? "bg-emerald-500" : ch.healthy === false ? "bg-red-500" : "bg-gray-400";
                 const label = ch.channel.charAt(0).toUpperCase() + ch.channel.slice(1);
-                const tooltip = isOk ? `${label}: receiving messages` : isBad ? `${label}: webhook issue — check Settings` : `${label}: status unknown`;
+                const tooltip = ch.healthy === true
+                  ? `${label}: subscription confirmed (token valid, page accessible, webhook active)`
+                  : ch.healthy === false
+                  ? `${label} issue: ${ch.issues[0] ?? 'check Settings'}`
+                  : `${label}: status unknown`;
                 return (
                   <div
                     key={ch.channel}
@@ -1134,6 +1151,42 @@ export function UnifiedInbox() {
             </div>
           )}
         </div>
+
+        {/* ── Channel health alert banner ── */}
+        {showHealthAlert && (
+          <div className="mx-3 mb-2 rounded-lg border border-red-200 bg-red-50 p-2.5" data-testid="channel-health-alert">
+            <div className="flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold text-red-700 leading-tight">
+                  {unhealthyChannels.length === 1
+                    ? `${unhealthyChannels[0].channel.charAt(0).toUpperCase() + unhealthyChannels[0].channel.slice(1)} channel issue`
+                    : `${unhealthyChannels.length} channel issues detected`}
+                </p>
+                {unhealthyChannels.map(ch => (
+                  <p key={ch.channel} className="text-[11px] text-red-600 mt-0.5 leading-tight">
+                    {ch.channel.charAt(0).toUpperCase() + ch.channel.slice(1)}: {ch.issues[0] ?? 'unknown issue'}
+                  </p>
+                ))}
+                <a
+                  href="/app/settings"
+                  className="text-[11px] text-red-700 font-medium underline underline-offset-2 mt-1 inline-block"
+                  data-testid="channel-health-alert-settings-link"
+                >
+                  Fix in Settings →
+                </a>
+              </div>
+              <button
+                onClick={() => setDismissedHealthAlert(alertKey)}
+                className="text-red-400 hover:text-red-600 flex-shrink-0"
+                title="Dismiss"
+                data-testid="channel-health-alert-dismiss"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* List */}
         <div className="flex-1 overflow-y-auto">

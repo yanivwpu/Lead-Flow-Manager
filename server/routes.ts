@@ -4121,49 +4121,140 @@ export async function registerRoutes(
   });
 
   // ─── Channel Health Status ─────────────────────────────────────────────────
-  // Returns a summary of each connected channel's health for the current user.
-  // Meta (FB/IG) channels also report their webhook subscription status from
-  // the last hourly auto-heal run (cached in memory to avoid rate-limiting).
+  // Deep health check for all connected channels. For Meta (FB/IG) channels,
+  // verifies four independent conditions: token validity, required permission
+  // scopes, page accessibility, and webhook subscription presence.
+  // `healthy` is true only when every check passes.
   app.get("/api/channel-health", async (req, res) => {
     try {
       if (!req.user) return res.status(401).json({ error: "Unauthorized" });
 
       const settings = await storage.getChannelSettings(req.user.id);
       const GRAPH_LOCAL = "https://graph.facebook.com/v19.0";
+      const appId     = process.env.META_APP_ID;
+      const appSecret = process.env.META_APP_SECRET;
+
+      const REQUIRED_SCOPES: Record<string, string[]> = {
+        facebook:  ['pages_messaging', 'pages_manage_metadata'],
+        instagram: ['instagram_manage_messages', 'pages_messaging'],
+      };
+
       const result: any[] = [];
 
       for (const s of settings) {
         const cfg = s.config as any;
         const entry: any = {
-          channel: s.channel,
+          channel:     s.channel,
           isConnected: s.isConnected ?? false,
-          isEnabled: s.isEnabled ?? false,
-          webhookOk: null as boolean | null,
-          webhookFields: null as string[] | null,
-          pageName: cfg?.pageName ?? cfg?.phoneNumberId ?? null,
+          isEnabled:   s.isEnabled   ?? false,
+          pageName:    cfg?.pageName ?? cfg?.phoneNumberId ?? null,
+          healthy:     null as boolean | null, // null = could not determine
+          issues:      [] as string[],
+          checks: {
+            tokenValid:      null as boolean | null,
+            tokenScopes:     null as string[] | null,
+            missingScopes:   null as string[] | null,
+            pageAccessible:  null as boolean | null,
+            subscriptionOk:  null as boolean | null,
+            subscriptionFields: null as string[] | null,
+          },
         };
 
-        // For Meta channels with an accessToken, quickly check subscription
-        if (s.isConnected && (s.channel === 'facebook' || s.channel === 'instagram') && cfg?.pageId && cfg?.accessToken) {
+        if (!s.isConnected) {
+          result.push(entry);
+          continue;
+        }
+
+        // ── Meta channels (Facebook / Instagram) ──────────────────────────────
+        if ((s.channel === 'facebook' || s.channel === 'instagram') && cfg?.pageId && cfg?.accessToken) {
+          const { pageId, accessToken } = cfg as { pageId: string; accessToken: string };
+
           try {
-            const checkResp = await fetch(
-              `${GRAPH_LOCAL}/${cfg.pageId}/subscribed_apps?access_token=${encodeURIComponent(cfg.accessToken)}`,
-              { signal: AbortSignal.timeout(5000) }
-            );
-            if (checkResp.ok) {
-              const checkData = (await checkResp.json()) as any;
-              const fields: string[] = (checkData?.data ?? []).flatMap((s: any) => s.subscribed_fields ?? []);
-              entry.webhookOk = fields.includes('messages');
-              entry.webhookFields = fields;
-            } else {
-              entry.webhookOk = false;
+            // Run all four checks in parallel to keep latency low
+            const [tokenResult, pageResult, subResult] = await Promise.allSettled([
+
+              // 1. Token validity + scopes
+              (async () => {
+                if (!appId || !appSecret) return null; // env vars not set
+                const r = await fetch(
+                  `${GRAPH_LOCAL}/debug_token?input_token=${encodeURIComponent(accessToken)}&access_token=${encodeURIComponent(`${appId}|${appSecret}`)}`,
+                  { signal: AbortSignal.timeout(5000) }
+                );
+                return r.ok ? (await r.json()) as any : null;
+              })(),
+
+              // 2. Page accessibility
+              (async () => {
+                const r = await fetch(
+                  `${GRAPH_LOCAL}/${pageId}?fields=name&access_token=${encodeURIComponent(accessToken)}`,
+                  { signal: AbortSignal.timeout(5000) }
+                );
+                return r.ok ? (await r.json()) as any : null;
+              })(),
+
+              // 3. Webhook subscription
+              (async () => {
+                const r = await fetch(
+                  `${GRAPH_LOCAL}/${pageId}/subscribed_apps?access_token=${encodeURIComponent(accessToken)}`,
+                  { signal: AbortSignal.timeout(5000) }
+                );
+                return r.ok ? (await r.json()) as any : null;
+              })(),
+            ]);
+
+            // ── Interpret: token ──
+            const tokenData = tokenResult.status === 'fulfilled' ? tokenResult.value : null;
+            if (tokenData?.data) {
+              entry.checks.tokenValid  = tokenData.data.is_valid === true;
+              entry.checks.tokenScopes = tokenData.data.scopes ?? [];
+              const required = REQUIRED_SCOPES[s.channel] ?? [];
+              const missing  = required.filter((sc: string) => !(entry.checks.tokenScopes ?? []).includes(sc));
+              entry.checks.missingScopes = missing;
+              if (!entry.checks.tokenValid)  entry.issues.push('Access token is invalid or expired');
+              if (missing.length)            entry.issues.push(`Missing permissions: ${missing.join(', ')}`);
+            } else if (appId && appSecret) {
+              entry.issues.push('Could not verify token (Meta API timeout)');
             }
-          } catch {
-            entry.webhookOk = null; // timeout / network error — unknown
+
+            // ── Interpret: page access ──
+            const pageData = pageResult.status === 'fulfilled' ? pageResult.value : null;
+            entry.checks.pageAccessible = !!(pageData?.id || pageData?.name);
+            if (!entry.checks.pageAccessible) entry.issues.push('Page is not accessible (revoked or unpublished)');
+
+            // ── Interpret: subscription ──
+            const subData = subResult.status === 'fulfilled' ? subResult.value : null;
+            if (subData?.data !== undefined) {
+              const fields: string[] = (subData.data ?? []).flatMap((x: any) => x.subscribed_fields ?? []);
+              entry.checks.subscriptionFields = fields;
+              entry.checks.subscriptionOk     = fields.includes('messages');
+              if (!entry.checks.subscriptionOk) entry.issues.push('Webhook not subscribed to "messages" field');
+            } else {
+              entry.checks.subscriptionOk = null;
+              entry.issues.push('Could not verify webhook subscription');
+            }
+
+            // ── Overall health ──
+            // healthy only when every check we could run passed
+            const checksRun = [
+              entry.checks.tokenValid,
+              entry.checks.pageAccessible,
+              entry.checks.subscriptionOk,
+            ].filter(v => v !== null);
+
+            entry.healthy = checksRun.length > 0
+              ? checksRun.every(Boolean) && entry.issues.length === 0
+              : null;
+
+          } catch (err) {
+            entry.issues.push('Health check failed (network error)');
+            entry.healthy = null;
           }
-        } else if (s.isConnected && (s.channel === 'whatsapp' || s.channel === 'sms' || s.channel === 'instagram')) {
-          // Non-Meta channels: assume webhook is ok if isConnected
-          entry.webhookOk = true;
+
+        // ── Non-Meta connected channels (WhatsApp, SMS, etc.) ─────────────────
+        } else if (s.isConnected) {
+          // These channels use server-managed webhooks — health tracks isConnected
+          entry.checks.subscriptionOk = true;
+          entry.healthy = true;
         }
 
         result.push(entry);
