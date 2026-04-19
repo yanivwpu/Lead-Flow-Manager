@@ -6,7 +6,7 @@ import {
   Clock, Tag, Loader2, AlertCircle, Crown,
   X, CheckCircle2, Image, Video,
   FileText, ListOrdered, Upload, MoreHorizontal,
-  Play, Search, Settings2, Copy,
+  Search, Settings2, Copy,
   ChevronUp, ChevronDown, MousePointer2, ArrowDown, Info, ArrowLeft
 } from "lucide-react";
 import { useUpload } from "@/hooks/use-upload";
@@ -611,21 +611,21 @@ export function ChatbotBuilder() {
               {selectedFlow.isActive ? "Active" : "Draft"}
             </button>
 
-            {/* Test Flow — hidden on mobile */}
+            {/* How to Test — hidden on mobile */}
             <Popover>
               <PopoverTrigger asChild>
                 <Button variant="outline" size="sm" className="hidden md:flex h-8 text-xs font-medium gap-1.5 text-gray-600" data-testid="button-test-flow">
-                  <Play className="h-3 w-3" />
-                  Test Flow
+                  <Info className="h-3 w-3" />
+                  How to Test
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-72 p-4" side="bottom" align="end">
                 <div className="flex gap-2.5">
-                  <Info className="h-4 w-4 text-amber-500 mt-0.5 flex-shrink-0" />
+                  <Info className="h-4 w-4 text-blue-500 mt-0.5 flex-shrink-0" />
                   <div>
-                    <p className="text-sm font-semibold text-gray-800 mb-1">Test mode coming soon</p>
+                    <p className="text-sm font-semibold text-gray-800 mb-1">How to test this flow</p>
                     <p className="text-xs text-gray-500 leading-relaxed">
-                      To test this flow today, activate it and send a real message from a test contact that matches your trigger keyword — or enable "Start on new conversation" and open a fresh chat.
+                      Activate the flow, then send a real message from a test contact that matches your trigger keyword — or enable "Start on new conversation" and open a fresh chat.
                     </p>
                   </div>
                 </div>
