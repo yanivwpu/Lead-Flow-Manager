@@ -1282,17 +1282,19 @@ export function ChannelSettings() {
                     </div>
                   </div>
                   <TiktokWebhookRow />
-                  <TestLeadButton />
-                  <button
-                    className="text-xs text-gray-400 hover:text-gray-600 underline"
-                    onClick={() => {
-                      updateChannelMutation.mutate({ channel: 'tiktok', data: { isConnected: false, isEnabled: false } });
-                      setTiktokMode('select');
-                    }}
-                    data-testid="button-tiktok-reconfigure"
-                  >
-                    Reconfigure
-                  </button>
+                  <div className="flex items-center justify-between">
+                    <TestLeadButton />
+                    <button
+                      className="text-xs text-gray-400 hover:text-gray-600 underline"
+                      onClick={() => {
+                        updateChannelMutation.mutate({ channel: 'tiktok', data: { isConnected: false, isEnabled: false } });
+                        setTiktokMode('select');
+                      }}
+                      data-testid="button-tiktok-reconfigure"
+                    >
+                      Reconfigure
+                    </button>
+                  </div>
                 </div>
 
               /* ── Mode select ── */
