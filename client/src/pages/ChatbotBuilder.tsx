@@ -564,7 +564,7 @@ export function ChatbotBuilder() {
             )}
           </div>
           {selectedFlow && unsavedChanges && (
-            <span className="text-[10px] font-semibold text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-md tracking-wide">
+            <span className="hidden md:inline text-[10px] font-semibold text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-md tracking-wide">
               UNSAVED
             </span>
           )}
@@ -575,7 +575,7 @@ export function ChatbotBuilder() {
         {/* Right: actions */}
         {selectedFlow ? (
           <div className="flex items-center gap-2 flex-shrink-0">
-            {/* Status toggle */}
+            {/* Status toggle — hidden on mobile */}
             <button
               onClick={() => {
                 const goingActive = !selectedFlow.isActive;
@@ -594,7 +594,7 @@ export function ChatbotBuilder() {
                 toggleFlowMutation.mutate({ id: selectedFlow.id, isActive: goingActive });
               }}
               className={cn(
-                "flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all",
+                "hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all",
                 selectedFlow.isActive
                   ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
                   : "bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100"
@@ -605,9 +605,10 @@ export function ChatbotBuilder() {
               {selectedFlow.isActive ? "Active" : "Draft"}
             </button>
 
+            {/* Test Flow — hidden on mobile */}
             <Popover>
               <PopoverTrigger asChild>
-                <Button variant="outline" size="sm" className="h-8 text-xs font-medium gap-1.5 text-gray-600" data-testid="button-test-flow">
+                <Button variant="outline" size="sm" className="hidden md:flex h-8 text-xs font-medium gap-1.5 text-gray-600" data-testid="button-test-flow">
                   <Play className="h-3 w-3" />
                   Test Flow
                 </Button>
@@ -634,7 +635,7 @@ export function ChatbotBuilder() {
             >
               {updateFlowMutation.isPending
                 ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                : <><Save className="h-3.5 w-3.5" />Save</>
+                : <><Save className="h-3.5 w-3.5" /><span className="hidden md:inline">Save</span></>
               }
             </Button>
 
@@ -645,6 +646,31 @@ export function ChatbotBuilder() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-48 shadow-lg border-gray-100">
+                {/* Status toggle — mobile only */}
+                <DropdownMenuItem
+                  onClick={() => {
+                    const goingActive = !selectedFlow.isActive;
+                    if (goingActive) {
+                      const hasKeywords = (selectedFlow.triggerKeywords as string[])?.length > 0;
+                      const hasNewChat = selectedFlow.triggerOnNewChat;
+                      if (!hasKeywords && !hasNewChat) {
+                        toast({
+                          title: "No trigger configured",
+                          description: "Set at least one keyword or enable 'Start on new conversation' before activating this flow.",
+                          variant: "destructive",
+                        });
+                        return;
+                      }
+                    }
+                    toggleFlowMutation.mutate({ id: selectedFlow.id, isActive: goingActive });
+                  }}
+                  className="md:hidden text-sm font-medium gap-2"
+                  data-testid="menu-toggle-status-mobile"
+                >
+                  <div className={cn("h-3.5 w-3.5 rounded-full border-2 flex-shrink-0", selectedFlow.isActive ? "border-emerald-500 bg-emerald-500" : "border-gray-400")} />
+                  {selectedFlow.isActive ? "Set to Draft" : "Activate Flow"}
+                </DropdownMenuItem>
+                <DropdownMenuSeparator className="md:hidden" />
                 <DropdownMenuItem
                   onClick={() => duplicateFlowMutation.mutate(selectedFlow)}
                   disabled={duplicateFlowMutation.isPending}
@@ -1063,7 +1089,7 @@ export function ChatbotBuilder() {
                         </div>
 
                         {/* Controls */}
-                        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+                        <div className="flex items-center gap-0.5 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity flex-shrink-0">
                           <button onClick={(e) => { e.stopPropagation(); moveStep(node.id, "up"); }} disabled={index === 0}
                             className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 disabled:opacity-20 transition-colors">
                             <ChevronUp className="h-3.5 w-3.5" />
@@ -1129,7 +1155,7 @@ export function ChatbotBuilder() {
 
         {/* ══ Right Inspector Panel ════════════════════════════════════ */}
         {selectedStep && selectedFlow && (
-          <aside className="w-[300px] bg-white border-l border-gray-200/80 flex flex-col flex-shrink-0 overflow-hidden">
+          <aside className="fixed inset-0 z-[60] md:relative md:inset-auto md:z-auto md:w-[300px] w-full bg-white border-l border-gray-200/80 flex flex-col flex-shrink-0 overflow-hidden">
             {/* Panel header */}
             <div className="flex items-center gap-3 px-4 py-3.5 border-b border-gray-100 bg-gray-50/50">
               {(() => {
