@@ -401,6 +401,8 @@ export function InboxLeadDetailsPanel({
   const [contactNotesList, setContactNotesList] = useState<ContactNote[]>([]);
   const [notesLoading, setNotesLoading] = useState(false);
   const [addNoteOpen, setAddNoteOpen] = useState(false);
+  const [expandedNoteId, setExpandedNoteId] = useState<string | null>(null);
+  const [editingTexts, setEditingTexts] = useState<Record<string, string>>({});
   // Snapshot of lastViewedAt taken when this contact was first opened — used to compute badge
   const [notesViewedAt, setNotesViewedAt] = useState<Date | null>(null);
 
@@ -1653,24 +1655,77 @@ export function InboxLeadDetailsPanel({
               </button>
             ) : (
               <div className="notes-scroll space-y-2 max-h-[240px] overflow-y-auto pr-1">
-                {contactNotesList.map(note => (
-                  <div
-                    key={note.id}
-                    className="p-3 rounded-xl overflow-x-hidden"
-                    style={{ background: '#FFFDF5', border: '1px solid #E8E2CC' }}
-                    data-testid={`note-item-${note.id}`}
-                  >
-                    <div className="flex items-center gap-1 mb-1.5">
-                      <span className="text-[10px] text-gray-400">{note.createdByName || "Team member"}</span>
-                      <span className="text-[10px] text-gray-300">·</span>
-                      <span className="text-[10px] text-gray-400">{formatRelativeTime(note.createdAt)}</span>
+                {contactNotesList.map(note => {
+                  const isExpanded = expandedNoteId === note.id;
+                  return (
+                    <div
+                      key={note.id}
+                      className={`p-3 rounded-xl overflow-x-hidden transition-shadow ${isExpanded ? 'ring-1 ring-amber-300/80' : 'cursor-pointer hover:brightness-[0.97]'}`}
+                      style={{ background: '#FFFDF5', border: '1px solid #E8E2CC' }}
+                      data-testid={`note-item-${note.id}`}
+                      onClick={() => {
+                        if (!isExpanded) {
+                          setExpandedNoteId(note.id);
+                          setEditingTexts(prev => ({ ...prev, [note.id]: note.content }));
+                        }
+                      }}
+                    >
+                      <div className="flex items-start justify-between gap-1 mb-1.5">
+                        <div className="flex items-center gap-1 flex-1 min-w-0">
+                          <span className="text-[10px] text-gray-400">{note.createdByName || "Team member"}</span>
+                          <span className="text-[10px] text-gray-300">·</span>
+                          <span className="text-[10px] text-gray-400">{formatRelativeTime(note.createdAt)}</span>
+                        </div>
+                        {isExpanded && (
+                          <button
+                            onMouseDown={e => e.preventDefault()}
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              await fetch(`/api/contacts/${contact.id}/notes/${note.id}`, { method: 'DELETE' });
+                              setContactNotesList(prev => prev.filter(n => n.id !== note.id));
+                              setExpandedNoteId(null);
+                            }}
+                            className="flex-shrink-0 p-0.5 rounded hover:bg-red-50 transition-colors"
+                            data-testid={`button-delete-note-${note.id}`}
+                          >
+                            <X className="w-3.5 h-3.5 text-gray-400 hover:text-red-400 transition-colors" />
+                          </button>
+                        )}
+                      </div>
+                      {isExpanded ? (
+                        <textarea
+                          autoFocus
+                          value={editingTexts[note.id] ?? note.content}
+                          onChange={e => setEditingTexts(prev => ({ ...prev, [note.id]: e.target.value }))}
+                          onBlur={async () => {
+                            const newContent = (editingTexts[note.id] ?? '').trim();
+                            if (newContent && newContent !== note.content) {
+                              await fetch(`/api/contacts/${contact.id}/notes/${note.id}`, {
+                                method: 'PATCH',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ content: newContent }),
+                              });
+                              setContactNotesList(prev =>
+                                prev.map(n => n.id === note.id ? { ...n, content: newContent } : n)
+                              );
+                            }
+                            setExpandedNoteId(null);
+                          }}
+                          onKeyDown={e => { if (e.key === 'Escape') setExpandedNoteId(null); }}
+                          onClick={e => e.stopPropagation()}
+                          className="w-full resize-none bg-transparent text-[12px] text-gray-800 outline-none"
+                          style={{ lineHeight: '1.6', wordBreak: 'break-word', overflowWrap: 'anywhere', minHeight: '3rem' }}
+                          data-testid={`textarea-note-${note.id}`}
+                        />
+                      ) : (
+                        <p
+                          className="text-[12px] text-gray-800"
+                          style={{ lineHeight: '1.6', wordBreak: 'break-word', overflowWrap: 'anywhere' }}
+                        >{note.content}</p>
+                      )}
                     </div>
-                    <p
-                      className="text-[12px] text-gray-800"
-                      style={{ lineHeight: '1.6', wordBreak: 'break-word', overflowWrap: 'anywhere' }}
-                    >{note.content}</p>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>

@@ -363,6 +363,31 @@ export function registerContactRoutes(app: Express): void {
     }
   });
 
+  // Update (edit) a Team Note
+  app.patch("/api/contacts/:id/notes/:noteId", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+      const { noteId } = req.params;
+      const { content } = req.body;
+      if (!content?.trim()) return res.status(400).json({ error: "Content is required" });
+
+      const note = await storage.getContactNoteById(noteId);
+      if (!note) return res.status(404).json({ error: "Note not found" });
+
+      const isCreator = note.createdByUserId === req.user.id;
+      const isWorkspaceOwner = note.workspaceId === req.user.id;
+      if (!isCreator && !isWorkspaceOwner) {
+        return res.status(403).json({ error: "You don't have permission to edit this note" });
+      }
+
+      const updated = await storage.updateContactNote(noteId, content.trim());
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating contact note:", error);
+      res.status(500).json({ error: "Failed to update note" });
+    }
+  });
+
   // Delete a Team Note
   app.delete("/api/contacts/:id/notes/:noteId", async (req, res) => {
     try {

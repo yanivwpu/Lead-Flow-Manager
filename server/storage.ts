@@ -198,6 +198,7 @@ export interface IStorage {
   getContactNotes(workspaceId: string, contactId: string): Promise<ContactNote[]>;
   addContactNote(data: InsertContactNote): Promise<ContactNote>;
   getContactNoteById(noteId: string): Promise<ContactNote | undefined>;
+  updateContactNote(noteId: string, content: string): Promise<ContactNote | undefined>;
   deleteContactNote(noteId: string): Promise<boolean>;
   createAppointment(data: InsertAppointment): Promise<Appointment>;
   getAppointmentsByUser(userId: string): Promise<Appointment[]>;
@@ -1508,6 +1509,11 @@ export class DbStorage implements IStorage {
 
   async getContactNoteById(noteId: string): Promise<ContactNote | undefined> {
     const [note] = await db.select().from(contactNotes).where(eq(contactNotes.id, noteId));
+    return note;
+  }
+
+  async updateContactNote(noteId: string, content: string): Promise<ContactNote | undefined> {
+    const [note] = await db.update(contactNotes).set({ content }).where(eq(contactNotes.id, noteId)).returning();
     return note;
   }
 
