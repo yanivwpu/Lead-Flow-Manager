@@ -411,6 +411,10 @@ app.use((req, res, next) => {
   // Start cron jobs (trial check-in emails, etc.)
   startCronJobs();
 
+  // Start durable flow job worker (handles Wait/delay steps that survive restarts)
+  const { startFlowJobWorker } = await import("./flowJobWorker");
+  startFlowJobWorker();
+
   // IndexNow: detect new/changed content and submit to search engines on startup.
   // Uses a persisted state snapshot to submit only newly added blog posts and
   // landing pages. Falls back to submitting all pages when no prior state exists

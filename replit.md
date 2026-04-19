@@ -15,6 +15,23 @@ The application is a full multi-tenant SaaS implementation with:
 - Notification system for follow-up reminders (push & email)
 - PWA capabilities (installable, offline-first)
 
+## Recent Changes (April 19, 2026) — Durable Wait Steps via flow_jobs Table
+
+### Overview
+Wait/delay nodes in the Chatbot Flow Builder are now handled by a durable scheduling system instead of `setTimeout`. This means flows survive server restarts and support delays from minutes to days.
+
+### What changed
+- **New DB table**: `flow_jobs` — stores scheduled resumptions with `flow_id`, `contact_id`, `conversation_id`, `node_id` (where to resume), `run_at` (when to resume), `status`, and serialized `TriggerContext` payload.
+- **`server/chatbotEngine.ts`**: Delay node no longer uses `setTimeout`. Instead it inserts a `flow_jobs` row and stops execution. Removed `MAX_DELAY_MS` cap entirely.
+- **`server/flowJobWorker.ts`**: New background worker polling every 7 seconds. Atomically claims pending jobs (sets status to `running`), resumes flow execution from the saved node, then marks `completed` or `failed`.
+- **`server/index.ts`**: Starts `FlowJobWorker` on startup.
+- **`ChatbotBuilder.tsx`**: Delay node now has a unit selector (minutes/hours/days). The 5-minute cap warning is removed.
+
+### Key design decisions
+- Idempotency: uses `UPDATE ... WHERE status = 'pending'` to atomically claim jobs — prevents double execution.
+- No external queue required — works with the existing PostgreSQL connection.
+- Phase 2 (retries, backoff, BullMQ) can be added later without schema changes.
+
 ## Recent Changes (April 17, 2026) — Outbound Media Sending (Images, PDF, Audio, Video)
 
 ### Overview

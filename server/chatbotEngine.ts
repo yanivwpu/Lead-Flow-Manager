@@ -137,8 +137,7 @@ function matchPendingButton(message: string, buttons: ButtonOption[]): ButtonOpt
   return null;
 }
 
-// ─── Max delay cap ─────────────────────────────────────────────────────────
-const MAX_DELAY_MS = 5 * 60 * 1000;
+// Max delay cap removed — delays are now handled durably via flow_jobs table
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 
@@ -635,7 +634,6 @@ async function executeFlow(
   }
 
   const visited = new Set<string>();
-  let cumulativeDelayMs = 0;
 
   while (currentNode) {
     const nodeId = currentNode.id;
@@ -669,13 +667,6 @@ async function executeFlow(
           break;
         }
 
-        const delayToUse = Math.min(cumulativeDelayMs, MAX_DELAY_MS);
-        cumulativeDelayMs = 0;
-        if (delayToUse > 0) {
-          console.log(`[Chatbot] Waiting ${delayToUse / 1000}s before sending node "${nodeId}"`);
-          await new Promise((resolve) => setTimeout(resolve, delayToUse));
-        }
-
         if (msgType === "template") {
           // Official WhatsApp template send — uses Meta Cloud API or Twilio Content API
           const templateId = (currentNode.data as any).templateId as string | undefined;
@@ -689,11 +680,6 @@ async function executeFlow(
               `[Chatbot] ⚠ Template node "${nodeId}" on channel "${ctx.channel}" — templates are WhatsApp-only, skipping`
             );
             break;
-          }
-          const delayToUseTemplate = Math.min(cumulativeDelayMs, MAX_DELAY_MS);
-          cumulativeDelayMs = 0;
-          if (delayToUseTemplate > 0) {
-            await new Promise((resolve) => setTimeout(resolve, delayToUseTemplate));
           }
           try {
             await sendFlowTemplate(ctx, templateId, templateVariables);
@@ -730,18 +716,31 @@ async function executeFlow(
 
       case "delay": {
         const minutes = currentNode.data.delayMinutes || 0;
-        const rawMs = minutes * 60 * 1000;
-        const cappedMs = Math.min(rawMs, MAX_DELAY_MS);
-        if (rawMs > MAX_DELAY_MS) {
-          console.warn(
-            `[Chatbot] Delay node "${nodeId}" requests ${minutes}m but is capped at ${MAX_DELAY_MS / 60_000}m`
+        const nextNodeId = nextNodeMap.get(nodeId);
+
+        if (!nextNodeId) {
+          console.log(`[Chatbot] Delay node "${nodeId}" has no next node — nothing to schedule`);
+          return;
+        }
+
+        const runAt = new Date(Date.now() + minutes * 60 * 1000);
+        try {
+          await storage.createFlowJob({
+            flowId: flow.id,
+            contactId: ctx.contactId,
+            conversationId: ctx.conversationId,
+            nodeId: nextNodeId,
+            runAt,
+            status: "pending",
+            payload: ctx as any,
+          });
+          console.log(
+            `[Chatbot] ⏱ Flow "${flow.name}" — scheduled durable job to resume from node "${nextNodeId}" at ${runAt.toISOString()} (delay: ${minutes}m)`
           );
+        } catch (err: any) {
+          console.error(`[Chatbot] ❌ Failed to create flow job for delay node "${nodeId}": ${err.message}`);
         }
-        if (cappedMs > 0) {
-          console.log(`[Chatbot] Delay node — accumulating ${cappedMs / 1000}s before next message`);
-          cumulativeDelayMs += cappedMs;
-        }
-        break;
+        return; // STOP execution — worker will resume after the delay
       }
 
       case "action": {
@@ -920,4 +919,19 @@ export async function triggerChatbotFlows(ctx: TriggerContext): Promise<void> {
   } catch (err: any) {
     console.error(`[Chatbot] triggerChatbotFlows error: ${err.message}`, err.stack);
   }
+}
+
+// ─── Public API for FlowJobWorker ───────────────────────────────────────────
+
+/**
+ * Resume flow execution from a specific node — called by the FlowJobWorker when
+ * a scheduled delay job becomes due. The flow and context were persisted in the
+ * flow_jobs table at the time the delay node was hit.
+ */
+export async function executeFlowFromJob(
+  flow: ChatbotFlow,
+  ctx: TriggerContext,
+  nodeId: string
+): Promise<void> {
+  await executeFlow(flow, ctx, nodeId);
 }

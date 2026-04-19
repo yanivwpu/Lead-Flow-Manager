@@ -70,6 +70,7 @@ interface ChatbotNode {
     condition?: { type: string; value: string };
     action?: { type: string; value: string };
     delayMinutes?: number;
+    delayUnit?: "minutes" | "hours" | "days";
     variableName?: string;
     templateId?: string;
     templateName?: string;
@@ -425,6 +426,7 @@ export function ChatbotBuilder() {
         messageType: type === "message" ? "text" : undefined,
         options: type === "question" ? [{ label: "Option 1", nextNodeId: "" }] : undefined,
         delayMinutes: type === "delay" ? 5 : undefined,
+        delayUnit: type === "delay" ? "minutes" : undefined,
         action: type === "action" ? { type: "set_tag", value: "" } : undefined,
       },
     };
@@ -1512,26 +1514,54 @@ export function ChatbotBuilder() {
               )}
 
               {/* ── WAIT ── */}
-              {selectedStep.type === "delay" && (
-                <div>
-                  <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 block">Delay duration</Label>
-                  <div className="flex items-center gap-3">
-                    <Input type="number" value={selectedStep.data.delayMinutes || 0}
-                      onChange={(e) => updateStep(selectedStep.id, { delayMinutes: parseInt(e.target.value) || 0 })}
-                      min={0} className="text-sm w-24 border-gray-200" data-testid={`input-delay-${selectedStep.id}`} />
-                    <span className="text-sm text-gray-500 font-medium">minutes</span>
-                  </div>
-                  <p className="text-[11px] text-gray-400 mt-2 leading-relaxed">The flow will pause before continuing to the next step.</p>
-                  {(selectedStep.data.delayMinutes || 0) > 5 && (
-                    <div className="flex gap-2 mt-2.5 p-2.5 bg-amber-50 rounded-lg border border-amber-200">
-                      <AlertCircle className="h-3.5 w-3.5 text-amber-500 mt-0.5 flex-shrink-0" />
-                      <p className="text-[11px] text-amber-700 leading-relaxed">
-                        <strong>Maximum is 5 minutes.</strong> Delays longer than 5 minutes are automatically capped. Server-side waits do not survive a process restart.
-                      </p>
+              {selectedStep.type === "delay" && (() => {
+                const unit = selectedStep.data.delayUnit || "minutes";
+                const totalMinutes = selectedStep.data.delayMinutes || 0;
+                const displayValue = unit === "days"
+                  ? Math.round(totalMinutes / 1440)
+                  : unit === "hours"
+                  ? Math.round(totalMinutes / 60)
+                  : totalMinutes;
+                const toMinutes = (val: number, u: string) =>
+                  u === "days" ? val * 1440 : u === "hours" ? val * 60 : val;
+                return (
+                  <div>
+                    <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 block">Delay duration</Label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="number"
+                        value={displayValue}
+                        onChange={(e) => updateStep(selectedStep.id, {
+                          delayMinutes: toMinutes(parseInt(e.target.value) || 0, unit),
+                          delayUnit: unit,
+                        })}
+                        min={0}
+                        className="text-sm w-20 border-gray-200"
+                        data-testid={`input-delay-${selectedStep.id}`}
+                      />
+                      <Select value={unit} onValueChange={(v) => {
+                        const newUnit = v as "minutes" | "hours" | "days";
+                        updateStep(selectedStep.id, {
+                          delayUnit: newUnit,
+                          delayMinutes: toMinutes(displayValue, newUnit),
+                        });
+                      }}>
+                        <SelectTrigger className="text-sm border-gray-200 bg-gray-50 w-28" data-testid={`select-delay-unit-${selectedStep.id}`}>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="minutes">Minutes</SelectItem>
+                          <SelectItem value="hours">Hours</SelectItem>
+                          <SelectItem value="days">Days</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
-                  )}
-                </div>
-              )}
+                    <p className="text-[11px] text-gray-400 mt-2 leading-relaxed">
+                      The flow will pause and resume automatically — even after a server restart. Supports minutes, hours, or days.
+                    </p>
+                  </div>
+                );
+              })()}
 
               {/* ── ACTION ── */}
               {selectedStep.type === "action" && (

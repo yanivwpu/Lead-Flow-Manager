@@ -1368,3 +1368,21 @@ export const appointments = pgTable("appointments", {
 export const insertAppointmentSchema = createInsertSchema(appointments).omit({ id: true, createdAt: true });
 export type Appointment = typeof appointments.$inferSelect;
 export type InsertAppointment = z.infer<typeof insertAppointmentSchema>;
+
+// ─── Flow Jobs (Durable Wait/Delay scheduling) ────────────────────────────────
+export const flowJobs = pgTable("flow_jobs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  flowId: varchar("flow_id").notNull(),
+  contactId: varchar("contact_id").notNull(),
+  conversationId: varchar("conversation_id").notNull(),
+  nodeId: varchar("node_id").notNull(), // the node to resume execution from after the delay
+  runAt: timestamp("run_at").notNull(),
+  status: varchar("status").notNull().default("pending"), // pending | running | completed | failed
+  payload: jsonb("payload").notNull().default({}), // serialized TriggerContext
+  errorMessage: text("error_message"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertFlowJobSchema = createInsertSchema(flowJobs).omit({ id: true, createdAt: true });
+export type FlowJob = typeof flowJobs.$inferSelect;
+export type InsertFlowJob = z.infer<typeof insertFlowJobSchema>;

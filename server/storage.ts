@@ -42,13 +42,14 @@ import {
   type Appointment, type InsertAppointment,
   type GhlEventDedup, type InsertGhlEventDedup,
   type GhlSyncFailure, type InsertGhlSyncFailure, ghlSyncFailures,
+  type FlowJob, type InsertFlowJob,
   aiSettings, aiBusinessKnowledge, aiUsage, aiLeadScores,
   userAutomationTemplates, templateUsageAnalytics,
   templates as templatesTable, templateEntitlements, realtorOnboardingSubmissions,
   templateInstalls, templateAssets, userTemplateData, ghlEventDedup
 } from "@shared/schema";
 import { db } from "../drizzle/db";
-import { users, chats, registeredPhones, messageUsage, conversationWindows, teamMembers, workflows, workflowExecutions, recurringReminders, webhooks, webhookDeliveries, integrations, messageTemplates, templateSends, dripCampaigns, dripSteps, dripEnrollments, dripSends, chatbotFlows, chatbotSessions, salespeople, demoBookings, salesConversions, adminSettings, contacts, conversations, messages, activityEvents, channelSettings, supportTickets, partners, commissions, agreementAcceptances, contactNotes, appointments, type InsertConversationWindow, type ConversationWindow } from "@shared/schema";
+import { users, chats, registeredPhones, messageUsage, conversationWindows, teamMembers, workflows, workflowExecutions, recurringReminders, webhooks, webhookDeliveries, integrations, messageTemplates, templateSends, dripCampaigns, dripSteps, dripEnrollments, dripSends, chatbotFlows, chatbotSessions, salespeople, demoBookings, salesConversions, adminSettings, contacts, conversations, messages, activityEvents, channelSettings, supportTickets, partners, commissions, agreementAcceptances, contactNotes, appointments, flowJobs, type InsertConversationWindow, type ConversationWindow } from "@shared/schema";
 import { eq, and, lte, sql, isNotNull, isNull, asc, desc, gte, sum, gt, or, like, ilike } from "drizzle-orm";
 
 export interface IStorage {
@@ -268,6 +269,12 @@ export interface IStorage {
   upsertUserTemplateData(userId: string, templateId: string, assetType: string, assetKey: string, definition: any): Promise<UserTemplateData>;
   deleteUserTemplateDataForTemplate(userId: string, templateId: string): Promise<void>;
   resetTemplateForUser(userId: string, templateId: string): Promise<void>;
+
+  // Flow Job methods (durable Wait/delay scheduling)
+  createFlowJob(job: import("@shared/schema").InsertFlowJob): Promise<import("@shared/schema").FlowJob>;
+  claimPendingFlowJobs(limit?: number): Promise<import("@shared/schema").FlowJob[]>;
+  markFlowJobCompleted(id: string): Promise<void>;
+  markFlowJobFailed(id: string, errorMessage: string): Promise<void>;
 }
 
 export class DbStorage implements IStorage {
@@ -2405,6 +2412,37 @@ export class DbStorage implements IStorage {
         sql`description LIKE ${'Realtor Growth Engine%'}`
       )
     );
+  }
+
+  // ─── Flow Job methods ──────────────────────────────────────────────────────
+
+  async createFlowJob(job: InsertFlowJob): Promise<FlowJob> {
+    const result = await db.insert(flowJobs).values(job).returning();
+    return result[0];
+  }
+
+  async claimPendingFlowJobs(limit = 50): Promise<FlowJob[]> {
+    // Atomically claim jobs: update status to 'running' where status = 'pending' and run_at <= now()
+    // Returns only the rows that were actually updated (idempotent — prevents double execution)
+    const claimed = await db
+      .update(flowJobs)
+      .set({ status: "running" })
+      .where(
+        and(
+          eq(flowJobs.status, "pending"),
+          lte(flowJobs.runAt, new Date())
+        )
+      )
+      .returning();
+    return claimed.slice(0, limit);
+  }
+
+  async markFlowJobCompleted(id: string): Promise<void> {
+    await db.update(flowJobs).set({ status: "completed" }).where(eq(flowJobs.id, id));
+  }
+
+  async markFlowJobFailed(id: string, errorMessage: string): Promise<void> {
+    await db.update(flowJobs).set({ status: "failed", errorMessage }).where(eq(flowJobs.id, id));
   }
 }
 
