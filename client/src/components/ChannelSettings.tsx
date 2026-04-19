@@ -185,26 +185,6 @@ export function ChannelSettings() {
     }
   }, [connectTwilioOpen]);
 
-  // TikTok: derive active state at component level for use in effects
-  const isTiktokChannelActive = !!(channels.find(c => c.channel === 'tiktok')?.isConnected && channels.find(c => c.channel === 'tiktok')?.isEnabled);
-  const isTiktokSetupMode = configChannel === 'tiktok' && (tiktokMode === 'zapier' || tiktokMode === 'webhook');
-
-  // Poll channels every 4s while the user is on the Zapier or webhook setup screen
-  useEffect(() => {
-    if (!isTiktokSetupMode) return;
-    const id = setInterval(() => {
-      queryClient.invalidateQueries({ queryKey: ["/api/channels"] });
-    }, 4000);
-    return () => clearInterval(id);
-  }, [isTiktokSetupMode, queryClient]);
-
-  // Auto-transition to active view once the channel becomes active
-  useEffect(() => {
-    if (isTiktokSetupMode && isTiktokChannelActive) {
-      setTiktokMode('select');
-    }
-  }, [isTiktokSetupMode, isTiktokChannelActive]);
-
   // Detect OAuth callback: ?meta_oauth=ready&channel=facebook|instagram
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -239,6 +219,26 @@ export function ChannelSettings() {
   const { data: channels = [], isLoading } = useQuery<ChannelSetting[]>({
     queryKey: ["/api/channels"],
   });
+
+  // TikTok: derived active state — must live AFTER channels is declared
+  const isTiktokChannelActive = !!(channels.find(c => c.channel === 'tiktok')?.isConnected && channels.find(c => c.channel === 'tiktok')?.isEnabled);
+  const isTiktokSetupMode = configChannel === 'tiktok' && (tiktokMode === 'zapier' || tiktokMode === 'webhook');
+
+  // Poll channels every 4s while the user is on the Zapier or webhook setup screen
+  useEffect(() => {
+    if (!isTiktokSetupMode) return;
+    const id = setInterval(() => {
+      queryClient.invalidateQueries({ queryKey: ["/api/channels"] });
+    }, 4000);
+    return () => clearInterval(id);
+  }, [isTiktokSetupMode, queryClient]);
+
+  // Auto-transition to active view once the channel becomes active
+  useEffect(() => {
+    if (isTiktokSetupMode && isTiktokChannelActive) {
+      setTiktokMode('select');
+    }
+  }, [isTiktokSetupMode, isTiktokChannelActive]);
 
   const { data: user } = useQuery<{
     id: string;
@@ -1287,7 +1287,6 @@ export function ChannelSettings() {
                     className="text-xs text-gray-400 hover:text-gray-600 underline"
                     onClick={() => {
                       updateChannelMutation.mutate({ channel: 'tiktok', data: { isConnected: false, isEnabled: false } });
-                      setTiktokZapierDone(false);
                       setTiktokMode('select');
                     }}
                     data-testid="button-tiktok-reconfigure"
