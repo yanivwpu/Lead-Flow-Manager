@@ -1266,7 +1266,11 @@ export function ChannelSettings() {
                   <TestLeadButton />
                   <button
                     className="text-xs text-gray-400 hover:text-gray-600 underline"
-                    onClick={() => setTiktokMode('webhook')}
+                    onClick={() => {
+                      updateChannelMutation.mutate({ channel: 'tiktok', data: { isConnected: false, isEnabled: false } });
+                      setTiktokZapierDone(false);
+                      setTiktokMode('select');
+                    }}
                     data-testid="button-tiktok-reconfigure"
                   >
                     Reconfigure
