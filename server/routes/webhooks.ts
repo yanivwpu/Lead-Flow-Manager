@@ -80,6 +80,9 @@ export function registerWebhookRoutes(app: Express): void {
         metadata,
       });
 
+      // Auto-activate the channel on first successful lead
+      await storage.upsertChannelSetting(userId, 'tiktok', { isConnected: true, isEnabled: true });
+
       res.status(201).json({ success: true, contactId: contact.id });
     } catch (error) {
       console.error("TikTok lead webhook error:", error);

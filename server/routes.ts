@@ -4430,6 +4430,9 @@ export async function registerRoutes(
         metadata: { isTest: true },
       });
 
+      // Auto-activate the channel — same as a real lead arriving
+      await storage.upsertChannelSetting(req.user.id, 'tiktok', { isConnected: true, isEnabled: true });
+
       console.log(`[TikTok Test Lead] Created test contact ${contact.id} for user ${req.user.id}`);
       res.status(201).json({ success: true, contactId: contact.id, name: randomName });
     } catch (err: any) {
