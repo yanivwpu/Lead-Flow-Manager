@@ -374,6 +374,117 @@ function AddNoteModal({ contactId, contactNotesList, currentUserId, teamMembers,
   );
 }
 
+interface EditNoteModalProps {
+  contactId: string;
+  note: ContactNote;
+  onSave: (updated: ContactNote) => void;
+  onDelete: (noteId: string) => void;
+  onClose: () => void;
+}
+function EditNoteModal({ contactId, note, onSave, onDelete, onClose }: EditNoteModalProps) {
+  const [text, setText] = useState(note.content);
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async () => {
+    const trimmed = text.trim();
+    if (!trimmed || trimmed === note.content) { onClose(); return; }
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/contacts/${contactId}/notes/${note.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: trimmed }),
+      });
+      if (res.ok) {
+        const updated: ContactNote = await res.json();
+        onSave(updated);
+        onClose();
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    await fetch(`/api/contacts/${contactId}/notes/${note.id}`, { method: 'DELETE' });
+    onDelete(note.id);
+    onClose();
+  };
+
+  return (
+    <div
+      className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 animate-in fade-in duration-150"
+      onClick={onClose}
+      data-testid="modal-overlay-edit-note"
+    >
+      <div
+        className="bg-white rounded-2xl shadow-lg w-[90%] max-w-[480px] flex flex-col animate-in zoom-in-95 duration-150"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="px-5 pt-5 pb-3 border-b border-gray-100 flex items-start justify-between">
+          <div>
+            <h2 className="text-[15px] font-semibold text-gray-900">Edit Note</h2>
+            <p className="text-[11px] text-gray-400 mt-0.5">
+              {note.createdByName || 'Team member'} · {note.createdAt
+                ? new Date(note.createdAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+                : ''}
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
+            data-testid="button-close-edit-note"
+          >
+            <X className="w-4 h-4 text-gray-400" />
+          </button>
+        </div>
+
+        {/* Textarea */}
+        <div className="px-5 py-4">
+          <textarea
+            className="notes-textarea w-full min-h-[120px] bg-white rounded-xl p-3 text-[13px] text-gray-700 placeholder-gray-400 resize-none font-sans leading-relaxed"
+            style={{ outline: 'none', boxShadow: 'none', border: '1px solid #E5E7EB' }}
+            value={text}
+            onChange={e => setText(e.target.value)}
+            autoFocus
+            data-testid="textarea-edit-note"
+          />
+        </div>
+
+        {/* Footer */}
+        <div className="px-5 pb-5 flex items-center justify-between">
+          <button
+            onClick={handleDelete}
+            className="flex items-center gap-1.5 py-2 px-3 text-[12px] font-semibold text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
+            data-testid="button-delete-edit-note"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            Delete
+          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onClose}
+              className="py-2 px-4 text-[12px] font-semibold text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+              data-testid="button-cancel-edit-note"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={!text.trim() || saving}
+              className="py-2 px-4 text-[12px] font-semibold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors"
+              data-testid="button-save-edit-note"
+            >
+              {saving ? 'Saving…' : 'Save Note'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function InboxLeadDetailsPanel({
   contact,
   primaryConversation,
@@ -401,8 +512,7 @@ export function InboxLeadDetailsPanel({
   const [contactNotesList, setContactNotesList] = useState<ContactNote[]>([]);
   const [notesLoading, setNotesLoading] = useState(false);
   const [addNoteOpen, setAddNoteOpen] = useState(false);
-  const [expandedNoteId, setExpandedNoteId] = useState<string | null>(null);
-  const [editingTexts, setEditingTexts] = useState<Record<string, string>>({});
+  const [editingNote, setEditingNote] = useState<ContactNote | null>(null);
   // Snapshot of lastViewedAt taken when this contact was first opened — used to compute badge
   const [notesViewedAt, setNotesViewedAt] = useState<Date | null>(null);
 
@@ -1655,77 +1765,25 @@ export function InboxLeadDetailsPanel({
               </button>
             ) : (
               <div className="notes-scroll space-y-2 max-h-[240px] overflow-y-auto pr-1">
-                {contactNotesList.map(note => {
-                  const isExpanded = expandedNoteId === note.id;
-                  return (
-                    <div
-                      key={note.id}
-                      className={`p-3 rounded-xl overflow-x-hidden transition-shadow ${isExpanded ? 'ring-1 ring-amber-300/80' : 'cursor-pointer hover:brightness-[0.97]'}`}
-                      style={{ background: '#FFFDF5', border: '1px solid #E8E2CC' }}
-                      data-testid={`note-item-${note.id}`}
-                      onClick={() => {
-                        if (!isExpanded) {
-                          setExpandedNoteId(note.id);
-                          setEditingTexts(prev => ({ ...prev, [note.id]: note.content }));
-                        }
-                      }}
-                    >
-                      <div className="flex items-start justify-between gap-1 mb-1.5">
-                        <div className="flex items-center gap-1 flex-1 min-w-0">
-                          <span className="text-[10px] text-gray-400">{note.createdByName || "Team member"}</span>
-                          <span className="text-[10px] text-gray-300">·</span>
-                          <span className="text-[10px] text-gray-400">{formatRelativeTime(note.createdAt)}</span>
-                        </div>
-                        {isExpanded && (
-                          <button
-                            onMouseDown={e => e.preventDefault()}
-                            onClick={async (e) => {
-                              e.stopPropagation();
-                              await fetch(`/api/contacts/${contact.id}/notes/${note.id}`, { method: 'DELETE' });
-                              setContactNotesList(prev => prev.filter(n => n.id !== note.id));
-                              setExpandedNoteId(null);
-                            }}
-                            className="flex-shrink-0 p-0.5 rounded hover:bg-red-50 transition-colors"
-                            data-testid={`button-delete-note-${note.id}`}
-                          >
-                            <X className="w-3.5 h-3.5 text-gray-400 hover:text-red-400 transition-colors" />
-                          </button>
-                        )}
-                      </div>
-                      {isExpanded ? (
-                        <textarea
-                          autoFocus
-                          value={editingTexts[note.id] ?? note.content}
-                          onChange={e => setEditingTexts(prev => ({ ...prev, [note.id]: e.target.value }))}
-                          onBlur={async () => {
-                            const newContent = (editingTexts[note.id] ?? '').trim();
-                            if (newContent && newContent !== note.content) {
-                              await fetch(`/api/contacts/${contact.id}/notes/${note.id}`, {
-                                method: 'PATCH',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ content: newContent }),
-                              });
-                              setContactNotesList(prev =>
-                                prev.map(n => n.id === note.id ? { ...n, content: newContent } : n)
-                              );
-                            }
-                            setExpandedNoteId(null);
-                          }}
-                          onKeyDown={e => { if (e.key === 'Escape') setExpandedNoteId(null); }}
-                          onClick={e => e.stopPropagation()}
-                          className="w-full resize-none bg-transparent text-[12px] text-gray-800 outline-none"
-                          style={{ lineHeight: '1.6', wordBreak: 'break-word', overflowWrap: 'anywhere', minHeight: '3rem' }}
-                          data-testid={`textarea-note-${note.id}`}
-                        />
-                      ) : (
-                        <p
-                          className="text-[12px] text-gray-800"
-                          style={{ lineHeight: '1.6', wordBreak: 'break-word', overflowWrap: 'anywhere' }}
-                        >{note.content}</p>
-                      )}
+                {contactNotesList.map(note => (
+                  <div
+                    key={note.id}
+                    className="p-3 rounded-xl overflow-x-hidden cursor-pointer hover:brightness-[0.97] transition-all"
+                    style={{ background: '#FFFDF5', border: '1px solid #E8E2CC' }}
+                    data-testid={`note-item-${note.id}`}
+                    onClick={() => setEditingNote(note)}
+                  >
+                    <div className="flex items-center gap-1 mb-1.5">
+                      <span className="text-[10px] text-gray-400">{note.createdByName || "Team member"}</span>
+                      <span className="text-[10px] text-gray-300">·</span>
+                      <span className="text-[10px] text-gray-400">{formatRelativeTime(note.createdAt)}</span>
                     </div>
-                  );
-                })}
+                    <p
+                      className="text-[12px] text-gray-800"
+                      style={{ lineHeight: '1.6', wordBreak: 'break-word', overflowWrap: 'anywhere' }}
+                    >{note.content}</p>
+                  </div>
+                ))}
               </div>
             )}
           </div>
@@ -1740,6 +1798,17 @@ export function InboxLeadDetailsPanel({
               onSave={saved => setContactNotesList(prev => [saved, ...prev])}
               onDelete={noteId => setContactNotesList(prev => prev.filter(n => n.id !== noteId))}
               onClose={() => setAddNoteOpen(false)}
+            />
+          )}
+
+          {/* ── EDIT NOTE MODAL ─────────────────────────────────────────── */}
+          {editingNote && (
+            <EditNoteModal
+              contactId={contact.id}
+              note={editingNote}
+              onSave={updated => setContactNotesList(prev => prev.map(n => n.id === updated.id ? updated : n))}
+              onDelete={noteId => setContactNotesList(prev => prev.filter(n => n.id !== noteId))}
+              onClose={() => setEditingNote(null)}
             />
           )}
 
