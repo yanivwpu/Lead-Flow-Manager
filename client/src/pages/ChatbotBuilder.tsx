@@ -652,6 +652,16 @@ export function ChatbotBuilder() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-48 shadow-lg border-gray-100">
+                {/* New Flow — always accessible on mobile */}
+                <DropdownMenuItem
+                  onClick={() => { setSelectedFlow(null); setSelectedStepId(null); setUnsavedChanges(false); setIsCreating(true); }}
+                  className="text-sm font-medium gap-2"
+                  data-testid="menu-new-flow-mobile"
+                >
+                  <Plus className="h-3.5 w-3.5 text-brand-green" />
+                  New Flow
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
                 {/* Status toggle — mobile only */}
                 <DropdownMenuItem
                   onClick={() => {
@@ -725,8 +735,15 @@ export function ChatbotBuilder() {
         )}>
           {/* Sidebar header */}
           <div className="px-3.5 pt-4 pb-3 border-b border-gray-100">
-            <div className="mb-3">
+            <div className="flex items-center justify-between mb-3">
               <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Your Flows</span>
+              <button
+                onClick={() => { setSelectedFlow(null); setSelectedStepId(null); setUnsavedChanges(false); setIsCreating(true); }}
+                className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-semibold text-brand-green hover:bg-brand-green/8 transition-colors"
+                data-testid="button-new-flow-sidebar"
+              >
+                <Plus className="h-3 w-3" />New
+              </button>
             </div>
             <div className="relative">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-300 pointer-events-none" />
