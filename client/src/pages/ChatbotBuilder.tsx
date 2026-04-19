@@ -580,20 +580,24 @@ export function ChatbotBuilder() {
             {/* Status toggle — hidden on mobile */}
             <button
               onClick={() => {
-                const goingActive = !selectedFlow.isActive;
-                if (goingActive) {
-                  const hasKeywords = (selectedFlow.triggerKeywords as string[])?.length > 0;
-                  const hasNewChat = selectedFlow.triggerOnNewChat;
-                  if (!hasKeywords && !hasNewChat) {
-                    toast({
-                      title: "No trigger configured",
-                      description: "Set at least one keyword or enable 'Start on new conversation' before activating this flow.",
-                      variant: "destructive",
-                    });
-                    return;
-                  }
+                const currentlyActive = selectedFlow.isActive === true;
+                // Switching to Draft is always allowed — skip all validation
+                if (currentlyActive) {
+                  toggleFlowMutation.mutate({ id: selectedFlow.id, isActive: false });
+                  return;
                 }
-                toggleFlowMutation.mutate({ id: selectedFlow.id, isActive: goingActive });
+                // Switching to Active requires a trigger to be configured
+                const hasKeywords = (selectedFlow.triggerKeywords as string[])?.length > 0;
+                const hasNewChat = selectedFlow.triggerOnNewChat === true;
+                if (!hasKeywords && !hasNewChat) {
+                  toast({
+                    title: "No trigger configured",
+                    description: "Set at least one keyword or enable 'Start on new conversation' before activating this flow.",
+                    variant: "destructive",
+                  });
+                  return;
+                }
+                toggleFlowMutation.mutate({ id: selectedFlow.id, isActive: true });
               }}
               className={cn(
                 "hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all",
@@ -651,20 +655,24 @@ export function ChatbotBuilder() {
                 {/* Status toggle — mobile only */}
                 <DropdownMenuItem
                   onClick={() => {
-                    const goingActive = !selectedFlow.isActive;
-                    if (goingActive) {
-                      const hasKeywords = (selectedFlow.triggerKeywords as string[])?.length > 0;
-                      const hasNewChat = selectedFlow.triggerOnNewChat;
-                      if (!hasKeywords && !hasNewChat) {
-                        toast({
-                          title: "No trigger configured",
-                          description: "Set at least one keyword or enable 'Start on new conversation' before activating this flow.",
-                          variant: "destructive",
-                        });
-                        return;
-                      }
+                    const currentlyActive = selectedFlow.isActive === true;
+                    // Switching to Draft is always allowed — skip all validation
+                    if (currentlyActive) {
+                      toggleFlowMutation.mutate({ id: selectedFlow.id, isActive: false });
+                      return;
                     }
-                    toggleFlowMutation.mutate({ id: selectedFlow.id, isActive: goingActive });
+                    // Switching to Active requires a trigger to be configured
+                    const hasKeywords = (selectedFlow.triggerKeywords as string[])?.length > 0;
+                    const hasNewChat = selectedFlow.triggerOnNewChat === true;
+                    if (!hasKeywords && !hasNewChat) {
+                      toast({
+                        title: "No trigger configured",
+                        description: "Set at least one keyword or enable 'Start on new conversation' before activating this flow.",
+                        variant: "destructive",
+                      });
+                      return;
+                    }
+                    toggleFlowMutation.mutate({ id: selectedFlow.id, isActive: true });
                   }}
                   className="md:hidden text-sm font-medium gap-2"
                   data-testid="menu-toggle-status-mobile"
