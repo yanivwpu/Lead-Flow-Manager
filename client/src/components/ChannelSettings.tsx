@@ -132,7 +132,6 @@ export function ChannelSettings() {
   const [telegramConnectResult, setTelegramConnectResult] = useState<{ username: string; botLink: string } | null>(null);
   const [copied, setCopied] = useState(false);
   const [tiktokMode, setTiktokMode] = useState<'select' | 'zapier' | 'webhook'>('select');
-  const [tiktokZapierDone, setTiktokZapierDone] = useState(false);
   const [tiktokWebhookExpanded, setTiktokWebhookExpanded] = useState(false);
   const [tiktokCopied, setTiktokCopied] = useState(false);
   const [tiktokTestLeadSent, setTiktokTestLeadSent] = useState(false);
@@ -185,6 +184,26 @@ export function ChannelSettings() {
       }
     }
   }, [connectTwilioOpen]);
+
+  // TikTok: derive active state at component level for use in effects
+  const isTiktokChannelActive = !!(channels.find(c => c.channel === 'tiktok')?.isConnected && channels.find(c => c.channel === 'tiktok')?.isEnabled);
+  const isTiktokSetupMode = configChannel === 'tiktok' && (tiktokMode === 'zapier' || tiktokMode === 'webhook');
+
+  // Poll channels every 4s while the user is on the Zapier or webhook setup screen
+  useEffect(() => {
+    if (!isTiktokSetupMode) return;
+    const id = setInterval(() => {
+      queryClient.invalidateQueries({ queryKey: ["/api/channels"] });
+    }, 4000);
+    return () => clearInterval(id);
+  }, [isTiktokSetupMode, queryClient]);
+
+  // Auto-transition to active view once the channel becomes active
+  useEffect(() => {
+    if (isTiktokSetupMode && isTiktokChannelActive) {
+      setTiktokMode('select');
+    }
+  }, [isTiktokSetupMode, isTiktokChannelActive]);
 
   // Detect OAuth callback: ?meta_oauth=ready&channel=facebook|instagram
   useEffect(() => {
@@ -414,6 +433,7 @@ export function ChannelSettings() {
     },
     onSuccess: () => {
       setTiktokTestLeadSent(true);
+      queryClient.invalidateQueries({ queryKey: ["/api/channels"] });
       toast({ title: "Test lead sent!", description: "Check your inbox — a new TikTok lead just arrived." });
     },
     onError: (err: Error) => {
@@ -423,7 +443,6 @@ export function ChannelSettings() {
 
   const resetTiktokDialog = () => {
     setTiktokMode('select');
-    setTiktokZapierDone(false);
     setTiktokWebhookExpanded(false);
     setTiktokCopied(false);
     setTiktokTestLeadSent(false);
@@ -1324,58 +1343,39 @@ export function ChannelSettings() {
                     <ArrowLeft className="h-3 w-3" /> Back
                   </button>
 
-                  {tiktokZapierDone ? (
-                    /* Zapier success */
-                    <div className="space-y-4">
-                      <div className="flex items-center gap-3 p-3 rounded-lg bg-green-50 border border-green-200">
-                        <CheckCircle2 className="h-5 w-5 text-green-600 shrink-0" />
-                        <div>
-                          <p className="text-sm font-medium text-green-800">TikTok lead capture is active</p>
-                          <p className="text-xs text-green-700">New leads will appear in your inbox automatically</p>
-                        </div>
-                      </div>
-                      <TestLeadButton />
+                  <div>
+                    <p className="text-sm font-medium text-gray-900 mb-3">Set up your Zap</p>
+                    <ol className="space-y-3">
+                      {[
+                        { n: 1, text: 'Open the Zap template below and click "Use this Zap"' },
+                        { n: 2, text: "Connect your TikTok account when prompted" },
+                        { n: 3, text: "Use this URL in Zapier to send leads into WhachatCRM:" },
+                      ].map(({ n, text }) => (
+                        <li key={n} className="flex gap-3 text-sm text-gray-600">
+                          <span className="flex-shrink-0 w-5 h-5 rounded-full bg-gray-100 text-gray-700 text-xs flex items-center justify-center font-semibold">{n}</span>
+                          <span>{text}</span>
+                        </li>
+                      ))}
+                    </ol>
+                  </div>
+                  <TiktokWebhookRow />
+                  <Button
+                    className="w-full gap-2"
+                    onClick={() => window.open('https://zapier.com/apps/tiktok-lead-generation/integrations/webhooks', '_blank')}
+                    data-testid="button-open-zap-template"
+                  >
+                    <ExternalLink className="h-4 w-4" />
+                    Open Zap Template
+                  </Button>
+
+                  {/* Waiting indicator — activates automatically on first lead */}
+                  <div className="flex items-center justify-between pt-2 border-t border-gray-100">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse shrink-0" />
+                      <span className="text-xs text-gray-500">Waiting for first lead…</span>
                     </div>
-                  ) : (
-                    /* Zapier setup */
-                    <div className="space-y-4">
-                      <div>
-                        <p className="text-sm font-medium text-gray-900 mb-3">Set up your Zap</p>
-                        <ol className="space-y-3">
-                          {[
-                            { n: 1, text: 'Open the Zap template below and click "Use this Zap"' },
-                            { n: 2, text: "Connect your TikTok account when prompted" },
-                            { n: 3, text: "Use this URL in Zapier to send leads into WhachatCRM:" },
-                          ].map(({ n, text }) => (
-                            <li key={n} className="flex gap-3 text-sm text-gray-600">
-                              <span className="flex-shrink-0 w-5 h-5 rounded-full bg-gray-100 text-gray-700 text-xs flex items-center justify-center font-semibold">{n}</span>
-                              <span>{text}</span>
-                            </li>
-                          ))}
-                        </ol>
-                      </div>
-                      <TiktokWebhookRow />
-                      <Button
-                        className="w-full gap-2"
-                        onClick={() => window.open('https://zapier.com/apps/tiktok-lead-generation/integrations/webhooks', '_blank')}
-                        data-testid="button-open-zap-template"
-                      >
-                        <ExternalLink className="h-4 w-4" />
-                        Open Zap Template
-                      </Button>
-                      <Button
-                        variant="outline"
-                        className="w-full"
-                        onClick={() => {
-                          setTiktokZapierDone(true);
-                          updateChannelMutation.mutate({ channel: 'tiktok', data: { isConnected: true, isEnabled: true } });
-                        }}
-                        data-testid="button-tiktok-zapier-done"
-                      >
-                        I've set up my Zap ✓
-                      </Button>
-                    </div>
-                  )}
+                    <TestLeadButton />
+                  </div>
                 </div>
 
               /* ── Webhook flow ── */
@@ -1410,20 +1410,13 @@ export function ChannelSettings() {
                     </div>
                   )}
 
-                  <div className="flex items-center gap-2 pt-1">
+                  {/* Waiting indicator — activates automatically on first lead */}
+                  <div className="flex items-center justify-between pt-2 border-t border-gray-100">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse shrink-0" />
+                      <span className="text-xs text-gray-500">Waiting for first lead…</span>
+                    </div>
                     <TestLeadButton />
-                    <Button
-                      className="flex-1"
-                      onClick={() => {
-                        updateChannelMutation.mutate({ channel: 'tiktok', data: { isConnected: true, isEnabled: true } });
-                        setConfigChannel(null);
-                        resetTiktokDialog();
-                      }}
-                      disabled={updateChannelMutation.isPending}
-                      data-testid="button-enable-tiktok"
-                    >
-                      {updateChannelMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Enable Lead Intake"}
-                    </Button>
                   </div>
                 </div>
               ) : null}
