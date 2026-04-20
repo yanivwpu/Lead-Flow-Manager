@@ -1403,13 +1403,7 @@ export function UnifiedInbox() {
               </div>
             </div>
 
-            {/* WhatsApp/Meta warnings */}
-            {whatsappAvailability && !whatsappAvailability.available && (
-              <div className="px-3 py-2 bg-amber-50 border-b border-amber-200 flex items-center gap-2 text-xs text-amber-700 flex-shrink-0">
-                <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
-                {whatsappAvailability.message || "WhatsApp not configured"}
-              </div>
-            )}
+
             {windowStatus?.hasRestriction && !windowStatus.isActive && (
               <div className="px-3 py-2 bg-red-50 border-b border-red-200 flex items-center gap-2 text-xs text-red-700 flex-shrink-0">
                 <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
