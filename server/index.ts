@@ -7,8 +7,6 @@ import { createServer } from "http";
 import { startNotificationScheduler } from "./notifications";
 import { setupAuth, registerAuthRoutes } from "./auth";
 import { startCronJobs } from "./cron";
-import { runMigrations } from "stripe-replit-sync";
-import { getStripeSync } from "./stripeClient";
 import { WebhookHandlers } from "./webhookHandlers";
 import { setupPresenceServer } from "./presence";
 import { registerChannelAdapters } from "./channelAdapters";
@@ -105,46 +103,6 @@ app.use((req, res, next) => {
 });
 
 setupPresenceServer(httpServer);
-
-async function initStripe() {
-  const databaseUrl = process.env.DATABASE_URL;
-  if (!databaseUrl) {
-    console.log('DATABASE_URL not set, skipping Stripe initialization');
-    return;
-  }
-
-  try {
-    console.log('Initializing Stripe schema...');
-    await runMigrations({ databaseUrl });
-    console.log('Stripe schema ready');
-
-    const stripeSync = await getStripeSync();
-
-    console.log('Setting up managed webhook...');
-    const webhookBaseUrl = `https://${process.env.REPLIT_DOMAINS?.split(',')[0]}`;
-    try {
-      const result = await stripeSync.findOrCreateManagedWebhook(
-        `${webhookBaseUrl}/api/stripe/webhook`
-      );
-      if (result?.webhook?.url) {
-        console.log(`Webhook configured: ${result.webhook.url}`);
-      } else {
-        console.log('Webhook setup completed (no URL returned)');
-      }
-    } catch (webhookError) {
-      console.log('Webhook setup skipped (may require production environment)');
-    }
-
-    console.log('Syncing Stripe data...');
-    stripeSync.syncBackfill()
-      .then(() => console.log('Stripe data synced'))
-      .catch((err: any) => console.error('Error syncing Stripe data:', err));
-  } catch (error) {
-    console.error('Failed to initialize Stripe:', error);
-  }
-}
-
-initStripe();
 
 app.post(
   '/api/stripe/webhook',

@@ -1,4 +1,4 @@
-import { getStripeSync, getUncachableStripeClient } from './stripeClient';
+import { getUncachableStripeClient } from './stripeClient';
 import { storage } from './storage';
 
 export class WebhookHandlers {
@@ -12,30 +12,14 @@ export class WebhookHandlers {
       );
     }
 
-    const sync = await getStripeSync();
-    await sync.processWebhook(payload, signature);
-    
-    // Custom processing for tracking converted user revenue
-    await this.trackConversionRevenue(payload, signature);
-  }
-
-  static async trackConversionRevenue(payload: Buffer, signature: string): Promise<void> {
-    try {
-      const stripe = await getUncachableStripeClient();
-      const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
-      
-      if (!webhookSecret) {
-        // If no webhook secret, parse event directly (less secure but works for testing)
-        const event = JSON.parse(payload.toString());
-        await this.handlePaymentEvent(event);
-        return;
-      }
-
-      const event = stripe.webhooks.constructEvent(payload, signature, webhookSecret);
-      await this.handlePaymentEvent(event);
-    } catch (error) {
-      console.log('Revenue tracking skipped (non-critical):', (error as Error).message);
+    const stripe = await getUncachableStripeClient();
+    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+    if (!webhookSecret) {
+      throw new Error('Missing STRIPE_WEBHOOK_SECRET');
     }
+
+    const event = stripe.webhooks.constructEvent(payload, signature, webhookSecret);
+    await this.handlePaymentEvent(event);
   }
 
   static async handlePaymentEvent(event: any): Promise<void> {
