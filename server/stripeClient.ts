@@ -13,6 +13,8 @@ async function getCredentials() {
 export async function getUncachableStripeClient() {
   const { secretKey } = await getCredentials();
 
+  console.log("STRIPE KEY USED:", process.env.STRIPE_SECRET_KEY?.slice(-5));
+
   return new Stripe(secretKey);
 }
 
