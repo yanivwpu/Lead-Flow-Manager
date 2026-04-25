@@ -186,11 +186,17 @@ class SubscriptionService {
     };
   }
 
-  async createCheckoutSession(userId: string, plan: SubscriptionPlan, baseUrl: string): Promise<{ url: string }> {
+  async createCheckoutSession(
+    userId: string,
+    plan: SubscriptionPlan,
+    baseUrl: string,
+    billingInterval: "monthly" | "yearly" = "monthly"
+  ): Promise<{ url: string }> {
     const user = await storage.getUser(userId);
     if (!user) throw new Error("User not found");
 
     const stripe = await getUncachableStripeClient();
+    const resolvedBaseUrl = process.env.APP_URL || baseUrl;
 
     let customerId = user.stripeCustomerId;
     if (!customerId) {
@@ -202,36 +208,38 @@ class SubscriptionService {
       customerId = customer.id;
     }
 
-    // Get price directly from Stripe API (bypassing sync issues)
-    const planAmounts: Record<SubscriptionPlan, number> = {
-      free: 0,
-      starter: 1900, // $19
-      pro: 4900, // $49
-    };
-
-    const amount = planAmounts[plan];
-    if (amount === 0) {
+    if (plan === "free") {
       throw new Error("Cannot checkout for free plan");
     }
 
-    // Query prices directly from Stripe API
-    console.log(`Looking for price with amount: ${amount} cents for plan: ${plan}`);
-    const stripePrices = await stripe.prices.list({ active: true, limit: 20 });
-    const priceResult = stripePrices.data.find(p => p.unit_amount === amount);
-    
-    if (!priceResult) {
-      console.error(`No price found for amount ${amount}. Available Stripe prices:`, stripePrices.data.map(p => ({ id: p.id, amount: p.unit_amount })));
-      throw new Error(`No price found for plan: ${plan} ($${amount/100}). Please create a $${amount/100}/month price in your Stripe dashboard.`);
+    const priceId =
+      plan === "starter"
+        ? billingInterval === "yearly"
+          ? process.env.STRIPE_STARTER_YEARLY_PRICE_ID
+          : process.env.STRIPE_STARTER_MONTHLY_PRICE_ID
+        : billingInterval === "yearly"
+          ? process.env.STRIPE_PRO_YEARLY_PRICE_ID
+          : process.env.STRIPE_PRO_MONTHLY_PRICE_ID;
+
+    if (!priceId) {
+      const envName =
+        plan === "starter"
+          ? billingInterval === "yearly"
+            ? "STRIPE_STARTER_YEARLY_PRICE_ID"
+            : "STRIPE_STARTER_MONTHLY_PRICE_ID"
+          : billingInterval === "yearly"
+            ? "STRIPE_PRO_YEARLY_PRICE_ID"
+            : "STRIPE_PRO_MONTHLY_PRICE_ID";
+      throw new Error(`Missing ${envName}`);
     }
-    console.log(`Found price: ${priceResult.id} for amount ${priceResult.unit_amount}`);
 
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
       payment_method_types: ['card'],
-      line_items: [{ price: priceResult.id, quantity: 1 }],
+      line_items: [{ price: priceId, quantity: 1 }],
       mode: 'subscription',
-      success_url: `${baseUrl}/app/settings?checkout=success`,
-      cancel_url: `${baseUrl}/app/settings?checkout=cancel`,
+      success_url: `${resolvedBaseUrl}/app/settings?checkout=success`,
+      cancel_url: `${resolvedBaseUrl}/app/settings?checkout=cancel`,
     });
 
     if (!session.url) throw new Error("Failed to create checkout session");
@@ -243,6 +251,7 @@ class SubscriptionService {
     if (!user) throw new Error("User not found");
 
     const stripe = await getUncachableStripeClient();
+    const resolvedBaseUrl = process.env.APP_URL || baseUrl;
 
     let customerId = user.stripeCustomerId;
     if (!customerId) {
@@ -254,31 +263,26 @@ class SubscriptionService {
       customerId = customer.id;
     }
 
-    const PRO_AMOUNT = 4900;
-    const AI_BRAIN_AMOUNT = 2900;
-
-    console.log(`Creating combined Pro + AI Brain checkout for user ${userId}`);
-    const stripePrices = await stripe.prices.list({ active: true, limit: 20 });
-    const proPrice = stripePrices.data.find(p => p.unit_amount === PRO_AMOUNT);
-    const aiPrice = stripePrices.data.find(p => p.unit_amount === AI_BRAIN_AMOUNT);
-
-    if (!proPrice) {
-      throw new Error("Pro plan price not found in Stripe. Please create a $49/month price.");
+    const proPriceId = process.env.STRIPE_PRO_MONTHLY_PRICE_ID;
+    if (!proPriceId) {
+      throw new Error("Missing STRIPE_PRO_MONTHLY_PRICE_ID");
     }
-    if (!aiPrice) {
-      throw new Error("AI Brain add-on price not found in Stripe. Please create a $29/month price.");
+
+    const aiPriceId = process.env.STRIPE_AI_BRAIN_MONTHLY_PRICE_ID;
+    if (!aiPriceId) {
+      throw new Error("Missing STRIPE_AI_BRAIN_MONTHLY_PRICE_ID");
     }
 
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
       payment_method_types: ['card'],
       line_items: [
-        { price: proPrice.id, quantity: 1 },
-        { price: aiPrice.id, quantity: 1 },
+        { price: proPriceId, quantity: 1 },
+        { price: aiPriceId, quantity: 1 },
       ],
       mode: 'subscription',
-      success_url: `${baseUrl}/app/templates/realtor-growth-engine?checkout=success`,
-      cancel_url: `${baseUrl}/app/templates/realtor-growth-engine?checkout=cancel`,
+      success_url: `${resolvedBaseUrl}/app/templates/realtor-growth-engine?checkout=success`,
+      cancel_url: `${resolvedBaseUrl}/app/templates/realtor-growth-engine?checkout=cancel`,
       metadata: {
         type: 'pro_plus_ai',
         userId,
@@ -300,6 +304,7 @@ class SubscriptionService {
     }
 
     const stripe = await getUncachableStripeClient();
+    const resolvedBaseUrl = process.env.APP_URL || baseUrl;
 
     let customerId = user.stripeCustomerId;
     if (!customerId) {
@@ -330,8 +335,8 @@ class SubscriptionService {
       payment_method_types: ['card'],
       line_items: [{ price: priceId, quantity: 1 }],
       mode: 'subscription',
-      success_url: `${baseUrl}/app/ai-brain?checkout=success`,
-      cancel_url: `${baseUrl}/app/ai-brain?checkout=cancel`,
+      success_url: `${resolvedBaseUrl}/app/ai-brain?checkout=success`,
+      cancel_url: `${resolvedBaseUrl}/app/ai-brain?checkout=cancel`,
     });
 
     if (!session.url) throw new Error("Failed to create checkout session");

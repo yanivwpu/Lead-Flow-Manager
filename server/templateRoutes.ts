@@ -140,19 +140,16 @@ export function registerTemplateRoutes(app: Express) {
         customerId = customer.id;
       }
 
-      const baseUrl = `${req.protocol}://${req.get("host")}`;
+      const baseUrl = process.env.APP_URL || `${req.protocol}://${req.get("host")}`;
+      const priceId = process.env.STRIPE_RGE_ONE_TIME_PRICE_ID;
+      if (!priceId) {
+        throw new Error("Missing STRIPE_RGE_ONE_TIME_PRICE_ID");
+      }
 
       const session = await stripe.checkout.sessions.create({
         customer: customerId,
         payment_method_types: ["card"],
-        line_items: [{
-          price_data: {
-            currency: "usd",
-            product_data: { name: "Realtor Growth Engine Onboarding" },
-            unit_amount: TEMPLATE_PRICE_CENTS,
-          },
-          quantity: 1,
-        }],
+        line_items: [{ price: priceId, quantity: 1 }],
         mode: "payment",
         success_url: `${baseUrl}/app/templates/realtor-growth-engine/onboarding?paid=true&session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${baseUrl}/app/templates/realtor-growth-engine`,

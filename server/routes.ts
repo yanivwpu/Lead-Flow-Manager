@@ -2621,13 +2621,26 @@ export async function registerRoutes(
         return res.status(401).json({ error: "Unauthorized" });
       }
 
-      const { planId } = req.body;
-      if (!planId || !['starter', 'growth', 'pro'].includes(planId)) {
+      const { planId, billingInterval } = req.body as {
+        planId?: string;
+        billingInterval?: "monthly" | "yearly";
+      };
+
+      if (!planId || !["starter", "pro"].includes(planId)) {
         return res.status(400).json({ error: "Invalid plan" });
       }
 
-      const baseUrl = `${req.protocol}://${req.get('host')}`;
-      const result = await subscriptionService.createCheckoutSession(req.user.id, planId, baseUrl);
+      if (billingInterval && !["monthly", "yearly"].includes(billingInterval)) {
+        return res.status(400).json({ error: "Invalid billing interval" });
+      }
+
+      const baseUrl = process.env.APP_URL || `${req.protocol}://${req.get('host')}`;
+      const result = await subscriptionService.createCheckoutSession(
+        req.user.id,
+        planId,
+        baseUrl,
+        billingInterval || "monthly"
+      );
       res.json(result);
     } catch (error: any) {
       console.error("Error creating checkout:", error);
@@ -2641,7 +2654,7 @@ export async function registerRoutes(
         return res.status(401).json({ error: "Unauthorized" });
       }
 
-      const baseUrl = `${req.protocol}://${req.get('host')}`;
+      const baseUrl = process.env.APP_URL || `${req.protocol}://${req.get('host')}`;
       const result = await subscriptionService.createProPlusAICheckoutSession(req.user.id, baseUrl);
       res.json(result);
     } catch (error: any) {
@@ -2657,7 +2670,7 @@ export async function registerRoutes(
         return res.status(401).json({ error: "Unauthorized" });
       }
 
-      const baseUrl = `${req.protocol}://${req.get('host')}`;
+      const baseUrl = process.env.APP_URL || `${req.protocol}://${req.get('host')}`;
       const result = await subscriptionService.createAddonCheckoutSession(req.user.id, baseUrl);
       res.json(result);
     } catch (error: any) {
