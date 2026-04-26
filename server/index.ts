@@ -76,6 +76,14 @@ import { createBullBoard } from "@bull-board/api";
 import { BullMQAdapter } from "@bull-board/api/bullMQAdapter";
 import { ExpressAdapter } from "@bull-board/express";
 
+console.log("ENV CHECK:", {
+  DATABASE_URL: !!process.env.DATABASE_URL,
+  STRIPE_KEY: !!process.env.STRIPE_SECRET_KEY,
+  OPENAI: !!process.env.OPENAI_API_KEY,
+  REDIS: !!process.env.REDIS_URL,
+  APP_URL: !!process.env.APP_URL
+});
+
 const app = express();
 const httpServer = createServer(app);
 
@@ -104,6 +112,7 @@ app.use((req, res, next) => {
 
 setupPresenceServer(httpServer);
 
+  
 app.post(
   '/api/stripe/webhook',
   express.raw({ type: 'application/json' }),
