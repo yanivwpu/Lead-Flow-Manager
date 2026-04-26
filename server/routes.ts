@@ -55,6 +55,7 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import { subscriptionService } from "./subscriptionService";
+import { resolveStripeCheckoutRedirectOrigin } from "./stripeCheckoutRedirectBase";
 import { sendWelcomeEmail, sendContactFormEmail, sendDemoBookingNotification, sendDemoConfirmationEmail, sendSalespersonWelcomeEmail } from "./email";
 import bcrypt from "bcryptjs";
 import { triggerNewChatWorkflows, triggerKeywordWorkflows, triggerTagChangeWorkflows, runW2QualificationEngine, runServiceRoutingEngine } from "./workflowEngine";
@@ -2671,6 +2672,17 @@ export async function registerRoutes(
       }
 
       const baseUrl = process.env.APP_URL || `${req.protocol}://${req.get('host')}`;
+
+      console.log("[AI Brain Checkout] ENV/Host:", {
+        host: req.get("host"),
+        "x-forwarded-host": req.headers["x-forwarded-host"],
+        "x-forwarded-proto": req.headers["x-forwarded-proto"],
+        APP_URL: process.env.APP_URL,
+        STRIPE_SECRET_KEY_exists: !!process.env.STRIPE_SECRET_KEY,
+        STRIPE_SECRET_KEY_prefix8: process.env.STRIPE_SECRET_KEY?.slice(0, 8),
+        STRIPE_AI_BRAIN_MONTHLY_PRICE_ID: process.env.STRIPE_AI_BRAIN_MONTHLY_PRICE_ID,
+      });
+
       const result = await subscriptionService.createAddonCheckoutSession(req.user.id, baseUrl);
       res.json(result);
     } catch (error: any) {
@@ -2686,7 +2698,9 @@ export async function registerRoutes(
         return res.status(401).json({ error: "Unauthorized" });
       }
 
-      const returnUrl = `${req.protocol}://${req.get('host')}/app/settings`;
+      const returnUrl = `${resolveStripeCheckoutRedirectOrigin(
+        process.env.APP_URL || `${req.protocol}://${req.get("host")}`,
+      )}/app/settings`;
       const result = await subscriptionService.createPortalSession(req.user.id, returnUrl);
       res.json(result);
     } catch (error: any) {
