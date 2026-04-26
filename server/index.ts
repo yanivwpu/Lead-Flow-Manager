@@ -431,6 +431,18 @@ app.use((req, res, next) => {
     () => {
       log(`serving on port ${port}`);
       runStartupGhlCleanup().catch(err => console.error('[GHL Startup Cleanup] Unhandled error:', err));
+
+      setTimeout(() => {
+        (async () => {
+          try {
+            console.log("[Backfill] Starting startup backfills...");
+            await (app as any).locals.runBackfills?.();
+            console.log("[Backfill] Startup backfills completed");
+          } catch (err) {
+            console.error("[Backfill] Startup backfills failed:", err);
+          }
+        })().catch((err) => console.error("[Backfill] Startup backfills failed:", err));
+      }, 0);
     },
   );
 })();

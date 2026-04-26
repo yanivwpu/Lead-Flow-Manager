@@ -3547,6 +3547,7 @@ export async function registerRoutes(
   // Uses the stored page access token to call /me to discover the real Facebook Page ID.
   async function backfillInstagramPageId() {
     try {
+      const { db: database } = await import("../drizzle/db");
       const { channelSettings: csTable } = await import("@shared/schema");
       const { eq: eqOp } = await import("drizzle-orm");
       const allIgSettings = await database
@@ -3597,9 +3598,14 @@ export async function registerRoutes(
     }
   }
 
-  // Run backfill async at startup — does not block server from starting
-  backfillFacebookInstagramChannelSettings();
-  backfillInstagramPageId();
+  async function runBackfills() {
+    await backfillFacebookInstagramChannelSettings();
+    await backfillInstagramPageId();
+  }
+
+  // IMPORTANT: Do not run backfills during route registration (startup import/init).
+  // We register the runner so `server/index.ts` can invoke it after the server is listening.
+  (app as any).locals.runBackfills = runBackfills;
   
   function encryptIntegrationConfig(config: Record<string, any>): Record<string, any> {
     const encrypted: Record<string, any> = { ...config };
