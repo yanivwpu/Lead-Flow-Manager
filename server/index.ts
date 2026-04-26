@@ -15,6 +15,18 @@ import "./worker";
 import oidcRouter from "./oidc";
 import bcrypt from "bcryptjs";
 import { storage } from "./storage";
+import { seedRealtorTemplate } from "./seedRealtorTemplate";
+import { createBullBoard } from "@bull-board/api";
+import { BullMQAdapter } from "@bull-board/api/bullMQAdapter";
+import { ExpressAdapter } from "@bull-board/express";
+
+console.log("ENV CHECK:", {
+  DATABASE_URL: !!process.env.DATABASE_URL,
+  STRIPE_KEY: !!process.env.STRIPE_SECRET_KEY,
+  OPENAI: !!process.env.OPENAI_API_KEY,
+  REDIS: !!process.env.REDIS_URL,
+  APP_URL: !!process.env.APP_URL
+});
 
 async function runStartupGhlCleanup() {
   const targetUserId = process.env.GHL_CLEANUP_USER_ID;
@@ -71,18 +83,6 @@ async function runStartupGhlCleanup() {
     console.error('[GHL Startup Cleanup] Error:', err);
   }
 }
-import { seedRealtorTemplate } from "./seedRealtorTemplate";
-import { createBullBoard } from "@bull-board/api";
-import { BullMQAdapter } from "@bull-board/api/bullMQAdapter";
-import { ExpressAdapter } from "@bull-board/express";
-
-console.log("ENV CHECK:", {
-  DATABASE_URL: !!process.env.DATABASE_URL,
-  STRIPE_KEY: !!process.env.STRIPE_SECRET_KEY,
-  OPENAI: !!process.env.OPENAI_API_KEY,
-  REDIS: !!process.env.REDIS_URL,
-  APP_URL: !!process.env.APP_URL
-});
 
 const app = express();
 const httpServer = createServer(app);
