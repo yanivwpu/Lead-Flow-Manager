@@ -87,6 +87,15 @@ async function runStartupGhlCleanup() {
 const app = express();
 const httpServer = createServer(app);
 
+// Redirect apex domain to www (preserve path + query)
+app.use((req, res, next) => {
+  const host = req.headers.host;
+  if (host === "whachatcrm.com") {
+    return res.redirect(301, `https://www.whachatcrm.com${req.url}`);
+  }
+  next();
+});
+
 // Enable gzip compression for all responses
 app.use(compression({
   filter: (req, res) => {
