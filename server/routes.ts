@@ -2617,6 +2617,60 @@ export async function registerRoutes(
     }
   });
 
+  // Debug endpoint: current user's subscription + Stripe price IDs (safe)
+  app.get("/api/subscription/debug", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const user = await storage.getUser(req.user.id);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      const limits = await subscriptionService.getUserLimits(req.user.id);
+
+      let stripePriceIds: string[] | null = null;
+      if (user.stripeSubscriptionId) {
+        try {
+          const stripe = await getUncachableStripeClient();
+          const subscription = await stripe.subscriptions.retrieve(user.stripeSubscriptionId, {
+            expand: ["items.data.price"],
+          } as any);
+          const items = subscription?.items?.data || [];
+          stripePriceIds = items.map((it: any) => it?.price?.id).filter(Boolean);
+        } catch (err: any) {
+          console.error("[Subscription Debug] Stripe lookup failed:", {
+            userId: user.id,
+            stripeCustomerId: user.stripeCustomerId,
+            stripeSubscriptionId: user.stripeSubscriptionId,
+            message: err?.message,
+          });
+          stripePriceIds = null;
+        }
+      }
+
+      return res.json({
+        userId: user.id,
+        email: user.email,
+        subscriptionPlan: user.subscriptionPlan,
+        subscriptionStatus: user.subscriptionStatus,
+        stripeCustomerId: user.stripeCustomerId,
+        stripeSubscriptionId: user.stripeSubscriptionId,
+        currentPeriodEnd: user.currentPeriodEnd,
+        shopifyAIBrainEnabled: user.shopifyAIBrainEnabled,
+        limits: {
+          hasAIBrainAddon: limits?.hasAIBrainAddon ?? false,
+        },
+        stripeSubscriptionItemPriceIds: stripePriceIds,
+      });
+    } catch (error: any) {
+      console.error("[Subscription Debug] Error:", error?.message || error);
+      return res.status(500).json({ error: "Failed to load subscription debug" });
+    }
+  });
+
   // Create checkout session for upgrading
   app.post("/api/subscription/checkout", async (req, res) => {
     try {

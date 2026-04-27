@@ -121,11 +121,16 @@ class SubscriptionService {
         expand: ['data.items.data.price'],
       });
       
-      // Check if any active subscription has the AI Brain add-on
-      // We identify it by: price amount ($29/mo = 2900 cents) AND product name containing "AI Brain"
+      const aiBrainPriceId = process.env.STRIPE_AI_BRAIN_MONTHLY_PRICE_ID;
+      // Check if any active subscription has the AI Brain add-on.
+      // Primary match: priceId from env (most reliable).
+      // Fallback match: unit_amount === 2900 (backwards compatibility).
       const AI_BRAIN_ADDON_AMOUNT = 2900;
       for (const sub of subscriptions.data) {
         for (const item of sub.items.data) {
+          if (aiBrainPriceId && item.price.id === aiBrainPriceId) {
+            return true;
+          }
           if (item.price.unit_amount === AI_BRAIN_ADDON_AMOUNT) {
             // Also check product name/metadata to avoid false positives
             const product = item.price.product;
@@ -242,6 +247,12 @@ class SubscriptionService {
       mode: 'subscription',
       success_url: `${resolvedBaseUrl}/app/settings?checkout=success`,
       cancel_url: `${resolvedBaseUrl}/app/settings?checkout=cancel`,
+      metadata: {
+        userId,
+        type: 'plan',
+        plan,
+        billingInterval,
+      },
     });
 
     if (!session.url) throw new Error("Failed to create checkout session");
@@ -339,6 +350,10 @@ class SubscriptionService {
       mode: 'subscription',
       success_url: `${resolvedBaseUrl}/app/ai-brain?checkout=success`,
       cancel_url: `${resolvedBaseUrl}/app/ai-brain?checkout=cancel`,
+      metadata: {
+        userId,
+        type: 'ai_brain_addon',
+      },
     });
 
     if (!session.url) throw new Error("Failed to create checkout session");
