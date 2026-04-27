@@ -44,9 +44,14 @@ class SubscriptionService {
       ? Math.max(0, Math.ceil((new Date(user.trialEndsAt).getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))
       : 0;
 
-    // During trial, users get Pro features regardless of their stored plan
-    const storedPlan = (user.subscriptionPlan || "free") as SubscriptionPlan;
-    const effectivePlan = isInTrial ? "pro" : storedPlan;
+    const overrideEnabled = !!user.planOverrideEnabled;
+    const overridePlan = (user.planOverride || "free") as SubscriptionPlan;
+    const billingPlan = (user.billingPlan || "free") as SubscriptionPlan;
+
+    // During trial, users get Pro features regardless of stored plan
+    const effectivePlan = isInTrial
+      ? "pro"
+      : (overrideEnabled ? overridePlan : billingPlan);
     const planLimits = PLAN_LIMITS[effectivePlan];
 
     // MONTHLY RESET LOGIC: Reset conversations if billing period has ended
@@ -66,8 +71,9 @@ class SubscriptionService {
     const isAtWarning = conversationsRemaining > 0 && conversationsRemaining <= 10;
 
     let suggestedUpgrade: SubscriptionPlan | null = null;
-    if (storedPlan === "free" && !isInTrial) suggestedUpgrade = "starter";
-    else if (storedPlan === "starter") suggestedUpgrade = "pro";
+    const upgradePlanSource = overrideEnabled ? overridePlan : billingPlan;
+    if (upgradePlanSource === "free" && !isInTrial) suggestedUpgrade = "starter";
+    else if (upgradePlanSource === "starter") suggestedUpgrade = "pro";
 
     // Check if user has the AI Brain add-on subscription from Stripe
     // Trial users get full AI Brain access as part of the Pro trial experience

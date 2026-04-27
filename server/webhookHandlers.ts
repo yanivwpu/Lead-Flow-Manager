@@ -61,12 +61,12 @@ export class WebhookHandlers {
       const proYearly = process.env.STRIPE_PRO_YEARLY_PRICE_ID;
       const aiBrainMonthly = process.env.STRIPE_AI_BRAIN_MONTHLY_PRICE_ID;
 
-      // Determine base plan from known price IDs (prefer Pro if both exist).
-      let subscriptionPlan: 'free' | 'starter' | 'pro' | undefined;
-      if (proMonthly && priceIds.includes(proMonthly)) subscriptionPlan = 'pro';
-      else if (proYearly && priceIds.includes(proYearly)) subscriptionPlan = 'pro';
-      else if (starterMonthly && priceIds.includes(starterMonthly)) subscriptionPlan = 'starter';
-      else if (starterYearly && priceIds.includes(starterYearly)) subscriptionPlan = 'starter';
+      // Determine billing plan from known price IDs (prefer Pro if both exist).
+      let billingPlan: 'free' | 'starter' | 'pro' | undefined;
+      if (proMonthly && priceIds.includes(proMonthly)) billingPlan = 'pro';
+      else if (proYearly && priceIds.includes(proYearly)) billingPlan = 'pro';
+      else if (starterMonthly && priceIds.includes(starterMonthly)) billingPlan = 'starter';
+      else if (starterYearly && priceIds.includes(starterYearly)) billingPlan = 'starter';
 
       const hasAIBrainAddon = !!(aiBrainMonthly && priceIds.includes(aiBrainMonthly));
 
@@ -76,7 +76,7 @@ export class WebhookHandlers {
       const updates: Record<string, any> = {
         stripeSubscriptionId: subscription?.id || user.stripeSubscriptionId,
         subscriptionStatus: subscription?.status || user.subscriptionStatus,
-        ...(subscriptionPlan ? { subscriptionPlan } : {}),
+        ...(billingPlan ? { billingPlan } : {}),
         ...(currentPeriodStartSec ? { currentPeriodStart: new Date(currentPeriodStartSec * 1000) } : {}),
         ...(currentPeriodEndSec ? { currentPeriodEnd: new Date(currentPeriodEndSec * 1000) } : {}),
         // Reuse this flag as a generic "AI Brain entitlement" boolean; name is historical.
@@ -89,7 +89,7 @@ export class WebhookHandlers {
         customerId,
         subscriptionId: subscription?.id,
         priceIds,
-        subscriptionPlan,
+        billingPlan,
         hasAIBrainAddon,
         updated: !!updated,
       });

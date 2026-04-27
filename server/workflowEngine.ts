@@ -21,11 +21,11 @@ async function isTemplateWorkflowAllowed(workflow: Workflow): Promise<boolean> {
   const user = await storage.getUser(workflow.userId);
   if (!user) return false;
 
-  const plan = (user.subscriptionPlan || "free").toLowerCase();
+  const limits = await subscriptionService.getUserLimits(workflow.userId);
+  const plan = (limits?.plan || "free").toLowerCase();
   const hasPro = plan === "pro" || plan === "scale";
   if (!hasPro) return false;
 
-  const limits = await subscriptionService.getUserLimits(workflow.userId);
   return limits?.hasAIBrainAddon || false;
 }
 

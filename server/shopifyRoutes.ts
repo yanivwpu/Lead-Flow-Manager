@@ -216,7 +216,10 @@ router.get('/billing/callback', async (req: Request, res: Response) => {
       await storage.updateUser(user.id, {
         shopifySubscriptionStatus: 'active',
         shopifyChargeId: subscription.id,
+        // keep legacy field in sync for UI/admin display
         subscriptionPlan: internalPlan,
+        // billingPlan is the billing-derived plan (Shopify)
+        billingPlan: internalPlan,
         subscriptionStatus: 'active',
       });
 

@@ -78,9 +78,10 @@ export function setupAuth(app: Express) {
             }
             
             // Ensure Pro subscription
-            if (user.subscriptionPlan !== 'pro') {
+            if ((user.billingPlan || user.subscriptionPlan) !== 'pro') {
               user = await storage.updateUser(user.id, { 
                 subscriptionPlan: 'pro',
+                billingPlan: 'pro',
                 onboardingCompleted: true,
                 // twilioConnected intentionally NOT set here — demo user has no
                 // real Twilio credentials (accountSid/authToken/whatsappNumber).

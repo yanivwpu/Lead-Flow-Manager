@@ -96,7 +96,13 @@ export const users = pgTable("users", {
   // Active provider selection
   whatsappProvider: text("whatsapp_provider").default("twilio"), // 'twilio' or 'meta'
   // Subscription fields
+  // Legacy: used by older code/admin UI. Do not use as billing source-of-truth.
   subscriptionPlan: text("subscription_plan").default("free"),
+  // Billing-derived plan (Stripe/Shopify only)
+  billingPlan: text("billing_plan").default("free"),
+  // Admin override plan (takes precedence if enabled)
+  planOverride: text("plan_override"),
+  planOverrideEnabled: boolean("plan_override_enabled").default(false),
   stripeCustomerId: text("stripe_customer_id"),
   stripeSubscriptionId: text("stripe_subscription_id"),
   subscriptionStatus: text("subscription_status").default("active"), // active, canceled, past_due

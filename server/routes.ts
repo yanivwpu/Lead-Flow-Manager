@@ -2630,6 +2630,7 @@ export async function registerRoutes(
       }
 
       const limits = await subscriptionService.getUserLimits(req.user.id);
+      const effectivePlan = limits?.plan || "free";
 
       let stripePriceIds: string[] | null = null;
       if (user.stripeSubscriptionId) {
@@ -2654,6 +2655,10 @@ export async function registerRoutes(
       return res.json({
         userId: user.id,
         email: user.email,
+        billingPlan: user.billingPlan,
+        planOverride: user.planOverride,
+        planOverrideEnabled: user.planOverrideEnabled,
+        effectivePlan,
         subscriptionPlan: user.subscriptionPlan,
         subscriptionStatus: user.subscriptionStatus,
         stripeCustomerId: user.stripeCustomerId,
@@ -5640,7 +5645,12 @@ export async function registerRoutes(
         return res.status(404).json({ error: 'User not found' });
       }
 
-      await storage.updateUser(userId, { subscriptionPlan });
+      await storage.updateUser(userId, {
+        // keep legacy field in sync for admin UI display
+        subscriptionPlan,
+        planOverride: subscriptionPlan,
+        planOverrideEnabled: true,
+      });
       
       const updated = await storage.getUser(userId);
       console.log(`[Admin] Updated user ${user.email} plan to ${subscriptionPlan}`);

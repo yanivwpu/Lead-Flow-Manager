@@ -18,10 +18,9 @@ export function registerTemplateRoutes(app: Express) {
       const user = await storage.getUser(userId);
       if (!user) return res.status(404).json({ error: "User not found" });
 
-      const plan = (user.subscriptionPlan || "free").toLowerCase();
-      const hasPro = plan === "pro" || plan === "scale";
-
       const limits = await subscriptionService.getUserLimits(userId);
+      const plan = (limits?.plan || "free").toLowerCase();
+      const hasPro = plan === "pro" || plan === "scale";
       const hasAI = limits?.hasAIBrainAddon || false;
 
       res.json({ hasPro, hasAI, plan });
@@ -62,9 +61,9 @@ export function registerTemplateRoutes(app: Express) {
         });
       }
 
-      const plan = (user?.subscriptionPlan || "free").toLowerCase();
-      const hasPro = plan === "pro" || plan === "scale";
       const limits = await subscriptionService.getUserLimits(userId);
+      const plan = (limits?.plan || "free").toLowerCase();
+      const hasPro = plan === "pro" || plan === "scale";
       const hasAI = limits?.hasAIBrainAddon || false;
       const subscriptionActive = hasPro && hasAI;
 
@@ -105,9 +104,9 @@ export function registerTemplateRoutes(app: Express) {
         return res.json({ success: true, alreadyPurchased: true });
       }
 
-      const plan = (user.subscriptionPlan || "free").toLowerCase();
-      const hasPro = plan === "pro" || plan === "scale";
       const limits = await subscriptionService.getUserLimits(userId);
+      const plan = (limits?.plan || "free").toLowerCase();
+      const hasPro = plan === "pro" || plan === "scale";
       const hasAI = limits?.hasAIBrainAddon || false;
 
       if (user.email !== "demo@whachat.com" && (!hasPro || !hasAI)) {
@@ -220,9 +219,9 @@ export function registerTemplateRoutes(app: Express) {
         return res.status(403).json({ error: "Template not purchased" });
       }
 
-      const plan = (user.subscriptionPlan || "free").toLowerCase();
-      const hasPro = plan === "pro" || plan === "scale";
       const limits = await subscriptionService.getUserLimits(userId);
+      const plan = (limits?.plan || "free").toLowerCase();
+      const hasPro = plan === "pro" || plan === "scale";
       const hasAI = limits?.hasAIBrainAddon || false;
       if (user.email !== "demo@whachat.com" && (!hasPro || !hasAI)) {
         return res.status(403).json({ error: "Active Pro + AI plan required", hasPro, hasAI });
@@ -325,9 +324,9 @@ export function registerTemplateRoutes(app: Express) {
       }
 
       if (user && user.email !== "demo@whachat.com") {
-        const plan = (user.subscriptionPlan || "free").toLowerCase();
-        const hasPro = plan === "pro" || plan === "scale";
         const limits = await subscriptionService.getUserLimits(userId);
+        const plan = (limits?.plan || "free").toLowerCase();
+        const hasPro = plan === "pro" || plan === "scale";
         const hasAI = limits?.hasAIBrainAddon || false;
         if (!hasPro || !hasAI) {
           return res.status(403).json({ error: "Active Pro + AI plan required", hasPro, hasAI });
