@@ -4,7 +4,7 @@ import { Helmet } from "react-helmet";
 import {
   Zap, Plus, Trash2, Edit2, ToggleLeft, ToggleRight,
   ArrowRight, User, Tag, Clock, FileText, ChevronDown,
-  Loader2, Crown, Mail, Users, X,
+  Loader2, Mail, Users, X,
   MessageSquare, GitBranch, Webhook, ChevronRight,
   Sparkles, LayoutTemplate, MoveUp, MoveDown,
   CheckCircle2, ArrowDown, ArrowLeft,
@@ -28,8 +28,9 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { Link } from "wouter";
 import { cn } from "@/lib/utils";
+import { useSubscription } from "@/lib/subscription-context";
+import { UpgradeModal, type UpgradeReason } from "@/components/UpgradeModal";
 
 // ─── Channel Config ───────────────────────────────────────────────────────────
 
@@ -83,6 +84,9 @@ const TRIGGER_GROUPS = [
 ];
 
 const ALL_TRIGGERS = TRIGGER_GROUPS.flatMap(g => g.triggers);
+
+/** Starter (Basic Automations): integration triggers remain Pro-only in the UI until backend tiers exist. */
+const PRO_ONLY_AUTOMATION_TRIGGERS = new Set<string>(["webhook", "form_submitted"]);
 
 function normalizeTriggerType(raw: string): string {
   if (raw === "tag_change") return "tag_added";
@@ -238,9 +242,38 @@ function ChannelChip({ value, selected, onClick }: { value: string; selected: bo
   );
 }
 
+function StarterPlanAutomationsBanner({ onUpgradePro }: { onUpgradePro: () => void }) {
+  return (
+    <div className="px-4 sm:px-6 py-3 bg-amber-50/90 border-b border-amber-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-sm text-amber-950">
+      <p>
+        You're on Starter — Basic Automations enabled. Upgrade to Pro for Advanced Automations.
+      </p>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="shrink-0 border-amber-200 bg-white hover:bg-amber-50 text-amber-950"
+        onClick={onUpgradePro}
+      >
+        Upgrade to Pro
+      </Button>
+    </div>
+  );
+}
+
 // ─── Trigger Popover (anchored to "Change" button) ────────────────────────────
 
-function TriggerPicker({ current, onSelect }: { current: string; onSelect: (v: string) => void }) {
+function TriggerPicker({
+  current,
+  onSelect,
+  lockProTriggers,
+  onProTriggerLocked,
+}: {
+  current: string;
+  onSelect: (v: string) => void;
+  lockProTriggers?: boolean;
+  onProTriggerLocked?: () => void;
+}) {
   const [open, setOpen] = useState(false);
   const normalized = normalizeTriggerType(current);
   const def = ALL_TRIGGERS.find(t => t.value === normalized);
@@ -277,13 +310,22 @@ function TriggerPicker({ current, onSelect }: { current: string; onSelect: (v: s
               {group.triggers.map((trigger) => {
                 const TIcon = trigger.icon;
                 const isActive = normalized === trigger.value;
+                const locked = !!(lockProTriggers && PRO_ONLY_AUTOMATION_TRIGGERS.has(trigger.value));
                 return (
                   <button
                     key={trigger.value}
-                    onClick={() => { onSelect(trigger.value); setOpen(false); }}
+                    type="button"
+                    onClick={() => {
+                      if (locked) {
+                        onProTriggerLocked?.();
+                        return;
+                      }
+                      onSelect(trigger.value);
+                      setOpen(false);
+                    }}
                     className={cn(
                       "w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left transition-colors",
-                      isActive ? "bg-brand-green/8 text-brand-green" : "hover:bg-gray-50"
+                      locked ? "opacity-70 hover:bg-gray-50/80" : isActive ? "bg-brand-green/8 text-brand-green" : "hover:bg-gray-50"
                     )}
                   >
                     <div className={cn("h-7 w-7 rounded-md flex items-center justify-center shrink-0", isActive ? "bg-brand-green/10" : "bg-gray-100")}>
@@ -293,7 +335,14 @@ function TriggerPicker({ current, onSelect }: { current: string; onSelect: (v: s
                       <p className={cn("text-sm font-medium", isActive ? "text-brand-green" : "text-gray-800")}>{trigger.label}</p>
                       <p className="text-[11px] text-gray-500 truncate">{trigger.description}</p>
                     </div>
-                    {isActive && <CheckCircle2 className="h-3.5 w-3.5 text-brand-green shrink-0" />}
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {locked && (
+                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-semibold border-amber-200 bg-white text-amber-900">
+                          Advanced
+                        </Badge>
+                      )}
+                      {isActive && <CheckCircle2 className="h-3.5 w-3.5 text-brand-green" />}
+                    </div>
                   </button>
                 );
               })}
@@ -647,6 +696,8 @@ function ConditionsBlock({
 function TriggerConfigBlock({
   triggerType, triggerKeywords, triggerTag, triggerToStage, triggerDuration,
   onSelectTrigger, onChangeKeywords, onChangeTag, onChangeToStage, onChangeDuration,
+  lockProTriggers,
+  onProTriggerLocked,
 }: {
   triggerType: string; triggerKeywords: string;
   triggerTag: string; triggerToStage: string; triggerDuration: string;
@@ -654,6 +705,8 @@ function TriggerConfigBlock({
   onChangeKeywords: (v: string) => void;
   onChangeTag: (v: string) => void; onChangeToStage: (v: string) => void;
   onChangeDuration: (v: string) => void;
+  lockProTriggers?: boolean;
+  onProTriggerLocked?: () => void;
 }) {
   const normalized = normalizeTriggerType(triggerType);
   const def = ALL_TRIGGERS.find(t => t.value === normalized);
@@ -665,7 +718,12 @@ function TriggerConfigBlock({
     <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
       {/* Trigger selector row */}
       <div className="px-4 py-3.5 border-b border-gray-100 bg-gray-50/50">
-        <TriggerPicker current={triggerType} onSelect={onSelectTrigger} />
+        <TriggerPicker
+          current={triggerType}
+          onSelect={onSelectTrigger}
+          lockProTriggers={lockProTriggers}
+          onProTriggerLocked={onProTriggerLocked}
+        />
       </div>
 
       {/* Config area (only for triggers that need it) */}
@@ -843,6 +901,25 @@ function StartScreen({ type, onScratch, onTemplate }: { type: "workflow" | "sequ
 export function Workflows() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { data: subscriptionData, isLoading: subscriptionLoading } = useSubscription();
+  const limits = subscriptionData?.limits;
+  const plan = limits?.plan ?? "free";
+  const workflowsEnabled = limits?.workflowsEnabled ?? false;
+  const isStarterPlan = plan === "starter";
+
+  const [upgradeModalOpen, setUpgradeModalOpen] = useState(false);
+  const [upgradeReason, setUpgradeReason] = useState<UpgradeReason>("automations_paid_plan");
+
+  const openPaidAutomationsUpgrade = () => {
+    setUpgradeReason("automations_paid_plan");
+    setUpgradeModalOpen(true);
+  };
+
+  const openAdvancedAutomationsUpgrade = () => {
+    setUpgradeReason("automations_upgrade_pro");
+    setUpgradeModalOpen(true);
+  };
+
   const [activeTab, setActiveTab] = useState("workflows");
 
   // ── View state machine ───────────────────────────────────────────────────
@@ -877,8 +954,16 @@ export function Workflows() {
 
   // ─── Queries ──────────────────────────────────────────────────────────────
 
-  const { data: workflows = [], isLoading, error } = useQuery<Workflow[]>({ queryKey: ["/api/workflows"], retry: false });
-  const { data: dripCampaigns = [], isLoading: isLoadingCampaigns } = useQuery<DripCampaign[]>({ queryKey: ["/api/drip-campaigns"], retry: false });
+  const { data: workflows = [], isLoading } = useQuery<Workflow[]>({
+    queryKey: ["/api/workflows"],
+    retry: false,
+    enabled: workflowsEnabled && !subscriptionLoading,
+  });
+  const { data: dripCampaigns = [], isLoading: isLoadingCampaigns } = useQuery<DripCampaign[]>({
+    queryKey: ["/api/drip-campaigns"],
+    retry: false,
+    enabled: workflowsEnabled && !subscriptionLoading,
+  });
   const { data: chats = [] } = useQuery<any[]>({ queryKey: ["/api/chats"], retry: false });
   const { data: teamMembers = [] } = useQuery<any[]>({ queryKey: ["/api/team/members"], retry: false });
 
@@ -1089,29 +1174,61 @@ export function Workflows() {
     return label;
   };
 
-  const isUpgradeRequired = error && (error as any).message?.includes("Pro plan");
+  const upgradeModal = (
+    <UpgradeModal
+      open={upgradeModalOpen}
+      onOpenChange={setUpgradeModalOpen}
+      reason={upgradeReason}
+      currentPlan={plan}
+    />
+  );
 
   // ─────────────────────────────────────────────────────────────────────────
   // RENDER
   // ─────────────────────────────────────────────────────────────────────────
 
-  if (isUpgradeRequired) {
+  if (subscriptionLoading) {
     return (
       <div className="flex flex-col h-full">
-        <Helmet><title>Workflows | WhachatCRM</title></Helmet>
-        <div className="p-6 border-b bg-gray-50">
-          <h1 className="text-2xl font-bold text-gray-900">Workflows</h1>
+        <Helmet>
+          <title>Automations | WhachatCRM</title>
+        </Helmet>
+        <div className="flex-1 flex items-center justify-center p-12">
+          <Loader2 className="h-8 w-8 animate-spin text-gray-300" />
         </div>
-        <div className="flex-1 flex items-center justify-center p-8">
-          <div className="text-center max-w-sm">
-            <div className="h-16 w-16 rounded-full bg-amber-100 flex items-center justify-center mx-auto mb-4">
-              <Crown className="h-8 w-8 text-amber-600" />
+      </div>
+    );
+  }
+
+  if (!workflowsEnabled) {
+    return (
+      <div className="flex flex-col h-full">
+        <Helmet>
+          <title>Automations | WhachatCRM</title>
+        </Helmet>
+        <div className="px-4 sm:px-6 py-4 border-b border-gray-200 bg-white">
+          <div className="flex items-center gap-3">
+            <div className="h-9 w-9 rounded-lg bg-brand-green/10 flex items-center justify-center">
+              <Zap className="h-5 w-5 text-brand-green" />
             </div>
-            <h2 className="text-xl font-bold text-gray-900 mb-2">Pro Feature</h2>
-            <p className="text-gray-600 mb-6">Workflow automation is available on the Pro plan.</p>
-            <Link href="/pricing"><Button className="bg-brand-green hover:bg-brand-green/90">Upgrade to Pro</Button></Link>
+            <div>
+              <h1 className="text-lg font-bold text-gray-900">Automations</h1>
+              <p className="text-xs text-gray-500">Workflows and drip sequences</p>
+            </div>
           </div>
         </div>
+        <div className="flex-1 flex flex-col items-center justify-center p-8">
+          <div className="text-center max-w-md space-y-4">
+            <div className="h-14 w-14 rounded-2xl bg-brand-green/10 flex items-center justify-center mx-auto">
+              <Zap className="h-7 w-7 text-brand-green" />
+            </div>
+            <p className="text-gray-900 font-medium">Automations are available on Starter and Pro plans</p>
+            <Button className="bg-brand-green hover:bg-brand-green/90" onClick={openPaidAutomationsUpgrade} data-testid="button-automations-upgrade">
+              Upgrade to Starter or Pro
+            </Button>
+          </div>
+        </div>
+        {upgradeModal}
       </div>
     );
   }
@@ -1127,6 +1244,7 @@ export function Workflows() {
           </button>
           <h1 className="text-base font-semibold text-gray-900">New Workflow</h1>
         </div>
+        {isStarterPlan && <StarterPlanAutomationsBanner onUpgradePro={openAdvancedAutomationsUpgrade} />}
         <div className="flex-1 overflow-auto">
           <div className="max-w-2xl mx-auto px-6 py-8">
             <div className="mb-8">
@@ -1136,6 +1254,7 @@ export function Workflows() {
             <StartScreen type="workflow" onScratch={() => setView("wf-builder")} onTemplate={applyWfTemplate} />
           </div>
         </div>
+        {upgradeModal}
       </div>
     );
   }
@@ -1151,6 +1270,7 @@ export function Workflows() {
           </button>
           <h1 className="text-base font-semibold text-gray-900">New Sequence</h1>
         </div>
+        {isStarterPlan && <StarterPlanAutomationsBanner onUpgradePro={openAdvancedAutomationsUpgrade} />}
         <div className="flex-1 overflow-auto">
           <div className="max-w-2xl mx-auto px-6 py-8">
             <div className="mb-8">
@@ -1160,6 +1280,7 @@ export function Workflows() {
             <StartScreen type="sequence" onScratch={() => setView("seq-builder")} onTemplate={applySeqTemplate} />
           </div>
         </div>
+        {upgradeModal}
       </div>
     );
   }
@@ -1204,6 +1325,8 @@ export function Workflows() {
             </Button>
           </div>
         </div>
+
+        {isStarterPlan && <StarterPlanAutomationsBanner onUpgradePro={openAdvancedAutomationsUpgrade} />}
 
         {/* Builder body */}
         <div className="flex-1 overflow-y-auto">
@@ -1253,6 +1376,8 @@ export function Workflows() {
                 onChangeTag={setTriggerTag}
                 onChangeToStage={setTriggerToStage}
                 onChangeDuration={setTriggerDuration}
+                lockProTriggers={isStarterPlan}
+                onProTriggerLocked={openAdvancedAutomationsUpgrade}
               />
             </div>
 
@@ -1322,6 +1447,7 @@ export function Workflows() {
             </div>
           </div>
         </div>
+        {upgradeModal}
       </div>
     );
   }
@@ -1358,6 +1484,8 @@ export function Workflows() {
             </Button>
           </div>
         </div>
+
+        {isStarterPlan && <StarterPlanAutomationsBanner onUpgradePro={openAdvancedAutomationsUpgrade} />}
 
         <div className="flex-1 overflow-y-auto">
           <div className="max-w-2xl mx-auto px-6 py-8 space-y-6">
@@ -1484,6 +1612,7 @@ export function Workflows() {
             </div>
           </div>
         </div>
+        {upgradeModal}
       </div>
     );
   }
@@ -1491,7 +1620,7 @@ export function Workflows() {
   // ── List View (default) ───────────────────────────────────────────────────
   return (
     <div className="flex flex-col h-full">
-      <Helmet><title>Automation | WhachatCRM</title></Helmet>
+      <Helmet><title>Automations | WhachatCRM</title></Helmet>
 
       <div className="px-4 sm:px-6 py-4 border-b border-gray-200 bg-white">
         <div className="flex items-center gap-3">
@@ -1499,11 +1628,13 @@ export function Workflows() {
             <Zap className="h-5 w-5 text-brand-green" />
           </div>
           <div>
-            <h1 className="text-lg font-bold text-gray-900">Automation</h1>
-            <p className="text-xs text-gray-500">Workflows &amp; drip sequences</p>
+            <h1 className="text-lg font-bold text-gray-900">Automations</h1>
+            <p className="text-xs text-gray-500">Workflows and drip sequences</p>
           </div>
         </div>
       </div>
+
+      {isStarterPlan && <StarterPlanAutomationsBanner onUpgradePro={openAdvancedAutomationsUpgrade} />}
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
         <div className="border-b border-gray-200 px-4 sm:px-6 bg-white">
@@ -1758,6 +1889,7 @@ export function Workflows() {
           </div>
         </div>
       )}
+      {upgradeModal}
     </div>
   );
 }

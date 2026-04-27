@@ -1645,11 +1645,17 @@ export async function registerRoutes(
       }
 
       const currentCount = await storage.getTeamMemberCount(req.user.id);
-      // -1 means unlimited team members
+      // -1 = unlimited (Pro). Same seat math as GET /api/subscription usersCount + limits.usersLimit.
       if (limits.maxUsers !== -1 && currentCount >= limits.maxUsers) {
-        return res.status(403).json({ 
-          error: `Your ${limits.planName} plan allows ${limits.maxUsers} team member(s). Upgrade to add more.`,
-          upgradeRequired: true
+        return res.status(403).json({
+          error:
+            limits.plan === "free"
+              ? "Your Free plan includes 1 user. Upgrade to Starter to invite team members."
+              : limits.plan === "starter"
+                ? "Starter includes up to 3 users. Upgrade to Pro for unlimited team members."
+                : `Your ${limits.planName} plan does not allow more team members right now.`,
+          upgradeRequired: true,
+          plan: limits.plan,
         });
       }
 
@@ -2860,7 +2866,7 @@ export async function registerRoutes(
       }
       const limits = await subscriptionService.getUserLimits(req.user.id);
       if (!limits?.workflowsEnabled) {
-        return res.status(403).json({ error: "Workflows require a Pro plan", upgradeRequired: true });
+        return res.status(403).json({ error: "Automations require Starter or Pro", upgradeRequired: true });
       }
       const userWorkflows = await storage.getWorkflows(req.user.id);
       res.json(userWorkflows);
@@ -2878,7 +2884,7 @@ export async function registerRoutes(
       }
       const limits = await subscriptionService.getUserLimits(req.user.id);
       if (!limits?.workflowsEnabled) {
-        return res.status(403).json({ error: "Workflows require a Pro plan", upgradeRequired: true });
+        return res.status(403).json({ error: "Automations require Starter or Pro", upgradeRequired: true });
       }
       const { name, description, triggerType, triggerConditions, actions } = req.body;
       if (!name || !triggerType) {
@@ -2964,7 +2970,7 @@ export async function registerRoutes(
       }
       const limits = await subscriptionService.getUserLimits(req.user.id);
       if (!limits?.workflowsEnabled) {
-        return res.status(403).json({ error: "Drip campaigns require a Pro plan", upgradeRequired: true });
+        return res.status(403).json({ error: "Automations require Starter or Pro", upgradeRequired: true });
       }
       const campaigns = await storage.getDripCampaigns(req.user.id);
       res.json(campaigns);
@@ -3001,7 +3007,7 @@ export async function registerRoutes(
       }
       const limits = await subscriptionService.getUserLimits(req.user.id);
       if (!limits?.workflowsEnabled) {
-        return res.status(403).json({ error: "Drip campaigns require a Pro plan", upgradeRequired: true });
+        return res.status(403).json({ error: "Automations require Starter or Pro", upgradeRequired: true });
       }
       const { name, description, triggerType, triggerConfig } = req.body;
       if (!name) {
@@ -3221,7 +3227,7 @@ export async function registerRoutes(
       }
       const limits = await subscriptionService.getUserLimits(req.user.id);
       if (!limits?.workflowsEnabled) {
-        return res.status(403).json({ error: "Recurring reminders require a Pro plan", upgradeRequired: true });
+        return res.status(403).json({ error: "This feature requires Starter or Pro", upgradeRequired: true });
       }
       const { chatId, title, frequency, dayOfWeek, dayOfMonth, timeOfDay } = req.body;
       if (!title || !frequency) {

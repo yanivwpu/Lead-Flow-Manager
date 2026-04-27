@@ -84,7 +84,7 @@ export function Sidebar() {
       label: t("nav.automationAi", "Automation & AI"),
       items: [
         { icon: Bot, label: t("nav.chatbot", "Flow Builder"), href: "/app/chatbot", testId: "sidebar-chatbot" },
-        { icon: Zap, label: t("nav.automations", "Automation"), href: "/app/workflows", testId: "sidebar-automation" },
+        { icon: Zap, label: t("nav.automations", "Automations"), href: "/app/workflows", testId: "sidebar-automation" },
         { icon: Brain, label: t("nav.aiBrain", "AI Features"), href: "/app/ai-brain", testId: "sidebar-ai-brain" },
       ],
     },

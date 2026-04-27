@@ -89,15 +89,30 @@ export function Pricing() {
     window.scrollTo(0, 0);
   }, []);
 
-  const { data: subscription } = useQuery<{
-    subscription: { plan: string; isShopify?: boolean } | null;
+  const { data: subscriptionData, isLoading: subscriptionLoading } = useQuery<{
+    limits: {
+      plan: string;
+      hasAIBrainAddon?: boolean;
+      aiBrainBasePlanEligible?: boolean;
+    } | null;
+    subscription: { plan: string; status?: string; currentPeriodEnd?: string | null; isShopify?: boolean } | null;
   }>({
     queryKey: ["/api/subscription"],
     enabled: !!user,
   });
 
-  const currentPlan = subscription?.subscription?.plan || "free";
-  const isShopify = !!(subscription?.subscription?.isShopify);
+  const limits = subscriptionData?.limits;
+  const subscriptionResolved = !user || !subscriptionLoading;
+  /** Effective billing/trial/override plan — same as Settings & dashboard (`limits.plan`). Not legacy `subscription.plan`. */
+  const effectivePlan: "free" | "starter" | "pro" | null = !subscriptionResolved
+    ? null
+    : limits?.plan && ["free", "starter", "pro"].includes(limits.plan)
+      ? (limits.plan as "free" | "starter" | "pro")
+      : "free";
+  const hasAIBrainAddon = limits?.hasAIBrainAddon ?? false;
+  const aiBrainBasePlanEligible = limits?.aiBrainBasePlanEligible ?? false;
+  const isShopify = !!(subscriptionData?.subscription?.isShopify);
+  const planButtonsDisabled = !!user && subscriptionLoading;
 
   // Shopify plan name mapping
   const SHOPIFY_PLAN_MAP: Record<string, string> = {
@@ -193,11 +208,54 @@ export function Pricing() {
     }
   };
 
-  const getPlanIndex = (planId: string) =>
-    ["free", "starter", "pro"].indexOf(planId);
-  const currentPlanIndex = getPlanIndex(currentPlan);
-  const canAccessAIBrain =
-    currentPlan === "starter" || currentPlan === "pro";
+  const [aiBrainAddonLoading, setAiBrainAddonLoading] = useState(false);
+
+  const handleAIBrainAddonCheckout = async () => {
+    if (!user) {
+      setLocation("/auth?redirect=/pricing");
+      return;
+    }
+    setAiBrainAddonLoading(true);
+    try {
+      if (isShopify) {
+        const response = await fetch("/api/shopify/billing/checkout-web", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ plan: "AI Brain Add-on" }),
+        });
+        if (!response.ok) throw new Error("Failed to start billing");
+        const data = await response.json();
+        if (data.confirmationUrl) window.location.href = data.confirmationUrl;
+        return;
+      }
+
+      const response = await fetch("/api/subscription/addon/ai-brain", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+      });
+      if (response.status === 401) {
+        setLocation("/auth?redirect=/pricing");
+        return;
+      }
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to start checkout");
+      }
+      if (data.url) {
+        window.location.href = data.url;
+      }
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to start checkout",
+        variant: "destructive",
+      });
+    } finally {
+      setAiBrainAddonLoading(false);
+    }
+  };
 
   const p = "pricingPage";
 
@@ -449,7 +507,7 @@ export function Pricing() {
         >
           {/* FREE */}
           {(() => {
-            const isCurrentPlan = currentPlan === "free";
+            const isCurrentPlan = effectivePlan === "free";
             return (
               <div
                 className="bg-white rounded-2xl border-2 border-gray-200 p-6 flex flex-col"
@@ -504,7 +562,7 @@ export function Pricing() {
                 <Button
                   className="w-full bg-gray-100 text-gray-700 hover:bg-gray-200"
                   onClick={() => setLocation(user ? "/app/inbox" : "/auth")}
-                  disabled={isCurrentPlan}
+                  disabled={planButtonsDisabled || isCurrentPlan}
                   data-testid="button-upgrade-free"
                 >
                   {isCurrentPlan
@@ -517,7 +575,7 @@ export function Pricing() {
 
           {/* STARTER */}
           {(() => {
-            const isCurrentPlan = currentPlan === "starter";
+            const isCurrentPlan = effectivePlan === "starter";
             const isLoading = loadingPlan === "starter";
             return (
               <div
@@ -603,7 +661,7 @@ export function Pricing() {
                       ? "bg-gray-100 text-gray-500"
                       : "bg-blue-600 hover:bg-blue-700 text-white"
                   }`}
-                  disabled={isCurrentPlan || isLoading}
+                  disabled={planButtonsDisabled || isCurrentPlan || isLoading}
                   onClick={() => handleUpgrade("starter")}
                   data-testid="button-upgrade-starter"
                 >
@@ -621,7 +679,7 @@ export function Pricing() {
 
           {/* PRO */}
           {(() => {
-            const isCurrentPlan = currentPlan === "pro";
+            const isCurrentPlan = effectivePlan === "pro";
             const isLoading = loadingPlan === "pro";
             return (
               <div
@@ -700,7 +758,7 @@ export function Pricing() {
                       ? "bg-gray-100 text-gray-500"
                       : "bg-brand-green hover:bg-emerald-700 text-white"
                   }`}
-                  disabled={isCurrentPlan || isLoading}
+                  disabled={planButtonsDisabled || isCurrentPlan || isLoading}
                   onClick={() => handleUpgrade("pro")}
                   data-testid="button-upgrade-pro"
                 >
@@ -764,7 +822,11 @@ export function Pricing() {
             <p className="text-xs text-gray-400 mb-4">
               {t(`${p}.plans.aiBrain.upsell`)}
             </p>
-            {canAccessAIBrain ? (
+            {!subscriptionResolved ? (
+              <Button className="w-full bg-gray-200 text-gray-500" disabled data-testid="button-ai-brain-loading">
+                <Loader2 className={`w-4 h-4 animate-spin ${isRTL ? "ml-2" : "mr-2"}`} />
+              </Button>
+            ) : hasAIBrainAddon ? (
               <Link href="/app/ai-brain">
                 <Button
                   className="w-full bg-purple-600 hover:bg-purple-700 text-white"
@@ -774,11 +836,23 @@ export function Pricing() {
                   {t(`${p}.plans.aiBrain.ctaUnlock`)}
                 </Button>
               </Link>
+            ) : aiBrainBasePlanEligible ? (
+              <Button
+                className="w-full bg-gray-900 hover:bg-gray-800 text-white"
+                onClick={handleAIBrainAddonCheckout}
+                disabled={aiBrainAddonLoading || planButtonsDisabled}
+                data-testid="button-ai-brain-addon-checkout"
+              >
+                {aiBrainAddonLoading ? (
+                  <Loader2 className={`w-4 h-4 animate-spin ${isRTL ? "ml-2" : "mr-2"}`} />
+                ) : null}
+                {t(`${p}.plans.aiBrain.ctaUpgrade`)}
+              </Button>
             ) : (
               <Button
                 className="w-full bg-gray-900 hover:bg-gray-800 text-white"
                 onClick={() => handleUpgrade("starter")}
-                disabled={loadingPlan === "starter"}
+                disabled={planButtonsDisabled || loadingPlan === "starter"}
                 data-testid="button-upgrade-for-ai-brain"
               >
                 {loadingPlan === "starter" && (

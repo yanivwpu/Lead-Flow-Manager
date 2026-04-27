@@ -50,7 +50,7 @@ import {
 } from "@shared/schema";
 import { db } from "../drizzle/db";
 import { users, chats, registeredPhones, messageUsage, conversationWindows, teamMembers, workflows, workflowExecutions, recurringReminders, webhooks, webhookDeliveries, integrations, messageTemplates, templateSends, dripCampaigns, dripSteps, dripEnrollments, dripSends, chatbotFlows, chatbotSessions, salespeople, demoBookings, salesConversions, adminSettings, contacts, conversations, messages, activityEvents, channelSettings, supportTickets, partners, commissions, agreementAcceptances, contactNotes, appointments, flowJobs, type InsertConversationWindow, type ConversationWindow } from "@shared/schema";
-import { eq, and, lte, sql, isNotNull, isNull, asc, desc, gte, sum, gt, or, like, ilike } from "drizzle-orm";
+import { eq, and, lte, sql, isNotNull, isNull, asc, desc, gte, sum, gt, or, like, ilike, ne } from "drizzle-orm";
 
 export interface IStorage {
   // User methods
@@ -564,14 +564,17 @@ export class DbStorage implements IStorage {
   }
 
   async getTeamMemberCount(ownerId: string): Promise<number> {
+    // Seats = account owner (1) + invited members (active/pending, non-owner rows).
+    // Exclude role=owner so a legacy owner row in team_members is not double-counted with the +1.
     const result = await db
       .select({ count: sql<number>`count(*)::int` })
       .from(teamMembers)
       .where(and(
         eq(teamMembers.ownerId, ownerId),
-        or(eq(teamMembers.status, 'active'), eq(teamMembers.status, 'pending'))
+        ne(teamMembers.role, "owner"),
+        or(eq(teamMembers.status, "active"), eq(teamMembers.status, "pending"))
       ));
-    return (result[0]?.count || 0) + 1; // +1 to include the owner
+    return (result[0]?.count || 0) + 1;
   }
 
   // Workflow methods (Pro feature)

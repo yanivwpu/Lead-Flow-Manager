@@ -266,7 +266,7 @@ export function Chats() {
     },
     onError: (error: Error) => {
       if (error.message.includes("Pro")) {
-        setUpgradeReason("add_automation");
+        setUpgradeReason("conversation_assignment");
         setUpgradeModalOpen(true);
       } else {
         toast({ title: "Error", description: error.message, variant: "destructive" });

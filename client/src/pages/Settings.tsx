@@ -439,6 +439,23 @@ export function Settings() {
     queryKey: ["/api/subscription"],
   });
 
+  const effectivePlan =
+    subscriptionData?.limits?.plan &&
+    ["free", "starter", "pro"].includes(subscriptionData.limits.plan)
+      ? subscriptionData.limits.plan
+      : "free";
+  const usersLimitVal = subscriptionData?.limits?.usersLimit;
+  const usersCountVal = subscriptionData?.limits?.usersCount;
+  const teamLimitsReady = !subscriptionLoading && subscriptionData?.limits != null;
+  const isUnlimitedTeam = usersLimitVal === -1;
+  const atTeamLimit =
+    teamLimitsReady &&
+    !isUnlimitedTeam &&
+    typeof usersLimitVal === "number" &&
+    usersLimitVal > 0 &&
+    typeof usersCountVal === "number" &&
+    usersCountVal >= usersLimitVal;
+
   const isInShopify = typeof window !== 'undefined' && (
     window.location.search.includes('shop=') || 
     window.top !== window.self ||
@@ -486,11 +503,17 @@ export function Settings() {
         credentials: "include",
         body: JSON.stringify(data),
       });
+      const body = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.error || "Failed to invite team member");
+        const err = new Error(body.error || "Failed to invite team member") as Error & {
+          upgradeRequired?: boolean;
+          plan?: string;
+        };
+        err.upgradeRequired = body.upgradeRequired;
+        err.plan = body.plan;
+        throw err;
       }
-      return res.json();
+      return body;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/team"] });
@@ -499,9 +522,16 @@ export function Settings() {
       setInviteName("");
       toast({ title: "Invitation Sent", description: "Team member has been invited." });
     },
-    onError: (error: Error) => {
-      if (error.message.includes("Upgrade")) {
-        setUpgradeReason("add_team_member");
+    onError: (error: Error & { upgradeRequired?: boolean; plan?: string }) => {
+      if (error.upgradeRequired) {
+        setUpgradeReason(
+          error.plan === "starter" ? "team_invite_upgrade_pro" : "team_invite_upgrade_starter"
+        );
+        setUpgradeModalOpen(true);
+      } else if (error.message.includes("Upgrade")) {
+        setUpgradeReason(
+          effectivePlan === "starter" ? "team_invite_upgrade_pro" : "team_invite_upgrade_starter"
+        );
         setUpgradeModalOpen(true);
       } else {
         toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -793,10 +823,70 @@ export function Settings() {
 
                 <div className="pt-2 border-t border-gray-200">
                   <p className="text-sm font-medium text-gray-700 mb-2">Invite a team member</p>
+                  {atTeamLimit && effectivePlan === "free" && (
+                    <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+                      <p className="mb-2">
+                        Free includes 1 user. Upgrade to Starter to invite up to 3 team members.
+                      </p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="border-amber-300 bg-white hover:bg-amber-100 text-amber-950"
+                        onClick={() => {
+                          setUpgradeReason("team_invite_upgrade_starter");
+                          setUpgradeModalOpen(true);
+                        }}
+                      >
+                        Upgrade to Starter
+                      </Button>
+                    </div>
+                  )}
+                  {atTeamLimit && effectivePlan === "starter" && (
+                    <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+                      <p className="mb-2">
+                        Starter includes up to 3 users. Upgrade to Pro for unlimited team members.
+                      </p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="border-amber-300 bg-white hover:bg-amber-100 text-amber-950"
+                        onClick={() => {
+                          setUpgradeReason("team_invite_upgrade_pro");
+                          setUpgradeModalOpen(true);
+                        }}
+                      >
+                        Upgrade to Pro
+                      </Button>
+                    </div>
+                  )}
                   <div className="flex flex-col sm:flex-row gap-2">
-                    <Input type="email" placeholder="Email address" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} className="flex-1" />
-                    <Button onClick={() => inviteMutation.mutate({ email: inviteEmail, name: inviteName || undefined })} disabled={!inviteEmail || inviteMutation.isPending} className="bg-blue-600 hover:bg-blue-700">
-                      {inviteMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <><UserPlus className="h-4 w-4 mr-1" /> Invite</>}
+                    <Input
+                      type="email"
+                      placeholder="Email address"
+                      value={inviteEmail}
+                      onChange={(e) => setInviteEmail(e.target.value)}
+                      className="flex-1"
+                      disabled={subscriptionLoading || atTeamLimit}
+                    />
+                    <Button
+                      onClick={() => inviteMutation.mutate({ email: inviteEmail, name: inviteName || undefined })}
+                      disabled={
+                        subscriptionLoading ||
+                        atTeamLimit ||
+                        !inviteEmail.trim() ||
+                        inviteMutation.isPending
+                      }
+                      className="bg-blue-600 hover:bg-blue-700"
+                    >
+                      {inviteMutation.isPending ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <>
+                          <UserPlus className="h-4 w-4 mr-1" /> Invite
+                        </>
+                      )}
                     </Button>
                   </div>
                 </div>

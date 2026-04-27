@@ -28,7 +28,7 @@ export function MobileNav() {
 
   const moreNavItems = [
     { label: t('nav.chatbot', 'Flow Builder'), href: "/app/chatbot", testId: "chatbot" },
-    { label: t('nav.automation', 'Automation'), href: "/app/workflows", testId: "automation" },
+    { label: t('nav.automation', 'Automations'), href: "/app/workflows", testId: "automation" },
     { label: t('nav.templates', 'Templates'), href: "/app/templates", testId: "templates" },
     { label: t('nav.websiteWidget', 'Website Widget'), href: "/app/widget", testId: "website-widget" },
     { label: t('nav.integrations', 'Integrations'), href: "/app/integrations", testId: "integrations" },

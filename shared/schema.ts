@@ -46,7 +46,7 @@ export const PLAN_LIMITS = {
     pushNotifications: true,
     teamInbox: true,
     assignmentEnabled: false,
-    workflowsEnabled: false,
+    workflowsEnabled: true, // Basic Automations (workflows & sequences)
     integrationsEnabled: true,
     maxWebhooks: 3,
     templatesEnabled: true,
@@ -65,7 +65,7 @@ export const PLAN_LIMITS = {
     pushNotifications: true,
     teamInbox: true,
     assignmentEnabled: true, // Pro feature: conversation assignment
-    workflowsEnabled: true, // Pro feature: advanced workflows
+    workflowsEnabled: true, // Advanced Automations (full builder; UI may still gate extras)
     integrationsEnabled: true,
     maxWebhooks: 10,
     templatesEnabled: true, // Pro feature: template messaging & retargeting
