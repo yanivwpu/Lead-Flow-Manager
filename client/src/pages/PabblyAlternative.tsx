@@ -4,6 +4,7 @@ import { ArrowRight, CheckCircle2, XCircle } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { Helmet } from "react-helmet";
 import { SiteFooter } from "@/components/SiteFooter";
+import { MARKETING_URL } from "@/lib/marketingUrl";
 
 export function PabblyAlternative() {
   const { user } = useAuth();
@@ -14,10 +15,10 @@ export function PabblyAlternative() {
         <title>Best Pabbly Alternative | WhachatCRM</title>
         <meta name="description" content="Switch from Pabbly Chatflow to WhachatCRM: $19/mo, no credit limits, free plan available. Visual chatbot builder & unified inbox for small teams." />
         <meta name="keywords" content="Pabbly alternative, Pabbly Chatflow alternative, WhatsApp CRM, WhatsApp automation, Pabbly competitor" />
-        <link rel="canonical" href="https://whachatcrm.com/pabbly-alternative" />
+        <link rel="canonical" href={`${MARKETING_URL}/pabbly-alternative`} />
         <meta property="og:title" content="Best Pabbly Alternative | WhachatCRM" />
         <meta property="og:description" content="Switch from Pabbly Chatflow to WhachatCRM: $19/mo, no credit limits, free plan available." />
-        <meta property="og:url" content="https://whachatcrm.com/pabbly-alternative" />
+        <meta property="og:url" content={`${MARKETING_URL}/pabbly-alternative`} />
         <meta property="og:type" content="website" />
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content="Best Pabbly Chatflow Alternative for SMBs" />

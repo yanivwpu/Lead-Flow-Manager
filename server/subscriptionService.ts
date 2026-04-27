@@ -2,6 +2,7 @@ import { storage } from "./storage";
 import { PLAN_LIMITS, type SubscriptionPlan } from "@shared/schema";
 import { getUncachableStripeClient } from "./stripeClient";
 import { resolveStripeCheckoutRedirectOrigin } from "./stripeCheckoutRedirectBase";
+import { getAppOrigin } from "./urlOrigins";
 
 export interface UserLimits {
   plan: SubscriptionPlan;
@@ -197,7 +198,7 @@ class SubscriptionService {
     if (!user) throw new Error("User not found");
 
     const stripe = await getUncachableStripeClient();
-    const resolvedBaseUrl = resolveStripeCheckoutRedirectOrigin(process.env.APP_URL || baseUrl);
+    const resolvedBaseUrl = resolveStripeCheckoutRedirectOrigin(getAppOrigin() || baseUrl);
 
     let customerId = user.stripeCustomerId;
     if (!customerId) {
@@ -252,7 +253,7 @@ class SubscriptionService {
     if (!user) throw new Error("User not found");
 
     const stripe = await getUncachableStripeClient();
-    const resolvedBaseUrl = resolveStripeCheckoutRedirectOrigin(process.env.APP_URL || baseUrl);
+    const resolvedBaseUrl = resolveStripeCheckoutRedirectOrigin(getAppOrigin() || baseUrl);
 
     let customerId = user.stripeCustomerId;
     if (!customerId) {
@@ -305,7 +306,7 @@ class SubscriptionService {
     }
 
     const stripe = await getUncachableStripeClient();
-    const resolvedBaseUrl = resolveStripeCheckoutRedirectOrigin(process.env.APP_URL || baseUrl);
+    const resolvedBaseUrl = resolveStripeCheckoutRedirectOrigin(getAppOrigin() || baseUrl);
 
     let customerId = user.stripeCustomerId;
     if (!customerId) {

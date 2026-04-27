@@ -1,8 +1,8 @@
 /**
- * Stripe Checkout success/cancel URLs must not use the apex host whachatcrm.com
- * when DNS is only configured for www. Normalize any whachatcrm host to https://www.whachatcrm.com.
+ * Stripe Checkout redirects must always land on the app origin, not marketing.
+ * If any whachatcrm host is detected (apex/www/app), force https://app.whachatcrm.com.
  */
-const WHACHAT_WWW_ORIGIN = "https://www.whachatcrm.com";
+const WHACHAT_APP_ORIGIN = "https://app.whachatcrm.com";
 
 export function resolveStripeCheckoutRedirectOrigin(resolvedBaseUrl: string): string {
   const raw = resolvedBaseUrl.trim().replace(/\/+$/, "");
@@ -11,8 +11,8 @@ export function resolveStripeCheckoutRedirectOrigin(resolvedBaseUrl: string): st
   try {
     const url = new URL(raw.includes("://") ? raw : `https://${raw}`);
     const host = url.hostname.toLowerCase();
-    if (host === "whachatcrm.com" || host === "www.whachatcrm.com") {
-      return WHACHAT_WWW_ORIGIN;
+    if (host === "whachatcrm.com" || host === "www.whachatcrm.com" || host === "app.whachatcrm.com") {
+      return WHACHAT_APP_ORIGIN;
     }
     return url.origin;
   } catch {

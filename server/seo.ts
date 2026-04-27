@@ -76,7 +76,7 @@ export const BLOG_POSTS_META: BlogPostMeta[] = [
   },
 ];
 
-const BASE_URL = "https://whachatcrm.com";
+const BASE_URL = (process.env.MARKETING_URL || "https://www.whachatcrm.com").replace(/\/+$/, "");
 
 export function injectSeoMeta(html: string, url: string): string {
   if (url.startsWith("/blog/")) {
@@ -403,7 +403,7 @@ export function injectHomepageSeoMeta(html: string): string {
       "@context": "https://schema.org",
       "@type": "WebPage",
       "name": "Official WhatsApp API, Instagram & SMS - One Unified Inbox",
-      "url": "https://whachatcrm.com/",
+      "url": "${BASE_URL}/",
       "description": "Manage WhatsApp Business API, Instagram, Facebook and SMS conversations in one unified inbox."
     }
     </script>`;

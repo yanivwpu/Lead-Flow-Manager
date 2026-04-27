@@ -13,6 +13,7 @@ import {
   registerMandatoryWebhooks,
   SHOPIFY_BILLING_PLANS,
 } from './shopify';
+import { getAppOrigin } from './urlOrigins';
 
 const router = Router();
 
@@ -70,6 +71,11 @@ router.get('/install', (req: Request, res: Response) => {
 });
 
 router.get('/callback', async (req: Request, res: Response) => {
+  console.log("[Shopify Callback] Host:", {
+    host: req.get("host"),
+    "x-forwarded-host": req.headers["x-forwarded-host"],
+    "x-forwarded-proto": req.headers["x-forwarded-proto"],
+  });
   const { shop, code, state, timestamp } = req.query;
 
   if (!shop || !code || !state || typeof shop !== 'string' || typeof code !== 'string' || typeof state !== 'string') {
@@ -139,7 +145,7 @@ router.get('/callback', async (req: Request, res: Response) => {
     // Register mandatory compliance webhooks
     await registerMandatoryWebhooks(shop, accessToken);
 
-    const HOST = process.env.SHOPIFY_APP_HOST || process.env.HOST || 'https://whachatcrm.com';
+    const HOST = getAppOrigin();
 
     const billingResult = await createShopifyBillingCharge(
       shop,
@@ -164,6 +170,11 @@ router.get('/callback', async (req: Request, res: Response) => {
 });
 
 router.get('/billing/callback', async (req: Request, res: Response) => {
+  console.log("[Shopify Billing Callback] Host:", {
+    host: req.get("host"),
+    "x-forwarded-host": req.headers["x-forwarded-host"],
+    "x-forwarded-proto": req.headers["x-forwarded-proto"],
+  });
   const { shop, charge_id } = req.query;
 
   if (!shop || typeof shop !== 'string') {
@@ -242,7 +253,7 @@ router.post('/billing/change-plan', shopifySessionMiddleware(), async (req: Requ
       await cancelShopifySubscription(shop, user.shopifyAccessToken, user.shopifyChargeId);
     }
 
-    const HOST = process.env.SHOPIFY_APP_HOST || process.env.HOST || 'https://whachatcrm.com';
+    const HOST = getAppOrigin();
 
     const billingResult = await createShopifyBillingCharge(
       shop,
@@ -535,7 +546,7 @@ router.post('/billing/checkout-web', async (req: Request, res: Response) => {
       await cancelShopifySubscription(user.shopifyShop, user.shopifyAccessToken, user.shopifyChargeId);
     }
 
-    const HOST = process.env.SHOPIFY_APP_HOST || process.env.HOST || 'https://whachatcrm.com';
+    const HOST = getAppOrigin();
     const billingResult = await createShopifyBillingCharge(
       user.shopifyShop,
       user.shopifyAccessToken,

@@ -10,6 +10,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Checkbox } from "@/components/ui/checkbox";
+import { MARKETING_URL } from "@/lib/marketingUrl";
 import { 
   DollarSign, LogOut, Loader2, User, Mail, Link2, Copy, 
   CheckCircle, Users, TrendingUp, Calendar, FileText, AlertCircle,
@@ -636,7 +637,7 @@ export function PartnerPortal() {
               <div className="flex items-center gap-2">
                 <Link2 className="h-5 w-5" />
                 <span className="font-mono text-lg" data-testid="text-ref-link">
-                  {stats?.refLink || `https://whachatcrm.com/?ref=${partner?.refCode}`}
+                  {stats?.refLink || `${MARKETING_URL}/?ref=${partner?.refCode}`}
                 </span>
               </div>
             </div>
@@ -671,7 +672,7 @@ export function PartnerPortal() {
                 size="sm"
                 className="bg-[#1877F2] hover:bg-[#166fe5] text-white border-none gap-2"
                 onClick={() => {
-                  const url = stats?.refLink || `https://whachatcrm.com/?ref=${partner?.refCode}`;
+                  const url = stats?.refLink || `${MARKETING_URL}/?ref=${partner?.refCode}`;
                   const text = "I'm using WhaChatCRM to manage my WhatsApp sales and it's a game changer! Check it out:";
                   window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}&quote=${encodeURIComponent(text)}`, '_blank');
                 }}
@@ -685,7 +686,7 @@ export function PartnerPortal() {
                 size="sm"
                 className="bg-[#000000] hover:bg-[#333333] text-white border-none gap-2"
                 onClick={() => {
-                  const url = stats?.refLink || `https://whachatcrm.com/?ref=${partner?.refCode}`;
+                  const url = stats?.refLink || `${MARKETING_URL}/?ref=${partner?.refCode}`;
                   const text = "Stop losing WhatsApp leads! WhaChatCRM is the best way to organize your sales. Try it here:";
                   window.open(`https://twitter.com/intent/tweet?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`, '_blank');
                 }}
@@ -699,7 +700,7 @@ export function PartnerPortal() {
                 size="sm"
                 className="bg-[#E4405F] hover:bg-[#d62e4c] text-white border-none gap-2"
                 onClick={() => {
-                  const url = stats?.refLink || `https://whachatcrm.com/?ref=${partner?.refCode}`;
+                  const url = stats?.refLink || `${MARKETING_URL}/?ref=${partner?.refCode}`;
                   navigator.clipboard.writeText(`Check out WhaChatCRM! The best WhatsApp CRM for sales teams: ${url}`);
                   alert("Link and message copied for Instagram! Since Instagram doesn't support direct link sharing in posts, you can now paste this into your Bio or Story.");
                 }}
@@ -892,7 +893,7 @@ export function PartnerPortal() {
             
             <div className="grid gap-4 md:grid-cols-2">
               {SHAREABLE_CONTENT.map((content) => {
-                const baseUrl = "https://whachatcrm.com";
+                const baseUrl = MARKETING_URL;
                 const contentUrl = `${baseUrl}${content.url}?ref=${partner?.refCode}`;
                 
                 return (

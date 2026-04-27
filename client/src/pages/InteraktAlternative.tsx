@@ -4,6 +4,7 @@ import { ArrowRight, CheckCircle2, XCircle } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { Helmet } from "react-helmet";
 import { SiteFooter } from "@/components/SiteFooter";
+import { MARKETING_URL } from "@/lib/marketingUrl";
 
 export function InteraktAlternative() {
   const { user } = useAuth();
@@ -14,10 +15,10 @@ export function InteraktAlternative() {
         <title>Best Interakt Alternative | WhachatCRM</title>
         <meta name="description" content="Switch from Interakt to WhachatCRM: $19/mo, simpler pricing, unlimited team members. Visual chatbot builder & unified inbox for small teams." />
         <meta name="keywords" content="Interakt alternative, WhatsApp CRM, Interakt competitor, WhatsApp business tool, affordable WhatsApp CRM" />
-        <link rel="canonical" href="https://whachatcrm.com/interakt-alternative" />
+        <link rel="canonical" href={`${MARKETING_URL}/interakt-alternative`} />
         <meta property="og:title" content="Best Interakt Alternative | WhachatCRM" />
         <meta property="og:description" content="Switch from Interakt to WhachatCRM: $19/mo, simpler pricing, unlimited team members." />
-        <meta property="og:url" content="https://whachatcrm.com/interakt-alternative" />
+        <meta property="og:url" content={`${MARKETING_URL}/interakt-alternative`} />
         <meta property="og:type" content="website" />
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content="Best Interakt Alternative for SMBs" />

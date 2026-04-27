@@ -4,4 +4,4 @@ Allow: /WhachatCRM-User-Guide.html
 Disallow: /api/
 Disallow: /app/
 
-Sitemap: https://whachatcrm.com/sitemap.xml
+Sitemap: https://www.whachatcrm.com/sitemap.xml

@@ -11,6 +11,7 @@ import { Helmet } from "react-helmet";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { getDirection } from "@/lib/i18n";
+import { MARKETING_URL } from "@/lib/marketingUrl";
 import { SiteFooter } from "@/components/SiteFooter";
 
 function RealtorMark() {
@@ -83,16 +84,16 @@ export function RealtorLanding() {
         <title>Realtor Growth Engine – Turn Real Estate Leads Into Showings | WhachatCRM</title>
         <meta name="description" content="AI-powered WhatsApp automation that qualifies leads and schedules showings automatically. Fully done-for-you setup for real estate agents." />
         <meta name="keywords" content="realtor CRM, real estate lead qualification, WhatsApp automation for realtors, automated showing booking, real estate AI CRM, lead scoring for agents" />
-        <link rel="canonical" href="https://whachatcrm.com/realtor-growth-engine" />
+        <link rel="canonical" href={`${MARKETING_URL}/realtor-growth-engine`} />
         <meta property="og:title" content="Realtor Growth Engine – Turn Real Estate Leads Into Showings" />
         <meta property="og:description" content="AI-powered WhatsApp automation that qualifies leads and schedules showings automatically." />
-        <meta property="og:url" content="https://whachatcrm.com/realtor-growth-engine" />
-        <meta property="og:image" content="https://whachatcrm.com/og/og-realtor-growth-engine.png" />
+        <meta property="og:url" content={`${MARKETING_URL}/realtor-growth-engine`} />
+        <meta property="og:image" content={`${MARKETING_URL}/og/og-realtor-growth-engine.png`} />
         <meta property="og:type" content="website" />
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content="Realtor Growth Engine – Turn Real Estate Leads Into Showings" />
         <meta name="twitter:description" content="AI-powered WhatsApp automation that qualifies leads and schedules showings automatically." />
-        <meta name="twitter:image" content="https://whachatcrm.com/og/og-realtor-growth-engine.png" />
+        <meta name="twitter:image" content={`${MARKETING_URL}/og/og-realtor-growth-engine.png`} />
       </Helmet>
 
       {/* NAV */}

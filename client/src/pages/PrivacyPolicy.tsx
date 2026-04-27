@@ -1,6 +1,7 @@
 import { Link } from "wouter";
 import { Helmet } from "react-helmet";
 import { ArrowLeft } from "lucide-react";
+import { MARKETING_URL } from "@/lib/marketingUrl";
 
 export function PrivacyPolicy() {
   return (
@@ -8,10 +9,10 @@ export function PrivacyPolicy() {
       <Helmet>
         <title>Privacy Policy | WhachatCRM</title>
         <meta name="description" content="WhachatCRM privacy policy. Learn how we collect, use, and protect your data when using our WhatsApp CRM platform." />
-        <link rel="canonical" href="https://whachatcrm.com/privacy-policy" />
+        <link rel="canonical" href={`${MARKETING_URL}/privacy-policy`} />
         <meta property="og:title" content="Privacy Policy | WhachatCRM" />
         <meta property="og:description" content="WhachatCRM privacy policy. Learn how we collect, use, and protect your data." />
-        <meta property="og:url" content="https://whachatcrm.com/privacy-policy" />
+        <meta property="og:url" content={`${MARKETING_URL}/privacy-policy`} />
         <meta property="og:type" content="website" />
         <meta name="twitter:card" content="summary" />
       </Helmet>

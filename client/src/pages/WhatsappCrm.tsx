@@ -4,6 +4,7 @@ import { ArrowRight, CheckCircle2, MessageSquare, Bell, Tag, Users } from "lucid
 import { useAuth } from "@/lib/auth-context";
 import { Helmet } from "react-helmet";
 import { SiteFooter } from "@/components/SiteFooter";
+import { MARKETING_URL } from "@/lib/marketingUrl";
 
 export function WhatsappCrm() {
   const { user } = useAuth();
@@ -14,10 +15,10 @@ export function WhatsappCrm() {
         <title>WhatsApp CRM with Notes & Tags | WhachatCRM</title>
         <meta name="description" content="Turn WhatsApp into a full CRM. Organize conversations, set reminders, collaborate with teams. Free plan available – no credit card needed." />
         <meta name="keywords" content="WhatsApp CRM, what is WhatsApp CRM, WhatsApp business CRM, WhatsApp customer management, WhatsApp lead management" />
-        <link rel="canonical" href="https://whachatcrm.com/whatsapp-crm" />
+        <link rel="canonical" href={`${MARKETING_URL}/whatsapp-crm`} />
         <meta property="og:title" content="WhatsApp CRM with Notes & Tags | WhachatCRM" />
         <meta property="og:description" content="Turn WhatsApp into a full CRM. Organize conversations, set reminders, collaborate with teams. Free plan available." />
-        <meta property="og:url" content="https://whachatcrm.com/whatsapp-crm" />
+        <meta property="og:url" content={`${MARKETING_URL}/whatsapp-crm`} />
         <meta property="og:type" content="website" />
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content="WhatsApp CRM with Notes & Tags | WhachatCRM" />

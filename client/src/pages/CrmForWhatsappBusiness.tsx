@@ -4,6 +4,7 @@ import { ArrowRight, CheckCircle2, Store, Briefcase, Home, ChevronRight } from "
 import { useAuth } from "@/lib/auth-context";
 import { Helmet } from "react-helmet";
 import { SiteFooter } from "@/components/SiteFooter";
+import { MARKETING_URL } from "@/lib/marketingUrl";
 
 export function CrmForWhatsappBusiness() {
   const { user } = useAuth();
@@ -14,10 +15,10 @@ export function CrmForWhatsappBusiness() {
         <title>CRM for WhatsApp Business | WhachatCRM</title>
         <meta name="description" content="Unified inbox for WhatsApp, SMS, Telegram, Instagram, Facebook & Web Chat. Manage all customer conversations in one place. Free plan available." />
         <meta name="keywords" content="CRM for WhatsApp Business, multi-channel CRM, unified inbox, WhatsApp lead management, small business CRM, SMS, Telegram" />
-        <link rel="canonical" href="https://whachatcrm.com/crm-for-whatsapp-business" />
+        <link rel="canonical" href={`${MARKETING_URL}/crm-for-whatsapp-business`} />
         <meta property="og:title" content="CRM for WhatsApp Business | WhachatCRM" />
         <meta property="og:description" content="Unified inbox for WhatsApp, SMS, Telegram, Instagram, Facebook & Web Chat. Manage all conversations in one place." />
-        <meta property="og:url" content="https://whachatcrm.com/crm-for-whatsapp-business" />
+        <meta property="og:url" content={`${MARKETING_URL}/crm-for-whatsapp-business`} />
         <meta property="og:type" content="website" />
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content="Multi-Channel CRM for WhatsApp Business" />

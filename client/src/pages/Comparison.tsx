@@ -3,6 +3,7 @@ import { Check, Shield, Zap, Users, ArrowRight, BarChart3, MessageSquare, Info, 
 import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
 import { SiteFooter } from "@/components/SiteFooter";
+import { MARKETING_URL } from "@/lib/marketingUrl";
 
 export function Comparison() {
   const faqItems = [
@@ -50,7 +51,7 @@ export function Comparison() {
       <Helmet>
         <title>Best WhatsApp CRM Software 2026 | WhachatCRM</title>
         <meta name="description" content="Discover the best WhatsApp CRM software in 2026. Compare CRM-first platforms vs. BSP providers. A comprehensive guide for small business sales and support." />
-        <link rel="canonical" href="https://whachatcrm.com/best-whatsapp-crm-2026" />
+        <link rel="canonical" href={`${MARKETING_URL}/best-whatsapp-crm-2026`} />
         <meta property="og:title" content="Best WhatsApp CRM Software 2026 | WhachatCRM" />
         <meta name="twitter:card" content="summary" />
         <meta name="twitter:title" content="Best WhatsApp CRM Software 2026 | WhachatCRM" />

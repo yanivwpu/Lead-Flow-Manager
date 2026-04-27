@@ -4,6 +4,7 @@ import { Link, useLocation } from "wouter";
 import { Helmet } from "react-helmet";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
+import { MARKETING_URL } from "@/lib/marketingUrl";
 import {
   ArrowLeft, Check, Loader2, Shield, Brain, Sparkles,
   Zap, MessageSquare, Users
@@ -233,10 +234,10 @@ export function Pricing() {
       <Helmet>
         <title>Pricing – Free Forever | WhachatCRM</title>
         <meta name="description" content="Simple, transparent pricing for WhatsApp CRM. Free plan forever, Starter at $19/mo, Pro at $49/mo. No hidden fees, no message markup. Start free today." />
-        <link rel="canonical" href="https://whachatcrm.com/pricing" />
+        <link rel="canonical" href={`${MARKETING_URL}/pricing`} />
         <meta property="og:title" content="WhachatCRM Pricing: Free Plan Forever, Starter from $19/mo" />
         <meta property="og:description" content="Simple, transparent pricing for WhatsApp CRM. Free plan forever, Starter at $19/mo. No hidden fees." />
-        <meta property="og:url" content="https://whachatcrm.com/pricing" />
+        <meta property="og:url" content={`${MARKETING_URL}/pricing`} />
         <meta property="og:type" content="website" />
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content="WhachatCRM Pricing: Free Plan Forever" />

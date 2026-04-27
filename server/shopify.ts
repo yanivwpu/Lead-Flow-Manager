@@ -10,7 +10,7 @@ const API_VERSION = ApiVersion.October24; // Maps to 2025-10 in Shopify dashboar
 const SHOPIFY_API_KEY = process.env.SHOPIFY_API_KEY || '';
 const SHOPIFY_API_SECRET = process.env.SHOPIFY_API_SECRET || '';
 const SHOPIFY_SCOPES = ['read_products', 'read_orders', 'read_customers'];
-const HOST = process.env.SHOPIFY_APP_HOST || process.env.HOST || 'https://whachatcrm.com';
+const HOST = process.env.APP_URL || process.env.SHOPIFY_APP_HOST || process.env.HOST || 'https://app.whachatcrm.com';
 
 export const SHOPIFY_BILLING_PLANS = {
   'Starter': {

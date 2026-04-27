@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { ArrowLeft, Send, Loader2, MessageSquare } from "lucide-react";
+import { MARKETING_URL } from "@/lib/marketingUrl";
 
 export function Contact() {
   const { toast } = useToast();
@@ -67,10 +68,10 @@ export function Contact() {
       <Helmet>
         <title>Contact WhachatCRM | Get Support & Sales Help</title>
         <meta name="description" content="Contact WhachatCRM for sales questions, support, or partnership inquiries. We're here to help you get the most out of your WhatsApp CRM." />
-        <link rel="canonical" href="https://whachatcrm.com/contact" />
+        <link rel="canonical" href={`${MARKETING_URL}/contact`} />
         <meta property="og:title" content="Contact WhachatCRM | Get Support & Sales Help" />
         <meta property="og:description" content="Contact WhachatCRM for sales questions, support, or partnership inquiries." />
-        <meta property="og:url" content="https://whachatcrm.com/contact" />
+        <meta property="og:url" content={`${MARKETING_URL}/contact`} />
         <meta property="og:type" content="website" />
         <meta name="twitter:card" content="summary" />
       </Helmet>

@@ -4,6 +4,7 @@ import { ArrowRight, CheckCircle2, XCircle, Brain, Zap, Shield, Sparkles, Messag
 import { useAuth } from "@/lib/auth-context";
 import { Helmet } from "react-helmet";
 import { SiteFooter } from "@/components/SiteFooter";
+import { MARKETING_URL } from "@/lib/marketingUrl";
 
 export function ManychatAlternative() {
   const { user } = useAuth();
@@ -13,7 +14,7 @@ export function ManychatAlternative() {
       <Helmet>
         <title>Best Manychat Alternative | WhachatCRM</title>
         <meta name="description" content="Looking for a Manychat alternative? WhachatCRM offers a unified inbox for 7+ channels, no message markups, and advanced AI automation for SMBs." />
-        <link rel="canonical" href="https://whachatcrm.com/manychat-alternative" />
+        <link rel="canonical" href={`${MARKETING_URL}/manychat-alternative`} />
       </Helmet>
 
       {/* Navigation */}

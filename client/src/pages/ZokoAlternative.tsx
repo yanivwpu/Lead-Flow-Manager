@@ -4,6 +4,7 @@ import { ArrowRight, CheckCircle2, XCircle, ChevronRight, Brain, Zap, Shield, Sp
 import { useAuth } from "@/lib/auth-context";
 import { Helmet } from "react-helmet";
 import { SiteFooter } from "@/components/SiteFooter";
+import { MARKETING_URL } from "@/lib/marketingUrl";
 
 export function ZokoAlternative() {
   const { user } = useAuth();
@@ -13,7 +14,7 @@ export function ZokoAlternative() {
       <Helmet>
         <title>Best Zoko Alternative for Shopify | WhachatCRM</title>
         <meta name="description" content="Switch from Zoko to WhachatCRM: $19/mo vs $35+, zero per-message fees, unlimited flows, and affordable AI. Best for Shopify sellers." />
-        <link rel="canonical" href="https://whachatcrm.com/zoko-alternative" />
+        <link rel="canonical" href={`${MARKETING_URL}/zoko-alternative`} />
       </Helmet>
 
       {/* Navigation */}

@@ -6,6 +6,7 @@ import { getUncachableStripeClient } from "./stripeClient";
 import { resolveStripeCheckoutRedirectOrigin } from "./stripeCheckoutRedirectBase";
 import { subscriptionService } from "./subscriptionService";
 import { z } from "zod";
+import { getAppOrigin } from "./urlOrigins";
 
 const TEMPLATE_ID = "realtor-growth-engine";
 const TEMPLATE_PRICE_CENTS = 19900;
@@ -141,9 +142,7 @@ export function registerTemplateRoutes(app: Express) {
         customerId = customer.id;
       }
 
-      const baseUrl = resolveStripeCheckoutRedirectOrigin(
-        process.env.APP_URL || `${req.protocol}://${req.get("host")}`,
-      );
+      const baseUrl = resolveStripeCheckoutRedirectOrigin(getAppOrigin());
       const priceId = process.env.STRIPE_RGE_ONE_TIME_PRICE_ID;
       if (!priceId) {
         throw new Error("Missing STRIPE_RGE_ONE_TIME_PRICE_ID");

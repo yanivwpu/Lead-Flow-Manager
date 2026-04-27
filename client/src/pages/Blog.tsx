@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { SiteFooter } from "@/components/SiteFooter";
+import { MARKETING_URL } from "@/lib/marketingUrl";
 
 interface BlogPost {
   slug: string;
@@ -118,7 +119,7 @@ export function Blog() {
         <meta property="og:title" content="WhatsApp CRM Blog & Guides | WhachatCRM" />
         <meta property="og:description" content="Learn how to grow your business with WhatsApp. Expert guides on WhatsApp CRM, automation, lead management, and customer service." />
         <meta property="og:type" content="website" />
-        <link rel="canonical" href="https://whachatcrm.com/blog" />
+        <link rel="canonical" href={`${MARKETING_URL}/blog`} />
       </Helmet>
 
       <header className="bg-gradient-to-b from-gray-50 to-white border-b border-gray-100">

@@ -56,6 +56,8 @@ import path from "path";
 import fs from "fs";
 import { subscriptionService } from "./subscriptionService";
 import { resolveStripeCheckoutRedirectOrigin } from "./stripeCheckoutRedirectBase";
+import { getAppOrigin } from "./urlOrigins";
+import { getMarketingOrigin } from "./urlOrigins";
 import { sendWelcomeEmail, sendContactFormEmail, sendDemoBookingNotification, sendDemoConfirmationEmail, sendSalespersonWelcomeEmail } from "./email";
 import bcrypt from "bcryptjs";
 import { triggerNewChatWorkflows, triggerKeywordWorkflows, triggerTagChangeWorkflows, runW2QualificationEngine, runServiceRoutingEngine } from "./workflowEngine";
@@ -1258,7 +1260,7 @@ export async function registerRoutes(
       }
 
       // Serve the uploaded file at a publicly reachable URL
-      const appUrl = process.env.APP_URL || process.env.HOST || 'https://whachatcrm.com';
+      const appUrl = getAppOrigin();
       const mediaUrl = `${appUrl}/uploads/${path.basename(req.file.path)}`;
       const mediaType = req.file.mimetype.startsWith('image/') ? "image"
         : req.file.mimetype.startsWith('video/') ? "video"
@@ -1364,7 +1366,7 @@ export async function registerRoutes(
         whatsappNumber,
       };
 
-      const webhookBaseUrl = process.env.APP_URL || `https://${process.env.REPLIT_DOMAINS?.split(',')[0]}`;
+      const webhookBaseUrl = getAppOrigin();
       const result = await connectUserTwilio(req.user.id, credentials, webhookBaseUrl);
 
       if (!result.success) {
@@ -1493,7 +1495,7 @@ export async function registerRoutes(
         return res.status(400).json({ error: result.error });
       }
 
-      const webhookBaseUrl = process.env.APP_URL || `https://${process.env.REPLIT_DOMAINS?.split(',')[0]}`;
+      const webhookBaseUrl = getAppOrigin();
       
       // Get the actual stored verify token to return to user
       const updatedUser = await storage.getUser(req.user.id);
@@ -1782,7 +1784,7 @@ export async function registerRoutes(
           // uses APP_URL first, falling back to REPLIT_DOMAINS. The signature
           // Twilio sends is computed against the URL they actually POST to, so
           // any mismatch here causes every production signature check to fail.
-          const webhookBaseUrl = process.env.APP_URL || `https://${process.env.REPLIT_DOMAINS?.split(",")[0]}`;
+          const webhookBaseUrl = getAppOrigin();
           const fullUrl = `${webhookBaseUrl}/api/webhook/twilio/incoming`;
           const isValid = twilioClient.validateRequest(authToken, twilioSignature, fullUrl, req.body);
 
@@ -2635,7 +2637,7 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Invalid billing interval" });
       }
 
-      const baseUrl = process.env.APP_URL || `${req.protocol}://${req.get('host')}`;
+      const baseUrl = getAppOrigin() || `${req.protocol}://${req.get('host')}`;
       const result = await subscriptionService.createCheckoutSession(
         req.user.id,
         planId,
@@ -2655,7 +2657,7 @@ export async function registerRoutes(
         return res.status(401).json({ error: "Unauthorized" });
       }
 
-      const baseUrl = process.env.APP_URL || `${req.protocol}://${req.get('host')}`;
+      const baseUrl = getAppOrigin() || `${req.protocol}://${req.get('host')}`;
       const result = await subscriptionService.createProPlusAICheckoutSession(req.user.id, baseUrl);
       res.json(result);
     } catch (error: any) {
@@ -2671,13 +2673,14 @@ export async function registerRoutes(
         return res.status(401).json({ error: "Unauthorized" });
       }
 
-      const baseUrl = process.env.APP_URL || `${req.protocol}://${req.get('host')}`;
+      const baseUrl = getAppOrigin() || `${req.protocol}://${req.get('host')}`;
 
       console.log("[AI Brain Checkout] ENV/Host:", {
         host: req.get("host"),
         "x-forwarded-host": req.headers["x-forwarded-host"],
         "x-forwarded-proto": req.headers["x-forwarded-proto"],
         APP_URL: process.env.APP_URL,
+        MARKETING_URL: process.env.MARKETING_URL,
         STRIPE_SECRET_KEY_exists: !!process.env.STRIPE_SECRET_KEY,
         STRIPE_SECRET_KEY_prefix8: process.env.STRIPE_SECRET_KEY?.slice(0, 8),
         STRIPE_AI_BRAIN_MONTHLY_PRICE_ID: process.env.STRIPE_AI_BRAIN_MONTHLY_PRICE_ID,
@@ -2698,9 +2701,7 @@ export async function registerRoutes(
         return res.status(401).json({ error: "Unauthorized" });
       }
 
-      const returnUrl = `${resolveStripeCheckoutRedirectOrigin(
-        process.env.APP_URL || `${req.protocol}://${req.get("host")}`,
-      )}/app/settings`;
+      const returnUrl = `${resolveStripeCheckoutRedirectOrigin(getAppOrigin())}/app/settings`;
       const result = await subscriptionService.createPortalSession(req.user.id, returnUrl);
       res.json(result);
     } catch (error: any) {
@@ -3898,7 +3899,7 @@ export async function registerRoutes(
     try {
       if (!req.user) return res.status(401).json({ error: "Unauthorized" });
 
-      const webhookBaseUrl = process.env.APP_URL || `https://${process.env.REPLIT_DOMAINS?.split(',')[0]}`;
+      const webhookBaseUrl = getAppOrigin();
       const webhookUrl = `${webhookBaseUrl}/api/webhook/meta`;
 
       const fbSetting = await storage.getChannelSetting(req.user.id, 'facebook' as any);
@@ -4695,7 +4696,7 @@ export async function registerRoutes(
           isEnabled: false,
           config: channelConfig,
         });
-        const webhookBaseUrl = process.env.APP_URL || `https://${process.env.REPLIT_DOMAINS?.split(',')[0]}`;
+        const webhookBaseUrl = getAppOrigin();
         metaWebhookConfig = {
           webhookUrl: `${webhookBaseUrl}/api/webhook/meta`,
           verifyToken: verifyTokenRaw,
@@ -6111,7 +6112,7 @@ export async function registerRoutes(
       
       res.json({
         refCode: partner.refCode,
-        refLink: `https://whachatcrm.com/?ref=${partner.refCode}`,
+        refLink: `${getMarketingOrigin()}/?ref=${partner.refCode}`,
         totalReferrals: partner.totalReferrals || referredUsers.length,
         activePaidUsers,
         totalEarnings: commissionStats.totalEarnings,

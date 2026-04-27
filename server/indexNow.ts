@@ -6,7 +6,7 @@ import { BLOG_POSTS_META, PAGE_META } from "./seo";
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const INDEXNOW_KEY = "9726ec610d574c62b33130ba828766eb";
-const HOST = "whachatcrm.com";
+const HOST = (process.env.MARKETING_URL || "https://www.whachatcrm.com").replace(/^https?:\/\//, "");
 const BASE_URL = `https://${HOST}`;
 const KEY_LOCATION = `${BASE_URL}/${INDEXNOW_KEY}.txt`;
 const INDEXNOW_API = "https://api.indexnow.org/indexnow";

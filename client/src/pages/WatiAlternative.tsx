@@ -4,6 +4,7 @@ import { ArrowRight, CheckCircle2, XCircle, ChevronRight } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { Helmet } from "react-helmet";
 import { SiteFooter } from "@/components/SiteFooter";
+import { MARKETING_URL } from "@/lib/marketingUrl";
 
 export function WatiAlternative() {
   const { user } = useAuth();
@@ -14,10 +15,10 @@ export function WatiAlternative() {
         <title>Best WATI Alternative for SMBs | WhachatCRM</title>
         <meta name="description" content="Switch from WATI to WhachatCRM: $19/mo vs $30+, free plan, zero message markup, unlimited users, simple setup. Better for small teams." />
         <meta name="keywords" content="WATI alternative, WhatsApp CRM, WATI competitor, simple WhatsApp CRM, affordable WhatsApp business tool" />
-        <link rel="canonical" href="https://whachatcrm.com/wati-alternative" />
+        <link rel="canonical" href={`${MARKETING_URL}/wati-alternative`} />
         <meta property="og:title" content="Best WATI Alternative for SMBs | WhachatCRM" />
         <meta property="og:description" content="Switch from WATI to WhachatCRM: $19/mo vs $30+, free plan, zero message markup, simple setup." />
-        <meta property="og:url" content="https://whachatcrm.com/wati-alternative" />
+        <meta property="og:url" content={`${MARKETING_URL}/wati-alternative`} />
         <meta property="og:type" content="website" />
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content="Best WATI Alternative for SMBs | Affordable WhatsApp CRM" />

@@ -29,6 +29,7 @@ import { SiteFooter } from "@/components/SiteFooter";
 import { BookDemoModal } from "@/components/BookDemoModal";
 import { LanguageSelector } from "@/components/LanguageSelector";
 import { getDirection } from "@/lib/i18n";
+import { MARKETING_URL } from "@/lib/marketingUrl";
 import heroImage from "@assets/generated_images/whatsapp_crm_dashboard_mockup_resized.png";
 import heroImageWebp from "@assets/generated_images/whatsapp_crm_dashboard_mockup.webp";
 
@@ -112,16 +113,16 @@ export function Welcome() {
       <Helmet>
         <title>WhatsApp & Unified Mailbox | WhachatCRM</title>
         <meta name="description" content="Manage WhatsApp, Instagram, and SMS in one unified mailbox. The simple CRM for SMBs and Shopify sellers." />
-        <link rel="canonical" href="https://whachatcrm.com/" />
+        <link rel="canonical" href={`${MARKETING_URL}/`} />
         <meta property="og:title" content="WhatsApp & Unified Mailbox | WhachatCRM" />
         <meta property="og:description" content="Manage WhatsApp, Instagram, and SMS in one unified mailbox. The simple CRM for SMBs and Shopify sellers." />
-        <meta property="og:url" content="https://whachatcrm.com/" />
+        <meta property="og:url" content={`${MARKETING_URL}/`} />
         <meta property="og:type" content="website" />
-        <meta property="og:image" content="https://whachatcrm.com/og-image.png" />
+        <meta property="og:image" content={`${MARKETING_URL}/og-image.png`} />
         <meta property="og:image:width" content="1200" />
         <meta property="og:image:height" content="630" />
         <meta name="twitter:card" content="summary_large_image" />
-        <meta name="twitter:image" content="https://whachatcrm.com/og-image.png" />
+        <meta name="twitter:image" content={`${MARKETING_URL}/og-image.png`} />
         <meta name="twitter:title" content="WhatsApp & Unified Mailbox | WhachatCRM" />
         <meta name="twitter:description" content="Manage WhatsApp, Instagram, and SMS in one unified mailbox. The simple CRM for SMBs and Shopify sellers." />
       </Helmet>

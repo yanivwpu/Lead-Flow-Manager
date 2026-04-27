@@ -5,6 +5,7 @@ import { Calendar, Clock, ArrowLeft, ArrowRight, Share2, Linkedin, MessageCircle
 import { Button } from "@/components/ui/button";
 import { BLOG_POSTS } from "./Blog";
 import { SiteFooter } from "@/components/SiteFooter";
+import { MARKETING_URL } from "@/lib/marketingUrl";
 
 const BLOG_CONTENT: Record<string, string> = {
   "whatsapp-crm-complete-guide-2025": `
@@ -1303,7 +1304,7 @@ export function BlogPost() {
   const prevPost = currentIndex > 0 ? BLOG_POSTS[currentIndex - 1] : null;
   const nextPost = currentIndex < BLOG_POSTS.length - 1 ? BLOG_POSTS[currentIndex + 1] : null;
 
-  const shareUrl = `https://whachatcrm.com/blog/${slug}`;
+  const shareUrl = `${MARKETING_URL}/blog/${slug}`;
   const shareText = encodeURIComponent(post.title);
 
   const renderContent = (markdown: string) => {
@@ -1468,7 +1469,7 @@ export function BlogPost() {
             "publisher": {
               "@type": "Organization",
               "name": "WhachatCRM",
-              "url": "https://whachatcrm.com"
+              "url": MARKETING_URL
             }
           })}
         </script>

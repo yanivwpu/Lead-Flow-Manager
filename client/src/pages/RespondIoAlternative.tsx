@@ -4,6 +4,7 @@ import { ArrowRight, CheckCircle2, XCircle } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { Helmet } from "react-helmet";
 import { SiteFooter } from "@/components/SiteFooter";
+import { MARKETING_URL } from "@/lib/marketingUrl";
 
 export function RespondIoAlternative() {
   const { user } = useAuth();
@@ -14,10 +15,10 @@ export function RespondIoAlternative() {
         <title>Best Respond.io Alternative | WhachatCRM</title>
         <meta name="description" content="Switch from Respond.io to WhachatCRM: Starts at $19/mo, free plan, unlimited users, simple setup. Better for small teams managing WhatsApp leads." />
         <meta name="keywords" content="Respond.io alternative, WhatsApp CRM, Respond.io competitor, affordable WhatsApp CRM, WhatsApp business tool" />
-        <link rel="canonical" href="https://whachatcrm.com/respond-io-alternative" />
+        <link rel="canonical" href={`${MARKETING_URL}/respond-io-alternative`} />
         <meta property="og:title" content="Best Respond.io Alternative | WhachatCRM" />
         <meta property="og:description" content="Switch from Respond.io to WhachatCRM: Starts at $19/mo, free plan, unlimited users, simple setup." />
-        <meta property="og:url" content="https://whachatcrm.com/respond-io-alternative" />
+        <meta property="og:url" content={`${MARKETING_URL}/respond-io-alternative`} />
         <meta property="og:type" content="website" />
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content="Best Respond.io Alternative for SMBs | Affordable WhatsApp CRM" />

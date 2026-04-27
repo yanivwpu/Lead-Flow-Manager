@@ -5,16 +5,23 @@ import { GHL_TO_CRM_STAGE_MAP, GHL_STATUS_TO_CRM_STAGE } from './ghlSync';
 import { db } from '../drizzle/db';
 import { contacts, conversations } from '@shared/schema';
 import { eq, and, inArray, notInArray } from 'drizzle-orm';
+import { getAppOrigin } from './urlOrigins';
 
 const router = Router();
 
 const GHL_TOKEN_URL = 'https://services.leadconnectorhq.com/oauth/token';
 const GHL_CLIENT_ID = process.env.GHL_CLIENT_ID || '';
 const GHL_CLIENT_SECRET = process.env.GHL_CLIENT_SECRET || '';
-const GHL_REDIRECT_URI = process.env.GHL_REDIRECT_URI || 'https://whachatcrm.com/api/ext/callback';
+const GHL_REDIRECT_URI =
+  process.env.GHL_REDIRECT_URI || `${getAppOrigin()}/api/ext/callback`;
 
 router.get('/callback', async (req: Request, res: Response) => {
   try {
+    console.log("[GHL Callback] Host:", {
+      host: req.get("host"),
+      "x-forwarded-host": req.headers["x-forwarded-host"],
+      "x-forwarded-proto": req.headers["x-forwarded-proto"],
+    });
     const { code, error, error_description } = req.query;
 
     if (error) {
@@ -155,7 +162,7 @@ router.get('/callback', async (req: Request, res: Response) => {
           <div class="check"><svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg></div>
           <h1>Connected to LeadConnector</h1>
           <p>Your LeadConnector account is now connected. You can return to WhachatCRM to start syncing and automations.</p>
-          <a href="https://whachatcrm.com/app/integrations" class="btn">Back to WhachatCRM</a>
+          <a href="${getAppOrigin()}/app/integrations" class="btn">Back to WhachatCRM</a>
         </div>
         <script>
           if (window.opener) {

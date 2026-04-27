@@ -1,6 +1,7 @@
 import { Link } from "wouter";
 import { Helmet } from "react-helmet";
 import { ArrowLeft } from "lucide-react";
+import { MARKETING_URL } from "@/lib/marketingUrl";
 
 export function TermsOfUse() {
   return (
@@ -8,10 +9,10 @@ export function TermsOfUse() {
       <Helmet>
         <title>Terms of Use | WhachatCRM</title>
         <meta name="description" content="WhachatCRM terms of use. Read our service terms, user responsibilities, and platform guidelines." />
-        <link rel="canonical" href="https://whachatcrm.com/terms-of-use" />
+        <link rel="canonical" href={`${MARKETING_URL}/terms-of-use`} />
         <meta property="og:title" content="Terms of Use | WhachatCRM" />
         <meta property="og:description" content="WhachatCRM terms of use. Read our service terms and guidelines." />
-        <meta property="og:url" content="https://whachatcrm.com/terms-of-use" />
+        <meta property="og:url" content={`${MARKETING_URL}/terms-of-use`} />
         <meta property="og:type" content="website" />
         <meta name="twitter:card" content="summary" />
       </Helmet>
