@@ -49,11 +49,14 @@ export function setupAuth(app: Express) {
       },
       async (email, password, done) => {
         try {
+          const rawEmail = typeof email === 'string' ? email : '';
+          const normalizedEmail = rawEmail.trim().toLowerCase();
+
           // Special handling for demo account - auto-create/fix in any environment
           const DEMO_EMAIL = 'demo@whachat.com';
           const DEMO_PASSWORD = 'password123';
           
-          if (email.toLowerCase() === DEMO_EMAIL && password === DEMO_PASSWORD) {
+          if (normalizedEmail === DEMO_EMAIL && password === DEMO_PASSWORD) {
             let user = await storage.getUserByEmail(DEMO_EMAIL);
             let needsSampleData = false;
             
@@ -101,7 +104,10 @@ export function setupAuth(app: Express) {
           }
           
           // Normal login flow for non-demo accounts
-          const user = await storage.getUserByEmail(email);
+          let user = await storage.getUserByEmail(rawEmail);
+          if (!user && normalizedEmail && normalizedEmail !== rawEmail) {
+            user = await storage.getUserByEmail(normalizedEmail);
+          }
           if (!user) {
             return done(null, false, { message: 'Invalid email or password' });
           }
