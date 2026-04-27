@@ -6,6 +6,10 @@ import { getAppOrigin } from "./urlOrigins";
 
 export type AIBrainSource = "none" | "stripe" | "shopify" | "manual" | "demo";
 
+/** Shown when user tries AI Brain add-on checkout on Free (effective plan). */
+export const AI_BRAIN_REQUIRES_PAID_PLAN_MESSAGE =
+  "AI Brain requires an active Starter or Pro plan. Please upgrade your plan first.";
+
 export interface UserLimits {
   plan: SubscriptionPlan;
   planName: string;
@@ -37,6 +41,8 @@ export interface UserLimits {
   aiBrainSource: AIBrainSource;
   /** Realtor Growth Engine: requires effective Pro plan plus AI Brain entitlement. */
   growthEngineEligible: boolean;
+  /** Starter or Pro effective plan — required before AI Brain add-on can apply. */
+  aiBrainBasePlanEligible: boolean;
 }
 
 class SubscriptionService {
@@ -81,8 +87,12 @@ class SubscriptionService {
     if (upgradePlanSource === "free" && !isInTrial) suggestedUpgrade = "starter";
     else if (upgradePlanSource === "starter") suggestedUpgrade = "pro";
 
+    const aiBrainBasePlanEligible =
+      effectivePlan === "starter" || effectivePlan === "pro";
+
     const aiEntitlement = await this.resolveAIBrainEntitlement(user);
-    const hasAIBrainAddon = aiEntitlement.has;
+    const hasAIBrainAddon =
+      aiBrainBasePlanEligible && aiEntitlement.has;
     const aiBrainSource = aiEntitlement.source;
     const growthEngineEligible = effectivePlan === "pro" && hasAIBrainAddon;
 
@@ -115,6 +125,7 @@ class SubscriptionService {
       hasAIBrainAddon,
       aiBrainSource,
       growthEngineEligible,
+      aiBrainBasePlanEligible,
     };
   }
 
@@ -352,10 +363,12 @@ class SubscriptionService {
     const user = await storage.getUser(userId);
     if (!user) throw new Error("User not found");
 
-    // Check if user has at least Starter plan (AI Assist) to be eligible for add-on
-    const storedPlan = (user.subscriptionPlan || "free") as SubscriptionPlan;
-    if (storedPlan === "free") {
-      throw new Error("You need a Starter or Pro plan to purchase the AI Brain add-on. Please upgrade your plan first.");
+    const limits = await this.getUserLimits(userId);
+    const plan = limits?.plan ?? "free";
+    if (plan !== "starter" && plan !== "pro") {
+      throw Object.assign(new Error(AI_BRAIN_REQUIRES_PAID_PLAN_MESSAGE), {
+        code: "AI_BRAIN_PLAN_INELIGIBLE",
+      });
     }
 
     const stripe = await getUncachableStripeClient();

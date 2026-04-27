@@ -2689,6 +2689,7 @@ export async function registerRoutes(
         shopifyAIBrainEnabled: user.shopifyAIBrainEnabled,
         hasAIBrainAddon: limits?.hasAIBrainAddon ?? false,
         aiBrainSource: limits?.aiBrainSource ?? "none",
+        aiBrainBasePlanEligible: limits?.aiBrainBasePlanEligible ?? false,
         growthEngineEligible: limits?.growthEngineEligible ?? false,
         stripeSubscriptionItemPriceIds: stripePriceIds,
       });
@@ -2771,6 +2772,9 @@ export async function registerRoutes(
       res.json(result);
     } catch (error: any) {
       console.error("Error creating AI Brain add-on checkout:", error);
+      if (error?.code === "AI_BRAIN_PLAN_INELIGIBLE") {
+        return res.status(400).json({ error: error.message });
+      }
       res.status(500).json({ error: error.message || "Failed to create checkout" });
     }
   });
