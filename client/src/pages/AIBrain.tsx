@@ -35,6 +35,13 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { toast } from "@/hooks/use-toast";
 import { Link } from "wouter";
 import { cn } from "@/lib/utils";
@@ -171,6 +178,7 @@ function AIBrainContent() {
   });
   
   const plan = subscription?.limits?.plan || "free";
+  const isFree = plan === "free";
   const isPro = plan === "pro" || plan === "enterprise";
   const isStarter = plan === "starter";
   const hasAIAssist = isStarter || isPro;
@@ -213,6 +221,7 @@ function AIBrainContent() {
   const [generatingAutomation, setGeneratingAutomation] = useState(false);
   const [generatedWorkflow, setGeneratedWorkflow] = useState<any>(null);
   const [isCheckingOut, setIsCheckingOut] = useState(false);
+  const [bundleModalOpen, setBundleModalOpen] = useState(false);
   
   const isShopify = !!(subscription?.subscription?.isShopify);
 
@@ -251,6 +260,38 @@ function AIBrainContent() {
       }
     } catch (error: any) {
       if (error.message === "session_expired") return;
+      toast({
+        title: "Checkout Error",
+        description: error.message || "Failed to start checkout. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsCheckingOut(false);
+    }
+  };
+
+  const handlePlanAIBundleCheckout = async (bundlePlan: "starter" | "pro") => {
+    setIsCheckingOut(true);
+    try {
+      const response = await fetch("/api/subscription/checkout/plan-ai-bundle", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ plan: bundlePlan }),
+      });
+      if (response.status === 401) {
+        window.location.href = "/auth?redirect=/app/ai-brain";
+        return;
+      }
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to start checkout");
+      }
+      if (data.url) {
+        setBundleModalOpen(false);
+        window.location.href = data.url;
+      }
+    } catch (error: any) {
       toast({
         title: "Checkout Error",
         description: error.message || "Failed to start checkout. Please try again.",
@@ -512,10 +553,63 @@ function AIBrainContent() {
                     "Unlock Full AI Brain – $29/mo"
                   )}
                 </Button>
+              ) : isFree && !isShopify ? (
+                <>
+                  <p className="text-sm text-gray-600 mb-4 max-w-md mx-auto">
+                    AI Brain is available as an add-on for Starter and Pro users. Choose a bundle to activate your plan and AI Brain together.
+                  </p>
+                  <Button
+                    className="bg-purple-600 hover:bg-purple-700 text-white"
+                    onClick={() => setBundleModalOpen(true)}
+                    disabled={isCheckingOut}
+                  >
+                    Choose Starter + AI Brain or Pro + AI Brain
+                  </Button>
+                  <Dialog open={bundleModalOpen} onOpenChange={setBundleModalOpen}>
+                    <DialogContent className="sm:max-w-md">
+                      <DialogHeader>
+                        <DialogTitle>Choose your bundle</DialogTitle>
+                        <DialogDescription>
+                          Monthly billing includes your selected plan and the AI Brain add-on in one subscription.
+                        </DialogDescription>
+                      </DialogHeader>
+                      <div className="grid gap-3 py-2">
+                        <Button
+                          variant="outline"
+                          className="h-auto py-4 flex flex-col items-stretch gap-1 border-2 hover:border-purple-400"
+                          onClick={() => handlePlanAIBundleCheckout("starter")}
+                          disabled={isCheckingOut}
+                        >
+                          <span className="font-semibold text-gray-900">Starter + AI Brain</span>
+                          <span className="text-xs text-gray-500 font-normal">
+                            Starter plan + AI Brain add-on (monthly)
+                          </span>
+                        </Button>
+                        <Button
+                          variant="outline"
+                          className="h-auto py-4 flex flex-col items-stretch gap-1 border-2 hover:border-purple-400"
+                          onClick={() => handlePlanAIBundleCheckout("pro")}
+                          disabled={isCheckingOut}
+                        >
+                          <span className="font-semibold text-gray-900">Pro + AI Brain</span>
+                          <span className="text-xs text-gray-500 font-normal">
+                            Pro plan + AI Brain add-on (monthly)
+                          </span>
+                        </Button>
+                      </div>
+                      {isCheckingOut && (
+                        <div className="flex items-center justify-center gap-2 text-sm text-gray-600">
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Redirecting to checkout…
+                        </div>
+                      )}
+                    </DialogContent>
+                  </Dialog>
+                </>
               ) : (
                 <Link href="/pricing">
                   <Button className="bg-purple-600 hover:bg-purple-700 text-white">
-                    Get Starter Plan First
+                    View plans to get Starter or Pro
                   </Button>
                 </Link>
               )}

@@ -372,6 +372,76 @@ class SubscriptionService {
     return { url: session.url };
   }
 
+  /**
+   * Starter/Pro monthly plan + AI Brain add-on in one Stripe subscription checkout.
+   * Only for accounts whose effective plan is currently Free (via getEffectivePlanForUser).
+   */
+  async createPlanAIBundleCheckoutSession(
+    userId: string,
+    bundlePlan: "starter" | "pro",
+    baseUrl: string,
+  ): Promise<{ url: string }> {
+    const user = await storage.getUser(userId);
+    if (!user) throw new Error("User not found");
+
+    if (this.getEffectivePlanForUser(user) !== "free") {
+      throw Object.assign(
+        new Error(
+          "Plan + AI bundle is only available when your effective plan is Free. Use AI Brain add-on checkout from this page if you already have Starter or Pro.",
+        ),
+        { code: "PLAN_AI_BUNDLE_NOT_FREE" },
+      );
+    }
+
+    const stripe = await getUncachableStripeClient();
+    const resolvedBaseUrl = resolveStripeCheckoutRedirectOrigin(getAppOrigin() || baseUrl);
+
+    let customerId = user.stripeCustomerId;
+    if (!customerId) {
+      const customer = await stripe.customers.create({
+        email: user.email,
+        metadata: { userId },
+      });
+      await storage.updateUser(userId, { stripeCustomerId: customer.id });
+      customerId = customer.id;
+    }
+
+    const planPriceId =
+      bundlePlan === "starter"
+        ? process.env.STRIPE_STARTER_MONTHLY_PRICE_ID
+        : process.env.STRIPE_PRO_MONTHLY_PRICE_ID;
+    const aiPriceId = process.env.STRIPE_AI_BRAIN_MONTHLY_PRICE_ID;
+
+    if (!planPriceId) {
+      throw new Error(
+        bundlePlan === "starter"
+          ? "Missing STRIPE_STARTER_MONTHLY_PRICE_ID"
+          : "Missing STRIPE_PRO_MONTHLY_PRICE_ID",
+      );
+    }
+    if (!aiPriceId) {
+      throw new Error("Missing STRIPE_AI_BRAIN_MONTHLY_PRICE_ID");
+    }
+
+    const session = await stripe.checkout.sessions.create({
+      customer: customerId,
+      payment_method_types: ["card"],
+      line_items: [{ price: planPriceId, quantity: 1 }, { price: aiPriceId, quantity: 1 }],
+      mode: "subscription",
+      success_url: `${resolvedBaseUrl}/app/ai-brain?checkout=success`,
+      cancel_url: `${resolvedBaseUrl}/app/ai-brain?checkout=cancel`,
+      metadata: {
+        userId,
+        type: "plan_ai_bundle",
+        plan: bundlePlan,
+        includesAIBrain: "true",
+      },
+    });
+
+    if (!session.url) throw new Error("Failed to create checkout session");
+    return { url: session.url };
+  }
+
   async createAddonCheckoutSession(userId: string, baseUrl: string): Promise<{ url: string }> {
     const user = await storage.getUser(userId);
     if (!user) throw new Error("User not found");

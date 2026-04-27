@@ -121,6 +121,27 @@ export class WebhookHandlers {
           subscriptionId,
           updated: !!updated,
         });
+
+        // Sync billingPlan + AI Brain entitlement from subscription line items immediately
+        // (helps plan_ai_bundle and multi-item checkouts before async subscription.updated arrives).
+        if (subscriptionId) {
+          try {
+            const stripe = await getUncachableStripeClient();
+            const fullSub = await stripe.subscriptions.retrieve(subscriptionId, {
+              expand: ["items.data.price", "items.data.price.product"],
+            } as any);
+            await updateUserFromSubscription(fullSub);
+            safeLog("[Stripe Webhook] Synced subscription after checkout.session.completed", {
+              subscriptionId,
+              metadataType: metadata?.type,
+            });
+          } catch (syncErr: any) {
+            safeLog("[Stripe Webhook] Post-checkout subscription sync failed", {
+              subscriptionId,
+              message: syncErr?.message || String(syncErr),
+            });
+          }
+        }
       }
     }
 

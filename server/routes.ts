@@ -2748,6 +2748,34 @@ export async function registerRoutes(
     }
   });
 
+  // Starter or Pro monthly + AI Brain bundle (effective plan Free only)
+  app.post("/api/subscription/checkout/plan-ai-bundle", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const plan = (req.body as { plan?: string })?.plan;
+      if (plan !== "starter" && plan !== "pro") {
+        return res.status(400).json({ error: "plan must be starter or pro" });
+      }
+
+      const baseUrl = getAppOrigin() || `${req.protocol}://${req.get("host")}`;
+      const result = await subscriptionService.createPlanAIBundleCheckoutSession(
+        req.user.id,
+        plan,
+        baseUrl,
+      );
+      res.json(result);
+    } catch (error: any) {
+      console.error("Error creating plan + AI bundle checkout:", error);
+      if (error?.code === "PLAN_AI_BUNDLE_NOT_FREE") {
+        return res.status(400).json({ error: error.message });
+      }
+      res.status(500).json({ error: error.message || "Failed to create checkout" });
+    }
+  });
+
   // Create checkout session for AI Brain add-on ($29/mo)
   app.post("/api/subscription/addon/ai-brain", async (req, res) => {
     try {
