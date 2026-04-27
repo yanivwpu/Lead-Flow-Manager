@@ -1,8 +1,10 @@
 import { storage } from "./storage";
-import { PLAN_LIMITS, type SubscriptionPlan } from "@shared/schema";
+import { PLAN_LIMITS, type SubscriptionPlan, type User } from "@shared/schema";
 import { getUncachableStripeClient } from "./stripeClient";
 import { resolveStripeCheckoutRedirectOrigin } from "./stripeCheckoutRedirectBase";
 import { getAppOrigin } from "./urlOrigins";
+
+export type AIBrainSource = "none" | "stripe" | "shopify" | "manual" | "demo";
 
 export interface UserLimits {
   plan: SubscriptionPlan;
@@ -31,6 +33,10 @@ export interface UserLimits {
   trialEndsAt: Date | null;
   trialDaysRemaining: number;
   hasAIBrainAddon: boolean;
+  /** Why hasAIBrainAddon is true; never inferred from legacy subscriptionPlan. */
+  aiBrainSource: AIBrainSource;
+  /** Realtor Growth Engine: requires effective Pro plan plus AI Brain entitlement. */
+  growthEngineEligible: boolean;
 }
 
 class SubscriptionService {
@@ -75,15 +81,10 @@ class SubscriptionService {
     if (upgradePlanSource === "free" && !isInTrial) suggestedUpgrade = "starter";
     else if (upgradePlanSource === "starter") suggestedUpgrade = "pro";
 
-    // Check if user has the AI Brain add-on subscription from Stripe
-    // Trial users get full AI Brain access as part of the Pro trial experience
-    // Demo user (demo@whachat.com) gets full AI Brain for demonstration purposes
-    const isDemoUser = user.email === 'demo@whachat.com';
-    const hasAIBrainAddon = isInTrial || isDemoUser
-      ? true
-      : user.shopifyAIBrainEnabled
-        ? true
-        : await this.checkAIBrainAddonStatus(user.stripeCustomerId);
+    const aiEntitlement = await this.resolveAIBrainEntitlement(user);
+    const hasAIBrainAddon = aiEntitlement.has;
+    const aiBrainSource = aiEntitlement.source;
+    const growthEngineEligible = effectivePlan === "pro" && hasAIBrainAddon;
 
     return {
       plan: effectivePlan,
@@ -112,47 +113,62 @@ class SubscriptionService {
       trialEndsAt: user.trialEndsAt,
       trialDaysRemaining,
       hasAIBrainAddon,
+      aiBrainSource,
+      growthEngineEligible,
     };
   }
 
-  private async checkAIBrainAddonStatus(stripeCustomerId: string | null | undefined): Promise<boolean> {
+  private isManualAIBrainEmail(email: string | undefined): boolean {
+    const raw = process.env.AI_BRAIN_MANUAL_EMAILS || "";
+    if (!email || !raw.trim()) return false;
+    const normalized = email.trim().toLowerCase();
+    return raw
+      .split(",")
+      .map((e) => e.trim().toLowerCase())
+      .filter(Boolean)
+      .includes(normalized);
+  }
+
+  /** True only if an active subscription item is the AI Brain price or a verified AI Brain product. */
+  async stripeCustomerHasActiveAIBrainAddon(
+    stripeCustomerId: string | null | undefined,
+  ): Promise<boolean> {
     if (!stripeCustomerId) return false;
-    
+
     try {
       const stripe = await getUncachableStripeClient();
       const subscriptions = await stripe.subscriptions.list({
         customer: stripeCustomerId,
-        status: 'active',
-        limit: 10,
-        expand: ['data.items.data.price'],
+        status: "active",
+        limit: 25,
+        expand: ["data.items.data.price", "data.items.data.price.product"],
       });
-      
+
       const aiBrainPriceId = process.env.STRIPE_AI_BRAIN_MONTHLY_PRICE_ID;
-      // Check if any active subscription has the AI Brain add-on.
-      // Primary match: priceId from env (most reliable).
-      // Fallback match: unit_amount === 2900 (backwards compatibility).
       const AI_BRAIN_ADDON_AMOUNT = 2900;
+
       for (const sub of subscriptions.data) {
         for (const item of sub.items.data) {
-          if (aiBrainPriceId && item.price.id === aiBrainPriceId) {
+          const price = item.price;
+          if (!price) continue;
+
+          if (aiBrainPriceId && price.id === aiBrainPriceId) {
             return true;
           }
-          if (item.price.unit_amount === AI_BRAIN_ADDON_AMOUNT) {
-            // Also check product name/metadata to avoid false positives
-            const product = item.price.product;
-            if (typeof product === 'object' && product !== null) {
-              const productName = (product as any).name?.toLowerCase() || '';
+
+          if (price.unit_amount === AI_BRAIN_ADDON_AMOUNT) {
+            const product = price.product;
+            if (typeof product === "object" && product !== null) {
+              const productName = ((product as any).name || "").toLowerCase();
               const productMetadata = (product as any).metadata || {};
-              // Match if product name contains "ai brain" or has addon type metadata
-              if (productName.includes('ai brain') || 
-                  productName.includes('ai-brain') ||
-                  productMetadata.type === 'ai_brain_addon') {
+              if (
+                productName.includes("ai brain") ||
+                productName.includes("ai-brain") ||
+                productMetadata.type === "ai_brain_addon"
+              ) {
                 return true;
               }
             }
-            // Fallback: if we can't verify product name but amount matches exactly,
-            // still return true (for backwards compatibility with existing subscriptions)
-            return true;
           }
         }
       }
@@ -161,6 +177,26 @@ class SubscriptionService {
       console.error("Error checking AI Brain addon status:", error);
       return false;
     }
+  }
+
+  private async resolveAIBrainEntitlement(user: User): Promise<{
+    has: boolean;
+    source: AIBrainSource;
+  }> {
+    if (user.email === "demo@whachat.com") {
+      return { has: true, source: "demo" };
+    }
+    if (this.isManualAIBrainEmail(user.email ?? undefined)) {
+      return { has: true, source: "manual" };
+    }
+    if (!!user.shopifyAIBrainEnabled) {
+      return { has: true, source: "shopify" };
+    }
+    const stripeOk = await this.stripeCustomerHasActiveAIBrainAddon(user.stripeCustomerId);
+    if (stripeOk) {
+      return { has: true, source: "stripe" };
+    }
+    return { has: false, source: "none" };
   }
 
   async checkAndDecrementConversation(userId: string): Promise<{ 
@@ -336,7 +372,7 @@ class SubscriptionService {
     }
 
     // Check if user already has the add-on
-    const hasAddon = await this.checkAIBrainAddonStatus(customerId);
+    const hasAddon = await this.stripeCustomerHasActiveAIBrainAddon(customerId);
     if (hasAddon) {
       throw new Error("You already have the AI Brain add-on active.");
     }

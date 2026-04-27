@@ -2633,23 +2633,45 @@ export async function registerRoutes(
       const effectivePlan = limits?.plan || "free";
 
       let stripePriceIds: string[] | null = null;
-      if (user.stripeSubscriptionId) {
-        try {
-          const stripe = await getUncachableStripeClient();
+      try {
+        const stripe = await getUncachableStripeClient();
+        const ids = new Set<string>();
+
+        if (user.stripeCustomerId) {
+          const subs = await stripe.subscriptions.list({
+            customer: user.stripeCustomerId,
+            status: "active",
+            expand: ["data.items.data.price"],
+            limit: 25,
+          });
+          for (const sub of subs.data) {
+            for (const it of sub.items?.data || []) {
+              const pid = (it as any)?.price?.id;
+              if (pid) ids.add(pid);
+            }
+          }
+        }
+
+        if (user.stripeSubscriptionId) {
           const subscription = await stripe.subscriptions.retrieve(user.stripeSubscriptionId, {
             expand: ["items.data.price"],
           } as any);
           const items = subscription?.items?.data || [];
-          stripePriceIds = items.map((it: any) => it?.price?.id).filter(Boolean);
-        } catch (err: any) {
-          console.error("[Subscription Debug] Stripe lookup failed:", {
-            userId: user.id,
-            stripeCustomerId: user.stripeCustomerId,
-            stripeSubscriptionId: user.stripeSubscriptionId,
-            message: err?.message,
-          });
-          stripePriceIds = null;
+          for (const it of items) {
+            const pid = (it as any)?.price?.id;
+            if (pid) ids.add(pid);
+          }
         }
+
+        stripePriceIds = [...ids];
+      } catch (err: any) {
+        console.error("[Subscription Debug] Stripe lookup failed:", {
+          userId: user.id,
+          stripeCustomerId: user.stripeCustomerId,
+          stripeSubscriptionId: user.stripeSubscriptionId,
+          message: err?.message,
+        });
+        stripePriceIds = null;
       }
 
       return res.json({
@@ -2659,15 +2681,15 @@ export async function registerRoutes(
         planOverride: user.planOverride,
         planOverrideEnabled: user.planOverrideEnabled,
         effectivePlan,
-        subscriptionPlan: user.subscriptionPlan,
+        subscriptionPlanLegacy: user.subscriptionPlan,
         subscriptionStatus: user.subscriptionStatus,
         stripeCustomerId: user.stripeCustomerId,
         stripeSubscriptionId: user.stripeSubscriptionId,
         currentPeriodEnd: user.currentPeriodEnd,
         shopifyAIBrainEnabled: user.shopifyAIBrainEnabled,
-        limits: {
-          hasAIBrainAddon: limits?.hasAIBrainAddon ?? false,
-        },
+        hasAIBrainAddon: limits?.hasAIBrainAddon ?? false,
+        aiBrainSource: limits?.aiBrainSource ?? "none",
+        growthEngineEligible: limits?.growthEngineEligible ?? false,
         stripeSubscriptionItemPriceIds: stripePriceIds,
       });
     } catch (error: any) {
