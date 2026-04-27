@@ -85,9 +85,16 @@ interface AdminUser {
   name: string | null;
   email: string;
   avatarUrl: string | null;
-  subscriptionPlan: string | null;
+  /** Effective plan (trial → pro, else override if enabled, else billing). */
+  effectivePlan: string;
+  billingPlan: string;
+  planOverride: string | null;
+  planOverrideEnabled: boolean;
+  /** Legacy column kept for reference (admin PATCH still syncs this). */
+  subscriptionPlanLegacy: string | null;
   subscriptionStatus: string | null;
   trialEndsAt: string | null;
+  isInTrial: boolean;
   twilioConnected: boolean | null;
   metaConnected: boolean | null;
   createdAt: string | null;
@@ -897,8 +904,8 @@ export function Admin() {
                         return new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime();
                       } else if (userSort === 'plan') {
                         const planOrder = { 'pro': 0, 'starter': 1, 'free': 2 };
-                        const aOrder = planOrder[a.subscriptionPlan as keyof typeof planOrder] ?? 3;
-                        const bOrder = planOrder[b.subscriptionPlan as keyof typeof planOrder] ?? 3;
+                        const aOrder = planOrder[a.effectivePlan as keyof typeof planOrder] ?? 3;
+                        const bOrder = planOrder[b.effectivePlan as keyof typeof planOrder] ?? 3;
                         return aOrder - bOrder;
                       }
                       return new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime();
@@ -933,21 +940,46 @@ export function Admin() {
                           ) : (
                             <Badge variant="secondary" className="text-xs">Organic</Badge>
                           )}
-                          <Badge 
-                            variant={
-                              user.subscriptionPlan === 'pro' ? 'default' :
-                              user.subscriptionPlan === 'starter' ? 'secondary' : 'outline'
-                            }
-                            className={cn(
-                              "text-xs",
-                              user.subscriptionPlan === 'pro' && 'bg-brand-green'
+                          <div className="flex flex-wrap items-center gap-1">
+                            <Badge 
+                              variant={
+                                user.effectivePlan === 'pro' ? 'default' :
+                                user.effectivePlan === 'starter' ? 'secondary' : 'outline'
+                              }
+                              className={cn(
+                                "text-xs",
+                                user.effectivePlan === 'pro' && 'bg-brand-green'
+                              )}
+                            >
+                              {user.effectivePlan || 'free'}
+                            </Badge>
+                            {user.isInTrial && (
+                              <Badge variant="outline" className="text-[10px] text-amber-700 border-amber-300">Trial</Badge>
                             )}
-                          >
-                            {user.subscriptionPlan || 'free'}
-                          </Badge>
+                          </div>
                           {user.subscriptionStatus && (
                             <span className="text-xs text-gray-500 self-center">{user.subscriptionStatus}</span>
                           )}
+                        </div>
+
+                        <div className="rounded-md bg-gray-50 px-2 py-1.5 space-y-0.5 text-xs">
+                          <div>
+                            <span className="text-gray-500">Billing:</span>{' '}
+                            <span className="font-medium text-gray-900">{user.billingPlan}</span>
+                          </div>
+                          <div className="flex flex-wrap gap-1 items-center">
+                            <span className="text-gray-500">Override:</span>
+                            <span>{user.planOverride ?? '—'}</span>
+                            <Badge
+                              variant={user.planOverrideEnabled ? 'default' : 'secondary'}
+                              className="text-[10px] h-5 px-1"
+                            >
+                              {user.planOverrideEnabled ? 'ON' : 'off'}
+                            </Badge>
+                          </div>
+                          <div className="text-[10px] text-gray-400 pt-0.5">
+                            Legacy: {user.subscriptionPlanLegacy ?? '—'}
+                          </div>
                         </div>
                         
                         {/* Details Grid */}
@@ -1006,7 +1038,7 @@ export function Admin() {
                       <TableHead>User</TableHead>
                       <TableHead>Acquisition</TableHead>
                       <TableHead>Sales Conversion</TableHead>
-                      <TableHead>Plan</TableHead>
+                      <TableHead className="min-w-[220px]">Effective / billing</TableHead>
                       <TableHead>Demo</TableHead>
                       <TableHead>Support</TableHead>
                       <TableHead>Connected</TableHead>
@@ -1039,8 +1071,8 @@ export function Admin() {
                             return new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime();
                           } else if (userSort === 'plan') {
                             const planOrder = { 'pro': 0, 'starter': 1, 'free': 2 };
-                            const aOrder = planOrder[a.subscriptionPlan as keyof typeof planOrder] ?? 3;
-                            const bOrder = planOrder[b.subscriptionPlan as keyof typeof planOrder] ?? 3;
+                            const aOrder = planOrder[a.effectivePlan as keyof typeof planOrder] ?? 3;
+                            const bOrder = planOrder[b.effectivePlan as keyof typeof planOrder] ?? 3;
                             return aOrder - bOrder;
                           }
                           return new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime();
@@ -1089,36 +1121,65 @@ export function Admin() {
                                 )}
                               </div>
                             </TableCell>
-                            <TableCell>
-                              <div className="flex flex-col gap-2">
-                                {editingUserPlan?.userId === user.id ? (
-                                  <select
-                                    value={editingUserPlan.plan}
-                                    onChange={(e) => setEditingUserPlan({ userId: user.id, plan: e.target.value })}
-                                    disabled={updateUserPlan.isPending}
-                                    className="w-[120px] h-8 border border-gray-300 rounded-md px-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-green disabled:opacity-50"
-                                    data-testid={`select-plan-${user.id}`}
-                                  >
-                                    <option value="free">Free</option>
-                                    <option value="starter">Starter</option>
-                                    <option value="pro">Pro</option>
-                                  </select>
-                                ) : (
-                                  <Badge 
-                                    variant={
-                                      user.subscriptionPlan === 'pro' ? 'default' :
-                                      user.subscriptionPlan === 'starter' ? 'secondary' : 'outline'
-                                    }
-                                    className={cn(
-                                      'cursor-pointer w-fit',
-                                      user.subscriptionPlan === 'pro' && 'bg-brand-green'
-                                    )}
-                                    onClick={() => setEditingUserPlan({ userId: user.id, plan: user.subscriptionPlan || 'free' })}
-                                    data-testid={`badge-plan-${user.id}`}
-                                  >
-                                    {user.subscriptionPlan || 'free'}
-                                  </Badge>
-                                )}
+                            <TableCell className="align-top min-w-[220px]">
+                              <div className="flex flex-col gap-2 text-xs">
+                                <div className="flex flex-wrap items-center gap-1">
+                                  <span className="text-gray-500 shrink-0">Effective:</span>
+                                  {editingUserPlan?.userId === user.id ? (
+                                    <select
+                                      value={editingUserPlan.plan}
+                                      onChange={(e) => setEditingUserPlan({ userId: user.id, plan: e.target.value })}
+                                      disabled={updateUserPlan.isPending}
+                                      className="w-[120px] h-8 border border-gray-300 rounded-md px-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-green disabled:opacity-50"
+                                      data-testid={`select-plan-${user.id}`}
+                                    >
+                                      <option value="free">Free</option>
+                                      <option value="starter">Starter</option>
+                                      <option value="pro">Pro</option>
+                                    </select>
+                                  ) : (
+                                    <>
+                                      <Badge 
+                                        variant={
+                                          user.effectivePlan === 'pro' ? 'default' :
+                                          user.effectivePlan === 'starter' ? 'secondary' : 'outline'
+                                        }
+                                        className={cn(
+                                          'cursor-pointer w-fit',
+                                          user.effectivePlan === 'pro' && 'bg-brand-green'
+                                        )}
+                                        onClick={() => setEditingUserPlan({ userId: user.id, plan: user.effectivePlan || 'free' })}
+                                        data-testid={`badge-plan-${user.id}`}
+                                      >
+                                        {user.effectivePlan || 'free'}
+                                      </Badge>
+                                      {user.isInTrial && (
+                                        <Badge variant="outline" className="text-[10px] text-amber-700 border-amber-300">
+                                          Trial
+                                        </Badge>
+                                      )}
+                                    </>
+                                  )}
+                                </div>
+                                <div className="text-[11px] space-y-0.5 border-l-2 border-gray-100 pl-2">
+                                  <div>
+                                    <span className="text-gray-500">Billing:</span>{' '}
+                                    <span className="font-medium text-gray-900">{user.billingPlan}</span>
+                                  </div>
+                                  <div className="flex flex-wrap gap-1 items-center">
+                                    <span className="text-gray-500">Override:</span>
+                                    <span>{user.planOverride ?? '—'}</span>
+                                    <Badge
+                                      variant={user.planOverrideEnabled ? 'default' : 'secondary'}
+                                      className="text-[10px] h-5 px-1"
+                                    >
+                                      {user.planOverrideEnabled ? 'ON' : 'off'}
+                                    </Badge>
+                                  </div>
+                                  <div className="text-[10px] text-gray-400">
+                                    Legacy: {user.subscriptionPlanLegacy ?? '—'}
+                                  </div>
+                                </div>
                                 {editingUserPlan?.userId === user.id && (
                                   <div className="flex gap-1.5">
                                     <Button

@@ -5617,14 +5617,22 @@ export async function registerRoutes(
         // Partner attribution from user record
         const partnerName = user.partnerId ? partnerMap.get(user.partnerId) || null : null;
         
+        const now = new Date();
+        const isInTrial = !!(user.trialEndsAt && new Date(user.trialEndsAt) > now);
+
         return {
           id: user.id,
           name: user.name,
           email: user.email,
           avatarUrl: user.avatarUrl,
-          subscriptionPlan: user.subscriptionPlan,
+          effectivePlan: subscriptionService.getEffectivePlanForUser(user),
+          billingPlan: user.billingPlan || "free",
+          planOverride: user.planOverride ?? null,
+          planOverrideEnabled: !!user.planOverrideEnabled,
+          subscriptionPlanLegacy: user.subscriptionPlan,
           subscriptionStatus: user.subscriptionStatus,
           trialEndsAt: user.trialEndsAt,
+          isInTrial,
           twilioConnected: user.twilioConnected,
           metaConnected: user.metaConnected,
           createdAt: user.createdAt,

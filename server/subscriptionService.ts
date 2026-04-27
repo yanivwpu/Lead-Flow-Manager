@@ -46,6 +46,22 @@ export interface UserLimits {
 }
 
 class SubscriptionService {
+  /**
+   * Same effective plan as getUserLimits (trial → pro, else override if enabled, else billing).
+   * No I/O; safe for admin lists.
+   */
+  getEffectivePlanForUser(
+    user: Pick<User, "trialEndsAt" | "planOverrideEnabled" | "planOverride" | "billingPlan">,
+    now: Date = new Date(),
+  ): SubscriptionPlan {
+    const isInTrial = user.trialEndsAt ? new Date(user.trialEndsAt) > now : false;
+    if (isInTrial) return "pro";
+    const overrideEnabled = !!user.planOverrideEnabled;
+    const overridePlan = (user.planOverride || "free") as SubscriptionPlan;
+    const billingPlan = (user.billingPlan || "free") as SubscriptionPlan;
+    return overrideEnabled ? overridePlan : billingPlan;
+  }
+
   async getUserLimits(userId: string): Promise<UserLimits | null> {
     const user = await storage.getUser(userId);
     if (!user) return null;
@@ -60,10 +76,7 @@ class SubscriptionService {
     const overridePlan = (user.planOverride || "free") as SubscriptionPlan;
     const billingPlan = (user.billingPlan || "free") as SubscriptionPlan;
 
-    // During trial, users get Pro features regardless of stored plan
-    const effectivePlan = isInTrial
-      ? "pro"
-      : (overrideEnabled ? overridePlan : billingPlan);
+    const effectivePlan = this.getEffectivePlanForUser(user, now);
     const planLimits = PLAN_LIMITS[effectivePlan];
 
     // MONTHLY RESET LOGIC: Reset conversations if billing period has ended
