@@ -56,6 +56,8 @@ export interface IStorage {
   // User methods
   getUser(id: string): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
+  /** Match users.email case-insensitively (Postgres lower()). Pass normalized lowercased email. */
+  getUserByEmailCaseInsensitive(normalizedEmail: string): Promise<User | undefined>;
   getUserByStripeCustomerId(customerId: string): Promise<User | undefined>;
   getUserByShopifyShop(shop: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
@@ -286,6 +288,18 @@ export class DbStorage implements IStorage {
 
   async getUserByEmail(email: string): Promise<User | undefined> {
     const result = await db.select().from(users).where(eq(users.email, email));
+    return result[0];
+  }
+
+  async getUserByEmailCaseInsensitive(normalizedEmail: string): Promise<User | undefined> {
+    const e = normalizedEmail.trim().toLowerCase();
+    if (!e) return undefined;
+    const result = await db
+      .select()
+      .from(users)
+      .where(sql`lower(${users.email}) = ${e}`)
+      .limit(2);
+    // Defensive: unique constraint should prevent multiples; if not, take first match.
     return result[0];
   }
 

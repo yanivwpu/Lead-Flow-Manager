@@ -12,6 +12,51 @@ const resetTokens = new Map<string, { email: string; expires: Date }>();
 
 const PgStore = connectPgSimple(session);
 
+async function resolveUserForLogin(rawEmail: string): Promise<User | undefined> {
+  const trimmed = typeof rawEmail === 'string' ? rawEmail.trim() : '';
+  const lower = trimmed.toLowerCase();
+  return (
+    (trimmed ? await storage.getUserByEmail(trimmed) : undefined) ||
+    (lower ? await storage.getUserByEmail(lower) : undefined) ||
+    (lower ? await storage.getUserByEmailCaseInsensitive(lower) : undefined)
+  );
+}
+
+/** Supports bcrypt hashes and legacy plaintext (re-hashed after successful login). */
+async function verifyLoginPassword(
+  plain: string,
+  stored: string | null | undefined,
+): Promise<{ ok: boolean; migratedFromPlaintext: boolean }> {
+  if (stored == null || stored === '') {
+    return { ok: false, migratedFromPlaintext: false };
+  }
+
+  const looksBcrypt =
+    stored.startsWith('$2a$') ||
+    stored.startsWith('$2b$') ||
+    stored.startsWith('$2y$');
+
+  if (looksBcrypt) {
+    try {
+      const ok = await bcrypt.compare(plain, stored);
+      return { ok, migratedFromPlaintext: false };
+    } catch {
+      return { ok: false, migratedFromPlaintext: false };
+    }
+  }
+
+  if (plain === stored) {
+    return { ok: true, migratedFromPlaintext: true };
+  }
+
+  try {
+    const ok = await bcrypt.compare(plain, stored);
+    return { ok, migratedFromPlaintext: false };
+  } catch {
+    return { ok: false, migratedFromPlaintext: false };
+  }
+}
+
 export function setupAuth(app: Express) {
   // Trust proxy for Replit's reverse proxy
   app.set('trust proxy', 1);
@@ -103,17 +148,30 @@ export function setupAuth(app: Express) {
             return done(null, user);
           }
           
-          // Normal login flow for non-demo accounts
-          let user = await storage.getUserByEmail(rawEmail);
-          if (!user && normalizedEmail && normalizedEmail !== rawEmail) {
-            user = await storage.getUserByEmail(normalizedEmail);
+          // Normal login flow for non-demo accounts (case-insensitive email match)
+          let user = await resolveUserForLogin(rawEmail);
+          const passwordFieldPresent = !!(user?.password && user.password.length > 0);
+          const storedLooksLikeBcrypt = user?.password?.startsWith('$2') ?? false;
+
+          let verifyOk = false;
+          if (user && passwordFieldPresent) {
+            const vr = await verifyLoginPassword(password, user.password);
+            verifyOk = vr.ok;
+            if (vr.ok && vr.migratedFromPlaintext) {
+              const hashed = await bcrypt.hash(password, 10);
+              const updated = await storage.updateUser(user.id, { password: hashed });
+              user = updated || user;
+            }
           }
-          if (!user) {
-            return done(null, false, { message: 'Invalid email or password' });
-          }
-          
-          const isValid = await bcrypt.compare(password, user.password);
-          if (!isValid) {
+
+          if (!user || !verifyOk) {
+            console.warn('[LOGIN DEBUG]', {
+              emailNormalized: normalizedEmail,
+              userFound: !!user,
+              passwordFieldPresent,
+              storedLooksLikeBcrypt,
+              verifyOk,
+            });
             return done(null, false, { message: 'Invalid email or password' });
           }
 
@@ -167,8 +225,8 @@ export function registerAuthRoutes(app: Express) {
         return res.status(400).json({ error: 'Missing required fields' });
       }
 
-      // Check if user already exists
-      const existingUser = await storage.getUserByEmail(email);
+      // Check if user already exists (case-insensitive)
+      const existingUser = await resolveUserForLogin(email);
       if (existingUser) {
         return res.status(400).json({ error: 'User already exists with that email' });
       }
@@ -327,7 +385,7 @@ export function registerAuthRoutes(app: Express) {
         return res.status(400).json({ error: 'Email is required' });
       }
 
-      const user = await storage.getUserByEmail(email);
+      const user = await resolveUserForLogin(email);
       
       if (user) {
         const token = crypto.randomBytes(32).toString('hex');
@@ -404,7 +462,7 @@ export function registerAuthRoutes(app: Express) {
         return res.status(400).json({ error: 'Email and newPassword required' });
       }
       
-      const user = await storage.getUserByEmail(email);
+      const user = await resolveUserForLogin(email);
       if (!user) {
         return res.status(404).json({ error: 'User not found with that email' });
       }
