@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Bell, Mail, Smartphone, Shield, LogOut, Phone, Plus, Trash2, Loader2, CreditCard, ExternalLink, Zap, CheckCircle2, XCircle, MessageSquare, Copy, Check, AlertTriangle, Users, UserPlus, Crown, Clock, Building2, FileText } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { useAuth } from "@/lib/auth-context";
 import { toast } from "@/hooks/use-toast";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Link, useSearch } from "wouter";
+import { Link, useLocation, useSearch } from "wouter";
 import { UpgradeModal, type UpgradeReason } from "@/components/UpgradeModal";
 import { ConnectTwilioWizard } from "@/components/ConnectTwilioWizard";
 import { ConnectMetaWizard } from "@/components/ConnectMetaWizard";
@@ -291,6 +291,64 @@ function AutoReplySettings() {
       </div>
     </div>
   );
+}
+
+class SettingsErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { hasError: boolean; errorMessage: string | null }
+> {
+  state = { hasError: false, errorMessage: null };
+
+  static getDerivedStateFromError(error: unknown) {
+    const msg = error instanceof Error ? error.message : "Unknown error";
+    return { hasError: true, errorMessage: msg };
+  }
+
+  componentDidCatch(error: unknown) {
+    // Keep this local to avoid taking down the whole app shell.
+    console.error("[Settings] render error:", error);
+  }
+
+  render() {
+    if (!this.state.hasError) return this.props.children;
+
+    return (
+      <div className="flex-1 h-full bg-gray-50 flex items-center justify-center p-6">
+        <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-6 max-w-md w-full">
+          <div className="flex items-start gap-3">
+            <div className="h-10 w-10 rounded-xl bg-amber-50 flex items-center justify-center shrink-0">
+              <AlertTriangle className="h-5 w-5 text-amber-600" />
+            </div>
+            <div className="min-w-0">
+              <h2 className="text-lg font-bold text-gray-900">Settings ran into an error</h2>
+              <p className="text-sm text-gray-600 mt-1">
+                Please reload the page. If it keeps happening, we can pinpoint the failing section next.
+              </p>
+              {this.state.errorMessage ? (
+                <p className="mt-2 text-xs text-gray-400 font-mono break-words">
+                  {this.state.errorMessage}
+                </p>
+              ) : null}
+              <div className="flex gap-2 mt-4">
+                <Button
+                  className="bg-brand-green hover:bg-brand-dark"
+                  onClick={() => window.location.reload()}
+                  data-testid="button-settings-error-reload"
+                >
+                  Reload
+                </Button>
+                <Link href="/app" className="inline-flex">
+                  <Button variant="outline" data-testid="button-settings-error-home">
+                    Go Home
+                  </Button>
+                </Link>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 }
 
 export function Settings() {
@@ -810,7 +868,8 @@ export function Settings() {
   };
 
   return (
-    <div className="flex-1 h-full bg-white flex flex-col overflow-hidden">
+    <SettingsErrorBoundary>
+      <div className="flex-1 h-full bg-white flex flex-col overflow-hidden">
       <div className="px-4 sm:px-8 py-4 sm:py-6 border-b border-gray-100 flex-shrink-0">
         <h1 className="text-2xl sm:text-3xl font-display font-bold text-gray-900">Settings</h1>
         <p className="text-gray-500 mt-1 text-sm sm:text-base">Manage notifications and preferences.</p>
@@ -1077,7 +1136,11 @@ export function Settings() {
             <div className="flex items-center gap-4">
               <div className="relative group">
                 {user?.avatarUrl ? (
-                  <img src={user.avatarUrl} alt={user.name || 'Profile'} className="h-16 w-16 rounded-full object-cover border-2 border-white shadow-sm" />
+                  <img
+                    src={user?.avatarUrl || ""}
+                    alt={user?.name || "Profile"}
+                    className="h-16 w-16 rounded-full object-cover border-2 border-white shadow-sm"
+                  />
                 ) : (
                   <div className="h-16 w-16 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 text-xl font-bold border-2 border-white shadow-sm">
                     {user?.name?.charAt(0)?.toUpperCase() || 'U'}
@@ -1117,6 +1180,7 @@ export function Settings() {
       <UpgradeModal open={upgradeModalOpen} onOpenChange={setUpgradeModalOpen} reason={upgradeReason} currentPlan={subscriptionData?.limits?.plan} />
       <ConnectTwilioWizard open={connectTwilioOpen} onOpenChange={setConnectTwilioOpen} />
       <ConnectMetaWizard open={connectMetaOpen} onOpenChange={setConnectMetaOpen} />
-    </div>
+      </div>
+    </SettingsErrorBoundary>
   );
 }
