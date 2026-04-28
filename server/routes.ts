@@ -2368,6 +2368,22 @@ export async function registerRoutes(
             const hasContent = messageText.length > 0 || attachments.length > 0;
 
             console.log(`[Meta Webhook] [Stage 3-FB] Event: senderId=${senderId} recipientId=${recipientId} mid=${messageId} text="${messageText.substring(0, 80)}" attachments=${attachments.length}`);
+            // Some Instagram DM deliveries can surface via object="page" depending on product configuration.
+            // If Meta sends any IG hints in the event, log them so we can adjust routing if needed.
+            const igHints = {
+              is_instagram: (event as any)?.is_instagram ?? null,
+              instagram_scoped_id: (event as any)?.instagram_scoped_id ?? null,
+              messageTags: (event as any)?.message?.tags ?? null,
+            };
+            if (igHints.is_instagram || igHints.instagram_scoped_id) {
+              console.log("[Meta Webhook] [Stage 3-FB] Instagram-like event hints detected", {
+                fbPageId,
+                recipientId,
+                senderId,
+                mid: messageId,
+                igHints,
+              });
+            }
 
             if (!senderId || !hasContent) {
               console.log(`[Meta Webhook] [Stage 3-FB] Skipping — no senderId or no content (senderId=${senderId}, hasContent=${hasContent})`);
@@ -4429,6 +4445,7 @@ export async function registerRoutes(
         instagramChannelSettings: igSetting
           ? { id: igSetting.id, isConnected: igSetting.isConnected, isEnabled: igSetting.isEnabled, config: sanitizeConfig(igCfg) }
           : null,
+        pageTokenDebug: null as any,
         subscribedApps: null as any,
         subscribedAppsError: null as any,
         pageIgLink: null as any,
@@ -4483,12 +4500,45 @@ export async function registerRoutes(
         };
       }
 
+      // 3) debug_token for the stored PAGE access token (requires META_APP_ID + META_APP_SECRET)
+      const appId = process.env.META_APP_ID;
+      const appSecret = process.env.META_APP_SECRET;
+      if (appId && appSecret) {
+        const appToken = `${appId}|${appSecret}`;
+        const debugUrl =
+          `${GRAPH}/debug_token?input_token=${encodeURIComponent(accessToken)}` +
+          `&access_token=${encodeURIComponent(appToken)}`;
+        const dbgResp = await fetch(debugUrl);
+        const dbg = (await dbgResp.json().catch(() => ({}))) as any;
+        const td = dbg?.data ?? {};
+        responsePayload.pageTokenDebug = {
+          httpOk: dbgResp.ok,
+          status: dbgResp.status,
+          is_valid: td?.is_valid ?? null,
+          type: td?.type ?? null,
+          app_id: td?.app_id ?? null,
+          expires_at: td?.expires_at ?? null,
+          data_access_expires_at: td?.data_access_expires_at ?? null,
+          scopes: Array.isArray(td?.scopes) ? td.scopes : [],
+          granular_scopes: Array.isArray(td?.granular_scopes) ? td.granular_scopes : [],
+          error: td?.error ?? dbg?.error ?? null,
+        };
+      } else {
+        responsePayload.pageTokenDebug = {
+          error: "META_APP_ID or META_APP_SECRET not set on server; cannot call debug_token",
+        };
+      }
+
       // Log a compact summary server-side (no secrets)
       console.log("[Meta Debug] subscription snapshot", {
         userId: req.user.id,
         channel,
         pageId,
         instagramAccountId: instagramAccountId ?? null,
+        pageTokenType: responsePayload.pageTokenDebug?.type ?? null,
+        pageTokenScopesCount: Array.isArray(responsePayload.pageTokenDebug?.scopes)
+          ? responsePayload.pageTokenDebug.scopes.length
+          : null,
         subscribedAppsHttpOk: responsePayload.subscribedApps?.httpOk ?? null,
         subscribedAppsStatus: responsePayload.subscribedApps?.status ?? null,
       });
