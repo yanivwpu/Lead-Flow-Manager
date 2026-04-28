@@ -297,6 +297,7 @@ export function Settings() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const searchString = useSearch();
+  const [, setLocation] = useLocation();
   const [pushEnabled, setPushEnabled] = useState(false);
   const [emailEnabled, setEmailEnabled] = useState(false);
   const [permission, setPermission] = useState(
@@ -315,6 +316,48 @@ export function Settings() {
   const [isImporting, setIsImporting] = useState(false);
 
   const [isUploading, setIsUploading] = useState(false);
+
+  // Safety: Settings is a protected route, but in rare cases auth state can be null
+  // (expired cookie, blocked third-party cookies, or transient /api/auth/me failure).
+  // Avoid rendering a blank screen / throwing on user.avatarUrl.
+  if (!user) {
+    return (
+      <div className="flex-1 h-full bg-gray-50 flex items-center justify-center p-6">
+        <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-6 max-w-md w-full">
+          <div className="flex items-start gap-3">
+            <div className="h-10 w-10 rounded-xl bg-red-50 flex items-center justify-center shrink-0">
+              <Shield className="h-5 w-5 text-red-600" />
+            </div>
+            <div className="min-w-0">
+              <h2 className="text-lg font-bold text-gray-900">You’re not logged in</h2>
+              <p className="text-sm text-gray-600 mt-1">
+                Your session may have expired. Please sign in again to view Settings.
+              </p>
+              <div className="flex gap-2 mt-4">
+                <Button
+                  className="bg-brand-green hover:bg-brand-dark"
+                  onClick={() => setLocation(`/auth?redirect=${encodeURIComponent("/app/settings")}`)}
+                  data-testid="button-settings-relogin"
+                >
+                  Sign in
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => window.location.reload()}
+                  data-testid="button-settings-reload"
+                >
+                  Reload
+                </Button>
+              </div>
+              <p className="text-xs text-gray-400 mt-3">
+                If this keeps happening, confirm cookies are enabled for <span className="font-medium">app.whachatcrm.com</span>.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const updateAvatarMutation = useMutation({
     mutationFn: async (avatarUrl: string) => {
