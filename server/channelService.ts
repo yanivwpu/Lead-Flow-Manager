@@ -457,6 +457,7 @@ class ChannelService {
 
       let shouldReply = false;
       let replyText = '';
+      let source: "away_message" | "auto_reply" | null = null;
 
       // 1. Away message (outside business hours) takes priority
       if (user.businessHoursEnabled && user.awayMessageEnabled) {
@@ -472,6 +473,7 @@ class ChannelService {
         if (!days.includes(day) || time < start || time > end) {
           shouldReply = true;
           replyText = user.awayMessage || "Thanks for reaching out! We're currently away but will respond as soon as we're back.";
+          source = "away_message";
         }
       }
 
@@ -479,15 +481,25 @@ class ChannelService {
       if (!shouldReply && user.autoReplyEnabled) {
         shouldReply = true;
         replyText = user.autoReplyMessage || "Thanks for your message! We'll get back to you shortly.";
+        source = "auto_reply";
       }
 
-      if (!shouldReply || !replyText) return;
+      if (!shouldReply || !replyText || !source) {
+        // Keep this log lightweight; helps distinguish “Facebook sent it” vs “we sent it”.
+        if (!user.businessHoursEnabled && !user.autoReplyEnabled) {
+          console.log(`[AutoReply] Skipped — disabled (autoReplyEnabled=false, businessHoursEnabled=false) userId=${userId} channel=${channel}`);
+        } else if (!user.autoReplyEnabled && !(user.businessHoursEnabled && user.awayMessageEnabled)) {
+          console.log(`[AutoReply] Skipped — no rule matched userId=${userId} channel=${channel}`);
+        }
+        return;
+      }
 
       const delayMs = (user.autoReplyDelay || 0) * 1000;
       const self = this;
 
       setTimeout(async () => {
         try {
+          console.log(`[AutoReply] Sending (${source}) — userId=${userId} channel=${channel} contactId=${contact.id} conversationId=${conversation.id}`);
           const result = await self.sendMessage({
             userId,
             contactId: contact.id,
@@ -495,9 +507,9 @@ class ChannelService {
             forceChannel: channel,
           });
           if (result.success) {
-            console.log(`[AutoReply] ✓ Sent via ${channel} to "${contact.name}" (conversationId: ${conversation.id})`);
+            console.log(`[AutoReply] ✓ Sent (${source}) via ${channel} to "${contact.name}" (conversationId: ${conversation.id})`);
           } else {
-            console.error(`[AutoReply] ✗ Send failed via ${channel}: ${result.error}`);
+            console.error(`[AutoReply] ✗ Send failed (${source}) via ${channel}: ${result.error}`);
           }
         } catch (err) {
           console.error('[AutoReply] Send error:', err);

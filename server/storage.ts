@@ -1631,11 +1631,19 @@ export class DbStorage implements IStorage {
 
   // Message methods
   async getMessages(conversationId: string, limit: number = 100, offset: number = 0): Promise<Message[]> {
-    return await db.select().from(messages)
+    // IMPORTANT:
+    // - Most UIs want the most recent N messages, rendered oldest→newest.
+    // - If we `orderBy asc(createdAt) limit N`, we'd return the OLDEST messages,
+    //   which makes the conversation open at history instead of latest.
+    // Strategy: fetch newest N with DESC, then reverse to ASC for display.
+    const rows = await db
+      .select()
+      .from(messages)
       .where(eq(messages.conversationId, conversationId))
-      .orderBy(asc(messages.createdAt))
+      .orderBy(desc(messages.createdAt))
       .limit(limit)
       .offset(offset);
+    return rows.reverse();
   }
 
   async getMessage(id: string): Promise<Message | undefined> {

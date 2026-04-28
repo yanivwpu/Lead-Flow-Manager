@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useMemo, useState, useEffect } from "react";
 
 const ADMIN_TOKEN_KEY = 'whachat_admin_token';
 function getAdminToken() { return localStorage.getItem(ADMIN_TOKEN_KEY) || ''; }
@@ -110,6 +110,9 @@ interface AdminUser {
   salespersonId: string | null;
   salespersonName: string | null;
 }
+
+type UserStatusFilter = "all" | "trial" | "active" | "expired";
+type PlanFilter = "all" | "free" | "starter" | "pro";
 
 interface GhlIntegration {
   id: string;
@@ -245,11 +248,98 @@ export function Admin() {
 
   const [userSort, setUserSort] = useState<'date' | 'support' | 'plan'>('support');
   const [showSupportOnly, setShowSupportOnly] = useState(false);
+  const [userSearch, setUserSearch] = useState("");
+  const [planFilter, setPlanFilter] = useState<PlanFilter>("all");
+  const [statusFilter, setStatusFilter] = useState<UserStatusFilter>("all");
+  const [aiFilter, setAiFilter] = useState<"all" | "enabled">("all");
+  const [overrideFilter, setOverrideFilter] = useState<"all" | "enabled">("all");
+  const [pageSize, setPageSize] = useState<50 | 100>(50);
+  const [page, setPage] = useState(1);
+  const [selectedAdminUser, setSelectedAdminUser] = useState<AdminUser | null>(null);
   
   const openSupportCount = adminUsers.filter(u => u.openTicketCount > 0).length;
   const filteredUsers = showSupportOnly 
     ? adminUsers.filter(u => u.openTicketCount > 0 || u.totalTicketCount > 0)
     : adminUsers;
+
+  const derivedUsers = useMemo(() => {
+    const q = userSearch.trim().toLowerCase();
+
+    function deriveStatus(u: AdminUser): UserStatusFilter {
+      if (u.isInTrial) return "trial";
+      const st = (u.subscriptionStatus || "").toLowerCase();
+      // Heuristic: treat active/trialing as active; canceled/unpaid/past_due as expired
+      if (st === "active" || st === "trialing") return "active";
+      if (st === "canceled" || st === "cancelled" || st === "past_due" || st === "unpaid") return "expired";
+      // If billing plan is paid and no explicit status, treat as active
+      if ((u.billingPlan || "").toLowerCase() !== "free") return "active";
+      return "expired";
+    }
+
+    // We currently don't have AI Brain entitlement on /api/admin/users without backend I/O.
+    // Keep column/filter ready; it will only show badges when the API includes this flag.
+    function hasAiBrain(_u: AdminUser): boolean {
+      return false;
+    }
+
+    const rows = filteredUsers
+      .filter((u) => {
+        if (!q) return true;
+        const name = (u.name || "").toLowerCase();
+        const email = (u.email || "").toLowerCase();
+        return name.includes(q) || email.includes(q) || u.id.toLowerCase().includes(q);
+      })
+      .filter((u) => {
+        if (planFilter === "all") return true;
+        return (u.effectivePlan || "free").toLowerCase() === planFilter;
+      })
+      .filter((u) => {
+        if (statusFilter === "all") return true;
+        return deriveStatus(u) === statusFilter;
+      })
+      .filter((u) => {
+        if (overrideFilter === "all") return true;
+        return !!u.planOverrideEnabled;
+      })
+      .filter((u) => {
+        if (aiFilter === "all") return true;
+        return hasAiBrain(u);
+      })
+      .sort((a, b) => {
+        if (userSort === "support") {
+          if (a.openTicketCount > 0 && b.openTicketCount === 0) return -1;
+          if (b.openTicketCount > 0 && a.openTicketCount === 0) return 1;
+          return new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime();
+        } else if (userSort === "plan") {
+          const planOrder = { pro: 0, starter: 1, free: 2 } as const;
+          const aOrder = planOrder[(a.effectivePlan as keyof typeof planOrder) || "free"] ?? 3;
+          const bOrder = planOrder[(b.effectivePlan as keyof typeof planOrder) || "free"] ?? 3;
+          return aOrder - bOrder;
+        }
+        return new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime();
+      });
+
+    const total = rows.length;
+    const totalPages = Math.max(1, Math.ceil(total / pageSize));
+    const safePage = Math.min(Math.max(1, page), totalPages);
+    const start = (safePage - 1) * pageSize;
+    const end = start + pageSize;
+
+    return {
+      rows,
+      deriveStatus,
+      hasAiBrain,
+      total,
+      totalPages,
+      page: safePage,
+      pageRows: rows.slice(start, end),
+    };
+  }, [aiFilter, filteredUsers, overrideFilter, page, pageSize, planFilter, statusFilter, userSearch, userSort]);
+
+  useEffect(() => {
+    // Reset to page 1 when filters change
+    setPage(1);
+  }, [userSearch, planFilter, statusFilter, aiFilter, overrideFilter, pageSize, showSupportOnly]);
 
   const createPartner = useMutation({
     mutationFn: async (data: { name: string; email: string; password: string; commissionRate?: string; commissionDurationMonths?: number }) => {
@@ -813,484 +903,377 @@ export function Admin() {
           <TabsContent value="users">
             <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
               <div className="p-3 sm:p-4 border-b border-gray-200 flex flex-col gap-3">
-                <div className="flex justify-between items-center">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                   <h2 className="font-semibold text-gray-900 text-sm sm:text-base">
-                    {showSupportOnly ? 'Support Users' : 'All Users'} ({filteredUsers.length})
+                    Users ({derivedUsers.total})
                   </h2>
-                </div>
-                <div className="flex gap-1.5 sm:gap-2 overflow-x-auto pb-1">
-                  <Button
-                    variant={showSupportOnly ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => setShowSupportOnly(!showSupportOnly)}
-                    className={cn(
-                      "min-h-[36px] text-xs sm:text-sm px-2 sm:px-3 shrink-0 relative",
-                      showSupportOnly ? 'bg-red-500 hover:bg-red-600' : ''
-                    )}
-                  >
-                    <MessageCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1" />
-                    <span className="hidden sm:inline">Support Only</span>
-                    <span className="sm:hidden">Support</span>
-                    {openSupportCount > 0 && (
-                      <span className={cn(
-                        "ml-1.5 px-1.5 py-0.5 text-[10px] font-bold rounded-full",
-                        showSupportOnly ? "bg-white text-red-600" : "bg-red-500 text-white"
-                      )}>
-                        {openSupportCount}
-                      </span>
-                    )}
-                  </Button>
-                  <div className="w-px bg-gray-200 mx-1 shrink-0" />
-                  <Button
-                    variant={userSort === 'support' ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => setUserSort('support')}
-                    className={cn(
-                      "min-h-[36px] text-xs sm:text-sm px-2 sm:px-3 shrink-0",
-                      userSort === 'support' ? 'bg-brand-green hover:bg-brand-dark' : ''
-                    )}
-                  >
-                    <AlertCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1" />
-                    <span className="hidden sm:inline">Urgent First</span>
-                    <span className="sm:hidden">Urgent</span>
-                  </Button>
-                  <Button
-                    variant={userSort === 'date' ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => setUserSort('date')}
-                    className={cn(
-                      "min-h-[36px] text-xs sm:text-sm px-2 sm:px-3 shrink-0",
-                      userSort === 'date' ? 'bg-brand-green hover:bg-brand-dark' : ''
-                    )}
-                  >
-                    <ArrowUpDown className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1" />
-                    Date
-                  </Button>
-                  <Button
-                    variant={userSort === 'plan' ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => setUserSort('plan')}
-                    className={cn(
-                      "min-h-[36px] text-xs sm:text-sm px-2 sm:px-3 shrink-0",
-                      userSort === 'plan' ? 'bg-brand-green hover:bg-brand-dark' : ''
-                    )}
-                  >
-                    <DollarSign className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1" />
-                    Plan
-                  </Button>
-                </div>
-              </div>
-              
-              {/* Mobile Card View */}
-              <div className="md:hidden divide-y divide-gray-100">
-                {usersError ? (
-                  <div className="text-center py-8">
-                    <p className="text-red-500 mb-2">Failed to load users: {usersErrorDetails?.message || 'Unknown error'}</p>
-                    <p className="text-gray-500 text-xs mb-3">Try logging out and back in</p>
-                    <Button variant="outline" size="sm" onClick={() => refetchUsers()}>
-                      Retry
+                  <div className="flex items-center gap-2">
+                    <Button variant="outline" size="sm" onClick={() => refetchUsers()} className="h-9">
+                      Refresh
                     </Button>
                   </div>
-                ) : filteredUsers.length === 0 ? (
-                  <div className="text-center py-8 text-gray-500">
-                    {showSupportOnly ? 'No support tickets.' : 'No users yet.'}
-                  </div>
-                ) : (
-                  [...filteredUsers]
-                    .sort((a, b) => {
-                      if (userSort === 'support') {
-                        if (a.openTicketCount > 0 && b.openTicketCount === 0) return -1;
-                        if (b.openTicketCount > 0 && a.openTicketCount === 0) return 1;
-                        return new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime();
-                      } else if (userSort === 'plan') {
-                        const planOrder = { 'pro': 0, 'starter': 1, 'free': 2 };
-                        const aOrder = planOrder[a.effectivePlan as keyof typeof planOrder] ?? 3;
-                        const bOrder = planOrder[b.effectivePlan as keyof typeof planOrder] ?? 3;
-                        return aOrder - bOrder;
-                      }
-                      return new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime();
-                    })
-                    .map((user) => (
-                      <div 
-                        key={user.id}
-                        className={cn(
-                          "p-4 space-y-3",
-                          user.openTicketCount > 0 && 'bg-red-50'
-                        )}
-                      >
-                        {/* User Header */}
-                        <div className="flex items-start gap-3">
-                          {user.avatarUrl ? (
-                            <img src={user.avatarUrl} alt="" className="w-10 h-10 rounded-full shrink-0" />
-                          ) : (
-                            <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center shrink-0">
-                              <UserCircle className="h-6 w-6 text-gray-500" />
-                            </div>
-                          )}
-                          <div className="flex-1 min-w-0">
-                            <div className="font-medium text-gray-900 truncate">{user.name || 'No name'}</div>
-                            <div className="text-sm text-gray-500 truncate">{user.email}</div>
-                          </div>
-                        </div>
-                        
-                        {/* Badges Row */}
-                        <div className="flex flex-wrap gap-1.5">
-                          {user.partnerName ? (
-                            <Badge className="bg-blue-100 text-blue-700 text-xs">Partner</Badge>
-                          ) : (
-                            <Badge variant="secondary" className="text-xs">Organic</Badge>
-                          )}
-                          <div className="flex flex-wrap items-center gap-1">
-                            <Badge 
-                              variant={
-                                user.effectivePlan === 'pro' ? 'default' :
-                                user.effectivePlan === 'starter' ? 'secondary' : 'outline'
-                              }
-                              className={cn(
-                                "text-xs",
-                                user.effectivePlan === 'pro' && 'bg-brand-green'
-                              )}
-                            >
-                              {user.effectivePlan || 'free'}
-                            </Badge>
-                            {user.isInTrial && (
-                              <Badge variant="outline" className="text-[10px] text-amber-700 border-amber-300">Trial</Badge>
-                            )}
-                          </div>
-                          {user.subscriptionStatus && (
-                            <span className="text-xs text-gray-500 self-center">{user.subscriptionStatus}</span>
-                          )}
-                        </div>
+                </div>
 
-                        <div className="rounded-md bg-gray-50 px-2 py-1.5 space-y-0.5 text-xs">
-                          <div>
-                            <span className="text-gray-500">Billing:</span>{' '}
-                            <span className="font-medium text-gray-900">{user.billingPlan}</span>
-                          </div>
-                          <div className="flex flex-wrap gap-1 items-center">
-                            <span className="text-gray-500">Override:</span>
-                            <span>{user.planOverride ?? '—'}</span>
-                            <Badge
-                              variant={user.planOverrideEnabled ? 'default' : 'secondary'}
-                              className="text-[10px] h-5 px-1"
-                            >
-                              {user.planOverrideEnabled ? 'ON' : 'off'}
-                            </Badge>
-                          </div>
-                          <div className="text-[10px] text-gray-400 pt-0.5">
-                            Legacy: {user.subscriptionPlanLegacy ?? '—'}
-                          </div>
-                        </div>
-                        
-                        {/* Details Grid */}
-                        <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-                          {user.trialEndsAt && (
-                            <div className="col-span-2">
-                              <span className="text-xs text-amber-600">
-                                Trial ends: {new Date(user.trialEndsAt).toLocaleDateString()}
-                              </span>
-                            </div>
-                          )}
-                          {user.openTicketCount > 0 && (
-                            <div className="col-span-2 flex items-center gap-1.5">
-                              <Badge 
-                                variant="destructive"
-                                className={cn(
-                                  "flex items-center gap-1 text-xs",
-                                  user.latestTicket?.priority === 'urgent' && 'bg-red-600',
-                                  user.latestTicket?.priority === 'high' && 'bg-orange-500',
-                                  user.latestTicket?.priority === 'normal' && 'bg-amber-500'
-                                )}
-                              >
-                                <MessageCircle className="h-3 w-3" />
-                                {user.openTicketCount} open
-                              </Badge>
-                              {user.latestTicket?.priority && (
-                                <span className="text-xs text-gray-500">{user.latestTicket.priority}</span>
-                              )}
-                            </div>
-                          )}
-                          <div>
-                            <span className="text-gray-500">Connected:</span>
-                            <div className="flex gap-1 mt-0.5">
-                              {user.twilioConnected && <Badge variant="outline" className="text-[10px] px-1.5">Twilio</Badge>}
-                              {user.metaConnected && <Badge variant="outline" className="text-[10px] px-1.5">Meta</Badge>}
-                              {!user.twilioConnected && !user.metaConnected && <span className="text-gray-400">-</span>}
-                            </div>
-                          </div>
-                          <div>
-                            <span className="text-gray-500">Signed up:</span>
-                            <div className="text-gray-900">
-                              {user.createdAt ? new Date(user.createdAt).toLocaleDateString() : '-'}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    ))
-                )}
+                {/* Filters */}
+                <div className="flex flex-col lg:flex-row gap-2 lg:items-center">
+                  <Input
+                    value={userSearch}
+                    onChange={(e) => setUserSearch(e.target.value)}
+                    placeholder="Search name, email, or userId…"
+                    className="h-9 lg:max-w-sm"
+                  />
+                  <div className="flex flex-wrap gap-2">
+                    <select
+                      value={planFilter}
+                      onChange={(e) => setPlanFilter(e.target.value as any)}
+                      className="h-9 border border-gray-200 rounded-md px-2 text-sm bg-white"
+                      aria-label="Plan filter"
+                    >
+                      <option value="all">All plans</option>
+                      <option value="free">Free</option>
+                      <option value="starter">Starter</option>
+                      <option value="pro">Pro</option>
+                    </select>
+                    <select
+                      value={statusFilter}
+                      onChange={(e) => setStatusFilter(e.target.value as any)}
+                      className="h-9 border border-gray-200 rounded-md px-2 text-sm bg-white"
+                      aria-label="Status filter"
+                    >
+                      <option value="all">All status</option>
+                      <option value="trial">Trial</option>
+                      <option value="active">Active</option>
+                      <option value="expired">Expired</option>
+                    </select>
+                    <select
+                      value={overrideFilter}
+                      onChange={(e) => setOverrideFilter(e.target.value as any)}
+                      className="h-9 border border-gray-200 rounded-md px-2 text-sm bg-white"
+                      aria-label="Override filter"
+                    >
+                      <option value="all">Override (any)</option>
+                      <option value="enabled">Override enabled</option>
+                    </select>
+                    <select
+                      value={aiFilter}
+                      onChange={(e) => setAiFilter(e.target.value as any)}
+                      className="h-9 border border-gray-200 rounded-md px-2 text-sm bg-white"
+                      aria-label="AI Brain filter"
+                      title="AI Brain entitlement is not included in the current /api/admin/users payload"
+                    >
+                      <option value="all">AI Brain (any)</option>
+                      <option value="enabled">AI Brain enabled</option>
+                    </select>
+                    <Button
+                      variant={showSupportOnly ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setShowSupportOnly(!showSupportOnly)}
+                      className={cn("h-9", showSupportOnly ? "bg-red-500 hover:bg-red-600" : "")}
+                      title="Show only users with any support tickets"
+                    >
+                      <MessageCircle className="h-4 w-4 mr-1.5" />
+                      Support
+                      {openSupportCount > 0 && (
+                        <span className={cn(
+                          "ml-2 px-1.5 py-0.5 text-[10px] font-bold rounded-full",
+                          showSupportOnly ? "bg-white text-red-600" : "bg-red-500 text-white"
+                        )}>
+                          {openSupportCount}
+                        </span>
+                      )}
+                    </Button>
+                    <select
+                      value={userSort}
+                      onChange={(e) => setUserSort(e.target.value as any)}
+                      className="h-9 border border-gray-200 rounded-md px-2 text-sm bg-white"
+                      aria-label="Sort"
+                    >
+                      <option value="support">Urgent first</option>
+                      <option value="date">Newest signup</option>
+                      <option value="plan">Plan</option>
+                    </select>
+                    <select
+                      value={pageSize}
+                      onChange={(e) => setPageSize(Number(e.target.value) as any)}
+                      className="h-9 border border-gray-200 rounded-md px-2 text-sm bg-white"
+                      aria-label="Rows per page"
+                    >
+                      <option value={50}>50 / page</option>
+                      <option value={100}>100 / page</option>
+                    </select>
+                  </div>
+                </div>
               </div>
-              
-              {/* Desktop Table View */}
-              <div className="hidden md:block overflow-x-auto">
+
+              {/* Compact table */}
+              <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>User</TableHead>
-                      <TableHead>Acquisition</TableHead>
-                      <TableHead>Sales Conversion</TableHead>
-                      <TableHead className="min-w-[220px]">Effective / billing</TableHead>
-                      <TableHead>Demo</TableHead>
-                      <TableHead>Support</TableHead>
-                      <TableHead>Connected</TableHead>
-                      <TableHead>Signed Up</TableHead>
+                      <TableHead className="min-w-[260px]">User</TableHead>
+                      <TableHead>Plan</TableHead>
+                      <TableHead>AI Brain</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Signup</TableHead>
+                      <TableHead className="min-w-[180px]">Acquisition</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {usersError ? (
                       <TableRow>
-                        <TableCell colSpan={8} className="text-center py-8">
+                        <TableCell colSpan={6} className="text-center py-8">
                           <p className="text-red-500 mb-2">Failed to load users: {usersErrorDetails?.message || 'Unknown error'}</p>
-                          <p className="text-gray-500 text-xs mb-3">Try logging out and back in</p>
                           <Button variant="outline" size="sm" onClick={() => refetchUsers()}>
                             Retry
                           </Button>
                         </TableCell>
                       </TableRow>
-                    ) : filteredUsers.length === 0 ? (
+                    ) : derivedUsers.total === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={8} className="text-center py-8 text-gray-500">
-                          {showSupportOnly ? 'No support tickets.' : 'No users yet.'}
+                        <TableCell colSpan={6} className="text-center py-8 text-gray-500">
+                          No users match the current filters.
                         </TableCell>
                       </TableRow>
                     ) : (
-                      [...filteredUsers]
-                        .sort((a, b) => {
-                          if (userSort === 'support') {
-                            if (a.openTicketCount > 0 && b.openTicketCount === 0) return -1;
-                            if (b.openTicketCount > 0 && a.openTicketCount === 0) return 1;
-                            return new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime();
-                          } else if (userSort === 'plan') {
-                            const planOrder = { 'pro': 0, 'starter': 1, 'free': 2 };
-                            const aOrder = planOrder[a.effectivePlan as keyof typeof planOrder] ?? 3;
-                            const bOrder = planOrder[b.effectivePlan as keyof typeof planOrder] ?? 3;
-                            return aOrder - bOrder;
-                          }
-                          return new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime();
-                        })
-                        .map((user) => (
-                          <TableRow 
-                            key={user.id}
-                            className={user.openTicketCount > 0 ? 'bg-red-50' : ''}
+                      derivedUsers.pageRows.map((u) => {
+                        const status = derivedUsers.deriveStatus(u);
+                        const plan = (u.effectivePlan || "free").toLowerCase();
+                        const planLabel = plan === "pro" ? "Pro" : plan === "starter" ? "Starter" : "Free";
+                        const acq =
+                          u.partnerName ? `Partner • ${u.partnerName}` :
+                          u.salespersonName ? `Internal • ${u.salespersonName}` :
+                          "Organic";
+                        const hasAI = derivedUsers.hasAiBrain(u);
+
+                        return (
+                          <TableRow
+                            key={u.id}
+                            className={cn("cursor-pointer", u.openTicketCount > 0 && "bg-red-50")}
+                            onClick={() => setSelectedAdminUser(u)}
+                            data-testid={`admin-user-row-${u.id}`}
                           >
                             <TableCell>
-                              <div className="flex items-center gap-2">
-                                {user.avatarUrl ? (
-                                  <img src={user.avatarUrl} alt="" className="w-8 h-8 rounded-full" />
+                              <div className="flex items-center gap-2.5">
+                                {u.avatarUrl ? (
+                                  <img src={u.avatarUrl} alt="" className="w-8 h-8 rounded-full" />
                                 ) : (
                                   <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center">
                                     <UserCircle className="h-5 w-5 text-gray-500" />
                                   </div>
                                 )}
-                                <div>
-                                  <div className="font-medium">{user.name || 'No name'}</div>
-                                  <div className="text-sm text-gray-500">{user.email}</div>
+                                <div className="min-w-0">
+                                  <div className="font-medium text-gray-900 truncate">{u.name || "No name"}</div>
+                                  <div className="text-xs text-gray-500 truncate">{u.email}</div>
                                 </div>
                               </div>
                             </TableCell>
                             <TableCell>
-                              <div className="flex flex-col gap-1">
-                                {user.partnerName ? (
-                                  <>
-                                    <Badge className="bg-blue-100 text-blue-700 w-fit">Partner</Badge>
-                                    <span className="text-xs text-blue-600">{user.partnerName}</span>
-                                  </>
-                                ) : (
-                                  <Badge variant="secondary" className="w-fit">Organic</Badge>
-                                )}
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex flex-col gap-1">
-                                {user.salespersonName ? (
-                                  <>
-                                    <Badge className="bg-purple-100 text-purple-700 w-fit">Internal</Badge>
-                                    <span className="text-xs text-purple-600">{user.salespersonName}</span>
-                                  </>
-                                ) : (
-                                  <span className="text-sm text-gray-400">-</span>
-                                )}
-                              </div>
-                            </TableCell>
-                            <TableCell className="align-top min-w-[220px]">
-                              <div className="flex flex-col gap-2 text-xs">
-                                <div className="flex flex-wrap items-center gap-1">
-                                  <span className="text-gray-500 shrink-0">Effective:</span>
-                                  {editingUserPlan?.userId === user.id ? (
-                                    <select
-                                      value={editingUserPlan.plan}
-                                      onChange={(e) => setEditingUserPlan({ userId: user.id, plan: e.target.value })}
-                                      disabled={updateUserPlan.isPending}
-                                      className="w-[120px] h-8 border border-gray-300 rounded-md px-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-green disabled:opacity-50"
-                                      data-testid={`select-plan-${user.id}`}
-                                    >
-                                      <option value="free">Free</option>
-                                      <option value="starter">Starter</option>
-                                      <option value="pro">Pro</option>
-                                    </select>
-                                  ) : (
-                                    <>
-                                      <Badge 
-                                        variant={
-                                          user.effectivePlan === 'pro' ? 'default' :
-                                          user.effectivePlan === 'starter' ? 'secondary' : 'outline'
-                                        }
-                                        className={cn(
-                                          'cursor-pointer w-fit',
-                                          user.effectivePlan === 'pro' && 'bg-brand-green'
-                                        )}
-                                        onClick={() => setEditingUserPlan({ userId: user.id, plan: user.effectivePlan || 'free' })}
-                                        data-testid={`badge-plan-${user.id}`}
-                                      >
-                                        {user.effectivePlan || 'free'}
-                                      </Badge>
-                                      {user.isInTrial && (
-                                        <Badge variant="outline" className="text-[10px] text-amber-700 border-amber-300">
-                                          Trial
-                                        </Badge>
-                                      )}
-                                    </>
-                                  )}
-                                </div>
-                                <div className="text-[11px] space-y-0.5 border-l-2 border-gray-100 pl-2">
-                                  <div>
-                                    <span className="text-gray-500">Billing:</span>{' '}
-                                    <span className="font-medium text-gray-900">{user.billingPlan}</span>
-                                  </div>
-                                  <div className="flex flex-wrap gap-1 items-center">
-                                    <span className="text-gray-500">Override:</span>
-                                    <span>{user.planOverride ?? '—'}</span>
-                                    <Badge
-                                      variant={user.planOverrideEnabled ? 'default' : 'secondary'}
-                                      className="text-[10px] h-5 px-1"
-                                    >
-                                      {user.planOverrideEnabled ? 'ON' : 'off'}
-                                    </Badge>
-                                  </div>
-                                  <div className="text-[10px] text-gray-400">
-                                    Legacy: {user.subscriptionPlanLegacy ?? '—'}
-                                  </div>
-                                </div>
-                                {editingUserPlan?.userId === user.id && (
-                                  <div className="flex gap-1.5">
-                                    <Button
-                                      size="sm"
-                                      variant="default"
-                                      className="h-6 px-2 text-xs bg-brand-green hover:bg-brand-dark"
-                                      onClick={() => updateUserPlan.mutate({ userId: user.id, plan: editingUserPlan.plan })}
-                                      disabled={updateUserPlan.isPending}
-                                    >
-                                      {updateUserPlan.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save'}
-                                    </Button>
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      className="h-6 px-2 text-xs"
-                                      onClick={() => setEditingUserPlan(null)}
-                                      disabled={updateUserPlan.isPending}
-                                    >
-                                      Cancel
-                                    </Button>
-                                  </div>
-                                )}
-                                {user.subscriptionStatus && (
-                                  <span className="text-xs text-gray-500">{user.subscriptionStatus}</span>
-                                )}
-                                {user.trialEndsAt && (
-                                  <span className="text-xs text-amber-600">
-                                    Trial ends: {new Date(user.trialEndsAt).toLocaleDateString()}
-                                  </span>
-                                )}
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              {user.hasDemo ? (
-                                <div className="flex flex-col gap-1">
-                                  <Badge 
-                                    variant={
-                                      user.demoStatus === 'converted' ? 'default' :
-                                      user.demoStatus === 'completed' ? 'secondary' :
-                                      user.demoStatus === 'scheduled' ? 'outline' : 'destructive'
-                                    }
-                                    className={user.demoStatus === 'converted' ? 'bg-brand-green' : ''}
-                                  >
-                                    {user.demoStatus}
+                              <div className="flex items-center gap-1.5">
+                                <Badge
+                                  variant={plan === "pro" ? "default" : plan === "starter" ? "secondary" : "outline"}
+                                  className={cn(plan === "pro" && "bg-brand-green")}
+                                >
+                                  {planLabel}
+                                </Badge>
+                                {u.planOverrideEnabled && (
+                                  <Badge variant="outline" className="text-[10px] border-indigo-300 text-indigo-700">
+                                    Override
                                   </Badge>
-                                  {user.demoDate && (
-                                    <span className="text-xs text-gray-500">
-                                      {new Date(user.demoDate).toLocaleDateString()}
-                                    </span>
-                                  )}
-                                </div>
+                                )}
+                                {u.isInTrial && (
+                                  <Badge variant="outline" className="text-[10px] border-amber-300 text-amber-700">
+                                    Trial
+                                  </Badge>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              {hasAI ? (
+                                <Badge className="bg-purple-100 text-purple-700">AI</Badge>
                               ) : (
-                                <span className="text-gray-400">-</span>
+                                <span className="text-xs text-gray-400">—</span>
                               )}
                             </TableCell>
                             <TableCell>
-                              {user.openTicketCount > 0 ? (
-                                <div className="flex items-center gap-1">
-                                  <Badge 
-                                    variant={user.latestTicket?.priority === 'urgent' ? 'destructive' : 'default'}
-                                    className={cn(
-                                      "flex items-center gap-1",
-                                      user.latestTicket?.priority === 'urgent' && 'bg-red-600',
-                                      user.latestTicket?.priority === 'high' && 'bg-orange-500',
-                                      user.latestTicket?.priority === 'normal' && 'bg-amber-500',
-                                      user.latestTicket?.priority === 'low' && 'bg-gray-400'
-                                    )}
-                                  >
-                                    <MessageCircle className="h-3 w-3" />
-                                    {user.openTicketCount} open
-                                  </Badge>
-                                  {user.latestTicket && (
-                                    <Badge 
-                                      variant="outline" 
-                                      className={cn(
-                                        "text-xs ml-1",
-                                        user.latestTicket.priority === 'urgent' && 'border-red-500 text-red-600',
-                                        user.latestTicket.priority === 'high' && 'border-orange-500 text-orange-600',
-                                        user.latestTicket.priority === 'normal' && 'border-amber-500 text-amber-600',
-                                        user.latestTicket.priority === 'low' && 'border-gray-400 text-gray-500'
-                                      )}
-                                    >
-                                      {user.latestTicket.priority}
-                                    </Badge>
-                                  )}
-                                </div>
-                              ) : user.totalTicketCount > 0 ? (
-                                <span className="text-gray-500 text-sm">{user.totalTicketCount} resolved</span>
-                              ) : (
-                                <span className="text-gray-400">-</span>
-                              )}
+                              <Badge
+                                variant={
+                                  status === "trial" ? "outline" :
+                                  status === "active" ? "default" :
+                                  "secondary"
+                                }
+                                className={cn(
+                                  status === "trial" && "border-amber-300 text-amber-700",
+                                  status === "active" && "bg-emerald-600",
+                                )}
+                              >
+                                {status === "trial" ? "Trial" : status === "active" ? "Active" : "Expired"}
+                              </Badge>
                             </TableCell>
-                            <TableCell>
-                              <div className="flex gap-2">
-                                {user.twilioConnected && <Badge variant="outline" className="text-xs">Twilio</Badge>}
-                                {user.metaConnected && <Badge variant="outline" className="text-xs">Meta</Badge>}
-                                {!user.twilioConnected && !user.metaConnected && <span className="text-gray-400">-</span>}
-                              </div>
+                            <TableCell className="text-sm text-gray-600">
+                              {u.createdAt ? new Date(u.createdAt).toLocaleDateString() : "—"}
                             </TableCell>
-                            <TableCell>
-                              <span className="text-sm text-gray-600">
-                                {user.createdAt ? new Date(user.createdAt).toLocaleDateString() : '-'}
-                              </span>
+                            <TableCell className="text-sm text-gray-700">
+                              {acq}
                             </TableCell>
                           </TableRow>
-                        ))
+                        );
+                      })
                     )}
                   </TableBody>
                 </Table>
               </div>
+
+              {/* Pagination */}
+              <div className="p-3 sm:p-4 border-t border-gray-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                <div className="text-xs text-gray-500">
+                  Showing{" "}
+                  <span className="font-medium text-gray-700">
+                    {(derivedUsers.page - 1) * pageSize + 1}
+                  </span>
+                  {"–"}
+                  <span className="font-medium text-gray-700">
+                    {Math.min(derivedUsers.page * pageSize, derivedUsers.total)}
+                  </span>
+                  {" "}of{" "}
+                  <span className="font-medium text-gray-700">{derivedUsers.total}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-9"
+                    disabled={derivedUsers.page <= 1}
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  >
+                    Prev
+                  </Button>
+                  <span className="text-xs text-gray-600">
+                    Page <span className="font-medium">{derivedUsers.page}</span> /{" "}
+                    <span className="font-medium">{derivedUsers.totalPages}</span>
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-9"
+                    disabled={derivedUsers.page >= derivedUsers.totalPages}
+                    onClick={() => setPage((p) => Math.min(derivedUsers.totalPages, p + 1))}
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
             </div>
+
+            {/* User details panel */}
+            <Sheet open={!!selectedAdminUser} onOpenChange={(v) => { if (!v) setSelectedAdminUser(null); }}>
+              <SheetContent side="right" className="w-full sm:max-w-xl overflow-y-auto">
+                <SheetHeader>
+                  <SheetTitle>User details</SheetTitle>
+                </SheetHeader>
+                {selectedAdminUser && (
+                  <div className="py-4 space-y-5">
+                    <div className="flex items-start gap-3">
+                      {selectedAdminUser.avatarUrl ? (
+                        <img src={selectedAdminUser.avatarUrl} alt="" className="w-12 h-12 rounded-full" />
+                      ) : (
+                        <div className="w-12 h-12 rounded-full bg-gray-200 flex items-center justify-center">
+                          <UserCircle className="h-7 w-7 text-gray-500" />
+                        </div>
+                      )}
+                      <div className="min-w-0">
+                        <div className="text-base font-semibold text-gray-900 truncate">{selectedAdminUser.name || "No name"}</div>
+                        <div className="text-sm text-gray-600 truncate">{selectedAdminUser.email}</div>
+                        <div className="text-xs text-gray-400 mt-1">User ID: {selectedAdminUser.id}</div>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="rounded-lg border p-3">
+                        <div className="text-xs text-gray-500">Effective plan</div>
+                        <div className="font-medium text-gray-900">{selectedAdminUser.effectivePlan}</div>
+                      </div>
+                      <div className="rounded-lg border p-3">
+                        <div className="text-xs text-gray-500">Billing plan</div>
+                        <div className="font-medium text-gray-900">{selectedAdminUser.billingPlan}</div>
+                      </div>
+                      <div className="rounded-lg border p-3">
+                        <div className="text-xs text-gray-500">Override</div>
+                        <div className="font-medium text-gray-900">
+                          {selectedAdminUser.planOverrideEnabled ? (selectedAdminUser.planOverride || "—") : "disabled"}
+                        </div>
+                      </div>
+                      <div className="rounded-lg border p-3">
+                        <div className="text-xs text-gray-500">Legacy plan</div>
+                        <div className="font-medium text-gray-900">{selectedAdminUser.subscriptionPlanLegacy || "—"}</div>
+                      </div>
+                    </div>
+
+                    <div className="rounded-lg border p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="text-sm font-semibold text-gray-900">Trial / status</div>
+                        <Badge variant="outline" className="text-xs">
+                          {selectedAdminUser.subscriptionStatus || "—"}
+                        </Badge>
+                      </div>
+                      <div className="text-sm text-gray-700">
+                        In trial: <span className="font-medium">{selectedAdminUser.isInTrial ? "yes" : "no"}</span>
+                      </div>
+                      {selectedAdminUser.trialEndsAt && (
+                        <div className="text-sm text-gray-700">
+                          Trial ends:{" "}
+                          <span className="font-medium">{new Date(selectedAdminUser.trialEndsAt).toLocaleString()}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="rounded-lg border p-3 space-y-2">
+                      <div className="text-sm font-semibold text-gray-900">Acquisition</div>
+                      <div className="text-sm text-gray-700">
+                        Partner: <span className="font-medium">{selectedAdminUser.partnerName || "—"}</span>
+                      </div>
+                      <div className="text-sm text-gray-700">
+                        Salesperson: <span className="font-medium">{selectedAdminUser.salespersonName || "—"}</span>
+                      </div>
+                      <div className="text-sm text-gray-700">
+                        Signup: <span className="font-medium">{selectedAdminUser.createdAt ? new Date(selectedAdminUser.createdAt).toLocaleString() : "—"}</span>
+                      </div>
+                    </div>
+
+                    <div className="rounded-lg border p-3 space-y-2">
+                      <div className="text-sm font-semibold text-gray-900">Support</div>
+                      <div className="text-sm text-gray-700">
+                        Open tickets: <span className="font-medium">{selectedAdminUser.openTicketCount}</span>
+                      </div>
+                      <div className="text-sm text-gray-700">
+                        Total tickets: <span className="font-medium">{selectedAdminUser.totalTicketCount}</span>
+                      </div>
+                      {selectedAdminUser.latestTicket && (
+                        <div className="text-xs text-gray-600">
+                          Latest priority: <span className="font-medium">{selectedAdminUser.latestTicket.priority}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="rounded-lg border p-3 space-y-2">
+                      <div className="text-sm font-semibold text-gray-900">Connectivity</div>
+                      <div className="flex gap-2">
+                        {selectedAdminUser.twilioConnected ? <Badge variant="outline">Twilio</Badge> : <Badge variant="secondary">Twilio off</Badge>}
+                        {selectedAdminUser.metaConnected ? <Badge variant="outline">Meta</Badge> : <Badge variant="secondary">Meta off</Badge>}
+                      </div>
+                    </div>
+
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+                      AI Brain / usage / Stripe IDs aren’t included in the current `/api/admin/users` payload. This panel is ready to display them once the endpoint includes those fields.
+                    </div>
+                  </div>
+                )}
+                <SheetFooter>
+                  <Button variant="outline" onClick={() => setSelectedAdminUser(null)}>
+                    Close
+                  </Button>
+                </SheetFooter>
+              </SheetContent>
+            </Sheet>
           </TabsContent>
 
           <TabsContent value="partners">

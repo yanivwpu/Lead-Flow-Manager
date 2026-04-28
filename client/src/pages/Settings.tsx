@@ -77,6 +77,8 @@ function AutoReplySettings() {
     autoReplyMessage: "Thanks for your message! We'll get back to you shortly.",
   });
   const [isSaving, setIsSaving] = useState(false);
+  const lastSavedRef = useRef<string>("");
+  const debounceRef = useRef<number | null>(null);
 
   const { data: userSettings } = useQuery<any>({
     queryKey: ["/api/users/auto-reply-settings"],
@@ -97,22 +99,38 @@ function AutoReplySettings() {
     }
   }, [userSettings]);
 
-  const handleSave = async () => {
+  const patchSettings = async (patch: Partial<typeof settings>) => {
     setIsSaving(true);
     try {
       const res = await fetch("/api/users/auto-reply-settings", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(settings),
+        body: JSON.stringify(patch),
         credentials: "include",
       });
-      if (res.ok) {
-        queryClient.invalidateQueries({ queryKey: ["/api/users/auto-reply-settings"] });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to save settings");
       }
+      queryClient.invalidateQueries({ queryKey: ["/api/users/auto-reply-settings"] });
     } catch (e) {
       console.error("Failed to save settings:", e);
+    } finally {
+      setIsSaving(false);
     }
-    setIsSaving(false);
+  };
+
+  const updateImmediate = (patch: Partial<typeof settings>) => {
+    setSettings((prev) => ({ ...prev, ...patch }));
+    patchSettings(patch);
+  };
+
+  const updateDebounced = (patch: Partial<typeof settings>) => {
+    setSettings((prev) => ({ ...prev, ...patch }));
+    if (debounceRef.current) window.clearTimeout(debounceRef.current);
+    debounceRef.current = window.setTimeout(() => {
+      patchSettings(patch);
+    }, 650);
   };
 
   const toggleDay = (dayId: number) => {
@@ -123,6 +141,26 @@ function AutoReplySettings() {
         : [...prev.businessDays, dayId].sort((a, b) => a - b)
     }));
   };
+
+  // Persist businessDays changes with debounce (multi-click friendly)
+  useEffect(() => {
+    const snap = JSON.stringify(settings.businessDays);
+    if (snap === lastSavedRef.current) return;
+    lastSavedRef.current = snap;
+    if (debounceRef.current) window.clearTimeout(debounceRef.current);
+    debounceRef.current = window.setTimeout(() => {
+      patchSettings({ businessDays: settings.businessDays });
+    }, 650);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settings.businessDays]);
+
+  // If Business Hours is disabled, Away Messages cannot fire in backend; keep UI consistent.
+  useEffect(() => {
+    if (!settings.businessHoursEnabled && settings.awayMessageEnabled) {
+      updateImmediate({ awayMessageEnabled: false });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settings.businessHoursEnabled]);
 
   return (
     <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 shadow-sm">
@@ -144,7 +182,7 @@ function AutoReplySettings() {
           </div>
           <Switch 
             checked={settings.autoReplyEnabled}
-            onCheckedChange={(checked) => setSettings(prev => ({ ...prev, autoReplyEnabled: checked }))}
+            onCheckedChange={(checked) => updateImmediate({ autoReplyEnabled: checked })}
             className="flex-shrink-0"
             data-testid="switch-auto-reply"
           />
@@ -155,7 +193,7 @@ function AutoReplySettings() {
             <Label className="text-xs text-gray-500 mb-1 block">Auto-reply message</Label>
             <textarea
               value={settings.autoReplyMessage}
-              onChange={(e) => setSettings(prev => ({ ...prev, autoReplyMessage: e.target.value }))}
+              onChange={(e) => updateDebounced({ autoReplyMessage: e.target.value })}
               className="w-full h-20 bg-gray-50 border border-gray-200 rounded-lg p-3 text-sm focus:outline-none focus:ring-1 focus:ring-purple-400 resize-none"
               placeholder="Thanks for your message! We'll get back to you shortly."
               data-testid="textarea-auto-reply"
@@ -172,7 +210,7 @@ function AutoReplySettings() {
           </div>
           <Switch 
             checked={settings.businessHoursEnabled}
-            onCheckedChange={(checked) => setSettings(prev => ({ ...prev, businessHoursEnabled: checked }))}
+            onCheckedChange={(checked) => updateImmediate({ businessHoursEnabled: checked })}
             className="flex-shrink-0"
             data-testid="switch-business-hours"
           />
@@ -200,7 +238,7 @@ function AutoReplySettings() {
               <Input
                 type="time"
                 value={settings.businessHoursStart}
-                onChange={(e) => setSettings(prev => ({ ...prev, businessHoursStart: e.target.value }))}
+                onChange={(e) => updateImmediate({ businessHoursStart: e.target.value })}
                 className="w-32"
                 data-testid="input-hours-start"
               />
@@ -208,7 +246,7 @@ function AutoReplySettings() {
               <Input
                 type="time"
                 value={settings.businessHoursEnd}
-                onChange={(e) => setSettings(prev => ({ ...prev, businessHoursEnd: e.target.value }))}
+                onChange={(e) => updateImmediate({ businessHoursEnd: e.target.value })}
                 className="w-32"
                 data-testid="input-hours-end"
               />
@@ -221,11 +259,14 @@ function AutoReplySettings() {
         <div className="flex items-center justify-between gap-3">
           <div className="space-y-0.5 min-w-0 flex-1">
             <Label className="text-sm sm:text-base font-medium">Away Message</Label>
-            <p className="text-xs sm:text-sm text-gray-500">Send a message when outside business hours.</p>
+            <p className="text-xs sm:text-sm text-gray-500">
+              Sends only when Business Hours is enabled and the customer messages you outside your hours.
+            </p>
           </div>
           <Switch 
             checked={settings.awayMessageEnabled}
-            onCheckedChange={(checked) => setSettings(prev => ({ ...prev, awayMessageEnabled: checked }))}
+            onCheckedChange={(checked) => updateImmediate({ awayMessageEnabled: checked })}
+            disabled={!settings.businessHoursEnabled}
             className="flex-shrink-0"
             data-testid="switch-away-message"
           />
@@ -236,23 +277,17 @@ function AutoReplySettings() {
             <Label className="text-xs text-gray-500 mb-1 block">Away message</Label>
             <textarea
               value={settings.awayMessage}
-              onChange={(e) => setSettings(prev => ({ ...prev, awayMessage: e.target.value }))}
+              onChange={(e) => updateDebounced({ awayMessage: e.target.value })}
               className="w-full h-20 bg-gray-50 border border-gray-200 rounded-lg p-3 text-sm focus:outline-none focus:ring-1 focus:ring-purple-400 resize-none"
               placeholder="Thanks for reaching out! We're currently away..."
               data-testid="textarea-away-message"
             />
           </div>
         )}
-
-        <Button
-          onClick={handleSave}
-          disabled={isSaving}
-          className="w-full sm:w-auto bg-purple-600 hover:bg-purple-700"
-          data-testid="button-save-auto-reply"
-        >
-          {isSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-          Save Settings
-        </Button>
+        <div className="flex items-center gap-2 text-xs text-gray-500">
+          {isSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+          <span>Changes save automatically.</span>
+        </div>
       </div>
     </div>
   );
