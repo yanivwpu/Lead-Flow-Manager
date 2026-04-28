@@ -338,22 +338,58 @@ export function ChannelSettings() {
   });
 
   const resubscribeMutation = useMutation({
-    mutationFn: async (channel: 'facebook' | 'instagram') => {
-      const res = await fetch(`/api/integrations/meta/resubscribe`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ channel }),
+    mutationFn: async (channel: "facebook" | "instagram") => {
+      console.info("[Integrations] Refresh Webhook Subscription — request", { channel });
+      let res: Response;
+      try {
+        res = await fetch("/api/integrations/meta/resubscribe", {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ channel }),
+        });
+      } catch (networkErr: unknown) {
+        const msg = networkErr instanceof Error ? networkErr.message : String(networkErr);
+        console.error("[Integrations] meta/resubscribe network error", { channel, message: msg });
+        throw new Error(`Network error: ${msg}`);
+      }
+
+      const raw = await res.text();
+      let data: { error?: string; resubscribed?: boolean; message?: string } = {};
+      try {
+        data = raw ? JSON.parse(raw) : {};
+      } catch {
+        console.error("[Integrations] meta/resubscribe non-JSON response", {
+          channel,
+          status: res.status,
+          snippet: raw.slice(0, 200),
+        });
+        throw new Error(`Invalid response (${res.status}). Is the API reachable?`);
+      }
+
+      if (!res.ok) {
+        console.error("[Integrations] meta/resubscribe HTTP error", {
+          channel,
+          status: res.status,
+          error: data.error,
+        });
+        throw new Error(data.error || `Request failed (${res.status})`);
+      }
+
+      console.info("[Integrations] meta/resubscribe OK", {
+        channel,
+        resubscribed: data.resubscribed,
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to re-subscribe");
       return data;
     },
     onSuccess: (data) => {
-      setResubscribeResult({ success: data.resubscribed, message: data.message });
+      setResubscribeResult({ success: !!data.resubscribed, message: data.message || "" });
     },
-    onError: (err: any) => {
-      setResubscribeResult({ success: false, message: err.message || "Failed to refresh webhook subscription." });
+    onError: (err: unknown) => {
+      const message =
+        err instanceof Error ? err.message : "Failed to refresh webhook subscription.";
+      console.error("[Integrations] meta/resubscribe mutation error", message);
+      setResubscribeResult({ success: false, message });
     },
   });
 

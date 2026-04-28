@@ -128,7 +128,7 @@ export class WebhookHandlers {
           try {
             const stripe = await getUncachableStripeClient();
             const fullSub = await stripe.subscriptions.retrieve(subscriptionId, {
-              expand: ["items.data.price", "items.data.price.product"],
+              expand: ["items.data.price"],
             } as any);
             await updateUserFromSubscription(fullSub);
             safeLog("[Stripe Webhook] Synced subscription after checkout.session.completed", {

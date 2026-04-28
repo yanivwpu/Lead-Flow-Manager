@@ -162,7 +162,15 @@ app.use('/api/webhook/meta', express.json({
   }
 }));
 
-app.use(express.json());
+// Do NOT run the global JSON parser on /api/webhook/meta — a second parse can
+// consume an already-read stream and replace req.body with {}, breaking HMAC + routing.
+const globalJsonParser = express.json();
+app.use((req: Request, _res: Response, next: NextFunction) => {
+  if (req.path.startsWith("/api/webhook/meta")) {
+    return next();
+  }
+  return globalJsonParser(req, _res, next);
+});
 app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
 
@@ -439,6 +447,11 @@ app.use((req, res, next) => {
     },
     () => {
       log(`serving on port ${port}`);
+      const appUrl = String(process.env.APP_URL || "").replace(/\/+$/, "");
+      console.log(
+        "[Meta Webhook] Meta App Dashboard callback URL must match:",
+        `${appUrl || "(set APP_URL env)"}/api/webhook/meta`,
+      );
       runStartupGhlCleanup().catch(err => console.error('[GHL Startup Cleanup] Unhandled error:', err));
 
       setTimeout(() => {

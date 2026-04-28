@@ -1,3 +1,4 @@
+import type Stripe from "stripe";
 import { storage } from "./storage";
 import { PLAN_LIMITS, type SubscriptionPlan, type User } from "@shared/schema";
 import { getUncachableStripeClient } from "./stripeClient";
@@ -163,52 +164,74 @@ class SubscriptionService {
       .includes(normalized);
   }
 
+  /** Legacy match when env price ID unknown or old prices used $29 (2900 cents). */
+  private matchesLegacyAiBrainProduct(product: Stripe.Product): boolean {
+    const productName = (product.name || "").toLowerCase();
+    const productMetadata = product.metadata || {};
+    return (
+      productName.includes("ai brain") ||
+      productName.includes("ai-brain") ||
+      productMetadata.type === "ai_brain_addon"
+    );
+  }
+
   /** True only if an active subscription item is the AI Brain price or a verified AI Brain product. */
   async stripeCustomerHasActiveAIBrainAddon(
     stripeCustomerId: string | null | undefined,
   ): Promise<boolean> {
     if (!stripeCustomerId) return false;
 
+    const aiBrainPriceId = process.env.STRIPE_AI_BRAIN_MONTHLY_PRICE_ID?.trim();
+    const AI_BRAIN_ADDON_AMOUNT = 2900;
+
     try {
       const stripe = await getUncachableStripeClient();
+      // Stripe allows at most 4 expansion levels; do not expand price.product on list (exceeds depth).
       const subscriptions = await stripe.subscriptions.list({
         customer: stripeCustomerId,
         status: "active",
         limit: 25,
-        expand: ["data.items.data.price", "data.items.data.price.product"],
+        expand: ["data.items.data.price"],
       });
-
-      const aiBrainPriceId = process.env.STRIPE_AI_BRAIN_MONTHLY_PRICE_ID;
-      const AI_BRAIN_ADDON_AMOUNT = 2900;
 
       for (const sub of subscriptions.data) {
         for (const item of sub.items.data) {
-          const price = item.price;
-          if (!price) continue;
+          const rawPrice = item.price;
+          if (!rawPrice || typeof rawPrice === "string") continue;
+          const price = rawPrice as Stripe.Price;
 
           if (aiBrainPriceId && price.id === aiBrainPriceId) {
             return true;
           }
 
-          if (price.unit_amount === AI_BRAIN_ADDON_AMOUNT) {
-            const product = price.product;
-            if (typeof product === "object" && product !== null) {
-              const productName = ((product as any).name || "").toLowerCase();
-              const productMetadata = (product as any).metadata || {};
-              if (
-                productName.includes("ai brain") ||
-                productName.includes("ai-brain") ||
-                productMetadata.type === "ai_brain_addon"
-              ) {
-                return true;
-              }
+          if (price.unit_amount !== AI_BRAIN_ADDON_AMOUNT) continue;
+
+          const pref = price.product;
+          if (typeof pref === "object" && pref !== null && !pref.deleted) {
+            if (this.matchesLegacyAiBrainProduct(pref)) return true;
+            continue;
+          }
+          if (typeof pref === "string") {
+            try {
+              const product = await stripe.products.retrieve(pref);
+              if (this.matchesLegacyAiBrainProduct(product)) return true;
+            } catch (prodErr: unknown) {
+              const msg = prodErr instanceof Error ? prodErr.message : String(prodErr);
+              console.warn("[AI Brain addon check] legacy product retrieve skipped", {
+                productId: pref,
+                message: msg,
+              });
             }
           }
         }
       }
       return false;
-    } catch (error) {
-      console.error("Error checking AI Brain addon status:", error);
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      console.error("[AI Brain addon check] subscriptions.list failed", {
+        message: msg,
+        customerId: stripeCustomerId,
+      });
       return false;
     }
   }

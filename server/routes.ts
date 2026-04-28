@@ -2045,6 +2045,20 @@ export async function registerRoutes(
   // Meta webhook for incoming messages and status updates
   app.post("/api/webhook/meta", async (req, res) => {
     try {
+      const entryList = Array.isArray(req.body?.entry) ? req.body.entry : [];
+      let messagingEventTotal = 0;
+      for (const ent of entryList) {
+        messagingEventTotal += Array.isArray((ent as any)?.messaging)
+          ? (ent as any).messaging.length
+          : 0;
+      }
+      console.log("[Meta Webhook] incoming request", {
+        object: (req.body as any)?.object ?? null,
+        entryCount: entryList.length,
+        messagingEventCount: messagingEventTotal,
+        firstEntryId: (entryList[0] as any)?.id ?? null,
+      });
+
       const webhookTimestamp = new Date().toISOString();
       console.log(`[Meta Webhook] ===== INBOUND WEBHOOK RECEIVED at ${webhookTimestamp} =====`);
       console.log(`[Meta Webhook] Headers: x-hub-signature-256=${req.headers["x-hub-signature-256"] ? "present" : "MISSING"}, content-type=${req.headers["content-type"]}`);
@@ -4135,35 +4149,79 @@ export async function registerRoutes(
   // Re-subscribe a Facebook or Instagram page to webhook messages events.
   // Useful when the page subscription is missing or broken without a full OAuth reconnect.
   app.post("/api/integrations/meta/resubscribe", async (req, res) => {
+    const requestedChannel = (req.body as { channel?: string })?.channel;
+    console.log("[Meta Resubscribe] refresh requested", {
+      userId: req.user?.id ?? null,
+      authenticated: !!req.user,
+      channel: requestedChannel ?? "(default facebook)",
+    });
+
     try {
-      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
-      const { channel = 'facebook' } = req.body as { channel?: 'facebook' | 'instagram' };
-
-      const fbSetting = await storage.getChannelSetting(req.user.id, channel as any);
-      if (!fbSetting?.isConnected) return res.status(404).json({ error: `No connected ${channel} page` });
-
-      const cfg = fbSetting.config as any;
-      const pageId = cfg?.pageId;
-      const accessToken = cfg?.accessToken;
-
-      if (!pageId || !accessToken) {
-        return res.status(400).json({ error: "Missing pageId or accessToken in channelSettings" });
+      if (!req.user) {
+        console.warn("[Meta Resubscribe] rejected — unauthorized");
+        return res.status(401).json({ error: "Unauthorized" });
       }
 
+      const { channel = "facebook" } = req.body as { channel?: "facebook" | "instagram" };
+
+      const fbSetting = await storage.getChannelSetting(req.user.id, channel as any);
+      if (!fbSetting?.isConnected) {
+        console.warn("[Meta Resubscribe] no connected channelSettings", {
+          userId: req.user.id,
+          channel,
+          hasRow: !!fbSetting,
+          isConnected: fbSetting?.isConnected,
+        });
+        return res.status(404).json({ error: `No connected ${channel} page` });
+      }
+
+      const cfg = fbSetting.config as Record<string, unknown>;
+      const pageId = (cfg?.pageId ?? cfg?.page_id) as string | undefined;
+      const accessToken = (cfg?.accessToken ??
+        cfg?.pageAccessToken ??
+        cfg?.page_access_token) as string | undefined;
+
+      const pageIdPresent = !!pageId;
+      const pageAccessTokenPresent = !!accessToken && String(accessToken).length > 0;
+
+      console.log("[Meta Resubscribe] channelSettings snapshot", {
+        userId: req.user.id,
+        channel,
+        pageIdPresent,
+        pageAccessTokenPresent,
+      });
+
+      if (!pageId || !accessToken) {
+        console.warn("[Meta Resubscribe] missing credentials in config", {
+          userId: req.user.id,
+          channel,
+          pageIdPresent,
+          pageAccessTokenPresent,
+        });
+        return res.status(400).json({
+          error: "Missing pageId or page access token in channel settings. Reconnect Facebook Messenger.",
+        });
+      }
+
+      const webhookCallbackHint = `${String(getAppOrigin() || "").replace(/\/+$/, "") || "(APP_URL unset)"}/api/webhook/meta`;
+      console.log("[Meta Resubscribe] expected Meta webhook callback URL (App Dashboard)", { webhookCallbackHint });
+
       // Demo/test mode: skip real API calls when using placeholder tokens
-      const isTestToken = accessToken.startsWith('test_') || accessToken === 'demo_token' || accessToken.length < 20;
+      const isTestToken =
+        accessToken.startsWith("test_") || accessToken === "demo_token" || accessToken.length < 20;
       if (isTestToken) {
-        console.log(`[Resubscribe] Demo token detected for pageId=${pageId} — simulating success`);
+        console.log("[Meta Resubscribe] demo token — simulating success", { pageId });
         return res.json({
           channel,
           pageId,
           pageName: cfg?.pageName,
           tokenValid: true,
-          tokenScopes: ['pages_messaging', 'pages_manage_metadata'],
+          tokenScopes: ["pages_messaging", "pages_manage_metadata"],
           tokenExpiry: null,
           tokenError: null,
-          previousFields: ['messages'],
+          previousFields: ["messages"],
           resubscribed: true,
+          subFieldsUsed: "messages",
           subError: null,
           message: `Webhook re-subscribed successfully. Facebook will now deliver messages to your inbox.`,
         });
@@ -4171,7 +4229,7 @@ export async function registerRoutes(
 
       const GRAPH = "https://graph.facebook.com/v19.0";
 
-      // 1. Validate the page token
+      // 1. Validate the page token (optional — requires app id + secret)
       const appId = process.env.META_APP_ID;
       const appSecret = process.env.META_APP_SECRET;
       let tokenValid = false;
@@ -4182,60 +4240,106 @@ export async function registerRoutes(
       if (appId && appSecret) {
         const appToken = `${appId}|${appSecret}`;
         const debugResp = await fetch(
-          `${GRAPH}/debug_token?input_token=${encodeURIComponent(accessToken)}&access_token=${encodeURIComponent(appToken)}`
+          `${GRAPH}/debug_token?input_token=${encodeURIComponent(accessToken)}&access_token=${encodeURIComponent(appToken)}`,
         );
         const debugData = (await debugResp.json()) as any;
         tokenValid = debugData?.data?.is_valid === true;
         tokenScopes = debugData?.data?.scopes ?? [];
         tokenExpiry = debugData?.data?.expires_at ?? null;
         tokenError = debugData?.data?.error?.message ?? null;
-        console.log(`[Resubscribe] Token debug — valid=${tokenValid}, scopes=[${tokenScopes.join(',')}], expires=${tokenExpiry}, error=${tokenError}`);
+        console.log("[Meta Resubscribe] Meta debug_token", {
+          httpOk: debugResp.ok,
+          tokenValid,
+          scopesCount: tokenScopes.length,
+          tokenError,
+        });
       } else {
-        console.warn(`[Resubscribe] META_APP_ID or META_APP_SECRET not set — skipping token validation`);
+        console.warn("[Meta Resubscribe] META_APP_ID or META_APP_SECRET not set — skipping debug_token");
       }
 
-      // 2. Check current subscription
-      const checkResp = await fetch(`${GRAPH}/${pageId}/subscribed_apps?access_token=${encodeURIComponent(accessToken)}`);
+      // 2. Current subscriptions (read-only)
+      const checkResp = await fetch(
+        `${GRAPH}/${pageId}/subscribed_apps?access_token=${encodeURIComponent(accessToken)}`,
+      );
       const checkData = (await checkResp.json()) as any;
       const existingSubs: any[] = checkData?.data ?? [];
       const existingFields: string[] = existingSubs.flatMap((s: any) => s.subscribed_fields ?? []);
-      console.log(`[Resubscribe] Current page subscriptions for pageId=${pageId}: ${JSON.stringify(existingSubs)}`);
-      console.log(`[Resubscribe] Subscribed fields: [${existingFields.join(',')}]`);
-
-      // 3. Re-subscribe — use only "messages" which is universally valid.
-      // Other fields (messaging_postbacks, messaging_referrals, etc.) require
-      // additional permissions that may not be granted for this app.
-      const subFields = "messages";
-
-      const subResp = await fetch(`${GRAPH}/${pageId}/subscribed_apps`, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: `subscribed_fields=${encodeURIComponent(subFields)}&access_token=${encodeURIComponent(accessToken)}`,
+      console.log("[Meta Resubscribe] GET subscribed_apps (before)", {
+        httpOk: checkResp.ok,
+        pageId,
+        subscriptionRows: existingSubs.length,
+        mergedFieldsSample: existingFields.slice(0, 12),
+        graphError: checkData?.error?.message ?? null,
       });
-      const subData = (await subResp.json()) as any;
-      const resubscribed = subResp.ok && subData?.success === true;
-      const subError = subData?.error?.message ?? null;
 
-      console.log(`[Resubscribe] POST subscribed_apps — success=${resubscribed}, error=${subError}, pageId=${pageId}, fields=${subFields}`);
+      // 3. POST subscribed_apps — prefer messages + messaging_postbacks; fall back to messages only.
+      const tryFieldsList = ["messages,messaging_postbacks", "messages"];
+      let resubscribed = false;
+      let subError: string | null = null;
+      let subData: any = null;
+      let subFieldsUsed = "";
+
+      for (const subFields of tryFieldsList) {
+        const subResp = await fetch(`${GRAPH}/${pageId}/subscribed_apps`, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: `subscribed_fields=${encodeURIComponent(subFields)}&access_token=${encodeURIComponent(accessToken)}`,
+        });
+        subData = (await subResp.json().catch(() => ({}))) as any;
+        subError = subData?.error?.message ?? null;
+        resubscribed =
+          subResp.ok && subData?.success === true && subData?.error == null;
+
+        console.log("[Meta Resubscribe] POST subscribed_apps", {
+          subscribed_fields: subFields,
+          httpStatus: subResp.status,
+          httpOk: subResp.ok,
+          bodySuccess: subData?.success,
+          errorCode: subData?.error?.code,
+          errorType: subData?.error?.type,
+          errorMessage: subError,
+        });
+
+        if (resubscribed) {
+          subFieldsUsed = subFields;
+          break;
+        }
+        if (subFields === "messages,messaging_postbacks") {
+          console.warn("[Meta Resubscribe] messages+messaging_postbacks failed; retrying messages only", {
+            errorMessage: subError,
+          });
+        }
+      }
+
+      console.log("[Meta Resubscribe] done", {
+        userId: req.user.id,
+        pageId,
+        resubscribed,
+        subFieldsUsed: subFieldsUsed || tryFieldsList[tryFieldsList.length - 1],
+        subError,
+      });
 
       res.json({
         channel,
         pageId,
         pageName: cfg?.pageName,
+        webhookCallbackHint,
         tokenValid,
         tokenScopes,
         tokenExpiry,
         tokenError,
         previousFields: existingFields,
         resubscribed,
+        subFieldsUsed: subFieldsUsed || null,
         subError,
         message: resubscribed
           ? `Webhook re-subscribed successfully. Facebook will now deliver messages to your inbox.`
-          : `Re-subscribe failed: ${subError || 'Unknown error'}. Check the server logs for details.`,
+          : `Re-subscribe failed: ${subError || "Unknown error"}. Verify Meta App webhook URL matches ${webhookCallbackHint} and check logs.`,
       });
-    } catch (err: any) {
-      console.error("[Resubscribe] error:", err);
-      res.status(500).json({ error: err.message });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("[Meta Resubscribe] unexpected error", { message: msg });
+      res.status(500).json({ error: msg });
     }
   });
 
