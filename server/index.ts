@@ -11,6 +11,7 @@ import { WebhookHandlers } from "./webhookHandlers";
 import { setupPresenceServer } from "./presence";
 import { registerChannelAdapters } from "./channelAdapters";
 import { getQueue } from "./queue";
+import { startInstagramDevPolling } from "./instagramPolling";
 import "./worker";
 import oidcRouter from "./oidc";
 import bcrypt from "bcryptjs";
@@ -394,6 +395,9 @@ app.use((req, res, next) => {
   
   // Start cron jobs (trial check-in emails, etc.)
   startCronJobs();
+
+  // Dev-only fallback polling for Instagram DMs (when webhooks aren't delivering)
+  startInstagramDevPolling();
 
   // Start durable flow job worker (handles Wait/delay steps that survive restarts)
   const { startFlowJobWorker } = await import("./flowJobWorker");

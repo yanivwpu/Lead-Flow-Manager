@@ -4631,6 +4631,56 @@ export async function registerRoutes(
     }
   });
 
+  // TEMP DEBUG: verify we can read Instagram DM conversations via Graph API (polling viability).
+  app.get("/api/debug/meta/ig-conversations", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+
+      const GRAPH = "https://graph.facebook.com/v19.0";
+
+      const igSetting = await storage.getChannelSetting(req.user.id, "instagram" as any);
+      const cfg = (igSetting?.config as any) ?? null;
+
+      const pageId: string | undefined = cfg?.pageId ?? cfg?.page_id;
+      const instagramAccountId: string | undefined =
+        cfg?.instagramAccountId ?? cfg?.instagramId ?? cfg?.instagram_id;
+      const accessToken: string | undefined =
+        cfg?.accessToken ?? cfg?.pageAccessToken ?? cfg?.page_access_token;
+
+      if (!igSetting?.isConnected) {
+        return res.status(400).json({ error: "Instagram channel is not connected for this user." });
+      }
+      if (!instagramAccountId) {
+        return res.status(400).json({ error: "Missing instagramAccountId in Instagram channelSettings config." });
+      }
+      if (!accessToken) {
+        return res.status(400).json({ error: "Missing stored PAGE access token in Instagram channelSettings config." });
+      }
+
+      const url =
+        `${GRAPH}/${encodeURIComponent(instagramAccountId)}/conversations` +
+        `?fields=participants,messages.limit(5){from,text,created_time}` +
+        `&access_token=${encodeURIComponent(accessToken)}`;
+
+      const resp = await fetch(url);
+      const body = (await resp.json().catch(() => ({}))) as any;
+
+      const responsePayload = {
+        instagramAccountId,
+        pageId: pageId ?? null,
+        httpOk: resp.ok,
+        status: resp.status,
+        body,
+      };
+
+      console.log("[Meta Debug] IG conversations response", JSON.stringify(responsePayload));
+      return res.json(responsePayload);
+    } catch (err: any) {
+      console.error("[Meta Debug] /api/debug/meta/ig-conversations error:", err);
+      return res.status(500).json({ error: err?.message || "Internal error" });
+    }
+  });
+
   // ─── Channel Health Status ─────────────────────────────────────────────────
   // Deep health check for all connected channels. For Meta (FB/IG) channels,
   // verifies four independent conditions: token validity, required permission
