@@ -4371,6 +4371,135 @@ export async function registerRoutes(
     }
   });
 
+  // TEMP DEBUG: inspect stored Meta FB/IG page subscriptions and config (no secrets).
+  // Use this when "connected" UI is true but no inbound webhooks are arriving.
+  app.get("/api/debug/meta/subscribed-apps", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+
+      const channelParam = String((req.query as any)?.channel || "instagram");
+      const channel = channelParam === "facebook" ? "facebook" : "instagram";
+
+      const GRAPH = "https://graph.facebook.com/v19.0";
+      const fbSetting = await storage.getChannelSetting(req.user.id, "facebook" as any);
+      const igSetting = await storage.getChannelSetting(req.user.id, "instagram" as any);
+
+      const pickCfg = (s: any) => (s?.config ? (s.config as any) : null);
+      const fbCfg = pickCfg(fbSetting);
+      const igCfg = pickCfg(igSetting);
+
+      const sanitizeConfig = (cfg: any) => {
+        if (!cfg) return null;
+        const {
+          accessToken,
+          pageAccessToken,
+          page_access_token,
+          appSecret,
+          webhookVerifyToken,
+          verifyToken,
+          ...rest
+        } = cfg;
+        const token = accessToken ?? pageAccessToken ?? page_access_token;
+        return {
+          ...rest,
+          accessTokenPresent: !!token,
+          accessTokenLength: typeof token === "string" ? token.length : 0,
+          appSecretPresent: !!appSecret,
+          webhookVerifyTokenPresent: !!(webhookVerifyToken || verifyToken),
+        };
+      };
+
+      const selectedSetting = channel === "instagram" ? igSetting : fbSetting;
+      const selectedCfg = channel === "instagram" ? igCfg : fbCfg;
+      const pageId: string | undefined = selectedCfg?.pageId ?? selectedCfg?.page_id;
+      const instagramAccountId: string | undefined =
+        channel === "instagram" ? (selectedCfg?.instagramAccountId ?? selectedCfg?.instagramId ?? selectedCfg?.instagram_id) : undefined;
+
+      const accessToken: string | undefined =
+        selectedCfg?.accessToken ?? selectedCfg?.pageAccessToken ?? selectedCfg?.page_access_token;
+
+      const responsePayload: any = {
+        userId: req.user.id,
+        channel,
+        pageId: pageId ?? null,
+        instagramAccountId: instagramAccountId ?? null,
+        facebookChannelSettings: fbSetting
+          ? { id: fbSetting.id, isConnected: fbSetting.isConnected, isEnabled: fbSetting.isEnabled, config: sanitizeConfig(fbCfg) }
+          : null,
+        instagramChannelSettings: igSetting
+          ? { id: igSetting.id, isConnected: igSetting.isConnected, isEnabled: igSetting.isEnabled, config: sanitizeConfig(igCfg) }
+          : null,
+        subscribedApps: null as any,
+        subscribedAppsError: null as any,
+        pageIgLink: null as any,
+      };
+
+      if (!pageId || !accessToken) {
+        responsePayload.subscribedAppsError = "Missing pageId or stored page access token in channelSettings config";
+        console.warn("[Meta Debug] subscribed_apps skipped — missing pageId/token", {
+          userId: req.user.id,
+          channel,
+          pageIdPresent: !!pageId,
+          tokenPresent: !!accessToken,
+        });
+        return res.json(responsePayload);
+      }
+
+      // 1) GET /{page-id}/subscribed_apps using STORED PAGE token (no secrets returned)
+      const subUrl = `${GRAPH}/${encodeURIComponent(pageId)}/subscribed_apps?access_token=${encodeURIComponent(accessToken)}`;
+      console.log("[Meta Debug] GET subscribed_apps", { channel, pageId });
+      const subResp = await fetch(subUrl);
+      const subData = (await subResp.json().catch(() => ({}))) as any;
+      responsePayload.subscribedApps = { httpOk: subResp.ok, status: subResp.status, body: subData };
+      if (!subResp.ok) {
+        responsePayload.subscribedAppsError = subData?.error ?? subData ?? `HTTP ${subResp.status}`;
+        console.warn("[Meta Debug] subscribed_apps GET failed", {
+          channel,
+          pageId,
+          status: subResp.status,
+          error: subData?.error?.message ?? null,
+        });
+      }
+
+      // 2) For Instagram: confirm Page -> IG business account link matches stored instagramAccountId
+      if (channel === "instagram") {
+        const linkUrl =
+          `${GRAPH}/${encodeURIComponent(pageId)}` +
+          `?fields=instagram_business_account,connected_instagram_account` +
+          `&access_token=${encodeURIComponent(accessToken)}`;
+        const linkResp = await fetch(linkUrl);
+        const linkData = (await linkResp.json().catch(() => ({}))) as any;
+        const linkedIgId: string | undefined =
+          linkData?.instagram_business_account?.id || linkData?.connected_instagram_account?.id;
+        responsePayload.pageIgLink = {
+          httpOk: linkResp.ok,
+          status: linkResp.status,
+          linkedIgBusinessAccountId: linkData?.instagram_business_account?.id ?? null,
+          linkedConnectedInstagramAccountId: linkData?.connected_instagram_account?.id ?? null,
+          linkedResolvedId: linkedIgId ?? null,
+          storedInstagramAccountId: instagramAccountId ?? null,
+          matchesStored: !!linkedIgId && !!instagramAccountId && linkedIgId === instagramAccountId,
+          error: linkData?.error ?? null,
+        };
+      }
+
+      // Log a compact summary server-side (no secrets)
+      console.log("[Meta Debug] subscription snapshot", {
+        userId: req.user.id,
+        channel,
+        pageId,
+        instagramAccountId: instagramAccountId ?? null,
+        subscribedAppsHttpOk: responsePayload.subscribedApps?.httpOk ?? null,
+        subscribedAppsStatus: responsePayload.subscribedApps?.status ?? null,
+      });
+
+      return res.json(responsePayload);
+    } catch (err: any) {
+      console.error("[Meta Debug] /api/debug/meta/subscribed-apps error:", err);
+      return res.status(500).json({ error: err?.message || "Internal error" });
+    }
+  });
+
   // ─── Channel Health Status ─────────────────────────────────────────────────
   // Deep health check for all connected channels. For Meta (FB/IG) channels,
   // verifies four independent conditions: token validity, required permission

@@ -395,6 +395,12 @@ export async function connectPage(
       granular_scopes: td.granular_scopes,
       error: td.error ?? debugData?.error,
     }));
+    if (td?.type && td.type !== "PAGE") {
+      console.warn(
+        `[MetaOAuth] WARNING: debug_token type=${td.type} (expected PAGE). ` +
+          `This suggests you're not using a Page access token, and inbound webhooks may not deliver.`
+      );
+    }
 
     if (!debugResp.ok || !td.is_valid) {
       const errMsg = td.error?.message ?? debugData?.error?.message ?? "Page access token is invalid or expired";
@@ -460,6 +466,8 @@ export async function connectPage(
         error_type: subData?.error?.type,
         error_message: subData?.error?.message,
       }));
+      // Full response (sanitized). Meta doesn't include tokens in this response; we avoid logging request bodies.
+      console.log("[MetaOAuth] subscribed_apps raw response (full)", JSON.stringify(subData));
       if (subResp.ok && subData.success) {
         result.steps.webhookSubscribed = true;
         break;
