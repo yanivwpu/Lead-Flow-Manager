@@ -12,6 +12,7 @@ import {
 import { useAuth } from "@/lib/auth-context";
 import { useToast } from "@/hooks/use-toast";
 import { supportedLanguages } from "@/lib/i18n";
+import { getCheckoutReturnPaths } from "@/lib/checkoutReturnPaths";
 
 // ─── Shared structural components ───────────────────────────────────────────
 function FeatureItem({
@@ -131,7 +132,7 @@ export function Pricing() {
         credentials: "include",
       });
       if (res.status === 401) {
-        setLocation("/auth?redirect=/pricing");
+        setLocation(`/auth?redirect=${encodeURIComponent(`${window.location.pathname}${window.location.search}`)}`);
         throw new Error("session_expired");
       }
       if (!res.ok) {
@@ -163,11 +164,11 @@ export function Pricing() {
       const res = await fetch("/api/subscription/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ planId }),
+        body: JSON.stringify({ planId, ...getCheckoutReturnPaths() }),
         credentials: "include",
       });
       if (res.status === 401) {
-        setLocation("/auth?redirect=/pricing");
+        setLocation(`/auth?redirect=${encodeURIComponent(`${window.location.pathname}${window.location.search}`)}`);
         throw new Error("session_expired");
       }
       if (!res.ok) {
@@ -234,9 +235,10 @@ export function Pricing() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
+        body: JSON.stringify(getCheckoutReturnPaths()),
       });
       if (response.status === 401) {
-        setLocation("/auth?redirect=/pricing");
+        setLocation(`/auth?redirect=${encodeURIComponent(`${window.location.pathname}${window.location.search}`)}`);
         return;
       }
       const data = await response.json();

@@ -7,6 +7,7 @@ import { resolveStripeCheckoutRedirectOrigin } from "./stripeCheckoutRedirectBas
 import { subscriptionService } from "./subscriptionService";
 import { z } from "zod";
 import { getAppOrigin } from "./urlOrigins";
+import { buildPostCheckoutSuccessUrl, buildStripeCancelUrl, sanitizeStripeReturnPath } from "./checkoutReturnPath";
 
 const TEMPLATE_ID = "realtor-growth-engine";
 const TEMPLATE_PRICE_CENTS = 19900;
@@ -95,6 +96,7 @@ export function registerTemplateRoutes(app: Express) {
 
   app.post("/api/templates/realtor-growth-engine/purchase", requireAuth, async (req, res) => {
     try {
+      const { redirectTo, cancelTo } = (req.body || {}) as { redirectTo?: string; cancelTo?: string };
       const userId = (req.user as any).id;
       const user = await storage.getUser(userId);
       if (!user) return res.status(404).json({ error: "User not found" });
@@ -142,18 +144,24 @@ export function registerTemplateRoutes(app: Express) {
       }
 
       const baseUrl = resolveStripeCheckoutRedirectOrigin(getAppOrigin());
+      const defaultRge = "/app/templates/realtor-growth-engine";
+      const successPath = sanitizeStripeReturnPath(redirectTo, `${defaultRge}/onboarding?paid=true`);
+      const cancelPath = sanitizeStripeReturnPath(cancelTo ?? redirectTo, defaultRge);
       const priceId = process.env.STRIPE_RGE_ONE_TIME_PRICE_ID;
       if (!priceId) {
         throw new Error("Missing STRIPE_RGE_ONE_TIME_PRICE_ID");
       }
+
+      const successInterstitial = buildPostCheckoutSuccessUrl(baseUrl, successPath);
+      const success_url = `${successInterstitial}&session_id={CHECKOUT_SESSION_ID}`;
 
       const session = await stripe.checkout.sessions.create({
         customer: customerId,
         payment_method_types: ["card"],
         line_items: [{ price: priceId, quantity: 1 }],
         mode: "payment",
-        success_url: `${baseUrl}/app/templates/realtor-growth-engine/onboarding?paid=true&session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${baseUrl}/app/templates/realtor-growth-engine`,
+        success_url,
+        cancel_url: buildStripeCancelUrl(baseUrl, cancelPath),
         metadata: { userId, templateId: TEMPLATE_ID },
       });
 

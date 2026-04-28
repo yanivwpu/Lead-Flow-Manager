@@ -3,6 +3,16 @@ import { PLAN_LIMITS, type SubscriptionPlan, type User } from "@shared/schema";
 import { getUncachableStripeClient } from "./stripeClient";
 import { resolveStripeCheckoutRedirectOrigin } from "./stripeCheckoutRedirectBase";
 import { getAppOrigin } from "./urlOrigins";
+import {
+  buildPostCheckoutSuccessUrl,
+  buildStripeCancelUrl,
+  sanitizeStripeReturnPath,
+} from "./checkoutReturnPath";
+
+export type StripeCheckoutRedirectOpts = {
+  successReturnPath?: string;
+  cancelReturnPath?: string;
+};
 
 export type AIBrainSource = "none" | "stripe" | "shopify" | "manual" | "demo";
 
@@ -306,13 +316,16 @@ class SubscriptionService {
       throw new Error(`Missing ${envName}`);
     }
 
+    const successPath = sanitizeStripeReturnPath(redirect?.successReturnPath ?? "/app/inbox");
+    const cancelPath = sanitizeStripeReturnPath(redirect?.cancelReturnPath ?? successPath);
+
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
       payment_method_types: ['card'],
       line_items: [{ price: priceId, quantity: 1 }],
       mode: 'subscription',
-      success_url: `${resolvedBaseUrl}/app/settings?checkout=success`,
-      cancel_url: `${resolvedBaseUrl}/app/settings?checkout=cancel`,
+      success_url: buildPostCheckoutSuccessUrl(resolvedBaseUrl, successPath),
+      cancel_url: buildStripeCancelUrl(resolvedBaseUrl, cancelPath),
       metadata: {
         userId,
         type: 'plan',
@@ -325,7 +338,11 @@ class SubscriptionService {
     return { url: session.url };
   }
 
-  async createProPlusAICheckoutSession(userId: string, baseUrl: string): Promise<{ url: string }> {
+  async createProPlusAICheckoutSession(
+    userId: string,
+    baseUrl: string,
+    redirect?: StripeCheckoutRedirectOpts,
+  ): Promise<{ url: string }> {
     const user = await storage.getUser(userId);
     if (!user) throw new Error("User not found");
 
@@ -352,6 +369,11 @@ class SubscriptionService {
       throw new Error("Missing STRIPE_AI_BRAIN_MONTHLY_PRICE_ID");
     }
 
+    const successPath = sanitizeStripeReturnPath(
+      redirect?.successReturnPath ?? "/app/templates/realtor-growth-engine",
+    );
+    const cancelPath = sanitizeStripeReturnPath(redirect?.cancelReturnPath ?? successPath);
+
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
       payment_method_types: ['card'],
@@ -360,8 +382,8 @@ class SubscriptionService {
         { price: aiPriceId, quantity: 1 },
       ],
       mode: 'subscription',
-      success_url: `${resolvedBaseUrl}/app/templates/realtor-growth-engine?checkout=success`,
-      cancel_url: `${resolvedBaseUrl}/app/templates/realtor-growth-engine?checkout=cancel`,
+      success_url: buildPostCheckoutSuccessUrl(resolvedBaseUrl, successPath),
+      cancel_url: buildStripeCancelUrl(resolvedBaseUrl, cancelPath),
       metadata: {
         type: 'pro_plus_ai',
         userId,
@@ -380,6 +402,7 @@ class SubscriptionService {
     userId: string,
     bundlePlan: "starter" | "pro",
     baseUrl: string,
+    redirect?: StripeCheckoutRedirectOpts,
   ): Promise<{ url: string }> {
     const user = await storage.getUser(userId);
     if (!user) throw new Error("User not found");
@@ -423,13 +446,16 @@ class SubscriptionService {
       throw new Error("Missing STRIPE_AI_BRAIN_MONTHLY_PRICE_ID");
     }
 
+    const successPath = sanitizeStripeReturnPath(redirect?.successReturnPath ?? "/app/ai-brain");
+    const cancelPath = sanitizeStripeReturnPath(redirect?.cancelReturnPath ?? successPath);
+
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
       payment_method_types: ["card"],
       line_items: [{ price: planPriceId, quantity: 1 }, { price: aiPriceId, quantity: 1 }],
       mode: "subscription",
-      success_url: `${resolvedBaseUrl}/app/ai-brain?checkout=success`,
-      cancel_url: `${resolvedBaseUrl}/app/ai-brain?checkout=cancel`,
+      success_url: buildPostCheckoutSuccessUrl(resolvedBaseUrl, successPath),
+      cancel_url: buildStripeCancelUrl(resolvedBaseUrl, cancelPath),
       metadata: {
         userId,
         type: "plan_ai_bundle",
@@ -442,7 +468,11 @@ class SubscriptionService {
     return { url: session.url };
   }
 
-  async createAddonCheckoutSession(userId: string, baseUrl: string): Promise<{ url: string }> {
+  async createAddonCheckoutSession(
+    userId: string,
+    baseUrl: string,
+    redirect?: StripeCheckoutRedirectOpts,
+  ): Promise<{ url: string }> {
     const user = await storage.getUser(userId);
     if (!user) throw new Error("User not found");
 
@@ -481,13 +511,16 @@ class SubscriptionService {
 
     console.log("Using AI Brain add-on price from env:", priceId);
 
+    const successPath = sanitizeStripeReturnPath(redirect?.successReturnPath ?? "/app/ai-brain");
+    const cancelPath = sanitizeStripeReturnPath(redirect?.cancelReturnPath ?? successPath);
+
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
       payment_method_types: ['card'],
       line_items: [{ price: priceId, quantity: 1 }],
       mode: 'subscription',
-      success_url: `${resolvedBaseUrl}/app/ai-brain?checkout=success`,
-      cancel_url: `${resolvedBaseUrl}/app/ai-brain?checkout=cancel`,
+      success_url: buildPostCheckoutSuccessUrl(resolvedBaseUrl, successPath),
+      cancel_url: buildStripeCancelUrl(resolvedBaseUrl, cancelPath),
       metadata: {
         userId,
         type: 'ai_brain_addon',

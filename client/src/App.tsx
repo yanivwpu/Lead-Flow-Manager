@@ -33,6 +33,7 @@ const QrLanding = lazy(() => import("@/pages/QrLanding").then(m => ({ default: m
 const SalesPortal = lazy(() => import("@/pages/SalesPortal").then(m => ({ default: m.SalesPortal })));
 const PartnerPortal = lazy(() => import("@/pages/PartnerPortal").then(m => ({ default: m.PartnerPortal })));
 const RealtorGrowthEngine = lazy(() => import("@/pages/RealtorGrowthEngine").then(m => ({ default: m.RealtorGrowthEngine })));
+const PostCheckout = lazy(() => import("@/pages/PostCheckout").then(m => ({ default: m.PostCheckout })));
 const RealtorLanding = lazy(() => import("@/pages/RealtorLanding").then(m => ({ default: m.RealtorLanding })));
 const WidgetFrame = lazy(() => import("@/pages/WidgetFrame").then(m => ({ default: m.WidgetFrame })));
 const WidgetChat = lazy(() => import("@/pages/WidgetChat").then(m => ({ default: m.WidgetChat })));
@@ -89,6 +90,10 @@ function Router() {
       <Route path="/widget-frame/:widgetId" component={WidgetFrame} />
       <Route path="/chat/:widgetId" component={WidgetChat} />
       <Route path="/help" component={HelpCenter} />
+
+      <Route path="/post-checkout">
+        <ProtectedRoute component={PostCheckout} />
+      </Route>
       
       {/* Protected Routes */}
       <Route path="/app/*?">

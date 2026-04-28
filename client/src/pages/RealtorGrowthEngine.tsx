@@ -59,6 +59,7 @@ function RealtorMark() {
 import { useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { getCheckoutReturnPaths } from "@/lib/checkoutReturnPaths";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -233,7 +234,20 @@ export function RealtorGrowthEngine() {
 
   const purchaseMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/templates/realtor-growth-engine/purchase");
+      const res = await fetch("/api/templates/realtor-growth-engine/purchase", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(getCheckoutReturnPaths()),
+      });
+      if (res.status === 401) {
+        window.location.href = `/auth?redirect=${encodeURIComponent(`${window.location.pathname}${window.location.search}`)}`;
+        throw new Error("session_expired");
+      }
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "Purchase failed");
+      }
       return res.json();
     },
     onSuccess: (data) => {
@@ -1261,9 +1275,11 @@ export function RealtorGrowthEngine() {
                 const res = await fetch(endpoint, {
                   method: "POST",
                   credentials: "include",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify(getCheckoutReturnPaths()),
                 });
                 if (res.status === 401) {
-                  window.location.href = "/auth?redirect=/app/templates/realtor-growth-engine";
+                  window.location.href = `/auth?redirect=${encodeURIComponent(`${window.location.pathname}${window.location.search}`)}`;
                   return;
                 }
                 if (!res.ok) throw new Error("Failed to create checkout");

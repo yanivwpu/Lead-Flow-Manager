@@ -55,6 +55,7 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import { subscriptionService } from "./subscriptionService";
+import { sanitizeStripeReturnPath } from "./checkoutReturnPath";
 import { resolveStripeCheckoutRedirectOrigin } from "./stripeCheckoutRedirectBase";
 import { getAppOrigin } from "./urlOrigins";
 import { getMarketingOrigin } from "./urlOrigins";
@@ -2712,9 +2713,11 @@ export async function registerRoutes(
         return res.status(401).json({ error: "Unauthorized" });
       }
 
-      const { planId, billingInterval } = req.body as {
+      const { planId, billingInterval, redirectTo, cancelTo } = req.body as {
         planId?: string;
         billingInterval?: "monthly" | "yearly";
+        redirectTo?: string;
+        cancelTo?: string;
       };
 
       if (!planId || !["starter", "pro"].includes(planId)) {
@@ -2726,11 +2729,14 @@ export async function registerRoutes(
       }
 
       const baseUrl = getAppOrigin() || `${req.protocol}://${req.get('host')}`;
+      const successPath = sanitizeStripeReturnPath(redirectTo, "/app/inbox");
+      const cancelPath = sanitizeStripeReturnPath(cancelTo ?? redirectTo, successPath);
       const result = await subscriptionService.createCheckoutSession(
         req.user.id,
         planId,
         baseUrl,
-        billingInterval || "monthly"
+        billingInterval || "monthly",
+        { successReturnPath: successPath, cancelReturnPath: cancelPath }
       );
       res.json(result);
     } catch (error: any) {
@@ -2745,8 +2751,17 @@ export async function registerRoutes(
         return res.status(401).json({ error: "Unauthorized" });
       }
 
+      const { redirectTo, cancelTo } = (req.body || {}) as { redirectTo?: string; cancelTo?: string };
       const baseUrl = getAppOrigin() || `${req.protocol}://${req.get('host')}`;
-      const result = await subscriptionService.createProPlusAICheckoutSession(req.user.id, baseUrl);
+      const successPath = sanitizeStripeReturnPath(
+        redirectTo,
+        "/app/templates/realtor-growth-engine",
+      );
+      const cancelPath = sanitizeStripeReturnPath(cancelTo ?? redirectTo, successPath);
+      const result = await subscriptionService.createProPlusAICheckoutSession(req.user.id, baseUrl, {
+        successReturnPath: successPath,
+        cancelReturnPath: cancelPath,
+      });
       res.json(result);
     } catch (error: any) {
       console.error("Error creating Pro+AI checkout:", error);
@@ -2761,16 +2776,23 @@ export async function registerRoutes(
         return res.status(401).json({ error: "Unauthorized" });
       }
 
-      const plan = (req.body as { plan?: string })?.plan;
+      const { plan, redirectTo, cancelTo } = (req.body || {}) as {
+        plan?: string;
+        redirectTo?: string;
+        cancelTo?: string;
+      };
       if (plan !== "starter" && plan !== "pro") {
         return res.status(400).json({ error: "plan must be starter or pro" });
       }
 
       const baseUrl = getAppOrigin() || `${req.protocol}://${req.get("host")}`;
+      const successPath = sanitizeStripeReturnPath(redirectTo, "/app/ai-brain");
+      const cancelPath = sanitizeStripeReturnPath(cancelTo ?? redirectTo, successPath);
       const result = await subscriptionService.createPlanAIBundleCheckoutSession(
         req.user.id,
         plan,
         baseUrl,
+        { successReturnPath: successPath, cancelReturnPath: cancelPath },
       );
       res.json(result);
     } catch (error: any) {
@@ -2790,6 +2812,9 @@ export async function registerRoutes(
       }
 
       const baseUrl = getAppOrigin() || `${req.protocol}://${req.get('host')}`;
+      const { redirectTo, cancelTo } = (req.body || {}) as { redirectTo?: string; cancelTo?: string };
+      const successPath = sanitizeStripeReturnPath(redirectTo, "/app/ai-brain");
+      const cancelPath = sanitizeStripeReturnPath(cancelTo ?? redirectTo, successPath);
 
       console.log("[AI Brain Checkout] ENV/Host:", {
         host: req.get("host"),
@@ -2802,7 +2827,10 @@ export async function registerRoutes(
         STRIPE_AI_BRAIN_MONTHLY_PRICE_ID: process.env.STRIPE_AI_BRAIN_MONTHLY_PRICE_ID,
       });
 
-      const result = await subscriptionService.createAddonCheckoutSession(req.user.id, baseUrl);
+      const result = await subscriptionService.createAddonCheckoutSession(req.user.id, baseUrl, {
+        successReturnPath: successPath,
+        cancelReturnPath: cancelPath,
+      });
       res.json(result);
     } catch (error: any) {
       console.error("Error creating AI Brain add-on checkout:", error);

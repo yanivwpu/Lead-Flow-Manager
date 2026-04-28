@@ -577,7 +577,23 @@ export function ChatbotBuilder() {
         {/* Right: actions */}
         {selectedFlow ? (
           <div className="flex items-center gap-2 flex-shrink-0">
-            {/* Status toggle — hidden on mobile */}
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                setSelectedFlow(null);
+                setSelectedStepId(null);
+                setUnsavedChanges(false);
+                setIsCreating(true);
+              }}
+              className="h-8 text-xs font-semibold gap-1.5 border-gray-200 text-gray-700 hover:bg-gray-50"
+              data-testid="button-new-flow-header"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              + New Flow
+            </Button>
+
+            {/* Status toggle — all breakpoints (dropdown no longer carries mobile toggle) */}
             <button
               onClick={() => {
                 const currentlyActive = selectedFlow.isActive === true;
@@ -600,7 +616,7 @@ export function ChatbotBuilder() {
                 toggleFlowMutation.mutate({ id: selectedFlow.id, isActive: true });
               }}
               className={cn(
-                "hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all",
+                "flex items-center gap-2 px-2.5 md:px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all flex-shrink-0",
                 selectedFlow.isActive
                   ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
                   : "bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100"
@@ -651,46 +667,7 @@ export function ChatbotBuilder() {
                   <MoreHorizontal className="h-4 w-4 text-gray-500" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-48 shadow-lg border-gray-100">
-                {/* New Flow — always accessible on mobile */}
-                <DropdownMenuItem
-                  onClick={() => { setSelectedFlow(null); setSelectedStepId(null); setUnsavedChanges(false); setIsCreating(true); }}
-                  className="text-sm font-medium gap-2"
-                  data-testid="menu-new-flow-mobile"
-                >
-                  <Plus className="h-3.5 w-3.5 text-brand-green" />
-                  New Flow
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                {/* Status toggle — mobile only */}
-                <DropdownMenuItem
-                  onClick={() => {
-                    const currentlyActive = selectedFlow.isActive === true;
-                    // Switching to Draft is always allowed — skip all validation
-                    if (currentlyActive) {
-                      toggleFlowMutation.mutate({ id: selectedFlow.id, isActive: false });
-                      return;
-                    }
-                    // Switching to Active requires a trigger to be configured
-                    const hasKeywords = (selectedFlow.triggerKeywords as string[])?.length > 0;
-                    const hasNewChat = selectedFlow.triggerOnNewChat === true;
-                    if (!hasKeywords && !hasNewChat) {
-                      toast({
-                        title: "No trigger configured",
-                        description: "Set at least one keyword or enable 'Start on new conversation' before activating this flow.",
-                        variant: "destructive",
-                      });
-                      return;
-                    }
-                    toggleFlowMutation.mutate({ id: selectedFlow.id, isActive: true });
-                  }}
-                  className="md:hidden text-sm font-medium gap-2"
-                  data-testid="menu-toggle-status-mobile"
-                >
-                  <div className={cn("h-3.5 w-3.5 rounded-full border-2 flex-shrink-0", selectedFlow.isActive ? "border-emerald-500 bg-emerald-500" : "border-gray-400")} />
-                  {selectedFlow.isActive ? "Set to Draft" : "Activate Flow"}
-                </DropdownMenuItem>
-                <DropdownMenuSeparator className="md:hidden" />
+              <DropdownMenuContent align="end" className="w-44 shadow-lg border-gray-100">
                 <DropdownMenuItem
                   onClick={() => duplicateFlowMutation.mutate(selectedFlow)}
                   disabled={duplicateFlowMutation.isPending}
@@ -701,7 +678,7 @@ export function ChatbotBuilder() {
                     ? <Loader2 className="h-3.5 w-3.5 animate-spin text-gray-400" />
                     : <Copy className="h-3.5 w-3.5 text-gray-400" />
                   }
-                  Duplicate Flow
+                  Duplicate
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
@@ -710,7 +687,7 @@ export function ChatbotBuilder() {
                   data-testid="menu-delete-flow"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
-                  Delete Flow
+                  Delete
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -722,7 +699,8 @@ export function ChatbotBuilder() {
             className="h-8 text-xs font-semibold bg-brand-green hover:bg-brand-green/90 gap-1.5"
             data-testid="button-new-flow-header"
           >
-            <Plus className="h-3.5 w-3.5" />New Flow
+            <Plus className="h-3.5 w-3.5" />
+            + New Flow
           </Button>
         )}
       </header>
@@ -735,15 +713,8 @@ export function ChatbotBuilder() {
         )}>
           {/* Sidebar header */}
           <div className="px-3.5 pt-4 pb-3 border-b border-gray-100">
-            <div className="flex items-center justify-between mb-3">
+            <div className="mb-3">
               <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Your Flows</span>
-              <button
-                onClick={() => { setSelectedFlow(null); setSelectedStepId(null); setUnsavedChanges(false); setIsCreating(true); }}
-                className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-semibold text-brand-green hover:bg-brand-green/8 transition-colors"
-                data-testid="button-new-flow-sidebar"
-              >
-                <Plus className="h-3 w-3" />New
-              </button>
             </div>
             <div className="relative">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-300 pointer-events-none" />
@@ -763,13 +734,9 @@ export function ChatbotBuilder() {
               <div className="text-center py-10 px-4">
                 <Zap className="h-7 w-7 mx-auto text-gray-200 mb-2.5" />
                 <p className="text-xs font-medium text-gray-400 mb-0.5">No flows yet</p>
-                <p className="text-[11px] text-gray-300 mb-3">Create your first automated flow</p>
-                <button
-                  onClick={() => setIsCreating(true)}
-                  className="text-[11px] font-semibold text-brand-green hover:underline"
-                >
-                  + Create flow
-                </button>
+                <p className="text-[11px] text-gray-400 leading-relaxed">
+                  Use <span className="font-semibold text-gray-600">+ New Flow</span> at the top to create one.
+                </p>
               </div>
             )}
             {filteredFlows.map((flow) => {
@@ -888,15 +855,12 @@ export function ChatbotBuilder() {
                 <Zap className="h-6 w-6 text-gray-300" />
               </div>
               <h3 className="text-sm font-bold text-gray-700 mb-1">Select a flow or create one</h3>
-              <p className="text-xs text-gray-400 mb-5 max-w-xs">Design automated conversation flows to qualify leads, answer questions, and route contacts.</p>
-              <Button
-                size="sm"
-                onClick={() => setIsCreating(true)}
-                className="bg-brand-green hover:bg-brand-green/90 text-xs font-semibold gap-1.5"
-                data-testid="button-create-first-flow"
-              >
-                <Plus className="h-3.5 w-3.5" />New Flow
-              </Button>
+              <p className="text-xs text-gray-400 mb-2 max-w-xs">
+                Design automated conversation flows to qualify leads, answer questions, and route contacts.
+              </p>
+              <p className="text-xs text-gray-500">
+                Tap <span className="font-semibold text-gray-700">+ New Flow</span> above to get started.
+              </p>
             </div>
           )}
 

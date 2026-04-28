@@ -43,6 +43,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "@/hooks/use-toast";
+import { getCheckoutReturnPaths } from "@/lib/checkoutReturnPaths";
 import { Link } from "wouter";
 import { cn } from "@/lib/utils";
 
@@ -171,7 +172,6 @@ const INDUSTRY_QUALIFY_TEMPLATES: Record<string, QualifyingQuestion[]> = {
 function AIBrainContent() {
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState("settings");
-  const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
   
   const { data: subscription, isLoading: subscriptionLoading } = useQuery<SubscriptionData>({
     queryKey: ["/api/subscription"],
@@ -246,9 +246,10 @@ function AIBrainContent() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
+        body: JSON.stringify(getCheckoutReturnPaths()),
       });
       if (response.status === 401) {
-        window.location.href = "/auth?redirect=/app/ai-brain";
+        window.location.href = `/auth?redirect=${encodeURIComponent(`${window.location.pathname}${window.location.search}`)}`;
         return;
       }
       const data = await response.json();
@@ -277,10 +278,10 @@ function AIBrainContent() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ plan: bundlePlan }),
+        body: JSON.stringify({ plan: bundlePlan, ...getCheckoutReturnPaths() }),
       });
       if (response.status === 401) {
-        window.location.href = "/auth?redirect=/app/ai-brain";
+        window.location.href = `/auth?redirect=${encodeURIComponent(`${window.location.pathname}${window.location.search}`)}`;
         return;
       }
       const data = await response.json();
@@ -512,7 +513,7 @@ function AIBrainContent() {
                 <div>
                   <p className="font-medium text-gray-900">Lead Qualification</p>
                   <p className="text-sm text-gray-500">Automatically score and qualify leads</p>
-                  <span className="text-xs text-purple-600 font-medium">Full AI Brain ($29/mo)</span>
+                  <span className="text-xs text-gray-500">Requires AI Brain</span>
                 </div>
               </div>
               <div className="flex items-start gap-3 p-4 bg-white rounded-xl border border-gray-200">
@@ -520,7 +521,7 @@ function AIBrainContent() {
                 <div>
                   <p className="font-medium text-gray-900">Plain English Automations</p>
                   <p className="text-sm text-gray-500">Describe workflows in plain language</p>
-                  <span className="text-xs text-purple-600 font-medium">Full AI Brain ($29/mo)</span>
+                  <span className="text-xs text-gray-500">Requires AI Brain</span>
                 </div>
               </div>
             </div>
@@ -529,14 +530,13 @@ function AIBrainContent() {
               <div className="flex items-center justify-center gap-2 mb-3">
                 <Crown className="w-5 h-5 text-purple-600" />
                 <span className="text-sm font-bold text-purple-700 uppercase tracking-wide">
-                  {hasAIAssist ? "Unlock Full AI Brain" : "Get Started with AI"}
+                  AI Brain add-on
                 </span>
               </div>
-              <p className="text-2xl font-bold text-gray-900 mb-1">$29/month</p>
               <p className="text-sm text-gray-600 mb-4">
                 {hasAIAssist 
-                  ? "Unlock unlimited suggestions, lead qualification, summarization, and automation builder" 
-                  : "Available for Starter and Pro plan subscribers"}
+                  ? "Unlimited suggestions, lead qualification, summarization, and automation builder." 
+                  : "Available for Starter and Pro plan subscribers."}
               </p>
               {hasAIAssist ? (
                 <Button 
@@ -550,7 +550,7 @@ function AIBrainContent() {
                       Processing...
                     </>
                   ) : (
-                    "Unlock Full AI Brain – $29/mo"
+                    "Add AI Brain — $29/month"
                   )}
                 </Button>
               ) : isFree && !isShopify ? (
@@ -669,18 +669,19 @@ function AIBrainContent() {
             ) : (
               <>
                 <p className="font-medium text-blue-800">AI Assist Active</p>
-                <p className="text-sm text-blue-600">
+                <p className="text-sm text-blue-600 mb-3">
                   Basic reply suggestions with sentiment detection included in your {isPro ? "Pro" : "Starter"} plan.
                   {isPro ? " Higher daily limits included." : ""}
                 </p>
                 <Button 
                   size="sm" 
-                  className="mt-2 bg-purple-600 hover:bg-purple-700 text-white"
+                  className="bg-purple-600 hover:bg-purple-700 text-white"
                   onClick={handleAddonCheckout}
                   disabled={isCheckingOut}
+                  data-testid="button-ai-brain-primary-cta"
                 >
                   <Crown className="w-3 h-3 mr-1" />
-                  {isCheckingOut ? "Processing..." : "Unlock Full AI Brain – $29/mo"}
+                  {isCheckingOut ? "Processing..." : "Add AI Brain — $29/month"}
                 </Button>
               </>
             )}
@@ -853,20 +854,17 @@ function AIBrainContent() {
               </div>
             ) : (
               <div className="bg-gray-50 rounded-xl border border-gray-200 p-6 opacity-60 relative">
-                <div className="absolute inset-0 flex items-center justify-center bg-white/50 rounded-xl z-10">
-                  <div className="text-center">
-                    <Lock className="w-6 h-6 text-gray-400 mx-auto mb-2" />
-                    <p className="text-sm font-medium text-gray-600">Requires Full AI Brain</p>
-                    <Button 
-                      size="sm" 
-                      className="mt-2 bg-purple-600 hover:bg-purple-700"
-                      onClick={() => handleAddonCheckout()}
-                      data-testid="button-unlock-lead-qual-settings"
-                    >
-                      Upgrade to AI Brain
-                    </Button>
-                  </div>
-                </div>
+                <button
+                  type="button"
+                  disabled={isCheckingOut}
+                  onClick={() => handleAddonCheckout()}
+                  data-testid="button-unlock-lead-qual-settings"
+                  className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-1 rounded-xl border-0 bg-white/50 p-4 text-center transition-colors hover:bg-white/65 focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-70"
+                >
+                  <Lock className="w-6 h-6 text-gray-400" aria-hidden />
+                  <span className="text-sm font-medium text-gray-700">Requires AI Brain</span>
+                  <span className="text-xs text-purple-700">Upgrade to unlock</span>
+                </button>
                 <h2 className="text-lg font-bold text-gray-400 mb-4 flex items-center gap-2">
                   <Target className="w-5 h-5 text-gray-400" />
                   Lead Qualification
@@ -923,20 +921,17 @@ function AIBrainContent() {
               </div>
             ) : (
               <div className="bg-gray-50 rounded-xl border border-gray-200 p-6 opacity-60 relative">
-                <div className="absolute inset-0 flex items-center justify-center bg-white/50 rounded-xl z-10">
-                  <div className="text-center">
-                    <Lock className="w-6 h-6 text-gray-400 mx-auto mb-2" />
-                    <p className="text-sm font-medium text-gray-600">Requires Full AI Brain</p>
-                    <Button 
-                      size="sm" 
-                      className="mt-2 bg-purple-600 hover:bg-purple-700"
-                      onClick={() => handleAddonCheckout()}
-                      data-testid="button-unlock-handoff-settings"
-                    >
-                      Upgrade to AI Brain
-                    </Button>
-                  </div>
-                </div>
+                <button
+                  type="button"
+                  disabled={isCheckingOut}
+                  onClick={() => handleAddonCheckout()}
+                  data-testid="button-unlock-handoff-settings"
+                  className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-1 rounded-xl border-0 bg-white/50 p-4 text-center transition-colors hover:bg-white/65 focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-70"
+                >
+                  <Lock className="w-6 h-6 text-gray-400" aria-hidden />
+                  <span className="text-sm font-medium text-gray-700">Requires AI Brain</span>
+                  <span className="text-xs text-purple-700">Upgrade to unlock</span>
+                </button>
                 <h2 className="text-lg font-bold text-gray-400 mb-4 flex items-center gap-2">
                   <Hand className="w-5 h-5 text-gray-400" />
                   Human Handoff Keywords
@@ -1435,7 +1430,7 @@ function AIBrainContent() {
                           <span className="font-medium text-gray-500">Lead Qualification</span>
                           <Crown className="w-3 h-3 text-purple-500" />
                         </div>
-                        <p className="text-sm text-gray-400">Full AI Brain feature</p>
+                        <p className="text-sm text-gray-400">Requires AI Brain</p>
                       </div>
                     )}
                     {hasFullAIBrain ? (
@@ -1455,7 +1450,7 @@ function AIBrainContent() {
                           <span className="font-medium text-gray-500">Human Handoff</span>
                           <Crown className="w-3 h-3 text-purple-500" />
                         </div>
-                        <p className="text-sm text-gray-400">Full AI Brain feature</p>
+                        <p className="text-sm text-gray-400">Requires AI Brain</p>
                       </div>
                     )}
                     <div className="p-4 bg-gray-50 rounded-xl">

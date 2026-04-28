@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { getCheckoutReturnPaths } from "@/lib/checkoutReturnPaths";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Zap, MessageSquare, Users, Phone, Sparkles, Loader2, Check, Info } from "lucide-react";
@@ -237,11 +238,11 @@ export function UpgradeModal({ open, onOpenChange, reason, currentPlan, limitInf
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ planId: plan }),
+        body: JSON.stringify({ planId: plan, ...getCheckoutReturnPaths() }),
       });
 
       if (response.status === 401) {
-        window.location.href = "/auth?redirect=/app/workflows";
+        window.location.href = `/auth?redirect=${encodeURIComponent(`${window.location.pathname}${window.location.search}`)}`;
         return;
       }
 
