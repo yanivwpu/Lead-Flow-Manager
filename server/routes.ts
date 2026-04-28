@@ -4550,6 +4550,87 @@ export async function registerRoutes(
     }
   });
 
+  // TEMP DEBUG: force clean unsubscribe + re-subscribe for IG page webhooks.
+  // This is intentionally narrow to avoid accidentally modifying other pages.
+  app.post("/api/debug/meta/force-resubscribe-ig", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+
+      const TARGET_PAGE_ID = "982745938248038";
+      const GRAPH = "https://graph.facebook.com/v19.0";
+      const subscribedFields = "messages,messaging_postbacks,message_reads";
+
+      const igSetting = await storage.getChannelSetting(req.user.id, "instagram" as any);
+      const cfg = (igSetting?.config as any) ?? null;
+      const pageId: string | undefined = cfg?.pageId ?? cfg?.page_id;
+      const accessToken: string | undefined = cfg?.accessToken ?? cfg?.pageAccessToken ?? cfg?.page_access_token;
+
+      if (!igSetting?.isConnected) {
+        return res.status(400).json({ error: "Instagram channel is not connected for this user." });
+      }
+      if (!pageId || !accessToken) {
+        return res.status(400).json({ error: "Missing pageId or stored PAGE access token for Instagram channel." });
+      }
+      if (pageId !== TARGET_PAGE_ID) {
+        return res.status(400).json({
+          error: `Refusing to modify pageId=${pageId}. This endpoint is hard-locked to pageId=${TARGET_PAGE_ID}.`,
+        });
+      }
+
+      console.log("[Meta Debug] force-resubscribe IG starting", {
+        userId: req.user.id,
+        pageId,
+        subscribed_fields: subscribedFields,
+      });
+
+      // 1) DELETE /{page-id}/subscribed_apps (clear)
+      const delUrl = `${GRAPH}/${encodeURIComponent(pageId)}/subscribed_apps?access_token=${encodeURIComponent(accessToken)}`;
+      const delResp = await fetch(delUrl, { method: "DELETE" });
+      const delData = (await delResp.json().catch(() => ({}))) as any;
+      console.log("[Meta Debug] DELETE subscribed_apps response (full)", JSON.stringify(delData));
+
+      // 2) POST /{page-id}/subscribed_apps (re-subscribe)
+      const postUrl = `${GRAPH}/${encodeURIComponent(pageId)}/subscribed_apps`;
+      const postResp = await fetch(postUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: `subscribed_fields=${encodeURIComponent(subscribedFields)}&access_token=${encodeURIComponent(accessToken)}`,
+      });
+      const postData = (await postResp.json().catch(() => ({}))) as any;
+      console.log("[Meta Debug] POST subscribed_apps response (full)", JSON.stringify(postData));
+
+      // 3) GET /{page-id}/subscribed_apps (verify)
+      const getUrl = `${GRAPH}/${encodeURIComponent(pageId)}/subscribed_apps?access_token=${encodeURIComponent(accessToken)}`;
+      const getResp = await fetch(getUrl);
+      const getData = (await getResp.json().catch(() => ({}))) as any;
+
+      console.log("[Meta Debug] force-resubscribe IG done", {
+        userId: req.user.id,
+        pageId,
+        deleteHttpOk: delResp.ok,
+        deleteStatus: delResp.status,
+        postHttpOk: postResp.ok,
+        postStatus: postResp.status,
+        getHttpOk: getResp.ok,
+        getStatus: getResp.status,
+      });
+
+      return res.json({
+        userId: req.user.id,
+        pageId,
+        subscribed_fields: subscribedFields,
+        delete: { httpOk: delResp.ok, status: delResp.status, body: delData },
+        post: { httpOk: postResp.ok, status: postResp.status, body: postData },
+        get: { httpOk: getResp.ok, status: getResp.status, body: getData },
+        note:
+          "No secrets are returned. If IG DMs still do not hit /api/webhook/meta after this, the blocker is almost certainly Meta App mode/review/product configuration rather than page subscription.",
+      });
+    } catch (err: any) {
+      console.error("[Meta Debug] /api/debug/meta/force-resubscribe-ig error:", err);
+      return res.status(500).json({ error: err?.message || "Internal error" });
+    }
+  });
+
   // ─── Channel Health Status ─────────────────────────────────────────────────
   // Deep health check for all connected channels. For Meta (FB/IG) channels,
   // verifies four independent conditions: token validity, required permission
