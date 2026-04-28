@@ -2086,6 +2086,13 @@ export async function registerRoutes(
       // every webhook to fail verification. rawBody is set by the express.json verify
       // callback registered in index.ts for /api/webhook/meta.
       const rawBody = (req as any).rawBody?.toString() || JSON.stringify(req.body);
+      const webhookObjectType = req.body.object as string | undefined;
+
+      // Extra diagnostics for Instagram DMs: log the raw bytes (truncated) so we can
+      // confirm which object type and entry shape Meta is sending in production.
+      if (webhookObjectType === "instagram") {
+        console.log("[Meta Webhook] [IG RAW] rawBody (first 4000 chars)", rawBody.slice(0, 4000));
+      }
 
       // --- Signature resolution ---
       // We track two flags separately:
@@ -2186,7 +2193,6 @@ export async function registerRoutes(
       const statusUpdate = parseMetaStatusWebhook(req.body);
 
       // [Stage 2] Classify the payload by object type so downstream sections are easy to trace
-      const webhookObjectType = req.body.object as string | undefined;
       const webhookEntry0 = req.body.entry?.[0];
       const webhookHasMessaging = !!(webhookEntry0?.messaging?.length);
       console.log(`[Meta Webhook] [Stage 2] Object type: "${webhookObjectType}" | has messaging array: ${webhookHasMessaging} | WhatsApp parse: ${incomingMessage ? "YES" : "no"} | status-update parse: ${statusUpdate ? "YES" : "no"}`);
@@ -2240,10 +2246,16 @@ export async function registerRoutes(
       }
 
       // [Stage 3] Parse Instagram Direct messages
-      const igEntry = req.body.entry?.[0];
-      if (igEntry?.messaging && req.body.object === 'instagram') {
-        console.log(`[Meta Webhook] [Stage 3-IG] Instagram messaging block — ${igEntry.messaging.length} event(s)`);
-        for (const event of igEntry.messaging) {
+      const igEntries: any[] = Array.isArray(req.body.entry) ? req.body.entry : [];
+      if (req.body.object === 'instagram') {
+        console.log(`[Meta Webhook] [Stage 3-IG] object=instagram, ${igEntries.length} entry(s)`);
+      }
+      for (const igEntry of igEntries) {
+        const igEvents: any[] = Array.isArray(igEntry?.messaging) ? igEntry.messaging : [];
+        if (!igEvents.length || req.body.object !== 'instagram') continue;
+
+        console.log(`[Meta Webhook] [Stage 3-IG] Entry id=${igEntry?.id ?? null}, ${igEvents.length} messaging event(s)`);
+        for (const event of igEvents) {
           if (event.message) {
             const senderId = event.sender?.id;
             const messageText = event.message.text || '';
@@ -2315,13 +2327,15 @@ export async function registerRoutes(
               } else {
                 console.warn(`[Meta Webhook] [Stage 3-IG] LOOKUP FAILED — recipientId: ${recipientId}. No connected Instagram channelSettings record matched. Message from senderId=${senderId} is being DROPPED.`);
                 console.warn(`[Meta Webhook] [Stage 3-IG] FIX: Go to Integrations → Instagram, enter your Page ID / Instagram Account ID (the one Meta calls as recipient="${recipientId}") and mark it connected.`);
+                // Print a compact raw payload snippet for troubleshooting recipient id mismatches.
+                console.warn("[Meta Webhook] [Stage 3-IG] rawBody snippet", rawBody.slice(0, 1200));
               }
             } else {
               console.log(`[Meta Webhook] [Stage 3-IG] Skipping event — senderId or content missing (senderId=${senderId}, textLen=${messageText.length}, attachments=${attachments.length})`);
             }
           }
         }
-      }
+      } // end IG entries loop
 
       // [Stage 3] Parse Facebook Messenger messages
       // object=page covers all Messenger DMs to a Facebook Page
@@ -4272,8 +4286,22 @@ export async function registerRoutes(
         graphError: checkData?.error?.message ?? null,
       });
 
-      // 3. POST subscribed_apps — prefer messages + messaging_postbacks; fall back to messages only.
-      const tryFieldsList = ["messages,messaging_postbacks", "messages"];
+      // 3. POST subscribed_apps — broaden fields for Instagram to include IG-specific delivery where supported.
+      // Use fallbacks because Meta can reject unknown fields depending on app/page configuration.
+      const tryFieldsList =
+        channel === "instagram"
+          ? [
+              "messages,messaging_postbacks,messaging_optins,messaging_referrals,messaging_seen,instagram_messages",
+              "messages,messaging_postbacks,messaging_seen,instagram_messages",
+              "messages,messaging_postbacks",
+              "messages",
+            ]
+          : [
+              "messages,messaging_postbacks,messaging_optins,messaging_referrals,messaging_seen",
+              "messages,messaging_postbacks,messaging_seen,messaging_referrals",
+              "messages,messaging_postbacks",
+              "messages",
+            ];
       let resubscribed = false;
       let subError: string | null = null;
       let subData: any = null;
@@ -4333,7 +4361,7 @@ export async function registerRoutes(
         subFieldsUsed: subFieldsUsed || null,
         subError,
         message: resubscribed
-          ? `Webhook re-subscribed successfully. Facebook will now deliver messages to your inbox.`
+          ? `Webhook re-subscribed successfully. Meta will now deliver ${channel === "instagram" ? "Instagram DMs" : "Messenger messages"} to your inbox.`
           : `Re-subscribe failed: ${subError || "Unknown error"}. Verify Meta App webhook URL matches ${webhookCallbackHint} and check logs.`,
       });
     } catch (err: unknown) {

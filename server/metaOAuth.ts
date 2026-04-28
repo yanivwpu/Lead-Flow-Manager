@@ -422,35 +422,55 @@ export async function connectPage(
 
   // Step 3: Subscribe page to webhooks.
   // Endpoint: POST /{page_id}/subscribed_apps
-  // Both Facebook Messenger and Instagram DMs (via Messenger Platform) use `messages`
-  // as the subscribed_field. The `instagram` value is NOT a valid page subscription
-  // field — it's an app-level webhook product setting in the developer console.
-  // Instagram DMs are distinguished from Facebook DMs by the webhook payload shape
-  // (object: "instagram" vs object: "page") not by the subscription field.
-  const subscribedFields = "messages";
+  //
+  // Meta's subscription fields differ across products/versions, and a too-strict
+  // list can fail silently in production (leading to "connected" UI but no inbound).
+  // We try a broad set first, then progressively fall back to `messages`.
+  const trySubscribedFields =
+    channel === "instagram"
+      ? [
+          // IG DMs: keep `messages` and include newer IG-specific fields when available.
+          "messages,messaging_postbacks,messaging_optins,messaging_referrals,messaging_seen,instagram_messages",
+          "messages,messaging_postbacks,messaging_seen,instagram_messages",
+          "messages,messaging_postbacks",
+          "messages",
+        ]
+      : [
+          // FB Messenger: include common Messenger events; fall back as needed.
+          "messages,messaging_postbacks,messaging_optins,messaging_referrals,messaging_seen",
+          "messages,messaging_postbacks,messaging_seen,messaging_referrals",
+          "messages,messaging_postbacks",
+          "messages",
+        ];
   const subEndpoint = `${GRAPH}/${page.id}/subscribed_apps`;
-  console.log(`[MetaOAuth] Step 3: POST ${subEndpoint} subscribed_fields=${subscribedFields}`);
+  console.log(`[MetaOAuth] Step 3: POST ${subEndpoint} subscribed_fields candidates=${trySubscribedFields.join(" | ")}`);
   try {
-    const subResp = await fetch(subEndpoint, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: `subscribed_fields=${subscribedFields}&access_token=${encodeURIComponent(page.accessToken)}`,
-    });
-    const subData = (await subResp.json()) as any;
-    console.log(`[MetaOAuth] subscribed_apps response:`, JSON.stringify({
-      http_status: subResp.status,
-      success: subData?.success,
-      error_code: subData?.error?.code,
-      error_type: subData?.error?.type,
-      error_message: subData?.error?.message,
-    }));
-    if (subResp.ok && subData.success) {
-      result.steps.webhookSubscribed = true;
-    } else {
-      result.warnings.push(
-        `Webhook subscription failed [${subData?.error?.code ?? subResp.status}]: ` +
-        (subData?.error?.message ?? "unknown — messages may not arrive until resolved")
-      );
+    for (const subscribedFields of trySubscribedFields) {
+      const subResp = await fetch(subEndpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: `subscribed_fields=${encodeURIComponent(subscribedFields)}&access_token=${encodeURIComponent(page.accessToken)}`,
+      });
+      const subData = (await subResp.json()) as any;
+      console.log(`[MetaOAuth] subscribed_apps response:`, JSON.stringify({
+        subscribed_fields: subscribedFields,
+        http_status: subResp.status,
+        success: subData?.success,
+        error_code: subData?.error?.code,
+        error_type: subData?.error?.type,
+        error_message: subData?.error?.message,
+      }));
+      if (subResp.ok && subData.success) {
+        result.steps.webhookSubscribed = true;
+        break;
+      }
+      // keep trying fallbacks; only warn after exhausting candidates
+      if (subscribedFields === trySubscribedFields[trySubscribedFields.length - 1]) {
+        result.warnings.push(
+          `Webhook subscription failed [${subData?.error?.code ?? subResp.status}]: ` +
+            (subData?.error?.message ?? "unknown — messages may not arrive until resolved")
+        );
+      }
     }
   } catch (e: any) {
     result.warnings.push("Webhook subscription failed: " + (e.message || "unknown error"));
