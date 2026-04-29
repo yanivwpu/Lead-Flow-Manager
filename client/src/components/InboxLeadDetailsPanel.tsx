@@ -817,6 +817,55 @@ export function InboxLeadDetailsPanel({
   };
   const aiStateLabel = AI_STATE_LABELS[intel.aiState] ?? intel.aiState;
 
+  // ── Safe system score auto-tag (server-enforced) ──────────────────────────
+  const systemScoreTagKeyRef = useRef<string>("");
+  useEffect(() => {
+    const d = intel.leadScoreDetails;
+    if (!d) return;
+
+    // Mapping: hot/warm/unqualified only. cold → no auto-tag.
+    const desiredTag =
+      d.bucket === "hot" ? "Hot Lead" :
+      d.bucket === "warm" ? "Warm Lead" :
+      d.bucket === "unqualified" ? "Unqualified" :
+      null;
+    if (!desiredTag) return;
+
+    // Confidence threshold
+    if ((d.confidence01 ?? 0) < 0.75) return;
+
+    const key = `${contact.id}:${desiredTag}:${Math.round((d.confidence01 ?? 0) * 100)}:${d.score}`;
+    if (systemScoreTagKeyRef.current === key) return;
+    systemScoreTagKeyRef.current = key;
+
+    fetch(`/api/contacts/${contact.id}/system-score-tag`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({
+        bucket: d.bucket,
+        score: d.score,
+        confidence: d.confidence01,
+      }),
+    })
+      .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
+      .then((resp) => {
+        // Server is source of truth; log for auditability without mutating UI state here.
+        // Contact updates will arrive via normal refetch/invalidation paths in the app.
+        if (resp?.applied) {
+          console.info("[system-score-tag] applied", {
+            contactId: contact.id,
+            oldTag: resp.oldTag,
+            newTag: resp.newTag,
+            bucket: d.bucket,
+            score: d.score,
+            confidence: d.confidence01,
+          });
+        }
+      })
+      .catch(() => {});
+  }, [contact.id, intel.leadScoreDetails]);
+
   const completeAction = (actionType: string, toastMsg: string) => {
     setFadingAction(actionType);
     setTimeout(() => {

@@ -177,6 +177,113 @@ export function registerContactRoutes(app: Express): void {
     }
   });
 
+  /**
+   * System score auto-tag (safe mode).
+   * - Never overwrites non-system/manual/workflow tags.
+   * - Only applies to New/empty or existing system score tags.
+   * - Enforces a minimum confidence threshold.
+   *
+   * This endpoint is intentionally contact-scoped (Unified Inbox) and does not
+   * touch pipelineStage. DB schema is unchanged.
+   */
+  app.post("/api/contacts/:id/system-score-tag", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+
+      const contact = await storage.getContact(req.params.id);
+      if (!contact) return res.status(404).json({ error: "Contact not found" });
+      if (contact.userId !== req.user.id) return res.status(403).json({ error: "Forbidden" });
+
+      const bucket = String(req.body?.bucket || "").toLowerCase();
+      const score = typeof req.body?.score === "number" ? req.body.score : undefined;
+      const confidence = typeof req.body?.confidence === "number" ? req.body.confidence : undefined;
+
+      const SYSTEM_TAGS = ["Hot Lead", "Warm Lead", "Unqualified"] as const;
+      const isSystemTag = (t: string | null | undefined) => SYSTEM_TAGS.includes((t || "") as any);
+      const isNeutralTag = (t: string | null | undefined) => {
+        const v = (t || "").trim();
+        return v === "" || v.toLowerCase() === "new";
+      };
+
+      const desiredTag =
+        bucket === "hot" ? "Hot Lead" :
+        bucket === "warm" ? "Warm Lead" :
+        bucket === "unqualified" ? "Unqualified" :
+        null; // cold → no auto-tag
+
+      const oldTag = (contact as any).tag as string;
+
+      if (!desiredTag) {
+        return res.json({ applied: false, skipped: true, reason: "bucket_not_eligible", oldTag, newTag: null });
+      }
+
+      if (confidence == null || confidence < 0.75) {
+        return res.json({
+          applied: false,
+          skipped: true,
+          reason: "confidence_below_threshold",
+          oldTag,
+          newTag: null,
+          bucket,
+          score,
+          confidence,
+        });
+      }
+
+      const eligibleCurrent = isNeutralTag(oldTag) || isSystemTag(oldTag);
+      if (!eligibleCurrent) {
+        return res.json({
+          applied: false,
+          skipped: true,
+          reason: "current_tag_not_eligible",
+          oldTag,
+          newTag: null,
+          bucket,
+          score,
+          confidence,
+        });
+      }
+
+      if ((oldTag || "").trim() === desiredTag) {
+        return res.json({
+          applied: false,
+          skipped: true,
+          reason: "already_set",
+          oldTag,
+          newTag: desiredTag,
+          bucket,
+          score,
+          confidence,
+        });
+      }
+
+      const updated = await storage.updateContact(contact.id, { tag: desiredTag });
+
+      console.info("[system-score-tag] applied", {
+        contactId: contact.id,
+        oldTag,
+        newTag: desiredTag,
+        bucket,
+        score,
+        confidence,
+        reason: "eligible_and_confident",
+      });
+
+      res.json({
+        applied: true,
+        oldTag,
+        newTag: desiredTag,
+        bucket,
+        score,
+        confidence,
+        contact: updated,
+      });
+    } catch (error) {
+      console.error("[system-score-tag] error", error);
+      res.status(500).json({ error: "Failed to apply system score tag" });
+    }
+  });
+
   // Delete contact
   app.delete("/api/contacts/:id", async (req, res) => {
     try {
