@@ -1,4 +1,5 @@
 import type { Express } from "express";
+import { CHANNELS } from "@shared/schema";
 import { storage } from "../storage";
 import OpenAI from "openai";
 
@@ -293,7 +294,7 @@ export function registerContactRoutes(app: Express): void {
     }
   });
 
-  // Send message to contact (auto channel selection)
+  // Send message to contact (auto channel selection, or forceChannel from body when set)
   app.post("/api/contacts/:id/send", async (req, res) => {
     try {
       if (!req.user) {
@@ -302,6 +303,16 @@ export function registerContactRoutes(app: Express): void {
       const { content, contentType, mediaUrl, mediaType, mediaFilename, channel } = req.body;
       if (!content?.trim() && !mediaUrl) {
         return res.status(400).json({ error: "Message must have content or a media attachment" });
+      }
+      const requested =
+        channel !== undefined && channel !== null && String(channel).trim() !== ""
+          ? String(channel).trim()
+          : undefined;
+      if (requested && !(CHANNELS as readonly string[]).includes(requested)) {
+        return res.status(400).json({ error: "Invalid channel" });
+      }
+      if (requested) {
+        console.log(`[api/contacts/send] contactId=${req.params.id} requestedChannel=${requested}`);
       }
       const { channelService } = await import("../channelService");
       const result = await channelService.sendMessage({
@@ -312,7 +323,8 @@ export function registerContactRoutes(app: Express): void {
         mediaUrl,
         mediaType,
         mediaFilename,
-        forceChannel: channel,
+        forceChannel: requested,
+        suppressFallback: !!requested,
       });
       if (result.success) {
         res.json(result);

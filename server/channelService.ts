@@ -6,6 +6,8 @@ import {
   CHANNEL_INFO, CHANNELS 
 } from "@shared/schema";
 
+type ForceChannelInput = Channel | string | undefined;
+
 /** Human-readable last-message preview for media messages. */
 function mediaPreviewLabel(contentType?: string): string {
   switch (contentType) {
@@ -88,6 +90,48 @@ class ChannelService {
       .map(s => s.channel as Channel);
   }
 
+  /** Validates outbound-only constraints when the client forces a channel (no silent fallback). */
+  private async validateForcedOutboundChannel(
+    userId: string,
+    contact: Contact,
+    channel: Channel
+  ): Promise<{ ok: true } | { ok: false; reason: string }> {
+    if (!CHANNEL_INFO[channel]?.isMessaging) {
+      return { ok: false, reason: 'This channel cannot be used for outbound messaging' };
+    }
+
+    if (channel === 'gohighlevel' && !contact.ghlId) {
+      return { ok: false, reason: 'Contact has no GoHighLevel identifier — cannot send on this channel' };
+    }
+
+    const channelIdField: Partial<Record<Channel, keyof Contact>> = {
+      whatsapp: 'whatsappId',
+      instagram: 'instagramId',
+      facebook: 'facebookId',
+      sms: 'phone',
+      telegram: 'telegramId',
+    };
+    const idField = channelIdField[channel];
+    if (idField && !contact[idField]) {
+      return { ok: false, reason: 'Contact has no identifier for this channel — choose another channel or update the contact' };
+    }
+
+    const enabled = await this.getEnabledChannels(userId);
+    if (!enabled.includes(channel)) {
+      return { ok: false, reason: `${CHANNEL_INFO[channel].label} is not connected for this workspace` };
+    }
+
+    const adapter = this.adapters.get(channel);
+    if (adapter) {
+      const available = await adapter.isAvailable(userId);
+      if (!available) {
+        return { ok: false, reason: `${CHANNEL_INFO[channel].label} is not available — check connection settings` };
+      }
+    }
+
+    return { ok: true };
+  }
+
   async sendMessage(params: {
     userId: string;
     contactId: string;
@@ -96,10 +140,12 @@ class ChannelService {
     mediaUrl?: string;
     mediaType?: string;
     mediaFilename?: string;
-    forceChannel?: Channel;
+    forceChannel?: ForceChannelInput;
+    /** When true (e.g. inbox user picked a channel), validate availability and never delivery-fallback to another channel. */
+    suppressFallback?: boolean;
     templateVariables?: Record<string, any>;
   }): Promise<SendMessageResult> {
-    const { userId, contactId, contentType = 'text', mediaUrl, mediaType, mediaFilename, forceChannel, templateVariables } = params;
+    const { userId, contactId, contentType = 'text', mediaUrl, mediaType, mediaFilename, forceChannel, suppressFallback, templateVariables } = params;
     const content = params.content ?? '';
 
     if (!content && !mediaUrl) {
@@ -111,8 +157,40 @@ class ChannelService {
       return { success: false, channel: 'whatsapp', error: 'Contact not found' };
     }
 
-    const targetChannel = forceChannel || this.getPrimaryChannel(contact);
-    
+    const rawForce = forceChannel;
+    const trimmedForce =
+      rawForce === undefined || rawForce === null
+        ? ''
+        : String(rawForce).trim();
+    const explicitForce = trimmedForce.length > 0;
+    const pinChannelNoFallback = explicitForce && suppressFallback === true;
+
+    let targetChannel: Channel;
+
+    if (explicitForce) {
+      if (!(CHANNELS as readonly string[]).includes(trimmedForce)) {
+        console.warn(`[sendMessage] blocked contactId=${contactId} selectedChannel=${trimmedForce} reason=invalid_channel`);
+        return { success: false, channel: 'whatsapp', error: 'Invalid channel' };
+      }
+      const forced = trimmedForce as Channel;
+      if (pinChannelNoFallback) {
+        const gate = await this.validateForcedOutboundChannel(userId, contact, forced);
+        if (!gate.ok) {
+          console.warn(
+            `[sendMessage] blocked contactId=${contactId} selectedChannel=${forced} reason=${gate.reason}`
+          );
+          return { success: false, channel: forced, error: gate.reason };
+        }
+      }
+      targetChannel = forced;
+    } else {
+      targetChannel = this.getPrimaryChannel(contact);
+    }
+
+    console.log(
+      `[sendMessage] start contactId=${contactId} selectedChannel=${explicitForce ? targetChannel : '(auto)'} resolvedChannel=${targetChannel} suppressFallback=${pinChannelNoFallback}`
+    );
+
     let conversation = await storage.getConversationByContactAndChannel(contactId, targetChannel);
     if (!conversation) {
       conversation = await storage.createConversation({
@@ -150,6 +228,9 @@ class ChannelService {
     const preview = content || (mediaUrl ? mediaPreviewLabel(contentType) : '');
 
     if (sendResult.success) {
+      console.log(
+        `[sendMessage] success contactId=${contactId} finalChannel=${targetChannel} messageId=${message.id}`
+      );
       console.log(`[Debug] Outgoing message sent — messageId: ${message.id}, conversationId: ${conversation.id}, channel: ${targetChannel}`);
       await storage.updateMessage(message.id, {
         status: 'sent',
@@ -185,6 +266,22 @@ class ChannelService {
       };
     }
 
+    if (pinChannelNoFallback) {
+      await storage.updateMessage(message.id, {
+        status: 'failed',
+        errorMessage: sendResult.error,
+      });
+      console.warn(
+        `[sendMessage] failed contactId=${contactId} finalChannel=${targetChannel} error=${sendResult.error || 'unknown'}`
+      );
+      return {
+        success: false,
+        messageId: message.id,
+        channel: targetChannel,
+        error: sendResult.error || 'Message delivery failed',
+      };
+    }
+
     const fallbackChannels = await this.getFallbackChannels(userId);
     for (const fallbackChannel of fallbackChannels) {
       if (fallbackChannel === targetChannel) continue;
@@ -210,6 +307,9 @@ class ChannelService {
       });
 
       if (fallbackResult.success) {
+        console.log(
+          `[sendMessage] success contactId=${contactId} finalChannel=${fallbackChannel} messageId=${message.id} (fallback from ${targetChannel})`
+        );
         await storage.updateMessage(message.id, {
           status: 'sent',
           externalMessageId: fallbackResult.externalMessageId,
@@ -244,6 +344,10 @@ class ChannelService {
       status: 'failed',
       errorMessage: sendResult.error,
     });
+
+    console.warn(
+      `[sendMessage] failed contactId=${contactId} finalChannel=${targetChannel} error=${sendResult.error || 'unknown'}`
+    );
 
     return {
       success: false,

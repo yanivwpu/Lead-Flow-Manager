@@ -483,6 +483,24 @@ export function UnifiedInbox() {
     (c) => c.channel === effectiveChannel
   ) || contactData?.conversations?.[0];
 
+  /** Immediate UI selection for outbound sends while PATCH /channel refetches; cleared when server state matches. */
+  const [sendChannelUi, setSendChannelUi] = useState<Channel | null>(null);
+  useEffect(() => { setSendChannelUi(null); }, [selectedContactId]);
+  useEffect(() => {
+    if (sendChannelUi && effectiveChannel === sendChannelUi) {
+      setSendChannelUi(null);
+    }
+  }, [effectiveChannel, sendChannelUi]);
+
+  const activeChannel: Channel = (
+    sendChannelUi ??
+    effectiveChannel ??
+    (contactData?.contact as Contact | undefined)?.primaryChannel ??
+    'whatsapp'
+  ) as Channel;
+
+  const isWhatsAppContact = activeChannel === 'whatsapp';
+
   const { data: realMessages = [], isLoading: messagesLoading, isFetching: messagesFetching } = useQuery<Message[]>({
     queryKey: ["/api/conversations", primaryConversation?.id, "messages"],
     enabled: !!primaryConversation?.id && (!isDemoUser || !selectedDemoChat),
@@ -510,8 +528,6 @@ export function UnifiedInbox() {
     enabled: !!primaryConversation?.id && !isDemoUser,
     refetchInterval: 60000,
   });
-
-  const isWhatsAppContact = effectiveChannel === 'whatsapp';
 
   const { data: whatsappAvailability } = useQuery<WhatsAppAvailability>({
     queryKey: ["/api/channels/whatsapp/availability"],
@@ -647,6 +663,7 @@ export function UnifiedInbox() {
     mutationFn: async (data: {
       contactId: string;
       content: string;
+      channel: Channel;
       mediaUrl?: string;
       mediaType?: string;
       mediaFilename?: string;
@@ -662,6 +679,7 @@ export function UnifiedInbox() {
           mediaUrl: data.mediaUrl,
           mediaType: data.mediaType ? `${data.mediaType}` : undefined,
           mediaFilename: data.mediaFilename,
+          channel: data.channel,
         }),
       });
       const json = await res.json();
@@ -856,6 +874,7 @@ export function UnifiedInbox() {
     sendMessageMutation.mutate({
       contactId: selectedContactId,
       content: messageInput,
+      channel: activeChannel,
       ...(pendingFile ? {
         mediaUrl: pendingFile.mediaUrl,
         mediaType: pendingFile.mediaType,
@@ -867,8 +886,8 @@ export function UnifiedInbox() {
 
   const handleAutoSend = useCallback((message: string) => {
     if (!message.trim() || !selectedContactId) return;
-    sendMessageMutation.mutate({ contactId: selectedContactId, content: message });
-  }, [selectedContactId, sendMessageMutation]);
+    sendMessageMutation.mutate({ contactId: selectedContactId, content: message, channel: activeChannel });
+  }, [selectedContactId, sendMessageMutation, activeChannel]);
 
   const ACCEPTED_TYPES: Record<string, string> = {
     "image/jpeg": "image", "image/jpg": "image", "image/png": "image", "image/webp": "image",
@@ -1044,9 +1063,6 @@ export function UnifiedInbox() {
     };
   }, [contact, messages]);
 
-  // Use the same smart channel resolution as the backend (effectiveChannel) so the
-  // header, window-status banner, and send path all agree on the channel being used.
-  const activeChannel: Channel = (effectiveChannel || contact?.primaryChannel || 'whatsapp') as Channel;
   const convStatus = primaryConversation?.status || 'open';
   const statusConfig = CONVERSATION_STATUSES.find(s => s.value === convStatus) || CONVERSATION_STATUSES[0];
 
@@ -1364,6 +1380,7 @@ export function UnifiedInbox() {
                         <DropdownMenuItem
                           key={key}
                           onClick={() => {
+                            setSendChannelUi(key as Channel);
                             if (isDemoUser && selectedContactId) {
                               setDemoChannelOverrides(prev => ({ ...prev, [selectedContactId]: key as Channel }));
                             } else if (selectedContactId) {
