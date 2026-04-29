@@ -657,8 +657,8 @@ export function InboxLeadDetailsPanel({
 
   // ── Conversation intelligence — re-runs whenever messages change ──
   const intel = useMemo(
-    () => analyzeConversation(messages, { industry: businessKnowledge?.industry }),
-    [messages, businessKnowledge?.industry]
+    () => analyzeConversation(messages, { industry: businessKnowledge?.industry, businessKnowledge }),
+    [messages, businessKnowledge]
   );
 
   // ── Workflow layer — computes recommended actions from intel + contact state ──
@@ -785,6 +785,8 @@ export function InboxLeadDetailsPanel({
   // ── Auto-tag: apply tag automatically when signal is strong + current tag is neutral ──
   const autoTagAppliedRef = useRef<string | null>(null);
   useEffect(() => {
+    // Phase 1 scoring: do not auto-apply tags/stages yet (suggestions only).
+    return;
     if (!workflow.tagAutoApply || !workflow.tagSuggestion) return;
     const key = `${contact.id}:${workflow.tagSuggestion}`;
     if (autoTagAppliedRef.current === key) return;
@@ -895,7 +897,10 @@ export function InboxLeadDetailsPanel({
               <div className="flex items-center gap-1.5">
                 <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", intel.leadScore.dot)} />
                 <span className={cn("text-[11px] font-semibold", intel.leadScore.color)}>
-                  {intel.leadScore.label} Lead
+                  {(intel.leadScoreDetails?.bucket === "unqualified"
+                    ? "Unqualified"
+                    : intel.leadScore.label)}{" "}
+                  Lead
                 </span>
               </div>
               <span className="text-[10px] text-gray-400 ml-3">
@@ -904,17 +909,8 @@ export function InboxLeadDetailsPanel({
                     const firstUnanswered = qualifyingCriteria.find(c => !answeredCriteriaKeys.has(c.key));
                     return firstUnanswered ? `Needs ${firstUnanswered.label}` : aiStateLabel;
                   }
-                  const industry = (businessKnowledge?.industry || "").toLowerCase();
-                  const isRealEstate = industry.includes("real estate") || industry.includes("realtor") || industry.includes("property");
-                  if (!isRealEstate) return aiStateLabel;
-                  const missing = [
-                    !intel.hasBudget    && "budget",
-                    !intel.hasTimeline  && "timeline",
-                    !intel.hasFinancing && "financing",
-                  ].filter(Boolean) as string[];
-                  return missing.length
-                    ? `Needs ${missing.slice(0, 2).join(" & ")}`
-                    : aiStateLabel;
+                  const missing = intel.leadScoreDetails?.missingRequired ?? [];
+                  return missing.length ? `Needs ${missing.slice(0, 2).join(" & ")}` : aiStateLabel;
                 })()}
               </span>
             </div>
@@ -1357,12 +1353,31 @@ export function InboxLeadDetailsPanel({
                       <div className="flex items-center gap-1.5">
                         <span className={cn("w-2 h-2 rounded-full shrink-0", intel.leadScore.dot)} />
                         <span className={cn("text-[13px] font-semibold leading-tight", intel.leadScore.color)}>
-                          {intel.leadScore.label} Lead
+                          {(intel.leadScoreDetails?.bucket === "unqualified"
+                            ? "Unqualified"
+                            : intel.leadScore.label)}{" "}
+                          Lead
                         </span>
                       </div>
                       <p className="text-[11px] text-gray-400 mt-0.5 ml-3.5">
                         {intel.intent} · {aiStateLabel}
                       </p>
+                      {intel.leadScoreDetails ? (
+                        <div className="mt-1 ml-3.5 space-y-0.5">
+                          {intel.leadScoreDetails.reasons.slice(0, 3).map((r) => (
+                            <div key={r} className="text-[11px] text-gray-500 leading-snug">
+                              {r}
+                            </div>
+                          ))}
+                          {intel.leadScoreDetails.missingRequired.length > 0 ? (
+                            <div className="text-[11px] text-gray-500 leading-snug">
+                              <span className="text-gray-400">Missing required:</span>{" "}
+                              {intel.leadScoreDetails.missingRequired.slice(0, 3).join(", ")}
+                              {intel.leadScoreDetails.missingRequired.length > 3 ? "…" : ""}
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : null}
                     </div>
 
                     <div className="flex flex-col gap-1">

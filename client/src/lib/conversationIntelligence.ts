@@ -4,6 +4,8 @@
  * Computes lead score and AI state dynamically.
  */
 
+import { scoreLead, type BusinessKnowledgeForScoring } from "./leadScoring";
+
 export interface ConversationMessage {
   direction: 'inbound' | 'outbound';
   content: string;
@@ -41,8 +43,18 @@ export interface LeadScore {
   confidence: number; // 0–100
 }
 
+export interface LeadScoreDetails {
+  score: number; // 0–100
+  bucket: 'hot' | 'warm' | 'cold' | 'unqualified';
+  reasons: string[];
+  missingRequired: string[];
+  negativeSignals: string[];
+  confidence01: number; // 0–1
+}
+
 export interface CopilotIntelligence extends QualificationData {
   leadScore: LeadScore;
+  leadScoreDetails?: LeadScoreDetails;
   aiState: 'Ready' | 'Qualifying' | 'Engaging' | 'Waiting' | 'Stalled';
   signalCount: number; // total qualification signals found
   isUrgent: boolean;
@@ -241,29 +253,6 @@ function detectUrgency(messages: ConversationMessage[]): boolean {
 
 // ── Lead Score ─────────────────────────────────────────────────────────────────
 
-function computeLeadScore(
-  hasBudget: boolean,
-  hasTimeline: boolean,
-  hasFinancing: boolean,
-  isUrgent: boolean,
-  messageCount: number,
-  inboundCount: number,
-): LeadScore {
-  const signals = [hasBudget, hasTimeline, hasFinancing].filter(Boolean).length;
-  const engagementHigh = messageCount >= 8 || inboundCount >= 4;
-  const engagementMed  = messageCount >= 4 || inboundCount >= 2;
-
-  if (signals === 3 || (signals >= 2 && isUrgent) || (signals >= 2 && engagementHigh)) {
-    return { label: 'Hot', color: 'text-red-600', dot: 'bg-red-500', confidence: 85 + signals * 5 };
-  }
-
-  if (signals >= 1 || (engagementMed && signals === 0 && !isUrgent)) {
-    return { label: 'Warm', color: 'text-amber-600', dot: 'bg-amber-400', confidence: 50 + signals * 15 };
-  }
-
-  return { label: 'Cold', color: 'text-blue-500', dot: 'bg-blue-400', confidence: 20 };
-}
-
 // ── AI State ───────────────────────────────────────────────────────────────────
 
 function computeAiState(
@@ -295,7 +284,7 @@ function computeAiState(
 
 export function analyzeConversation(
   messages: ConversationMessage[],
-  opts?: { industry?: string; isRealEstate?: boolean }
+  opts?: { industry?: string; isRealEstate?: boolean; businessKnowledge?: BusinessKnowledgeForScoring }
 ): CopilotIntelligence {
   if (!messages || messages.length === 0) {
     return {
@@ -333,13 +322,31 @@ export function analyzeConversation(
   const lastDirection = messages.length > 0 ? messages[messages.length - 1].direction : null;
   const signalCount   = [hasBudget, hasTimeline, hasFinancing].filter(Boolean).length;
 
-  const leadScore = computeLeadScore(hasBudget, hasTimeline, hasFinancing, isUrgent, messageCount, inboundCount);
+  const scoring = scoreLead(messages, opts?.businessKnowledge ?? { industry: opts?.industry }, { isRealEstate });
+  const leadScore: LeadScore = (() => {
+    const label = scoring.bucket === "hot" ? "Hot" : scoring.bucket === "warm" ? "Warm" : "Cold";
+    if (scoring.bucket === "unqualified") {
+      return { label: "Cold", color: "text-gray-500", dot: "bg-gray-400", confidence: Math.round(scoring.confidence * 100) };
+    }
+    if (label === "Hot") return { label, color: "text-red-600", dot: "bg-red-500", confidence: Math.round(scoring.confidence * 100) };
+    if (label === "Warm") return { label, color: "text-amber-600", dot: "bg-amber-400", confidence: Math.round(scoring.confidence * 100) };
+    return { label: "Cold", color: "text-blue-500", dot: "bg-blue-400", confidence: Math.round(scoring.confidence * 100) };
+  })();
   const aiState   = computeAiState(hasBudget, hasTimeline, hasFinancing, messageCount, lastDirection, isUrgent);
 
   return {
     budget, timeline, financing, intent,
     hasBudget, hasTimeline, hasFinancing,
-    leadScore, aiState,
+    leadScore,
+    leadScoreDetails: {
+      score: scoring.score,
+      bucket: scoring.bucket,
+      reasons: scoring.reasons,
+      missingRequired: scoring.missingRequired,
+      negativeSignals: scoring.negativeSignals,
+      confidence01: scoring.confidence,
+    },
+    aiState,
     signalCount, isUrgent, messageCount, lastDirection,
   };
 }
