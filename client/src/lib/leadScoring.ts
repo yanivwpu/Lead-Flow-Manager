@@ -30,6 +30,14 @@ type ScoreOptions = {
   isRealEstate?: boolean;
 };
 
+export type StageSignalSummary = {
+  isRealEstate: boolean;
+  strongEngagement: boolean;
+  strongIntent: boolean;
+  viewingIntent: boolean;
+  intents: Array<"booking" | "pricing" | "quote" | "availability">;
+};
+
 const URGENCY_WORDS = [
   "asap",
   "as soon as possible",
@@ -84,6 +92,28 @@ function detectIntent(inbound: string): Array<"booking" | "pricing" | "quote" | 
   if (/\bquote|estimate\b/i.test(inbound)) intents.push("quote");
   if (/\bavailable|availability|in stock|still available\b/i.test(inbound)) intents.push("availability");
   return intents;
+}
+
+/**
+ * Deterministic intent/engagement signals for stage suggestions.
+ * This is explicitly NOT an auto-move mechanism — it only produces evidence flags.
+ */
+function getStageSignals(
+  messages: ConversationMessage[],
+  businessKnowledge?: BusinessKnowledgeForScoring,
+  options?: ScoreOptions
+): StageSignalSummary {
+  const inbound = inboundText(messages);
+  const stats = messageStats(messages);
+  const isRealEstate = inferIsRealEstate(businessKnowledge, options);
+  const intents = detectIntent(inbound);
+  const reSignals = isRealEstate ? extractRealEstateSignals(inbound) : null;
+
+  const strongEngagement = stats.inbound >= 2 && stats.turns >= 1;
+  const strongIntent = intents.length > 0;
+  const viewingIntent = !!reSignals?.viewingIntent;
+
+  return { isRealEstate, strongEngagement, strongIntent, viewingIntent, intents };
 }
 
 // Minimal real-estate-only signals (deterministic, inbound-only)
@@ -284,4 +314,7 @@ export function scoreLead(
     confidence,
   };
 }
+
+// Explicit re-export for build systems that rely on export maps.
+export { getStageSignals };
 
