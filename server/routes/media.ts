@@ -134,6 +134,12 @@ async function uploadMediaBuffer(
 // Route registration
 // ---------------------------------------------------------------------------
 export function registerMediaRoutes(app: Express): void {
+  if (process.env.NODE_ENV === "production" && !process.env.PRIVATE_OBJECT_DIR) {
+    console.warn(
+      "[MediaUpload] PRODUCTION: PRIVATE_OBJECT_DIR is unset — new uploads use ephemeral local /uploads/ and will not survive redeploys. Configure object storage (e.g. on Railway) and APP_URL."
+    );
+  }
+
   // Memory storage — no bytes touch local disk in the multer layer
   const upload = multer({
     storage: multer.memoryStorage(),

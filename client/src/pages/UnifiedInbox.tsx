@@ -1462,9 +1462,10 @@ export function UnifiedInbox() {
                           {(() => {
                             const hasMedia = !!(msg.mediaUrl || msg.mediaFilename);
                             const isOptimistic = msg.id.startsWith('optimistic-');
-                            const mediaDisplayUrl = isOut && msg.mediaUrl
-                              ? msg.mediaUrl
-                              : `/api/media/proxy?messageId=${msg.id}`;
+                            const proxyUrl = `/api/media/proxy?messageId=${encodeURIComponent(msg.id)}`;
+                            // Outbound images use the authenticated proxy so URLs survive host/storage migration.
+                            const imageSrc = isOptimistic && msg.mediaUrl ? msg.mediaUrl : proxyUrl;
+                            const mediaDisplayUrl = isOut && msg.mediaUrl ? msg.mediaUrl : proxyUrl;
                             const ct = msg.contentType;
                             const isImage = ct === 'image' || msg.mediaType?.startsWith('image');
                             const isVideo = ct === 'video' || msg.mediaType?.startsWith('video');
@@ -1473,10 +1474,10 @@ export function UnifiedInbox() {
                             if (hasMedia && isImage) return (
                               <div>
                                 <img
-                                  src={mediaDisplayUrl}
+                                  src={imageSrc}
                                   alt="Image"
                                   className="max-w-full rounded cursor-pointer max-h-64 object-cover"
-                                  onClick={() => window.open(mediaDisplayUrl, '_blank')}
+                                  onClick={() => window.open(imageSrc, '_blank')}
                                   onLoad={() => {
                                     // ResizeObserver handles the re-scroll for most cases.
                                     // This is a direct backup for the first frame after decode.

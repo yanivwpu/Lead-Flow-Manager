@@ -3,6 +3,44 @@ import { storage } from "../storage";
 import { getMediaUrl, downloadMedia } from "../userMeta";
 import fs from "fs";
 import path from "path";
+import { ObjectStorageService, ObjectNotFoundError } from "../replit_integrations/object_storage/objectStorage";
+
+/** Same pattern as server/replit_integrations/object_storage/routes.ts for generated upload names */
+const PROXY_OBJECTS_UPLOAD_FILENAME_RE =
+  /^[\w][\w\-]*\.(jpg|jpeg|png|webp|pdf|mp3|m4a|ogg|mp4)$/i;
+
+function extractObjectsUploadFilename(mediaUrl: string): string | null {
+  try {
+    const raw = mediaUrl.trim();
+    const u =
+      raw.startsWith("http://") || raw.startsWith("https://")
+        ? new URL(raw)
+        : new URL(raw, "https://placeholder.local");
+    const m = u.pathname.match(/\/objects\/uploads\/([^/]+)$/);
+    return m ? decodeURIComponent(m[1]) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Local multer/static /uploads/* — not GCS /objects/uploads */
+function extractLocalDiskUploadFilename(mediaUrl: string): string | null {
+  if (mediaUrl.includes("/objects/uploads/")) return null;
+  try {
+    const raw = mediaUrl.trim();
+    const u =
+      raw.startsWith("http://") || raw.startsWith("https://")
+        ? new URL(raw)
+        : new URL(raw, "https://placeholder.local");
+    const idx = u.pathname.indexOf("/uploads/");
+    if (idx === -1) return null;
+    const rest = u.pathname.slice(idx + "/uploads/".length);
+    const fn = path.basename(rest.split("?")[0] || "");
+    return fn || null;
+  } catch {
+    return null;
+  }
+}
 
 export function registerConversationRoutes(app: Express): void {
   // Get conversation messages
@@ -90,7 +128,8 @@ export function registerConversationRoutes(app: Express): void {
   //               We fetch and pipe them directly. If the URL has expired we
   //               return 410 Gone so the UI can show a "media expired" notice.
   //
-  //   Outbound  : media_url is a direct external or /uploads/ URL. We pipe it.
+  //   Outbound  : media_url may be /objects/uploads, /uploads, or a remote URL.
+  //               Proxy resolves object storage + local disk + canonical APP_URL.
   //
   // All errors are logged with messageId, channel, and reason for easy debugging.
   // ---------------------------------------------------------------------------
@@ -102,14 +141,16 @@ export function registerConversationRoutes(app: Express): void {
 
       const message = await storage.getMessage(messageId);
       if (!message) {
-        console.warn(`[MediaProxy] messageId=${messageId} — not found in DB`);
+        console.warn(`[MediaProxy] messageId=${messageId} reason=message_not_found`);
         return res.status(404).json({ error: "Message not found" });
       }
 
       // Security: message must belong to the requesting user's account
       const conversation = await storage.getConversation(message.conversationId);
       if (!conversation || conversation.userId !== req.user.id) {
-        console.warn(`[MediaProxy] messageId=${messageId} — forbidden for userId=${req.user.id}`);
+        console.warn(
+          `[MediaProxy] messageId=${messageId} reason=forbidden userId=${req.user.id}`
+        );
         return res.status(403).json({ error: "Forbidden" });
       }
 
@@ -138,13 +179,17 @@ export function registerConversationRoutes(app: Express): void {
         console.log(`[MediaProxy] messageId=${messageId} channel=whatsapp mediaId=${whatsappMediaId} (from ${idSource}) — fetching fresh URL`);
         const freshUrl = await getMediaUrl(req.user.id, whatsappMediaId);
         if (!freshUrl) {
-          console.error(`[MediaProxy] messageId=${messageId} channel=whatsapp — getMediaUrl returned null (token invalid or mediaId expired)`);
+          console.error(
+            `[MediaProxy] messageId=${messageId} channel=whatsapp reason=getMediaUrl_null (token invalid or media expired)`
+          );
           return res.status(502).json({ error: "Could not retrieve WhatsApp media URL. Check Meta credentials." });
         }
 
         const buffer = await downloadMedia(req.user.id, freshUrl);
         if (!buffer) {
-          console.error(`[MediaProxy] messageId=${messageId} channel=whatsapp — downloadMedia failed for url=${freshUrl.substring(0, 80)}`);
+          console.error(
+            `[MediaProxy] messageId=${messageId} channel=whatsapp reason=downloadMedia_failed url=${freshUrl.substring(0, 80)}`
+          );
           return res.status(502).json({ error: "Could not download WhatsApp media." });
         }
 
@@ -161,68 +206,158 @@ export function registerConversationRoutes(app: Express): void {
       }
 
       // ------------------------------------------------------------------
-      // Facebook / outbound / other: media_url is a direct URL
+      // Stored media_url: GCS /objects/uploads, local /uploads, remote CDN / URL
       // ------------------------------------------------------------------
       if (message.mediaUrl) {
-        // Local /uploads/ files — serve directly from disk
-        if (message.mediaUrl.startsWith('/uploads/') || message.mediaUrl.includes('/uploads/')) {
-          const filename = path.basename(message.mediaUrl.split('/uploads/')[1] || '');
-          const filepath = path.join(process.cwd(), 'uploads', filename);
+        const rawMediaUrl = message.mediaUrl.trim();
+        const objectFn = extractObjectsUploadFilename(rawMediaUrl);
+        const localFn = extractLocalDiskUploadFilename(rawMediaUrl);
+        const appBase = (process.env.APP_URL || "").replace(/\/$/, "");
+
+        // 1) Object storage (survives redeploy; works when DB still has old host in URL)
+        if (objectFn && PROXY_OBJECTS_UPLOAD_FILENAME_RE.test(objectFn) && process.env.PRIVATE_OBJECT_DIR) {
+          try {
+            const oss = new ObjectStorageService();
+            const objectFile = await oss.getObjectEntityFile(`/objects/uploads/${objectFn}`);
+            const [metadata] = await objectFile.getMetadata();
+            const [downloaded] = await objectFile.download();
+            const buf = Buffer.isBuffer(downloaded) ? downloaded : Buffer.from(downloaded);
+            const ct =
+              (metadata.contentType as string | undefined) || mimeFromContentType(message.contentType);
+            res.set("X-Content-Type-Options", "nosniff");
+            res.set("Content-Type", ct);
+            res.set("Cache-Control", "private, max-age=3600");
+            if (message.contentType === "document") {
+              res.set("Content-Disposition", `attachment; filename="${objectFn}"`);
+            } else {
+              res.set("Content-Disposition", "inline");
+            }
+            console.log(
+              `[MediaProxy] messageId=${messageId} channel=${channel} reason=served_object_storage bytes=${buf.length} mime=${ct} fn=${objectFn}`
+            );
+            return res.send(buf);
+          } catch (e: any) {
+            if (e instanceof ObjectNotFoundError) {
+              console.warn(
+                `[MediaProxy] messageId=${messageId} channel=${channel} reason=object_not_in_bucket filename=${objectFn}`
+              );
+            } else {
+              console.warn(
+                `[MediaProxy] messageId=${messageId} channel=${channel} reason=object_storage_read_error err=${e?.message || e}`
+              );
+            }
+          }
+        } else if (objectFn && !process.env.PRIVATE_OBJECT_DIR) {
+          console.warn(
+            `[MediaProxy] messageId=${messageId} channel=${channel} reason=no_PRIVATE_OBJECT_DIR path=/objects/uploads/${objectFn}`
+          );
+        } else if (objectFn && !PROXY_OBJECTS_UPLOAD_FILENAME_RE.test(objectFn)) {
+          console.warn(
+            `[MediaProxy] messageId=${messageId} channel=${channel} reason=object_filename_not_allowed filename=${objectFn}`
+          );
+        }
+
+        // 2) Local disk /uploads/* (dev / ephemeral — not under /objects/uploads)
+        if (localFn) {
+          const filepath = path.join(process.cwd(), "uploads", localFn);
           if (fs.existsSync(filepath)) {
             const mime = mimeFromContentType(message.contentType);
-            res.set('Content-Type', mime);
-            res.set('Cache-Control', 'private, max-age=3600');
-            if (message.contentType === 'document') {
-              res.set('Content-Disposition', `attachment; filename="${filename}"`);
+            res.set("Content-Type", mime);
+            res.set("Cache-Control", "private, max-age=3600");
+            if (message.contentType === "document") {
+              res.set("Content-Disposition", `attachment; filename="${localFn}"`);
             } else {
-              res.set('Content-Disposition', 'inline');
+              res.set("Content-Disposition", "inline");
             }
-            console.log(`[MediaProxy] messageId=${messageId} — served from local disk: ${filepath}`);
+            console.log(
+              `[MediaProxy] messageId=${messageId} channel=${channel} reason=served_local_disk path=${filepath}`
+            );
             return res.sendFile(filepath);
           }
-          // File not on disk (e.g. after redeploy) — fall through to remote fetch
-          console.warn(`[MediaProxy] messageId=${messageId} — local file missing: ${filepath}, falling through to remote`);
+          console.warn(
+            `[MediaProxy] messageId=${messageId} channel=${channel} reason=local_upload_missing path=${filepath}`
+          );
         }
 
-        console.log(`[MediaProxy] messageId=${messageId} channel=${channel} — fetching remote url=${message.mediaUrl.substring(0, 80)}`);
-        let response: Response;
-        try {
-          response = await fetch(message.mediaUrl, { signal: AbortSignal.timeout(15000) });
-        } catch (fetchErr: any) {
-          console.error(`[MediaProxy] messageId=${messageId} channel=${channel} — fetch threw: ${fetchErr?.message}`);
-          return res.status(502).json({ error: "Network error fetching media." });
+        // 3) Remote fetch — stored URL then canonical APP_URL (migration / host drift)
+        const candidateUrls: string[] = [];
+        const pushUrl = (u: string) => {
+          if (u && !candidateUrls.includes(u)) candidateUrls.push(u);
+        };
+        pushUrl(rawMediaUrl);
+        if (appBase && objectFn && PROXY_OBJECTS_UPLOAD_FILENAME_RE.test(objectFn)) {
+          pushUrl(`${appBase}/objects/uploads/${objectFn}`);
+        }
+        if (appBase && localFn) {
+          pushUrl(`${appBase}/uploads/${localFn}`);
         }
 
-        if (!response.ok) {
-          if (response.status === 403 || response.status === 410) {
-            console.warn(`[MediaProxy] messageId=${messageId} channel=${channel} — CDN URL expired (status ${response.status})`);
-            return res.status(410).json({ error: "Media has expired and is no longer available from the platform." });
+        let lastStatus = 0;
+        for (let i = 0; i < candidateUrls.length; i++) {
+          const url = candidateUrls[i];
+          console.log(
+            `[MediaProxy] messageId=${messageId} channel=${channel} reason=fetch_attempt idx=${i} url=${url.substring(0, 120)}`
+          );
+          let response: globalThis.Response;
+          try {
+            response = await fetch(url, { signal: AbortSignal.timeout(15000) });
+          } catch (fetchErr: any) {
+            console.warn(
+              `[MediaProxy] messageId=${messageId} channel=${channel} reason=fetch_network_error url=${url.substring(0, 80)} err=${fetchErr?.message || fetchErr}`
+            );
+            continue;
           }
-          console.error(`[MediaProxy] messageId=${messageId} channel=${channel} — remote returned HTTP ${response.status}`);
-          return res.status(502).json({ error: `Remote media server returned ${response.status}` });
+          lastStatus = response.status;
+          if (!response.ok) {
+            const errTxt = (await response.text()).slice(0, 240);
+            console.warn(
+              `[MediaProxy] messageId=${messageId} channel=${channel} reason=fetch_http_error status=${response.status} url=${url.substring(0, 100)} body=${errTxt}`
+            );
+            if (response.status === 403 || response.status === 410) {
+              return res.status(410).json({
+                error: "Media has expired and is no longer available from the platform.",
+              });
+            }
+            continue;
+          }
+
+          const ct = response.headers.get("content-type") || mimeFromContentType(message.contentType);
+          const arrayBuffer = await response.arrayBuffer();
+          const buffer = Buffer.from(arrayBuffer);
+          res.set("Content-Type", ct);
+          res.set("Cache-Control", "private, max-age=300");
+          if (message.contentType === "document") {
+            res.set("Content-Disposition", `attachment; filename="document"`);
+          } else {
+            res.set("Content-Disposition", "inline");
+          }
+          console.log(
+            `[MediaProxy] messageId=${messageId} channel=${channel} reason=served_remote bytes=${buffer.length} mime=${ct} url=${url.substring(0, 100)}`
+          );
+          return res.send(buffer);
         }
 
-        const ct = response.headers.get('content-type') || mimeFromContentType(message.contentType);
-        const arrayBuffer = await response.arrayBuffer();
-        const buffer = Buffer.from(arrayBuffer);
-
-        res.set('Content-Type', ct);
-        res.set('Cache-Control', 'private, max-age=300');
-        if (message.contentType === 'document') {
-          res.set('Content-Disposition', `attachment; filename="document"`);
-        } else {
-          res.set('Content-Disposition', 'inline');
+        console.error(
+          `[MediaProxy] messageId=${messageId} channel=${channel} reason=all_candidates_failed lastHttpStatus=${lastStatus} tried=${candidateUrls.length}`
+        );
+        if (lastStatus === 403 || lastStatus === 410) {
+          return res.status(410).json({
+            error: "Media has expired and is no longer available from the platform.",
+          });
         }
-        console.log(`[MediaProxy] messageId=${messageId} channel=${channel} — served ${buffer.length} bytes, mime=${ct}`);
-        return res.send(buffer);
+        return res.status(502).json({ error: "Could not retrieve media from any known location." });
       }
 
       // Nothing to serve
-      console.warn(`[MediaProxy] messageId=${messageId} channel=${channel} contentType=${message.contentType} — no mediaUrl or mediaFilename in DB`);
+      console.warn(
+        `[MediaProxy] messageId=${messageId} channel=${channel} reason=no_media_in_db contentType=${message.contentType}`
+      );
       return res.status(404).json({ error: "No media available for this message." });
 
     } catch (error: any) {
-      console.error(`[MediaProxy] messageId=${messageId} — unhandled error: ${error?.message || error}`);
+      console.error(
+        `[MediaProxy] messageId=${messageId} reason=unhandled_exception err=${error?.message || error}`
+      );
       res.status(500).json({ error: "Media proxy failed" });
     }
   });
