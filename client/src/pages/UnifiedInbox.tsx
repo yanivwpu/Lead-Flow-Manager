@@ -643,13 +643,11 @@ export function UnifiedInbox() {
     const deadlineMs = expMs - bufferMs;
     const msLeft = deadlineMs - Date.now();
     if (msLeft <= 0) {
-      return { text: 'Window expired', amber: true };
+      return { text: 'Window expired', amber: false };
     }
-    const totalMin = Math.max(1, Math.ceil(msLeft / 60_000));
-    const h = Math.floor(totalMin / 60);
-    const m = totalMin % 60;
     const amber = msLeft < 2 * 60 * 60 * 1000;
-    const text = h > 0 ? `${h}h ${m}m left` : `${m}m left`;
+    const fullHours = Math.floor(msLeft / (60 * 60 * 1000));
+    const text = fullHours >= 1 ? `${fullHours}h left` : '1h left';
     return { text, amber };
   }, [activeChannel, windowStatus, metaWindowTimerTick]);
 
@@ -1502,7 +1500,7 @@ export function UnifiedInbox() {
                   })()}
                 </div>
               </div>
-              <div className="flex items-center gap-2 flex-shrink-0">
+              <div className="flex items-center gap-1.5 flex-shrink-0">
                 {/* Mobile: open CRM details sheet */}
                 <Button
                   variant="ghost"
@@ -1515,21 +1513,22 @@ export function UnifiedInbox() {
                   <PanelRight className="w-4 h-4" />
                 </Button>
 
-                {metaWindowHeaderHint ? (
-                  <span
-                    className={cn(
-                      'hidden sm:inline text-[10px] tabular-nums text-muted-foreground whitespace-nowrap max-w-[120px] truncate',
-                      metaWindowHeaderHint.amber && 'text-amber-700 font-medium'
-                    )}
-                    title="Time left for free-form messaging on this channel"
-                    data-testid="meta-window-timer"
-                  >
-                    {metaWindowHeaderHint.text}
-                  </span>
-                ) : null}
+                <div className="flex items-baseline gap-0.5 flex-shrink-0">
+                  {metaWindowHeaderHint ? (
+                    <span
+                      className={cn(
+                        'hidden sm:inline text-[9px] leading-none font-normal text-gray-400/90 whitespace-nowrap pr-0.5',
+                        metaWindowHeaderHint.amber && 'text-amber-600/80'
+                      )}
+                      title="Time left for free-form messaging on this channel"
+                      data-testid="meta-window-timer"
+                    >
+                      {metaWindowHeaderHint.text}
+                    </span>
+                  ) : null}
 
-                {/* Channel switcher */}
-                <DropdownMenu>
+                  {/* Channel switcher */}
+                  <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant="outline" size="sm" className="gap-1 h-7 px-2 text-xs border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-gray-700 bg-white shadow-none" data-testid="button-switch-channel" disabled={contactReachableChannels.length === 0} title={contactReachableChannels.length === 0 ? 'No messaging channel available for this contact' : undefined}>
                       {getChannelIcon(activeChannel)}
@@ -1567,6 +1566,7 @@ export function UnifiedInbox() {
                     })}
                   </DropdownMenuContent>
                 </DropdownMenu>
+                </div>
 
                 {/* Actions menu */}
                 <DropdownMenu>
