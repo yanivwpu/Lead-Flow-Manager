@@ -36,7 +36,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { format, parseISO } from "date-fns";
-import { TAG_COLORS, PIPELINE_STAGES } from "@/lib/data";
+import { TAG_COLORS, PIPELINE_STAGES, RGE_OPTIONAL_PIPELINE_STAGES } from "@/lib/data";
 import {
   analyzeConversation,
   computeWorkflow,
@@ -45,6 +45,7 @@ import {
   type ConversationMessage,
   type QualifyingCriterion,
 } from "@/lib/conversationIntelligence";
+import { getStageSignals } from "@/lib/leadScoring";
 import { AIUpgradePrompt } from "./AIUpgradePrompt";
 import type { AICapabilities } from "@/lib/useAICapabilities";
 
@@ -816,6 +817,56 @@ export function InboxLeadDetailsPanel({
     Stalled:   "Stalled",
   };
   const aiStateLabel = AI_STATE_LABELS[intel.aiState] ?? intel.aiState;
+
+  // ── Safe AI stage suggestion (click-to-apply only) ─────────────────────────
+  const stageSuggestion = useMemo(() => {
+    const d = intel.leadScoreDetails;
+    if (!d) return null;
+    if ((d.confidence01 ?? 0) < 0.85) return null;
+    if ((d.missingRequired ?? []).length > 0) return null;
+    if (!["Lead", "Contacted"].includes(contact.pipelineStage)) return null;
+
+    const signals = getStageSignals(messages, businessKnowledge);
+    const deterministicIntent = signals.strongIntent || signals.viewingIntent;
+    const stageExists = (s: string) =>
+      PIPELINE_STAGES.includes(s as any) ||
+      (signals.isRealEstate && (RGE_OPTIONAL_PIPELINE_STAGES as readonly string[]).includes(s));
+
+    // Generic: Lead → Contacted only, when deterministic intent from inbound (detectIntent), not auto-move.
+    if (!signals.isRealEstate) {
+      if (contact.pipelineStage !== "Lead") return null;
+      if (!deterministicIntent) return null;
+      return "Contacted";
+    }
+
+    // Real estate — Lead → Contacted: strong engagement + (intent or viewing), or viewing alone (tour/showing).
+    if (contact.pipelineStage === "Lead") {
+      const leadToContacted =
+        (signals.strongEngagement && (signals.strongIntent || signals.viewingIntent)) ||
+        signals.viewingIntent;
+      if (!leadToContacted) return null;
+      return "Contacted";
+    }
+
+    // Contacted → Qualified (Hot): hot bucket, deterministic intent, stage name must be plausible for this workspace.
+    if (
+      contact.pipelineStage === "Contacted" &&
+      d.bucket === "hot" &&
+      deterministicIntent &&
+      stageExists("Qualified (Hot)")
+    ) {
+      return "Qualified (Hot)";
+    }
+
+    // Viewing/showing/tour → first appointment stage that exists (RGE-style names).
+    if (contact.pipelineStage === "Contacted" && signals.viewingIntent) {
+      const candidates = ["Appointment Requested", "Appointment Booked", "Appointment Set"];
+      const found = candidates.find(stageExists);
+      return found ?? null;
+    }
+
+    return null;
+  }, [intel.leadScoreDetails, contact.pipelineStage, messages, businessKnowledge]);
 
   // ── Safe system score auto-tag (server-enforced) ──────────────────────────
   const systemScoreTagKeyRef = useRef<string>("");
@@ -1653,6 +1704,31 @@ export function InboxLeadDetailsPanel({
                           → {workflow.stageSuggestion}
                         </button>
                       )}
+                    </div>
+                  )}
+
+                  {/* Safe AI stage suggestion — click to apply (never auto-moves) */}
+                  {stageSuggestion && !completedActions.has("stage") && (
+                    <div className="mt-2 flex items-center justify-between gap-2 rounded-lg border border-gray-200 bg-white px-2.5 py-2">
+                      <div className="min-w-0">
+                        <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">
+                          Suggested stage
+                        </div>
+                        <div className="text-[12px] font-semibold text-gray-800 truncate">
+                          {stageSuggestion}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => {
+                          onUpdateContact({ pipelineStage: stageSuggestion });
+                          completeAction("stage", `Moved to ${stageSuggestion}`);
+                        }}
+                        className="shrink-0 text-[11px] font-semibold px-2 py-1 rounded-md border border-gray-200 bg-gray-50 hover:bg-gray-100 text-gray-700 transition-colors"
+                        data-testid="button-apply-stage-suggestion"
+                        title="Apply suggested stage"
+                      >
+                        Apply stage
+                      </button>
                     </div>
                   )}
                 </>

@@ -138,3 +138,11 @@ export const TAG_COLORS: Record<string, string> = {
 };
 
 export const PIPELINE_STAGES = ['Lead', 'Contacted', 'Proposal', 'Negotiation', 'Closed'];
+
+/** RGE-style names not in PIPELINE_STAGES; client-only hint for “stage exists” in Copilot suggestions (real-estate). */
+export const RGE_OPTIONAL_PIPELINE_STAGES = [
+  'Qualified (Hot)',
+  'Appointment Requested',
+  'Appointment Booked',
+  'Appointment Set',
+] as const;
