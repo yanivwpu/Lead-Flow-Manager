@@ -8,6 +8,12 @@ import {
 
 type ForceChannelInput = Channel | string | undefined;
 
+/** Inbox WhatsApp free-form: enforce ~23h from last inbound when DB stores a 24h ceiling (1h safety margin). */
+const WHATSAPP_INBOX_CSW_BUFFER_MS = 60 * 60 * 1000;
+
+const WHATSAPP_WINDOW_EXPIRED_MSG =
+  'WhatsApp window expired. Use an approved template or switch to another available channel.';
+
 /** Human-readable last-message preview for media messages. */
 function mediaPreviewLabel(contentType?: string): string {
   switch (contentType) {
@@ -164,6 +170,29 @@ class ChannelService {
     return { ok: true };
   }
 
+  /**
+   * Inbox/contact free-form WhatsApp: block outside customer service window (23h effective vs 24h stored).
+   * Does not apply to other channels or to internal callers that omit enforceWhatsAppCustomerServiceWindow.
+   */
+  private assertWhatsAppInboxCustomerServiceWindow(conversation: Conversation): {
+    ok: true;
+  } | {
+    ok: false;
+    reason: string;
+  } {
+    if (conversation.channel !== 'whatsapp') return { ok: true };
+    const raw = conversation.windowExpiresAt;
+    if (!raw) {
+      return { ok: false, reason: 'no_window_expires_at' };
+    }
+    const expiresAtMs = new Date(raw).getTime();
+    const freeFormDeadlineMs = expiresAtMs - WHATSAPP_INBOX_CSW_BUFFER_MS;
+    if (Date.now() >= freeFormDeadlineMs) {
+      return { ok: false, reason: 'outside_customer_service_window' };
+    }
+    return { ok: true };
+  }
+
   async sendMessage(params: {
     userId: string;
     contactId: string;
@@ -175,9 +204,22 @@ class ChannelService {
     forceChannel?: ForceChannelInput;
     /** When true (e.g. inbox user picked a channel), validate availability and never delivery-fallback to another channel. */
     suppressFallback?: boolean;
+    /** When true (Unified Inbox / POST /api/contacts/:id/send), block WhatsApp free-form outside CSW. */
+    enforceWhatsAppCustomerServiceWindow?: boolean;
     templateVariables?: Record<string, any>;
   }): Promise<SendMessageResult> {
-    const { userId, contactId, contentType = 'text', mediaUrl, mediaType, mediaFilename, forceChannel, suppressFallback, templateVariables } = params;
+    const {
+      userId,
+      contactId,
+      contentType = 'text',
+      mediaUrl,
+      mediaType,
+      mediaFilename,
+      forceChannel,
+      suppressFallback,
+      enforceWhatsAppCustomerServiceWindow,
+      templateVariables,
+    } = params;
     const content = params.content ?? '';
 
     if (!content && !mediaUrl) {
@@ -232,6 +274,22 @@ class ChannelService {
         status: 'open',
       });
       await subscriptionService.incrementConversationUsage(userId);
+    }
+
+    if (enforceWhatsAppCustomerServiceWindow === true && targetChannel === 'whatsapp') {
+      const waWin = this.assertWhatsAppInboxCustomerServiceWindow(conversation);
+      if (!waWin.ok) {
+        console.warn(
+          `[sendMessage] whatsapp_window_blocked contactId=${contactId} conversationId=${conversation.id} ` +
+            `selectedChannel=${explicitForce ? targetChannel : '(auto)'} finalChannel=whatsapp ` +
+            `windowExpiresAt=${conversation.windowExpiresAt ?? 'null'} reason=${waWin.reason}`
+        );
+        return {
+          success: false,
+          channel: 'whatsapp',
+          error: WHATSAPP_WINDOW_EXPIRED_MSG,
+        };
+      }
     }
 
     const message = await storage.createMessage({

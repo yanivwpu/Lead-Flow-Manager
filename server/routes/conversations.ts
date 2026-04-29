@@ -392,11 +392,24 @@ export function registerConversationRoutes(app: Express): void {
       const windowExpiresAt = conversation.windowExpiresAt
         ? new Date(conversation.windowExpiresAt)
         : null;
-      const isActive = windowExpiresAt ? windowExpiresAt > now : false;
-      const hoursRemaining = windowExpiresAt
-        ? Math.max(0, (windowExpiresAt.getTime() - now.getTime()) / (1000 * 60 * 60))
-        : 0;
-      const isExpiringSoon = hoursRemaining > 0 && hoursRemaining < 4;
+      const WHATSAPP_CSW_BUFFER_MS = 60 * 60 * 1000;
+      let isActive: boolean;
+      let hoursRemaining: number;
+      if (conversation.channel === 'whatsapp' && windowExpiresAt) {
+        const freeFormDeadline = new Date(windowExpiresAt.getTime() - WHATSAPP_CSW_BUFFER_MS);
+        isActive = freeFormDeadline > now;
+        hoursRemaining = Math.max(0, (freeFormDeadline.getTime() - now.getTime()) / (1000 * 60 * 60));
+      } else if (windowExpiresAt) {
+        isActive = windowExpiresAt > now;
+        hoursRemaining = Math.max(0, (windowExpiresAt.getTime() - now.getTime()) / (1000 * 60 * 60));
+      } else {
+        isActive = false;
+        hoursRemaining = 0;
+      }
+      const isExpiringSoon =
+        conversation.channel === 'whatsapp'
+          ? hoursRemaining > 0 && hoursRemaining < 2
+          : hoursRemaining > 0 && hoursRemaining < 4;
 
       res.json({
         hasRestriction: true,

@@ -325,6 +325,7 @@ export function registerContactRoutes(app: Express): void {
         mediaFilename,
         forceChannel: requested,
         suppressFallback: !!requested,
+        enforceWhatsAppCustomerServiceWindow: true,
       });
       if (result.success) {
         res.json(result);

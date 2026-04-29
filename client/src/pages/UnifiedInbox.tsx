@@ -590,6 +590,20 @@ export function UnifiedInbox() {
 
   const isWhatsAppContact = activeChannel === 'whatsapp';
 
+  const windowConversationId = useMemo(() => {
+    if (!activeChannel) return undefined;
+    const ch = activeChannel as string;
+    if (!['whatsapp', 'facebook', 'instagram'].includes(ch)) return undefined;
+    const conv = contactData?.conversations?.find((c) => c.channel === activeChannel);
+    return conv?.id ?? primaryConversation?.id;
+  }, [activeChannel, contactData?.conversations, primaryConversation?.id]);
+
+  const [metaWindowTimerTick, setMetaWindowTimerTick] = useState(0);
+  useEffect(() => {
+    const id = window.setInterval(() => setMetaWindowTimerTick((n) => n + 1), 60_000);
+    return () => window.clearInterval(id);
+  }, []);
+
   const { data: realMessages = [], isLoading: messagesLoading, isFetching: messagesFetching } = useQuery<Message[]>({
     queryKey: ["/api/conversations", primaryConversation?.id, "messages"],
     enabled: !!primaryConversation?.id && (!isDemoUser || !selectedDemoChat),
@@ -613,10 +627,31 @@ export function UnifiedInbox() {
   }, [isDemoUser, selectedDemoChat, realMessages]);
 
   const { data: windowStatus } = useQuery<WindowStatus>({
-    queryKey: ["/api/conversations", primaryConversation?.id, "window-status"],
-    enabled: !!primaryConversation?.id && !isDemoUser,
+    queryKey: ["/api/conversations", windowConversationId, "window-status"],
+    enabled: !!windowConversationId && !isDemoUser,
     refetchInterval: 60000,
   });
+
+  const metaWindowHeaderHint = useMemo(() => {
+    if (!activeChannel) return null;
+    const ch = activeChannel as string;
+    if (!['whatsapp', 'facebook', 'instagram'].includes(ch)) return null;
+    if (!windowStatus?.hasRestriction || !windowStatus.windowExpiresAt) return null;
+    void metaWindowTimerTick;
+    const expMs = new Date(windowStatus.windowExpiresAt).getTime();
+    const bufferMs = activeChannel === 'whatsapp' ? 60 * 60 * 1000 : 0;
+    const deadlineMs = expMs - bufferMs;
+    const msLeft = deadlineMs - Date.now();
+    if (msLeft <= 0) {
+      return { text: 'Window expired', amber: true };
+    }
+    const totalMin = Math.max(1, Math.ceil(msLeft / 60_000));
+    const h = Math.floor(totalMin / 60);
+    const m = totalMin % 60;
+    const amber = msLeft < 2 * 60 * 60 * 1000;
+    const text = h > 0 ? `${h}h ${m}m left` : `${m}m left`;
+    return { text, amber };
+  }, [activeChannel, windowStatus, metaWindowTimerTick]);
 
   const { data: whatsappAvailability } = useQuery<WhatsAppAvailability>({
     queryKey: ["/api/channels/whatsapp/availability"],
@@ -1467,7 +1502,7 @@ export function UnifiedInbox() {
                   })()}
                 </div>
               </div>
-              <div className="flex items-center gap-1 flex-shrink-0">
+              <div className="flex items-center gap-2 flex-shrink-0">
                 {/* Mobile: open CRM details sheet */}
                 <Button
                   variant="ghost"
@@ -1479,6 +1514,19 @@ export function UnifiedInbox() {
                 >
                   <PanelRight className="w-4 h-4" />
                 </Button>
+
+                {metaWindowHeaderHint ? (
+                  <span
+                    className={cn(
+                      'hidden sm:inline text-[10px] tabular-nums text-muted-foreground whitespace-nowrap max-w-[120px] truncate',
+                      metaWindowHeaderHint.amber && 'text-amber-700 font-medium'
+                    )}
+                    title="Time left for free-form messaging on this channel"
+                    data-testid="meta-window-timer"
+                  >
+                    {metaWindowHeaderHint.text}
+                  </span>
+                ) : null}
 
                 {/* Channel switcher */}
                 <DropdownMenu>
