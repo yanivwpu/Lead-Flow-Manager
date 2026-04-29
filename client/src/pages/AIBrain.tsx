@@ -108,6 +108,12 @@ const SALES_GOAL_OPTIONS = [
   { value: "answer_questions", label: "Answer Questions" },
 ];
 
+const AI_MODE_SEGMENTS = [
+  { value: "off", label: "Off", tooltip: "AI is disabled" },
+  { value: "suggest_only", label: "Suggest", tooltip: "AI suggests replies, you send" },
+  { value: "full_auto", label: "Auto", tooltip: "AI replies automatically with safeguards" },
+] as const;
+
 type QualifyingQuestion = { key: string; label: string; question: string; required: boolean };
 
 const INDUSTRY_QUALIFY_TEMPLATES: Record<string, QualifyingQuestion[]> = {
@@ -742,41 +748,33 @@ function AIBrainContent() {
                 Mode
               </h2>
               
-              <div className="grid gap-3">
-                {[
-                  { value: "off", label: "Off", desc: "Copilot and Autopilot are paused", icon: X },
-                  { value: "suggest_only", label: "Suggest Only", desc: "Suggests replies, you send them", icon: Lightbulb },
-                  { value: "full_auto", label: "Full Auto", desc: "Responds automatically (with guardrails)", icon: Sparkles },
-                ].map(mode => (
-                  <button
-                    key={mode.value}
-                    onClick={() => setSettings(prev => ({ ...prev, aiMode: mode.value }))}
-                    className={cn(
-                      "flex items-center gap-4 p-4 rounded-xl border-2 text-left transition-all",
-                      settings.aiMode === mode.value
-                        ? "border-purple-500 bg-purple-50"
-                        : "border-gray-200 hover:border-gray-300"
-                    )}
-                    data-testid={`ai-mode-${mode.value}`}
-                  >
-                    <div className={cn(
-                      "w-10 h-10 rounded-lg flex items-center justify-center",
-                      settings.aiMode === mode.value ? "bg-purple-100" : "bg-gray-100"
-                    )}>
-                      <mode.icon className={cn(
-                        "w-5 h-5",
-                        settings.aiMode === mode.value ? "text-purple-600" : "text-gray-400"
-                      )} />
-                    </div>
-                    <div className="flex-1">
-                      <p className="font-medium text-gray-900">{mode.label}</p>
-                      <p className="text-sm text-gray-500">{mode.desc}</p>
-                    </div>
-                    {settings.aiMode === mode.value && (
-                      <CheckCircle2 className="w-5 h-5 text-purple-500" />
-                    )}
-                  </button>
-                ))}
+              <div
+                className="flex w-full max-w-xl rounded-lg border border-gray-200 bg-gray-100/90 p-[3px] gap-0.5"
+                role="radiogroup"
+                aria-label="AI mode"
+              >
+                {AI_MODE_SEGMENTS.map((mode) => {
+                  const selected = settings.aiMode === mode.value;
+                  return (
+                    <button
+                      key={mode.value}
+                      type="button"
+                      role="radio"
+                      aria-checked={selected}
+                      title={mode.tooltip}
+                      onClick={() => setSettings((prev) => ({ ...prev, aiMode: mode.value }))}
+                      className={cn(
+                        "flex-1 min-w-0 rounded-md px-3 py-2.5 text-sm font-medium transition-colors",
+                        selected
+                          ? "bg-violet-50 text-gray-900 border border-violet-200/90 shadow-sm"
+                          : "border border-transparent text-gray-600 hover:bg-gray-200/70"
+                      )}
+                      data-testid={`ai-mode-${mode.value}`}
+                    >
+                      {mode.label}
+                    </button>
+                  );
+                })}
               </div>
               
               <Button 
