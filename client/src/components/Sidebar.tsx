@@ -125,24 +125,24 @@ export function Sidebar() {
         {/* ── Logo + Toggle ── */}
         <div
           className={cn(
-            "flex items-center pt-5 pb-4 flex-shrink-0",
-            collapsed ? "justify-center px-0 flex-col gap-3" : "px-6 justify-between"
+            "flex items-center flex-shrink-0",
+            collapsed ? "justify-center px-0 flex-col gap-3 pt-5 pb-4" : "gap-3 px-4 pt-4 pb-3.5"
           )}
         >
           {!collapsed && (
-            <div className="flex items-center gap-2 min-w-0 flex-1 pr-1">
-              <div className="h-6 w-6 bg-brand-green rounded-md flex items-center justify-center shrink-0">
-                <span className="text-white font-bold text-sm">W</span>
+            <div className="flex min-w-0 flex-1 items-center gap-1.5">
+              <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-brand-green">
+                <span className="text-[11px] font-bold leading-none text-white">W</span>
               </div>
-              <span className="font-display font-medium text-base text-gray-900 whitespace-normal">
+              <span className="font-display text-sm font-medium leading-tight tracking-tight text-gray-900 whitespace-normal">
                 WhachatCRM
               </span>
             </div>
           )}
 
           {collapsed && (
-            <div className="h-6 w-6 bg-brand-green rounded-md flex items-center justify-center">
-              <span className="text-white font-bold text-sm">W</span>
+            <div className="flex h-5 w-5 items-center justify-center rounded-md bg-brand-green">
+              <span className="text-[11px] font-bold leading-none text-white">W</span>
             </div>
           )}
 
@@ -152,8 +152,8 @@ export function Sidebar() {
                 onClick={toggleSidebar}
                 data-testid="button-toggle-sidebar"
                 className={cn(
-                  "flex items-center justify-center rounded-md text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors",
-                  collapsed ? "w-8 h-8" : "w-7 h-7"
+                  "mt-0 shrink-0 flex items-center justify-center rounded-md text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700",
+                  collapsed ? "h-8 w-8" : "h-7 w-7"
                 )}
                 aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
               >
