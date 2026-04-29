@@ -1567,11 +1567,15 @@ export function UnifiedInbox() {
                               switchChannelMutation.mutate({ contactId: selectedContactId, channel: key as Channel });
                             }
                           }}
-                          className={cn("gap-2", isActive && "font-medium")}
+                          className={cn(
+                            "min-h-0 gap-1.5 px-2 py-1 text-[13px] leading-tight",
+                            "focus:bg-gray-50 focus:text-gray-900 data-[highlighted]:bg-gray-50 data-[highlighted]:text-gray-900",
+                            isActive && "font-medium"
+                          )}
                         >
-                          <Icon className="w-4 h-4" style={{ color: cfg.color }} />
+                          <Icon className="h-3.5 w-3.5 shrink-0" style={{ color: cfg.color }} />
                           {cfg.label}
-                          {isActive && <span className="ml-auto text-xs text-emerald-600">✓</span>}
+                          {isActive && <span className="ml-auto text-[11px] text-slate-400">✓</span>}
                         </DropdownMenuItem>
                       );
                     })}
