@@ -1513,29 +1513,34 @@ export function UnifiedInbox() {
                   <PanelRight className="w-4 h-4" />
                 </Button>
 
-                <div className="flex items-baseline gap-0.5 flex-shrink-0">
-                  {metaWindowHeaderHint ? (
-                    <span
-                      className={cn(
-                        'hidden sm:inline text-[9px] leading-none font-normal text-gray-400/90 whitespace-nowrap pr-0.5',
-                        metaWindowHeaderHint.amber && 'text-amber-600/80'
-                      )}
-                      title="Time left for free-form messaging on this channel"
-                      data-testid="meta-window-timer"
-                    >
-                      {metaWindowHeaderHint.text}
-                    </span>
-                  ) : null}
-
-                  {/* Channel switcher */}
-                  <DropdownMenu>
+                {/* Channel switcher */}
+                <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="sm" className="gap-1 h-7 px-2 text-xs border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-gray-700 bg-white shadow-none" data-testid="button-switch-channel" disabled={contactReachableChannels.length === 0} title={contactReachableChannels.length === 0 ? 'No messaging channel available for this contact' : undefined}>
+                    <Button variant="outline" size="sm" className="gap-1 h-7 px-2 text-xs border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-gray-700 bg-white shadow-none max-w-[min(100%,16rem)]" data-testid="button-switch-channel" disabled={contactReachableChannels.length === 0} title={contactReachableChannels.length === 0 ? 'No messaging channel available for this contact' : undefined}>
                       {getChannelIcon(activeChannel)}
-                      <span className="hidden sm:inline">
-                        {activeChannel ? CHANNEL_CONFIG[activeChannel]?.label : 'No channel'}
+                      <span className="hidden sm:inline-flex min-w-0 items-baseline gap-0.5 text-xs font-normal leading-tight">
+                        <span className="truncate text-gray-600">
+                          {activeChannel ? CHANNEL_CONFIG[activeChannel]?.label : 'No channel'}
+                        </span>
+                        {metaWindowHeaderHint ? (
+                          <>
+                            <span className="shrink-0 text-gray-400/90" aria-hidden>
+                              •
+                            </span>
+                            <span
+                              className={cn(
+                                'shrink-0 whitespace-nowrap text-gray-400/90',
+                                metaWindowHeaderHint.amber && 'text-amber-600/80'
+                              )}
+                              title="Time left for free-form messaging on this channel"
+                              data-testid="meta-window-timer"
+                            >
+                              {metaWindowHeaderHint.text}
+                            </span>
+                          </>
+                        ) : null}
                       </span>
-                      <ChevronDown className="w-3 h-3" />
+                      <ChevronDown className="w-3 h-3 shrink-0" />
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
@@ -1566,7 +1571,6 @@ export function UnifiedInbox() {
                     })}
                   </DropdownMenuContent>
                 </DropdownMenu>
-                </div>
 
                 {/* Actions menu */}
                 <DropdownMenu>
