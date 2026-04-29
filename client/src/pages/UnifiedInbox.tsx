@@ -91,6 +91,9 @@ interface Contact {
   instagramId?: string;
   facebookId?: string;
   telegramId?: string;
+  /** Matches server: used to resolve default channel when override is invalid */
+  lastIncomingChannel?: Channel;
+  ghlId?: string;
 }
 
 interface Conversation {
@@ -193,6 +196,44 @@ const CONVERSATION_STATUSES = [
 ];
 
 const DEMO_CHANNELS: Channel[] = ['whatsapp', 'instagram', 'facebook', 'telegram', 'sms', 'webchat'];
+
+function contactHasWebchatReachability(
+  c: Contact,
+  conversations?: Array<{ channel: Channel | string }>
+): boolean {
+  if (c.lastIncomingChannel === 'webchat' || c.primaryChannel === 'webchat' || c.source === 'webchat') {
+    return true;
+  }
+  return conversations?.some((x) => x.channel === 'webchat') ?? false;
+}
+
+/**
+ * Channels this contact can use for outbound — identifiers only (WhatsApp requires whatsappId; SMS requires phone).
+ * Web Chat is included only when the contact has a webchat session/signals.
+ */
+function getReachableChannelsForContact(
+  c: Contact | undefined,
+  conversations?: Array<{ channel: Channel | string }>
+): Channel[] {
+  if (!c) return [];
+  const keys = new Set<string>();
+  if (c.whatsappId) keys.add('whatsapp');
+  if (c.instagramId) keys.add('instagram');
+  if (c.facebookId) keys.add('facebook');
+  if (c.phone) keys.add('sms');
+  if (c.telegramId) keys.add('telegram');
+  if (c.ghlId) keys.add('gohighlevel');
+  if (contactHasWebchatReachability(c, conversations)) keys.add('webchat');
+  const order: Channel[] = ['whatsapp', 'instagram', 'facebook', 'sms', 'webchat', 'telegram', 'gohighlevel'];
+  return order.filter((k) => keys.has(k));
+}
+
+/** Same clamp as header activeChannel; empty reachable → cannot send (null). */
+function clampOutboundChannel(shown: Channel | undefined, reachable: Channel[]): Channel | null {
+  if (reachable.length === 0) return null;
+  if (shown !== undefined && reachable.includes(shown)) return shown;
+  return reachable[0];
+}
 
 const SOURCE_LABELS: Record<string, string> = {
   manual: 'Manual',
@@ -430,15 +471,24 @@ export function UnifiedInbox() {
       const baseCh = (selectedDemoChat.channel || DEMO_CHANNELS[chatIndex >= 0 ? chatIndex % DEMO_CHANNELS.length : 0]) as Channel;
       const overrideCh = demoChannelOverrides[selectedDemoChat.id] as Channel | undefined;
       const activeCh = overrideCh || baseCh;
+      const waDigits = selectedDemoChat.whatsappPhone
+        ? String(selectedDemoChat.whatsappPhone).replace(/\D/g, '')
+        : '';
       return {
         contact: {
           id: selectedDemoChat.id,
           name: selectedDemoChat.name,
           avatar: selectedDemoChat.avatar,
-          phone: selectedDemoChat.whatsappPhone || '',
+          phone: activeCh === 'sms' || activeCh === 'whatsapp' ? (selectedDemoChat.whatsappPhone || '') : '',
           email: '',
           primaryChannel: baseCh,
           primaryChannelOverride: overrideCh,
+          lastIncomingChannel: activeCh,
+          whatsappId: activeCh === 'whatsapp' && waDigits ? waDigits : activeCh === 'whatsapp' ? '15555550100' : undefined,
+          instagramId: activeCh === 'instagram' ? 'demo_instagram' : undefined,
+          facebookId: activeCh === 'facebook' ? 'demo_psid' : undefined,
+          telegramId: activeCh === 'telegram' ? 'demo_telegram' : undefined,
+          source: activeCh === 'webchat' ? 'webchat' : undefined,
           tag: selectedDemoChat.tag,
           pipelineStage: selectedDemoChat.pipelineStage,
           notes: selectedDemoChat.notes || '',
@@ -458,26 +508,42 @@ export function UnifiedInbox() {
     return realContactData;
   }, [isDemoUser, selectedDemoChat, realContactData, demoChats, demoChannelOverrides]);
 
-  // Mirror the backend's getPrimaryChannel logic: respect primaryChannelOverride only when
-  // the contact actually has an identifier for that channel. Otherwise fall through to
-  // lastIncomingChannel / primaryChannel to avoid routing to a dead-end channel.
+  const contactReachableChannels = useMemo(
+    () =>
+      getReachableChannelsForContact(
+        contactData?.contact as Contact | undefined,
+        contactData?.conversations
+      ),
+    [contactData?.contact, contactData?.conversations]
+  );
+
+  // Mirror backend getPrimaryChannel, then clamp to channels this contact can actually use.
   const effectiveChannel = useMemo(() => {
     const c = contactData?.contact as Contact | undefined;
     if (!c) return undefined;
+    const reachable = contactReachableChannels;
+    if (reachable.length === 0) return undefined;
+
+    const channelIdMap: Record<string, string | undefined> = {
+      whatsapp: c.whatsappId,
+      instagram: c.instagramId,
+      facebook: c.facebookId,
+      telegram: c.telegramId,
+    };
+
     const override = c.primaryChannelOverride as Channel | undefined;
     if (override) {
-      const channelIdMap: Record<string, string | undefined> = {
-        whatsapp:  c.whatsappId,
-        instagram: c.instagramId,
-        facebook:  c.facebookId,
-        telegram:  c.telegramId,
-      };
-      // Only use the override if the contact has an actual ID for that channel
       const hasId = !(override in channelIdMap) || !!channelIdMap[override];
-      if (hasId) return override;
+      if (hasId && reachable.includes(override)) return override;
     }
-    return c.primaryChannel as Channel;
-  }, [contactData?.contact]);
+
+    const last = c.lastIncomingChannel as Channel | undefined;
+    if (last && reachable.includes(last)) return last;
+
+    if (reachable.includes(c.primaryChannel as Channel)) return c.primaryChannel as Channel;
+
+    return reachable[0];
+  }, [contactData?.contact, contactReachableChannels]);
 
   const primaryConversation = contactData?.conversations?.find(
     (c) => c.channel === effectiveChannel
@@ -492,12 +558,35 @@ export function UnifiedInbox() {
     }
   }, [effectiveChannel, sendChannelUi]);
 
-  const activeChannel: Channel = (
-    sendChannelUi ??
-    effectiveChannel ??
-    (contactData?.contact as Contact | undefined)?.primaryChannel ??
-    'whatsapp'
-  ) as Channel;
+  // Drop stale picker state when contact data changes (e.g. only FB + webchat allowed).
+  useEffect(() => {
+    if (!sendChannelUi) return;
+    if (!contactReachableChannels.includes(sendChannelUi)) {
+      setSendChannelUi(null);
+    }
+  }, [contactReachableChannels, sendChannelUi]);
+
+  const activeChannel: Channel | undefined = useMemo(() => {
+    const c = contactData?.contact as Contact | undefined;
+    const reachable = contactReachableChannels;
+    if (reachable.length === 0) return undefined;
+
+    const preferred = sendChannelUi ?? effectiveChannel ?? c?.primaryChannel ?? reachable[0];
+    if (reachable.includes(preferred as Channel)) return preferred as Channel;
+    if (effectiveChannel && reachable.includes(effectiveChannel)) return effectiveChannel;
+    return reachable[0];
+  }, [
+    contactData?.contact,
+    contactReachableChannels,
+    sendChannelUi,
+    effectiveChannel,
+  ]);
+
+  /** Single source for POST /send `channel`: mirrors header label each render; mutation reads at request time. */
+  const displayedOutboundChannelRef = useRef<Channel | undefined>(undefined);
+  const contactReachableChannelsRef = useRef<Channel[]>([]);
+  displayedOutboundChannelRef.current = activeChannel;
+  contactReachableChannelsRef.current = contactReachableChannels;
 
   const isWhatsAppContact = activeChannel === 'whatsapp';
 
@@ -663,12 +752,18 @@ export function UnifiedInbox() {
     mutationFn: async (data: {
       contactId: string;
       content: string;
-      channel: Channel;
       mediaUrl?: string;
       mediaType?: string;
       mediaFilename?: string;
       contentType?: string;
     }) => {
+      const channel = clampOutboundChannel(
+        displayedOutboundChannelRef.current,
+        contactReachableChannelsRef.current
+      );
+      if (channel === null) {
+        throw new Error('No available messaging channel for this contact.');
+      }
       const res = await fetch(`/api/contacts/${data.contactId}/send`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -679,7 +774,7 @@ export function UnifiedInbox() {
           mediaUrl: data.mediaUrl,
           mediaType: data.mediaType ? `${data.mediaType}` : undefined,
           mediaFilename: data.mediaFilename,
-          channel: data.channel,
+          channel,
         }),
       });
       const json = await res.json();
@@ -871,10 +966,17 @@ export function UnifiedInbox() {
   const handleSendMessage = () => {
     if (!messageInput.trim() && !pendingFile) return;
     if (!selectedContactId) return;
+    if (contactReachableChannels.length === 0) {
+      toast({
+        title: 'Cannot send',
+        description: 'No available messaging channel for this contact.',
+        variant: 'destructive',
+      });
+      return;
+    }
     sendMessageMutation.mutate({
       contactId: selectedContactId,
       content: messageInput,
-      channel: activeChannel,
       ...(pendingFile ? {
         mediaUrl: pendingFile.mediaUrl,
         mediaType: pendingFile.mediaType,
@@ -886,8 +988,16 @@ export function UnifiedInbox() {
 
   const handleAutoSend = useCallback((message: string) => {
     if (!message.trim() || !selectedContactId) return;
-    sendMessageMutation.mutate({ contactId: selectedContactId, content: message, channel: activeChannel });
-  }, [selectedContactId, sendMessageMutation, activeChannel]);
+    if (contactReachableChannels.length === 0) {
+      toast({
+        title: 'Cannot send',
+        description: 'No available messaging channel for this contact.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    sendMessageMutation.mutate({ contactId: selectedContactId, content: message });
+  }, [selectedContactId, sendMessageMutation, contactReachableChannels.length, toast]);
 
   const ACCEPTED_TYPES: Record<string, string> = {
     "image/jpeg": "image", "image/jpg": "image", "image/png": "image", "image/webp": "image",
@@ -1026,7 +1136,14 @@ export function UnifiedInbox() {
 
   // --- Helpers ---
 
-  const getChannelIcon = (channel: Channel, size = "w-3 h-3") => {
+  const getChannelIcon = (channel: Channel | undefined, size = "w-3 h-3") => {
+    if (!channel) {
+      return (
+        <span title="No messaging channel">
+          <AlertCircle className={cn(size, 'text-amber-500')} aria-hidden />
+        </span>
+      );
+    }
     const config = CHANNEL_CONFIG[channel] || { icon: User, color: '#6B7280' };
     const Icon = config.icon;
     return <Icon className={size} style={{ color: config.color }} />;
@@ -1366,14 +1483,19 @@ export function UnifiedInbox() {
                 {/* Channel switcher */}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="sm" className="gap-1 h-7 px-2 text-xs border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-gray-700 bg-white shadow-none" data-testid="button-switch-channel">
+                    <Button variant="outline" size="sm" className="gap-1 h-7 px-2 text-xs border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-gray-700 bg-white shadow-none" data-testid="button-switch-channel" disabled={contactReachableChannels.length === 0} title={contactReachableChannels.length === 0 ? 'No messaging channel available for this contact' : undefined}>
                       {getChannelIcon(activeChannel)}
-                      <span className="hidden sm:inline">{CHANNEL_CONFIG[activeChannel]?.label}</span>
+                      <span className="hidden sm:inline">
+                        {activeChannel ? CHANNEL_CONFIG[activeChannel]?.label : 'No channel'}
+                      </span>
                       <ChevronDown className="w-3 h-3" />
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
-                    {Object.entries(CHANNEL_CONFIG).filter(([k]) => k !== 'tiktok').map(([key, cfg]) => {
+                    {Object.entries(CHANNEL_CONFIG)
+                      .filter(([k]) => k !== 'tiktok')
+                      .filter(([k]) => contactReachableChannels.includes(k as Channel))
+                      .map(([key, cfg]) => {
                       const Icon = cfg.icon;
                       const isActive = activeChannel === key;
                       return (

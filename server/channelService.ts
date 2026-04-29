@@ -90,6 +90,28 @@ class ChannelService {
       .map(s => s.channel as Channel);
   }
 
+  /** Sync checks only — used for delivery fallback so we never SMS/WhatsApp/etc. without identifiers. */
+  private contactHasIdentifiersForChannel(contact: Contact, channel: Channel): boolean {
+    if (channel === 'webchat') {
+      return (
+        contact.lastIncomingChannel === 'webchat' ||
+        contact.primaryChannel === 'webchat' ||
+        contact.source === 'webchat'
+      );
+    }
+    if (channel === 'gohighlevel') return !!contact.ghlId;
+    const channelIdField: Partial<Record<Channel, keyof Contact>> = {
+      whatsapp: 'whatsappId',
+      instagram: 'instagramId',
+      facebook: 'facebookId',
+      sms: 'phone',
+      telegram: 'telegramId',
+    };
+    const idField = channelIdField[channel];
+    if (!idField) return true;
+    return !!contact[idField];
+  }
+
   /** Validates outbound-only constraints when the client forces a channel (no silent fallback). */
   private async validateForcedOutboundChannel(
     userId: string,
@@ -100,20 +122,30 @@ class ChannelService {
       return { ok: false, reason: 'This channel cannot be used for outbound messaging' };
     }
 
-    if (channel === 'gohighlevel' && !contact.ghlId) {
+    if (channel === 'webchat') {
+      const conv = await storage.getConversationByContactAndChannel(contact.id, 'webchat');
+      const ok =
+        contact.lastIncomingChannel === 'webchat' ||
+        contact.primaryChannel === 'webchat' ||
+        contact.source === 'webchat' ||
+        !!conv;
+      if (!ok) {
+        return { ok: false, reason: 'This contact has no web chat session — cannot send on Web Chat' };
+      }
+    } else if (channel === 'gohighlevel' && !contact.ghlId) {
       return { ok: false, reason: 'Contact has no GoHighLevel identifier — cannot send on this channel' };
-    }
-
-    const channelIdField: Partial<Record<Channel, keyof Contact>> = {
-      whatsapp: 'whatsappId',
-      instagram: 'instagramId',
-      facebook: 'facebookId',
-      sms: 'phone',
-      telegram: 'telegramId',
-    };
-    const idField = channelIdField[channel];
-    if (idField && !contact[idField]) {
-      return { ok: false, reason: 'Contact has no identifier for this channel — choose another channel or update the contact' };
+    } else {
+      const channelIdField: Partial<Record<Channel, keyof Contact>> = {
+        whatsapp: 'whatsappId',
+        instagram: 'instagramId',
+        facebook: 'facebookId',
+        sms: 'phone',
+        telegram: 'telegramId',
+      };
+      const idField = channelIdField[channel];
+      if (idField && !contact[idField]) {
+        return { ok: false, reason: 'Contact has no identifier for this channel — choose another channel or update the contact' };
+      }
     }
 
     const enabled = await this.getEnabledChannels(userId);
@@ -285,6 +317,7 @@ class ChannelService {
     const fallbackChannels = await this.getFallbackChannels(userId);
     for (const fallbackChannel of fallbackChannels) {
       if (fallbackChannel === targetChannel) continue;
+      if (!this.contactHasIdentifiersForChannel(contact, fallbackChannel)) continue;
 
       let fallbackConv = await storage.getConversationByContactAndChannel(contactId, fallbackChannel);
       if (!fallbackConv) {
