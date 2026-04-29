@@ -50,6 +50,10 @@ export interface AIComposerProps {
   hasFullAIBrain?: boolean;
   /** Full capability object from useAICapabilities — drives gating & credit display */
   capabilities?: AICapabilities;
+  /** Business AI mode from `/api/ai/settings` (off | suggest | auto). Source of truth for Full Auto. */
+  businessAiMode?: "off" | "suggest" | "auto";
+  /** Contact id for `[AI-AUTO]` logs (inbox CRM contact, not conversation id). */
+  contactId?: string | null;
   /** CRM context injected into AI prompt to improve reply quality */
   contactContext?: ContactContext;
   conversationId: string | null;
@@ -95,6 +99,8 @@ export function AIComposer({
   handleFileSelect,
   onTemplate,
   className,
+  businessAiMode = "suggest",
+  contactId = null,
 }: AIComposerProps) {
   const isMobile = useIsMobile();
   // Resolve effective access from capabilities (falls back to legacy aiEnabled prop)
@@ -138,6 +144,23 @@ export function AIComposer({
     }
   }, [conversationId]);
 
+  // Sync composer mode from business settings (Full Auto only when business + plan allow).
+  useEffect(() => {
+    if (autoOverride) return;
+    if (!showAIModes) {
+      setAiMode("manual");
+      return;
+    }
+    if (businessAiMode === "off") {
+      setAiMode("manual");
+      return;
+    }
+    if (businessAiMode === "auto") {
+      setAiMode(effectiveCanAuto ? "auto" : "suggest");
+      return;
+    }
+  }, [autoOverride, businessAiMode, effectiveCanAuto, showAIModes]);
+
   // ─── Auto-reply engine ───────────────────────────────────────────────────
   const executeAutoReply = useCallback(async (history: AIComposerMessage[]) => {
     if (!conversationId || !aiEnabled || autoReplyInFlightRef.current) return;
@@ -163,28 +186,54 @@ export function AIComposer({
       if (res.ok) {
         const data = await res.json();
         const suggestion: string = data.suggestion || "";
-        if (suggestion.trim()) {
-          if (onAutoSend) {
-            onAutoSend(suggestion);
-          } else {
-            // Fallback: set value + send via parent
-            onChange(suggestion);
-            setTimeout(onSend, 80);
-          }
+        const allowed = data.autoSendAllowed === true;
+        const reason = typeof data.autoSendReason === "string" ? data.autoSendReason : "unknown";
+        const confidence = typeof data.confidence === "number" ? data.confidence : 0;
+        const trimmed = suggestion.trim();
+        const willSend = allowed && trimmed.length > 5 && !!onAutoSend;
+        let clientReason = reason;
+        if (willSend) clientReason = "send_ok";
+        else if (!allowed) clientReason = reason;
+        else if (trimmed.length <= 5) clientReason = "suggestion_too_short";
+        else if (!onAutoSend) clientReason = "missing_onAutoSend_callback";
+        console.info("[AI-AUTO]", {
+          contactId: contactId || "unknown",
+          autoTriggered: willSend,
+          reason: clientReason,
+          confidence,
+        });
+
+        if (willSend && onAutoSend) {
+          onAutoSend(suggestion);
           setAutoPhase("replied");
           setTimeout(() => setAutoPhase("waiting"), 5000);
         } else {
+          if (!allowed || trimmed.length <= 5 || !onAutoSend) setAiMode("suggest");
           setAutoPhase("waiting");
         }
       } else {
+        console.info("[AI-AUTO]", {
+          contactId: contactId || "unknown",
+          autoTriggered: false,
+          reason: "suggest_reply_request_failed",
+          confidence: 0,
+        });
+        setAiMode("suggest");
         setAutoPhase("waiting");
       }
     } catch {
+      console.info("[AI-AUTO]", {
+        contactId: contactId || "unknown",
+        autoTriggered: false,
+        reason: "suggest_reply_exception",
+        confidence: 0,
+      });
+      setAiMode("suggest");
       setAutoPhase("waiting");
     } finally {
       autoReplyInFlightRef.current = false;
     }
-  }, [conversationId, aiEnabled, contactContext, onAutoSend, onChange, onSend]);
+  }, [conversationId, aiEnabled, contactContext, contactId, onAutoSend]);
 
   // Watch messages: when in auto mode and last message is from lead → auto-reply
   const lastMsg = messages[messages.length - 1];
@@ -351,11 +400,11 @@ export function AIComposer({
               const Icon   = mode === "manual" ? User : mode === "suggest" ? Sparkles : Zap;
               const active = aiMode === mode;
 
-              // Capability gate
+              // Capability + business-settings gate (Full Auto only when business mode is auto)
               const modeEnabled =
                 mode === "manual"  ? true :
-                mode === "suggest" ? effectiveCanSuggest :
-                effectiveCanAuto;
+                mode === "suggest" ? effectiveCanSuggest && businessAiMode !== "off" :
+                effectiveCanAuto && businessAiMode === "auto";
 
               const lockReason =
                 !modeEnabled && mode === "suggest" && capabilities?.plan === "free"

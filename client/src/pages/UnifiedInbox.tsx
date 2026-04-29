@@ -350,6 +350,13 @@ export function UnifiedInbox() {
   });
   const aiEnabled = hasAIAssist && (hasFullAIBrain ? ((aiSettings as any)?.aiMode !== "off") : true);
 
+  const businessAiMode = useMemo((): "off" | "suggest" | "auto" => {
+    const raw = (aiSettings as any)?.aiMode as string | undefined;
+    if (raw === "full_auto" || raw === "auto") return "auto";
+    if (raw === "suggest_only" || raw === "suggest") return "suggest";
+    return "off";
+  }, [(aiSettings as any)?.aiMode]);
+
   // Unified AI capabilities from plan + usage data
   const capabilities = useAICapabilities();
 
@@ -1842,6 +1849,8 @@ export function UnifiedInbox() {
               aiEnabled={aiEnabled}
               hasFullAIBrain={hasFullAIBrain}
               capabilities={capabilities}
+              businessAiMode={businessAiMode}
+              contactId={selectedContactId}
               contactContext={contactContext}
               conversationId={primaryConversation?.id ?? selectedContactId}
               messages={messages.map((m) => ({

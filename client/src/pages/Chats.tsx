@@ -182,6 +182,13 @@ export function Chats() {
   });
   
   const aiEnabled = (hasAIAssist || hasFullAIBrain) && (hasFullAIBrain ? (aiSettings && (aiSettings as any).aiMode !== "off") : true);
+
+  const businessAiMode = useMemo((): "off" | "suggest" | "auto" => {
+    const raw = (aiSettings as any)?.aiMode as string | undefined;
+    if (raw === "full_auto" || raw === "auto") return "auto";
+    if (raw === "suggest_only" || raw === "suggest") return "suggest";
+    return "off";
+  }, [(aiSettings as any)?.aiMode]);
   
   // Timeline interface and query
   interface TimelineEvent {
@@ -578,6 +585,114 @@ export function Chats() {
       });
     }
   };
+
+  const handleAutoSend = useCallback(async (text: string) => {
+    const message = text.trim();
+    if (!message || !selectedChat) return;
+
+    if (demoMode) {
+      const newMsg = {
+        id: `demo-msg-${Date.now()}`,
+        text: message,
+        sender: "me",
+        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      };
+      setDemoChats((prev) =>
+        prev.map((chat) =>
+          chat.id === selectedChat.id
+            ? {
+                ...chat,
+                messages: [...chat.messages, newMsg],
+                lastMessage: message,
+                time: "Just now",
+              }
+            : chat
+        )
+      );
+      setNewMessage("");
+      return;
+    }
+
+    if (!canSendMessages) {
+      setUpgradeReason("free_reply");
+      setUpgradeModalOpen(true);
+      return;
+    }
+
+    if (isAtLimit) {
+      setUpgradeReason("conversation_limit");
+      if (subscription?.limits) {
+        setUpgradeLimitInfo({
+          limit: subscription.limits.conversationsLimit,
+          used: subscription.limits.conversationsUsed,
+          planName: subscription.limits.planName,
+          resetDate: subscription.subscription?.currentPeriodEnd || null,
+        });
+      }
+      setUpgradeModalOpen(true);
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/chats/${selectedChat.id}/send`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ message }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        if (data.code === "PLAN_LIMIT") {
+          setUpgradeReason("free_reply");
+          setUpgradeModalOpen(true);
+          return;
+        }
+        if (data.code === "CONVERSATION_LIMIT") {
+          setUpgradeReason("conversation_limit");
+          if (data.limit && data.used && data.planName) {
+            setUpgradeLimitInfo({
+              limit: data.limit,
+              used: data.used,
+              planName: data.planName,
+              resetDate: subscription?.subscription?.currentPeriodEnd || null,
+            });
+          }
+          setUpgradeModalOpen(true);
+          return;
+        }
+        if (data.code === "THROTTLED") {
+          toast({
+            title: "Message limit reached",
+            description: data.error || "This conversation has too many messages. Please wait for the 24-hour window to reset.",
+            variant: "destructive",
+          });
+          return;
+        }
+        throw new Error(data.error || "Failed to send message");
+      }
+
+      queryClient.invalidateQueries({ queryKey: ["/api/chats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/subscription"] });
+      setNewMessage("");
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to send message",
+        variant: "destructive",
+      });
+    }
+  }, [
+    selectedChat,
+    demoMode,
+    canSendMessages,
+    isAtLimit,
+    subscription?.limits,
+    subscription?.subscription?.currentPeriodEnd,
+    queryClient,
+    toast,
+  ]);
 
   if (isLoading || isProviderStatusLoading) {
     return (
@@ -1071,10 +1186,12 @@ export function Chats() {
                 value={newMessage}
                 onChange={setNewMessage}
                 onSend={handleSendMessage}
+                onAutoSend={handleAutoSend}
                 setTyping={setTyping}
                 typingTimeoutRef={typingTimeoutRef}
                 aiEnabled={aiEnabled}
                 hasFullAIBrain={hasFullAIBrain}
+                businessAiMode={businessAiMode}
                 conversationId={selectedChat?.id ?? null}
                 messages={(selectedChat?.messages ?? []).map((m: any) => ({
                   role: m.direction === 'incoming' ? 'user' : 'assistant',

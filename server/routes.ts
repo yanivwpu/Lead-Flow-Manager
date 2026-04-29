@@ -55,6 +55,11 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import { subscriptionService } from "./subscriptionService";
+import {
+  businessKnowledgeFromAiRecord,
+  evaluateFullAutoSend,
+  normalizeBusinessAiMode,
+} from "./aiAutoSendGate";
 import { getUncachableStripeClient } from "./stripeClient";
 import { sanitizeStripeReturnPath } from "./checkoutReturnPath";
 import { resolveStripeCheckoutRedirectOrigin } from "./stripeCheckoutRedirectBase";
@@ -7515,6 +7520,40 @@ export async function registerRoutes(
         aiLanguage,
         contactContext || undefined
       );
+
+      const businessMode = normalizeBusinessAiMode((settings as any)?.aiMode);
+      const wantsAuto = requestedMode === "auto";
+      let autoSendAllowed = false;
+      let autoSendReason = wantsAuto ? "not_evaluated" : "not_requested";
+      let contactIdForLog: string | null = null;
+
+      if (wantsAuto && chatId) {
+        try {
+          const conv = await storage.getConversation(chatId);
+          contactIdForLog = conv?.contactId ?? null;
+        } catch {
+          contactIdForLog = null;
+        }
+      }
+
+      if (wantsAuto) {
+        const scoringKnowledge = businessKnowledgeFromAiRecord(knowledge as any);
+        const gate = evaluateFullAutoSend({
+          businessMode,
+          conversationHistory,
+          suggestion: suggestion.suggestion || "",
+          confidence: typeof suggestion.confidence === "number" ? suggestion.confidence : 0,
+          businessKnowledge: scoringKnowledge,
+        });
+        autoSendAllowed = gate.allowed;
+        autoSendReason = gate.reason;
+        console.info("[AI-AUTO]", {
+          contactId: contactIdForLog ?? "unknown",
+          autoTriggered: autoSendAllowed,
+          reason: autoSendReason,
+          confidence: suggestion.confidence,
+        });
+      }
       
       // Track usage
       await storage.incrementAiUsage(userId, 'repliesSuggested');
@@ -7522,7 +7561,9 @@ export async function registerRoutes(
       res.json({ 
         ...suggestion, 
         status: fairUse.status,
-        shouldDowngradeToSuggestOnly: fairUse.shouldDowngradeToSuggestOnly
+        shouldDowngradeToSuggestOnly: fairUse.shouldDowngradeToSuggestOnly,
+        autoSendAllowed,
+        autoSendReason,
       });
     } catch (error) {
       console.error("Reply suggestion error:", error);
