@@ -37,6 +37,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { cn } from "@/lib/utils";
 import { format, parseISO } from "date-fns";
 import { TAG_COLORS, PIPELINE_STAGES, RGE_OPTIONAL_PIPELINE_STAGES } from "@/lib/data";
+import { CONVERSATION_STATUS_ROWS, getConversationStatusRow } from "@/lib/conversationStatusUi";
 import {
   analyzeConversation,
   computeWorkflow,
@@ -84,13 +85,6 @@ interface TeamMember {
   role: string;
   status: string;
 }
-
-const CONVERSATION_STATUSES = [
-  { value: 'open',     label: 'Open',     color: 'border-emerald-400 text-emerald-600' },
-  { value: 'pending',  label: 'Pending',  color: 'border-amber-400 text-amber-600' },
-  { value: 'resolved', label: 'Resolved', color: 'border-blue-400 text-blue-600' },
-  { value: 'closed',   label: 'Closed',   color: 'border-gray-300 text-gray-500' },
-];
 
 const SOURCE_LABELS: Record<string, string> = {
   manual: 'Manual', whatsapp: 'WhatsApp', instagram: 'Instagram',
@@ -653,7 +647,7 @@ export function InboxLeadDetailsPanel({
   };
 
   const convStatus = primaryConversation?.status || 'open';
-  const statusCls  = CONVERSATION_STATUSES.find(s => s.value === convStatus)?.color || 'border-gray-200 text-gray-500';
+  const conversationStatusRow = getConversationStatusRow(convStatus);
   const followUpSt = getFollowUpStatus(contact.followUpDate);
 
   // ── Conversation intelligence — re-runs whenever messages change ──
@@ -1782,17 +1776,27 @@ export function InboxLeadDetailsPanel({
               <div className="flex gap-1.5 mt-1">
                 <Select value={convStatus} onValueChange={onUpdateConversationStatus}>
                   <SelectTrigger
-                    className={cn("h-7 text-[11px] font-medium flex-1 bg-white border px-2", statusCls)}
+                    className={cn(
+                      "h-7 text-[11px] font-medium flex-1 bg-white border border-gray-200 px-2 shadow-none",
+                      conversationStatusRow.textClass
+                    )}
                     data-testid="select-conversation-status"
                   >
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {CONVERSATION_STATUSES.map(s => (
-                      <SelectItem key={s.value} value={s.value}>
-                        <span className={cn("text-[11px] font-medium", s.color.split(' ').find(c => c.startsWith('text-')))}>
-                          {s.label}
-                        </span>
+                    {CONVERSATION_STATUS_ROWS.map((s) => (
+                      <SelectItem
+                        key={s.value}
+                        value={s.value}
+                        className={cn(
+                          "text-[11px] font-medium rounded-sm",
+                          "focus:!bg-gray-100 focus:!text-gray-900",
+                          "data-[highlighted]:!bg-gray-100 data-[highlighted]:!text-gray-900",
+                          s.textClass
+                        )}
+                      >
+                        {s.label}
                       </SelectItem>
                     ))}
                   </SelectContent>

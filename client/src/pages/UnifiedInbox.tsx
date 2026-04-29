@@ -61,6 +61,7 @@ import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { ChatAvatar } from "@/components/ChatAvatar";
 import { TAG_COLORS } from "@/lib/data";
+import { getConversationStatusRow } from "@/lib/conversationStatusUi";
 import { useToast } from "@/hooks/use-toast";
 import { InboxLeadDetailsPanel } from "@/components/InboxLeadDetailsPanel";
 import { useAICapabilities } from "@/lib/useAICapabilities";
@@ -187,13 +188,6 @@ const CHANNEL_CONFIG: Record<string, { icon: any; color: string; label: string }
   tiktok: { icon: Video, color: '#000000', label: 'TikTok' },
   gohighlevel: { icon: Zap, color: '#F97316', label: 'GoHighLevel' },
 };
-
-const CONVERSATION_STATUSES = [
-  { value: 'open', label: 'Open', color: 'bg-gray-100 text-gray-900' },
-  { value: 'pending', label: 'Pending', color: 'bg-amber-100 text-amber-700' },
-  { value: 'resolved', label: 'Resolved', color: 'bg-blue-100 text-blue-700' },
-  { value: 'closed', label: 'Closed', color: 'bg-gray-100 text-gray-700' },
-];
 
 const DEMO_CHANNELS: Channel[] = ['whatsapp', 'instagram', 'facebook', 'telegram', 'sms', 'webchat'];
 
@@ -598,9 +592,10 @@ export function UnifiedInbox() {
     return conv?.id ?? primaryConversation?.id;
   }, [activeChannel, contactData?.conversations, primaryConversation?.id]);
 
-  const [metaWindowTimerTick, setMetaWindowTimerTick] = useState(0);
+  /** Drives reply-window UI every minute without waiting on React Query refetch. */
+  const [replyWindowNow, setReplyWindowNow] = useState(() => Date.now());
   useEffect(() => {
-    const id = window.setInterval(() => setMetaWindowTimerTick((n) => n + 1), 60_000);
+    const id = window.setInterval(() => setReplyWindowNow(Date.now()), 60_000);
     return () => window.clearInterval(id);
   }, []);
 
@@ -632,52 +627,63 @@ export function UnifiedInbox() {
     refetchInterval: 60000,
   });
 
-  const metaWindowHeaderHint = useMemo(() => {
+  /** WhatsApp: effectiveDeadline = windowExpiresAt − 1h buffer; remainingMs = effectiveDeadline − now. */
+  const replyWindowDerived = useMemo(() => {
     if (!activeChannel) return null;
     const ch = activeChannel as string;
     if (!['whatsapp', 'facebook', 'instagram'].includes(ch)) return null;
     if (!windowStatus?.hasRestriction || !windowStatus.windowExpiresAt) return null;
-    void metaWindowTimerTick;
-    const expMs = new Date(windowStatus.windowExpiresAt).getTime();
+
+    const windowExpiresAt = windowStatus.windowExpiresAt;
+    const windowExpiresAtMs = new Date(windowExpiresAt).getTime();
     const bufferMs = activeChannel === 'whatsapp' ? 60 * 60 * 1000 : 0;
-    const deadlineMs = expMs - bufferMs;
-    const msLeft = deadlineMs - Date.now();
-    if (msLeft <= 0) {
-      return { text: 'Window expired', amber: false };
+    const effectiveDeadlineMs = windowExpiresAtMs - bufferMs;
+    const remainingMs = effectiveDeadlineMs - replyWindowNow;
+
+    // temporary debug
+    console.log('[reply-window]', { windowExpiresAt, now: replyWindowNow, remainingMs });
+
+    return { windowExpiresAt, windowExpiresAtMs, effectiveDeadlineMs, remainingMs };
+  }, [activeChannel, windowStatus?.hasRestriction, windowStatus?.windowExpiresAt, replyWindowNow]);
+
+  const metaWindowHeaderHint = useMemo(() => {
+    if (!replyWindowDerived) return null;
+    const { remainingMs } = replyWindowDerived;
+    if (remainingMs <= 0) {
+      return { expired: true as const, amber: false };
     }
-    const amber = msLeft < 2 * 60 * 60 * 1000;
-    const fullHours = Math.floor(msLeft / (60 * 60 * 1000));
-    const text = fullHours >= 1 ? `${fullHours}h left` : '1h left';
-    return { text, amber };
-  }, [activeChannel, windowStatus, metaWindowTimerTick]);
+    const amber = remainingMs < 2 * 60 * 60 * 1000;
+    let displaySuffix: string;
+    if (remainingMs < 60 * 60 * 1000) {
+      const mins = Math.max(1, Math.floor(remainingMs / (60 * 1000)));
+      displaySuffix = `${mins}m left`;
+    } else {
+      const hours = Math.floor(remainingMs / (60 * 60 * 1000));
+      displaySuffix = `${hours}h left`;
+    }
+    return { expired: false as const, displaySuffix, amber };
+  }, [replyWindowDerived]);
 
   // Inline composer notice (subtle): only when < 1h left or expired.
   // Uses the same expiry buffer rule as the header hint; UI-only change.
   const metaComposerWindowNotice = useMemo(() => {
-    if (!activeChannel) return null;
-    const ch = activeChannel as string;
-    if (!['whatsapp', 'facebook', 'instagram'].includes(ch)) return null;
-    if (!windowStatus?.hasRestriction || !windowStatus.windowExpiresAt) return null;
-    void metaWindowTimerTick;
+    if (!replyWindowDerived) return null;
+    const { remainingMs } = replyWindowDerived;
 
-    const expMs = new Date(windowStatus.windowExpiresAt).getTime();
-    const bufferMs = activeChannel === 'whatsapp' ? 60 * 60 * 1000 : 0;
-    const deadlineMs = expMs - bufferMs;
-    const msLeft = deadlineMs - Date.now();
-
-    if (msLeft <= 0) {
+    if (remainingMs <= 0) {
       return {
         variant: 'expired' as const,
         text: 'Reply window expired. Use a template or switch channel.',
       };
     }
 
-    if (msLeft < 60 * 60 * 1000) {
-      return { variant: 'soon' as const, text: 'Reply window closing soon.' };
+    if (remainingMs < 60 * 60 * 1000) {
+      const mins = Math.max(1, Math.floor(remainingMs / (60 * 1000)));
+      return { variant: 'soon' as const, text: `Reply window: ${mins}m left` };
     }
 
     return null;
-  }, [activeChannel, windowStatus, metaWindowTimerTick]);
+  }, [replyWindowDerived]);
 
   const { data: whatsappAvailability } = useQuery<WhatsAppAvailability>({
     queryKey: ["/api/channels/whatsapp/availability"],
@@ -1248,7 +1254,7 @@ export function UnifiedInbox() {
   }, [contact, messages, aiBusinessKnowledge?.industry]);
 
   const convStatus = primaryConversation?.status || 'open';
-  const statusConfig = CONVERSATION_STATUSES.find(s => s.value === convStatus) || CONVERSATION_STATUSES[0];
+  const conversationStatusRow = getConversationStatusRow(convStatus);
 
   if (inboxLoading && !isDemoUser) {
     return (
@@ -1518,8 +1524,8 @@ export function UnifiedInbox() {
                 <div className="flex items-center gap-1.5 flex-wrap">
                   <h3 className="font-semibold text-sm truncate">{contact.name}</h3>
                   {getChannelIcon(activeChannel)}
-                  <span className={cn("text-[10px] px-1.5 py-0.5 rounded font-medium", statusConfig.color)}>
-                    {statusConfig.label}
+                  <span className={cn("text-[10px] font-medium tracking-tight", conversationStatusRow.textClass)}>
+                    {conversationStatusRow.label}
                   </span>
                 </div>
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -1554,15 +1560,15 @@ export function UnifiedInbox() {
                     className={cn(
                       "hidden sm:inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] leading-none",
                       "bg-gray-100 border-gray-200 text-gray-600",
-                      metaWindowHeaderHint.text === "Window expired" && "bg-rose-50 border-rose-200 text-rose-700",
-                      metaWindowHeaderHint.amber && metaWindowHeaderHint.text !== "Window expired" && "bg-amber-50 border-amber-200 text-amber-800"
+                      metaWindowHeaderHint.expired && "bg-rose-50 border-rose-200 text-rose-700",
+                      metaWindowHeaderHint.amber && !metaWindowHeaderHint.expired && "bg-amber-50 border-amber-200 text-amber-800"
                     )}
                     title="Time left for free-form messaging on this channel"
                     data-testid="meta-window-timer"
                   >
-                    {metaWindowHeaderHint.text === "Window expired"
-                      ? "Window expired"
-                      : `Reply window: ${metaWindowHeaderHint.text}`}
+                    {metaWindowHeaderHint.expired
+                      ? "Reply window expired"
+                      : `Reply window: ${metaWindowHeaderHint.displaySuffix}`}
                   </span>
                 ) : null}
 

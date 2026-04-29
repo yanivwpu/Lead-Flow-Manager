@@ -55,6 +55,7 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import { subscriptionService } from "./subscriptionService";
+import { getUncachableStripeClient } from "./stripeClient";
 import { sanitizeStripeReturnPath } from "./checkoutReturnPath";
 import { resolveStripeCheckoutRedirectOrigin } from "./stripeCheckoutRedirectBase";
 import { getAppOrigin } from "./urlOrigins";
@@ -6107,29 +6108,96 @@ export async function registerRoutes(
       // Build lookup maps
       const partnerMap = new Map(allPartners.map(p => [p.id, p.name]));
       const salespersonMap = new Map(allSalespeople.map(s => [s.id, s.name]));
+
+      // Best-effort Stripe price IDs (same approach as /api/subscription/debug)
+      const shouldLookupStripe = allUsers.some(
+        (u: any) => !!u?.stripeCustomerId || !!u?.stripeSubscriptionId,
+      );
+      const stripe = shouldLookupStripe ? await getUncachableStripeClient().catch(() => null) : null;
+      const getStripePriceIdsForUser = async (user: any): Promise<string[] | null> => {
+        if (!stripe) return null;
+        const ids = new Set<string>();
+        try {
+          if (user?.stripeCustomerId) {
+            const subs = await stripe.subscriptions.list({
+              customer: user.stripeCustomerId,
+              status: "active",
+              expand: ["data.items.data.price"],
+              limit: 25,
+            });
+            for (const sub of subs.data) {
+              for (const it of sub.items?.data || []) {
+                const pid = (it as any)?.price?.id;
+                if (pid) ids.add(pid);
+              }
+            }
+          }
+
+          if (user?.stripeSubscriptionId) {
+            const subscription = await stripe.subscriptions.retrieve(user.stripeSubscriptionId, {
+              expand: ["items.data.price"],
+            } as any);
+            const items = (subscription as any)?.items?.data || [];
+            for (const it of items) {
+              const pid = (it as any)?.price?.id;
+              if (pid) ids.add(pid);
+            }
+          }
+
+          return [...ids];
+        } catch (err: any) {
+          console.warn("[Admin Users] Stripe price-id lookup failed", {
+            userId: user?.id,
+            stripeCustomerId: user?.stripeCustomerId,
+            stripeSubscriptionId: user?.stripeSubscriptionId,
+            message: err?.message,
+          });
+          return null;
+        }
+      };
       
-      const usersWithInfo = allUsers.map(user => {
+      const usersWithInfo = await Promise.all(allUsers.map(async user => {
         const userBookings = allBookings.filter(b => b.visitorEmail === user.email);
         const userTickets = allTickets.filter(t => t.userEmail === user.email || t.userId === user.id);
         const openTickets = userTickets.filter(t => t.status === 'open' || t.status === 'in_progress');
-        
+
         // Find salesperson attribution via conversions
         const userConversion = allConversions.find(c => c.userId === user.id);
         const salespersonId = userConversion?.salespersonId || null;
         const salespersonName = salespersonId ? salespersonMap.get(salespersonId) || null : null;
-        
+
         // Partner attribution from user record
         const partnerName = user.partnerId ? partnerMap.get(user.partnerId) || null : null;
-        
+
         const now = new Date();
         const isInTrial = !!(user.trialEndsAt && new Date(user.trialEndsAt) > now);
+
+        // Source of truth: subscriptionService.getUserLimits()
+        let limits: Awaited<ReturnType<typeof subscriptionService.getUserLimits>> | null = null;
+        try {
+          limits = await subscriptionService.getUserLimits(user.id);
+        } catch (err: any) {
+          console.warn("[Admin Users] getUserLimits failed", { userId: user.id, message: err?.message });
+          limits = null;
+        }
+
+        const effectivePlan = limits?.plan || subscriptionService.getEffectivePlanForUser(user, now);
+        const conversationsLimit =
+          limits?.conversationsLimit ??
+          PLAN_LIMITS[effectivePlan as SubscriptionPlan]?.conversationsPerMonth ??
+          0;
+        const conversationsUsed =
+          limits?.conversationsUsed ??
+          (user as any)?.monthlyConversations ??
+          0;
+        const stripeSubscriptionItemPriceIds = await getStripePriceIdsForUser(user);
 
         return {
           id: user.id,
           name: user.name,
           email: user.email,
           avatarUrl: user.avatarUrl,
-          effectivePlan: subscriptionService.getEffectivePlanForUser(user),
+          effectivePlan,
           billingPlan: user.billingPlan || "free",
           planOverride: user.planOverride ?? null,
           planOverrideEnabled: !!user.planOverrideEnabled,
@@ -6146,13 +6214,25 @@ export async function registerRoutes(
           openTicketCount: openTickets.length,
           totalTicketCount: userTickets.length,
           latestTicket: openTickets[0] || null,
+          // Usage
+          conversationsUsed,
+          conversationsLimit,
+          // AI Brain / Growth Engine (same as /api/subscription/debug source-of-truth)
+          hasAIBrainAddon: limits?.hasAIBrainAddon ?? false,
+          aiBrainSource: limits?.aiBrainSource ?? "none",
+          aiBrainBasePlanEligible: limits?.aiBrainBasePlanEligible ?? false,
+          growthEngineEligible: limits?.growthEngineEligible ?? false,
+          // Stripe IDs (from user record)
+          stripeCustomerId: (user as any)?.stripeCustomerId ?? null,
+          stripeSubscriptionId: (user as any)?.stripeSubscriptionId ?? null,
+          stripeSubscriptionItemPriceIds,
           // Attribution fields
           partnerId: user.partnerId || null,
           partnerName,
           salespersonId,
           salespersonName,
         };
-      });
+      }));
       
       // Sort: users with open tickets first, then by created date
       usersWithInfo.sort((a, b) => {

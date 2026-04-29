@@ -104,6 +104,17 @@ interface AdminUser {
   openTicketCount: number;
   totalTicketCount: number;
   latestTicket: any | null;
+  // Conversation usage (same definition as plan limits)
+  conversationsUsed?: number;
+  conversationsLimit?: number;
+  // AI Brain / Growth Engine / Stripe (same source-of-truth as /api/subscription/debug)
+  hasAIBrainAddon?: boolean;
+  aiBrainSource?: string;
+  aiBrainBasePlanEligible?: boolean;
+  growthEngineEligible?: boolean;
+  stripeCustomerId?: string | null;
+  stripeSubscriptionId?: string | null;
+  stripeSubscriptionItemPriceIds?: string[] | null;
   // Attribution fields
   partnerId: string | null;
   partnerName: string | null;
@@ -276,10 +287,8 @@ export function Admin() {
       return "expired";
     }
 
-    // We currently don't have AI Brain entitlement on /api/admin/users without backend I/O.
-    // Keep column/filter ready; it will only show badges when the API includes this flag.
-    function hasAiBrain(_u: AdminUser): boolean {
-      return false;
+    function hasAiBrain(u: AdminUser): boolean {
+      return !!u.hasAIBrainAddon;
     }
 
     const rows = filteredUsers
@@ -959,7 +968,6 @@ export function Admin() {
                       onChange={(e) => setAiFilter(e.target.value as any)}
                       className="h-9 border border-gray-200 rounded-md px-2 text-sm bg-white"
                       aria-label="AI Brain filter"
-                      title="AI Brain entitlement is not included in the current /api/admin/users payload"
                     >
                       <option value="all">AI Brain (any)</option>
                       <option value="enabled">AI Brain enabled</option>
@@ -1012,6 +1020,8 @@ export function Admin() {
                     <TableRow>
                       <TableHead className="min-w-[260px]">User</TableHead>
                       <TableHead>Plan</TableHead>
+                      <TableHead>Conversations</TableHead>
+                      <TableHead>Usage %</TableHead>
                       <TableHead>AI Brain</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Signup</TableHead>
@@ -1021,7 +1031,7 @@ export function Admin() {
                   <TableBody>
                     {usersError ? (
                       <TableRow>
-                        <TableCell colSpan={6} className="text-center py-8">
+                        <TableCell colSpan={8} className="text-center py-8">
                           <p className="text-red-500 mb-2">Failed to load users: {usersErrorDetails?.message || 'Unknown error'}</p>
                           <Button variant="outline" size="sm" onClick={() => refetchUsers()}>
                             Retry
@@ -1030,7 +1040,7 @@ export function Admin() {
                       </TableRow>
                     ) : derivedUsers.total === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={6} className="text-center py-8 text-gray-500">
+                        <TableCell colSpan={8} className="text-center py-8 text-gray-500">
                           No users match the current filters.
                         </TableCell>
                       </TableRow>
@@ -1044,6 +1054,9 @@ export function Admin() {
                           u.salespersonName ? `Internal • ${u.salespersonName}` :
                           "Organic";
                         const hasAI = derivedUsers.hasAiBrain(u);
+                        const used = u.conversationsUsed ?? 0;
+                        const limit = u.conversationsLimit ?? 0;
+                        const usagePct = limit > 0 ? Math.round((used / limit) * 100) : 0;
 
                         return (
                           <TableRow
@@ -1086,6 +1099,12 @@ export function Admin() {
                                   </Badge>
                                 )}
                               </div>
+                            </TableCell>
+                            <TableCell className="text-sm text-gray-700">
+                              {limit > 0 ? `${used} / ${limit}` : "—"}
+                            </TableCell>
+                            <TableCell className="text-sm text-gray-600">
+                              {limit > 0 ? `${usagePct}%` : "—"}
                             </TableCell>
                             <TableCell>
                               {hasAI ? (
@@ -1262,8 +1281,56 @@ export function Admin() {
                       </div>
                     </div>
 
-                    <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
-                      AI Brain / usage / Stripe IDs aren’t included in the current `/api/admin/users` payload. This panel is ready to display them once the endpoint includes those fields.
+                    <div className="rounded-lg border p-3 space-y-2">
+                      <div className="text-sm font-semibold text-gray-900">Usage</div>
+                      <div className="text-sm text-gray-700">
+                        Conversations:{" "}
+                        <span className="font-medium">
+                          {(selectedAdminUser.conversationsUsed ?? 0)} / {(selectedAdminUser.conversationsLimit ?? 0)}
+                        </span>
+                      </div>
+                      <div className="text-sm text-gray-700">
+                        Usage %:{" "}
+                        <span className="font-medium">
+                          {(selectedAdminUser.conversationsLimit ?? 0) > 0
+                            ? `${Math.round(((selectedAdminUser.conversationsUsed ?? 0) / (selectedAdminUser.conversationsLimit ?? 1)) * 100)}%`
+                            : "—"}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="rounded-lg border p-3 space-y-2">
+                      <div className="text-sm font-semibold text-gray-900">AI Brain</div>
+                      <div className="text-sm text-gray-700">
+                        AI Brain:{" "}
+                        <span className="font-medium">{selectedAdminUser.hasAIBrainAddon ? "active" : "inactive"}</span>
+                      </div>
+                      <div className="text-sm text-gray-700">
+                        Source:{" "}
+                        <span className="font-medium">{selectedAdminUser.aiBrainSource || "none"}</span>
+                      </div>
+                      <div className="text-sm text-gray-700">
+                        Growth Engine eligible:{" "}
+                        <span className="font-medium">{selectedAdminUser.growthEngineEligible ? "yes" : "no"}</span>
+                      </div>
+                    </div>
+
+                    <div className="rounded-lg border p-3 space-y-2">
+                      <div className="text-sm font-semibold text-gray-900">Stripe</div>
+                      <div className="text-sm text-gray-700">
+                        Customer ID: <span className="font-medium">{selectedAdminUser.stripeCustomerId || "—"}</span>
+                      </div>
+                      <div className="text-sm text-gray-700">
+                        Subscription ID: <span className="font-medium">{selectedAdminUser.stripeSubscriptionId || "—"}</span>
+                      </div>
+                      <div className="text-sm text-gray-700">
+                        Price IDs:{" "}
+                        <span className="font-medium">
+                          {Array.isArray(selectedAdminUser.stripeSubscriptionItemPriceIds)
+                            ? selectedAdminUser.stripeSubscriptionItemPriceIds.join(", ")
+                            : "—"}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 )}
