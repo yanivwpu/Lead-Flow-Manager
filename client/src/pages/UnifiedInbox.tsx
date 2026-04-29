@@ -189,7 +189,7 @@ const CHANNEL_CONFIG: Record<string, { icon: any; color: string; label: string }
 };
 
 const CONVERSATION_STATUSES = [
-  { value: 'open', label: 'Open', color: 'bg-emerald-100 text-emerald-700' },
+  { value: 'open', label: 'Open', color: 'bg-gray-100 text-gray-900' },
   { value: 'pending', label: 'Pending', color: 'bg-amber-100 text-amber-700' },
   { value: 'resolved', label: 'Resolved', color: 'bg-blue-100 text-blue-700' },
   { value: 'closed', label: 'Closed', color: 'bg-gray-100 text-gray-700' },
@@ -1229,11 +1229,11 @@ export function UnifiedInbox() {
 
       {/* ── LEFT COLUMN: Conversation List ── */}
       <div className={cn(
-        "w-full md:w-72 lg:w-80 border-r flex flex-col flex-shrink-0",
+        "w-full md:w-72 lg:w-80 border-r flex flex-col flex-shrink-0 bg-gray-50",
         selectedContactId ? "hidden md:flex" : "flex"
       )}>
         {/* Header */}
-        <div className="p-3 border-b">
+        <div className="p-3 border-b border-gray-200">
           <div className="flex items-center gap-2 mb-2">
             <h2 className="text-base font-semibold flex-1">Inbox</h2>
             {/* Channel Filter */}
@@ -1265,7 +1265,7 @@ export function UnifiedInbox() {
                           if (e.target.checked) next.add(ch); else next.delete(ch);
                           setSelectedChannels(next);
                         }}
-                        className="w-3.5 h-3.5 rounded border-gray-300 accent-emerald-600"
+                        className="w-3.5 h-3.5 rounded border-gray-300 accent-gray-900"
                         data-testid={`checkbox-channel-${ch}`}
                       />
                       <Icon className="w-3.5 h-3.5 flex-shrink-0" style={{ color: cfg.color }} />
@@ -1294,8 +1294,8 @@ export function UnifiedInbox() {
                 className={cn(
                   "flex-1 text-xs py-1 rounded-md font-medium transition-colors",
                   filterTab === tab
-                    ? "bg-emerald-100 text-emerald-700"
-                    : "text-gray-500 hover:bg-gray-100"
+                    ? "bg-gray-100 text-gray-900"
+                    : "text-gray-500 hover:bg-gray-50"
                 )}
                 data-testid={`filter-tab-${tab}`}
               >
@@ -1410,8 +1410,8 @@ export function UnifiedInbox() {
                 key={item.contact.id}
                 onClick={() => setLocation(`/app/inbox/${item.contact.id}`)}
                 className={cn(
-                  "p-3 border-b cursor-pointer hover:bg-slate-50 transition-colors",
-                  selectedContactId === item.contact.id && "bg-emerald-50",
+                  "p-3 border-b cursor-pointer transition-colors bg-white hover:bg-gray-50",
+                  selectedContactId === item.contact.id && "bg-gray-50 border-l-2 border-l-gray-200 hover:bg-gray-100",
                   isOverdue && "border-l-2 border-l-red-400"
                 )}
                 data-testid={`inbox-item-${item.contact.id}`}
@@ -1428,7 +1428,7 @@ export function UnifiedInbox() {
                       <span className={cn("font-medium text-sm truncate flex-1", needsReply && "font-semibold")}>{item.contact.name}</span>
                       <span className="text-[10px] text-muted-foreground flex-shrink-0">{formatTime(item.lastMessageAt)}</span>
                       {item.unreadCount > 0 && (
-                        <Badge className="ml-0.5 text-[10px] px-1.5 py-0 h-4 flex-shrink-0 bg-emerald-600">{item.unreadCount}</Badge>
+                        <Badge className="ml-0.5 text-[10px] px-1.5 py-0 h-4 flex-shrink-0 bg-gray-200 text-gray-800">{item.unreadCount}</Badge>
                       )}
                     </div>
                     <p className={cn("text-xs truncate mb-1", needsReply ? "text-gray-700 font-medium" : "text-muted-foreground")}>
@@ -1474,7 +1474,7 @@ export function UnifiedInbox() {
         {selectedContactId && contact ? (
           <>
             {/* Conversation Header */}
-            <div className="p-3 border-b flex items-center gap-2 flex-shrink-0">
+            <div className="p-3 border-b border-gray-200 flex items-center gap-2 flex-shrink-0 bg-white">
               <button onClick={() => setLocation('/app/inbox')} className="md:hidden p-1 text-gray-500" data-testid="button-back-inbox">
                 <ChevronDown className="w-5 h-5 rotate-90" />
               </button>
@@ -1493,7 +1493,7 @@ export function UnifiedInbox() {
                     const assignee = teamMembers.find((m: TeamMember) => (m.memberId || m.id) === contact.assignedTo);
                     const name = assignee?.name || assignee?.email?.split('@')[0];
                     return name ? (
-                      <span className="flex items-center gap-1 text-emerald-600 hidden sm:flex">
+                      <span className="flex items-center gap-1 text-gray-500 hidden sm:flex">
                         <UserCheck className="w-3 h-3" />{name}
                       </span>
                     ) : null;
@@ -1518,7 +1518,7 @@ export function UnifiedInbox() {
                   <span
                     className={cn(
                       "hidden sm:inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] leading-none",
-                      "bg-slate-50 border-slate-200 text-slate-700",
+                      "bg-gray-100 border-gray-200 text-gray-600",
                       metaWindowHeaderHint.text === "Window expired" && "bg-rose-50 border-rose-200 text-rose-700",
                       metaWindowHeaderHint.amber && metaWindowHeaderHint.text !== "Window expired" && "bg-amber-50 border-amber-200 text-amber-800"
                     )}
@@ -1549,7 +1549,7 @@ export function UnifiedInbox() {
                       <ChevronDown className="h-3 w-3 shrink-0 text-gray-500" />
                     </Button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
+                  <DropdownMenuContent align="end" className="bg-white border-gray-200">
                     {Object.entries(CHANNEL_CONFIG)
                       .filter(([k]) => k !== 'tiktok')
                       .filter(([k]) => contactReachableChannels.includes(k as Channel))
@@ -1569,7 +1569,7 @@ export function UnifiedInbox() {
                           }}
                           className={cn(
                             "min-h-0 gap-1.5 px-2 py-1 text-[13px] leading-tight",
-                            "focus:bg-gray-50 focus:text-gray-900 data-[highlighted]:bg-gray-50 data-[highlighted]:text-gray-900",
+                            "focus:bg-gray-100 focus:text-gray-900 data-[highlighted]:bg-gray-100 data-[highlighted]:text-gray-900",
                             isActive && "font-medium"
                           )}
                         >
@@ -1770,7 +1770,7 @@ export function UnifiedInbox() {
               <div className="border-t border-gray-100 bg-gray-50 px-4 py-2 flex items-center gap-3">
                 {isUploading ? (
                   <div className="flex items-center gap-2 text-sm text-gray-500">
-                    <Loader2 className="w-4 h-4 animate-spin text-emerald-600" />
+                    <Loader2 className="w-4 h-4 animate-spin text-gray-500" />
                     Uploading…
                   </div>
                 ) : pendingFile ? (
@@ -1827,8 +1827,8 @@ export function UnifiedInbox() {
           /* Empty state */
           <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-[#efeae2]/30">
             <div className="bg-white rounded-2xl p-8 shadow-sm max-w-sm">
-              <div className="w-16 h-16 bg-emerald-50 rounded-full flex items-center justify-center mx-auto mb-4">
-                <MessageCircle className="w-8 h-8 text-emerald-600" />
+              <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <MessageCircle className="w-8 h-8 text-gray-600" />
               </div>
               <h2 className="text-xl font-semibold text-gray-900 mb-2">Select a conversation</h2>
               <p className="text-gray-500 text-sm">Choose a contact from the list to view messages and manage their CRM details.</p>
@@ -1948,8 +1948,8 @@ export function UnifiedInbox() {
                 else description = Object.entries(data || {}).map(([k, v]) => `${k}: ${v}`).join(', ') || "Activity recorded";
 
                 return (
-                  <div key={event.id} className="flex gap-3 p-2.5 bg-slate-50 rounded-lg" data-testid={`timeline-event-${event.id}`}>
-                    <div className="w-2 h-2 mt-1.5 rounded-full bg-emerald-500 flex-shrink-0" />
+                  <div key={event.id} className="flex gap-3 p-2.5 bg-gray-50 rounded-lg" data-testid={`timeline-event-${event.id}`}>
+                    <div className="w-2 h-2 mt-1.5 rounded-full bg-gray-400 flex-shrink-0" />
                     <div className="flex-1">
                       <p className="text-xs font-medium">{event.eventType.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</p>
                       <p className="text-xs text-muted-foreground">{description}</p>
@@ -1985,14 +1985,14 @@ export function UnifiedInbox() {
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <LayoutTemplate className="w-4 h-4 text-emerald-600" />
+              <LayoutTemplate className="w-4 h-4 text-gray-600" />
               Send WhatsApp Template
             </DialogTitle>
           </DialogHeader>
           {isDemoUser ? (
             <div className="flex flex-col items-center gap-4 py-6 text-center">
-              <div className="w-12 h-12 rounded-full bg-emerald-50 flex items-center justify-center">
-                <LayoutTemplate className="w-6 h-6 text-emerald-500" />
+              <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center">
+                <LayoutTemplate className="w-6 h-6 text-gray-600" />
               </div>
               <div>
                 <p className="text-sm font-medium text-gray-800 mb-1">Connect WhatsApp to send templates</p>
@@ -2002,7 +2002,7 @@ export function UnifiedInbox() {
               </div>
               <a
                 href="/app/settings"
-                className="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium rounded-lg transition-colors"
+                className="inline-flex items-center gap-1.5 px-4 py-2 bg-gray-900 hover:bg-gray-800 text-white text-sm font-medium rounded-lg transition-colors"
                 data-testid="link-connect-whatsapp"
               >
                 Go to Settings
@@ -2032,7 +2032,7 @@ export function UnifiedInbox() {
                       <button
                         key={t.id}
                         onClick={() => handleSelectTemplate(t)}
-                        className="text-left p-3 border border-gray-200 rounded-lg hover:border-emerald-300 hover:bg-emerald-50 transition-colors"
+                        className="text-left p-3 border border-gray-200 rounded-lg hover:border-gray-300 hover:bg-gray-50 transition-colors"
                         data-testid={`template-item-${t.id}`}
                       >
                         <div className="flex items-center justify-between mb-1">
@@ -2064,7 +2064,7 @@ export function UnifiedInbox() {
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <LayoutTemplate className="w-4 h-4 text-emerald-600" />
+              <LayoutTemplate className="w-4 h-4 text-gray-600" />
               {selectedInboxTemplate?.name}
             </DialogTitle>
           </DialogHeader>
@@ -2109,7 +2109,7 @@ export function UnifiedInbox() {
                 <Button
                   onClick={handleSendTemplateFromInbox}
                   disabled={sendTemplateFromInboxMutation.isPending}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                  className="bg-gray-900 hover:bg-gray-800 text-white"
                   data-testid="button-template-send"
                 >
                   {sendTemplateFromInboxMutation.isPending ? (

@@ -116,7 +116,7 @@ export function Sidebar() {
     <TooltipProvider delayDuration={200}>
       <div
         className={cn(
-          "hidden md:flex h-full flex-col bg-white z-20 transition-all duration-200 ease-in-out flex-shrink-0",
+          "hidden md:flex h-full flex-col bg-gray-50 z-20 transition-all duration-200 ease-in-out flex-shrink-0",
           isRTL ? "border-is" : "border-ie",
           collapsed ? "w-16 items-center" : "w-[200px] items-stretch"
         )}
@@ -131,7 +131,7 @@ export function Sidebar() {
         >
           {!collapsed && (
             <div className="flex min-w-0 flex-1 items-center gap-1.5">
-              <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-brand-green">
+              <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-gray-900">
                 <span className="text-[11px] font-bold leading-none text-white">W</span>
               </div>
               <span className="font-display text-sm font-medium leading-tight tracking-tight text-gray-900 whitespace-normal">
@@ -141,7 +141,7 @@ export function Sidebar() {
           )}
 
           {collapsed && (
-            <div className="flex h-5 w-5 items-center justify-center rounded-md bg-brand-green">
+            <div className="flex h-5 w-5 items-center justify-center rounded-md bg-gray-900">
               <span className="text-[11px] font-bold leading-none text-white">W</span>
             </div>
           )}
@@ -183,7 +183,7 @@ export function Sidebar() {
               const btnClasses = cn(
                 "w-10 h-10 flex items-center justify-center rounded-lg transition-colors border-s border-s-transparent",
                 isActive
-                  ? "border-s-gray-300 bg-gray-50 text-gray-900"
+                  ? "border-s-gray-300 bg-gray-100 text-gray-900"
                   : "text-gray-500 hover:bg-gray-100 hover:text-gray-900"
               );
 
@@ -243,7 +243,7 @@ export function Sidebar() {
                         const linkClasses = cn(
                           "flex items-center p-2 rounded-lg transition-colors group relative w-full border-s border-s-transparent",
                           isActive
-                            ? "border-s-gray-300 bg-gray-50 font-medium text-gray-900"
+                            ? "border-s-gray-300 bg-gray-100 font-medium text-gray-900"
                             : "text-gray-600 hover:bg-gray-100/90 hover:text-gray-900"
                         );
                         const iconClasses = cn(

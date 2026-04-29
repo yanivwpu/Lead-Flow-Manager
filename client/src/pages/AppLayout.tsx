@@ -28,7 +28,7 @@ const Contacts = lazy(() => import("./Contacts").then(m => ({ default: m.Contact
 
 const PageLoader = () => (
   <div className="flex h-full items-center justify-center">
-    <Loader2 className="h-6 w-6 text-brand-green animate-spin" />
+    <Loader2 className="h-6 w-6 text-gray-500 animate-spin" />
   </div>
 );
 
