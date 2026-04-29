@@ -1,6 +1,8 @@
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const APP_URL = process.env.APP_URL || 'https://app.whachatcrm.com';
-const FROM_EMAIL = 'WhaChatCRM <noreply@crm.whachatcrm.com>';
+const FROM_EMAIL =
+  (process.env.RESEND_FROM_EMAIL && process.env.RESEND_FROM_EMAIL.trim()) ||
+  'WhaChatCRM <noreply@crm.whachatcrm.com>';
 
 interface EmailOptions {
   to: string;
@@ -10,8 +12,12 @@ interface EmailOptions {
 
 export async function sendEmail({ to, subject, html }: EmailOptions): Promise<boolean> {
   if (!RESEND_API_KEY) {
-    console.log(`[Email] No RESEND_API_KEY configured, skipping email to ${to}`);
-    console.log(`[Email] Subject: ${subject}`);
+    console.warn(
+      `[Email] RESEND_API_KEY is missing — cannot send email. Recipient: ${to}, subject: "${subject}"`
+    );
+    console.warn(
+      '[Email] Set RESEND_API_KEY in your environment (e.g. Railway variables) to enable Resend.'
+    );
     return false;
   }
 
@@ -31,15 +37,21 @@ export async function sendEmail({ to, subject, html }: EmailOptions): Promise<bo
     });
 
     if (!response.ok) {
-      const error = await response.text();
-      console.error(`[Email] Failed to send to ${to}: ${error}`);
+      const body = await response.text();
+      console.error(
+        `[Email] Resend API returned an error — HTTP ${response.status} — recipient: ${to}, subject: "${subject}"`
+      );
+      console.error(`[Email] Resend response body: ${body || '(empty)'}`);
       return false;
     }
 
     console.log(`[Email] Sent successfully to ${to}: ${subject}`);
     return true;
   } catch (error) {
-    console.error('[Email] Error sending email:', error);
+    console.error(
+      `[Email] Network or unexpected error while calling Resend — recipient: ${to}, subject: "${subject}"`,
+      error
+    );
     return false;
   }
 }
