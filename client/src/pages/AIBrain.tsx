@@ -385,9 +385,12 @@ function AIBrainContent() {
       if (!res.ok) throw new Error("Failed to save settings");
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["/api/ai/settings"] });
-      toast({ title: "Settings saved", description: "Your AI settings have been updated." });
+      const keys = Object.keys(variables as Record<string, unknown>);
+      if (keys.length === 1 && keys[0] === "aiMode") {
+        toast({ title: "AI mode updated." });
+      }
     },
     onError: () => {
       toast({ title: "Error", description: "Failed to save settings. Please try again.", variant: "destructive" });
@@ -453,19 +456,17 @@ function AIBrainContent() {
   
   const handleAddKeyword = () => {
     if (newKeyword && !settings.handoffKeywords.includes(newKeyword)) {
-      setSettings(prev => ({
-        ...prev,
-        handoffKeywords: [...prev.handoffKeywords, newKeyword],
-      }));
+      const handoffKeywords = [...settings.handoffKeywords, newKeyword];
+      setSettings((prev) => ({ ...prev, handoffKeywords }));
       setNewKeyword("");
+      saveSettingsMutation.mutate({ handoffKeywords });
     }
   };
   
   const handleRemoveKeyword = (keyword: string) => {
-    setSettings(prev => ({
-      ...prev,
-      handoffKeywords: prev.handoffKeywords.filter(k => k !== keyword),
-    }));
+    const handoffKeywords = settings.handoffKeywords.filter((k) => k !== keyword);
+    setSettings((prev) => ({ ...prev, handoffKeywords }));
+    saveSettingsMutation.mutate({ handoffKeywords });
   };
   
   
@@ -670,7 +671,7 @@ function AIBrainContent() {
                   <p className="font-medium text-purple-800">Full AI Brain Active</p>
                   <ChevronDown className="w-4 h-4 text-purple-400 group-open:rotate-180 transition-transform" />
                 </summary>
-                <p className="text-sm text-purple-600 mt-2">Unlimited access to all advanced features - reply suggestions, lead qualification, summarization, automation builder, and more.</p>
+                <p className="text-sm text-purple-600 mt-2">Advanced AI features are enabled for this workspace.</p>
               </details>
             ) : (
               <>
@@ -743,16 +744,15 @@ function AIBrainContent() {
           
           <TabsContent value="settings" className="space-y-6">
             <div className="bg-white rounded-xl border border-gray-200 p-6">
-              <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+              <h2 className="text-lg font-bold text-gray-900 mb-1 flex items-center gap-2">
                 <Bot className="w-5 h-5 text-purple-500" />
                 Mode
               </h2>
-              
-              <div
-                className="flex w-full max-w-xl rounded-lg border border-gray-200 bg-gray-100/90 p-[3px] gap-0.5"
-                role="radiogroup"
-                aria-label="AI mode"
-              >
+              <p className="text-sm text-gray-500 mb-4">
+                Choose how AI behaves in conversations.
+              </p>
+
+              <div className="flex flex-wrap gap-2 sm:gap-3" role="radiogroup" aria-label="AI mode">
                 {AI_MODE_SEGMENTS.map((mode) => {
                   const selected = settings.aiMode === mode.value;
                   return (
@@ -762,12 +762,18 @@ function AIBrainContent() {
                       role="radio"
                       aria-checked={selected}
                       title={mode.tooltip}
-                      onClick={() => setSettings((prev) => ({ ...prev, aiMode: mode.value }))}
+                      onClick={() => {
+                        if (settings.aiMode === mode.value) return;
+                        const next = mode.value;
+                        setSettings((prev) => ({ ...prev, aiMode: next }));
+                        saveSettingsMutation.mutate({ aiMode: next });
+                      }}
+                      disabled={saveSettingsMutation.isPending}
                       className={cn(
-                        "flex-1 min-w-0 rounded-md px-3 py-2.5 text-sm font-medium transition-colors",
+                        "px-4 py-2 sm:px-6 sm:py-3 rounded-lg border text-center transition-colors text-sm sm:text-base whitespace-nowrap font-medium",
                         selected
-                          ? "bg-violet-50 text-gray-900 border border-violet-200/90 shadow-sm"
-                          : "border border-transparent text-gray-600 hover:bg-gray-200/70"
+                          ? "bg-violet-50 text-gray-900 border-violet-200/80"
+                          : "border-gray-200 text-gray-700 hover:bg-gray-50"
                       )}
                       data-testid={`ai-mode-${mode.value}`}
                     >
@@ -776,16 +782,6 @@ function AIBrainContent() {
                   );
                 })}
               </div>
-              
-              <Button 
-                onClick={() => saveSettingsMutation.mutate(settings)}
-                disabled={saveSettingsMutation.isPending}
-                className="mt-4 bg-purple-600 hover:bg-purple-700"
-                data-testid="save-ai-settings"
-              >
-                {saveSettingsMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
-                Save Settings
-              </Button>
             </div>
             
             <div className="bg-white rounded-xl border border-gray-200 p-4 sm:p-6">
@@ -802,12 +798,18 @@ function AIBrainContent() {
                 ].map(persona => (
                   <button
                     key={persona.value}
-                    onClick={() => setSettings(prev => ({ ...prev, aiPersona: persona.value }))}
+                    onClick={() => {
+                      const next = persona.value;
+                      if (settings.aiPersona === next) return;
+                      setSettings((prev) => ({ ...prev, aiPersona: next }));
+                      saveSettingsMutation.mutate({ aiPersona: next });
+                    }}
+                    disabled={saveSettingsMutation.isPending}
                     className={cn(
-                      "px-4 py-2 sm:px-6 sm:py-3 rounded-lg border-2 text-center transition-all text-sm sm:text-base whitespace-nowrap",
+                      "px-4 py-2 sm:px-6 sm:py-3 rounded-lg border text-center transition-colors text-sm sm:text-base whitespace-nowrap font-medium",
                       settings.aiPersona === persona.value
-                        ? "border-blue-500 bg-blue-50 text-blue-700"
-                        : "border-gray-200 hover:border-gray-300 text-gray-700"
+                        ? "bg-violet-50 text-gray-900 border-violet-200/80"
+                        : "border-gray-200 text-gray-700 hover:bg-gray-50"
                     )}
                     data-testid={`ai-persona-${persona.value}`}
                   >
@@ -832,7 +834,11 @@ function AIBrainContent() {
                     </div>
                     <Switch
                       checked={settings.leadQualificationEnabled}
-                      onCheckedChange={(checked) => setSettings(prev => ({ ...prev, leadQualificationEnabled: checked }))}
+                      onCheckedChange={(checked) => {
+                        setSettings((prev) => ({ ...prev, leadQualificationEnabled: checked }));
+                        saveSettingsMutation.mutate({ leadQualificationEnabled: checked });
+                      }}
+                      disabled={saveSettingsMutation.isPending}
                       data-testid="switch-lead-qualification"
                     />
                   </div>
@@ -844,7 +850,11 @@ function AIBrainContent() {
                     </div>
                     <Switch
                       checked={settings.autoTaggingEnabled}
-                      onCheckedChange={(checked) => setSettings(prev => ({ ...prev, autoTaggingEnabled: checked }))}
+                      onCheckedChange={(checked) => {
+                        setSettings((prev) => ({ ...prev, autoTaggingEnabled: checked }));
+                        saveSettingsMutation.mutate({ autoTaggingEnabled: checked });
+                      }}
+                      disabled={saveSettingsMutation.isPending}
                       data-testid="switch-auto-tagging"
                     />
                   </div>
