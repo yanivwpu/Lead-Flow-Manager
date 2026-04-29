@@ -651,6 +651,34 @@ export function UnifiedInbox() {
     return { text, amber };
   }, [activeChannel, windowStatus, metaWindowTimerTick]);
 
+  // Inline composer notice (subtle): only when < 1h left or expired.
+  // Uses the same expiry buffer rule as the header hint; UI-only change.
+  const metaComposerWindowNotice = useMemo(() => {
+    if (!activeChannel) return null;
+    const ch = activeChannel as string;
+    if (!['whatsapp', 'facebook', 'instagram'].includes(ch)) return null;
+    if (!windowStatus?.hasRestriction || !windowStatus.windowExpiresAt) return null;
+    void metaWindowTimerTick;
+
+    const expMs = new Date(windowStatus.windowExpiresAt).getTime();
+    const bufferMs = activeChannel === 'whatsapp' ? 60 * 60 * 1000 : 0;
+    const deadlineMs = expMs - bufferMs;
+    const msLeft = deadlineMs - Date.now();
+
+    if (msLeft <= 0) {
+      return {
+        variant: 'expired' as const,
+        text: 'Reply window expired. Use a template or switch channel.',
+      };
+    }
+
+    if (msLeft < 60 * 60 * 1000) {
+      return { variant: 'soon' as const, text: 'Reply window closing soon.' };
+    }
+
+    return null;
+  }, [activeChannel, windowStatus, metaWindowTimerTick]);
+
   const { data: whatsappAvailability } = useQuery<WhatsAppAvailability>({
     queryKey: ["/api/channels/whatsapp/availability"],
     enabled: isWhatsAppContact && !!selectedContactId,
@@ -1611,30 +1639,6 @@ export function UnifiedInbox() {
               </div>
             </div>
 
-
-            {windowStatus?.hasRestriction && !windowStatus.isActive && (
-              <div className="px-3 py-2 bg-red-50 border-b border-red-200 flex items-center gap-2 text-xs text-red-700 flex-shrink-0">
-                <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
-                <span className="flex-1">24-hour reply window closed — you can't send new messages until they message you first. You can still receive their messages.</span>
-                {isWhatsAppContact && (
-                  <button
-                    onClick={handleOpenTemplatePicker}
-                    className="flex items-center gap-1 px-2 py-0.5 bg-red-100 hover:bg-red-200 text-red-700 rounded font-medium transition-colors whitespace-nowrap"
-                    data-testid="button-use-template-banner"
-                  >
-                    <LayoutTemplate className="w-3 h-3" />
-                    Use Template
-                  </button>
-                )}
-              </div>
-            )}
-            {windowStatus?.hasRestriction && windowStatus.isActive && windowStatus.isExpiringSoon && (
-              <div className="px-3 py-2 bg-amber-50 border-b border-amber-200 flex items-center gap-2 text-xs text-amber-700 flex-shrink-0">
-                <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
-                Reply window closes in {windowStatus.hoursRemaining}h — reply soon. You can always receive their messages.
-              </div>
-            )}
-
             {/* Messages area */}
             <div
               ref={messagesContainerRef}
@@ -1811,6 +1815,19 @@ export function UnifiedInbox() {
             )}
 
             {/* Composer */}
+            {metaComposerWindowNotice ? (
+              <div
+                className={cn(
+                  "border-t px-4 py-2 text-[11px] leading-snug",
+                  metaComposerWindowNotice.variant === "soon"
+                    ? "border-amber-200/60 text-amber-700 bg-transparent"
+                    : "border-rose-200/70 text-rose-700 bg-transparent"
+                )}
+                data-testid="reply-window-inline-notice"
+              >
+                {metaComposerWindowNotice.text}
+              </div>
+            ) : null}
             <AIComposer
               value={messageInput}
               onChange={setMessageInput}
