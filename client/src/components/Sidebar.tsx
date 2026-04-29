@@ -129,7 +129,7 @@ export function Sidebar() {
         >
           {!collapsed && (
             <div className="flex items-center min-w-0">
-              <div className="h-6 w-6 bg-brand-green rounded-md flex items-center justify-center shrink-0">
+              <div className="h-6 w-6 bg-slate-900 rounded-md flex items-center justify-center shrink-0">
                 <span className="text-white font-bold text-sm">W</span>
               </div>
               <span className="font-display font-bold text-base text-gray-900 ms-2 truncate">
@@ -139,7 +139,7 @@ export function Sidebar() {
           )}
 
           {collapsed && (
-            <div className="h-6 w-6 bg-brand-green rounded-md flex items-center justify-center">
+            <div className="h-6 w-6 bg-slate-900 rounded-md flex items-center justify-center">
               <span className="text-white font-bold text-sm">W</span>
             </div>
           )}
@@ -162,7 +162,10 @@ export function Sidebar() {
                 )}
               </button>
             </TooltipTrigger>
-            <TooltipContent side={tooltipSide}>
+            <TooltipContent
+              side={tooltipSide}
+              className="border border-slate-700/60 bg-slate-900 text-slate-50 shadow-lg"
+            >
               {collapsed ? "Expand sidebar" : "Collapse sidebar"}
             </TooltipContent>
           </Tooltip>
@@ -176,13 +179,13 @@ export function Sidebar() {
               const isActive = !item.external && location.startsWith(item.href);
               const iconClasses = cn(
                 "h-5 w-5",
-                isActive ? "text-brand-green" : "text-gray-400"
+                isActive ? "text-gray-900" : "text-gray-400"
               );
               const btnClasses = cn(
-                "w-10 h-10 flex items-center justify-center rounded-lg transition-colors",
+                "w-10 h-10 flex items-center justify-center rounded-lg transition-colors border-s-2",
                 isActive
-                  ? "bg-emerald-50 text-brand-green"
-                  : "text-gray-500 hover:bg-gray-50 hover:text-gray-900"
+                  ? "border-s-gray-900 bg-white text-gray-900 shadow-sm ring-1 ring-gray-200/90"
+                  : "border-s-transparent text-gray-500 hover:bg-gray-100 hover:text-gray-900"
               );
 
               const inner = <item.icon className={iconClasses} />;
@@ -208,7 +211,10 @@ export function Sidebar() {
                       </Link>
                     )}
                   </TooltipTrigger>
-                  <TooltipContent side={tooltipSide}>
+                  <TooltipContent
+                    side={tooltipSide}
+                    className="border border-slate-700/60 bg-slate-900 text-slate-50 shadow-lg"
+                  >
                     {item.label}
                   </TooltipContent>
                 </Tooltip>
@@ -239,15 +245,15 @@ export function Sidebar() {
                       {category.items.map((item: any) => {
                         const isActive = !item.external && location.startsWith(item.href);
                         const linkClasses = cn(
-                          "flex items-center p-2 rounded-lg transition-colors group relative w-full",
+                          "flex items-center p-2 rounded-lg transition-colors group relative w-full border-s-2",
                           isActive
-                            ? "bg-emerald-50 text-brand-green"
-                            : "text-gray-500 hover:bg-gray-50 hover:text-gray-900"
+                            ? "border-s-gray-900 bg-white font-medium text-gray-900 shadow-sm ring-1 ring-gray-200/90"
+                            : "border-s-transparent text-gray-600 hover:bg-gray-100/90 hover:text-gray-900"
                         );
                         const iconClasses = cn(
                           "h-5 w-5 shrink-0",
                           isActive
-                            ? "text-brand-green"
+                            ? "text-gray-900"
                             : "text-gray-400 group-hover:text-gray-600"
                         );
 
@@ -323,7 +329,10 @@ export function Sidebar() {
               </button>
             </TooltipTrigger>
             {collapsed && (
-              <TooltipContent side={tooltipSide}>
+              <TooltipContent
+                side={tooltipSide}
+                className="border border-slate-700/60 bg-slate-900 text-slate-50 shadow-lg"
+              >
                 {t("common.logout", "Logout")}
               </TooltipContent>
             )}
