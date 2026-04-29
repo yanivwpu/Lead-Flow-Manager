@@ -656,7 +656,10 @@ export function InboxLeadDetailsPanel({
   const followUpSt = getFollowUpStatus(contact.followUpDate);
 
   // ── Conversation intelligence — re-runs whenever messages change ──
-  const intel = useMemo(() => analyzeConversation(messages), [messages]);
+  const intel = useMemo(
+    () => analyzeConversation(messages, { industry: businessKnowledge?.industry }),
+    [messages, businessKnowledge?.industry]
+  );
 
   // ── Workflow layer — computes recommended actions from intel + contact state ──
   const workflow = useMemo(() => computeWorkflow(
@@ -702,13 +705,15 @@ export function InboxLeadDetailsPanel({
       .then(r => r.ok ? r.json() : Promise.reject(r.status))
       .then(data => {
         if (!cancelled) {
-          setAiMemory(data.memory || buildAIMemorySummary(intel, messages));
+          setAiMemory(
+            data.memory || buildAIMemorySummary(intel, messages, { industry: businessKnowledge?.industry })
+          );
         }
       })
       .catch(() => {
         if (!cancelled) {
           // Fallback to rule-based summary
-          setAiMemory(buildAIMemorySummary(intel, messages));
+          setAiMemory(buildAIMemorySummary(intel, messages, { industry: businessKnowledge?.industry }));
         }
       })
       .finally(() => {

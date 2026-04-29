@@ -1195,11 +1195,17 @@ export function UnifiedInbox() {
 
   const contact = contactData?.contact;
 
+  // Business knowledge (industry gate for Copilot intel; no backend logic change)
+  const { data: aiBusinessKnowledge } = useQuery<{ industry?: string }>({
+    queryKey: ["/api/ai/business-knowledge"],
+    staleTime: 5 * 60 * 1000,
+  });
+
   // Build contact context for AI reply quality improvement (must be after contact + messages are declared)
   const contactContext: ContactContext | undefined = useMemo(() => {
     if (!contact) return undefined;
     const msgList = messages.map(m => ({ direction: m.direction, content: m.content || '' }));
-    const intel = msgList.length > 0 ? analyzeConversation(msgList) : null;
+    const intel = msgList.length > 0 ? analyzeConversation(msgList, { industry: aiBusinessKnowledge?.industry }) : null;
     return {
       name:          contact.name,
       tag:           contact.tag || undefined,
@@ -1211,7 +1217,7 @@ export function UnifiedInbox() {
       intent:        intel?.intent,
       leadScore:     intel?.leadScore?.label,
     };
-  }, [contact, messages]);
+  }, [contact, messages, aiBusinessKnowledge?.industry]);
 
   const convStatus = primaryConversation?.status || 'open';
   const statusConfig = CONVERSATION_STATUSES.find(s => s.value === convStatus) || CONVERSATION_STATUSES[0];

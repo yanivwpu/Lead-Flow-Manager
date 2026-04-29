@@ -75,7 +75,11 @@ function normalizeMoney(raw: string): string {
 }
 
 function extractBudget(messages: ConversationMessage[]): string | null {
-  const all = searchAll(messages);
+  // Evidence guard: only extract from the lead's own words (inbound).
+  // This prevents "hallucinated" CRM fields from agent messages like
+  // "Our packages start at $X" or "Budget options are...".
+  const all = searchInbound(messages);
+  if (!all) return null;
 
   // Try range first: "$500k to $600k" or "$500k–$600k"
   const rangeMatches = all.match(MONEY_RANGE_RE);
@@ -125,7 +129,9 @@ const MONTHS = ['january','february','march','april','may','june','july','august
 const SEASONS = ['spring','summer','fall','autumn','winter'];
 
 function extractTimeline(messages: ConversationMessage[]): string | null {
-  const all = searchAll(messages);
+  // Evidence guard: only extract from inbound messages.
+  const all = searchInbound(messages);
+  if (!all) return null;
 
   // ASAP / urgency
   if (URGENCY_WORDS.some(w => all.includes(w))) return 'ASAP';
@@ -171,7 +177,9 @@ function extractTimeline(messages: ConversationMessage[]): string | null {
 // ── Financing Extraction ───────────────────────────────────────────────────────
 
 function extractFinancing(messages: ConversationMessage[]): string | null {
-  const all = searchAll(messages);
+  // Evidence guard: only extract from inbound messages.
+  const all = searchInbound(messages);
+  if (!all) return null;
 
   if (/pre.?approved|pre.?approval/gi.test(all)) return 'Pre-approved';
   if (/(?:paying|pay|all)\s+cash|cash\s+buyer|cash\s+purchase/gi.test(all)) return 'Cash buyer';
@@ -190,11 +198,13 @@ function extractFinancing(messages: ConversationMessage[]): string | null {
 
 // ── Intent Extraction ──────────────────────────────────────────────────────────
 
-function extractIntent(messages: ConversationMessage[]): string {
-  // Primarily from inbound messages (lead's own words)
-  const inbound = searchInbound(messages);
-  const all     = searchAll(messages);
-  const src     = inbound || all;
+function extractIntent(messages: ConversationMessage[], opts?: { isRealEstate?: boolean }): string {
+  // Evidence guard: only infer intent from lead's own words.
+  const src = searchInbound(messages);
+  if (!src) return 'Browsing';
+
+  // Universal CRM default: do not apply real-estate intent taxonomy unless explicitly enabled.
+  if (!opts?.isRealEstate) return 'Inquiry';
 
   // Investor check first — explicit investment intent only
   if (/\b(?:investor|invest(?:ing|ment)|multi.?family|multifamily|rental\s+income|cap\s+rate|roi\b|cash\s+flow|property\s+management|income.?producing|income\s+property|investment\s+prop)/gi.test(src))
@@ -283,7 +293,10 @@ function computeAiState(
 
 // ── Main Entry Point ───────────────────────────────────────────────────────────
 
-export function analyzeConversation(messages: ConversationMessage[]): CopilotIntelligence {
+export function analyzeConversation(
+  messages: ConversationMessage[],
+  opts?: { industry?: string; isRealEstate?: boolean }
+): CopilotIntelligence {
   if (!messages || messages.length === 0) {
     return {
       budget: null, timeline: null, financing: null, intent: 'Browsing',
@@ -294,10 +307,21 @@ export function analyzeConversation(messages: ConversationMessage[]): CopilotInt
     };
   }
 
+  const industry = (opts?.industry || '').toLowerCase();
+  const isRealEstate =
+    opts?.isRealEstate ??
+    (
+      industry.includes('real estate') ||
+      industry.includes('realestate') ||
+      industry.includes('property') ||
+      industry.includes('realtor') ||
+      industry === 'real_estate'
+    );
+
   const budget    = extractBudget(messages);
   const timeline  = extractTimeline(messages);
   const financing = extractFinancing(messages);
-  const intent    = extractIntent(messages);
+  const intent    = extractIntent(messages, { isRealEstate });
   const isUrgent  = detectUrgency(messages);
 
   const hasBudget    = budget    !== null;
@@ -412,11 +436,6 @@ export function computeWorkflow(
 
   // ── 2. Qualification triggers — next missing field ───────────────────────
   let nextQuestion: string | null = null;
-  const missing = [
-    !intel.hasBudget    && 'budget',
-    !intel.hasTimeline  && 'timeline',
-    !intel.hasFinancing && 'financing',
-  ].filter(Boolean) as string[];
 
   // Only suggest qualification questions once there is enough conversational context.
   // A single opening message ("test", "hi", etc.) gives no signal — don't interrogate.
@@ -437,27 +456,6 @@ export function computeWorkflow(
           priority: answered.size === 0 ? 'medium' : 'medium',
           reason: `${remaining.length} qualification${remaining.length !== 1 ? 's' : ''} remaining`,
           value: nextCriterion.question,
-        });
-      }
-    } else {
-      // ── Default: hardcoded real-estate style qualifications ──
-      if (missing.length === 3) {
-        nextQuestion = "What's your budget range and ideal timeline for making a move?";
-      } else if (missing.includes('financing')) {
-        nextQuestion = "Have you been pre-approved for financing, or are you planning to pay cash?";
-      } else if (missing.includes('budget')) {
-        nextQuestion = "What's your budget range for this?";
-      } else if (missing.includes('timeline')) {
-        nextQuestion = "What's your ideal timeline for making a move?";
-      }
-
-      if (nextQuestion) {
-        actions.push({
-          type: 'qualify',
-          label: 'Ask qualifying question',
-          priority: intel.signalCount === 0 ? 'high' : 'medium',
-          reason: `Missing: ${missing.join(', ')} — ask to complete lead profile`,
-          value: nextQuestion,
         });
       }
     }
@@ -594,27 +592,39 @@ function extractListingHint(messages: ConversationMessage[]): string | null {
 export function buildAIMemorySummary(
   intel: CopilotIntelligence,
   messages: ConversationMessage[],
+  opts?: { industry?: string; isRealEstate?: boolean }
 ): string {
   if (!messages || messages.length === 0) return '';
 
   const parts: string[] = [];
-  const propHint    = extractPropertyHint(messages);
-  const listingHint = extractListingHint(messages);
+  const industry = (opts?.industry || '').toLowerCase();
+  const isRealEstate =
+    opts?.isRealEstate ??
+    (
+      industry.includes('real estate') ||
+      industry.includes('realestate') ||
+      industry.includes('property') ||
+      industry.includes('realtor') ||
+      industry === 'real_estate'
+    );
+
+  const propHint    = isRealEstate ? extractPropertyHint(messages) : null;
+  const listingHint = isRealEstate ? extractListingHint(messages) : null;
 
   // ── Intent-aware opening sentence ─────────────────────────────────────────
-  if (intel.intent === 'Investor') {
+  if (isRealEstate && intel.intent === 'Investor') {
     const target = propHint || 'investment properties';
     parts.push(`Investor looking for ${target}.`);
-  } else if (intel.intent === 'Seller') {
+  } else if (isRealEstate && intel.intent === 'Seller') {
     parts.push('Looking to sell their property.');
-  } else if (intel.intent === 'Renter') {
+  } else if (isRealEstate && intel.intent === 'Renter') {
     const target = propHint || 'a rental property';
     parts.push(`Looking to rent ${target}.`);
-  } else if (intel.intent === 'Buyer') {
+  } else if (isRealEstate && intel.intent === 'Buyer') {
     const target = propHint || 'a property';
     parts.push(`Looking to buy ${target}.`);
   } else {
-    // Browsing / unknown — use listing hint or a generic inquiry line
+    // Generic / unknown — keep neutral; only add property hints for real estate contexts.
     if (listingHint) {
       parts.push(`Inquired about ${listingHint}.`);
     } else if (propHint) {
@@ -741,7 +751,7 @@ export const VERIFICATION_CASES: VerificationCase[] = [
 export function runVerification(): void {
   console.group('🤖 Copilot Intelligence Verification');
   for (const tc of VERIFICATION_CASES) {
-    const intel    = analyzeConversation(tc.messages);
+    const intel    = analyzeConversation(tc.messages, { isRealEstate: true });
     const workflow = computeWorkflow(intel, tc.contact);
     const pass = (
       (tc.expected.score     == null || intel.leadScore.label === tc.expected.score) &&

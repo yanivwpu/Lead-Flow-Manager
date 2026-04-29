@@ -107,7 +107,8 @@ export class AIService {
     // Optimization: Only send the last 8 messages for extraction to save tokens
     const limitedHistory = conversationHistory.slice(-8);
     
-    const extractionPrompt = `You are a lead data extraction AI. Analyze this conversation and extract any customer information.
+    const extractionPrompt = `You are a lead data extraction system. Extract ONLY information that is explicitly stated in the conversation.
+Do not infer, guess, or fill in missing details. If a field is not clearly stated, return null.
 
 Business context: ${businessKnowledge?.businessName || "Unknown business"} - ${businessKnowledge?.industry || "General"}
 
@@ -121,9 +122,9 @@ Extract and return a JSON object with these fields (use null for unknown):
 - budget: Budget mentioned
 - timeline: Timeline/urgency
 - location: Location mentioned
-- intent: Primary intent (price, availability, quote, book, interested)
-- score: Lead quality score 0-100
-- status: Lead status (new, warm, hot, unqualified)
+- intent: Primary intent, using the customer's words when possible (e.g. "pricing", "availability", "quote", "booking"). If unclear, null.
+- score: Lead quality score 0-100 based ONLY on explicit signals present (do not inflate). If unclear, 25.
+- status: Lead status (new, warm, hot, unqualified) based ONLY on explicit signals present. If unclear, "new".
 
 Return only valid JSON.`;
 
@@ -288,8 +289,8 @@ Return JSON: { "summary": "your summary" }`;
       intel.financing ? `Financing: ${intel.financing}`     : null,
     ].filter(Boolean).join('\n');
 
-    const systemPrompt = `You are a CRM assistant helping real estate agents understand their leads.
-Write a short, natural 1–2 sentence summary of what this lead wants, based on the conversation.
+    const systemPrompt = `You are a CRM assistant helping businesses understand customer conversations and decide clear next steps.
+Write a short, natural 1–2 sentence summary of what this customer wants, based on the conversation.
 
 Rules:
 - Write like a human note an agent would read at a glance
@@ -321,13 +322,13 @@ Write a short natural summary of what this lead wants.`;
       if (text.startsWith('{')) {
         try {
           const parsed = JSON.parse(text);
-          return parsed.summary || parsed.memory || 'Lead inquiring about property details.';
+          return parsed.summary || parsed.memory || 'Customer inquiring about details.';
         } catch { /* not JSON */ }
       }
-      return text || 'Lead inquiring about property details.';
+      return text || 'Customer inquiring about details.';
     } catch (error) {
       console.error('[AI] Error generating AI memory:', error);
-      return 'Lead inquiring about property details.';
+      return 'Customer inquiring about details.';
     }
   }
 
