@@ -737,7 +737,8 @@ export function InboxLeadDetailsPanel({
     const lastMsg = messages[messages.length - 1];
     if (!lastMsg || lastMsg.direction !== 'inbound') return;
 
-    const key = `${contact.id}:${messages.length}`;
+    const effectiveChatId = primaryConversation?.id ?? contact.id;
+    const key = `${effectiveChatId}:${messages.length}`;
     if (aiCopilotReplyKeyRef.current === key) return;
     aiCopilotReplyKeyRef.current = key;
 
@@ -754,7 +755,7 @@ export function InboxLeadDetailsPanel({
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
       body: JSON.stringify({
-        chatId: contact.id,
+        chatId: effectiveChatId,
         conversationHistory,
         contactContext: {
           name:          contact.name,
@@ -768,13 +769,18 @@ export function InboxLeadDetailsPanel({
       }),
     })
       .then(r => r.ok ? r.json() : Promise.reject(r.status))
-      .then(data => { if (!cancelled && data.reply) setAiCopilotReply(data.reply); })
+      .then(data => {
+        const suggestion = data?.suggestion ?? data?.reply;
+        if (!cancelled && typeof suggestion === 'string' && suggestion.trim()) {
+          setAiCopilotReply(suggestion);
+        }
+      })
       .catch(() => {})
       .finally(() => { if (!cancelled) setAiCopilotReplyLoading(false); });
 
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [messages.length, contact.id, hasAIBrain]);
+  }, [messages.length, contact.id, primaryConversation?.id, hasAIBrain]);
 
   // ── Auto-tag: apply tag automatically when signal is strong + current tag is neutral ──
   const autoTagAppliedRef = useRef<string | null>(null);

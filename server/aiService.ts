@@ -408,7 +408,7 @@ ${contactContext.financing ? `- Financing (already mentioned): ${contactContext.
 ${contactContext.notes ? `- Agent notes: ${contactContext.notes}` : ''}
 ` : ''}CORE RULES — READ CAREFULLY:
 
-1. READ THE FULL CONVERSATION before replying. Extract what is already known: property interest, intent, budget, timeline, name, location.
+1. READ THE FULL CONVERSATION before replying. Extract what is already known from the customer's messages (goals, constraints, preferences, and what they've already shared).
 
 2. NEVER ask for information that was already provided in the conversation. Reference it instead.
 
@@ -427,7 +427,7 @@ ${contactContext.notes ? `- Agent notes: ${contactContext.notes}` : ''}
 6. ADVANCE THE CONVERSATION — every reply must do one of:
    - Clarify lead intent or interest
    - Move toward a viewing / meeting / booking
-   - Uncover budget, timeline, or financing readiness
+   - Clarify the single most important missing detail for the next step (only if it is relevant and not already answered)
    - Confirm next step or route them to action
 
 7. ASK ONLY ONE QUESTION — the single most useful next question. Not a list.${isFirstMessage ? `
