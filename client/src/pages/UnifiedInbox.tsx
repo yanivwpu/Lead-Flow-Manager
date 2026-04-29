@@ -1513,34 +1513,23 @@ export function UnifiedInbox() {
                   <PanelRight className="w-4 h-4" />
                 </Button>
 
-                {/* Channel switcher */}
-                <DropdownMenu>
+                {/* Channel switcher + window timer (timer outside trigger; neutral control) */}
+                <div className="flex min-w-0 max-w-[min(100%,18rem)] items-baseline gap-1 sm:gap-1.5">
+                  <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="sm" className="gap-1 h-7 px-2 text-xs border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-gray-700 bg-white shadow-none max-w-[min(100%,16rem)]" data-testid="button-switch-channel" disabled={contactReachableChannels.length === 0} title={contactReachableChannels.length === 0 ? 'No messaging channel available for this contact' : undefined}>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 gap-1 rounded-md border border-gray-200/90 bg-white px-2 text-xs font-normal text-gray-600 shadow-none hover:bg-gray-50/90 hover:text-gray-700 focus-visible:ring-1 focus-visible:ring-gray-300/50 focus-visible:ring-offset-0 max-w-[min(100%,12rem)]"
+                      data-testid="button-switch-channel"
+                      disabled={contactReachableChannels.length === 0}
+                      title={contactReachableChannels.length === 0 ? 'No messaging channel available for this contact' : undefined}
+                    >
                       {getChannelIcon(activeChannel)}
-                      <span className="hidden sm:inline-flex min-w-0 items-baseline gap-0.5 text-xs font-normal leading-tight">
-                        <span className="truncate text-gray-600">
-                          {activeChannel ? CHANNEL_CONFIG[activeChannel]?.label : 'No channel'}
-                        </span>
-                        {metaWindowHeaderHint ? (
-                          <>
-                            <span className="shrink-0 text-gray-400/90" aria-hidden>
-                              •
-                            </span>
-                            <span
-                              className={cn(
-                                'shrink-0 whitespace-nowrap text-gray-400/90',
-                                metaWindowHeaderHint.amber && 'text-amber-600/80'
-                              )}
-                              title="Time left for free-form messaging on this channel"
-                              data-testid="meta-window-timer"
-                            >
-                              {metaWindowHeaderHint.text}
-                            </span>
-                          </>
-                        ) : null}
+                      <span className="hidden min-w-0 truncate sm:inline">
+                        {activeChannel ? CHANNEL_CONFIG[activeChannel]?.label : 'No channel'}
                       </span>
-                      <ChevronDown className="w-3 h-3 shrink-0" />
+                      <ChevronDown className="h-3 w-3 shrink-0 text-gray-500" />
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
@@ -1571,6 +1560,24 @@ export function UnifiedInbox() {
                     })}
                   </DropdownMenuContent>
                 </DropdownMenu>
+                  {metaWindowHeaderHint ? (
+                    <span className="hidden min-w-0 items-baseline gap-1 sm:inline-flex">
+                      <span className="shrink-0 text-[10px] font-normal leading-none text-gray-400/90" aria-hidden>
+                        •
+                      </span>
+                      <span
+                        className={cn(
+                          'shrink-0 text-[10px] font-normal leading-none text-gray-400/90',
+                          metaWindowHeaderHint.amber && 'text-amber-600/80'
+                        )}
+                        title="Time left for free-form messaging on this channel"
+                        data-testid="meta-window-timer"
+                      >
+                        {metaWindowHeaderHint.text}
+                      </span>
+                    </span>
+                  ) : null}
+                </div>
 
                 {/* Actions menu */}
                 <DropdownMenu>
