@@ -1513,14 +1513,31 @@ export function UnifiedInbox() {
                   <PanelRight className="w-4 h-4" />
                 </Button>
 
-                {/* Channel switcher + window timer (timer outside trigger; neutral control) */}
-                <div className="flex min-w-0 max-w-[min(100%,18rem)] items-baseline gap-1 sm:gap-1.5">
-                  <DropdownMenu>
+                {/* Window timer/status (info) + channel switcher (action) */}
+                {metaWindowHeaderHint ? (
+                  <span
+                    className={cn(
+                      "hidden sm:inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] leading-none",
+                      "bg-slate-50 border-slate-200 text-slate-700",
+                      metaWindowHeaderHint.text === "Window expired" && "bg-rose-50 border-rose-200 text-rose-700",
+                      metaWindowHeaderHint.amber && metaWindowHeaderHint.text !== "Window expired" && "bg-amber-50 border-amber-200 text-amber-800"
+                    )}
+                    title="Time left for free-form messaging on this channel"
+                    data-testid="meta-window-timer"
+                  >
+                    {metaWindowHeaderHint.text === "Window expired"
+                      ? "Window expired"
+                      : `Reply window: ${metaWindowHeaderHint.text}`}
+                  </span>
+                ) : null}
+
+                {/* Channel switcher (neutral control) */}
+                <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="h-7 gap-1 rounded-md border border-gray-200/90 bg-white px-2 text-xs font-normal text-gray-600 shadow-none hover:bg-gray-50/90 hover:text-gray-700 focus-visible:ring-1 focus-visible:ring-gray-300/50 focus-visible:ring-offset-0 max-w-[min(100%,12rem)]"
+                      className="h-7 max-w-[min(100%,12rem)] gap-1 rounded-md border border-gray-200/90 bg-white px-2 text-xs font-normal text-gray-600 shadow-none hover:bg-gray-50/90 hover:text-gray-700 focus-visible:ring-1 focus-visible:ring-gray-300/50 focus-visible:ring-offset-0"
                       data-testid="button-switch-channel"
                       disabled={contactReachableChannels.length === 0}
                       title={contactReachableChannels.length === 0 ? 'No messaging channel available for this contact' : undefined}
@@ -1560,24 +1577,6 @@ export function UnifiedInbox() {
                     })}
                   </DropdownMenuContent>
                 </DropdownMenu>
-                  {metaWindowHeaderHint ? (
-                    <span className="hidden min-w-0 items-baseline gap-1 sm:inline-flex">
-                      <span className="shrink-0 text-[10px] font-normal leading-none text-gray-400/90" aria-hidden>
-                        •
-                      </span>
-                      <span
-                        className={cn(
-                          'shrink-0 text-[10px] font-normal leading-none text-gray-400/90',
-                          metaWindowHeaderHint.amber && 'text-amber-600/80'
-                        )}
-                        title="Time left for free-form messaging on this channel"
-                        data-testid="meta-window-timer"
-                      >
-                        {metaWindowHeaderHint.text}
-                      </span>
-                    </span>
-                  ) : null}
-                </div>
 
                 {/* Actions menu */}
                 <DropdownMenu>
