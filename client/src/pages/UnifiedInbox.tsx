@@ -1410,8 +1410,9 @@ export function UnifiedInbox() {
                 key={item.contact.id}
                 onClick={() => setLocation(`/app/inbox/${item.contact.id}`)}
                 className={cn(
-                  "p-3 border-b cursor-pointer transition-colors bg-white hover:bg-gray-50",
-                  selectedContactId === item.contact.id && "bg-gray-50 border-l-2 border-l-gray-200 hover:bg-gray-100",
+                  "p-3 border-b cursor-pointer transition-colors bg-transparent hover:bg-gray-100/70",
+                  selectedContactId === item.contact.id &&
+                    "bg-white shadow-sm ring-1 ring-gray-200 hover:bg-white border-l-2 border-l-gray-300",
                   isOverdue && "border-l-2 border-l-red-400"
                 )}
                 data-testid={`inbox-item-${item.contact.id}`}

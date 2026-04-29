@@ -131,7 +131,7 @@ export function Sidebar() {
         >
           {!collapsed && (
             <div className="flex min-w-0 flex-1 items-center gap-1.5">
-              <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-gray-900">
+              <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-brand-green">
                 <span className="text-[11px] font-bold leading-none text-white">W</span>
               </div>
               <span className="font-display text-sm font-medium leading-tight tracking-tight text-gray-900 whitespace-normal">
@@ -141,7 +141,7 @@ export function Sidebar() {
           )}
 
           {collapsed && (
-            <div className="flex h-5 w-5 items-center justify-center rounded-md bg-gray-900">
+            <div className="flex h-5 w-5 items-center justify-center rounded-md bg-brand-green">
               <span className="text-[11px] font-bold leading-none text-white">W</span>
             </div>
           )}
