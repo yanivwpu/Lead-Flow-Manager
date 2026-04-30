@@ -534,83 +534,92 @@ function AIBrainContent() {
     );
   }
   
+  const segmentTabClass = (selected: boolean) =>
+    cn(
+      "h-9 px-3.5 rounded-lg border text-sm font-medium transition-all duration-200 ease-out",
+      selected
+        ? "bg-violet-600 text-white border-violet-600 shadow-sm shadow-violet-600/20"
+        : "bg-slate-100 text-slate-700 border-slate-200/90 hover:border-violet-300 hover:bg-violet-50/90 hover:text-violet-900",
+      saveSettingsMutation.isPending && "opacity-60 pointer-events-none",
+    );
+
   return (
-    <div className="h-full overflow-y-auto overflow-x-hidden bg-muted/30">
-      <div className="p-6 sm:p-8 max-w-[900px] mx-auto w-full space-y-6 pb-20">
+    <div className="h-full overflow-y-auto overflow-x-hidden bg-gradient-to-b from-violet-50/50 via-slate-50/80 to-slate-100/60">
+      <div className="p-6 sm:p-8 max-w-[900px] mx-auto w-full space-y-8 pb-24">
         <header className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
           <div className="flex items-start gap-3">
-            <div className="w-10 h-10 rounded-lg border border-border bg-background flex items-center justify-center shrink-0">
-              <Brain className="w-5 h-5 text-foreground" />
+            <div className="w-11 h-11 rounded-xl border border-violet-200/70 bg-gradient-to-br from-violet-100 to-white shadow-sm shadow-violet-900/5 flex items-center justify-center shrink-0">
+              <Brain className="w-5 h-5 text-violet-700" />
             </div>
             <div>
-              <h1 className="text-xl font-semibold tracking-tight text-foreground">AI Brain</h1>
-              <p className="text-sm text-muted-foreground mt-0.5">
+              <h1 className="text-xl font-semibold tracking-tight text-slate-900">AI Brain</h1>
+              <p className="text-sm text-slate-600 mt-0.5">
                 Control how AI assists in your inbox{hasFullAIBrain ? "" : " — add AI Brain for business profile and handoff controls"}.
               </p>
             </div>
           </div>
           {hasFullAIBrain && saveKnowledgeMutation.isPending && (
-            <span className="text-xs text-muted-foreground flex items-center gap-1.5 shrink-0">
-              <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden />
+            <span className="text-xs text-violet-700 flex items-center gap-1.5 shrink-0 rounded-full border border-violet-200/80 bg-violet-50/90 px-2.5 py-1 font-medium">
+              <Loader2 className="w-3.5 h-3.5 animate-spin text-violet-600" aria-hidden />
               Saving…
             </span>
           )}
         </header>
 
-        <div
-          className={cn(
-            "rounded-lg border px-4 py-3 flex items-start gap-3",
-            hasFullAIBrain ? "bg-background border-border" : "bg-background border-border",
-          )}
-        >
-          <div
-            className={cn(
-              "w-8 h-8 rounded-md flex items-center justify-center shrink-0 border",
-              hasFullAIBrain ? "bg-muted border-transparent" : "bg-muted border-transparent",
-            )}
-          >
-            {hasFullAIBrain ? (
-              <Crown className="w-4 h-4 text-foreground" />
-            ) : (
-              <Sparkles className="w-4 h-4 text-foreground" />
-            )}
-          </div>
-          <div className="flex-1 min-w-0">
-            {hasFullAIBrain ? (
-              <p className="text-sm font-medium text-foreground">AI Brain is active</p>
-            ) : (
-              <>
-                <p className="text-sm font-medium text-foreground">AI Assist</p>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Suggestions included on your {isPro ? "Pro" : "Starter"} plan{isPro ? " with higher daily limits." : "."}
+        {hasFullAIBrain ? (
+          <div className="rounded-xl border border-violet-200/70 bg-gradient-to-br from-violet-50/95 via-white to-white px-5 py-5 shadow-md shadow-violet-950/[0.06] ring-1 ring-violet-100/80">
+            <div className="flex items-start gap-4">
+              <div className="w-11 h-11 rounded-xl bg-violet-600 text-white flex items-center justify-center shrink-0 shadow-sm shadow-violet-600/30">
+                <Crown className="w-5 h-5" />
+              </div>
+              <div className="flex-1 min-w-0 pt-0.5">
+                <p className="text-lg font-semibold tracking-tight text-violet-950">AI Brain (Active)</p>
+                <p className="text-sm text-violet-800/80 mt-1 leading-relaxed">
+                  Advanced AI automation, lead qualification, and Copilot are enabled
                 </p>
-                <Button
-                  size="sm"
-                  className="mt-3"
-                  variant="secondary"
-                  onClick={handleAddonCheckout}
-                  disabled={isCheckingOut}
-                  data-testid="button-ai-brain-primary-cta"
-                >
-                  <Crown className="w-3.5 h-3.5 mr-1.5" />
-                  {isCheckingOut ? "Processing…" : "Add AI Brain — $29/mo"}
-                </Button>
-              </>
-            )}
+              </div>
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="rounded-xl border border-slate-200/80 bg-white/90 px-5 py-4 shadow-sm shadow-slate-900/[0.04] flex items-start gap-4">
+            <div className="w-10 h-10 rounded-lg bg-sky-50 border border-sky-100 flex items-center justify-center shrink-0">
+              <Sparkles className="w-5 h-5 text-sky-600" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-slate-900">AI Assist</p>
+              <p className="text-sm text-slate-600 mt-1">
+                Suggestions included on your {isPro ? "Pro" : "Starter"} plan{isPro ? " with higher daily limits." : "."}
+              </p>
+              <Button
+                size="sm"
+                className="mt-3 bg-violet-600 text-white hover:bg-violet-700 shadow-sm shadow-violet-600/20"
+                onClick={handleAddonCheckout}
+                disabled={isCheckingOut}
+                data-testid="button-ai-brain-primary-cta"
+              >
+                <Crown className="w-3.5 h-3.5 mr-1.5" />
+                {isCheckingOut ? "Processing…" : "Add AI Brain — $29/mo"}
+              </Button>
+            </div>
+          </div>
+        )}
 
-        {/* Section 1: AI behavior */}
-        <Card className="shadow-sm border-border/80">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base font-semibold">AI behavior</CardTitle>
-            <CardDescription>Mode and tone for replies</CardDescription>
+        {/* Section 1: AI behavior — primary control surface */}
+        <Card className="rounded-xl border-2 border-violet-200/60 bg-white shadow-md shadow-violet-950/[0.07] ring-1 ring-violet-100/50">
+          <CardHeader className="pb-4 space-y-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <CardTitle className="text-lg font-semibold text-slate-900 tracking-tight">AI behavior</CardTitle>
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-violet-700 bg-violet-100/90 border border-violet-200/70 rounded-full px-2 py-0.5">
+                Core
+              </span>
+            </div>
+            <CardDescription className="text-slate-600">Mode and tone for replies</CardDescription>
           </CardHeader>
-          <CardContent>
-            <div className="flex flex-col gap-6 sm:flex-row sm:gap-0">
+          <CardContent className="pt-0">
+            <div className="flex flex-col gap-8 sm:flex-row sm:gap-0">
               <div className="flex-1 space-y-2.5 min-w-0">
-                <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Mode</Label>
-                <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="AI mode">
+                <Label className="text-xs font-medium text-violet-900/70 uppercase tracking-wide">Mode</Label>
+                <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="AI mode">
                   {AI_MODE_SEGMENTS.map((mode) => {
                     const selected = settings.aiMode === mode.value;
                     return (
@@ -627,12 +636,7 @@ function AIBrainContent() {
                           saveSettingsMutation.mutate({ aiMode: next });
                         }}
                         disabled={saveSettingsMutation.isPending}
-                        className={cn(
-                          "h-8 px-3 rounded-md border text-sm font-medium transition-colors",
-                          selected
-                            ? "bg-foreground text-background border-foreground"
-                            : "bg-background text-foreground border-border hover:bg-muted/80",
-                        )}
+                        className={segmentTabClass(selected)}
                         data-testid={`ai-mode-${mode.value}`}
                       >
                         {mode.label}
@@ -642,11 +646,11 @@ function AIBrainContent() {
                 </div>
               </div>
 
-              <div className="hidden sm:block w-px bg-border shrink-0 mx-6 self-stretch" aria-hidden />
+              <div className="hidden sm:block w-px bg-gradient-to-b from-transparent via-violet-200/80 to-transparent shrink-0 mx-7 self-stretch" aria-hidden />
 
-              <div className="flex-1 space-y-2.5 min-w-0 sm:pt-0 pt-2 border-t sm:border-t-0 border-border">
-                <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Persona</Label>
-                <div className="flex flex-wrap gap-1.5">
+              <div className="flex-1 space-y-2.5 min-w-0 sm:pt-0 pt-4 border-t border-violet-100 sm:border-t-0">
+                <Label className="text-xs font-medium text-violet-900/70 uppercase tracking-wide">Persona</Label>
+                <div className="flex flex-wrap gap-2">
                   {[
                     { value: "professional", label: "Professional" },
                     { value: "friendly", label: "Friendly" },
@@ -662,12 +666,7 @@ function AIBrainContent() {
                         saveSettingsMutation.mutate({ aiPersona: next });
                       }}
                       disabled={saveSettingsMutation.isPending}
-                      className={cn(
-                        "h-8 px-3 rounded-md border text-sm font-medium transition-colors",
-                        settings.aiPersona === persona.value
-                          ? "bg-foreground text-background border-foreground"
-                          : "bg-background text-foreground border-border hover:bg-muted/80",
-                      )}
+                      className={segmentTabClass(settings.aiPersona === persona.value)}
                       data-testid={`ai-persona-${persona.value}`}
                     >
                       {persona.label}
@@ -682,10 +681,10 @@ function AIBrainContent() {
         {hasFullAIBrain && (
           <>
             {/* Section 2: Business profile */}
-            <Card className="shadow-sm border-border/80">
+            <Card className="rounded-xl border border-slate-200/70 bg-white shadow-sm shadow-slate-900/[0.03]">
               <CardHeader className="pb-3">
-                <CardTitle className="text-base font-semibold">Business profile</CardTitle>
-                <CardDescription>Helps the model stay aligned with what you offer</CardDescription>
+                <CardTitle className="text-base font-semibold text-slate-900">Business profile</CardTitle>
+                <CardDescription className="text-slate-600">Helps the model stay aligned with what you offer</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid gap-4 sm:grid-cols-2">
@@ -739,18 +738,18 @@ function AIBrainContent() {
             </Card>
 
             {/* Section 3: Lead understanding */}
-            <Card className="shadow-sm border-border/80">
+            <Card className="rounded-xl border border-slate-200/70 bg-white shadow-sm shadow-slate-900/[0.03]">
               <CardHeader className="pb-3 flex flex-row items-start justify-between gap-3 space-y-0">
                 <div>
-                  <CardTitle className="text-base font-semibold">What AI should learn from leads</CardTitle>
-                  <CardDescription>Optional prompts the assistant can use to gather context</CardDescription>
+                  <CardTitle className="text-base font-semibold text-slate-900">What AI should learn from leads</CardTitle>
+                  <CardDescription className="text-slate-600">Optional prompts the assistant can use to gather context</CardDescription>
                 </div>
                 {knowledge.industry && INDUSTRY_QUALIFY_TEMPLATES[knowledge.industry] && (
                   <Button
                     type="button"
                     variant="outline"
                     size="sm"
-                    className="h-8 shrink-0 text-xs"
+                    className="h-8 shrink-0 text-xs border-violet-200 text-violet-700 hover:bg-violet-50 hover:text-violet-800"
                     onClick={() => {
                       const template = INDUSTRY_QUALIFY_TEMPLATES[knowledge.industry];
                       if (template) setKnowledge((prev) => ({ ...prev, qualifyingQuestions: [...template] }));
@@ -766,7 +765,7 @@ function AIBrainContent() {
                   {knowledge.qualifyingQuestions.map((qq, idx) => (
                     <div
                       key={qq.key}
-                      className="rounded-lg border border-border bg-muted/20 p-3 space-y-3 sm:space-y-0 sm:grid sm:grid-cols-[minmax(0,7rem)_1fr_auto_auto] sm:gap-3 sm:items-center"
+                      className="rounded-lg border border-slate-200/60 bg-slate-50/50 p-3 space-y-3 sm:space-y-0 sm:grid sm:grid-cols-[minmax(0,7rem)_1fr_auto_auto] sm:gap-3 sm:items-center"
                     >
                       <div className="space-y-1">
                         <Label className="text-[10px] uppercase text-muted-foreground sr-only sm:not-sr-only sm:mb-0">
@@ -842,7 +841,7 @@ function AIBrainContent() {
                   ))}
                 </div>
 
-                <div className="rounded-lg border border-dashed border-border p-3 space-y-3 bg-muted/10">
+                <div className="rounded-lg border border-dashed border-violet-200/60 p-3 space-y-3 bg-violet-50/20">
                   <div className="grid gap-2 sm:grid-cols-2">
                     <Input
                       value={newQQ.label}
@@ -871,7 +870,7 @@ function AIBrainContent() {
                       type="button"
                       variant="secondary"
                       size="sm"
-                      className="h-8"
+                      className="h-8 bg-violet-600 text-white hover:bg-violet-700 shadow-sm shadow-violet-600/15 disabled:opacity-50 disabled:shadow-none"
                       disabled={!newQQ.label.trim() || !newQQ.question.trim()}
                       onClick={() => {
                         if (!newQQ.label.trim() || !newQQ.question.trim()) return;
@@ -904,10 +903,10 @@ function AIBrainContent() {
             </Card>
 
             {/* Section 4: Booking */}
-            <Card className="shadow-sm border-border/80">
+            <Card className="rounded-xl border border-slate-200/70 bg-white shadow-sm shadow-slate-900/[0.03]">
               <CardHeader className="pb-3">
-                <CardTitle className="text-base font-semibold">Booking &amp; next steps</CardTitle>
-                <CardDescription>Used when AI suggests scheduling or follow-ups</CardDescription>
+                <CardTitle className="text-base font-semibold text-slate-900">Booking &amp; next steps</CardTitle>
+                <CardDescription className="text-slate-600">Used when AI suggests scheduling or follow-ups</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-1.5 sm:max-w-xl">
@@ -930,17 +929,17 @@ function AIBrainContent() {
 
         {/* Section 5: Human handoff */}
         {hasFullAIBrain ? (
-          <Card className="shadow-sm border-border/80">
+          <Card className="rounded-xl border border-slate-200/70 bg-white shadow-sm shadow-slate-900/[0.03]">
             <CardHeader className="pb-3">
-              <CardTitle className="text-base font-semibold">Human handoff</CardTitle>
-              <CardDescription>When a message matches these phrases, pause for your team</CardDescription>
+              <CardTitle className="text-base font-semibold text-slate-900">Human handoff</CardTitle>
+              <CardDescription className="text-slate-600">When a message matches these phrases, pause for your team</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="flex flex-wrap gap-1.5">
                 {settings.handoffKeywords.map((keyword) => (
                   <span
                     key={keyword}
-                    className="inline-flex items-center gap-1 pl-2.5 pr-1 py-0.5 rounded-md border border-border bg-background text-xs text-foreground"
+                    className="inline-flex items-center gap-1 pl-2.5 pr-1 py-0.5 rounded-md border border-violet-200/70 bg-violet-50/80 text-xs text-violet-950 font-medium"
                   >
                     {keyword}
                     <button
@@ -963,7 +962,13 @@ function AIBrainContent() {
                   onKeyDown={(e) => e.key === "Enter" && handleAddKeyword()}
                   data-testid="input-handoff-keyword"
                 />
-                <Button type="button" variant="secondary" className="h-9 shrink-0" onClick={handleAddKeyword} data-testid="add-handoff-keyword">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-9 shrink-0 border-violet-200 text-violet-700 hover:bg-violet-50"
+                  onClick={handleAddKeyword}
+                  data-testid="add-handoff-keyword"
+                >
                   Add
                 </Button>
               </div>
@@ -997,29 +1002,29 @@ function AIBrainContent() {
 
         {hasFullAIBrain && (
           <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
-            <Card className="shadow-sm border-border/80">
+            <Card className="rounded-xl border border-dashed border-slate-200/90 bg-slate-50/40 shadow-none">
               <CollapsibleTrigger asChild>
                 <button
                   type="button"
-                  className="flex w-full items-center justify-between text-left p-6 hover:bg-muted/30 transition-colors rounded-lg"
+                  className="flex w-full items-center justify-between text-left p-5 hover:bg-slate-100/50 transition-colors rounded-xl"
                 >
                   <div>
-                    <p className="text-base font-semibold">Advanced</p>
-                    <p className="text-sm text-muted-foreground mt-0.5">Optional extra guidance for the model</p>
+                    <p className="text-xs font-semibold uppercase tracking-widest text-slate-500">Advanced</p>
+                    <p className="text-sm text-slate-600 mt-1">Optional extra guidance for the model</p>
                   </div>
                   <ChevronRight
-                    className={cn("w-4 h-4 text-muted-foreground transition-transform shrink-0", advancedOpen && "rotate-90")}
+                    className={cn("w-4 h-4 text-slate-400 transition-transform shrink-0", advancedOpen && "rotate-90")}
                   />
                 </button>
               </CollapsibleTrigger>
               <CollapsibleContent>
-                <CardContent className="pt-0 pb-6 space-y-1.5">
-                  <Label htmlFor="custom-instr" className="text-xs font-medium text-muted-foreground">
+                <CardContent className="pt-0 pb-5 px-5 space-y-1.5">
+                  <Label htmlFor="custom-instr" className="text-xs font-medium text-slate-500">
                     Custom instructions
                   </Label>
                   <Textarea
                     id="custom-instr"
-                    className="text-sm min-h-[88px] max-h-40 resize-y"
+                    className="text-sm min-h-[88px] max-h-40 resize-y border-slate-200/80 bg-white"
                     rows={3}
                     value={knowledge.customInstructions}
                     onChange={(e) => setKnowledge((prev) => ({ ...prev, customInstructions: e.target.value }))}
