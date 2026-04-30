@@ -513,7 +513,10 @@ export function AIComposer({
     }
   };
 
+  const canSend = value.trim().length > 0;
+
   const handleSendClick = () => {
+    if (!canSend) return;
     onSend();
     if (aiMode === "suggest") {
       setAiDraft(null);
@@ -535,6 +538,7 @@ export function AIComposer({
     // not send the message. Users send via the send button instead.
     // On desktop, Enter sends; Shift+Enter inserts a newline.
     if (e.key === "Enter" && !e.shiftKey && !isMobile) {
+      if (!canSend) return;
       e.preventDefault();
       if (setTyping) setTyping(false);
       handleSendClick();
@@ -791,8 +795,15 @@ export function AIComposer({
                 </button>
               )}
               <button
+                type="button"
                 onClick={handleSendClick}
-                className="h-8 px-3.5 bg-brand-green hover:bg-emerald-700 rounded-lg flex items-center gap-1.5 text-white text-xs font-semibold transition-colors shadow-sm"
+                disabled={!canSend}
+                className={cn(
+                  "px-3 py-1.5 rounded-lg flex items-center gap-1.5 text-white text-xs font-semibold transition-all",
+                  "bg-emerald-600/90 shadow-none",
+                  "hover:bg-emerald-700 hover:shadow-sm",
+                  "disabled:opacity-40 disabled:pointer-events-none disabled:cursor-not-allowed disabled:hover:bg-emerald-600/90 disabled:hover:shadow-none",
+                )}
                 data-testid="button-send-message"
               >
                 <Send className="h-3 w-3" />
