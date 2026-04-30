@@ -269,6 +269,10 @@ export function UnifiedInbox() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  /** Set after `replyWindowNow` exists; WS handler bumps clock when inbound pushes so UI doesn’t wait for the 1m tick. */
+  const bumpReplyWindowClockRef = useRef<() => void>(() => {});
+  /** Ignore first snapshot per conversation; then invalidate window-status when a new inbound tail appears (polling path). */
+  const lastInboundTailRef = useRef<{ convId: string; msgId: string } | null>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -308,6 +312,10 @@ export function UnifiedInbox() {
                 queryKey: ["/api/conversations", msg.conversationId, "messages"],
                 type: "active",
               });
+              queryClient.invalidateQueries({
+                queryKey: ["/api/conversations", msg.conversationId, "window-status"],
+              });
+              bumpReplyWindowClockRef.current();
             }
           }
         } catch {}
@@ -606,6 +614,10 @@ export function UnifiedInbox() {
     return () => window.clearInterval(id);
   }, []);
 
+  useEffect(() => {
+    bumpReplyWindowClockRef.current = () => setReplyWindowNow(Date.now());
+  }, []);
+
   const { data: realMessages = [], isLoading: messagesLoading, isFetching: messagesFetching } = useQuery<Message[]>({
     queryKey: ["/api/conversations", primaryConversation?.id, "messages"],
     enabled: !!primaryConversation?.id && (!isDemoUser || !selectedDemoChat),
@@ -634,6 +646,39 @@ export function UnifiedInbox() {
     refetchInterval: 60000,
   });
 
+  // Refetch window status when polling delivers a new inbound message (WS may be unavailable).
+  useEffect(() => {
+    if (isDemoUser || !realMessages.length) return;
+    const convId = primaryConversation?.id;
+    if (!convId) return;
+    const last = realMessages[realMessages.length - 1];
+    if (last.direction !== "inbound") return;
+
+    const prev = lastInboundTailRef.current;
+    if (prev?.convId !== convId) {
+      lastInboundTailRef.current = { convId, msgId: last.id };
+      return;
+    }
+    if (prev.msgId === last.id) return;
+
+    lastInboundTailRef.current = { convId, msgId: last.id };
+
+    const ids = new Set<string>([convId]);
+    if (windowConversationId && windowConversationId !== convId) ids.add(windowConversationId);
+    ids.forEach((id) => {
+      queryClient.invalidateQueries({
+        queryKey: ["/api/conversations", id, "window-status"],
+      });
+    });
+    bumpReplyWindowClockRef.current();
+  }, [
+    realMessages,
+    primaryConversation?.id,
+    windowConversationId,
+    isDemoUser,
+    queryClient,
+  ]);
+
   /** WhatsApp: effectiveDeadline = windowExpiresAt − 1h buffer; remainingMs = effectiveDeadline − now. */
   const replyWindowDerived = useMemo(() => {
     if (!activeChannel) return null;
@@ -646,9 +691,6 @@ export function UnifiedInbox() {
     const bufferMs = activeChannel === 'whatsapp' ? 60 * 60 * 1000 : 0;
     const effectiveDeadlineMs = windowExpiresAtMs - bufferMs;
     const remainingMs = effectiveDeadlineMs - replyWindowNow;
-
-    // temporary debug
-    console.log('[reply-window]', { windowExpiresAt, now: replyWindowNow, remainingMs });
 
     return { windowExpiresAt, windowExpiresAtMs, effectiveDeadlineMs, remainingMs };
   }, [activeChannel, windowStatus?.hasRestriction, windowStatus?.windowExpiresAt, replyWindowNow]);

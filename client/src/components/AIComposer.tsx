@@ -71,6 +71,14 @@ export interface AIComposerProps {
 const MIN_TEXTAREA_HEIGHT = 58;
 const MAX_TEXTAREA_HEIGHT = 160;
 
+/** User-facing copy when Full Auto did not auto-send (mode stays Auto in the UI). */
+function autoSkipInlineCopy(gateReason: string): string {
+  if (gateReason === "low_confidence") {
+    return "Auto reply skipped — low confidence";
+  }
+  return "Auto reply skipped — not enough context";
+}
+
 // Canned demo replies for when demoMode=true (no real API call)
 const DEMO_SUGGESTIONS = [
   "Got it — I'll pull up the best matches for your criteria. Are you flexible on location or is it a hard requirement?",
@@ -114,6 +122,9 @@ export function AIComposer({
   const [aiCooldown, setAiCooldown] = useState(false);
   const [autoPhase, setAutoPhase] = useState<AutoPhase>("idle");
   const [autoOverride, setAutoOverride] = useState(false);
+  /** After auto-send was blocked but we have suggestion text — show composer instead of passive panel. */
+  const [autoSkippedWithDraft, setAutoSkippedWithDraft] = useState(false);
+  const [autoSendBlockedMessage, setAutoSendBlockedMessage] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const prevIdRef = useRef<string | null>(null);
   const lastAutoReplyKeyRef = useRef<string>("");
@@ -139,6 +150,8 @@ export function AIComposer({
       setIsDrafting(false);
       setAutoOverride(false);
       setAutoPhase("idle");
+      setAutoSkippedWithDraft(false);
+      setAutoSendBlockedMessage(null);
       lastAutoReplyKeyRef.current = "";
       autoReplyInFlightRef.current = false;
     }
@@ -166,6 +179,8 @@ export function AIComposer({
     if (!conversationId || !aiEnabled || autoReplyInFlightRef.current) return;
     autoReplyInFlightRef.current = true;
     setAutoPhase("typing");
+    setAutoSendBlockedMessage(null);
+    setAutoSkippedWithDraft(false);
 
     // Natural human-like delay before "typing"
     await new Promise((r) => setTimeout(r, 1200 + Math.random() * 800));
@@ -208,7 +223,25 @@ export function AIComposer({
           setAutoPhase("replied");
           setTimeout(() => setAutoPhase("waiting"), 5000);
         } else {
-          if (!allowed || trimmed.length <= 5 || !onAutoSend) setAiMode("suggest");
+          // Stay in Auto; block only this send. Surface suggestion for manual review when available.
+          if (trimmed.length > 0) {
+            setAiDraft(trimmed);
+            onChange(trimmed);
+            setAutoSkippedWithDraft(true);
+          } else {
+            setAutoSkippedWithDraft(false);
+          }
+
+          let effectiveReason = reason;
+          if (allowed && trimmed.length <= 5) {
+            effectiveReason = "missing_or_trivial_suggestion";
+          } else if (allowed && !onAutoSend) {
+            effectiveReason = "missing_onAutoSend_callback";
+          } else if (!allowed) {
+            effectiveReason = reason;
+          }
+
+          setAutoSendBlockedMessage(autoSkipInlineCopy(effectiveReason));
           setAutoPhase("waiting");
         }
       } else {
@@ -218,7 +251,8 @@ export function AIComposer({
           reason: "suggest_reply_request_failed",
           confidence: 0,
         });
-        setAiMode("suggest");
+        setAutoSkippedWithDraft(false);
+        setAutoSendBlockedMessage(autoSkipInlineCopy("request_failed"));
         setAutoPhase("waiting");
       }
     } catch {
@@ -228,7 +262,8 @@ export function AIComposer({
         reason: "suggest_reply_exception",
         confidence: 0,
       });
-      setAiMode("suggest");
+      setAutoSkippedWithDraft(false);
+      setAutoSendBlockedMessage(autoSkipInlineCopy("request_failed"));
       setAutoPhase("waiting");
     } finally {
       autoReplyInFlightRef.current = false;
@@ -300,6 +335,8 @@ export function AIComposer({
     setAiDraft(null);
     setIsDrafting(false);
     setAutoOverride(false);
+    setAutoSkippedWithDraft(false);
+    setAutoSendBlockedMessage(null);
     onChange("");
 
     if (mode === "suggest" && aiEnabled) fetchSuggestion();
@@ -321,6 +358,19 @@ export function AIComposer({
     }
   };
 
+  const handleSendClick = () => {
+    onSend();
+    if (aiMode === "auto") {
+      setAutoSkippedWithDraft(false);
+      setAutoSendBlockedMessage(null);
+    }
+    if (isMobile) {
+      requestAnimationFrame(() => textareaRef.current?.blur());
+    } else {
+      requestAnimationFrame(() => textareaRef.current?.focus());
+    }
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     // On mobile, the virtual keyboard's Enter key should insert a newline,
     // not send the message. Users send via the send button instead.
@@ -328,27 +378,31 @@ export function AIComposer({
     if (e.key === "Enter" && !e.shiftKey && !isMobile) {
       e.preventDefault();
       if (setTyping) setTyping(false);
-      onSend();
-      // Restore focus so the user can keep typing immediately
-      requestAnimationFrame(() => textareaRef.current?.focus());
+      handleSendClick();
     }
   };
 
   const handleAutoOverride = () => {
     setAutoOverride(true);
     setAiMode("manual");
+    setAutoSkippedWithDraft(false);
+    setAutoSendBlockedMessage(null);
     setTimeout(() => textareaRef.current?.focus(), 0);
   };
 
-  const isAutoPassive = aiMode === "auto" && !autoOverride;
+  /** Passive Auto panel (click to take over) — hidden when we need to show a skipped-auto draft in the textarea. */
+  const isAutoPassive = aiMode === "auto" && !autoOverride && !autoSkippedWithDraft;
   const isSuggestMode = aiMode === "suggest" && aiEnabled;
 
   // ─── Status line text ────────────────────────────────────────────────────
   const statusLineText = (() => {
+    if (aiMode === "auto" && autoSkippedWithDraft && value.trim()) {
+      return "Draft ready — edit or send";
+    }
     if (isSuggestMode) {
       if (isDrafting) return "Drafting a reply…";
       if (aiDraft) return "Draft ready — edit or send";
-      return "Switching to Suggest…";
+      return "Tap Suggest for an AI draft";
     }
     if (isAutoPassive) {
       if (autoPhase === "typing") return "Typing…";
@@ -387,6 +441,16 @@ export function AIComposer({
           {statusIsSpinning && (
             <Loader2 className="w-2.5 h-2.5 text-purple-400 animate-spin ml-0.5 shrink-0" />
           )}
+        </div>
+      )}
+
+      {aiEnabled && aiMode === "auto" && autoSendBlockedMessage && (
+        <div
+          className="px-4 py-1.5 bg-amber-50/90 border-b border-amber-100/90"
+          data-testid="auto-reply-skipped-notice"
+          role="status"
+        >
+          <span className="text-[10px] text-amber-900/90 leading-snug">{autoSendBlockedMessage}</span>
         </div>
       )}
 
@@ -513,7 +577,8 @@ export function AIComposer({
             }
             className={cn(
               "w-full border rounded-xl px-3.5 py-2.5 text-base md:text-[13px] leading-relaxed focus:outline-none transition-colors resize-none",
-              isSuggestMode && (isDrafting || aiDraft)
+              (isSuggestMode && (isDrafting || aiDraft)) ||
+                (aiMode === "auto" && autoSkippedWithDraft && value.trim())
                 ? "bg-violet-50/30 border-purple-200/70 focus:border-purple-300 text-gray-800"
                 : "bg-white border-gray-200 focus:border-brand-green text-gray-800"
             )}
@@ -596,16 +661,7 @@ export function AIComposer({
                 </button>
               )}
               <button
-                onClick={() => {
-                  onSend();
-                  if (isMobile) {
-                    // On mobile: blur to dismiss keyboard so the viewport snaps back to normal size
-                    requestAnimationFrame(() => textareaRef.current?.blur());
-                  } else {
-                    // On desktop: keep focus so the user can keep typing without clicking again
-                    requestAnimationFrame(() => textareaRef.current?.focus());
-                  }
-                }}
+                onClick={handleSendClick}
                 className="h-8 px-3.5 bg-brand-green hover:bg-emerald-700 rounded-lg flex items-center gap-1.5 text-white text-xs font-semibold transition-colors shadow-sm"
                 data-testid="button-send-message"
               >
