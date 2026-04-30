@@ -538,18 +538,18 @@ function AIBrainContent() {
     cn(
       "h-9 px-3.5 rounded-lg border text-sm font-medium transition-all duration-200 ease-out",
       selected
-        ? "bg-violet-600 text-white border-violet-600 shadow-sm shadow-violet-600/20"
-        : "bg-slate-100 text-slate-700 border-slate-200/90 hover:border-violet-300 hover:bg-violet-50/90 hover:text-violet-900",
+        ? "bg-violet-600 text-white border-violet-600 shadow-sm shadow-violet-900/10"
+        : "bg-slate-100 text-slate-700 border-slate-200/90 hover:border-slate-300 hover:bg-slate-200/40 hover:text-slate-900",
       saveSettingsMutation.isPending && "opacity-60 pointer-events-none",
     );
 
   return (
-    <div className="h-full overflow-y-auto overflow-x-hidden bg-gradient-to-b from-violet-50/50 via-slate-50/80 to-slate-100/60">
+    <div className="h-full overflow-y-auto overflow-x-hidden bg-gradient-to-b from-slate-50 via-slate-50/95 to-slate-100/80">
       <div className="p-6 sm:p-8 max-w-[900px] mx-auto w-full space-y-8 pb-24">
         <header className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
           <div className="flex items-start gap-3">
-            <div className="w-11 h-11 rounded-xl border border-violet-200/70 bg-gradient-to-br from-violet-100 to-white shadow-sm shadow-violet-900/5 flex items-center justify-center shrink-0">
-              <Brain className="w-5 h-5 text-violet-700" />
+            <div className="w-11 h-11 rounded-xl border border-slate-200/90 bg-white shadow-sm shadow-slate-900/[0.04] flex items-center justify-center shrink-0">
+              <Brain className="w-5 h-5 text-slate-700" />
             </div>
             <div>
               <h1 className="text-xl font-semibold tracking-tight text-slate-900">AI Brain</h1>
@@ -559,22 +559,22 @@ function AIBrainContent() {
             </div>
           </div>
           {hasFullAIBrain && saveKnowledgeMutation.isPending && (
-            <span className="text-xs text-violet-700 flex items-center gap-1.5 shrink-0 rounded-full border border-violet-200/80 bg-violet-50/90 px-2.5 py-1 font-medium">
-              <Loader2 className="w-3.5 h-3.5 animate-spin text-violet-600" aria-hidden />
+            <span className="text-xs text-slate-600 flex items-center gap-1.5 shrink-0 rounded-full border border-slate-200/90 bg-white px-2.5 py-1 font-medium shadow-sm shadow-slate-900/[0.03]">
+              <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-500" aria-hidden />
               Saving…
             </span>
           )}
         </header>
 
         {hasFullAIBrain ? (
-          <div className="rounded-xl border border-violet-200/70 bg-gradient-to-br from-violet-50/95 via-white to-white px-5 py-5 shadow-md shadow-violet-950/[0.06] ring-1 ring-violet-100/80">
+          <div className="rounded-xl border border-slate-200/90 bg-gradient-to-br from-violet-50/40 via-white to-white px-5 py-5 shadow-sm shadow-slate-900/[0.05]">
             <div className="flex items-start gap-4">
-              <div className="w-11 h-11 rounded-xl bg-violet-600 text-white flex items-center justify-center shrink-0 shadow-sm shadow-violet-600/30">
+              <div className="w-11 h-11 rounded-xl bg-violet-600 text-white flex items-center justify-center shrink-0 shadow-sm shadow-violet-900/15">
                 <Crown className="w-5 h-5" />
               </div>
               <div className="flex-1 min-w-0 pt-0.5">
-                <p className="text-lg font-semibold tracking-tight text-violet-950">AI Brain (Active)</p>
-                <p className="text-sm text-violet-800/80 mt-1 leading-relaxed">
+                <p className="text-lg font-semibold tracking-tight text-slate-900">AI Brain (Active)</p>
+                <p className="text-sm text-slate-600 mt-1 leading-relaxed">
                   Advanced AI automation, lead qualification, and Copilot are enabled
                 </p>
               </div>
@@ -592,7 +592,7 @@ function AIBrainContent() {
               </p>
               <Button
                 size="sm"
-                className="mt-3 bg-violet-600 text-white hover:bg-violet-700 shadow-sm shadow-violet-600/20"
+                className="mt-3 bg-violet-600 text-white hover:bg-violet-700 shadow-sm shadow-violet-900/10"
                 onClick={handleAddonCheckout}
                 disabled={isCheckingOut}
                 data-testid="button-ai-brain-primary-cta"
@@ -605,20 +605,15 @@ function AIBrainContent() {
         )}
 
         {/* Section 1: AI behavior — primary control surface */}
-        <Card className="rounded-xl border-2 border-violet-200/60 bg-white shadow-md shadow-violet-950/[0.07] ring-1 ring-violet-100/50">
+        <Card className="rounded-xl border border-slate-200/80 bg-white shadow-md shadow-slate-900/[0.06]">
           <CardHeader className="pb-4 space-y-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <CardTitle className="text-lg font-semibold text-slate-900 tracking-tight">AI behavior</CardTitle>
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-violet-700 bg-violet-100/90 border border-violet-200/70 rounded-full px-2 py-0.5">
-                Core
-              </span>
-            </div>
+            <CardTitle className="text-lg font-semibold text-slate-900 tracking-tight">AI behavior</CardTitle>
             <CardDescription className="text-slate-600">Mode and tone for replies</CardDescription>
           </CardHeader>
           <CardContent className="pt-0">
             <div className="flex flex-col gap-8 sm:flex-row sm:gap-0">
               <div className="flex-1 space-y-2.5 min-w-0">
-                <Label className="text-xs font-medium text-violet-900/70 uppercase tracking-wide">Mode</Label>
+                <Label className="text-xs font-medium text-gray-500 uppercase tracking-wide">Mode</Label>
                 <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="AI mode">
                   {AI_MODE_SEGMENTS.map((mode) => {
                     const selected = settings.aiMode === mode.value;
@@ -646,10 +641,10 @@ function AIBrainContent() {
                 </div>
               </div>
 
-              <div className="hidden sm:block w-px bg-gradient-to-b from-transparent via-violet-200/80 to-transparent shrink-0 mx-7 self-stretch" aria-hidden />
+              <div className="hidden sm:block w-px bg-gradient-to-b from-transparent via-slate-200/90 to-transparent shrink-0 mx-7 self-stretch" aria-hidden />
 
-              <div className="flex-1 space-y-2.5 min-w-0 sm:pt-0 pt-4 border-t border-violet-100 sm:border-t-0">
-                <Label className="text-xs font-medium text-violet-900/70 uppercase tracking-wide">Persona</Label>
+              <div className="flex-1 space-y-2.5 min-w-0 sm:pt-0 pt-4 border-t border-slate-100 sm:border-t-0">
+                <Label className="text-xs font-medium text-gray-500 uppercase tracking-wide">Persona</Label>
                 <div className="flex flex-wrap gap-2">
                   {[
                     { value: "professional", label: "Professional" },
@@ -749,7 +744,7 @@ function AIBrainContent() {
                     type="button"
                     variant="outline"
                     size="sm"
-                    className="h-8 shrink-0 text-xs border-violet-200 text-violet-700 hover:bg-violet-50 hover:text-violet-800"
+                    className="h-8 shrink-0 text-xs border-slate-200 text-slate-700 hover:bg-slate-50 hover:text-slate-900"
                     onClick={() => {
                       const template = INDUSTRY_QUALIFY_TEMPLATES[knowledge.industry];
                       if (template) setKnowledge((prev) => ({ ...prev, qualifyingQuestions: [...template] }));
@@ -841,7 +836,7 @@ function AIBrainContent() {
                   ))}
                 </div>
 
-                <div className="rounded-lg border border-dashed border-violet-200/60 p-3 space-y-3 bg-violet-50/20">
+                <div className="rounded-lg border border-dashed border-slate-200/80 p-3 space-y-3 bg-slate-50/50">
                   <div className="grid gap-2 sm:grid-cols-2">
                     <Input
                       value={newQQ.label}
@@ -870,7 +865,7 @@ function AIBrainContent() {
                       type="button"
                       variant="secondary"
                       size="sm"
-                      className="h-8 bg-violet-600 text-white hover:bg-violet-700 shadow-sm shadow-violet-600/15 disabled:opacity-50 disabled:shadow-none"
+                      className="h-8 bg-slate-900 text-white hover:bg-slate-800 shadow-sm shadow-slate-900/10 disabled:opacity-50 disabled:shadow-none"
                       disabled={!newQQ.label.trim() || !newQQ.question.trim()}
                       onClick={() => {
                         if (!newQQ.label.trim() || !newQQ.question.trim()) return;
@@ -939,7 +934,7 @@ function AIBrainContent() {
                 {settings.handoffKeywords.map((keyword) => (
                   <span
                     key={keyword}
-                    className="inline-flex items-center gap-1 pl-2.5 pr-1 py-0.5 rounded-md border border-violet-200/70 bg-violet-50/80 text-xs text-violet-950 font-medium"
+                    className="inline-flex items-center gap-1 pl-2.5 pr-1 py-0.5 rounded-md border border-slate-200/90 bg-slate-100/80 text-xs text-slate-800 font-medium"
                   >
                     {keyword}
                     <button
@@ -965,7 +960,7 @@ function AIBrainContent() {
                 <Button
                   type="button"
                   variant="outline"
-                  className="h-9 shrink-0 border-violet-200 text-violet-700 hover:bg-violet-50"
+                  className="h-9 shrink-0 border-slate-200 text-slate-700 hover:bg-slate-50"
                   onClick={handleAddKeyword}
                   data-testid="add-handoff-keyword"
                 >
@@ -975,7 +970,7 @@ function AIBrainContent() {
             </CardContent>
           </Card>
         ) : (
-          <Card className="shadow-sm border-border/80 relative overflow-hidden">
+          <Card className="rounded-xl border border-slate-200/70 bg-white shadow-sm shadow-slate-900/[0.03] relative overflow-hidden">
             <button
               type="button"
               disabled={isCheckingOut}
