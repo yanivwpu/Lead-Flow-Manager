@@ -153,8 +153,8 @@ interface InboxLeadDetailsPanelProps {
   onUpdateConversationStatus: (status: string) => void;
   onEditContact: () => void;
   onDeleteContact: () => void;
-  /** Called when a qualifying question is clicked — inserts it into the composer */
-  onInsertMessage?: (text: string) => void;
+  /** Optional 1-line preview of the main composer draft (read-only, from parent state) */
+  composerDraftPreview?: string;
   /** Override the root container class — use when embedding in a mobile sheet */
   panelClassName?: string;
 }
@@ -491,7 +491,7 @@ export function InboxLeadDetailsPanel({
   onUpdateConversationStatus,
   onEditContact,
   onDeleteContact,
-  onInsertMessage,
+  composerDraftPreview,
   panelClassName,
 }: InboxLeadDetailsPanelProps) {
   const { toast } = useToast();
@@ -563,11 +563,6 @@ export function InboxLeadDetailsPanel({
   const [aiMemoryLoading, setAiMemoryLoading] = useState(false);
   // Track which contact+message fingerprint the memory was generated for (avoid redundant calls)
   const aiMemoryKeyRef = useRef<string>('');
-
-  // AI Copilot Reply — context-aware reply suggestion from the AI
-  const [aiCopilotReply, setAiCopilotReply] = useState<string>('');
-  const [aiCopilotReplyLoading, setAiCopilotReplyLoading] = useState(false);
-  const aiCopilotReplyKeyRef = useRef<string>('');
 
   // Follow popover: 'quick' shows the quick options; 'custom' shows date+time picker
   const [followView,       setFollowView]       = useState<'quick' | 'custom'>('quick');
@@ -719,64 +714,6 @@ export function InboxLeadDetailsPanel({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messages.length, contact.id]);
 
-  // ── AI Copilot Reply: generate context-aware suggested reply when new inbound message arrives ──
-  useEffect(() => {
-    // Reset when contact changes
-    setAiCopilotReply('');
-    aiCopilotReplyKeyRef.current = '';
-  }, [contact.id]);
-
-  useEffect(() => {
-    if (!hasAIBrain || messages.length === 0) return;
-    // Only suggest a reply when the last message is inbound (i.e. the lead wrote last)
-    const lastMsg = messages[messages.length - 1];
-    if (!lastMsg || lastMsg.direction !== 'inbound') return;
-
-    const effectiveChatId = primaryConversation?.id ?? contact.id;
-    const key = `${effectiveChatId}:${messages.length}`;
-    if (aiCopilotReplyKeyRef.current === key) return;
-    aiCopilotReplyKeyRef.current = key;
-
-    let cancelled = false;
-    setAiCopilotReplyLoading(true);
-
-    const conversationHistory = messages.map(m => ({
-      role: m.direction === 'outbound' ? 'assistant' : 'user',
-      content: m.content || '',
-    }));
-
-    fetch('/api/ai/suggest-reply', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({
-        chatId: effectiveChatId,
-        conversationHistory,
-        contactContext: {
-          name:          contact.name,
-          pipelineStage: contact.pipelineStage,
-          intent:        intel.intent,
-          budget:        intel.hasBudget    ? intel.budget    : null,
-          timeline:      intel.hasTimeline  ? intel.timeline  : null,
-          financing:     intel.hasFinancing ? intel.financing : null,
-          notes:         contact.notes,
-        },
-      }),
-    })
-      .then(r => r.ok ? r.json() : Promise.reject(r.status))
-      .then(data => {
-        const suggestion = data?.suggestion ?? data?.reply;
-        if (!cancelled && typeof suggestion === 'string' && suggestion.trim()) {
-          setAiCopilotReply(suggestion);
-        }
-      })
-      .catch(() => {})
-      .finally(() => { if (!cancelled) setAiCopilotReplyLoading(false); });
-
-    return () => { cancelled = true; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [messages.length, contact.id, primaryConversation?.id, hasAIBrain]);
-
   // ── Auto-tag: apply tag automatically when signal is strong + current tag is neutral ──
   const autoTagAppliedRef = useRef<string | null>(null);
   useEffect(() => {
@@ -811,6 +748,43 @@ export function InboxLeadDetailsPanel({
     Stalled:   "Stalled",
   };
   const aiStateLabel = AI_STATE_LABELS[intel.aiState] ?? intel.aiState;
+
+  /** Collapsed Copilot row — display-only */
+  const copilotCollapsedSummary = useMemo(() => {
+    const label =
+      intel.leadScoreDetails?.bucket === "unqualified" ? "Unqualified" : intel.leadScore.label;
+    const tail =
+      intel.aiState === "Ready"
+        ? "Ready to act"
+        : intel.aiState === "Qualifying"
+          ? "Qualifying"
+          : intel.aiState === "Engaging"
+            ? "Engaging"
+            : intel.aiState === "Waiting"
+              ? "Waiting for reply"
+              : intel.aiState === "Stalled"
+                ? "Stalled"
+                : aiStateLabel;
+    return `${label} lead • ${tail}`;
+  }, [intel.leadScoreDetails?.bucket, intel.leadScore.label, intel.aiState, aiStateLabel]);
+
+  /** Single primary insight line + optional supporting — display-only formatting of `reasons` */
+  const copilotInsightPresentation = useMemo(() => {
+    const reasons = intel.leadScoreDetails?.reasons ?? [];
+    const qualifyNoise = /configured qualification field/;
+    const mainReasons = reasons.filter((r) => !qualifyNoise.test(r));
+    const qualLine = reasons.find((r) => qualifyNoise.test(r));
+    if (mainReasons.length === 0) {
+      return {
+        headline: `${intel.intent} — ${aiStateLabel}`,
+        supporting: qualLine ? [qualLine] : ([] as string[]),
+      };
+    }
+    const headline =
+      mainReasons.length >= 2 ? `${mainReasons[0]} — ${mainReasons[1]}` : mainReasons[0];
+    const supporting = [...mainReasons.slice(2, 4), ...(qualLine ? [qualLine] : [])].filter(Boolean).slice(0, 2);
+    return { headline, supporting };
+  }, [intel.leadScoreDetails?.reasons, intel.intent, aiStateLabel]);
 
   // ── Safe AI stage suggestion (click-to-apply only) ─────────────────────────
   const stageSuggestion = useMemo(() => {
@@ -930,39 +904,62 @@ export function InboxLeadDetailsPanel({
   return (
     <div className={panelClassName ?? "hidden lg:flex w-[260px] xl:w-[272px] flex-col border-l border-gray-100 bg-white overflow-y-auto flex-shrink-0"}>
 
+      {/* ══ COPILOT — distinct assistant region ═════════════════════════════════ */}
+      <div
+        className={cn(
+          "mx-2 mt-2 mb-1 rounded-xl border border-violet-200/70 bg-gradient-to-b from-violet-50/90 to-violet-50/40 shadow-sm shadow-violet-950/[0.06] ring-1 ring-violet-100/50",
+          !copilotExpanded && "mb-2",
+        )}
+      >
       {/* ══ COPILOT STICKY HEADER ════════════════════════════════════════ */}
-      <div className={cn(
-        "sticky top-0 z-10 transition-all duration-200",
-        copilotExpanded
-          ? "bg-[#FAFAFB] border-b border-gray-200 border-l-2 border-l-violet-100"
-          : "bg-white border-b border-gray-100"
-      )}>
+      <div
+        className={cn(
+          "sticky top-0 z-10 transition-all duration-200 rounded-t-xl",
+          copilotExpanded
+            ? "bg-violet-50/80 border-b border-violet-100/90"
+            : "bg-violet-50/60 border-b border-violet-100/60",
+        )}
+      >
         {/* Full-width clickable header row */}
         <div
           onClick={() => setCopilotExpanded(p => !p)}
           className={cn(
-            "px-3 pt-2.5 pb-2 flex items-center justify-between cursor-pointer transition-colors select-none",
-            copilotExpanded ? "hover:bg-black/[0.02]" : "hover:bg-gray-50"
+            "px-3 pt-2.5 pb-1.5 flex items-start justify-between cursor-pointer transition-colors select-none gap-2",
+            copilotExpanded ? "hover:bg-violet-100/30" : "hover:bg-violet-100/20",
           )}
           data-testid="button-copilot-collapse"
         >
-          <div className="flex items-center gap-1.5">
-            <Sparkles className={cn("w-3 h-3 transition-colors duration-200", copilotExpanded ? "text-violet-500" : "text-purple-400")} />
-            <span className={cn("text-[11px] tracking-wide transition-colors duration-200", copilotExpanded ? "font-bold text-gray-800" : "font-semibold text-gray-700")}>Copilot</span>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1.5">
+              <Sparkles
+                className={cn(
+                  "w-3.5 h-3.5 shrink-0 transition-colors duration-200",
+                  copilotExpanded ? "text-violet-600" : "text-violet-500",
+                )}
+              />
+              <span className="text-sm font-bold tracking-tight text-gray-900">Copilot</span>
+            </div>
             {hasAIBrain && (
-              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-600 tracking-wide leading-none">AI Brain</span>
+              <p className="text-[9px] text-gray-500 font-medium mt-1 ml-[22px] leading-tight">
+                AI Brain
+                <span className="text-gray-400"> · </span>
+                {aiPaused ? "Paused" : "Active"}
+              </p>
             )}
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0 pt-0.5">
             {canSeeCopilot ? (
               <button
-                onClick={e => { e.stopPropagation(); setAiPaused(p => !p); }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setAiPaused((p) => !p);
+                }}
                 className={cn(
                   "text-[10px] font-medium px-1.5 py-0.5 rounded-full border transition-colors leading-none",
                   aiPaused
-                    ? "bg-gray-100 text-gray-400 border-gray-200 hover:bg-gray-200"
-                    : "bg-purple-50 text-purple-600 border-purple-200 hover:bg-purple-100"
+                    ? "bg-white/80 text-gray-500 border-violet-200/80 hover:bg-white"
+                    : "bg-white text-violet-700 border-violet-200/90 hover:bg-violet-50",
                 )}
                 data-testid="button-ai-toggle"
               >
@@ -972,45 +969,27 @@ export function InboxLeadDetailsPanel({
               <span className="text-[10px] text-gray-300 font-medium">{copilotUpgradeTo}+</span>
             )}
 
-            <div className="flex items-center gap-0.5 text-gray-400">
-              <ChevronDown className={cn("w-[18px] h-[18px] transition-transform duration-200", copilotExpanded && "rotate-180")} />
-              <span className="text-[10px] font-medium">
-                {copilotExpanded ? "Collapse" : "Expand"}
-              </span>
+            <div className="flex items-center gap-0.5 text-gray-500">
+              <ChevronDown
+                className={cn("w-[18px] h-[18px] transition-transform duration-200", copilotExpanded && "rotate-180")}
+              />
+              <span className="text-[10px] font-medium">{copilotExpanded ? "Collapse" : "Expand"}</span>
             </div>
           </div>
         </div>
 
-        {/* Collapsed summary — click anywhere to expand */}
+        {/* Collapsed — one-line summary, compact height */}
         {!copilotExpanded && canSeeCopilot && (
           <div
             onClick={() => setCopilotExpanded(true)}
-            className="px-3 pb-2 flex items-center justify-between cursor-pointer"
+            className="px-3 py-1.5 flex items-center justify-between gap-2 cursor-pointer border-t border-violet-100/50"
           >
-            <div className="flex flex-col gap-0">
-              <div className="flex items-center gap-1.5">
-                <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", intel.leadScore.dot)} />
-                <span className={cn("text-[11px] font-semibold", intel.leadScore.color)}>
-                  {(intel.leadScoreDetails?.bucket === "unqualified"
-                    ? "Unqualified"
-                    : intel.leadScore.label)}{" "}
-                  Lead
-                </span>
-              </div>
-              <span className="text-[10px] text-gray-400 ml-3">
-                {(() => {
-                  if (qualifyingCriteria.length > 0) {
-                    const firstUnanswered = qualifyingCriteria.find(c => !answeredCriteriaKeys.has(c.key));
-                    return firstUnanswered ? `Needs ${firstUnanswered.label}` : aiStateLabel;
-                  }
-                  const missing = intel.leadScoreDetails?.missingRequired ?? [];
-                  return missing.length ? `Needs ${missing.slice(0, 2).join(" & ")}` : aiStateLabel;
-                })()}
-              </span>
-            </div>
+            <p className="text-[11px] font-medium text-gray-800 leading-tight truncate min-w-0">
+              {copilotCollapsedSummary}
+            </p>
             {activeSuggestionCount > 0 && (
-              <span className="text-[10px] text-purple-500 font-medium">
-                {activeSuggestionCount} suggestion{activeSuggestionCount !== 1 ? 's' : ''}
+              <span className="text-[9px] text-violet-600 font-semibold shrink-0">
+                {activeSuggestionCount} suggestion{activeSuggestionCount !== 1 ? "s" : ""}
               </span>
             )}
           </div>
@@ -1018,7 +997,7 @@ export function InboxLeadDetailsPanel({
       </div>
 
       {copilotExpanded && (
-      <div className="px-3 py-2 border-b border-gray-100 animate-in fade-in duration-150">
+      <div className="px-3 py-2 border-b border-violet-100/70 bg-violet-50/30 animate-in fade-in duration-150">
         <div className="grid grid-cols-4 gap-1">
 
           {/* ── BOOK ── */}
@@ -1423,6 +1402,8 @@ export function InboxLeadDetailsPanel({
         </div>
       </div>
       )}
+      </div>
+      {/* end Copilot header + quick actions tinted shell */}
 
       {/* ══ Body ════════════════════════════════════════════════════════════ */}
       <div className="flex-1 overflow-y-auto">
@@ -1430,7 +1411,10 @@ export function InboxLeadDetailsPanel({
 
           {/* ══ COPILOT EXPANDED PANEL ══════════════════════════════════ */}
           {copilotExpanded && (
-            <div className="-mx-3 -mt-3 bg-[#FAFAFB] border-b border-gray-100 px-4 pt-4 pb-5 space-y-3 animate-in fade-in slide-in-from-top-1 duration-200">
+            <div
+              className="mx-2 mb-3 rounded-xl border border-violet-200/70 bg-gradient-to-b from-violet-50/85 to-violet-50/35 shadow-sm shadow-violet-950/[0.06] ring-1 ring-violet-100/40 overflow-hidden animate-in fade-in slide-in-from-top-1 duration-200"
+            >
+            <div className="border-b border-violet-100/50 bg-violet-50/20 px-4 pt-4 pb-5 space-y-4">
 
               {!canSeeCopilot ? (
                 <AIUpgradePrompt
@@ -1441,50 +1425,65 @@ export function InboxLeadDetailsPanel({
                 />
               ) : (
                 <>
-                  {/* A. SNAPSHOT — lead level + signals, plain text no card */}
-                  <div className="space-y-2">
+                  {/* A. SNAPSHOT — hierarchy: lead status → insight → chips → score */}
+                  <div className="space-y-3">
                     <div>
-                      <div className="flex items-center gap-1.5">
-                        <span className={cn("w-2 h-2 rounded-full shrink-0", intel.leadScore.dot)} />
-                        <span className={cn("text-[13px] font-semibold leading-tight", intel.leadScore.color)}>
+                      <div className="flex items-center gap-2.5">
+                        <span className={cn("w-2.5 h-2.5 rounded-full shrink-0 ring-2 ring-white shadow-sm", intel.leadScore.dot)} />
+                        <span
+                          className={cn(
+                            "text-[15px] font-bold tracking-tight leading-none",
+                            intel.leadScore.color,
+                          )}
+                        >
                           {(intel.leadScoreDetails?.bucket === "unqualified"
                             ? "Unqualified"
                             : intel.leadScore.label)}{" "}
                           Lead
                         </span>
                       </div>
-                      <p className="text-[11px] text-gray-400 mt-0.5 ml-3.5">
-                        {intel.intent} · {aiStateLabel}
+                      <p className="text-[11px] text-gray-500 mt-2 pl-1 border-l-2 border-violet-200/80 ml-0.5">
+                        <span className="font-medium text-gray-600">{intel.intent}</span>
+                        <span className="text-gray-400"> · </span>
+                        {aiStateLabel}
                       </p>
                       {intel.leadScoreDetails ? (
-                        <div className="mt-1 ml-3.5 space-y-0.5">
-                          <p className="text-[10px] text-gray-400 font-medium tabular-nums">
-                            Score {intel.leadScoreDetails.score}
-                            {intel.leadScoreDetails.signals?.decisionOverride ? (
-                              <span className="text-violet-600"> · decision override</span>
-                            ) : null}
+                        <div className="mt-3 space-y-2.5">
+                          {/* Insight — one primary line (+ optional supporting) */}
+                          <p className="text-[12px] font-semibold text-gray-800 leading-snug">
+                            {copilotInsightPresentation.headline}
                           </p>
+                          {copilotInsightPresentation.supporting.length > 0 && (
+                            <div className="space-y-1">
+                              {copilotInsightPresentation.supporting.map((line, i) => (
+                                <p key={`${i}-${line.slice(0, 24)}`} className="text-[10px] text-gray-500 leading-snug">
+                                  {line}
+                                </p>
+                              ))}
+                            </div>
+                          )}
                           {intel.leadScoreDetails.signals?.detected &&
                           intel.leadScoreDetails.signals.detected.length > 0 ? (
-                            <div className="flex flex-wrap gap-1 pt-0.5">
+                            <div className="flex flex-wrap gap-1.5 pt-0.5 opacity-[0.82]">
                               {intel.leadScoreDetails.signals.detected.slice(0, 6).map((id) => (
                                 <span
                                   key={id}
-                                  className="text-[9px] px-1.5 py-0.5 rounded bg-white/80 border border-gray-200/80 text-gray-600 font-medium"
+                                  className="text-[9px] px-1.5 py-0.5 rounded-md bg-white/70 border border-violet-100/90 text-gray-600 font-medium shadow-sm shadow-violet-950/5"
                                 >
                                   {id.replace(/:/g, " · ")}
                                 </span>
                               ))}
                             </div>
                           ) : null}
-                          {intel.leadScoreDetails.reasons.slice(0, 3).map((r) => (
-                            <div key={r} className="text-[11px] text-gray-500 leading-snug">
-                              {r}
-                            </div>
-                          ))}
+                          <p className="text-[10px] text-gray-400 font-medium tabular-nums pt-0.5">
+                            Score {intel.leadScoreDetails.score}
+                            {intel.leadScoreDetails.signals?.decisionOverride ? (
+                              <span className="text-violet-600"> · decision override</span>
+                            ) : null}
+                          </p>
                           {intel.leadScoreDetails.missingRequired.length > 0 ? (
-                            <div className="text-[11px] text-gray-500 leading-snug">
-                              <span className="text-gray-400">Missing required:</span>{" "}
+                            <div className="text-[10px] text-gray-500 leading-snug border-t border-violet-100/60 pt-2">
+                              <span className="text-gray-400 font-medium">Missing required:</span>{" "}
                               {intel.leadScoreDetails.missingRequired.slice(0, 3).join(", ")}
                               {intel.leadScoreDetails.missingRequired.length > 3 ? "…" : ""}
                             </div>
@@ -1551,111 +1550,92 @@ export function InboxLeadDetailsPanel({
                     </div>
                   </div>
 
-                  {/* B. ACTION — NBA + Suggested Reply unified in one block */}
+                  {/* B. Next best action — full reply text lives in composer only */}
                   {canSeeWorkflow && (() => {
-                    const nbaData = hasAIBrain ? (() => {
-                      const industry = (businessKnowledge?.industry || "").toLowerCase();
-                      const isRealEstate = industry.includes("real estate") || industry.includes("realtor") || industry.includes("property");
+                    const nbaData = hasAIBrain
+                      ? (() => {
+                          const industry = (businessKnowledge?.industry || "").toLowerCase();
+                          const isRealEstate =
+                            industry.includes("real estate") ||
+                            industry.includes("realtor") ||
+                            industry.includes("property");
 
-                      if (qualifyingCriteria.length > 0) {
-                        // Use custom qualifying criteria for NBA
-                        const firstUnanswered = qualifyingCriteria.find(c => !answeredCriteriaKeys.has(c.key));
-                        if (!firstUnanswered) return null;
-                        return {
-                          missing: [firstUnanswered.label],
-                          recommendation: firstUnanswered.question,
-                        };
-                      }
+                          if (qualifyingCriteria.length > 0) {
+                            const firstUnanswered = qualifyingCriteria.find(
+                              (c) => !answeredCriteriaKeys.has(c.key),
+                            );
+                            if (!firstUnanswered) return null;
+                            return {
+                              missing: [firstUnanswered.label],
+                              recommendation: firstUnanswered.question,
+                            };
+                          }
 
-                      if (!isRealEstate) return null;
+                          if (!isRealEstate) return null;
 
-                      // Real-estate defaults only when industry is configured as real estate
-                      const missingLabels = [
-                        !intel.hasBudget    && "Budget",
-                        !intel.hasTimeline  && "Timeline",
-                        !intel.hasFinancing && "Financing",
-                      ].filter(Boolean) as string[];
-                      const nextActions: Record<string, string> = {
-                        Budget:    "Ask about budget",
-                        Timeline:  "Ask about timeline",
-                        Financing: "Ask about financing",
-                      };
-                      if (!missingLabels.length) return null;
-                      return {
-                        missing:        missingLabels,
-                        recommendation: nextActions[missingLabels[0]],
-                      };
-                    })() : null;
+                          const missingLabels = [
+                            !intel.hasBudget && "Budget",
+                            !intel.hasTimeline && "Timeline",
+                            !intel.hasFinancing && "Financing",
+                          ].filter(Boolean) as string[];
+                          const nextActions: Record<string, string> = {
+                            Budget: "Ask about budget",
+                            Timeline: "Ask about timeline",
+                            Financing: "Ask about financing",
+                          };
+                          if (!missingLabels.length) return null;
+                          return {
+                            missing: missingLabels,
+                            recommendation: nextActions[missingLabels[0]],
+                          };
+                        })()
+                      : null;
 
-                    const hasAiReply = !!aiCopilotReply || aiCopilotReplyLoading;
-                    if (!nbaData && !hasAiReply) return null;
+                    const fallbackAction = workflow.actions[0]?.label ?? null;
+                    const primaryLine = nbaData?.recommendation ?? fallbackAction;
+                    if (!primaryLine) return null;
 
                     return (
-                      <div className="bg-gray-50 border border-gray-100 rounded-xl px-3 py-3 space-y-2">
-                        <p className="text-[9px] uppercase tracking-widest font-bold text-gray-400">
-                          {nbaData ? "Next best action" : "Suggested reply"}
+                      <div className="rounded-xl border border-gray-200/95 bg-white px-3 py-3 space-y-2 shadow-md shadow-gray-900/[0.07] ring-1 ring-gray-100/80">
+                        <p className="text-[9px] uppercase tracking-widest font-bold text-gray-500">
+                          Next best action
                         </p>
-
-                        {nbaData && (
-                          <div className="space-y-0.5">
-                            <p className="text-[11px] text-gray-400">
-                              <span className="font-medium text-gray-600">Missing:</span>{" "}
-                              {nbaData.missing.join(", ")}
+                        <div className="rounded-lg bg-violet-50/35 border border-violet-100/70 px-2.5 py-2">
+                          <p className="text-[12px] font-semibold text-gray-900 leading-snug flex gap-1.5 items-start">
+                            <span className="text-violet-500 shrink-0 font-bold">→</span>
+                            <span>{primaryLine}</span>
+                          </p>
+                          {nbaData && nbaData.missing.length > 0 ? (
+                            <p className="text-[10px] text-gray-500 mt-1.5">
+                              <span className="font-medium text-gray-600">Gap:</span> {nbaData.missing.join(", ")}
                             </p>
-                            <p className="text-[13px] font-semibold text-gray-800 leading-snug">
-                              {nbaData.recommendation}
-                            </p>
-                          </div>
-                        )}
-
-                        {hasAiReply && (
-                          <div className={cn(nbaData && "pt-2 border-t border-gray-200")}>
-                            {aiCopilotReplyLoading && !aiCopilotReply ? (
-                              <div className="flex items-center gap-1.5 py-1">
-                                <div className="w-1.5 h-1.5 rounded-full bg-purple-300 animate-pulse" />
-                                <span className="text-[11px] text-gray-400 italic">Generating reply…</span>
-                              </div>
-                            ) : (
-                              <>
-                                <p className="text-[12px] text-gray-700 leading-relaxed">
-                                  {aiCopilotReply}
-                                </p>
-                                <button
-                                  onClick={() => {
-                                    if (onInsertMessage) {
-                                      onInsertMessage(aiCopilotReply);
-                                    } else {
-                                      navigator.clipboard.writeText(aiCopilotReply).catch(() => {});
-                                    }
-                                    completeAction('qualify', "Message inserted");
-                                  }}
-                                  className="mt-2 text-[11px] font-semibold text-emerald-600 hover:text-emerald-700 transition-colors flex items-center gap-1"
-                                  data-testid="button-insert-suggested-message"
-                                >
-                                  Insert reply
-                                  <span className="text-emerald-400">→</span>
-                                </button>
-                              </>
-                            )}
-                          </div>
-                        )}
+                          ) : null}
+                        </div>
+                        {composerDraftPreview && composerDraftPreview.trim().length > 0 ? (
+                          <p
+                            className="text-[10px] text-gray-400 leading-snug italic border-t border-gray-100 pt-2 mt-1 line-clamp-2"
+                            title={composerDraftPreview}
+                          >
+                            Draft preview: {composerDraftPreview}
+                          </p>
+                        ) : null}
                       </div>
                     );
                   })()}
 
-                  {/* C. CONTEXT — summary, intentionally muted */}
+                  {/* C. CONTEXT — memory (reference, de-emphasized) */}
                   {(aiMemory || aiMemoryLoading) && (
-                    <div className="pt-2 border-t border-gray-100">
-                      <p className="text-[9px] uppercase tracking-widest font-semibold text-gray-300 mb-1">
+                    <div className="mt-6 pt-5 border-t border-violet-100/60">
+                      <p className="text-[8px] uppercase tracking-widest font-semibold text-gray-400/70 mb-1.5">
                         {hasAIBrain ? "Memory" : "Summary"}
                       </p>
                       {aiMemoryLoading ? (
                         <div className="flex items-center gap-1.5">
                           <div className="w-1.5 h-1.5 rounded-full bg-gray-200 animate-pulse" />
-                          <span className="text-[11px] text-gray-400 italic">Generating…</span>
+                          <span className="text-[10px] text-gray-400/90 italic">Generating…</span>
                         </div>
                       ) : (
-                        <p className="text-[11px] text-gray-400 leading-relaxed">{aiMemory}</p>
+                        <p className="text-[10px] text-gray-400/85 leading-relaxed">{aiMemory}</p>
                       )}
                     </div>
                   )}
@@ -1748,6 +1728,7 @@ export function InboxLeadDetailsPanel({
 
 
               )}
+            </div>
             </div>
           )}
 

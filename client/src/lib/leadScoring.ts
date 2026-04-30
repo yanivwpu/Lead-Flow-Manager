@@ -29,6 +29,8 @@ export type LeadScoringSignals = {
   industry: { layer: "real_estate" | "property_management"; bonus: number } | null;
   detected: string[];
   decisionOverride?: boolean;
+  /** Strong purchase/commitment phrases → score floored at 90, hot, high confidence. */
+  dealReadyOverride?: boolean;
 };
 
 export type LeadScoreResult = {
@@ -57,8 +59,26 @@ export type StageSignalSummary = {
 
 // ── Constants ───────────────────────────────────────────────────────────────
 
-/** On 0–~32 scale; at or above → `hot` bucket (score also floored to hot band). */
+/** On 0–~32 scale; at or above → `hot` bucket (score also floored to 75). */
 const DECISION_HOT_THRESHOLD = 20;
+
+/** Inbound phrases that indicate deal-ready intent — always HOT with score ≥ 90. */
+const DEAL_READY_INTENT_PATTERNS: RegExp[] = [
+  /\bsend\s+papers?\b/i,
+  /\bready\s+to\s+deposit\b/i,
+  /\bmake\s+an?\s+offer\b/i,
+  /\b(i\s*['']?ll|i\s+will)\s+take\s+it\b/i,
+  /\blet'?s\s+(sign|proceed|close|do\s+it)\b/i,
+  /\bproceed\s+(with|to)\b/i,
+  /\bproceed\b/i,
+  /\bsign\s+(the\s+)?(contract|papers|agreement|lease)\b/i,
+  /\blet'?s\s+sign\b/i,
+  /\b(want|ready|going)\s+to\s+buy\b/i,
+  /\b(i\s*['']?ll|i\s+will)\s+buy\b/i,
+  /\bbuy\s+(it|now|today)\b/i,
+  /\bbuy\s+now\b/i,
+  /\b(place|put|pay)\s+(a\s+)?deposit\b/i,
+];
 
 const MAX_INDUSTRY_BONUS = 20;
 const MAX_PM_BONUS = 16;
@@ -203,6 +223,21 @@ function computeUrgencyScore(inbound: string): { value: number; detected: string
   }
   if (hits >= 1) return { value: 7, detected: ["urgency:time_sensitive"] };
   return { value: 0, detected: [] };
+}
+
+/** +10 if one of asap/today/immediately; +20 if two or more distinct matches. */
+function computeCriticalUrgencyBoost(inbound: string): { boost: number; detected: string[] } {
+  const hitAsap = /\basap\b/i.test(inbound);
+  const hitToday = /\btoday\b/i.test(inbound);
+  const hitImmediate = /\bimmediately\b/i.test(inbound);
+  const distinct = (hitAsap ? 1 : 0) + (hitToday ? 1 : 0) + (hitImmediate ? 1 : 0);
+  if (distinct >= 2) return { boost: 20, detected: ["urgency:critical_boost"] };
+  if (distinct === 1) return { boost: 10, detected: ["urgency:critical_boost"] };
+  return { boost: 0, detected: [] };
+}
+
+function detectDealReadyIntent(inbound: string): boolean {
+  return DEAL_READY_INTENT_PATTERNS.some((re) => re.test(inbound));
 }
 
 function computeSoftNegativeScore(inbound: string): { value: number; detected: string[] } {
@@ -450,6 +485,7 @@ export function scoreLead(
   const decision = computeDecisionScore(inbound);
   const urgency = computeUrgencyScore(inbound);
   const softNeg = computeSoftNegativeScore(inbound);
+  const criticalUrgency = computeCriticalUrgencyBoost(inbound);
 
   const industry = computeIndustryLayer(inbound, businessKnowledge, options);
 
@@ -457,7 +493,7 @@ export function scoreLead(
     engagementScore: engagement.value,
     interestScore: interest.value,
     decisionScore: decision.value,
-    urgencyScore: urgency.value,
+    urgencyScore: urgency.value + criticalUrgency.boost,
     negativeScore: softNeg.value,
   };
 
@@ -469,8 +505,16 @@ export function scoreLead(
     core.negativeScore +
     (industry?.bonus ?? 0);
 
+  const dealReadyIntent = detectDealReadyIntent(inbound);
+
   let decisionOverride = false;
-  if (core.decisionScore >= DECISION_HOT_THRESHOLD) {
+  let dealReadyOverride = false;
+
+  if (dealReadyIntent) {
+    dealReadyOverride = true;
+    decisionOverride = true;
+    score = Math.max(score, 90);
+  } else if (core.decisionScore >= DECISION_HOT_THRESHOLD) {
     decisionOverride = true;
     score = Math.max(score, 75);
   }
@@ -480,7 +524,7 @@ export function scoreLead(
   let bucket: LeadBucket =
     score >= 75 ? "hot" : score >= 45 ? "warm" : score >= 15 ? "cold" : "unqualified";
 
-  if (decisionOverride) {
+  if (decisionOverride || dealReadyOverride) {
     bucket = "hot";
   }
 
@@ -490,17 +534,23 @@ export function scoreLead(
       ...interest.detected,
       ...decision.detected,
       ...urgency.detected,
+      ...criticalUrgency.detected,
       ...softNeg.detected,
       ...(industry?.detected ?? []),
+      ...(dealReadyIntent ? ["decision:deal_ready"] : []),
     ]),
   );
 
   const reasons: string[] = [];
+  if (dealReadyIntent) {
+    reasons.push("Customer ready to proceed");
+    reasons.push("Strong buying intent detected");
+  }
   if (engagement.value >= 12) reasons.push("Strong engagement from customer");
   else if (engagement.value >= 6) reasons.push("Some engagement from customer");
   if (interest.detected.some((d) => d.startsWith("interest:"))) reasons.push("Interest / discovery signals");
   if (decision.detected.length > 0) reasons.push("Strong decision / next-step intent");
-  if (urgency.detected.length > 0) reasons.push("Time-sensitive / urgent");
+  if (urgency.detected.length > 0 || criticalUrgency.boost > 0) reasons.push("Time-sensitive / urgent");
   if (industry?.layer === "real_estate" && (industry.bonus ?? 0) > 0) reasons.push("Real-estate-specific signals");
   if (industry?.layer === "property_management" && (industry.bonus ?? 0) > 0) reasons.push("Property-management signals");
 
@@ -510,7 +560,7 @@ export function scoreLead(
     realEstateSignals: reSignalsForQual,
     qualifyingQuestions: businessKnowledge?.qualifyingQuestions,
   });
-  if (missingRequired.length > 0) {
+  if (missingRequired.length > 0 && !dealReadyIntent) {
     reasons.push(
       `${missingRequired.length} configured qualification field${missingRequired.length !== 1 ? "s" : ""} not yet captured`,
     );
@@ -520,11 +570,15 @@ export function scoreLead(
     (stats.inbound >= 2 ? 1 : 0) +
     (interest.value > 0 ? 1 : 0) +
     (decision.value > 0 ? 1 : 0) +
-    (urgency.value > 0 ? 1 : 0) +
-    ((industry?.bonus ?? 0) > 0 ? 1 : 0);
-  const confidence = clamp01(0.25 + evidenceCount * 0.14 + Math.min(0.22, stats.inbound * 0.03));
+    (urgency.value > 0 || criticalUrgency.boost > 0 ? 1 : 0) +
+    ((industry?.bonus ?? 0) > 0 ? 1 : 0) +
+    (dealReadyIntent ? 2 : 0);
+  let confidence = clamp01(0.25 + evidenceCount * 0.14 + Math.min(0.22, stats.inbound * 0.03));
+  if (dealReadyIntent) {
+    confidence = Math.max(confidence, 0.93);
+  }
 
-  const uniqReasons = Array.from(new Set(reasons)).slice(0, 8);
+  const uniqReasons = Array.from(new Set(reasons)).slice(0, 10);
 
   return {
     score,
@@ -538,6 +592,7 @@ export function scoreLead(
       industry: industry && industry.bonus > 0 ? { layer: industry.layer, bonus: industry.bonus } : null,
       detected,
       decisionOverride,
+      dealReadyOverride,
     },
   };
 }

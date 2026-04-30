@@ -14,6 +14,7 @@ import {
   LayoutTemplate,
   X,
   Timer,
+  Brain,
 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import EmojiPicker from "emoji-picker-react";
@@ -147,6 +148,9 @@ export function AIComposer({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const prevIdRef = useRef<string | null>(null);
   const lastAutoReplyKeyRef = useRef<string>("");
+  const lastSuggestDraftKeyRef = useRef<string>("");
+  /** User chose Manual while workspace default is suggest — don't force Suggest back on settings sync. */
+  const userLockedManualRef = useRef(false);
   const autoReplyInFlightRef = useRef(false);
 
   // Auto-resize textarea — avoid height-auto jump on mobile by reading scrollHeight before reset
@@ -173,6 +177,8 @@ export function AIComposer({
       setAutoSendBlockedMessage(null);
       setDismissedStatusChipIds([]);
       lastAutoReplyKeyRef.current = "";
+      lastSuggestDraftKeyRef.current = "";
+      userLockedManualRef.current = false;
       autoReplyInFlightRef.current = false;
     }
   }, [conversationId]);
@@ -192,7 +198,15 @@ export function AIComposer({
       setAiMode(effectiveCanAuto ? "auto" : "suggest");
       return;
     }
-  }, [autoOverride, businessAiMode, effectiveCanAuto, showAIModes]);
+    if (businessAiMode === "suggest") {
+      if (userLockedManualRef.current) {
+        setAiMode("manual");
+        return;
+      }
+      setAiMode(effectiveCanSuggest ? "suggest" : "manual");
+      return;
+    }
+  }, [autoOverride, businessAiMode, effectiveCanAuto, effectiveCanSuggest, showAIModes]);
 
   // ─── Auto-reply engine ───────────────────────────────────────────────────
   const executeAutoReply = useCallback(async (history: AIComposerMessage[]) => {
@@ -232,10 +246,13 @@ export function AIComposer({
         else if (!allowed) clientReason = reason;
         else if (trimmed.length <= 5) clientReason = "suggestion_too_short";
         else if (!onAutoSend) clientReason = "missing_onAutoSend_callback";
-        console.info("[AI-AUTO]", {
-          contactId: contactId || "unknown",
-          autoTriggered: willSend,
+        console.info("[AI-AUTO-CLIENT]", {
+          mode: "auto",
+          autoSendAllowed: allowed,
           reason: clientReason,
+          serverReason: reason,
+          suggestionLength: trimmed.length,
+          contactId: contactId || "unknown",
           confidence,
         });
 
@@ -266,22 +283,25 @@ export function AIComposer({
           setAutoPhase("waiting");
         }
       } else {
-        console.info("[AI-AUTO]", {
-          contactId: contactId || "unknown",
-          autoTriggered: false,
+        console.info("[AI-AUTO-CLIENT]", {
+          mode: "auto",
+          autoSendAllowed: false,
           reason: "suggest_reply_request_failed",
-          confidence: 0,
+          httpStatus: res.status,
+          suggestionLength: 0,
+          contactId: contactId || "unknown",
         });
         setAutoSkippedWithDraft(false);
         setAutoSendBlockedMessage(null);
         setAutoPhase("waiting");
       }
     } catch {
-      console.info("[AI-AUTO]", {
-        contactId: contactId || "unknown",
-        autoTriggered: false,
+      console.info("[AI-AUTO-CLIENT]", {
+        mode: "auto",
+        autoSendAllowed: false,
         reason: "suggest_reply_exception",
-        confidence: 0,
+        suggestionLength: 0,
+        contactId: contactId || "unknown",
       });
       setAutoSkippedWithDraft(false);
       setAutoSendBlockedMessage(null);
@@ -328,6 +348,67 @@ export function AIComposer({
     executeAutoReply(messages);
   }, [aiMode, autoOverride, lastMsgKey, lastTurnIsInbound, messages, executeAutoReply]);
   // ─────────────────────────────────────────────────────────────────────────
+
+  /** Suggest mode: load editable AI draft when the latest turn is a new inbound message. */
+  const loadSuggestDraftForInbound = useCallback(
+    async (history: AIComposerMessage[]) => {
+      if (!conversationId || !aiEnabled) return;
+      setIsDrafting(true);
+      setAiDraft(null);
+      onChange("");
+      if (demoMode) {
+        await new Promise((r) => setTimeout(r, 700 + Math.random() * 400));
+        const demo = DEMO_SUGGESTIONS[_demoCycleIdx % DEMO_SUGGESTIONS.length];
+        _demoCycleIdx++;
+        setAiDraft(demo);
+        onChange(demo);
+        setIsDrafting(false);
+        return;
+      }
+      try {
+        const res = await fetch("/api/ai/suggest-reply", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            chatId: conversationId,
+            conversationHistory: history.slice(-12),
+            ...(contactContext ? { contactContext } : {}),
+          }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const suggestion = data.suggestion || null;
+          setAiDraft(suggestion);
+          if (suggestion) onChange(suggestion);
+        } else {
+          setAiDraft(null);
+        }
+      } catch {
+        setAiDraft(null);
+      } finally {
+        setIsDrafting(false);
+      }
+    },
+    [conversationId, aiEnabled, demoMode, contactContext, onChange],
+  );
+
+  useEffect(() => {
+    if (aiMode !== "suggest" || !aiEnabled || !conversationId || autoOverride) return;
+    if (!lastTurnIsInbound) return;
+    if (lastMsgKey === lastSuggestDraftKeyRef.current) return;
+    lastSuggestDraftKeyRef.current = lastMsgKey;
+    loadSuggestDraftForInbound(messages);
+  }, [
+    aiMode,
+    aiEnabled,
+    conversationId,
+    autoOverride,
+    lastMsgKey,
+    lastTurnIsInbound,
+    messages,
+    loadSuggestDraftForInbound,
+  ]);
 
   const fetchSuggestion = useCallback(async () => {
     if (!conversationId || !aiEnabled || aiCooldown) return;
@@ -376,6 +457,8 @@ export function AIComposer({
 
   const handleModeChange = (mode: AIMode) => {
     setAiMode(mode);
+    if (mode === "manual") userLockedManualRef.current = true;
+    if (mode === "suggest" || mode === "auto") userLockedManualRef.current = false;
     setAiDraft(null);
     setIsDrafting(false);
     setAutoOverride(false);
@@ -383,7 +466,10 @@ export function AIComposer({
     setAutoSendBlockedMessage(null);
     onChange("");
 
-    if (mode === "suggest" && aiEnabled) fetchSuggestion();
+    if (mode === "suggest" && aiEnabled) {
+      lastSuggestDraftKeyRef.current = "";
+      fetchSuggestion();
+    }
 
     if (mode === "auto") {
       setAutoPhase("idle");
@@ -394,7 +480,9 @@ export function AIComposer({
   };
 
   const handleTextareaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    onChange(e.target.value);
+    const v = e.target.value;
+    if (aiMode === "suggest" && aiEnabled && !v.trim()) setAiDraft(null);
+    onChange(v);
     if (setTyping) {
       setTyping(true);
       if (typingTimeoutRef?.current) clearTimeout(typingTimeoutRef.current);
@@ -404,6 +492,10 @@ export function AIComposer({
 
   const handleSendClick = () => {
     onSend();
+    if (aiMode === "suggest") {
+      setAiDraft(null);
+      lastSuggestDraftKeyRef.current = "";
+    }
     if (aiMode === "auto") {
       setAutoSkippedWithDraft(false);
       setAutoSendBlockedMessage(null);
@@ -428,6 +520,7 @@ export function AIComposer({
 
   const handleAutoOverride = () => {
     setAutoOverride(true);
+    userLockedManualRef.current = true;
     setAiMode("manual");
     setAutoSkippedWithDraft(false);
     setAutoSendBlockedMessage(null);
@@ -507,7 +600,7 @@ export function AIComposer({
       } else if (!lastTurnIsInbound && autoPhase === "replied") {
         candidates.push({
           id: "ai-sent-wait",
-          label: "Sent — waiting",
+          label: "⚡ Auto-replied",
           priority: 83,
           tone: "neutral",
           icon: CheckCircle2,
@@ -584,7 +677,7 @@ export function AIComposer({
     if (autoPhase === "typing") return "Typing a reply…";
     // Latest message from customer → we're not waiting on them (updates every time `messages` changes).
     if (lastTurnIsInbound) return "Ready to respond";
-    if (autoPhase === "replied") return "Replied — waiting for response";
+    if (autoPhase === "replied") return "⚡ Auto-replied — waiting for response";
     if (lastTurnIsOutbound) return "Waiting for customer response…";
     return "Ready to respond";
   })();
@@ -712,6 +805,17 @@ export function AIComposer({
             size="sm"
             className="mt-0.5"
           />
+        )}
+
+        {/* Suggest mode: primary draft lives in the composer */}
+        {isSuggestMode && !isDrafting && Boolean(aiDraft) && value.trim().length > 0 && (
+          <p
+            className="text-[11px] text-violet-800/90 flex items-center gap-1.5 px-0.5 -mt-0.5"
+            data-testid="composer-ai-draft-hint"
+          >
+            <span aria-hidden>✨</span>
+            <span className="font-medium">AI draft ready — edit or send</span>
+          </p>
         )}
 
         {/* Row 2: Auto-passive panel or Textarea */}

@@ -7221,19 +7221,23 @@ export async function registerRoutes(
     return { canProceed: true, status: "healthy" };
   };
   
-  // Rate limiting per conversation (cooldown between rapid AI messages)
+  // Rate limiting per conversation (cooldown between rapid AI messages).
+  // Bucket by request mode so Copilot's suggest-only call (no aiMode) does not block
+  // the composer's full-auto call (aiMode: auto) on the same inbound — same millisecond.
   const conversationCooldowns = new Map<string, number>();
-  const COOLDOWN_MS = 3000; // 3 second cooldown between AI messages per chat
+  const COOLDOWN_MS = 3000; // 3 second cooldown between AI messages per chat per bucket
   
-  const checkConversationRateLimit = (chatId: string): boolean => {
+  const checkConversationRateLimit = (chatId: string, requestedMode?: string): boolean => {
     const now = Date.now();
-    const lastCall = conversationCooldowns.get(chatId);
+    const modeBucket = requestedMode === "auto" ? "auto" : "suggest";
+    const key = `${chatId}:${modeBucket}`;
+    const lastCall = conversationCooldowns.get(key);
     
     if (lastCall && (now - lastCall) < COOLDOWN_MS) {
       return false;
     }
     
-    conversationCooldowns.set(chatId, now);
+    conversationCooldowns.set(key, now);
     return true;
   };
 
@@ -7487,7 +7491,7 @@ export async function registerRoutes(
       }
       
       // Rate limiting per conversation
-      if (chatId && !checkConversationRateLimit(chatId)) {
+      if (chatId && !checkConversationRateLimit(chatId, requestedMode)) {
         return res.status(429).json({ 
           error: "Please wait a moment before requesting another suggestion.",
           status: "rate_limited"

@@ -1112,7 +1112,18 @@ export function UnifiedInbox() {
       });
       return;
     }
-    sendMessageMutation.mutate({ contactId: selectedContactId, content: message });
+    console.info("[AI-AUTO-SEND]", "attempting send", {
+      contactId: selectedContactId,
+      length: message.trim().length,
+    });
+    sendMessageMutation.mutate(
+      { contactId: selectedContactId, content: message },
+      {
+        onSuccess: () => console.info("[AI-AUTO-SEND]", "sent"),
+        onError: (err: unknown) =>
+          console.warn("[AI-AUTO-SEND]", "failed", err instanceof Error ? err.message : err),
+      },
+    );
   }, [selectedContactId, sendMessageMutation, contactReachableChannels.length, toast]);
 
   const ACCEPTED_TYPES: Record<string, string> = {
@@ -1916,7 +1927,11 @@ export function UnifiedInbox() {
           messages={messages.map(m => ({ direction: m.direction, content: m.content || '' }))}
           capabilities={capabilities}
           currentUserId={user?.id}
-          onInsertMessage={text => setMessageInput(text)}
+          composerDraftPreview={
+            hasFullAIBrain && messageInput.trim()
+              ? `${messageInput.slice(0, 100)}${messageInput.length > 100 ? "…" : ""}`
+              : undefined
+          }
           onUpdateContact={updateContact}
           onUpdateConversationStatus={status => {
             if (primaryConversation) {
@@ -1947,7 +1962,11 @@ export function UnifiedInbox() {
                   capabilities={capabilities}
                   currentUserId={user?.id}
                   panelClassName="flex flex-col w-full bg-white"
-                  onInsertMessage={text => { setMessageInput(text); setShowDetailsSheet(false); }}
+                  composerDraftPreview={
+                    hasFullAIBrain && messageInput.trim()
+                      ? `${messageInput.slice(0, 100)}${messageInput.length > 100 ? "…" : ""}`
+                      : undefined
+                  }
                   onUpdateContact={updateContact}
                   onUpdateConversationStatus={status => {
                     if (primaryConversation) {
