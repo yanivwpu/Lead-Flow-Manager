@@ -366,6 +366,11 @@ export function UnifiedInbox() {
     return "off";
   }, [(aiSettings as any)?.aiMode]);
 
+  const handoffKeywords = useMemo((): string[] => {
+    const raw = (aiSettings as any)?.handoffKeywords;
+    return Array.isArray(raw) ? raw.map((x: any) => String(x || "").trim()).filter(Boolean) : [];
+  }, [(aiSettings as any)?.handoffKeywords]);
+
   // Unified AI capabilities from plan + usage data
   const capabilities = useAICapabilities();
 
@@ -774,6 +779,17 @@ export function UnifiedInbox() {
     });
     return match || null;
   }, [handoffTimeline, primaryConversation?.id]);
+
+  // When a new inbound arrives, refetch timeline immediately so Copilot flips to Snoozed right away.
+  useEffect(() => {
+    if (!selectedContactId || isDemoUser) return;
+    if (!realMessages.length) return;
+    const last = realMessages[realMessages.length - 1];
+    if (last.direction !== "inbound") return;
+    queryClient.invalidateQueries({
+      queryKey: [`/api/contacts/${selectedContactId}/timeline?limit=60`],
+    });
+  }, [realMessages, selectedContactId, isDemoUser, queryClient]);
 
   type ChannelHealthEntry = {
     channel: string;
@@ -1910,6 +1926,7 @@ export function UnifiedInbox() {
               hasFullAIBrain={hasFullAIBrain}
               capabilities={capabilities}
               businessAiMode={businessAiMode}
+              handoffKeywords={handoffKeywords}
               contactId={selectedContactId}
               contactContext={contactContext}
               conversationId={primaryConversation?.id ?? selectedContactId}

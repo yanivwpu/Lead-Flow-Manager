@@ -57,6 +57,8 @@ export interface AIComposerProps {
   capabilities?: AICapabilities;
   /** Business AI mode from `/api/ai/settings` (off | suggest | auto). Source of truth for Full Auto. */
   businessAiMode?: "off" | "suggest" | "auto";
+  /** Optional list of handoff keywords for local pre-check before calling AI. */
+  handoffKeywords?: string[];
   /** Contact id for `[AI-AUTO]` logs (inbox CRM contact, not conversation id). */
   contactId?: string | null;
   /** CRM context injected into AI prompt to improve reply quality */
@@ -125,6 +127,7 @@ export function AIComposer({
   onTemplate,
   className,
   businessAiMode = "suggest",
+  handoffKeywords,
   contactId = null,
   metaReplyWindowNotice = null,
 }: AIComposerProps) {
@@ -212,6 +215,29 @@ export function AIComposer({
     setAutoPhase("typing");
     setAutoSendBlockedMessage(null);
     setAutoSkippedWithDraft(false);
+
+    // Local handoff pre-check (cheap + immediate). If the latest inbound matches, do NOT call AI.
+    const lastInboundText = (() => {
+      const inbound = history.filter((m) => m.role === "user").map((m) => m.content || "");
+      return (inbound[inbound.length - 1] || "").trim();
+    })();
+    if (lastInboundText && handoffKeywords && handoffKeywords.length > 0) {
+      const msgLower = lastInboundText.toLowerCase();
+      const matched = handoffKeywords
+        .map((k) => String(k || "").trim())
+        .filter(Boolean)
+        .some((k) => msgLower.includes(k.toLowerCase()));
+      if (matched) {
+        console.info("[HANDOFF_TRIGGERED]", {
+          contactId: contactId || "unknown",
+          matchedKeyword: "client_precheck",
+          message: lastInboundText.slice(0, 500),
+        });
+        setAutoPhase("waiting");
+        autoReplyInFlightRef.current = false;
+        return;
+      }
+    }
 
     // Natural human-like delay before "typing"
     await new Promise((r) => setTimeout(r, 1200 + Math.random() * 800));
@@ -306,7 +332,7 @@ export function AIComposer({
     } finally {
       autoReplyInFlightRef.current = false;
     }
-  }, [conversationId, aiEnabled, contactContext, contactId, onAutoSend]);
+  }, [conversationId, aiEnabled, contactContext, contactId, handoffKeywords, onAutoSend]);
 
   // Watch messages: when in auto mode and last message is from lead → auto-reply
   const lastMsg = messages[messages.length - 1];

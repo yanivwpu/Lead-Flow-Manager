@@ -608,6 +608,52 @@ class ChannelService {
       preview: content.substring(0, 100),
     });
 
+    // ── Human handoff (conversation-level) ───────────────────────────────────
+    // Runs immediately on inbound message receipt so it can override any AI work
+    // before auto-send gates or suggestion generation.
+    let handoffTriggered = false;
+    try {
+      const aiSettings = await storage.getAiSettings(userId);
+      const { aiService } = await import("./aiService");
+      const handoff = await aiService.checkHandoffNeeded(content || "", aiSettings || undefined);
+      if (handoff.shouldHandoff) {
+        handoffTriggered = true;
+        // Best-effort keyword extraction for logging/debugging.
+        const keywords = (aiSettings?.handoffKeywords || ["call me", "human", "agent", "speak to someone"])
+          .map((k) => String(k || "").trim())
+          .filter(Boolean);
+        const lower = (content || "").toLowerCase();
+        const matchedKeyword =
+          keywords.find((k) => lower.includes(k.toLowerCase())) || "unknown";
+
+        console.info("[HANDOFF_TRIGGERED]", {
+          contactId: contact.id,
+          matchedKeyword,
+          message: (content || "").slice(0, 500),
+        });
+
+        await this.logActivity(userId, contact.id, conversation.id, "ai_handoff", {
+          matchedKeyword,
+          message: (content || "").slice(0, 500),
+          reason: handoff.reason || "handoff_keyword_match",
+        });
+      }
+    } catch (err: any) {
+      console.warn("[HANDOFF_TRIGGERED] check failed", err?.message || err);
+    }
+
+    // Handoff means: stop all automated responses (AI, chatbot, auto-replies).
+    // The conversation is effectively "Snoozed" and a human should take over.
+    if (handoffTriggered) {
+      return {
+        contact,
+        conversation,
+        message,
+        isNewConversation,
+        chatbotWillFire: false,
+      };
+    }
+
     // Evaluate chatbot trigger once — used both to fire the flow and to let
     // callers gate their own outbound messages without an extra DB round-trip.
     const { willChatbotTrigger, triggerChatbotFlows } = await import('./chatbotEngine');
