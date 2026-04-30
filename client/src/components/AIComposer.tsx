@@ -12,6 +12,7 @@ import {
   Clock,
   Lock,
   LayoutTemplate,
+  Info,
 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import EmojiPicker from "emoji-picker-react";
@@ -274,6 +275,17 @@ export function AIComposer({
   const lastMsg = messages[messages.length - 1];
   const lastMsgKey = messages.length > 0 ? `${messages.length}::${lastMsg?.content ?? ""}` : "";
   const lastMsgIsFromLead = lastMsg?.role === "user";
+  /** Derived from conversation each render — avoids stale "waiting" after a new inbound arrives. */
+  const lastMessageIsInbound = lastMsg?.role === "user";
+  const lastMessageIsOutbound = lastMsg?.role === "assistant";
+
+  // Sync phase when messages prove the customer already replied while UI phase still says "waiting".
+  useEffect(() => {
+    if (aiMode !== "auto" || autoOverride) return;
+    if (!lastMessageIsInbound) return;
+    if (autoPhase !== "waiting") return;
+    setAutoPhase("idle");
+  }, [aiMode, autoOverride, lastMessageIsInbound, autoPhase]);
 
   useEffect(() => {
     if (aiMode !== "auto" || autoOverride) return;
@@ -426,9 +438,11 @@ export function AIComposer({
       ? "Typing a reply…"
       : autoPhase === "replied"
       ? "Replied — waiting for response"
-      : autoPhase === "idle"
+      : lastMessageIsInbound
       ? "Ready to respond"
-      : "Waiting for customer response…";
+      : lastMessageIsOutbound
+      ? "Waiting for customer response…"
+      : "Ready to respond";
 
   return (
     <div className={cn("border-t border-gray-200 bg-white shrink-0", className)}>
@@ -446,11 +460,12 @@ export function AIComposer({
 
       {aiEnabled && aiMode === "auto" && autoSendBlockedMessage && (
         <div
-          className="px-4 py-1.5 bg-amber-50/90 border-b border-amber-100/90"
+          className="flex items-center gap-2 px-3 py-1.5 bg-amber-50/35 border-b border-amber-950/[0.06]"
           data-testid="auto-reply-skipped-notice"
           role="status"
         >
-          <span className="text-[10px] text-amber-900/90 leading-snug">{autoSendBlockedMessage}</span>
+          <Info className="w-3.5 h-3.5 shrink-0 text-amber-600/55" aria-hidden />
+          <span className="text-sm text-muted-foreground leading-snug">{autoSendBlockedMessage}</span>
         </div>
       )}
 
