@@ -4,29 +4,22 @@ import {
   Brain, 
   Sparkles, 
   Settings2, 
-  Building2, 
   MessageSquare, 
-  Zap, 
+  Zap,
   AlertTriangle,
   Loader2,
-  Save,
   Plus,
   X,
-  Lightbulb,
-  Target,
-  Users,
-  Clock,
-  CheckCircle2,
-  HelpCircle,
-  Send,
   Bot,
   Hand,
   TrendingUp,
   Crown,
   Lock,
   ChevronDown,
+  Target,
   Trash2,
   ListChecks,
+  Save,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -49,10 +42,6 @@ import { cn } from "@/lib/utils";
 
 interface AISettings {
   aiMode: string;
-  businessHoursOnly: boolean;
-  confidenceLevel: string;
-  leadQualificationEnabled: boolean;
-  autoTaggingEnabled: boolean;
   handoffKeywords: string[];
   aiPersona: string;
 }
@@ -61,18 +50,9 @@ interface BusinessKnowledge {
   businessName: string;
   industry: string;
   servicesProducts: string;
-  businessHours: string;
-  locations: string;
   bookingLink: string;
-  faqs: Array<{ question: string; answer: string }>;
-  salesGoals: string;
   customInstructions: string;
   qualifyingQuestions: Array<{ key: string; label: string; question: string; required: boolean }>;
-}
-
-interface AIHealth {
-  status: "healthy" | "limited" | "paused";
-  message?: string;
 }
 
 interface SubscriptionData {
@@ -86,6 +66,12 @@ interface SubscriptionData {
   };
 }
 
+const AI_MODE_SEGMENTS = [
+  { value: "off", label: "Off", tooltip: "AI is disabled" },
+  { value: "suggest_only", label: "Suggest", tooltip: "AI suggests replies, you send" },
+  { value: "full_auto", label: "Auto", tooltip: "AI replies automatically with safeguards" },
+] as const;
+
 const INDUSTRY_OPTIONS = [
   { value: "real_estate", label: "Real Estate" },
   { value: "travel", label: "Travel & Tourism" },
@@ -97,21 +83,6 @@ const INDUSTRY_OPTIONS = [
   { value: "hospitality", label: "Hospitality" },
   { value: "automotive", label: "Automotive" },
   { value: "other", label: "Other" },
-];
-
-const SALES_GOAL_OPTIONS = [
-  { value: "book_call", label: "Book a Call/Meeting" },
-  { value: "get_phone", label: "Get Phone Number" },
-  { value: "collect_deposit", label: "Collect Deposit" },
-  { value: "schedule_visit", label: "Schedule a Visit" },
-  { value: "get_quote", label: "Provide Quote" },
-  { value: "answer_questions", label: "Answer Questions" },
-];
-
-const AI_MODE_SEGMENTS = [
-  { value: "off", label: "Off", tooltip: "AI is disabled" },
-  { value: "suggest_only", label: "Suggest", tooltip: "AI suggests replies, you send" },
-  { value: "full_auto", label: "Auto", tooltip: "AI replies automatically with safeguards" },
 ] as const;
 
 type QualifyingQuestion = { key: string; label: string; question: string; required: boolean };
@@ -119,10 +90,10 @@ type QualifyingQuestion = { key: string; label: string; question: string; requir
 const INDUSTRY_QUALIFY_TEMPLATES: Record<string, QualifyingQuestion[]> = {
   real_estate: [
     { key: "intent",    label: "Intent",     question: "Are you looking to buy, rent, or invest?",                                  required: true  },
-    { key: "budget",    label: "Budget",      question: "Do you have a target price range or budget in mind?",                       required: true  },
-    { key: "timeline",  label: "Timeline",    question: "What's your ideal timeline for making a move?",                             required: true  },
-    { key: "financing", label: "Financing",   question: "Have you been pre-approved for financing, or are you paying cash?",         required: false },
-    { key: "location",  label: "Location",    question: "Do you have a preferred area or neighbourhood in mind?",                    required: false },
+    { key: "budget",    label: "Budget",     question: "Do you have a target price range or budget in mind?",                       required: true  },
+    { key: "timeline",  label: "Timeline",   question: "What's your ideal timeline for making a move?",                             required: true  },
+    { key: "financing", label: "Financing",  question: "Have you been pre-approved for financing, or are you paying cash?",         required: false },
+    { key: "location",  label: "Location",   question: "Do you have a preferred area or neighbourhood in mind?",                    required: false },
   ],
   healthcare: [
     { key: "service",   label: "Service",     question: "What type of care or treatment are you looking for?",                       required: true  },
@@ -132,46 +103,46 @@ const INDUSTRY_QUALIFY_TEMPLATES: Record<string, QualifyingQuestion[]> = {
   ],
   travel: [
     { key: "destination", label: "Destination", question: "Where are you looking to travel?",                                       required: true  },
-    { key: "dates",       label: "Dates",        question: "When are you planning to travel, and for how long?",                    required: true  },
-    { key: "group_size",  label: "Group Size",   question: "How many people will be travelling?",                                   required: true  },
-    { key: "budget",      label: "Budget",        question: "Do you have a rough budget per person in mind?",                       required: false },
-    { key: "preferences", label: "Preferences",  question: "Any special preferences — accommodation type, activities, diet, etc.?", required: false },
+    { key: "dates",       label: "Dates",       question: "When are you planning to travel, and for how long?",                     required: true  },
+    { key: "group_size",  label: "Group Size",  question: "How many people will be travelling?",                                    required: true  },
+    { key: "budget",      label: "Budget",      question: "Do you have a rough budget per person in mind?",                         required: false },
+    { key: "preferences", label: "Preferences", question: "Any special preferences — accommodation type, activities, diet, etc.?",   required: false },
   ],
   contractor: [
-    { key: "project",   label: "Project",    question: "What type of project are you looking to get done?",                         required: true  },
-    { key: "timeline",  label: "Timeline",   question: "When would you like the work to start?",                                    required: true  },
-    { key: "budget",    label: "Budget",     question: "Do you have a budget in mind for this project?",                            required: false },
-    { key: "location",  label: "Location",   question: "What's the property address or general area?",                              required: true  },
+    { key: "project",   label: "Project",   question: "What type of project are you looking to get done?",                          required: true  },
+    { key: "timeline",  label: "Timeline",  question: "When would you like the work to start?",                                     required: true  },
+    { key: "budget",    label: "Budget",    question: "Do you have a budget in mind for this project?",                             required: false },
+    { key: "location",  label: "Location",  question: "What's the property address or general area?",                               required: true  },
   ],
   ecommerce: [
-    { key: "product",   label: "Product",    question: "Which product or category are you interested in?",                          required: true  },
-    { key: "quantity",  label: "Quantity",   question: "How many units are you looking to order?",                                   required: false },
-    { key: "shipping",  label: "Shipping",   question: "Do you need standard or expedited shipping?",                               required: false },
-    { key: "budget",    label: "Budget",     question: "Do you have a budget range in mind?",                                       required: false },
+    { key: "product",   label: "Product",   question: "Which product or category are you interested in?",                           required: true  },
+    { key: "quantity",  label: "Quantity",  question: "How many units are you looking to order?",                                   required: false },
+    { key: "shipping",  label: "Shipping",  question: "Do you need standard or expedited shipping?",                                required: false },
+    { key: "budget",    label: "Budget",    question: "Do you have a budget range in mind?",                                        required: false },
   ],
   finance: [
-    { key: "service",   label: "Service",    question: "What financial service are you looking for — insurance, investments, loans?", required: true  },
-    { key: "amount",    label: "Amount",     question: "What amount or coverage level are you considering?",                          required: true  },
-    { key: "timeline",  label: "Timeline",   question: "When do you need this in place?",                                            required: false },
-    { key: "situation", label: "Situation",  question: "Can you briefly describe your current financial situation?",                  required: false },
+    { key: "service",   label: "Service",   question: "What financial service are you looking for — insurance, investments, loans?", required: true  },
+    { key: "amount",    label: "Amount",    question: "What amount or coverage level are you considering?",                          required: true  },
+    { key: "timeline",  label: "Timeline",  question: "When do you need this in place?",                                            required: false },
+    { key: "situation", label: "Situation", question: "Can you briefly describe your current financial situation?",                  required: false },
   ],
   education: [
-    { key: "course",    label: "Course",     question: "Which course or program are you interested in?",                            required: true  },
-    { key: "level",     label: "Level",      question: "What's your current level — beginner, intermediate, or advanced?",          required: true  },
-    { key: "schedule",  label: "Schedule",   question: "Are you looking for full-time, part-time, or self-paced learning?",         required: false },
-    { key: "budget",    label: "Budget",     question: "Do you have a budget or are you looking for financing options?",             required: false },
+    { key: "course",    label: "Course",    question: "Which course or program are you interested in?",                             required: true  },
+    { key: "level",     label: "Level",     question: "What's your current level — beginner, intermediate, or advanced?",           required: true  },
+    { key: "schedule",  label: "Schedule",  question: "Are you looking for full-time, part-time, or self-paced learning?",          required: false },
+    { key: "budget",    label: "Budget",    question: "Do you have a budget or are you looking for financing options?",             required: false },
   ],
   automotive: [
-    { key: "vehicle",   label: "Vehicle",    question: "Are you looking to buy, lease, or service a vehicle?",                      required: true  },
-    { key: "type",      label: "Type",       question: "What type of vehicle are you interested in — new or used?",                 required: true  },
-    { key: "budget",    label: "Budget",     question: "Do you have a budget range in mind?",                                       required: false },
-    { key: "timeline",  label: "Timeline",   question: "When are you looking to make a decision?",                                  required: false },
+    { key: "vehicle",   label: "Vehicle",   question: "Are you looking to buy, lease, or service a vehicle?",                       required: true  },
+    { key: "type",      label: "Type",      question: "What type of vehicle are you interested in — new or used?",                  required: true  },
+    { key: "budget",    label: "Budget",    question: "Do you have a budget range in mind?",                                        required: false },
+    { key: "timeline",  label: "Timeline",  question: "When are you looking to make a decision?",                                   required: false },
   ],
   hospitality: [
-    { key: "dates",     label: "Dates",      question: "What dates are you looking to book?",                                       required: true  },
-    { key: "guests",    label: "Guests",     question: "How many guests will be staying?",                                          required: true  },
-    { key: "room_type", label: "Room Type",  question: "Do you have a preference for room type or amenities?",                      required: false },
-    { key: "budget",    label: "Budget",     question: "Do you have a nightly budget in mind?",                                     required: false },
+    { key: "dates",     label: "Dates",     question: "What dates are you looking to book?",                                        required: true  },
+    { key: "guests",    label: "Guests",    question: "How many guests will be staying?",                                           required: true  },
+    { key: "room_type", label: "Room Type", question: "Do you have a preference for room type or amenities?",                       required: false },
+    { key: "budget",    label: "Budget",    question: "Do you have a nightly budget in mind?",                                      required: false },
   ],
 };
 
@@ -194,38 +165,19 @@ function AIBrainContent() {
   
   const [settings, setSettings] = useState<AISettings>({
     aiMode: "suggest_only",
-    businessHoursOnly: false,
-    confidenceLevel: "balanced",
-    leadQualificationEnabled: true,
-    autoTaggingEnabled: true,
     handoffKeywords: ["call me", "human", "agent", "speak to someone"],
     aiPersona: "professional",
   });
-  
   const [knowledge, setKnowledge] = useState<BusinessKnowledge>({
     businessName: "",
     industry: "",
     servicesProducts: "",
-    businessHours: "",
-    locations: "",
     bookingLink: "",
-    faqs: [],
-    salesGoals: "",
     customInstructions: "",
     qualifyingQuestions: [],
   });
-  
-  const [aiHealth, setAiHealth] = useState<AIHealth>({
-    status: "healthy",
-    message: undefined,
-  });
-  
-  const [newFaq, setNewFaq] = useState({ question: "", answer: "" });
   const [newQQ, setNewQQ] = useState({ label: "", question: "", required: true });
   const [newKeyword, setNewKeyword] = useState("");
-  const [automationPrompt, setAutomationPrompt] = useState("");
-  const [generatingAutomation, setGeneratingAutomation] = useState(false);
-  const [generatedWorkflow, setGeneratedWorkflow] = useState<any>(null);
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [bundleModalOpen, setBundleModalOpen] = useState(false);
   
@@ -315,18 +267,10 @@ function AIBrainContent() {
     enabled: !subscriptionLoading && (hasAIAssist || hasFullAIBrain),
     retry: false,
   });
-  
-  // Business knowledge - only for Full AI Brain users
+
   const { data: businessKnowledge, isLoading: knowledgeLoading } = useQuery({
     queryKey: ["/api/ai/business-knowledge"],
     enabled: !subscriptionLoading && hasFullAIBrain,
-    retry: false,
-  });
-  
-  // AI health - for all AI users
-  const { data: aiHealthData, isLoading: healthLoading } = useQuery({
-    queryKey: ["/api/ai/health"],
-    enabled: !subscriptionLoading && (hasAIAssist || hasFullAIBrain),
     retry: false,
   });
   
@@ -335,44 +279,30 @@ function AIBrainContent() {
       const s = aiSettings as AISettings;
       setSettings({
         aiMode: s.aiMode || "suggest_only",
-        businessHoursOnly: s.businessHoursOnly || false,
-        confidenceLevel: s.confidenceLevel || "balanced",
-        leadQualificationEnabled: s.leadQualificationEnabled ?? true,
-        autoTaggingEnabled: s.autoTaggingEnabled ?? true,
         handoffKeywords: s.handoffKeywords || ["call me", "human", "agent", "speak to someone"],
         aiPersona: s.aiPersona || "professional",
       });
     }
   }, [aiSettings]);
-  
+
   useEffect(() => {
-    if (businessKnowledge && typeof businessKnowledge === 'object') {
+    if (businessKnowledge && typeof businessKnowledge === "object") {
       const k = businessKnowledge as BusinessKnowledge;
       setKnowledge({
         businessName: k.businessName || "",
         industry: k.industry || "",
         servicesProducts: k.servicesProducts || "",
-        businessHours: k.businessHours || "",
-        locations: k.locations || "",
         bookingLink: k.bookingLink || "",
-        faqs: k.faqs || [],
-        salesGoals: k.salesGoals || "",
         customInstructions: k.customInstructions || "",
         qualifyingQuestions: (k.qualifyingQuestions || []).map((q: any, i: number) => ({
-          key:      q.key      || `q_${i}`,
-          label:    q.label    || `Question ${i + 1}`,
+          key: q.key || `q_${i}`,
+          label: q.label || `Question ${i + 1}`,
           question: q.question || "",
           required: q.required ?? true,
         })),
       });
     }
   }, [businessKnowledge]);
-  
-  useEffect(() => {
-    if (aiHealthData && typeof aiHealthData === 'object') {
-      setAiHealth(aiHealthData as AIHealth);
-    }
-  }, [aiHealthData]);
   
   const saveSettingsMutation = useMutation({
     mutationFn: async (data: Partial<AISettings>) => {
@@ -396,7 +326,7 @@ function AIBrainContent() {
       toast({ title: "Error", description: "Failed to save settings. Please try again.", variant: "destructive" });
     },
   });
-  
+
   const saveKnowledgeMutation = useMutation({
     mutationFn: async (data: Partial<BusinessKnowledge>) => {
       const res = await fetch("/api/ai/business-knowledge", {
@@ -410,49 +340,13 @@ function AIBrainContent() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/ai/business-knowledge"] });
-      toast({ title: "Knowledge saved", description: "Your business knowledge has been updated." });
+      toast({ title: "Saved" });
     },
     onError: () => {
-      toast({ title: "Error", description: "Failed to save knowledge. Please try again.", variant: "destructive" });
+      toast({ title: "Error", description: "Failed to save. Please try again.", variant: "destructive" });
     },
   });
   
-  const generateAutomationMutation = useMutation({
-    mutationFn: async (prompt: string) => {
-      const res = await fetch("/api/ai/generate-automation", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt }),
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error("Failed to generate automation");
-      return res.json();
-    },
-    onSuccess: (data) => {
-      setGeneratedWorkflow(data);
-      toast({ title: "Automation generated", description: "Review the workflow below." });
-    },
-    onError: () => {
-      toast({ title: "Error", description: "Failed to generate automation. Please try again.", variant: "destructive" });
-    },
-  });
-  
-  const handleAddFaq = () => {
-    if (newFaq.question && newFaq.answer) {
-      setKnowledge(prev => ({
-        ...prev,
-        faqs: [...prev.faqs, newFaq],
-      }));
-      setNewFaq({ question: "", answer: "" });
-    }
-  };
-  
-  const handleRemoveFaq = (index: number) => {
-    setKnowledge(prev => ({
-      ...prev,
-      faqs: prev.faqs.filter((_, i) => i !== index),
-    }));
-  };
   
   const handleAddKeyword = () => {
     if (newKeyword && !settings.handoffKeywords.includes(newKeyword)) {
@@ -627,7 +521,7 @@ function AIBrainContent() {
     );
   }
   
-  if (settingsLoading || knowledgeLoading) {
+  if (settingsLoading || (hasFullAIBrain && knowledgeLoading)) {
     return (
       <div className="h-full flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
@@ -695,23 +589,6 @@ function AIBrainContent() {
           </div>
         </div>
         
-        {aiHealth.status !== "healthy" && (
-          <div className={cn(
-            "mb-6 p-4 rounded-xl border flex items-center gap-3",
-            aiHealth.status === "paused" ? "bg-red-50 border-red-200" : "bg-yellow-50 border-yellow-200"
-          )}>
-            <AlertTriangle className={cn("w-5 h-5", aiHealth.status === "paused" ? "text-red-500" : "text-yellow-500")} />
-            <div className="flex-1">
-              <p className={cn("font-medium", aiHealth.status === "paused" ? "text-red-700" : "text-yellow-700")}>
-                {aiHealth.status === "paused" ? "AI is Paused" : "AI is Limited"}
-              </p>
-              <p className={cn("text-sm", aiHealth.status === "paused" ? "text-red-600" : "text-yellow-600")}>
-                {aiHealth.message || "AI assistance is temporarily limited to protect deliverability."}
-              </p>
-            </div>
-          </div>
-        )}
-        
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <div className="overflow-x-auto -mx-4 px-4 md:mx-0 md:px-0">
             <TabsList className="bg-gray-100 p-1 rounded-xl inline-flex min-w-max">
@@ -722,23 +599,11 @@ function AIBrainContent() {
               </TabsTrigger>
               {hasFullAIBrain && (
                 <TabsTrigger value="knowledge" className="rounded-lg data-[state=active]:bg-white whitespace-nowrap">
-                  <Building2 className="w-4 h-4 mr-1 md:mr-2" />
+                  <ListChecks className="w-4 h-4 mr-1 md:mr-2" />
                   <span className="hidden sm:inline">Business Knowledge</span>
                   <span className="sm:hidden">Knowledge</span>
                 </TabsTrigger>
               )}
-              {hasFullAIBrain && (
-                <TabsTrigger value="automation" className="rounded-lg data-[state=active]:bg-white whitespace-nowrap">
-                  <Zap className="w-4 h-4 mr-1 md:mr-2" />
-                  <span className="hidden sm:inline">Automation Builder</span>
-                  <span className="sm:hidden">Automation</span>
-                </TabsTrigger>
-              )}
-              <TabsTrigger value="health" className="rounded-lg data-[state=active]:bg-white whitespace-nowrap">
-                <TrendingUp className="w-4 h-4 mr-1 md:mr-2" />
-                <span className="hidden sm:inline">AI Health</span>
-                <span className="sm:hidden">Health</span>
-              </TabsTrigger>
             </TabsList>
           </div>
           
@@ -748,9 +613,6 @@ function AIBrainContent() {
                 <Bot className="w-5 h-5 text-purple-500" />
                 Mode
               </h2>
-              <p className="text-sm text-gray-500 mb-4">
-                Choose how AI behaves in conversations.
-              </p>
 
               <div className="flex flex-wrap gap-2 sm:gap-3" role="radiogroup" aria-label="AI mode">
                 {AI_MODE_SEGMENTS.map((mode) => {
@@ -822,76 +684,6 @@ function AIBrainContent() {
             {hasFullAIBrain ? (
               <div className="bg-white rounded-xl border border-gray-200 p-6">
                 <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-                  <Target className="w-5 h-5 text-green-500" />
-                  Lead Qualification
-                </h2>
-                
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Label className="font-medium">Enable Lead Qualification</Label>
-                      <p className="text-sm text-gray-500">Automatically score and qualify incoming leads</p>
-                    </div>
-                    <Switch
-                      checked={settings.leadQualificationEnabled}
-                      onCheckedChange={(checked) => {
-                        setSettings((prev) => ({ ...prev, leadQualificationEnabled: checked }));
-                        saveSettingsMutation.mutate({ leadQualificationEnabled: checked });
-                      }}
-                      disabled={saveSettingsMutation.isPending}
-                      data-testid="switch-lead-qualification"
-                    />
-                  </div>
-                  
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Label className="font-medium">Auto-Tagging</Label>
-                      <p className="text-sm text-gray-500">Automatically tag conversations based on content</p>
-                    </div>
-                    <Switch
-                      checked={settings.autoTaggingEnabled}
-                      onCheckedChange={(checked) => {
-                        setSettings((prev) => ({ ...prev, autoTaggingEnabled: checked }));
-                        saveSettingsMutation.mutate({ autoTaggingEnabled: checked });
-                      }}
-                      disabled={saveSettingsMutation.isPending}
-                      data-testid="switch-auto-tagging"
-                    />
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="bg-gray-50 rounded-xl border border-gray-200 p-6 opacity-60 relative">
-                <button
-                  type="button"
-                  disabled={isCheckingOut}
-                  onClick={() => handleAddonCheckout()}
-                  data-testid="button-unlock-lead-qual-settings"
-                  className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-1 rounded-xl border-0 bg-white/50 p-4 text-center transition-colors hover:bg-white/65 focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-70"
-                >
-                  <Lock className="w-6 h-6 text-gray-400" aria-hidden />
-                  <span className="text-sm font-medium text-gray-700">Requires AI Brain</span>
-                  <span className="text-xs text-purple-700">Upgrade to unlock</span>
-                </button>
-                <h2 className="text-lg font-bold text-gray-400 mb-4 flex items-center gap-2">
-                  <Target className="w-5 h-5 text-gray-400" />
-                  Lead Qualification
-                </h2>
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Label className="font-medium text-gray-400">Enable Lead Qualification</Label>
-                      <p className="text-sm text-gray-400">Automatically score and qualify incoming leads</p>
-                    </div>
-                    <Switch disabled checked={false} />
-                  </div>
-                </div>
-              </div>
-            )}
-            
-            {hasFullAIBrain ? (
-              <div className="bg-white rounded-xl border border-gray-200 p-6">
-                <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
                   <Hand className="w-5 h-5 text-orange-500" />
                   Human Handoff Keywords
                 </h2>
@@ -958,523 +750,235 @@ function AIBrainContent() {
               </div>
             )}
           </TabsContent>
-          
-          <TabsContent value="knowledge" className="space-y-6">
-            <div className="bg-white rounded-xl border border-gray-200 p-6">
-              <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-                <Building2 className="w-5 h-5 text-blue-500" />
-                Business Information
-              </h2>
-              
-              <div className="grid gap-4">
-                <div className="grid md:grid-cols-2 gap-4">
-                  <div>
-                    <Label>Business Name</Label>
-                    <Input
-                      value={knowledge.businessName}
-                      onChange={(e) => setKnowledge(prev => ({ ...prev, businessName: e.target.value }))}
-                      placeholder="Your Business Name"
-                      data-testid="input-business-name"
-                    />
-                  </div>
-                  <div>
-                    <Label>Industry</Label>
-                    <Select
-                      value={knowledge.industry}
-                      onValueChange={(value) => setKnowledge(prev => ({ ...prev, industry: value }))}
-                    >
-                      <SelectTrigger data-testid="select-industry">
-                        <SelectValue placeholder="Select industry" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {INDUSTRY_OPTIONS.map(option => (
-                          <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                
-                <div>
-                  <Label>Services/Products</Label>
-                  <Textarea
-                    value={knowledge.servicesProducts}
-                    onChange={(e) => setKnowledge(prev => ({ ...prev, servicesProducts: e.target.value }))}
-                    placeholder="Describe your main services or products..."
-                    rows={3}
-                    data-testid="textarea-services"
-                  />
-                </div>
-                
-                <div className="grid md:grid-cols-2 gap-4">
-                  <div>
-                    <Label>Business Hours</Label>
-                    <Input
-                      value={knowledge.businessHours}
-                      onChange={(e) => setKnowledge(prev => ({ ...prev, businessHours: e.target.value }))}
-                      placeholder="e.g., Mon-Fri 9am-5pm EST"
-                      data-testid="input-business-hours"
-                    />
-                  </div>
-                  <div>
-                    <Label>Locations</Label>
-                    <Input
-                      value={knowledge.locations}
-                      onChange={(e) => setKnowledge(prev => ({ ...prev, locations: e.target.value }))}
-                      placeholder="e.g., New York, Los Angeles"
-                      data-testid="input-locations"
-                    />
-                  </div>
-                </div>
-                
-                <div>
-                  <Label>Booking/Calendar Link</Label>
-                  <Input
-                    value={knowledge.bookingLink}
-                    onChange={(e) => setKnowledge(prev => ({ ...prev, bookingLink: e.target.value }))}
-                    placeholder="https://calendly.com/..."
-                    data-testid="input-booking-link"
-                  />
-                </div>
-                
-                <div>
-                  <Label>Sales Goal</Label>
-                  <Select
-                    value={knowledge.salesGoals}
-                    onValueChange={(value) => setKnowledge(prev => ({ ...prev, salesGoals: value }))}
-                  >
-                    <SelectTrigger data-testid="select-sales-goal">
-                      <SelectValue placeholder="What's your primary goal?" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {SALES_GOAL_OPTIONS.map(option => (
-                        <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                
-                {/* ── Qualifying Questions ─────────────────────────────── */}
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
+
+          {hasFullAIBrain && (
+            <TabsContent value="knowledge" className="space-y-6">
+              <div className="bg-white rounded-xl border border-gray-200 p-6">
+                <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+                  <ListChecks className="w-5 h-5 text-purple-500" />
+                  Business Knowledge
+                </h2>
+
+                <div className="grid gap-4">
+                  <div className="grid md:grid-cols-2 gap-4">
                     <div>
-                      <Label className="flex items-center gap-1.5">
-                        <ListChecks className="w-3.5 h-3.5 text-purple-500" />
-                        Qualification Questions
-                      </Label>
-                      <p className="text-xs text-gray-400 mt-0.5">
-                        Define what information the AI should collect from each lead, in order.
-                      </p>
-                    </div>
-                    {knowledge.industry && INDUSTRY_QUALIFY_TEMPLATES[knowledge.industry] && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const template = INDUSTRY_QUALIFY_TEMPLATES[knowledge.industry];
-                          if (template) setKnowledge(prev => ({ ...prev, qualifyingQuestions: [...template] }));
-                        }}
-                        className="text-[11px] font-semibold text-purple-600 hover:text-purple-700 border border-purple-200 hover:border-purple-300 px-2 py-1 rounded-lg transition-colors whitespace-nowrap"
-                        data-testid="button-apply-industry-template"
-                      >
-                        Apply {INDUSTRY_OPTIONS.find(o => o.value === knowledge.industry)?.label} template
-                      </button>
-                    )}
-                  </div>
-
-                  {/* Current questions list */}
-                  {knowledge.qualifyingQuestions.length > 0 && (
-                    <div className="space-y-2">
-                      {knowledge.qualifyingQuestions.map((qq, idx) => (
-                        <div key={qq.key} className="flex items-start gap-2 bg-gray-50 border border-gray-100 rounded-lg px-3 py-2.5 group">
-                          <span className="text-[11px] font-bold text-gray-300 w-4 pt-0.5 shrink-0">{idx + 1}</span>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-0.5">
-                              <span className="text-[11px] font-semibold text-gray-700">{qq.label}</span>
-                              <span className={cn(
-                                "text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide",
-                                qq.required ? "bg-red-50 text-red-500" : "bg-gray-100 text-gray-400"
-                              )}>
-                                {qq.required ? "required" : "optional"}
-                              </span>
-                            </div>
-                            <p className="text-[12px] text-gray-500 leading-relaxed truncate">{qq.question}</p>
-                          </div>
-                          <div className="flex items-center gap-1 shrink-0">
-                            <button
-                              type="button"
-                              onClick={() => setKnowledge(prev => ({
-                                ...prev,
-                                qualifyingQuestions: prev.qualifyingQuestions.map((q, i) =>
-                                  i === idx ? { ...q, required: !q.required } : q
-                                )
-                              }))}
-                              className="text-[10px] text-gray-400 hover:text-gray-600 transition-colors px-1"
-                              title="Toggle required"
-                            >
-                              {qq.required ? "✓req" : "opt"}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setKnowledge(prev => ({
-                                ...prev,
-                                qualifyingQuestions: prev.qualifyingQuestions.filter((_, i) => i !== idx)
-                              }))}
-                              className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-300 hover:text-red-400"
-                              data-testid={`button-remove-qualifying-question-${idx}`}
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Add new question form */}
-                  <div className="border border-dashed border-gray-200 rounded-lg p-3 space-y-2">
-                    <p className="text-[10px] uppercase tracking-widest text-gray-400 font-semibold">Add question</p>
-                    <div className="grid grid-cols-3 gap-2">
+                      <Label>Business name</Label>
                       <Input
-                        value={newQQ.label}
-                        onChange={(e) => setNewQQ(prev => ({ ...prev, label: e.target.value }))}
-                        placeholder="Label (e.g. Budget)"
-                        className="text-sm col-span-1"
-                        data-testid="input-new-qq-label"
-                      />
-                      <Input
-                        value={newQQ.question}
-                        onChange={(e) => setNewQQ(prev => ({ ...prev, question: e.target.value }))}
-                        placeholder="Question to ask the lead..."
-                        className="text-sm col-span-2"
-                        data-testid="input-new-qq-question"
+                        value={knowledge.businessName}
+                        onChange={(e) => setKnowledge((prev) => ({ ...prev, businessName: e.target.value }))}
+                        placeholder="Your business name"
+                        data-testid="input-business-name"
                       />
                     </div>
-                    <div className="flex items-center justify-between">
-                      <label className="flex items-center gap-2 text-xs text-gray-500 cursor-pointer">
-                        <Switch
-                          checked={newQQ.required}
-                          onCheckedChange={(v) => setNewQQ(prev => ({ ...prev, required: v }))}
-                        />
-                        Required to qualify lead
-                      </label>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        disabled={!newQQ.label.trim() || !newQQ.question.trim()}
-                        onClick={() => {
-                          if (!newQQ.label.trim() || !newQQ.question.trim()) return;
-                          const key = newQQ.label.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
-                          setKnowledge(prev => ({
-                            ...prev,
-                            qualifyingQuestions: [...prev.qualifyingQuestions, {
-                              key: `${key}_${Date.now()}`,
-                              label: newQQ.label.trim(),
-                              question: newQQ.question.trim(),
-                              required: newQQ.required,
-                            }]
-                          }));
-                          setNewQQ({ label: "", question: "", required: true });
-                        }}
-                        data-testid="button-add-qualifying-question"
+                    <div>
+                      <Label>Industry</Label>
+                      <Select
+                        value={knowledge.industry}
+                        onValueChange={(value) => setKnowledge((prev) => ({ ...prev, industry: value }))}
                       >
-                        <Plus className="w-3.5 h-3.5 mr-1" />
-                        Add
-                      </Button>
+                        <SelectTrigger data-testid="select-industry">
+                          <SelectValue placeholder="Select industry" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {INDUSTRY_OPTIONS.map((o) => (
+                            <SelectItem key={o.value} value={o.value}>
+                              {o.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                   </div>
-                </div>
 
-                <div>
-                  <Label>Custom AI Instructions</Label>
-                  <Textarea
-                    value={knowledge.customInstructions}
-                    onChange={(e) => setKnowledge(prev => ({ ...prev, customInstructions: e.target.value }))}
-                    placeholder="Any special instructions for how the AI should behave..."
-                    rows={3}
-                    data-testid="textarea-custom-instructions"
-                  />
-                </div>
-              </div>
-              
-              <Button 
-                onClick={() => saveKnowledgeMutation.mutate(knowledge)}
-                disabled={saveKnowledgeMutation.isPending}
-                className="mt-4 bg-blue-600 hover:bg-blue-700"
-                data-testid="save-business-knowledge"
-              >
-                {saveKnowledgeMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
-                Save Knowledge
-              </Button>
-            </div>
-            
-            <div className="bg-white rounded-xl border border-gray-200 p-6">
-              <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-                <HelpCircle className="w-5 h-5 text-purple-500" />
-                FAQs
-              </h2>
-              <p className="text-sm text-gray-500 mb-4">Add common questions and answers the AI can use.</p>
-              
-              {knowledge.faqs.length > 0 && (
-                <div className="space-y-3 mb-4">
-                  {knowledge.faqs.map((faq, index) => (
-                    <div key={index} className="p-3 bg-gray-50 rounded-lg group border border-transparent hover:border-purple-100 transition-colors">
-                      <div className="flex justify-between items-start mb-1">
-                        <p className="font-medium text-gray-900 text-sm flex-1">Q: {faq.question}</p>
-                        <div className="flex gap-1 ml-2">
-                          <button
-                            onClick={() => {
-                              const q = prompt("Edit Question", faq.question);
-                              const a = prompt("Edit Answer", faq.answer);
-                              if (q !== null && a !== null) {
-                                setKnowledge(prev => ({
-                                  ...prev,
-                                  faqs: prev.faqs.map((f, i) => i === index ? { question: q, answer: a } : f)
-                                }));
-                              }
-                            }}
-                            className="p-1 text-gray-400 hover:text-blue-600 transition-colors"
-                            title="Edit FAQ"
-                          >
-                            <Settings2 className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => handleRemoveFaq(index)}
-                            className="p-1 text-gray-400 hover:text-red-500 transition-colors"
-                            title="Delete FAQ"
-                          >
-                            <X className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </div>
-                      <p className="text-gray-600 text-sm">A: {faq.answer}</p>
-                    </div>
-                  ))}
-                </div>
-              )}
-              
-              <div className="space-y-3">
-                <Input
-                  value={newFaq.question}
-                  onChange={(e) => setNewFaq(prev => ({ ...prev, question: e.target.value }))}
-                  placeholder="Question..."
-                  data-testid="input-faq-question"
-                />
-                <Textarea
-                  value={newFaq.answer}
-                  onChange={(e) => setNewFaq(prev => ({ ...prev, answer: e.target.value }))}
-                  placeholder="Answer..."
-                  rows={2}
-                  data-testid="textarea-faq-answer"
-                />
-                <Button onClick={handleAddFaq} variant="outline" className="w-full" data-testid="add-faq">
-                  <Plus className="w-4 h-4 mr-2" /> Add FAQ
-                </Button>
-              </div>
-            </div>
-          </TabsContent>
-          
-          <TabsContent value="automation" className="space-y-6">
-            <div className="bg-white rounded-xl border border-gray-200 p-6">
-              <h2 className="text-lg font-bold text-gray-900 mb-2 flex items-center gap-2">
-                <Zap className="w-5 h-5 text-yellow-500" />
-                Plain English Automation Builder
-              </h2>
-              <p className="text-sm text-gray-500 mb-6">
-                Describe what you want to happen in plain English, and AI will create the workflow for you.
-              </p>
-              
-              <div className="space-y-4">
-                <Textarea
-                  value={automationPrompt}
-                  onChange={(e) => setAutomationPrompt(e.target.value)}
-                  placeholder="Example: When a customer asks about pricing, send them our price list and ask if they'd like to schedule a call..."
-                  rows={4}
-                  data-testid="textarea-automation-prompt"
-                />
-                
-                <Button
-                  onClick={() => generateAutomationMutation.mutate(automationPrompt)}
-                  disabled={!automationPrompt || generateAutomationMutation.isPending}
-                  className="bg-yellow-500 hover:bg-yellow-600 text-black"
-                  data-testid="generate-automation"
-                >
-                  {generateAutomationMutation.isPending ? (
-                    <><Loader2 className="w-4 h-4 animate-spin mr-2" /> Generating...</>
-                  ) : (
-                    <><Sparkles className="w-4 h-4 mr-2" /> Generate Automation</>
-                  )}
-                </Button>
-              </div>
-              
-              {generatedWorkflow && (
-                <div className="mt-6 p-4 bg-gray-50 rounded-xl border border-gray-200">
-                  <h3 className="font-medium text-gray-900 mb-3">Generated Workflow</h3>
-                  <p className="text-sm text-gray-600 mb-4">{generatedWorkflow.description}</p>
-                  
+                  <div>
+                    <Label>Services / products</Label>
+                    <Textarea
+                      value={knowledge.servicesProducts}
+                      onChange={(e) => setKnowledge((prev) => ({ ...prev, servicesProducts: e.target.value }))}
+                      placeholder="What do you sell or provide?"
+                      rows={3}
+                      data-testid="textarea-services-products"
+                    />
+                  </div>
+
+                  <div>
+                    <Label>Booking link</Label>
+                    <Input
+                      value={knowledge.bookingLink}
+                      onChange={(e) => setKnowledge((prev) => ({ ...prev, bookingLink: e.target.value }))}
+                      placeholder="https://calendly.com/..."
+                      data-testid="input-booking-link"
+                    />
+                  </div>
+
+                  {/* Qualification questions */}
                   <div className="space-y-3">
-                    {generatedWorkflow.triggers?.map((trigger: any, i: number) => (
-                      <div key={i} className="flex items-center gap-2 text-sm">
-                        <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs font-medium">WHEN</span>
-                        <span className="text-gray-700">{trigger.type}</span>
+                    <div className="flex items-center justify-between">
+                      <Label className="flex items-center gap-1.5">
+                        <Target className="w-4 h-4 text-gray-500" />
+                        Qualification questions
+                      </Label>
+                      {knowledge.industry && INDUSTRY_QUALIFY_TEMPLATES[knowledge.industry] && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const template = INDUSTRY_QUALIFY_TEMPLATES[knowledge.industry];
+                            if (template) setKnowledge((prev) => ({ ...prev, qualifyingQuestions: [...template] }));
+                          }}
+                          className="text-[11px] font-semibold text-purple-600 hover:text-purple-700 border border-purple-200 hover:border-purple-300 px-2 py-1 rounded-lg transition-colors whitespace-nowrap"
+                          data-testid="button-apply-industry-template"
+                        >
+                          Apply {INDUSTRY_OPTIONS.find((o) => o.value === knowledge.industry)?.label} template
+                        </button>
+                      )}
+                    </div>
+
+                    {knowledge.qualifyingQuestions.length > 0 && (
+                      <div className="space-y-2">
+                        {knowledge.qualifyingQuestions.map((qq, idx) => (
+                          <div
+                            key={qq.key}
+                            className="flex items-start gap-2 bg-gray-50 border border-gray-100 rounded-lg px-3 py-2.5 group"
+                          >
+                            <span className="text-[11px] font-bold text-gray-300 w-4 pt-0.5 shrink-0">{idx + 1}</span>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-0.5">
+                                <span className="text-[11px] font-semibold text-gray-700">{qq.label}</span>
+                                <span
+                                  className={cn(
+                                    "text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide",
+                                    qq.required ? "bg-red-50 text-red-500" : "bg-gray-100 text-gray-400",
+                                  )}
+                                >
+                                  {qq.required ? "required" : "optional"}
+                                </span>
+                              </div>
+                              <p className="text-[12px] text-gray-500 leading-relaxed truncate">{qq.question}</p>
+                            </div>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setKnowledge((prev) => ({
+                                    ...prev,
+                                    qualifyingQuestions: prev.qualifyingQuestions.map((q, i) =>
+                                      i === idx ? { ...q, required: !q.required } : q,
+                                    ),
+                                  }))
+                                }
+                                className="text-[10px] text-gray-400 hover:text-gray-600 transition-colors px-1"
+                                title="Toggle required"
+                              >
+                                {qq.required ? "✓req" : "opt"}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setKnowledge((prev) => ({
+                                    ...prev,
+                                    qualifyingQuestions: prev.qualifyingQuestions.filter((_, i) => i !== idx),
+                                  }))
+                                }
+                                className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-300 hover:text-red-400"
+                                data-testid={`button-remove-qualifying-question-${idx}`}
+                                title="Remove"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                    ))}
-                    {generatedWorkflow.actions?.map((action: any, i: number) => (
-                      <div key={i} className="flex items-center gap-2 text-sm">
-                        <span className="px-2 py-1 bg-green-100 text-green-700 rounded text-xs font-medium">THEN</span>
-                        <span className="text-gray-700">{action.type}</span>
+                    )}
+
+                    <div className="border border-dashed border-gray-200 rounded-lg p-3 space-y-2">
+                      <p className="text-[10px] uppercase tracking-widest text-gray-400 font-semibold">Add question</p>
+                      <div className="grid grid-cols-3 gap-2">
+                        <Input
+                          value={newQQ.label}
+                          onChange={(e) => setNewQQ((prev) => ({ ...prev, label: e.target.value }))}
+                          placeholder="Label (e.g. Budget)"
+                          className="text-sm col-span-1"
+                          data-testid="input-new-qq-label"
+                        />
+                        <Input
+                          value={newQQ.question}
+                          onChange={(e) => setNewQQ((prev) => ({ ...prev, question: e.target.value }))}
+                          placeholder="Question to ask the lead..."
+                          className="text-sm col-span-2"
+                          data-testid="input-new-qq-question"
+                        />
                       </div>
-                    ))}
+                      <div className="flex items-center justify-between">
+                        <label className="flex items-center gap-2 text-xs text-gray-500 cursor-pointer">
+                          <Switch
+                            checked={newQQ.required}
+                            onCheckedChange={(v) => setNewQQ((prev) => ({ ...prev, required: v }))}
+                          />
+                          Required
+                        </label>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={!newQQ.label.trim() || !newQQ.question.trim()}
+                          onClick={() => {
+                            if (!newQQ.label.trim() || !newQQ.question.trim()) return;
+                            const key = newQQ.label
+                              .toLowerCase()
+                              .replace(/\s+/g, "_")
+                              .replace(/[^a-z0-9_]/g, "");
+                            setKnowledge((prev) => ({
+                              ...prev,
+                              qualifyingQuestions: [
+                                ...prev.qualifyingQuestions,
+                                {
+                                  key: `${key}_${Date.now()}`,
+                                  label: newQQ.label.trim(),
+                                  question: newQQ.question.trim(),
+                                  required: newQQ.required,
+                                },
+                              ],
+                            }));
+                            setNewQQ({ label: "", question: "", required: true });
+                          }}
+                          data-testid="button-add-qualifying-question"
+                        >
+                          <Plus className="w-3.5 h-3.5 mr-1" />
+                          Add
+                        </Button>
+                      </div>
+                    </div>
                   </div>
-                  
-                  <div className="flex gap-2 mt-4">
-                    <Button className="bg-green-600 hover:bg-green-700" data-testid="save-automation">
-                      <CheckCircle2 className="w-4 h-4 mr-2" /> Save Workflow
-                    </Button>
-                    <Button variant="outline" onClick={() => setGeneratedWorkflow(null)}>
-                      Discard
-                    </Button>
+
+                  <div>
+                    <Label>Custom instructions</Label>
+                    <Textarea
+                      value={knowledge.customInstructions}
+                      onChange={(e) => setKnowledge((prev) => ({ ...prev, customInstructions: e.target.value }))}
+                      placeholder="Anything specific the AI should know or how it should behave…"
+                      rows={3}
+                      data-testid="textarea-custom-instructions"
+                    />
                   </div>
                 </div>
-              )}
-            </div>
-            
-            <div className="bg-gradient-to-r from-purple-50 to-blue-50 rounded-xl p-6 border border-purple-100">
-              <div className="flex items-start gap-4">
-                <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center">
-                  <Lightbulb className="w-5 h-5 text-purple-600" />
-                </div>
-                <div>
-                  <h3 className="font-medium text-gray-900 mb-2">Example Automations</h3>
-                  <ul className="text-sm text-gray-600 space-y-2">
-                    <li>"When someone asks about pricing, send our rate card and schedule a follow-up"</li>
-                    <li>"If a lead mentions they're ready to buy, notify me immediately and mark as hot lead"</li>
-                    <li>"When a customer says thank you, ask for a review"</li>
-                    <li>"After qualifying a lead, add them to my CRM pipeline"</li>
-                  </ul>
-                </div>
+
+                <Button
+                  onClick={() => saveKnowledgeMutation.mutate(knowledge)}
+                  disabled={saveKnowledgeMutation.isPending}
+                  className="mt-4 bg-blue-600 hover:bg-blue-700"
+                  data-testid="save-business-knowledge"
+                >
+                  {saveKnowledgeMutation.isPending ? (
+                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                  ) : (
+                    <Save className="w-4 h-4 mr-2" />
+                  )}
+                  Save
+                </Button>
               </div>
-            </div>
-          </TabsContent>
-          
-          <TabsContent value="health" className="space-y-6">
-            <div className="bg-white rounded-xl border border-gray-200 p-6">
-              <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-                <TrendingUp className="w-5 h-5 text-green-500" />
-                AI Health
-              </h2>
-              
-              {healthLoading ? (
-                <div className="flex justify-center py-8">
-                  <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
-                </div>
-              ) : (
-                <div className="space-y-6">
-                  <div className={cn(
-                    "p-6 rounded-xl flex items-center gap-4",
-                    aiHealth.status === "healthy" && "bg-green-50 border border-green-200",
-                    aiHealth.status === "limited" && "bg-yellow-50 border border-yellow-200",
-                    aiHealth.status === "paused" && "bg-red-50 border border-red-200"
-                  )}>
-                    <div className={cn(
-                      "w-12 h-12 rounded-full flex items-center justify-center",
-                      aiHealth.status === "healthy" && "bg-green-100",
-                      aiHealth.status === "limited" && "bg-yellow-100",
-                      aiHealth.status === "paused" && "bg-red-100"
-                    )}>
-                      {aiHealth.status === "healthy" && <CheckCircle2 className="w-6 h-6 text-green-600" />}
-                      {aiHealth.status === "limited" && <AlertTriangle className="w-6 h-6 text-yellow-600" />}
-                      {aiHealth.status === "paused" && <Hand className="w-6 h-6 text-red-600" />}
-                    </div>
-                    <div>
-                      <h3 className={cn(
-                        "text-lg font-semibold",
-                        aiHealth.status === "healthy" && "text-green-800",
-                        aiHealth.status === "limited" && "text-yellow-800",
-                        aiHealth.status === "paused" && "text-red-800"
-                      )}>
-                        {aiHealth.status === "healthy" && "AI is Healthy"}
-                        {aiHealth.status === "limited" && "AI is Limited"}
-                        {aiHealth.status === "paused" && "AI is Paused"}
-                      </h3>
-                      <p className={cn(
-                        "text-sm",
-                        aiHealth.status === "healthy" && "text-green-600",
-                        aiHealth.status === "limited" && "text-yellow-600",
-                        aiHealth.status === "paused" && "text-red-600"
-                      )}>
-                        {aiHealth.status === "healthy" && "Copilot and Autopilot are working normally."}
-                        {aiHealth.status === "limited" && (aiHealth.message || "AI assistance is temporarily limited to protect deliverability.")}
-                        {aiHealth.status === "paused" && (aiHealth.message || "AI assistance is temporarily limited to protect deliverability.")}
-                      </p>
-                    </div>
-                  </div>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="p-4 bg-gray-50 rounded-xl">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Sparkles className="w-4 h-4 text-purple-500" />
-                        <span className="font-medium text-gray-900">Reply Suggestions</span>
-                      </div>
-                      <p className="text-sm text-gray-600">
-                        {settings.aiMode === "full_auto" ? "Auto-sending enabled" : 
-                         settings.aiMode === "suggest_only" ? "Suggestions enabled" : "Disabled"}
-                      </p>
-                    </div>
-                    {hasFullAIBrain ? (
-                      <div className="p-4 bg-gray-50 rounded-xl">
-                        <div className="flex items-center gap-2 mb-2">
-                          <Target className="w-4 h-4 text-green-500" />
-                          <span className="font-medium text-gray-900">Lead Qualification</span>
-                        </div>
-                        <p className="text-sm text-gray-600">
-                          {settings.leadQualificationEnabled ? "Active" : "Disabled"}
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="p-4 bg-gray-50 rounded-xl opacity-60">
-                        <div className="flex items-center gap-2 mb-2">
-                          <Target className="w-4 h-4 text-gray-400" />
-                          <span className="font-medium text-gray-500">Lead Qualification</span>
-                          <Crown className="w-3 h-3 text-purple-500" />
-                        </div>
-                        <p className="text-sm text-gray-400">Requires AI Brain</p>
-                      </div>
-                    )}
-                    {hasFullAIBrain ? (
-                      <div className="p-4 bg-gray-50 rounded-xl">
-                        <div className="flex items-center gap-2 mb-2">
-                          <Hand className="w-4 h-4 text-orange-500" />
-                          <span className="font-medium text-gray-900">Human Handoff</span>
-                        </div>
-                        <p className="text-sm text-gray-600">
-                          {settings.handoffKeywords.length} trigger keywords configured
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="p-4 bg-gray-50 rounded-xl opacity-60">
-                        <div className="flex items-center gap-2 mb-2">
-                          <Hand className="w-4 h-4 text-gray-400" />
-                          <span className="font-medium text-gray-500">Human Handoff</span>
-                          <Crown className="w-3 h-3 text-purple-500" />
-                        </div>
-                        <p className="text-sm text-gray-400">Requires AI Brain</p>
-                      </div>
-                    )}
-                    <div className="p-4 bg-gray-50 rounded-xl">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Clock className="w-4 h-4 text-blue-500" />
-                        <span className="font-medium text-gray-900">Business Hours</span>
-                      </div>
-                      <p className="text-sm text-gray-600">
-                        {settings.businessHoursOnly ? "Active only during business hours" : "Active 24/7"}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          </TabsContent>
+            </TabsContent>
+          )}
         </Tabs>
       </div>
     </div>
