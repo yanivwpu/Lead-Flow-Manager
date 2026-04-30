@@ -12,7 +12,6 @@ import {
   Clock,
   Lock,
   LayoutTemplate,
-  X,
   Timer,
   Brain,
 } from "lucide-react";
@@ -144,7 +143,6 @@ export function AIComposer({
   /** After auto-send was blocked but we have suggestion text — show composer instead of passive panel. */
   const [autoSkippedWithDraft, setAutoSkippedWithDraft] = useState(false);
   const [autoSendBlockedMessage, setAutoSendBlockedMessage] = useState<string | null>(null);
-  const [dismissedStatusChipIds, setDismissedStatusChipIds] = useState<string[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const prevIdRef = useRef<string | null>(null);
   const lastAutoReplyKeyRef = useRef<string>("");
@@ -175,7 +173,6 @@ export function AIComposer({
       setAutoPhase("idle");
       setAutoSkippedWithDraft(false);
       setAutoSendBlockedMessage(null);
-      setDismissedStatusChipIds([]);
       lastAutoReplyKeyRef.current = "";
       lastSuggestDraftKeyRef.current = "";
       userLockedManualRef.current = false;
@@ -531,133 +528,6 @@ export function AIComposer({
   const isAutoPassive = aiMode === "auto" && !autoOverride && !autoSkippedWithDraft;
   const isSuggestMode = aiMode === "suggest" && aiEnabled;
 
-  type ComposerStatusChip = {
-    id: string;
-    label: string;
-    priority: number;
-    tone: "neutral" | "amber" | "rose" | "violet";
-    icon: LucideIcon;
-    title?: string;
-    testId?: string;
-    spinIcon?: boolean;
-  };
-
-  const composerStatusChips = useMemo((): ComposerStatusChip[] => {
-    const candidates: ComposerStatusChip[] = [];
-
-    if (metaReplyWindowNotice) {
-      const expired = metaReplyWindowNotice.variant === "expired";
-      const shortLabel = expired
-        ? "Reply window ended"
-        : metaReplyWindowNotice.text.replace(/^Reply window:\s*/i, "").trim() || "Reply window";
-      candidates.push({
-        id: "reply-window",
-        label: shortLabel.slice(0, 36),
-        priority: expired ? 100 : 92,
-        tone: expired ? "rose" : "amber",
-        icon: Timer,
-        title: metaReplyWindowNotice.text,
-        testId: "reply-window-inline-notice",
-      });
-    }
-
-    if (aiEnabled && aiMode === "auto" && autoSendBlockedMessage) {
-      const label =
-        autoSendBlockedMessage.length > 40
-          ? `${autoSendBlockedMessage.slice(0, 38)}…`
-          : autoSendBlockedMessage;
-      candidates.push({
-        id: "auto-blocked",
-        label,
-        priority: 88,
-        tone: "amber",
-        icon: Zap,
-        title: autoSendBlockedMessage,
-        testId: "auto-reply-skipped-notice",
-      });
-    }
-
-    if (aiEnabled && aiMode === "auto" && autoSkippedWithDraft && value.trim()) {
-      candidates.push({
-        id: "auto-draft-review",
-        label: "Review draft",
-        priority: 91,
-        tone: "violet",
-        icon: Sparkles,
-      });
-    }
-
-    if (aiEnabled && isAutoPassive) {
-      if (autoPhase === "typing") {
-        candidates.push({
-          id: "ai-typing",
-          label: "AI typing…",
-          priority: 97,
-          tone: "violet",
-          icon: Loader2,
-          spinIcon: true,
-        });
-      } else if (!lastTurnIsInbound && autoPhase === "replied") {
-        candidates.push({
-          id: "ai-sent-wait",
-          label: "⚡ Auto-replied",
-          priority: 83,
-          tone: "neutral",
-          icon: CheckCircle2,
-        });
-      } else if (!lastTurnIsInbound && lastTurnIsOutbound) {
-        candidates.push({
-          id: "waiting-reply",
-          label: "Waiting for reply",
-          priority: 84,
-          tone: "neutral",
-          icon: Clock,
-        });
-      }
-    }
-
-    if (aiEnabled && isSuggestMode) {
-      if (isDrafting) {
-        candidates.push({
-          id: "suggest-drafting",
-          label: "Drafting…",
-          priority: 96,
-          tone: "violet",
-          icon: Loader2,
-          spinIcon: true,
-        });
-      } else {
-        candidates.push({
-          id: "suggest-hint",
-          label: "Tap Suggest",
-          priority: 56,
-          tone: "neutral",
-          icon: Sparkles,
-        });
-      }
-    }
-
-    return candidates
-      .sort((a, b) => b.priority - a.priority)
-      .filter((c) => !dismissedStatusChipIds.includes(c.id))
-      .slice(0, 3);
-  }, [
-    metaReplyWindowNotice,
-    aiEnabled,
-    aiMode,
-    autoSendBlockedMessage,
-    autoSkippedWithDraft,
-    value,
-    isAutoPassive,
-    isSuggestMode,
-    autoPhase,
-    lastTurnIsInbound,
-    lastTurnIsOutbound,
-    isDrafting,
-    aiDraft,
-    dismissedStatusChipIds,
-  ]);
-
   // ─── Auto-passive icon & label ───────────────────────────────────────────
   const AutoIcon = autoPhase === "typing"
     ? Loader2
@@ -676,52 +546,6 @@ export function AIComposer({
 
   return (
     <div className={cn("border-t border-gray-200 bg-white shrink-0", className)}>
-
-      {/* Single AI / system status row — inline chips, max 3, dismissible (does not grow the message list). */}
-      {composerStatusChips.length > 0 && (
-        <div
-          className="flex flex-wrap items-center gap-1.5 px-3 py-1 border-b border-gray-100 bg-gray-50/45 min-h-[28px]"
-          role="status"
-          aria-live="polite"
-          data-testid="composer-status-chip-bar"
-        >
-          {composerStatusChips.map((chip) => {
-            const Icon = chip.icon;
-            return (
-              <span
-                key={chip.id}
-                data-testid={chip.testId}
-                title={chip.title ?? chip.label}
-                className={cn(
-                  "inline-flex items-center gap-1 max-w-[min(100%,15rem)] rounded-md border px-1.5 py-0.5 text-[10px] font-medium leading-tight shadow-none",
-                  chip.tone === "rose" && "border-rose-200/80 bg-rose-50/90 text-rose-900",
-                  chip.tone === "amber" && "border-amber-200/75 bg-amber-50/70 text-amber-950/90",
-                  chip.tone === "violet" && "border-violet-200/70 bg-violet-50/60 text-violet-950/90",
-                  chip.tone === "neutral" && "border-gray-200/90 bg-white text-gray-600",
-                )}
-              >
-                <Icon
-                  className={cn("h-3 w-3 shrink-0 opacity-90", chip.spinIcon && "animate-spin")}
-                  aria-hidden
-                />
-                <span className="truncate">{chip.label}</span>
-                <button
-                  type="button"
-                  className="shrink-0 rounded p-0.5 text-gray-400 hover:bg-black/[0.05] hover:text-gray-600 -mr-0.5"
-                  aria-label={`Dismiss ${chip.label}`}
-                  onClick={() =>
-                    setDismissedStatusChipIds((prev) =>
-                      prev.includes(chip.id) ? prev : [...prev, chip.id],
-                    )
-                  }
-                >
-                  <X className="h-3 w-3" />
-                </button>
-              </span>
-            );
-          })}
-        </div>
-      )}
 
       <div className="px-3 pt-1.5 pb-2 flex flex-col gap-1.5">
 

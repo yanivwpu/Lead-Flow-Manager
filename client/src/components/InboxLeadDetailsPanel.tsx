@@ -944,7 +944,7 @@ export function InboxLeadDetailsPanel({
                 AI Brain
                 <span className="text-gray-400"> · </span>
                 <span className={cn(aiPaused ? "text-gray-500" : "text-gray-600")}>
-                  {aiPaused ? "Paused" : "Active"}
+                  {aiPaused ? "Snoozed" : "Active"}
                 </span>
               </p>
             )}
@@ -965,7 +965,7 @@ export function InboxLeadDetailsPanel({
                 )}
                 data-testid="button-ai-toggle"
               >
-                {aiPaused ? "Paused" : "Active"}
+                {aiPaused ? "Snoozed" : "Active"}
               </button>
             ) : (
               <span className="text-[10px] text-gray-300 font-medium">{copilotUpgradeTo}+</span>
@@ -1393,12 +1393,13 @@ export function InboxLeadDetailsPanel({
                 : "border-gray-200 bg-white hover:bg-gray-50"
             )}
             data-testid="button-ai-pause"
+            title="Temporarily pause AI for this conversation"
           >
             {aiPaused
               ? <PlayCircle className="w-3 h-3 text-gray-500" />
               : <PauseCircle className="w-3 h-3 text-gray-500" />
             }
-            <span className="text-[9px] text-gray-500 font-medium">{aiPaused ? "Resume" : "Pause"}</span>
+            <span className="text-[9px] text-gray-500 font-medium">{aiPaused ? "Unsnooze" : "Snooze"}</span>
           </button>
 
         </div>
