@@ -626,14 +626,6 @@ export function AIComposer({
           icon: Loader2,
           spinIcon: true,
         });
-      } else if (aiDraft) {
-        candidates.push({
-          id: "draft-ready",
-          label: "Draft ready",
-          priority: 79,
-          tone: "neutral",
-          icon: Sparkles,
-        });
       } else {
         candidates.push({
           id: "suggest-hint",
