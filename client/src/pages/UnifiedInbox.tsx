@@ -143,6 +143,7 @@ interface TimelineEvent {
   id: string;
   eventType: string;
   eventData: Record<string, unknown>;
+  conversationId?: string | null;
   actorType?: string;
   actorId?: string;
   createdAt: string;
@@ -754,6 +755,25 @@ export function UnifiedInbox() {
     queryKey: ["/api/contacts", selectedContactId, "timeline"],
     enabled: !!selectedContactId && showTimeline,
   });
+
+  // Lightweight always-on timeline slice used to reflect AI handoff instantly
+  // in the Copilot/Snooze UI (no new schema/state; derived from activity events).
+  const { data: handoffTimeline = [] } = useQuery<TimelineEvent[]>({
+    queryKey: [`/api/contacts/${selectedContactId}/timeline?limit=60`],
+    enabled: !!selectedContactId,
+    refetchInterval: 5000,
+  });
+
+  const activeHandoff = useMemo(() => {
+    const convId = primaryConversation?.id;
+    const match = handoffTimeline.find((e) => {
+      if (e.eventType !== "ai_handoff") return false;
+      // If server provides conversationId, scope to the active conversation.
+      if (convId && e.conversationId) return e.conversationId === convId;
+      return true;
+    });
+    return match || null;
+  }, [handoffTimeline, primaryConversation?.id]);
 
   type ChannelHealthEntry = {
     channel: string;
@@ -1927,6 +1947,12 @@ export function UnifiedInbox() {
           messages={messages.map(m => ({ direction: m.direction, content: m.content || '' }))}
           capabilities={capabilities}
           currentUserId={user?.id}
+          handoffActive={!!activeHandoff}
+          handoffMessage={
+            activeHandoff
+              ? String((activeHandoff.eventData as any)?.reason || "Customer requested human assistance")
+              : undefined
+          }
           composerDraftPreview={
             hasFullAIBrain && messageInput.trim()
               ? `${messageInput.slice(0, 100)}${messageInput.length > 100 ? "…" : ""}`
@@ -1962,6 +1988,12 @@ export function UnifiedInbox() {
                   capabilities={capabilities}
                   currentUserId={user?.id}
                   panelClassName="flex flex-col w-full bg-white"
+                  handoffActive={!!activeHandoff}
+                  handoffMessage={
+                    activeHandoff
+                      ? String((activeHandoff.eventData as any)?.reason || "Customer requested human assistance")
+                      : undefined
+                  }
                   composerDraftPreview={
                     hasFullAIBrain && messageInput.trim()
                       ? `${messageInput.slice(0, 100)}${messageInput.length > 100 ? "…" : ""}`

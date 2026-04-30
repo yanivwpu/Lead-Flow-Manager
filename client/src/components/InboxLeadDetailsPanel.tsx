@@ -149,6 +149,10 @@ interface InboxLeadDetailsPanelProps {
   messages?: ConversationMessage[];
   capabilities?: AICapabilities;
   currentUserId?: string;
+  /** Derived from activityEvents: eventType === "ai_handoff" */
+  handoffActive?: boolean;
+  /** Human-readable reason (e.g. "Customer requested: \"human\"") */
+  handoffMessage?: string;
   onUpdateContact: (fields: Record<string, unknown>) => void;
   onUpdateConversationStatus: (status: string) => void;
   onEditContact: () => void;
@@ -487,6 +491,8 @@ export function InboxLeadDetailsPanel({
   messages = [],
   capabilities,
   currentUserId,
+  handoffActive = false,
+  handoffMessage,
   onUpdateContact,
   onUpdateConversationStatus,
   onEditContact,
@@ -502,6 +508,7 @@ export function InboxLeadDetailsPanel({
   const copilotUpgradeTo = capabilities?.upgradePlan ?? "Starter";
   const workflowUpgradeTo = capabilities?.upgradePlan ?? "Pro";
   const [aiPaused,   setAiPaused]   = useState(false);
+  const effectiveAiPaused = aiPaused || handoffActive;
 
   // Team Notes
   const [contactNotesList, setContactNotesList] = useState<ContactNote[]>([]);
@@ -901,6 +908,116 @@ export function InboxLeadDetailsPanel({
   const hasAnyChips       = activeChipActions.length > 0 || hasTagSuggestion || hasStageSuggestion;
   const activeSuggestionCount = (hasAnyChips ? 1 : 0) + (qualifyAction ? 1 : 0);
 
+  type NextBestActionRow = {
+    id: "book" | "assign" | "follow" | "snooze";
+    label: string;
+    priority: number;
+    onClick: () => void;
+    title?: string;
+  };
+
+  const nextBestActions = useMemo((): NextBestActionRow[] => {
+    if (!canSeeWorkflow) return [];
+
+    // Human handoff overrides all other actions.
+    if (handoffActive) {
+      return [
+        {
+          id: "assign",
+          label: "Assign agent",
+          priority: 999,
+          onClick: () => setAssignOpen(true),
+          title: "Customer requested human assistance",
+        },
+      ];
+    }
+
+    const intentText = `${intel.intent ?? ""}`.toLowerCase();
+    const lastMsgText = `${messages[messages.length - 1]?.content ?? ""}`.toLowerCase();
+
+    const hasBookingIntent =
+      /book|schedule|appointment|showing|tour|viewing|visit/.test(intentText) ||
+      /book|schedule|appointment|showing|tour|viewing/.test(lastMsgText);
+
+    const hasStrongPurchaseIntent =
+      /buy|purchase|ready to buy|make an offer|offer/.test(intentText) ||
+      /make an offer|offer|ready to buy/.test(lastMsgText);
+
+    const hasDelayLaterSignal =
+      /\blater\b|\bnot now\b|\bnext week\b|\bnext month\b|\bbusy\b|\bmaybe later\b/.test(lastMsgText) ||
+      /later|delay/.test(intentText);
+
+    const needsAssignment = !contact.assignedTo;
+    const shouldSetFollowUp = !contact.followUpDate && (intel.aiState === "Waiting" || intel.aiState === "Stalled");
+
+    const candidates: NextBestActionRow[] = [];
+
+    // Priority 1: revenue actions
+    if (hasBookingIntent) {
+      candidates.push({
+        id: "book",
+        label: "Book showing",
+        priority: 100,
+        onClick: () => setBookOpen(true),
+        title: "Open booking",
+      });
+    } else if (hasStrongPurchaseIntent) {
+      // "Send offer" is supported conceptually, but we only surface actions we can trigger via existing buttons.
+      // (No-op intentionally omitted to avoid duplicating features.)
+    }
+
+    // Priority 2: workflow actions
+    if (needsAssignment) {
+      candidates.push({
+        id: "assign",
+        label: "Assign agent",
+        priority: 70,
+        onClick: () => setAssignOpen(true),
+        title: "Open assign",
+      });
+    }
+    if (shouldSetFollowUp) {
+      candidates.push({
+        id: "follow",
+        label: "Set follow-up",
+        priority: 60,
+        onClick: () => setFollowOpen(true),
+        title: "Open follow-up",
+      });
+    }
+
+    // Priority 3: secondary
+    if (!effectiveAiPaused && hasDelayLaterSignal) {
+      candidates.push({
+        id: "snooze",
+        label: "Snooze",
+        priority: 30,
+        onClick: () => setAiPaused(true),
+        title: "Temporarily pause AI for this conversation",
+      });
+    }
+
+    // Dedup by id, keep highest priority
+    const byId = new Map<NextBestActionRow["id"], NextBestActionRow>();
+    for (const c of candidates) {
+      const prev = byId.get(c.id);
+      if (!prev || c.priority > prev.priority) byId.set(c.id, c);
+    }
+
+    return Array.from(byId.values())
+      .sort((a, b) => b.priority - a.priority)
+      .slice(0, 2);
+  }, [
+    canSeeWorkflow,
+    handoffActive,
+    intel.intent,
+    intel.aiState,
+    messages,
+    contact.assignedTo,
+    contact.followUpDate,
+    effectiveAiPaused,
+  ]);
+
   return (
     <div className={panelClassName ?? "hidden lg:flex w-[260px] xl:w-[272px] flex-col border-l border-gray-100 bg-white overflow-y-auto flex-shrink-0"}>
 
@@ -941,7 +1058,7 @@ export function InboxLeadDetailsPanel({
             </div>
             {hasAIBrain && (
               <p className="text-[9px] text-gray-500 font-medium mt-1 ml-[22px] leading-tight">
-                {aiPaused ? "AI paused for this conversation" : "AI Brain"}
+                {effectiveAiPaused ? "AI paused for this conversation" : "AI Brain"}
               </p>
             )}
           </div>
@@ -955,13 +1072,13 @@ export function InboxLeadDetailsPanel({
                 }}
                 className={cn(
                   "text-[10px] font-medium px-1.5 py-0.5 rounded-full border transition-colors leading-none",
-                  aiPaused
+                  effectiveAiPaused
                     ? "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
                     : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50",
                 )}
                 data-testid="button-ai-toggle"
               >
-                {aiPaused ? "Snoozed" : "Active"}
+                {effectiveAiPaused ? "Snoozed" : "Active"}
               </button>
             ) : (
               <span className="text-[10px] text-gray-300 font-medium">{copilotUpgradeTo}+</span>
@@ -1584,21 +1701,56 @@ export function InboxLeadDetailsPanel({
                       : null;
 
                     const fallbackAction = workflow.actions[0]?.label ?? null;
-                    const primaryLine = nbaData?.recommendation ?? fallbackAction;
-                    if (!primaryLine) return null;
+                    const legacyPrimaryLine = nbaData?.recommendation ?? fallbackAction;
+                    const actionRows = nextBestActions.length > 0 ? nextBestActions : [];
+                    const shouldShowLegacyLine = actionRows.length === 0 && Boolean(legacyPrimaryLine);
+                    if (!shouldShowLegacyLine && actionRows.length === 0) return null;
 
                     return (
                       <div className="rounded-xl border border-gray-200/95 bg-white px-3 py-3 space-y-2 shadow-md shadow-gray-900/[0.07] ring-1 ring-gray-100/80">
                         <p className="text-[9px] uppercase tracking-widest font-bold text-gray-500">
-                          Next best action
+                          Next best actions
                         </p>
-                        <div className="rounded-lg bg-gray-50 border border-gray-200 px-2.5 py-2">
-                          <p className="text-[12px] font-semibold text-gray-900 leading-snug flex gap-1.5 items-start">
-                            <span className="text-gray-600 shrink-0 font-bold">→</span>
-                            <span>{primaryLine}</span>
-                          </p>
+                        {handoffActive && (
+                          <div className="rounded-lg border border-amber-200/70 bg-amber-50/60 px-2.5 py-2">
+                            <p className="text-[11px] font-semibold text-gray-900 leading-snug">
+                              Customer requested human assistance
+                            </p>
+                            {handoffMessage ? (
+                              <p className="text-[10px] text-gray-600 mt-0.5 leading-snug">
+                                {handoffMessage}
+                              </p>
+                            ) : null}
+                          </div>
+                        )}
+                        <div className="rounded-lg bg-gray-50 border border-gray-200 px-2.5 py-2 space-y-1.5">
+                          {actionRows.map((row) => (
+                            <button
+                              key={row.id}
+                              type="button"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                row.onClick();
+                              }}
+                              title={row.title ?? row.label}
+                              className="w-full text-left rounded-md px-1.5 py-1 hover:bg-white/70 transition-colors"
+                              data-testid={`next-best-action-${row.id}`}
+                            >
+                              <p className="text-[12px] font-semibold text-gray-900 leading-snug flex gap-1.5 items-start">
+                                <span className="text-gray-600 shrink-0 font-bold">→</span>
+                                <span>{row.label}</span>
+                              </p>
+                            </button>
+                          ))}
+                          {shouldShowLegacyLine && (
+                            <p className="text-[12px] font-semibold text-gray-900 leading-snug flex gap-1.5 items-start px-1.5 py-1">
+                              <span className="text-gray-600 shrink-0 font-bold">→</span>
+                              <span>{legacyPrimaryLine}</span>
+                            </p>
+                          )}
                           {nbaData && nbaData.missing.length > 0 ? (
-                            <p className="text-[10px] text-gray-500 mt-1.5">
+                            <p className="text-[10px] text-gray-500 mt-1">
                               <span className="font-medium text-gray-600">Gap:</span> {nbaData.missing.join(", ")}
                             </p>
                           ) : null}
