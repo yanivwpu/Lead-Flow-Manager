@@ -7505,6 +7505,85 @@ export async function registerRoutes(
       const { aiService } = await import("./aiService");
       const knowledge = await storage.getAiBusinessKnowledge(userId);
       const settings = await storage.getAiSettings(userId);
+
+      // ── Human handoff: hard block AI reply generation/autosend ──────────────
+      // If a handoff has been triggered for this conversation (or this inbound message matches),
+      // we must not generate a reply and must not allow auto-send.
+      if (chatId) {
+        try {
+          const conv = await storage.getConversation(chatId);
+          if (conv?.contactId) {
+            const events = await storage.getActivityEvents(conv.contactId, 60);
+            const lastHandoff = events.find(
+              (e) => e.eventType === "ai_handoff" && e.conversationId === chatId
+            );
+            if (lastHandoff) {
+              return res.json({
+                suggestion: "",
+                confidence: 0,
+                status: "handoff",
+                autoSendAllowed: false,
+                autoSendReason: "handoff_triggered",
+              });
+            }
+          }
+        } catch {
+          // ignore
+        }
+      }
+
+      const lastInbound = (() => {
+        const history = conversationHistory as Array<{ role: string; content?: string }>;
+        const inbound = history.filter((m) => m.role === "user").map((m) => m.content || "");
+        return (inbound[inbound.length - 1] || "").trim();
+      })();
+      if (lastInbound) {
+        const handoff = await aiService.checkHandoffNeeded(lastInbound, settings || undefined);
+        if (handoff.shouldHandoff) {
+          let contactIdForLog: string | null = null;
+          try {
+            if (chatId) {
+              const conv = await storage.getConversation(chatId);
+              contactIdForLog = conv?.contactId ?? null;
+              if (conv?.contactId) {
+                const keywords = (settings?.handoffKeywords || ["call me", "human", "agent", "speak to someone"])
+                  .map((k) => String(k || "").trim())
+                  .filter(Boolean);
+                const lower = lastInbound.toLowerCase();
+                const matchedKeyword =
+                  keywords.find((k) => lower.includes(k.toLowerCase())) || "unknown";
+                console.info("[HANDOFF_TRIGGERED]", {
+                  contactId: conv.contactId,
+                  matchedKeyword,
+                  message: lastInbound.slice(0, 500),
+                });
+                await storage.createActivityEvent({
+                  userId,
+                  contactId: conv.contactId,
+                  conversationId: chatId,
+                  eventType: "ai_handoff",
+                  eventData: {
+                    matchedKeyword,
+                    message: lastInbound.slice(0, 500),
+                    reason: handoff.reason || "handoff_keyword_match",
+                  },
+                  actorType: "system",
+                });
+              }
+            }
+          } catch {
+            // ignore
+          }
+
+          return res.json({
+            suggestion: "",
+            confidence: 0,
+            status: "handoff",
+            autoSendAllowed: false,
+            autoSendReason: "handoff_triggered",
+          });
+        }
+      }
       
       // Validate tone parameter
       const validTones = ["neutral", "friendly", "professional", "sales"];

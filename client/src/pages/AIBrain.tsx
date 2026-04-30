@@ -1,25 +1,19 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { 
-  Brain, 
-  Sparkles, 
-  Settings2, 
-  MessageSquare, 
-  Zap,
-  AlertTriangle,
+import debounce from "lodash/debounce";
+import {
+  Brain,
+  Sparkles,
+  Settings2,
   Loader2,
   Plus,
   X,
-  Bot,
   Hand,
-  TrendingUp,
   Crown,
   Lock,
-  ChevronDown,
-  Target,
+  ChevronRight,
   Trash2,
   ListChecks,
-  Save,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,7 +21,8 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   Dialog,
   DialogContent,
@@ -148,7 +143,9 @@ const INDUSTRY_QUALIFY_TEMPLATES: Record<string, QualifyingQuestion[]> = {
 
 function AIBrainContent() {
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState("settings");
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const lastKnowledgeSentRef = useRef<string | null>(null);
+  const knowledgeHydratedRef = useRef(false);
   
   const { data: subscription, isLoading: subscriptionLoading } = useQuery<SubscriptionData>({
     queryKey: ["/api/subscription"],
@@ -262,7 +259,7 @@ function AIBrainContent() {
   };
   
   // AI settings query - enabled for anyone with AI access (AI Assist or Full AI Brain)
-  const { data: aiSettings, isLoading: settingsLoading, error: settingsError } = useQuery({
+  const { data: aiSettings, isLoading: settingsLoading } = useQuery({
     queryKey: ["/api/ai/settings"],
     enabled: !subscriptionLoading && (hasAIAssist || hasFullAIBrain),
     retry: false,
@@ -288,7 +285,7 @@ function AIBrainContent() {
   useEffect(() => {
     if (businessKnowledge && typeof businessKnowledge === "object") {
       const k = businessKnowledge as BusinessKnowledge;
-      setKnowledge({
+      const next: BusinessKnowledge = {
         businessName: k.businessName || "",
         industry: k.industry || "",
         servicesProducts: k.servicesProducts || "",
@@ -300,7 +297,9 @@ function AIBrainContent() {
           question: q.question || "",
           required: q.required ?? true,
         })),
-      });
+      };
+      setKnowledge(next);
+      lastKnowledgeSentRef.current = JSON.stringify(next);
     }
   }, [businessKnowledge]);
   
@@ -340,12 +339,32 @@ function AIBrainContent() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/ai/business-knowledge"] });
-      toast({ title: "Saved" });
     },
     onError: () => {
       toast({ title: "Error", description: "Failed to save. Please try again.", variant: "destructive" });
     },
   });
+
+  const debouncedPersistKnowledge = useMemo(
+    () =>
+      debounce((payload: BusinessKnowledge) => {
+        saveKnowledgeMutation.mutate(payload, {
+          onSuccess: () => {
+            lastKnowledgeSentRef.current = JSON.stringify(payload);
+          },
+        });
+      }, 750),
+    [saveKnowledgeMutation],
+  );
+
+  useEffect(() => () => debouncedPersistKnowledge.cancel(), [debouncedPersistKnowledge]);
+
+  useEffect(() => {
+    if (!hasFullAIBrain || knowledgeLoading || !knowledgeHydratedRef.current) return;
+    const snapshot = JSON.stringify(knowledge);
+    if (snapshot === lastKnowledgeSentRef.current) return;
+    debouncedPersistKnowledge(knowledge);
+  }, [knowledge, hasFullAIBrain, knowledgeLoading, debouncedPersistKnowledge]);
   
   
   const handleAddKeyword = () => {
@@ -383,46 +402,32 @@ function AIBrainContent() {
             </div>
             <h1 className="text-3xl font-bold text-gray-900 mb-3">AI Features</h1>
             
-            {hasAIAssist ? (
-              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-8 max-w-md mx-auto">
-                <div className="flex items-center gap-2 justify-center mb-2">
-                  <Sparkles className="w-5 h-5 text-blue-600" />
-                  <span className="font-medium text-blue-800">AI Assist Active</span>
-                </div>
-                <p className="text-sm text-blue-700">
-                  Basic reply suggestions & sentiment detection included with your {isStarter ? "Starter" : "Pro"} plan.
-                  {isPro && " Higher daily limits included."}
-                </p>
-              </div>
-            ) : (
-              <p className="text-lg text-gray-600 mb-8 max-w-md mx-auto">
-                Supercharge your customer conversations with AI-powered reply suggestions, lead qualification, and automation.
-              </p>
-            )}
+            <p className="text-lg text-gray-600 mb-8 max-w-md mx-auto">
+              Reply faster with AI that understands your business—suggestions on Starter and Pro, plus a deeper control panel when you add AI Brain.
+            </p>
             
             <div className="grid gap-4 max-w-lg mx-auto text-left mb-8">
               <div className="flex items-start gap-3 p-4 bg-white rounded-xl border border-gray-200">
-                <Sparkles className="w-5 h-5 text-purple-500 mt-0.5" />
+                <Sparkles className="w-5 h-5 text-purple-500 mt-0.5 shrink-0" />
                 <div>
-                  <p className="font-medium text-gray-900">Smart Reply Suggestions</p>
-                  <p className="text-sm text-gray-500">AI suggests responses based on your business context</p>
-                  {hasAIAssist && <span className="text-xs text-blue-600 font-medium">Included in AI Assist (limited)</span>}
+                  <p className="font-medium text-gray-900">Smart reply suggestions</p>
+                  <p className="text-sm text-gray-500">Draft-ready replies tuned to the conversation</p>
                 </div>
               </div>
               <div className="flex items-start gap-3 p-4 bg-white rounded-xl border border-gray-200">
-                <Target className="w-5 h-5 text-green-500 mt-0.5" />
+                <ListChecks className="w-5 h-5 text-green-600 mt-0.5 shrink-0" />
                 <div>
-                  <p className="font-medium text-gray-900">Lead Qualification</p>
-                  <p className="text-sm text-gray-500">Automatically score and qualify leads</p>
-                  <span className="text-xs text-gray-500">Requires AI Brain</span>
+                  <p className="font-medium text-gray-900">Business profile & booking</p>
+                  <p className="text-sm text-gray-500">Keep services, scheduling links, and context in one place</p>
+                  <span className="text-xs text-gray-500">With AI Brain</span>
                 </div>
               </div>
               <div className="flex items-start gap-3 p-4 bg-white rounded-xl border border-gray-200">
-                <Zap className="w-5 h-5 text-yellow-500 mt-0.5" />
+                <Settings2 className="w-5 h-5 text-blue-600 mt-0.5 shrink-0" />
                 <div>
-                  <p className="font-medium text-gray-900">Plain English Automations</p>
-                  <p className="text-sm text-gray-500">Describe workflows in plain language</p>
-                  <span className="text-xs text-gray-500">Requires AI Brain</span>
+                  <p className="font-medium text-gray-900">Tone, handoff, and custom guidance</p>
+                  <p className="text-sm text-gray-500">Fine-tune how the AI writes and when to loop you in</p>
+                  <span className="text-xs text-gray-500">With AI Brain</span>
                 </div>
               </div>
             </div>
@@ -435,8 +440,8 @@ function AIBrainContent() {
                 </span>
               </div>
               <p className="text-sm text-gray-600 mb-4">
-                {hasAIAssist 
-                  ? "Unlimited suggestions, lead qualification, summarization, and automation builder." 
+                {hasAIAssist
+                  ? "Higher limits on suggestions plus the full business profile, lead questions, booking link, handoff keywords, and custom instructions."
                   : "Available for Starter and Pro plan subscribers."}
               </p>
               {hasAIAssist ? (
@@ -530,456 +535,502 @@ function AIBrainContent() {
   }
   
   return (
-    <div className="h-full overflow-y-auto overflow-x-hidden">
-      <div className="p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto w-full">
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 bg-gradient-to-br from-purple-100 to-blue-100 rounded-xl flex items-center justify-center">
-              <Brain className="w-6 h-6 text-purple-600" />
+    <div className="h-full overflow-y-auto overflow-x-hidden bg-muted/30">
+      <div className="p-6 sm:p-8 max-w-[900px] mx-auto w-full space-y-6 pb-20">
+        <header className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-lg border border-border bg-background flex items-center justify-center shrink-0">
+              <Brain className="w-5 h-5 text-foreground" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">AI Features</h1>
-              <p className="text-sm text-gray-500">Configure AI-powered features for your business</p>
+              <h1 className="text-xl font-semibold tracking-tight text-foreground">AI Brain</h1>
+              <p className="text-sm text-muted-foreground mt-0.5">
+                Control how AI assists in your inbox{hasFullAIBrain ? "" : " — add AI Brain for business profile and handoff controls"}.
+              </p>
             </div>
           </div>
-        </div>
-        
-        <div className={cn(
-          "mb-6 p-4 rounded-xl border flex items-start gap-3",
-          hasFullAIBrain ? "bg-purple-50 border-purple-200" : "bg-blue-50 border-blue-200"
-        )}>
-          <div className={cn(
-            "w-8 h-8 rounded-lg flex items-center justify-center shrink-0",
-            hasFullAIBrain ? "bg-purple-100" : "bg-blue-100"
-          )}>
+          {hasFullAIBrain && saveKnowledgeMutation.isPending && (
+            <span className="text-xs text-muted-foreground flex items-center gap-1.5 shrink-0">
+              <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden />
+              Saving…
+            </span>
+          )}
+        </header>
+
+        <div
+          className={cn(
+            "rounded-lg border px-4 py-3 flex items-start gap-3",
+            hasFullAIBrain ? "bg-background border-border" : "bg-background border-border",
+          )}
+        >
+          <div
+            className={cn(
+              "w-8 h-8 rounded-md flex items-center justify-center shrink-0 border",
+              hasFullAIBrain ? "bg-muted border-transparent" : "bg-muted border-transparent",
+            )}
+          >
             {hasFullAIBrain ? (
-              <Crown className="w-4 h-4 text-purple-600" />
+              <Crown className="w-4 h-4 text-foreground" />
             ) : (
-              <Sparkles className="w-4 h-4 text-blue-600" />
+              <Sparkles className="w-4 h-4 text-foreground" />
             )}
           </div>
-          <div className="flex-1">
+          <div className="flex-1 min-w-0">
             {hasFullAIBrain ? (
-              <details className="group">
-                <summary className="flex items-center justify-between cursor-pointer list-none">
-                  <p className="font-medium text-purple-800">Full AI Brain Active</p>
-                  <ChevronDown className="w-4 h-4 text-purple-400 group-open:rotate-180 transition-transform" />
-                </summary>
-                <p className="text-sm text-purple-600 mt-2">Advanced AI features are enabled for this workspace.</p>
-              </details>
+              <p className="text-sm font-medium text-foreground">AI Brain is active</p>
             ) : (
               <>
-                <p className="font-medium text-blue-800">AI Assist Active</p>
-                <p className="text-sm text-blue-600 mb-3">
-                  Basic reply suggestions with sentiment detection included in your {isPro ? "Pro" : "Starter"} plan.
-                  {isPro ? " Higher daily limits included." : ""}
+                <p className="text-sm font-medium text-foreground">AI Assist</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Suggestions included on your {isPro ? "Pro" : "Starter"} plan{isPro ? " with higher daily limits." : "."}
                 </p>
-                <Button 
-                  size="sm" 
-                  className="bg-purple-600 hover:bg-purple-700 text-white"
+                <Button
+                  size="sm"
+                  className="mt-3"
+                  variant="secondary"
                   onClick={handleAddonCheckout}
                   disabled={isCheckingOut}
                   data-testid="button-ai-brain-primary-cta"
                 >
-                  <Crown className="w-3 h-3 mr-1" />
-                  {isCheckingOut ? "Processing..." : "Add AI Brain — $29/month"}
+                  <Crown className="w-3.5 h-3.5 mr-1.5" />
+                  {isCheckingOut ? "Processing…" : "Add AI Brain — $29/mo"}
                 </Button>
               </>
             )}
           </div>
         </div>
-        
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <div className="overflow-x-auto -mx-4 px-4 md:mx-0 md:px-0">
-            <TabsList className="bg-gray-100 p-1 rounded-xl inline-flex min-w-max">
-              <TabsTrigger value="settings" className="rounded-lg data-[state=active]:bg-white whitespace-nowrap">
-                <Settings2 className="w-4 h-4 mr-1 md:mr-2" />
-                <span className="hidden sm:inline">Settings</span>
-                <span className="sm:hidden">Setup</span>
-              </TabsTrigger>
-              {hasFullAIBrain && (
-                <TabsTrigger value="knowledge" className="rounded-lg data-[state=active]:bg-white whitespace-nowrap">
-                  <ListChecks className="w-4 h-4 mr-1 md:mr-2" />
-                  <span className="hidden sm:inline">Business Knowledge</span>
-                  <span className="sm:hidden">Knowledge</span>
-                </TabsTrigger>
-              )}
-            </TabsList>
-          </div>
-          
-          <TabsContent value="settings" className="space-y-6">
-            <div className="bg-white rounded-xl border border-gray-200 p-6">
-              <h2 className="text-lg font-bold text-gray-900 mb-1 flex items-center gap-2">
-                <Bot className="w-5 h-5 text-purple-500" />
-                Mode
-              </h2>
 
-              <div className="flex flex-wrap gap-2 sm:gap-3" role="radiogroup" aria-label="AI mode">
-                {AI_MODE_SEGMENTS.map((mode) => {
-                  const selected = settings.aiMode === mode.value;
-                  return (
+        {/* Section 1: AI behavior */}
+        <Card className="shadow-sm border-border/80">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base font-semibold">AI behavior</CardTitle>
+            <CardDescription>Mode and tone for replies</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-col gap-6 sm:flex-row sm:gap-0">
+              <div className="flex-1 space-y-2.5 min-w-0">
+                <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Mode</Label>
+                <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="AI mode">
+                  {AI_MODE_SEGMENTS.map((mode) => {
+                    const selected = settings.aiMode === mode.value;
+                    return (
+                      <button
+                        key={mode.value}
+                        type="button"
+                        role="radio"
+                        aria-checked={selected}
+                        title={mode.tooltip}
+                        onClick={() => {
+                          if (settings.aiMode === mode.value) return;
+                          const next = mode.value;
+                          setSettings((prev) => ({ ...prev, aiMode: next }));
+                          saveSettingsMutation.mutate({ aiMode: next });
+                        }}
+                        disabled={saveSettingsMutation.isPending}
+                        className={cn(
+                          "h-8 px-3 rounded-md border text-sm font-medium transition-colors",
+                          selected
+                            ? "bg-foreground text-background border-foreground"
+                            : "bg-background text-foreground border-border hover:bg-muted/80",
+                        )}
+                        data-testid={`ai-mode-${mode.value}`}
+                      >
+                        {mode.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="hidden sm:block w-px bg-border shrink-0 mx-6 self-stretch" aria-hidden />
+
+              <div className="flex-1 space-y-2.5 min-w-0 sm:pt-0 pt-2 border-t sm:border-t-0 border-border">
+                <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Persona</Label>
+                <div className="flex flex-wrap gap-1.5">
+                  {[
+                    { value: "professional", label: "Professional" },
+                    { value: "friendly", label: "Friendly" },
+                    { value: "casual", label: "Casual" },
+                  ].map((persona) => (
                     <button
-                      key={mode.value}
+                      key={persona.value}
                       type="button"
-                      role="radio"
-                      aria-checked={selected}
-                      title={mode.tooltip}
                       onClick={() => {
-                        if (settings.aiMode === mode.value) return;
-                        const next = mode.value;
-                        setSettings((prev) => ({ ...prev, aiMode: next }));
-                        saveSettingsMutation.mutate({ aiMode: next });
+                        const next = persona.value;
+                        if (settings.aiPersona === next) return;
+                        setSettings((prev) => ({ ...prev, aiPersona: next }));
+                        saveSettingsMutation.mutate({ aiPersona: next });
                       }}
                       disabled={saveSettingsMutation.isPending}
                       className={cn(
-                        "px-4 py-2 sm:px-6 sm:py-3 rounded-lg border text-center transition-colors text-sm sm:text-base whitespace-nowrap font-medium",
-                        selected
-                          ? "bg-violet-50 text-gray-900 border-violet-200/80"
-                          : "border-gray-200 text-gray-700 hover:bg-gray-50"
+                        "h-8 px-3 rounded-md border text-sm font-medium transition-colors",
+                        settings.aiPersona === persona.value
+                          ? "bg-foreground text-background border-foreground"
+                          : "bg-background text-foreground border-border hover:bg-muted/80",
                       )}
-                      data-testid={`ai-mode-${mode.value}`}
+                      data-testid={`ai-persona-${persona.value}`}
                     >
-                      {mode.label}
+                      {persona.label}
                     </button>
-                  );
-                })}
-              </div>
-            </div>
-            
-            <div className="bg-white rounded-xl border border-gray-200 p-4 sm:p-6">
-              <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-                <MessageSquare className="w-5 h-5 text-blue-500" />
-                AI Persona
-              </h2>
-              
-              <div className="flex flex-wrap gap-2 sm:gap-3">
-                {[
-                  { value: "professional", label: "Professional" },
-                  { value: "friendly", label: "Friendly" },
-                  { value: "casual", label: "Casual" },
-                ].map(persona => (
-                  <button
-                    key={persona.value}
-                    onClick={() => {
-                      const next = persona.value;
-                      if (settings.aiPersona === next) return;
-                      setSettings((prev) => ({ ...prev, aiPersona: next }));
-                      saveSettingsMutation.mutate({ aiPersona: next });
-                    }}
-                    disabled={saveSettingsMutation.isPending}
-                    className={cn(
-                      "px-4 py-2 sm:px-6 sm:py-3 rounded-lg border text-center transition-colors text-sm sm:text-base whitespace-nowrap font-medium",
-                      settings.aiPersona === persona.value
-                        ? "bg-violet-50 text-gray-900 border-violet-200/80"
-                        : "border-gray-200 text-gray-700 hover:bg-gray-50"
-                    )}
-                    data-testid={`ai-persona-${persona.value}`}
-                  >
-                    {persona.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-            
-            {hasFullAIBrain ? (
-              <div className="bg-white rounded-xl border border-gray-200 p-6">
-                <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-                  <Hand className="w-5 h-5 text-orange-500" />
-                  Human Handoff Keywords
-                </h2>
-                <p className="text-sm text-gray-500 mb-4">
-                  When a customer uses these phrases, AI will pause and notify you for a human takeover.
-                </p>
-                
-                <div className="flex flex-wrap gap-2 mb-4">
-                  {settings.handoffKeywords.map(keyword => (
-                    <span 
-                      key={keyword}
-                      className="inline-flex items-center gap-1 px-3 py-1 bg-orange-50 text-orange-700 rounded-full text-sm"
-                    >
-                      {keyword}
-                      <button onClick={() => handleRemoveKeyword(keyword)} className="hover:text-orange-900">
-                        <X className="w-3 h-3" />
-                      </button>
-                    </span>
                   ))}
                 </div>
-                
-                <div className="flex gap-2">
-                  <Input
-                    value={newKeyword}
-                    onChange={(e) => setNewKeyword(e.target.value)}
-                    placeholder="Add keyword..."
-                    className="flex-1"
-                    onKeyDown={(e) => e.key === "Enter" && handleAddKeyword()}
-                    data-testid="input-handoff-keyword"
-                  />
-                  <Button onClick={handleAddKeyword} variant="outline" data-testid="add-handoff-keyword">
-                    <Plus className="w-4 h-4" />
-                  </Button>
-                </div>
               </div>
-            ) : (
-              <div className="bg-gray-50 rounded-xl border border-gray-200 p-6 opacity-60 relative">
-                <button
-                  type="button"
-                  disabled={isCheckingOut}
-                  onClick={() => handleAddonCheckout()}
-                  data-testid="button-unlock-handoff-settings"
-                  className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-1 rounded-xl border-0 bg-white/50 p-4 text-center transition-colors hover:bg-white/65 focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-70"
-                >
-                  <Lock className="w-6 h-6 text-gray-400" aria-hidden />
-                  <span className="text-sm font-medium text-gray-700">Requires AI Brain</span>
-                  <span className="text-xs text-purple-700">Upgrade to unlock</span>
-                </button>
-                <h2 className="text-lg font-bold text-gray-400 mb-4 flex items-center gap-2">
-                  <Hand className="w-5 h-5 text-gray-400" />
-                  Human Handoff Keywords
-                </h2>
-                <p className="text-sm text-gray-400 mb-4">
-                  When a customer uses these phrases, AI will pause and notify you for a human takeover.
-                </p>
-                <div className="flex flex-wrap gap-2 mb-4">
-                  <span className="inline-flex items-center gap-1 px-3 py-1 bg-gray-100 text-gray-400 rounded-full text-sm">
-                    speak to human
-                  </span>
-                  <span className="inline-flex items-center gap-1 px-3 py-1 bg-gray-100 text-gray-400 rounded-full text-sm">
-                    talk to agent
-                  </span>
-                </div>
-              </div>
-            )}
-          </TabsContent>
+            </div>
+          </CardContent>
+        </Card>
 
-          {hasFullAIBrain && (
-            <TabsContent value="knowledge" className="space-y-6">
-              <div className="bg-white rounded-xl border border-gray-200 p-6">
-                <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-                  <ListChecks className="w-5 h-5 text-purple-500" />
-                  Business Knowledge
-                </h2>
-
-                <div className="grid gap-4">
-                  <div className="grid md:grid-cols-2 gap-4">
-                    <div>
-                      <Label>Business name</Label>
-                      <Input
-                        value={knowledge.businessName}
-                        onChange={(e) => setKnowledge((prev) => ({ ...prev, businessName: e.target.value }))}
-                        placeholder="Your business name"
-                        data-testid="input-business-name"
-                      />
-                    </div>
-                    <div>
-                      <Label>Industry</Label>
-                      <Select
-                        value={knowledge.industry}
-                        onValueChange={(value) => setKnowledge((prev) => ({ ...prev, industry: value }))}
-                      >
-                        <SelectTrigger data-testid="select-industry">
-                          <SelectValue placeholder="Select industry" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {INDUSTRY_OPTIONS.map((o) => (
-                            <SelectItem key={o.value} value={o.value}>
-                              {o.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-
-                  <div>
-                    <Label>Services / products</Label>
-                    <Textarea
-                      value={knowledge.servicesProducts}
-                      onChange={(e) => setKnowledge((prev) => ({ ...prev, servicesProducts: e.target.value }))}
-                      placeholder="What do you sell or provide?"
-                      rows={3}
-                      data-testid="textarea-services-products"
-                    />
-                  </div>
-
-                  <div>
-                    <Label>Booking link</Label>
+        {hasFullAIBrain && (
+          <>
+            {/* Section 2: Business profile */}
+            <Card className="shadow-sm border-border/80">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base font-semibold">Business profile</CardTitle>
+                <CardDescription>Helps the model stay aligned with what you offer</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="biz-name" className="text-xs font-medium text-muted-foreground">
+                      Business name
+                    </Label>
                     <Input
-                      value={knowledge.bookingLink}
-                      onChange={(e) => setKnowledge((prev) => ({ ...prev, bookingLink: e.target.value }))}
-                      placeholder="https://calendly.com/..."
-                      data-testid="input-booking-link"
+                      id="biz-name"
+                      className="h-9 text-sm"
+                      value={knowledge.businessName}
+                      onChange={(e) => setKnowledge((prev) => ({ ...prev, businessName: e.target.value }))}
+                      placeholder="Acme Co."
+                      data-testid="input-business-name"
                     />
                   </div>
-
-                  {/* Qualification questions */}
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <Label className="flex items-center gap-1.5">
-                        <Target className="w-4 h-4 text-gray-500" />
-                        Qualification questions
-                      </Label>
-                      {knowledge.industry && INDUSTRY_QUALIFY_TEMPLATES[knowledge.industry] && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const template = INDUSTRY_QUALIFY_TEMPLATES[knowledge.industry];
-                            if (template) setKnowledge((prev) => ({ ...prev, qualifyingQuestions: [...template] }));
-                          }}
-                          className="text-[11px] font-semibold text-purple-600 hover:text-purple-700 border border-purple-200 hover:border-purple-300 px-2 py-1 rounded-lg transition-colors whitespace-nowrap"
-                          data-testid="button-apply-industry-template"
-                        >
-                          Apply {INDUSTRY_OPTIONS.find((o) => o.value === knowledge.industry)?.label} template
-                        </button>
-                      )}
-                    </div>
-
-                    {knowledge.qualifyingQuestions.length > 0 && (
-                      <div className="space-y-2">
-                        {knowledge.qualifyingQuestions.map((qq, idx) => (
-                          <div
-                            key={qq.key}
-                            className="flex items-start gap-2 bg-gray-50 border border-gray-100 rounded-lg px-3 py-2.5 group"
-                          >
-                            <span className="text-[11px] font-bold text-gray-300 w-4 pt-0.5 shrink-0">{idx + 1}</span>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 mb-0.5">
-                                <span className="text-[11px] font-semibold text-gray-700">{qq.label}</span>
-                                <span
-                                  className={cn(
-                                    "text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide",
-                                    qq.required ? "bg-red-50 text-red-500" : "bg-gray-100 text-gray-400",
-                                  )}
-                                >
-                                  {qq.required ? "required" : "optional"}
-                                </span>
-                              </div>
-                              <p className="text-[12px] text-gray-500 leading-relaxed truncate">{qq.question}</p>
-                            </div>
-                            <div className="flex items-center gap-1 shrink-0">
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setKnowledge((prev) => ({
-                                    ...prev,
-                                    qualifyingQuestions: prev.qualifyingQuestions.map((q, i) =>
-                                      i === idx ? { ...q, required: !q.required } : q,
-                                    ),
-                                  }))
-                                }
-                                className="text-[10px] text-gray-400 hover:text-gray-600 transition-colors px-1"
-                                title="Toggle required"
-                              >
-                                {qq.required ? "✓req" : "opt"}
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setKnowledge((prev) => ({
-                                    ...prev,
-                                    qualifyingQuestions: prev.qualifyingQuestions.filter((_, i) => i !== idx),
-                                  }))
-                                }
-                                className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-300 hover:text-red-400"
-                                data-testid={`button-remove-qualifying-question-${idx}`}
-                                title="Remove"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-                          </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium text-muted-foreground">Industry</Label>
+                    <Select
+                      value={knowledge.industry || undefined}
+                      onValueChange={(value) => setKnowledge((prev) => ({ ...prev, industry: value }))}
+                    >
+                      <SelectTrigger className="h-9 text-sm" data-testid="select-industry">
+                        <SelectValue placeholder="Select industry" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {INDUSTRY_OPTIONS.map((o) => (
+                          <SelectItem key={o.value} value={o.value}>
+                            {o.label}
+                          </SelectItem>
                         ))}
-                      </div>
-                    )}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="space-y-1.5 sm:max-w-xl">
+                  <Label htmlFor="services" className="text-xs font-medium text-muted-foreground">
+                    Services or products
+                  </Label>
+                  <Textarea
+                    id="services"
+                    className="text-sm min-h-[72px] max-h-28 resize-y"
+                    rows={2}
+                    value={knowledge.servicesProducts}
+                    onChange={(e) => setKnowledge((prev) => ({ ...prev, servicesProducts: e.target.value }))}
+                    placeholder="Short summary of what you sell or deliver"
+                    data-testid="textarea-services-products"
+                  />
+                </div>
+              </CardContent>
+            </Card>
 
-                    <div className="border border-dashed border-gray-200 rounded-lg p-3 space-y-2">
-                      <p className="text-[10px] uppercase tracking-widest text-gray-400 font-semibold">Add question</p>
-                      <div className="grid grid-cols-3 gap-2">
+            {/* Section 3: Lead understanding */}
+            <Card className="shadow-sm border-border/80">
+              <CardHeader className="pb-3 flex flex-row items-start justify-between gap-3 space-y-0">
+                <div>
+                  <CardTitle className="text-base font-semibold">What AI should learn from leads</CardTitle>
+                  <CardDescription>Optional prompts the assistant can use to gather context</CardDescription>
+                </div>
+                {knowledge.industry && INDUSTRY_QUALIFY_TEMPLATES[knowledge.industry] && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-8 shrink-0 text-xs"
+                    onClick={() => {
+                      const template = INDUSTRY_QUALIFY_TEMPLATES[knowledge.industry];
+                      if (template) setKnowledge((prev) => ({ ...prev, qualifyingQuestions: [...template] }));
+                    }}
+                    data-testid="button-apply-industry-template"
+                  >
+                    Use {INDUSTRY_OPTIONS.find((o) => o.value === knowledge.industry)?.label} starter set
+                  </Button>
+                )}
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-3">
+                  {knowledge.qualifyingQuestions.map((qq, idx) => (
+                    <div
+                      key={qq.key}
+                      className="rounded-lg border border-border bg-muted/20 p-3 space-y-3 sm:space-y-0 sm:grid sm:grid-cols-[minmax(0,7rem)_1fr_auto_auto] sm:gap-3 sm:items-center"
+                    >
+                      <div className="space-y-1">
+                        <Label className="text-[10px] uppercase text-muted-foreground sr-only sm:not-sr-only sm:mb-0">
+                          Label
+                        </Label>
                         <Input
-                          value={newQQ.label}
-                          onChange={(e) => setNewQQ((prev) => ({ ...prev, label: e.target.value }))}
-                          placeholder="Label (e.g. Budget)"
-                          className="text-sm col-span-1"
-                          data-testid="input-new-qq-label"
-                        />
-                        <Input
-                          value={newQQ.question}
-                          onChange={(e) => setNewQQ((prev) => ({ ...prev, question: e.target.value }))}
-                          placeholder="Question to ask the lead..."
-                          className="text-sm col-span-2"
-                          data-testid="input-new-qq-question"
-                        />
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <label className="flex items-center gap-2 text-xs text-gray-500 cursor-pointer">
-                          <Switch
-                            checked={newQQ.required}
-                            onCheckedChange={(v) => setNewQQ((prev) => ({ ...prev, required: v }))}
-                          />
-                          Required
-                        </label>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          disabled={!newQQ.label.trim() || !newQQ.question.trim()}
-                          onClick={() => {
-                            if (!newQQ.label.trim() || !newQQ.question.trim()) return;
-                            const key = newQQ.label
-                              .toLowerCase()
-                              .replace(/\s+/g, "_")
-                              .replace(/[^a-z0-9_]/g, "");
+                          className="h-8 text-sm"
+                          value={qq.label}
+                          onChange={(e) => {
+                            const v = e.target.value;
                             setKnowledge((prev) => ({
                               ...prev,
-                              qualifyingQuestions: [
-                                ...prev.qualifyingQuestions,
-                                {
-                                  key: `${key}_${Date.now()}`,
-                                  label: newQQ.label.trim(),
-                                  question: newQQ.question.trim(),
-                                  required: newQQ.required,
-                                },
-                              ],
+                              qualifyingQuestions: prev.qualifyingQuestions.map((q, i) =>
+                                i === idx ? { ...q, label: v } : q,
+                              ),
                             }));
-                            setNewQQ({ label: "", question: "", required: true });
                           }}
-                          data-testid="button-add-qualifying-question"
+                          placeholder="Label"
+                        />
+                      </div>
+                      <div className="space-y-1 sm:col-span-1 min-w-0">
+                        <Label className="text-[10px] uppercase text-muted-foreground sr-only sm:not-sr-only sm:mb-0">
+                          Question
+                        </Label>
+                        <Input
+                          className="h-8 text-sm"
+                          value={qq.question}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            setKnowledge((prev) => ({
+                              ...prev,
+                              qualifyingQuestions: prev.qualifyingQuestions.map((q, i) =>
+                                i === idx ? { ...q, question: v } : q,
+                              ),
+                            }));
+                          }}
+                          placeholder="Question to ask"
+                        />
+                      </div>
+                      <div className="flex items-center gap-2 justify-between sm:justify-center">
+                        <span className="text-xs text-muted-foreground sm:hidden">Required</span>
+                        <Switch
+                          checked={qq.required}
+                          onCheckedChange={(checked) =>
+                            setKnowledge((prev) => ({
+                              ...prev,
+                              qualifyingQuestions: prev.qualifyingQuestions.map((q, i) =>
+                                i === idx ? { ...q, required: checked } : q,
+                              ),
+                            }))
+                          }
+                        />
+                      </div>
+                      <div className="flex justify-end sm:justify-center">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                          onClick={() =>
+                            setKnowledge((prev) => ({
+                              ...prev,
+                              qualifyingQuestions: prev.qualifyingQuestions.filter((_, i) => i !== idx),
+                            }))
+                          }
+                          data-testid={`button-remove-qualifying-question-${idx}`}
+                          title="Remove"
                         >
-                          <Plus className="w-3.5 h-3.5 mr-1" />
-                          Add
+                          <Trash2 className="w-4 h-4" />
                         </Button>
                       </div>
                     </div>
-                  </div>
-
-                  <div>
-                    <Label>Custom instructions</Label>
-                    <Textarea
-                      value={knowledge.customInstructions}
-                      onChange={(e) => setKnowledge((prev) => ({ ...prev, customInstructions: e.target.value }))}
-                      placeholder="Anything specific the AI should know or how it should behave…"
-                      rows={3}
-                      data-testid="textarea-custom-instructions"
-                    />
-                  </div>
+                  ))}
                 </div>
 
-                <Button
-                  onClick={() => saveKnowledgeMutation.mutate(knowledge)}
-                  disabled={saveKnowledgeMutation.isPending}
-                  className="mt-4 bg-blue-600 hover:bg-blue-700"
-                  data-testid="save-business-knowledge"
-                >
-                  {saveKnowledgeMutation.isPending ? (
-                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                  ) : (
-                    <Save className="w-4 h-4 mr-2" />
-                  )}
-                  Save
+                <div className="rounded-lg border border-dashed border-border p-3 space-y-3 bg-muted/10">
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <Input
+                      value={newQQ.label}
+                      onChange={(e) => setNewQQ((prev) => ({ ...prev, label: e.target.value }))}
+                      placeholder="Label"
+                      className="h-8 text-sm"
+                      data-testid="input-new-qq-label"
+                    />
+                    <Input
+                      value={newQQ.question}
+                      onChange={(e) => setNewQQ((prev) => ({ ...prev, question: e.target.value }))}
+                      placeholder="Question"
+                      className="h-8 text-sm"
+                      data-testid="input-new-qq-question"
+                    />
+                  </div>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
+                      <Switch
+                        checked={newQQ.required}
+                        onCheckedChange={(v) => setNewQQ((prev) => ({ ...prev, required: v }))}
+                      />
+                      Required by default
+                    </label>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      className="h-8"
+                      disabled={!newQQ.label.trim() || !newQQ.question.trim()}
+                      onClick={() => {
+                        if (!newQQ.label.trim() || !newQQ.question.trim()) return;
+                        const key = newQQ.label
+                          .toLowerCase()
+                          .replace(/\s+/g, "_")
+                          .replace(/[^a-z0-9_]/g, "");
+                        setKnowledge((prev) => ({
+                          ...prev,
+                          qualifyingQuestions: [
+                            ...prev.qualifyingQuestions,
+                            {
+                              key: `${key}_${Date.now()}`,
+                              label: newQQ.label.trim(),
+                              question: newQQ.question.trim(),
+                              required: newQQ.required,
+                            },
+                          ],
+                        }));
+                        setNewQQ({ label: "", question: "", required: true });
+                      }}
+                      data-testid="button-add-qualifying-question"
+                    >
+                      <Plus className="w-3.5 h-3.5 mr-1" />
+                      Add question
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Section 4: Booking */}
+            <Card className="shadow-sm border-border/80">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base font-semibold">Booking &amp; next steps</CardTitle>
+                <CardDescription>Used when AI suggests scheduling or follow-ups</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-1.5 sm:max-w-xl">
+                  <Label htmlFor="booking" className="text-xs font-medium text-muted-foreground">
+                    Booking link
+                  </Label>
+                  <Input
+                    id="booking"
+                    className="h-9 text-sm"
+                    value={knowledge.bookingLink}
+                    onChange={(e) => setKnowledge((prev) => ({ ...prev, bookingLink: e.target.value }))}
+                    placeholder="https://…"
+                    data-testid="input-booking-link"
+                  />
+                </div>
+              </CardContent>
+            </Card>
+          </>
+        )}
+
+        {/* Section 5: Human handoff */}
+        {hasFullAIBrain ? (
+          <Card className="shadow-sm border-border/80">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base font-semibold">Human handoff</CardTitle>
+              <CardDescription>When a message matches these phrases, pause for your team</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex flex-wrap gap-1.5">
+                {settings.handoffKeywords.map((keyword) => (
+                  <span
+                    key={keyword}
+                    className="inline-flex items-center gap-1 pl-2.5 pr-1 py-0.5 rounded-md border border-border bg-background text-xs text-foreground"
+                  >
+                    {keyword}
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveKeyword(keyword)}
+                      className="p-0.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground"
+                      aria-label={`Remove ${keyword}`}
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+              <div className="flex gap-2 max-w-md">
+                <Input
+                  value={newKeyword}
+                  onChange={(e) => setNewKeyword(e.target.value)}
+                  placeholder="Add keyword"
+                  className="h-9 text-sm"
+                  onKeyDown={(e) => e.key === "Enter" && handleAddKeyword()}
+                  data-testid="input-handoff-keyword"
+                />
+                <Button type="button" variant="secondary" className="h-9 shrink-0" onClick={handleAddKeyword} data-testid="add-handoff-keyword">
+                  Add
                 </Button>
               </div>
-            </TabsContent>
-          )}
-        </Tabs>
+            </CardContent>
+          </Card>
+        ) : (
+          <Card className="shadow-sm border-border/80 relative overflow-hidden">
+            <button
+              type="button"
+              disabled={isCheckingOut}
+              onClick={() => handleAddonCheckout()}
+              data-testid="button-unlock-handoff-settings"
+              className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-1 bg-background/75 backdrop-blur-[1px] p-4 text-center transition-colors hover:bg-background/85 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-70"
+            >
+              <Lock className="w-5 h-5 text-muted-foreground" aria-hidden />
+              <span className="text-sm font-medium text-foreground">Human handoff</span>
+              <span className="text-xs text-muted-foreground">Included with AI Brain</span>
+            </button>
+            <CardHeader className="pb-3 opacity-40 pointer-events-none">
+              <CardTitle className="text-base font-semibold">Human handoff</CardTitle>
+              <CardDescription>Keyword phrases that route to your team</CardDescription>
+            </CardHeader>
+            <CardContent className="opacity-40 pointer-events-none space-y-3">
+              <div className="flex flex-wrap gap-1.5">
+                <span className="text-xs rounded-md border px-2 py-0.5">speak to human</span>
+                <span className="text-xs rounded-md border px-2 py-0.5">talk to agent</span>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {hasFullAIBrain && (
+          <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
+            <Card className="shadow-sm border-border/80">
+              <CollapsibleTrigger asChild>
+                <button
+                  type="button"
+                  className="flex w-full items-center justify-between text-left p-6 hover:bg-muted/30 transition-colors rounded-lg"
+                >
+                  <div>
+                    <p className="text-base font-semibold">Advanced</p>
+                    <p className="text-sm text-muted-foreground mt-0.5">Optional extra guidance for the model</p>
+                  </div>
+                  <ChevronRight
+                    className={cn("w-4 h-4 text-muted-foreground transition-transform shrink-0", advancedOpen && "rotate-90")}
+                  />
+                </button>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <CardContent className="pt-0 pb-6 space-y-1.5">
+                  <Label htmlFor="custom-instr" className="text-xs font-medium text-muted-foreground">
+                    Custom instructions
+                  </Label>
+                  <Textarea
+                    id="custom-instr"
+                    className="text-sm min-h-[88px] max-h-40 resize-y"
+                    rows={3}
+                    value={knowledge.customInstructions}
+                    onChange={(e) => setKnowledge((prev) => ({ ...prev, customInstructions: e.target.value }))}
+                    placeholder="Anything specific the AI should know or how it should behave"
+                    data-testid="textarea-custom-instructions"
+                  />
+                </CardContent>
+              </CollapsibleContent>
+            </Card>
+          </Collapsible>
+        )}
       </div>
     </div>
   );
