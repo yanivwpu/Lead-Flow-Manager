@@ -941,11 +941,7 @@ export function InboxLeadDetailsPanel({
             </div>
             {hasAIBrain && (
               <p className="text-[9px] text-gray-500 font-medium mt-1 ml-[22px] leading-tight">
-                AI Brain
-                <span className="text-gray-400"> · </span>
-                <span className={cn(aiPaused ? "text-gray-500" : "text-gray-600")}>
-                  {aiPaused ? "Snoozed" : "Active"}
-                </span>
+                {aiPaused ? "AI paused for this conversation" : "AI Brain"}
               </p>
             )}
           </div>
