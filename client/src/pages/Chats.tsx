@@ -1194,8 +1194,9 @@ export function Chats() {
                 businessAiMode={businessAiMode}
                 conversationId={selectedChat?.id ?? null}
                 messages={(selectedChat?.messages ?? []).map((m: any) => ({
-                  role: m.direction === 'incoming' ? 'user' : 'assistant',
-                  content: m.text || '',
+                  role: m.direction === "incoming" ? "user" : "assistant",
+                  direction: m.direction === "incoming" ? "inbound" : "outbound",
+                  content: m.text || "",
                 }))}
                 demoMode={demoMode}
                 fileInputRef={fileInputRef}

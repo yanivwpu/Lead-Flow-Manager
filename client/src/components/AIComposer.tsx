@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import {
   Send,
   Smile,
@@ -12,7 +12,8 @@ import {
   Clock,
   Lock,
   LayoutTemplate,
-  Info,
+  X,
+  Timer,
 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import EmojiPicker from "emoji-picker-react";
@@ -20,6 +21,7 @@ import { cn } from "@/lib/utils";
 import { AICreditBadge, AIUpgradePrompt } from "./AIUpgradePrompt";
 import type { AICapabilities } from "@/lib/useAICapabilities";
 import { useIsMobile } from "@/hooks/use-mobile";
+import type { LucideIcon } from "lucide-react";
 
 type AIMode = "manual" | "suggest" | "auto";
 type AutoPhase = "idle" | "typing" | "replied" | "waiting";
@@ -27,6 +29,8 @@ type AutoPhase = "idle" | "typing" | "replied" | "waiting";
 export interface AIComposerMessage {
   role: "user" | "assistant";
   content: string;
+  /** When provided, waiting-state UI uses this (aligned with `Message.direction`). */
+  direction?: "inbound" | "outbound";
 }
 
 export interface ContactContext {
@@ -67,17 +71,29 @@ export interface AIComposerProps {
   /** Opens the inline template picker for WhatsApp template sends */
   onTemplate?: () => void;
   className?: string;
+  /** Meta reply-window hint (Inbox only); merged into composer chip bar. */
+  metaReplyWindowNotice?: { variant: "soon" | "expired"; text: string } | null;
 }
 
 const MIN_TEXTAREA_HEIGHT = 58;
 const MAX_TEXTAREA_HEIGHT = 160;
 
-/** User-facing copy when Full Auto did not auto-send (mode stays Auto in the UI). */
-function autoSkipInlineCopy(gateReason: string): string {
-  if (gateReason === "low_confidence") {
-    return "Auto reply skipped — low confidence";
+/**
+ * Subtle notice when auto-send was blocked. Returns null to hide the row (no misleading generic copy).
+ * When the server reports strong intent, we never show a warning — avoids contradicting clear user behavior.
+ */
+function autoSkipNoticeForReason(
+  gateReason: string,
+  opts: { strongIntent: boolean }
+): string | null {
+  if (opts.strongIntent) return null;
+  if (gateReason === "missing_required_gt_one") {
+    return "Waiting for missing details";
   }
-  return "Auto reply skipped — not enough context";
+  if (gateReason === "low_confidence") {
+    return "Low confidence — waiting for more signals";
+  }
+  return null;
 }
 
 // Canned demo replies for when demoMode=true (no real API call)
@@ -110,6 +126,7 @@ export function AIComposer({
   className,
   businessAiMode = "suggest",
   contactId = null,
+  metaReplyWindowNotice = null,
 }: AIComposerProps) {
   const isMobile = useIsMobile();
   // Resolve effective access from capabilities (falls back to legacy aiEnabled prop)
@@ -126,6 +143,7 @@ export function AIComposer({
   /** After auto-send was blocked but we have suggestion text — show composer instead of passive panel. */
   const [autoSkippedWithDraft, setAutoSkippedWithDraft] = useState(false);
   const [autoSendBlockedMessage, setAutoSendBlockedMessage] = useState<string | null>(null);
+  const [dismissedStatusChipIds, setDismissedStatusChipIds] = useState<string[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const prevIdRef = useRef<string | null>(null);
   const lastAutoReplyKeyRef = useRef<string>("");
@@ -153,6 +171,7 @@ export function AIComposer({
       setAutoPhase("idle");
       setAutoSkippedWithDraft(false);
       setAutoSendBlockedMessage(null);
+      setDismissedStatusChipIds([]);
       lastAutoReplyKeyRef.current = "";
       autoReplyInFlightRef.current = false;
     }
@@ -204,6 +223,7 @@ export function AIComposer({
         const suggestion: string = data.suggestion || "";
         const allowed = data.autoSendAllowed === true;
         const reason = typeof data.autoSendReason === "string" ? data.autoSendReason : "unknown";
+        const strongIntent = data.autoSendStrongIntent === true;
         const confidence = typeof data.confidence === "number" ? data.confidence : 0;
         const trimmed = suggestion.trim();
         const willSend = allowed && trimmed.length > 5 && !!onAutoSend;
@@ -242,7 +262,7 @@ export function AIComposer({
             effectiveReason = reason;
           }
 
-          setAutoSendBlockedMessage(autoSkipInlineCopy(effectiveReason));
+          setAutoSendBlockedMessage(autoSkipNoticeForReason(effectiveReason, { strongIntent }));
           setAutoPhase("waiting");
         }
       } else {
@@ -253,7 +273,7 @@ export function AIComposer({
           confidence: 0,
         });
         setAutoSkippedWithDraft(false);
-        setAutoSendBlockedMessage(autoSkipInlineCopy("request_failed"));
+        setAutoSendBlockedMessage(null);
         setAutoPhase("waiting");
       }
     } catch {
@@ -264,7 +284,7 @@ export function AIComposer({
         confidence: 0,
       });
       setAutoSkippedWithDraft(false);
-      setAutoSendBlockedMessage(autoSkipInlineCopy("request_failed"));
+      setAutoSendBlockedMessage(null);
       setAutoPhase("waiting");
     } finally {
       autoReplyInFlightRef.current = false;
@@ -274,27 +294,39 @@ export function AIComposer({
   // Watch messages: when in auto mode and last message is from lead → auto-reply
   const lastMsg = messages[messages.length - 1];
   const lastMsgKey = messages.length > 0 ? `${messages.length}::${lastMsg?.content ?? ""}` : "";
-  const lastMsgIsFromLead = lastMsg?.role === "user";
-  /** Derived from conversation each render — avoids stale "waiting" after a new inbound arrives. */
-  const lastMessageIsInbound = lastMsg?.role === "user";
-  const lastMessageIsOutbound = lastMsg?.role === "assistant";
+  /** Recomputed every render from latest `messages` (refetches / WS / polling). */
+  const lastTurnIsInbound = (() => {
+    const m = messages[messages.length - 1];
+    if (!m) return false;
+    if (m.direction === "inbound") return true;
+    if (m.direction === "outbound") return false;
+    return m.role === "user";
+  })();
+  const lastTurnIsOutbound = (() => {
+    const m = messages[messages.length - 1];
+    if (!m) return false;
+    if (m.direction === "outbound") return true;
+    if (m.direction === "inbound") return false;
+    return m.role === "assistant";
+  })();
 
-  // Sync phase when messages prove the customer already replied while UI phase still says "waiting".
+  // Customer sent the latest turn → clear stale "waiting"/"replied" phase so UI matches the thread.
   useEffect(() => {
     if (aiMode !== "auto" || autoOverride) return;
-    if (!lastMessageIsInbound) return;
-    if (autoPhase !== "waiting") return;
-    setAutoPhase("idle");
-  }, [aiMode, autoOverride, lastMessageIsInbound, autoPhase]);
+    if (!lastTurnIsInbound) return;
+    if (autoPhase === "waiting" || autoPhase === "replied") {
+      setAutoPhase("idle");
+    }
+  }, [aiMode, autoOverride, lastTurnIsInbound, autoPhase]);
 
   useEffect(() => {
     if (aiMode !== "auto" || autoOverride) return;
-    if (!lastMsgIsFromLead) return;
+    if (!lastTurnIsInbound) return;
     if (lastMsgKey === lastAutoReplyKeyRef.current) return; // already handled
 
     lastAutoReplyKeyRef.current = lastMsgKey;
     executeAutoReply(messages);
-  }, [aiMode, autoOverride, lastMsgKey, lastMsgIsFromLead, messages, executeAutoReply]);
+  }, [aiMode, autoOverride, lastMsgKey, lastTurnIsInbound, messages, executeAutoReply]);
   // ─────────────────────────────────────────────────────────────────────────
 
   const fetchSuggestion = useCallback(async () => {
@@ -406,25 +438,140 @@ export function AIComposer({
   const isAutoPassive = aiMode === "auto" && !autoOverride && !autoSkippedWithDraft;
   const isSuggestMode = aiMode === "suggest" && aiEnabled;
 
-  // ─── Status line text ────────────────────────────────────────────────────
-  const statusLineText = (() => {
-    if (aiMode === "auto" && autoSkippedWithDraft && value.trim()) {
-      return "Draft ready — edit or send";
-    }
-    if (isSuggestMode) {
-      if (isDrafting) return "Drafting a reply…";
-      if (aiDraft) return "Draft ready — edit or send";
-      return "Tap Suggest for an AI draft";
-    }
-    if (isAutoPassive) {
-      if (autoPhase === "typing") return "Typing…";
-      if (autoPhase === "replied") return "Replied — waiting for customer response";
-      return "Waiting for customer response…";
-    }
-    return null;
-  })();
+  type ComposerStatusChip = {
+    id: string;
+    label: string;
+    priority: number;
+    tone: "neutral" | "amber" | "rose" | "violet";
+    icon: LucideIcon;
+    title?: string;
+    testId?: string;
+    spinIcon?: boolean;
+  };
 
-  const statusIsSpinning = isDrafting || (isAutoPassive && autoPhase === "typing");
+  const composerStatusChips = useMemo((): ComposerStatusChip[] => {
+    const candidates: ComposerStatusChip[] = [];
+
+    if (metaReplyWindowNotice) {
+      const expired = metaReplyWindowNotice.variant === "expired";
+      const shortLabel = expired
+        ? "Reply window ended"
+        : metaReplyWindowNotice.text.replace(/^Reply window:\s*/i, "").trim() || "Reply window";
+      candidates.push({
+        id: "reply-window",
+        label: shortLabel.slice(0, 36),
+        priority: expired ? 100 : 92,
+        tone: expired ? "rose" : "amber",
+        icon: Timer,
+        title: metaReplyWindowNotice.text,
+        testId: "reply-window-inline-notice",
+      });
+    }
+
+    if (aiEnabled && aiMode === "auto" && autoSendBlockedMessage) {
+      const label =
+        autoSendBlockedMessage.length > 40
+          ? `${autoSendBlockedMessage.slice(0, 38)}…`
+          : autoSendBlockedMessage;
+      candidates.push({
+        id: "auto-blocked",
+        label,
+        priority: 88,
+        tone: "amber",
+        icon: Zap,
+        title: autoSendBlockedMessage,
+        testId: "auto-reply-skipped-notice",
+      });
+    }
+
+    if (aiEnabled && aiMode === "auto" && autoSkippedWithDraft && value.trim()) {
+      candidates.push({
+        id: "auto-draft-review",
+        label: "Review draft",
+        priority: 91,
+        tone: "violet",
+        icon: Sparkles,
+      });
+    }
+
+    if (aiEnabled && isAutoPassive) {
+      if (autoPhase === "typing") {
+        candidates.push({
+          id: "ai-typing",
+          label: "AI typing…",
+          priority: 97,
+          tone: "violet",
+          icon: Loader2,
+          spinIcon: true,
+        });
+      } else if (!lastTurnIsInbound && autoPhase === "replied") {
+        candidates.push({
+          id: "ai-sent-wait",
+          label: "Sent — waiting",
+          priority: 83,
+          tone: "neutral",
+          icon: CheckCircle2,
+        });
+      } else if (!lastTurnIsInbound && lastTurnIsOutbound) {
+        candidates.push({
+          id: "waiting-reply",
+          label: "Waiting for reply",
+          priority: 84,
+          tone: "neutral",
+          icon: Clock,
+        });
+      }
+    }
+
+    if (aiEnabled && isSuggestMode) {
+      if (isDrafting) {
+        candidates.push({
+          id: "suggest-drafting",
+          label: "Drafting…",
+          priority: 96,
+          tone: "violet",
+          icon: Loader2,
+          spinIcon: true,
+        });
+      } else if (aiDraft) {
+        candidates.push({
+          id: "draft-ready",
+          label: "Draft ready",
+          priority: 79,
+          tone: "neutral",
+          icon: Sparkles,
+        });
+      } else {
+        candidates.push({
+          id: "suggest-hint",
+          label: "Tap Suggest",
+          priority: 56,
+          tone: "neutral",
+          icon: Sparkles,
+        });
+      }
+    }
+
+    return candidates
+      .sort((a, b) => b.priority - a.priority)
+      .filter((c) => !dismissedStatusChipIds.includes(c.id))
+      .slice(0, 3);
+  }, [
+    metaReplyWindowNotice,
+    aiEnabled,
+    aiMode,
+    autoSendBlockedMessage,
+    autoSkippedWithDraft,
+    value,
+    isAutoPassive,
+    isSuggestMode,
+    autoPhase,
+    lastTurnIsInbound,
+    lastTurnIsOutbound,
+    isDrafting,
+    aiDraft,
+    dismissedStatusChipIds,
+  ]);
 
   // ─── Auto-passive icon & label ───────────────────────────────────────────
   const AutoIcon = autoPhase === "typing"
@@ -433,39 +580,61 @@ export function AIComposer({
     ? CheckCircle2
     : Clock;
 
-  const autoLabel =
-    autoPhase === "typing"
-      ? "Typing a reply…"
-      : autoPhase === "replied"
-      ? "Replied — waiting for response"
-      : lastMessageIsInbound
-      ? "Ready to respond"
-      : lastMessageIsOutbound
-      ? "Waiting for customer response…"
-      : "Ready to respond";
+  const autoLabel = (() => {
+    if (autoPhase === "typing") return "Typing a reply…";
+    // Latest message from customer → we're not waiting on them (updates every time `messages` changes).
+    if (lastTurnIsInbound) return "Ready to respond";
+    if (autoPhase === "replied") return "Replied — waiting for response";
+    if (lastTurnIsOutbound) return "Waiting for customer response…";
+    return "Ready to respond";
+  })();
 
   return (
     <div className={cn("border-t border-gray-200 bg-white shrink-0", className)}>
 
-      {/* Subtle AI status line */}
-      {aiEnabled && statusLineText && (
-        <div className="px-4 py-1 flex items-center gap-1.5 bg-gray-50/60 border-b border-gray-100">
-          <Sparkles className="w-2.5 h-2.5 text-purple-400 shrink-0" />
-          <span className="text-[10px] text-gray-400 italic tracking-wide">{statusLineText}</span>
-          {statusIsSpinning && (
-            <Loader2 className="w-2.5 h-2.5 text-purple-400 animate-spin ml-0.5 shrink-0" />
-          )}
-        </div>
-      )}
-
-      {aiEnabled && aiMode === "auto" && autoSendBlockedMessage && (
+      {/* Single AI / system status row — inline chips, max 3, dismissible (does not grow the message list). */}
+      {composerStatusChips.length > 0 && (
         <div
-          className="flex items-center gap-2 px-3 py-1.5 bg-amber-50/35 border-b border-amber-950/[0.06]"
-          data-testid="auto-reply-skipped-notice"
+          className="flex flex-wrap items-center gap-1.5 px-3 py-1 border-b border-gray-100 bg-gray-50/45 min-h-[28px]"
           role="status"
+          aria-live="polite"
+          data-testid="composer-status-chip-bar"
         >
-          <Info className="w-3.5 h-3.5 shrink-0 text-amber-600/55" aria-hidden />
-          <span className="text-sm text-muted-foreground leading-snug">{autoSendBlockedMessage}</span>
+          {composerStatusChips.map((chip) => {
+            const Icon = chip.icon;
+            return (
+              <span
+                key={chip.id}
+                data-testid={chip.testId}
+                title={chip.title ?? chip.label}
+                className={cn(
+                  "inline-flex items-center gap-1 max-w-[min(100%,15rem)] rounded-md border px-1.5 py-0.5 text-[10px] font-medium leading-tight shadow-none",
+                  chip.tone === "rose" && "border-rose-200/80 bg-rose-50/90 text-rose-900",
+                  chip.tone === "amber" && "border-amber-200/75 bg-amber-50/70 text-amber-950/90",
+                  chip.tone === "violet" && "border-violet-200/70 bg-violet-50/60 text-violet-950/90",
+                  chip.tone === "neutral" && "border-gray-200/90 bg-white text-gray-600",
+                )}
+              >
+                <Icon
+                  className={cn("h-3 w-3 shrink-0 opacity-90", chip.spinIcon && "animate-spin")}
+                  aria-hidden
+                />
+                <span className="truncate">{chip.label}</span>
+                <button
+                  type="button"
+                  className="shrink-0 rounded p-0.5 text-gray-400 hover:bg-black/[0.05] hover:text-gray-600 -mr-0.5"
+                  aria-label={`Dismiss ${chip.label}`}
+                  onClick={() =>
+                    setDismissedStatusChipIds((prev) =>
+                      prev.includes(chip.id) ? prev : [...prev, chip.id],
+                    )
+                  }
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            );
+          })}
         </div>
       )}
 

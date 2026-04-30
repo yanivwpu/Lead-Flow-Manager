@@ -1458,6 +1458,25 @@ export function InboxLeadDetailsPanel({
                       </p>
                       {intel.leadScoreDetails ? (
                         <div className="mt-1 ml-3.5 space-y-0.5">
+                          <p className="text-[10px] text-gray-400 font-medium tabular-nums">
+                            Score {intel.leadScoreDetails.score}
+                            {intel.leadScoreDetails.signals?.decisionOverride ? (
+                              <span className="text-violet-600"> · decision override</span>
+                            ) : null}
+                          </p>
+                          {intel.leadScoreDetails.signals?.detected &&
+                          intel.leadScoreDetails.signals.detected.length > 0 ? (
+                            <div className="flex flex-wrap gap-1 pt-0.5">
+                              {intel.leadScoreDetails.signals.detected.slice(0, 6).map((id) => (
+                                <span
+                                  key={id}
+                                  className="text-[9px] px-1.5 py-0.5 rounded bg-white/80 border border-gray-200/80 text-gray-600 font-medium"
+                                >
+                                  {id.replace(/:/g, " · ")}
+                                </span>
+                              ))}
+                            </div>
+                          ) : null}
                           {intel.leadScoreDetails.reasons.slice(0, 3).map((r) => (
                             <div key={r} className="text-[11px] text-gray-500 leading-snug">
                               {r}

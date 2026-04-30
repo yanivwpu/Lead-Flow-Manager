@@ -1869,20 +1869,7 @@ export function UnifiedInbox() {
               </div>
             )}
 
-            {/* Composer */}
-            {metaComposerWindowNotice ? (
-              <div
-                className={cn(
-                  "border-t px-4 py-2 text-[11px] leading-snug",
-                  metaComposerWindowNotice.variant === "soon"
-                    ? "border-amber-200/60 text-amber-700 bg-transparent"
-                    : "border-rose-200/70 text-rose-700 bg-transparent"
-                )}
-                data-testid="reply-window-inline-notice"
-              >
-                {metaComposerWindowNotice.text}
-              </div>
-            ) : null}
+            {/* Composer — Meta reply-window + AI notices merge into one chip bar inside AIComposer */}
             <AIComposer
               value={messageInput}
               onChange={setMessageInput}
@@ -1896,12 +1883,14 @@ export function UnifiedInbox() {
               contactContext={contactContext}
               conversationId={primaryConversation?.id ?? selectedContactId}
               messages={messages.map((m) => ({
-                role: m.direction === 'inbound' ? 'user' : 'assistant',
-                content: m.content || '',
+                role: m.direction === "inbound" ? "user" : "assistant",
+                direction: m.direction,
+                content: m.content || "",
               }))}
               onTemplate={isWhatsAppContact ? handleOpenTemplatePicker : undefined}
               fileInputRef={fileInputRef}
               handleFileSelect={handleFileSelect}
+              metaReplyWindowNotice={metaComposerWindowNotice}
             />
           </>
         ) : (

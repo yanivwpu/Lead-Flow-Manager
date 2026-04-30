@@ -4,7 +4,7 @@
  * Computes lead score and AI state dynamically.
  */
 
-import { scoreLead, type BusinessKnowledgeForScoring } from "./leadScoring";
+import { scoreLead, type BusinessKnowledgeForScoring, type LeadScoringSignals } from "./leadScoring";
 
 export interface ConversationMessage {
   direction: 'inbound' | 'outbound';
@@ -50,6 +50,7 @@ export interface LeadScoreDetails {
   missingRequired: string[];
   negativeSignals: string[];
   confidence01: number; // 0–1
+  signals?: LeadScoringSignals;
 }
 
 export interface CopilotIntelligence extends QualificationData {
@@ -345,6 +346,7 @@ export function analyzeConversation(
       missingRequired: scoring.missingRequired,
       negativeSignals: scoring.negativeSignals,
       confidence01: scoring.confidence,
+      signals: scoring.signals,
     },
     aiState,
     signalCount, isUrgent, messageCount, lastDirection,

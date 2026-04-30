@@ -57,6 +57,7 @@ import fs from "fs";
 import { subscriptionService } from "./subscriptionService";
 import {
   businessKnowledgeFromAiRecord,
+  detectStrongAutoIntent,
   evaluateFullAutoSend,
   normalizeBusinessAiMode,
 } from "./aiAutoSendGate";
@@ -7536,7 +7537,14 @@ export async function registerRoutes(
         }
       }
 
+      let autoSendStrongIntent = false;
       if (wantsAuto) {
+        const history = conversationHistory as Array<{ role: string; content?: string }>;
+        const inboundContents = history.filter((m) => m.role === "user").map((m) => m.content || "");
+        const joinedInbound = inboundContents.join("\n");
+        const lastInbound = inboundContents[inboundContents.length - 1]?.trim() || "";
+        autoSendStrongIntent = detectStrongAutoIntent(joinedInbound, lastInbound);
+
         const scoringKnowledge = businessKnowledgeFromAiRecord(knowledge as any);
         const gate = evaluateFullAutoSend({
           businessMode,
@@ -7552,6 +7560,7 @@ export async function registerRoutes(
           autoTriggered: autoSendAllowed,
           reason: autoSendReason,
           confidence: suggestion.confidence,
+          strongIntent: autoSendStrongIntent,
         });
       }
       
@@ -7564,6 +7573,7 @@ export async function registerRoutes(
         shouldDowngradeToSuggestOnly: fairUse.shouldDowngradeToSuggestOnly,
         autoSendAllowed,
         autoSendReason,
+        ...(wantsAuto ? { autoSendStrongIntent } : {}),
       });
     } catch (error) {
       console.error("Reply suggestion error:", error);
