@@ -18,6 +18,7 @@ import {
 } from "./whatsappService";
 import { storage } from "./storage";
 import { insertChatSchema, insertRegisteredPhoneSchema, insertSalespersonSchema, insertDemoBookingSchema, PLAN_LIMITS, type SubscriptionPlan } from "@shared/schema";
+import { isConversationHandoffActive } from "@shared/handoffActivity";
 import { z } from "zod";
 import { getVapidPublicKey } from "./notifications";
 import {
@@ -60,6 +61,8 @@ import {
   detectStrongAutoIntent,
   evaluateFullAutoSend,
   normalizeBusinessAiMode,
+  shouldBypassAutoGuardsForInbound,
+  type ChatTurn,
 } from "./aiAutoSendGate";
 import { getUncachableStripeClient } from "./stripeClient";
 import { sanitizeStripeReturnPath } from "./checkoutReturnPath";
@@ -1880,6 +1883,14 @@ export async function registerRoutes(
       // isNewConversation and chatbotWillFire are evaluated once inside
       // processIncomingMessage and returned here so no subsequent handler
       // needs to query the DB again to make the same determination.
+      const twilioMimeToContent = (ct: string | undefined): "image" | "video" | "audio" | "document" => {
+        if (!ct) return "image";
+        if (ct.startsWith("image/")) return "image";
+        if (ct.startsWith("video/")) return "video";
+        if (ct.startsWith("audio/")) return "audio";
+        return "document";
+      };
+      const hasTwilioMedia = !!parsed.mediaUrl && parsed.numMedia > 0;
       const {
         isNewConversation: inboxIsNewConv,
         chatbotWillFire: inboxChatbotWillFire,
@@ -1891,8 +1902,10 @@ export async function registerRoutes(
         channelContactId: normalizedFrom,
         channelAccountId: matchedPhone, // the business number that received the message
         contactName: parsed.profileName || normalizedFrom,
-        content: parsed.body,
-        contentType: 'text',
+        content: parsed.body || (hasTwilioMedia ? "" : ""),
+        contentType: hasTwilioMedia ? twilioMimeToContent(parsed.mediaContentType) : "text",
+        mediaUrl: parsed.mediaUrl,
+        mediaFilename: hasTwilioMedia ? `mms-${parsed.messageSid}` : undefined,
         externalMessageId: parsed.messageSid,
       });
       console.log(`[Inbound] Webhook returned 200 — channel: ${channel}, messageSid: ${parsed.messageSid}, userId: ${userId}`);
@@ -2318,7 +2331,7 @@ export async function registerRoutes(
                     content,
                     contentType,
                     mediaUrl: attachmentMediaUrl,
-                    mediaType: attachmentType,
+                    attachmentType,
                     externalMessageId: messageId,
                   }).then(async (result) => {
                     console.log(`[Inbound] [Stage 10-IG] Pipeline complete — channel: instagram, messageId: ${messageId}, contactId: ${result.contact.id}, conversationId: ${result.conversation.id}, messageId_db: ${result.message.id}, isNewConversation: ${result.isNewConversation}`);
@@ -2464,6 +2477,7 @@ export async function registerRoutes(
                 content,
                 contentType,
                 mediaUrl: attachmentMediaUrl,
+                attachmentType: firstAttachment?.type,
                 externalMessageId: messageId,
               }).then(async (result) => {
                 console.log(`[Inbound] [Stage 10-FB] Pipeline complete — channel: facebook, mid=${messageId}, contactId=${result.contact.id}, conversationId=${result.conversation.id}, dbMessageId=${result.message.id}, isNew=${result.isNewConversation}`);
@@ -7502,22 +7516,33 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Conversation history required" });
       }
 
+      const historyTurns = conversationHistory as ChatTurn[];
+      const lastInbound = (() => {
+        const inbound = historyTurns.filter((m) => m.role === "user").map((m) => m.content || "");
+        return (inbound[inbound.length - 1] || "").trim();
+      })();
+
+      const forceAutoBypass =
+        !!lastInbound &&
+        shouldBypassAutoGuardsForInbound({
+          conversationHistory: historyTurns,
+          lastInbound,
+        });
+
       const { aiService } = await import("./aiService");
       const knowledge = await storage.getAiBusinessKnowledge(userId);
       const settings = await storage.getAiSettings(userId);
 
       // ── Human handoff: hard block AI reply generation/autosend ──────────────
-      // If a handoff has been triggered for this conversation (or this inbound message matches),
-      // we must not generate a reply and must not allow auto-send.
-      if (chatId) {
+      // Follow-up force phrases bypass stale handoff so customers get a reply when nudging.
+      if (chatId && !forceAutoBypass) {
         try {
           const conv = await storage.getConversation(chatId);
           if (conv?.contactId) {
-            const events = await storage.getActivityEvents(conv.contactId, 60);
-            const lastHandoff = events.find(
-              (e) => e.eventType === "ai_handoff" && e.conversationId === chatId
-            );
-            if (lastHandoff) {
+            const events = await storage.getActivityEvents(conv.contactId, 120);
+            if (isConversationHandoffActive(events, chatId)) {
+              console.info("[AI-AUTO] triggered", false);
+              console.info("[AI-AUTO] blocked", "handoff_triggered");
               return res.json({
                 suggestion: "",
                 confidence: 0,
@@ -7532,12 +7557,7 @@ export async function registerRoutes(
         }
       }
 
-      const lastInbound = (() => {
-        const history = conversationHistory as Array<{ role: string; content?: string }>;
-        const inbound = history.filter((m) => m.role === "user").map((m) => m.content || "");
-        return (inbound[inbound.length - 1] || "").trim();
-      })();
-      if (lastInbound) {
+      if (lastInbound && !forceAutoBypass) {
         const handoff = await aiService.checkHandoffNeeded(lastInbound, settings || undefined);
         if (handoff.shouldHandoff) {
           let contactIdForLog: string | null = null;
@@ -7575,6 +7595,8 @@ export async function registerRoutes(
             // ignore
           }
 
+          console.info("[AI-AUTO] triggered", false);
+          console.info("[AI-AUTO] blocked", "handoff_triggered");
           return res.json({
             suggestion: "",
             confidence: 0,
@@ -7644,7 +7666,10 @@ export async function registerRoutes(
           reason: autoSendReason,
           confidence: suggestion.confidence,
           strongIntent: autoSendStrongIntent,
+          forceBypass: forceAutoBypass,
         });
+        console.info("[AI-AUTO] triggered", autoSendAllowed);
+        console.info("[AI-AUTO] blocked", autoSendAllowed ? "(none)" : autoSendReason);
       }
       
       // Track usage

@@ -221,6 +221,7 @@ export function AIComposer({
       const inbound = history.filter((m) => m.role === "user").map((m) => m.content || "");
       return (inbound[inbound.length - 1] || "").trim();
     })();
+    console.info("[AI-AUTO-CLIENT]", { mode: "auto", latestMessage: lastInboundText.slice(0, 500) });
     if (lastInboundText && handoffKeywords && handoffKeywords.length > 0) {
       const msgLower = lastInboundText.toLowerCase();
       const matched = handoffKeywords
@@ -271,6 +272,7 @@ export function AIComposer({
         else if (!onAutoSend) clientReason = "missing_onAutoSend_callback";
         console.info("[AI-AUTO-CLIENT]", {
           mode: "auto",
+          latestMessage: lastInboundText.slice(0, 500),
           autoSendAllowed: allowed,
           reason: clientReason,
           serverReason: reason,
@@ -308,6 +310,7 @@ export function AIComposer({
       } else {
         console.info("[AI-AUTO-CLIENT]", {
           mode: "auto",
+          latestMessage: lastInboundText.slice(0, 500),
           autoSendAllowed: false,
           reason: "suggest_reply_request_failed",
           httpStatus: res.status,
@@ -321,6 +324,7 @@ export function AIComposer({
     } catch {
       console.info("[AI-AUTO-CLIENT]", {
         mode: "auto",
+        latestMessage: lastInboundText.slice(0, 500),
         autoSendAllowed: false,
         reason: "suggest_reply_exception",
         suggestionLength: 0,

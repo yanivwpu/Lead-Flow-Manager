@@ -4,7 +4,7 @@ import {
   type BusinessKnowledgeForScoring,
 } from "../client/src/lib/leadScoring";
 
-export type ChatTurn = { role: string; content: string };
+export type ChatTurn = { role: string; content?: string };
 
 /** Maps DB + API variants to the three logical modes. */
 export function normalizeBusinessAiMode(raw: string | undefined | null): "off" | "suggest" | "auto" {
@@ -31,6 +31,34 @@ const COMPLAINT_RE =
   /\b(lawsuit|sue you|suing|terrible|awful|worst experience|this is a scam|fraud|refund now|report you to|disgusting|hate this|angry\b|furious|unacceptable service)\b/i;
 
 const STOP_RE = /\b(stop|unsubscribe|do not contact|dont contact|don't contact|remove me|opt out)\b/i;
+
+/**
+ * Full Auto: follow-up / frustration lines that must get a reply (bypass short-thread & greeting-only guards).
+ * Does not bypass STOP/COMPLAINT or trivial AI output — see evaluateFullAutoSend.
+ */
+export function shouldBypassAutoGuardsForInbound(params: {
+  conversationHistory: ChatTurn[];
+  lastInbound: string;
+}): boolean {
+  const last = params.lastInbound.trim();
+  if (!last) return false;
+
+  if (/\bno\s*answer\b/i.test(last)) return true;
+
+  if (/\bhello\s*\?/i.test(last)) return true;
+
+  const inboundLines = params.conversationHistory
+    .filter((m) => m.role === "user")
+    .map((m) => (m.content || "").trim())
+    .filter(Boolean);
+  if (inboundLines.length >= 2) {
+    const prev = inboundLines[inboundLines.length - 2];
+    const cur = inboundLines[inboundLines.length - 1];
+    if (GREETING_ONLY.test(prev) && GREETING_ONLY.test(cur)) return true;
+  }
+
+  return false;
+}
 
 /**
  * High-intent phrases / bundles — when matched, Full Auto may bypass strict Copilot gates
@@ -107,6 +135,22 @@ export function evaluateFullAutoSend(params: {
 
   if (STOP_RE.test(joinedInbound) || COMPLAINT_RE.test(joinedInbound)) {
     return { allowed: false, reason: "disqualifier_intent", missingRequiredLen: 0, inboundCount };
+  }
+
+  const forceBypass = shouldBypassAutoGuardsForInbound({
+    conversationHistory,
+    lastInbound,
+  });
+
+  if (forceBypass) {
+    const trimmedSuggestion = suggestion.trim();
+    if (!trimmedSuggestion || trimmedSuggestion.length <= 5) {
+      return { allowed: false, reason: "missing_or_trivial_suggestion", missingRequiredLen: 0, inboundCount };
+    }
+    if (PLACEHOLDER_RE.test(trimmedSuggestion)) {
+      return { allowed: false, reason: "suggestion_contains_placeholder", missingRequiredLen: 0, inboundCount };
+    }
+    return { allowed: true, reason: "followup_force_bypass", missingRequiredLen: 0, inboundCount };
   }
 
   const strongIntent = detectStrongAutoIntent(joinedInbound, lastInbound);
