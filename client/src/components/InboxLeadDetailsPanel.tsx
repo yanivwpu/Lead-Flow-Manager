@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import type { ContactNote } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
 import {
   Select,
   SelectContent,
@@ -533,11 +534,28 @@ export function InboxLeadDetailsPanel({
     (handoffEventId == null || dismissedHandoffSnoozeId !== handoffEventId);
   const headerShowsSnoozed = aiPaused || headerHandoffSnoozes;
 
-  const toggleCopilotSnooze = () => {
+  const toggleCopilotSnooze = async () => {
     if (headerShowsSnoozed) {
       setAiPaused(false);
-      if (handoffActive && handoffEventId) {
-        setDismissedHandoffSnoozeId(handoffEventId);
+      if (handoffActive && primaryConversation?.id) {
+        try {
+          await apiRequest("POST", `/api/contacts/${contact.id}/handoff-resolve`, {
+            conversationId: primaryConversation.id,
+            reason: "user_unsnooze",
+          });
+          await queryClient.invalidateQueries({
+            queryKey: [`/api/contacts/${contact.id}/timeline?limit=60`],
+          });
+        } catch {
+          toast({
+            title: "Could not resume AI",
+            description: "Try again in a moment.",
+            variant: "destructive",
+          });
+        }
+        if (handoffEventId) {
+          setDismissedHandoffSnoozeId(handoffEventId);
+        }
       } else {
         setDismissedHandoffSnoozeId(null);
       }

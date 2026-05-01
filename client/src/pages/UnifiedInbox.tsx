@@ -67,6 +67,7 @@ import { InboxLeadDetailsPanel } from "@/components/InboxLeadDetailsPanel";
 import { useAICapabilities } from "@/lib/useAICapabilities";
 import { analyzeConversation } from "@/lib/conversationIntelligence";
 import type { ContactContext } from "@/components/AIComposer";
+import { isConversationHandoffActive } from "@shared/handoffActivity";
 
 type Channel = 'whatsapp' | 'instagram' | 'facebook' | 'sms' | 'webchat' | 'telegram' | 'tiktok' | 'gohighlevel' | string;
 type FilterTab = 'all' | 'unread' | 'mine';
@@ -119,6 +120,22 @@ interface Message {
   createdAt: string;
   sentViaFallback?: boolean;
   fallbackChannel?: Channel;
+}
+
+/** Prefer direct <img src> for permanent URLs (R2, app uploads); never use expiring provider CDNs. */
+function isClientRenderableMediaUrl(url: string): boolean {
+  if (!url) return false;
+  if (url.startsWith("blob:") || url.startsWith("/")) return true;
+  if (!/^https?:\/\//i.test(url)) return false;
+  try {
+    const h = new URL(url).hostname;
+    if (/fbcdn\.net|facebook\.com|fbsbx\.com|lookaside\.fbsbx\.com|twilio\.com|graph\.facebook\.com/i.test(h)) {
+      return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 interface InboxItem {
@@ -771,11 +788,11 @@ export function UnifiedInbox() {
 
   const activeHandoff = useMemo(() => {
     const convId = primaryConversation?.id;
+    if (!convId || !isConversationHandoffActive(handoffTimeline, convId)) return null;
     const match = handoffTimeline.find((e) => {
       if (e.eventType !== "ai_handoff") return false;
-      // If server provides conversationId, scope to the active conversation.
       if (convId && e.conversationId) return e.conversationId === convId;
-      return true;
+      return e.conversationId == null;
     });
     return match || null;
   }, [handoffTimeline, primaryConversation?.id]);
@@ -1017,11 +1034,16 @@ export function UnifiedInbox() {
       setMessageInput(data.content);
       toast({ title: "Message not sent", description: error.message, variant: "destructive" });
     },
-    onSettled: (_data, _error, _vars, context) => {
+    onSettled: (_data, _error, vars, context) => {
       queryClient.invalidateQueries({ queryKey: ["/api/inbox"] });
       if (context?.conversationId) {
         queryClient.invalidateQueries({
           queryKey: ["/api/conversations", context.conversationId, "messages"],
+        });
+      }
+      if (vars?.contactId) {
+        queryClient.invalidateQueries({
+          queryKey: [`/api/contacts/${vars.contactId}/timeline?limit=60`],
         });
       }
     },
@@ -1777,9 +1799,15 @@ export function UnifiedInbox() {
                             const hasMedia = !!(msg.mediaUrl || msg.mediaFilename);
                             const isOptimistic = msg.id.startsWith('optimistic-');
                             const proxyUrl = `/api/media/proxy?messageId=${encodeURIComponent(msg.id)}`;
-                            // Outbound images use the authenticated proxy so URLs survive host/storage migration.
-                            const imageSrc = isOptimistic && msg.mediaUrl ? msg.mediaUrl : proxyUrl;
-                            const mediaDisplayUrl = isOut && msg.mediaUrl ? msg.mediaUrl : proxyUrl;
+                            const useDirectMedia = !!(
+                              msg.mediaUrl &&
+                              (isOptimistic ||
+                                msg.mediaUrl.startsWith("blob:") ||
+                                msg.mediaUrl.startsWith("/") ||
+                                isClientRenderableMediaUrl(msg.mediaUrl))
+                            );
+                            const imageSrc = useDirectMedia ? msg.mediaUrl! : proxyUrl;
+                            const mediaDisplayUrl = useDirectMedia ? msg.mediaUrl! : proxyUrl;
                             const ct = msg.contentType;
                             const isImage = ct === 'image' || msg.mediaType?.startsWith('image');
                             const isVideo = ct === 'video' || msg.mediaType?.startsWith('video');

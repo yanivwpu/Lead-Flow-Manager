@@ -5,6 +5,10 @@ import {
   type Contact, type Conversation, type Message, type Channel,
   CHANNEL_INFO, CHANNELS,
 } from "@shared/schema";
+import {
+  AI_HANDOFF_RESOLVED_EVENT,
+  isConversationHandoffActive,
+} from "@shared/handoffActivity";
 import { db } from "../drizzle/db";
 import { messages as messagesTbl } from "@shared/schema";
 import { eq, sql } from "drizzle-orm";
@@ -399,6 +403,8 @@ class ChannelService {
         preview: content.substring(0, 100),
       });
 
+      await this.resolveHandoffIfActive(userId, contactId, conversation.id, "agent_outbound_message");
+
       // Mirror outbound message to GHL if contact has a GHL ID (fire-and-forget)
       if (contact.ghlId) {
         import('./ghlSync').then(({ ghlSyncOutboundMessage }) => {
@@ -478,6 +484,8 @@ class ChannelService {
           to: fallbackChannel,
           reason: 'delivery_fallback',
         });
+
+        await this.resolveHandoffIfActive(userId, contactId, fallbackConv.id, "agent_outbound_message");
 
         return {
           success: true,
@@ -790,6 +798,13 @@ class ChannelService {
       };
     }
 
+    await this.resolveHandoffIfActive(
+      userId,
+      contact.id,
+      conversation.id,
+      "customer_normal_message"
+    );
+
     // Evaluate chatbot trigger once — used both to fire the flow and to let
     // callers gate their own outbound messages without an extra DB round-trip.
     const { willChatbotTrigger, triggerChatbotFlows } = await import('./chatbotEngine');
@@ -985,6 +1000,28 @@ class ChannelService {
       actorType,
       actorId,
     });
+  }
+
+  /**
+   * Clears human-handoff escalation when the conversation is no longer in an active handoff state.
+   * Appends `ai_handoff_resolved` so timeline ordering reflects recovery.
+   */
+  async resolveHandoffIfActive(
+    userId: string,
+    contactId: string,
+    conversationId: string,
+    reason: string
+  ): Promise<void> {
+    try {
+      const events = await storage.getActivityEvents(contactId, 120);
+      if (!isConversationHandoffActive(events, conversationId)) return;
+      await this.logActivity(userId, contactId, conversationId, AI_HANDOFF_RESOLVED_EVENT, {
+        reason,
+      });
+      console.info("[HANDOFF_RESOLVED]", { contactId, conversationId, reason });
+    } catch (err: unknown) {
+      console.warn("[HANDOFF_RESOLVED] failed", (err as Error)?.message || err);
+    }
   }
 
   registerAdapter(channel: Channel, adapter: ChannelAdapter): void {
