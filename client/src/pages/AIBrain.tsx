@@ -31,6 +31,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "@/hooks/use-toast";
+import { AIBrainBrandMark } from "@/components/AIBrainBrandMark";
 import { getCheckoutReturnPaths } from "@/lib/checkoutReturnPaths";
 import { Link } from "wouter";
 import { cn } from "@/lib/utils";
@@ -538,8 +539,8 @@ function AIBrainContent() {
     cn(
       "h-9 px-3.5 rounded-lg border text-sm font-medium transition-all duration-200 ease-out",
       selected
-        ? "bg-violet-600 text-white border-violet-600 shadow-sm shadow-violet-900/10"
-        : "bg-slate-100 text-slate-700 border-slate-200/90 hover:border-slate-300 hover:bg-slate-200/40 hover:text-slate-900",
+        ? "bg-slate-800 text-white border-slate-800 shadow-sm shadow-slate-900/10"
+        : "bg-slate-100 text-slate-700 border-slate-200/90 hover:border-slate-300 hover:bg-slate-200/50 hover:text-slate-900",
       saveSettingsMutation.isPending && "opacity-60 pointer-events-none",
     );
 
@@ -548,9 +549,7 @@ function AIBrainContent() {
       <div className="p-6 sm:p-8 max-w-[900px] mx-auto w-full space-y-8 pb-24">
         <header className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
           <div className="flex items-start gap-3">
-            <div className="w-11 h-11 rounded-xl border border-slate-200/90 bg-white shadow-sm shadow-slate-900/[0.04] flex items-center justify-center shrink-0">
-              <Brain className="w-5 h-5 text-slate-700" />
-            </div>
+            <AIBrainBrandMark />
             <div>
               <h1 className="text-xl font-semibold tracking-tight text-slate-900">AI Brain</h1>
               <p className="text-sm text-slate-600 mt-0.5">
@@ -567,11 +566,9 @@ function AIBrainContent() {
         </header>
 
         {hasFullAIBrain ? (
-          <div className="rounded-xl border border-slate-200/90 bg-gradient-to-br from-violet-50/40 via-white to-white px-5 py-5 shadow-sm shadow-slate-900/[0.05]">
+          <div className="rounded-xl border border-purple-100/90 bg-gradient-to-br from-purple-50/50 via-white to-blue-50/35 px-5 py-5 shadow-sm shadow-slate-900/[0.04]">
             <div className="flex items-start gap-4">
-              <div className="w-11 h-11 rounded-xl bg-violet-600 text-white flex items-center justify-center shrink-0 shadow-sm shadow-violet-900/15">
-                <Crown className="w-5 h-5" />
-              </div>
+              <AIBrainBrandMark />
               <div className="flex-1 min-w-0 pt-0.5">
                 <p className="text-lg font-semibold tracking-tight text-slate-900">AI Brain (Active)</p>
                 <p className="text-sm text-slate-600 mt-1 leading-relaxed">
@@ -592,12 +589,12 @@ function AIBrainContent() {
               </p>
               <Button
                 size="sm"
-                className="mt-3 bg-violet-600 text-white hover:bg-violet-700 shadow-sm shadow-violet-900/10"
+                className="mt-3 bg-purple-600 text-white hover:bg-purple-700 shadow-sm shadow-purple-900/10"
                 onClick={handleAddonCheckout}
                 disabled={isCheckingOut}
                 data-testid="button-ai-brain-primary-cta"
               >
-                <Crown className="w-3.5 h-3.5 mr-1.5" />
+                <Brain className="w-3.5 h-3.5 mr-1.5" />
                 {isCheckingOut ? "Processing…" : "Add AI Brain — $29/mo"}
               </Button>
             </div>
