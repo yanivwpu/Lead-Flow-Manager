@@ -1,12 +1,37 @@
 import { storage } from "./storage";
 import { subscriptionService } from "./subscriptionService";
 import { notifyUser } from "./presence";
-import { 
-  type Contact, type Conversation, type Message, type Channel, 
-  CHANNEL_INFO, CHANNELS 
+import {
+  type Contact, type Conversation, type Message, type Channel,
+  CHANNEL_INFO, CHANNELS,
 } from "@shared/schema";
+import {
+  persistInboundMedia,
+  isAlreadyCanonicalPermanentUrl,
+  looksLikeTransientProviderUrl,
+  type PersistInboundMediaAuth,
+} from "./mediaStorageService";
+import { isEncrypted, decryptCredential } from "./userTwilio";
+import { db } from "../drizzle/db";
+import { messages as messagesTbl } from "@shared/schema";
+import { eq, sql } from "drizzle-orm";
+import {
+  classifyGreetingInbound,
+  nicheGreetingOpener,
+  getLightGreetingFollowup,
+  getImpatienceGreetingReply,
+  GREETING_ACTIVITY,
+} from "./autoGreetingReply";
 
 type ForceChannelInput = Channel | string | undefined;
+
+async function countMessagesInConversation(conversationId: string): Promise<number> {
+  const [row] = await db
+    .select({ c: sql<number>`count(*)::int` })
+    .from(messagesTbl)
+    .where(eq(messagesTbl.conversationId, conversationId));
+  return Number(row?.c ?? 0);
+}
 
 /** Inbox WhatsApp free-form: enforce ~23h from last inbound when DB stores a 24h ceiling (1h safety margin). */
 const WHATSAPP_INBOX_CSW_BUFFER_MS = 60 * 60 * 1000;
@@ -471,6 +496,99 @@ class ChannelService {
     };
   }
 
+  /**
+   * Download provider media (Meta / Twilio / Telegram / WA Cloud) and store to R2 or legacy object storage.
+   */
+  private async persistInboundMediaIfNeeded(p: {
+    userId: string;
+    channel: Channel;
+    contentType: string;
+    mediaUrl?: string;
+    mediaFilename?: string;
+    platformMediaId?: string;
+    telegramMedia?: { botToken: string; fileId: string };
+  }): Promise<{
+    mediaUrl?: string;
+    mediaFilename?: string;
+    providerMediaUrl?: string | null;
+    providerMediaId?: string | null;
+    mediaMimeType?: string | null;
+    mediaSize?: number | null;
+    mediaStorageKey?: string | null;
+    mediaStoredAt?: Date | null;
+    mediaType?: string | null;
+  }> {
+    const { userId, channel, contentType, telegramMedia } = p;
+    let { mediaUrl, mediaFilename, platformMediaId } = p;
+
+    const hasTg = !!telegramMedia?.botToken && !!telegramMedia?.fileId;
+    const hasMedia =
+      hasTg ||
+      !!(platformMediaId && String(platformMediaId).trim()) ||
+      !!(mediaUrl && String(mediaUrl).trim());
+    if (!hasMedia) return {};
+
+    if (mediaUrl && isAlreadyCanonicalPermanentUrl(mediaUrl) && !platformMediaId) {
+      return {};
+    }
+
+    let auth: PersistInboundMediaAuth = { kind: "public" };
+    if (hasTg) {
+      auth = { kind: "telegram", botToken: telegramMedia!.botToken, fileId: telegramMedia!.fileId };
+    } else if (channel === "facebook" || channel === "instagram") {
+      const setting = await storage.getChannelSetting(userId, channel);
+      const token = (setting?.config as { accessToken?: string })?.accessToken;
+      auth = token ? { kind: "meta-page-bearer", accessToken: token } : { kind: "public" };
+    } else if (channel === "whatsapp" && platformMediaId && !mediaUrl) {
+      auth = { kind: "meta-whatsapp-user", userId };
+    } else if (
+      (channel === "whatsapp" || channel === "sms") &&
+      mediaUrl &&
+      /twilio\.com/i.test(mediaUrl)
+    ) {
+      const user = await storage.getUser(userId);
+      if (!user?.twilioAccountSid || !user?.twilioAuthToken) return {};
+      const tok = isEncrypted(user.twilioAuthToken)
+        ? decryptCredential(user.twilioAuthToken)
+        : user.twilioAuthToken;
+      auth = { kind: "twilio-basic", accountSid: user.twilioAccountSid, authToken: tok };
+    }
+
+    const res = await persistInboundMedia({
+      channel,
+      userId,
+      providerMediaUrl: mediaUrl?.trim() || null,
+      providerMediaId: platformMediaId?.trim() || null,
+      mediaType: contentType || "document",
+      filename: mediaFilename?.trim() || null,
+      auth,
+    });
+
+    if (!res) {
+      if (mediaUrl && looksLikeTransientProviderUrl(mediaUrl)) {
+        return {
+          mediaUrl,
+          mediaFilename,
+          providerMediaUrl: mediaUrl,
+          providerMediaId: platformMediaId || null,
+        };
+      }
+      return {};
+    }
+
+    return {
+      mediaUrl: res.mediaUrl,
+      mediaFilename: res.mediaFilename ?? mediaFilename,
+      providerMediaUrl: res.providerMediaUrl ?? (mediaUrl && looksLikeTransientProviderUrl(mediaUrl) ? mediaUrl : null),
+      providerMediaId: res.providerMediaId ?? platformMediaId ?? null,
+      mediaMimeType: res.mediaMimeType,
+      mediaSize: res.mediaSize,
+      mediaStorageKey: res.mediaStorageKey,
+      mediaStoredAt: res.mediaStoredAt,
+      mediaType: res.mediaMimeType,
+    };
+  }
+
   async processIncomingMessage(params: {
     userId: string;
     channel: Channel;
@@ -483,8 +601,24 @@ class ChannelService {
     mediaFilename?: string; // Actual filename for documents/attachments
     platformMediaId?: string; // Platform-assigned media ID for proxy fetching (e.g. WhatsApp Meta mediaId)
     externalMessageId?: string;
+    /** Telegram file_id + bot token — downloaded and stored like other channels */
+    telegramMedia?: { botToken: string; fileId: string };
+    /** Meta Messenger / IG attachment.type (image, video, …) — stored on messages.media_type when not superseded by persist */
+    attachmentType?: string;
   }): Promise<{ contact: Contact; conversation: Conversation; message: Message; isNewConversation: boolean; chatbotWillFire: boolean }> {
-    const { userId, channel, content, contentType = 'text', mediaUrl, mediaFilename, platformMediaId, externalMessageId, channelAccountId } = params;
+    const {
+      userId,
+      channel,
+      content,
+      contentType = "text",
+      mediaUrl,
+      mediaFilename,
+      platformMediaId,
+      externalMessageId,
+      channelAccountId,
+      telegramMedia,
+      attachmentType,
+    } = params;
     let { channelContactId, contactName } = params;
 
     // Normalise phone-based identifiers to digits-only so "+923364127888" and
@@ -572,17 +706,54 @@ class ChannelService {
       });
     }
 
+    let persisted: {
+      mediaUrl?: string;
+      mediaFilename?: string;
+      providerMediaUrl?: string | null;
+      providerMediaId?: string | null;
+      mediaMimeType?: string | null;
+      mediaSize?: number | null;
+      mediaStorageKey?: string | null;
+      mediaStoredAt?: Date | null;
+      mediaType?: string | null;
+    } = {};
+    try {
+      persisted = await this.persistInboundMediaIfNeeded({
+        userId,
+        channel,
+        contentType,
+        mediaUrl,
+        mediaFilename,
+        platformMediaId,
+        telegramMedia,
+      });
+    } catch (err: unknown) {
+      console.warn("[Inbound] persistInboundMediaIfNeeded error:", (err as Error)?.message || err);
+    }
+
+    const priorMessageCount = await countMessagesInConversation(conversation.id);
+
+    const finalMediaUrl = persisted.mediaUrl ?? mediaUrl;
+    const finalMediaFilename = persisted.mediaFilename ?? mediaFilename;
+
     const message = await storage.createMessage({
       conversationId: conversation.id,
       contactId: contact.id,
       userId,
-      direction: 'inbound',
+      direction: "inbound",
       content,
       contentType,
-      mediaUrl,
-      mediaFilename,
+      mediaUrl: finalMediaUrl,
+      mediaFilename: finalMediaFilename,
       platformMediaId,
-      status: 'delivered',
+      mediaType: persisted.mediaType ?? attachmentType ?? undefined,
+      providerMediaUrl: persisted.providerMediaUrl ?? undefined,
+      providerMediaId: persisted.providerMediaId ?? undefined,
+      mediaMimeType: persisted.mediaMimeType ?? undefined,
+      mediaSize: persisted.mediaSize ?? undefined,
+      mediaStorageKey: persisted.mediaStorageKey ?? undefined,
+      mediaStoredAt: persisted.mediaStoredAt ?? undefined,
+      status: "delivered",
       externalMessageId,
     });
 
@@ -590,7 +761,7 @@ class ChannelService {
 
     await storage.updateConversation(conversation.id, {
       lastMessageAt: new Date(),
-      lastMessagePreview: (content || (mediaUrl ? mediaPreviewLabel(contentType) : '')).substring(0, 100),
+      lastMessagePreview: (content || (finalMediaUrl ? mediaPreviewLabel(contentType) : "")).substring(0, 100),
       lastMessageDirection: 'inbound',
       unreadCount: (conversation.unreadCount || 0) + 1,
     });
@@ -674,9 +845,14 @@ class ChannelService {
     // ── Auto-Reply & Business Hours — runs for every channel ─────────────────
     // Chatbot takes full priority: skip auto-reply when a flow will fire.
     if (!chatbotWillFire) {
-      this._scheduleAutoReply({ userId, contact, conversation, channel }).catch(
-        (err: Error) => console.error('[AutoReply] Scheduling error:', err.message)
-      );
+      this._scheduleAutoReply({
+        userId,
+        contact,
+        conversation,
+        channel,
+        inboundContent: content,
+        priorMessageCount,
+      }).catch((err: Error) => console.error("[AutoReply] Scheduling error:", err.message));
     } else {
       console.log(`[AutoReply] Suppressed — chatbot will fire for userId: ${userId}, channel: ${channel}`);
     }
@@ -689,58 +865,106 @@ class ChannelService {
     contact: Contact;
     conversation: Conversation;
     channel: Channel;
+    inboundContent: string;
+    /** Message rows in this conversation before the current inbound was inserted */
+    priorMessageCount: number;
   }): Promise<void> {
-    const { userId, contact, conversation, channel } = params;
+    const { userId, contact, conversation, channel, inboundContent, priorMessageCount } = params;
 
     try {
       const user = await storage.getUser(userId);
       if (!user) return;
 
       let shouldReply = false;
-      let replyText = '';
+      let replyText = "";
       let source: "away_message" | "auto_reply" | null = null;
+      let greetingActivityToLog: string | null = null;
 
-      // 1. Away message (outside business hours) takes priority
+      // 1. Away message (outside business hours) takes priority — unchanged copy path
       if (user.businessHoursEnabled && user.awayMessageEnabled) {
         const now = new Date();
-        const tz = user.timezone || 'America/New_York';
-        const local = new Date(now.toLocaleString('en-US', { timeZone: tz }));
+        const tz = user.timezone || "America/New_York";
+        const local = new Date(now.toLocaleString("en-US", { timeZone: tz }));
         const day = local.getDay();
         const time = local.toTimeString().slice(0, 5); // "HH:mm"
         const days = (user.businessDays as number[]) || [1, 2, 3, 4, 5];
-        const start = user.businessHoursStart || '09:00';
-        const end = user.businessHoursEnd || '17:00';
+        const start = user.businessHoursStart || "09:00";
+        const end = user.businessHoursEnd || "17:00";
 
         if (!days.includes(day) || time < start || time > end) {
           shouldReply = true;
-          replyText = user.awayMessage || "Thanks for reaching out! We're currently away but will respond as soon as we're back.";
+          replyText =
+            user.awayMessage ||
+            "Thanks for reaching out! We're currently away but will respond as soon as we're back.";
           source = "away_message";
         }
       }
 
-      // 2. Always-on auto-reply (when not already handled by away message)
+      // 2. Always-on auto-reply — greeting-aware when inbound looks like a simple greeting
       if (!shouldReply && user.autoReplyEnabled) {
-        shouldReply = true;
-        replyText = user.autoReplyMessage || "Thanks for your message! We'll get back to you shortly.";
-        source = "auto_reply";
+        const trimmed = (inboundContent || "").trim();
+        const gKind = classifyGreetingInbound(trimmed);
+
+        if (trimmed && gKind !== "none") {
+          const events = await storage.getActivityEvents(contact.id, 300);
+          const cid = conversation.id;
+          const hasEvt = (t: string) =>
+            events.some((e) => e.conversationId === cid && e.eventType === t);
+
+          if (gKind === "impatience" && !hasEvt(GREETING_ACTIVITY.impatience)) {
+            shouldReply = true;
+            replyText = getImpatienceGreetingReply();
+            source = "auto_reply";
+            greetingActivityToLog = GREETING_ACTIVITY.impatience;
+          } else if (gKind === "pure") {
+            if (priorMessageCount === 0 && !hasEvt(GREETING_ACTIVITY.niche)) {
+              const bk = await storage.getAiBusinessKnowledge(userId);
+              shouldReply = true;
+              replyText = nicheGreetingOpener(bk?.industry);
+              source = "auto_reply";
+              greetingActivityToLog = GREETING_ACTIVITY.niche;
+            } else if (priorMessageCount > 0 && !hasEvt(GREETING_ACTIVITY.light)) {
+              shouldReply = true;
+              replyText = getLightGreetingFollowup();
+              source = "auto_reply";
+              greetingActivityToLog = GREETING_ACTIVITY.light;
+            }
+          }
+        }
+
+        // Non-greeting inbound: keep legacy auto-reply body
+        if (!shouldReply && classifyGreetingInbound(trimmed) === "none") {
+          shouldReply = true;
+          replyText =
+            user.autoReplyMessage || "Thanks for your message! We'll get back to you shortly.";
+          source = "auto_reply";
+        }
       }
 
       if (!shouldReply || !replyText || !source) {
-        // Keep this log lightweight; helps distinguish “Facebook sent it” vs “we sent it”.
         if (!user.businessHoursEnabled && !user.autoReplyEnabled) {
-          console.log(`[AutoReply] Skipped — disabled (autoReplyEnabled=false, businessHoursEnabled=false) userId=${userId} channel=${channel}`);
+          console.log(
+            `[AutoReply] Skipped — disabled (autoReplyEnabled=false, businessHoursEnabled=false) userId=${userId} channel=${channel}`
+          );
         } else if (!user.autoReplyEnabled && !(user.businessHoursEnabled && user.awayMessageEnabled)) {
           console.log(`[AutoReply] Skipped — no rule matched userId=${userId} channel=${channel}`);
+        } else if (user.autoReplyEnabled && classifyGreetingInbound((inboundContent || "").trim()) !== "none") {
+          console.log(
+            `[AutoReply] Skipped — greeting already handled or capped conversationId=${conversation.id}`
+          );
         }
         return;
       }
 
       const delayMs = (user.autoReplyDelay || 0) * 1000;
       const self = this;
+      const activityAfterSend = greetingActivityToLog;
 
       setTimeout(async () => {
         try {
-          console.log(`[AutoReply] Sending (${source}) — userId=${userId} channel=${channel} contactId=${contact.id} conversationId=${conversation.id}`);
+          console.log(
+            `[AutoReply] Sending (${source}) — userId=${userId} channel=${channel} contactId=${contact.id} conversationId=${conversation.id}`
+          );
           const result = await self.sendMessage({
             userId,
             contactId: contact.id,
@@ -748,17 +972,23 @@ class ChannelService {
             forceChannel: channel,
           });
           if (result.success) {
-            console.log(`[AutoReply] ✓ Sent (${source}) via ${channel} to "${contact.name}" (conversationId: ${conversation.id})`);
+            console.log(
+              `[AutoReply] ✓ Sent (${source}) via ${channel} to "${contact.name}" (conversationId: ${conversation.id})`
+            );
+            if (activityAfterSend) {
+              await self.logActivity(userId, contact.id, conversation.id, activityAfterSend, {
+                kind: activityAfterSend,
+              });
+            }
           } else {
             console.error(`[AutoReply] ✗ Send failed (${source}) via ${channel}: ${result.error}`);
           }
         } catch (err) {
-          console.error('[AutoReply] Send error:', err);
+          console.error("[AutoReply] Send error:", err);
         }
       }, delayMs);
-
     } catch (err) {
-      console.error('[AutoReply] _scheduleAutoReply error:', err);
+      console.error("[AutoReply] _scheduleAutoReply error:", err);
     }
   }
 
