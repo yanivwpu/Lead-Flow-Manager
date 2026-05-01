@@ -31,7 +31,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "@/hooks/use-toast";
-import { AIBrainBrandMark } from "@/components/AIBrainBrandMark";
 import { getCheckoutReturnPaths } from "@/lib/checkoutReturnPaths";
 import { Link } from "wouter";
 import { cn } from "@/lib/utils";
@@ -549,7 +548,9 @@ function AIBrainContent() {
       <div className="p-6 sm:p-8 max-w-[900px] mx-auto w-full space-y-8 pb-24">
         <header className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
           <div className="flex items-start gap-3">
-            <AIBrainBrandMark />
+            <div className="h-10 w-10 bg-purple-100 rounded-xl flex items-center justify-center shrink-0">
+              <Brain className="h-5 w-5 text-purple-600" />
+            </div>
             <div>
               <h1 className="text-xl font-semibold tracking-tight text-slate-900">AI Brain</h1>
               <p className="text-sm text-slate-600 mt-0.5">
@@ -568,7 +569,9 @@ function AIBrainContent() {
         {hasFullAIBrain ? (
           <div className="rounded-xl border border-purple-100/90 bg-gradient-to-br from-purple-50/50 via-white to-blue-50/35 px-5 py-5 shadow-sm shadow-slate-900/[0.04]">
             <div className="flex items-start gap-4">
-              <AIBrainBrandMark />
+              <div className="h-10 w-10 bg-purple-100 rounded-xl flex items-center justify-center shrink-0">
+                <Brain className="h-5 w-5 text-purple-600" />
+              </div>
               <div className="flex-1 min-w-0 pt-0.5">
                 <p className="text-lg font-semibold tracking-tight text-slate-900">AI Brain (Active)</p>
                 <p className="text-sm text-slate-600 mt-1 leading-relaxed">
