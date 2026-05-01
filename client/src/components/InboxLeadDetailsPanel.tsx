@@ -151,6 +151,8 @@ interface InboxLeadDetailsPanelProps {
   currentUserId?: string;
   /** Derived from activityEvents: eventType === "ai_handoff" */
   handoffActive?: boolean;
+  /** Timeline row id for the active ai_handoff event — used so Unsnooze can dismiss snooze UI per event */
+  handoffEventId?: string | null;
   /** Human-readable reason (e.g. "Customer requested: \"human\"") */
   handoffMessage?: string;
   onUpdateContact: (fields: Record<string, unknown>) => void;
@@ -492,6 +494,7 @@ export function InboxLeadDetailsPanel({
   capabilities,
   currentUserId,
   handoffActive = false,
+  handoffEventId = null,
   handoffMessage,
   onUpdateContact,
   onUpdateConversationStatus,
@@ -507,8 +510,41 @@ export function InboxLeadDetailsPanel({
   const hasAIBrain       = capabilities?.hasAIBrain ?? false;
   const copilotUpgradeTo = capabilities?.upgradePlan ?? "Starter";
   const workflowUpgradeTo = capabilities?.upgradePlan ?? "Pro";
-  const [aiPaused,   setAiPaused]   = useState(false);
+  const [aiPaused, setAiPaused] = useState(false);
+  /** User chose Unsnooze for this handoff timeline row — stops handoff from driving the Copilot header pill only */
+  const [dismissedHandoffSnoozeId, setDismissedHandoffSnoozeId] = useState<string | null>(null);
+
+  useEffect(() => {
+    setAiPaused(false);
+    setDismissedHandoffSnoozeId(null);
+  }, [contact.id]);
+
+  useEffect(() => {
+    if (!handoffEventId) {
+      setDismissedHandoffSnoozeId(null);
+      return;
+    }
+    setDismissedHandoffSnoozeId((prev) => (prev === handoffEventId ? prev : null));
+  }, [handoffEventId]);
+
   const effectiveAiPaused = aiPaused || handoffActive;
+  const headerHandoffSnoozes =
+    handoffActive &&
+    (handoffEventId == null || dismissedHandoffSnoozeId !== handoffEventId);
+  const headerShowsSnoozed = aiPaused || headerHandoffSnoozes;
+
+  const toggleCopilotSnooze = () => {
+    if (headerShowsSnoozed) {
+      setAiPaused(false);
+      if (handoffActive && handoffEventId) {
+        setDismissedHandoffSnoozeId(handoffEventId);
+      } else {
+        setDismissedHandoffSnoozeId(null);
+      }
+    } else {
+      setAiPaused(true);
+    }
+  };
 
   // Team Notes
   const [contactNotesList, setContactNotesList] = useState<ContactNote[]>([]);
@@ -1058,7 +1094,7 @@ export function InboxLeadDetailsPanel({
             </div>
             {hasAIBrain && (
               <p className="text-[9px] text-gray-500 font-medium mt-1 ml-[22px] leading-tight">
-                {effectiveAiPaused ? "AI paused for this conversation" : "AI Brain"}
+                {headerShowsSnoozed ? "AI paused for this conversation" : "AI Brain"}
               </p>
             )}
           </div>
@@ -1068,17 +1104,17 @@ export function InboxLeadDetailsPanel({
               <button
                 onClick={(e) => {
                   e.stopPropagation();
-                  setAiPaused((p) => !p);
+                  toggleCopilotSnooze();
                 }}
                 className={cn(
                   "text-[10px] font-medium px-1.5 py-0.5 rounded-full border transition-colors leading-none",
-                  effectiveAiPaused
+                  headerShowsSnoozed
                     ? "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
                     : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50",
                 )}
                 data-testid="button-ai-toggle"
               >
-                {effectiveAiPaused ? "Snoozed" : "Active"}
+                {headerShowsSnoozed ? "Snoozed" : "Active"}
               </button>
             ) : (
               <span className="text-[10px] text-gray-300 font-medium">{copilotUpgradeTo}+</span>
@@ -1498,21 +1534,21 @@ export function InboxLeadDetailsPanel({
 
           {/* ── PAUSE ── */}
           <button
-            onClick={() => setAiPaused(p => !p)}
+            onClick={() => toggleCopilotSnooze()}
             className={cn(
               "flex flex-col items-center gap-0.5 py-1.5 rounded-lg border transition-colors",
-              aiPaused
+              headerShowsSnoozed
                 ? "border-gray-200 bg-gray-100 hover:bg-gray-200"
                 : "border-gray-200 bg-white hover:bg-gray-50"
             )}
             data-testid="button-ai-pause"
             title="Temporarily pause AI for this conversation"
           >
-            {aiPaused
+            {headerShowsSnoozed
               ? <PlayCircle className="w-3 h-3 text-gray-500" />
               : <PauseCircle className="w-3 h-3 text-gray-500" />
             }
-            <span className="text-[9px] text-gray-500 font-medium">{aiPaused ? "Unsnooze" : "Snooze"}</span>
+            <span className="text-[9px] text-gray-500 font-medium">{headerShowsSnoozed ? "Unsnooze" : "Snooze"}</span>
           </button>
 
         </div>

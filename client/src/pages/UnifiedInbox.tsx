@@ -1965,6 +1965,7 @@ export function UnifiedInbox() {
           capabilities={capabilities}
           currentUserId={user?.id}
           handoffActive={!!activeHandoff}
+          handoffEventId={activeHandoff?.id ?? null}
           handoffMessage={
             activeHandoff
               ? String((activeHandoff.eventData as any)?.reason || "Customer requested human assistance")
@@ -2006,6 +2007,7 @@ export function UnifiedInbox() {
                   currentUserId={user?.id}
                   panelClassName="flex flex-col w-full bg-white"
                   handoffActive={!!activeHandoff}
+                  handoffEventId={activeHandoff?.id ?? null}
                   handoffMessage={
                     activeHandoff
                       ? String((activeHandoff.eventData as any)?.reason || "Customer requested human assistance")
