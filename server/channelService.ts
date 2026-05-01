@@ -5,25 +5,58 @@ import {
   type Contact, type Conversation, type Message, type Channel,
   CHANNEL_INFO, CHANNELS,
 } from "@shared/schema";
-import {
-  persistInboundMedia,
-  isAlreadyCanonicalPermanentUrl,
-  looksLikeTransientProviderUrl,
-  type PersistInboundMediaAuth,
-} from "./mediaStorageService";
-import { isEncrypted, decryptCredential } from "./userTwilio";
 import { db } from "../drizzle/db";
 import { messages as messagesTbl } from "@shared/schema";
 import { eq, sql } from "drizzle-orm";
-import {
-  classifyGreetingInbound,
-  nicheGreetingOpener,
-  getLightGreetingFollowup,
-  getImpatienceGreetingReply,
-  GREETING_ACTIVITY,
-} from "./autoGreetingReply";
 
 type ForceChannelInput = Channel | string | undefined;
+
+/** Simple greeting classification for business auto-reply (inlined so deploy has no extra module). */
+type GreetingInboundKind = "none" | "pure" | "impatience";
+const PURE_GREETING_RE =
+  /^(hi|hello|hey|yo|sup|hola|good morning|good afternoon|good evening|gm|gn|howdy|greetings|good day)[\s!?.]*$/i;
+
+function classifyGreetingInbound(text: string): GreetingInboundKind {
+  const t = text.trim();
+  if (!t || t.length > 120) return "none";
+  const lower = t.toLowerCase();
+  const greetingStem =
+    /^(hi|hello|hey|good morning|good afternoon|good evening|yo|sup|hola|howdy|greetings|good day)\b/i;
+  if (!greetingStem.test(lower)) return "none";
+  if (/\?\?/.test(t)) return "impatience";
+  if (/\?$/.test(t) && t.length <= 35) return "impatience";
+  if (/!{2,}/.test(t) && t.length <= 40) return "impatience";
+  if (PURE_GREETING_RE.test(t)) return "pure";
+  return "none";
+}
+
+function nicheGreetingOpener(industryRaw: string | null | undefined): string {
+  const i = (industryRaw || "").toLowerCase();
+  if (
+    i.includes("real estate") ||
+    i.includes("real_estate") ||
+    i.includes("realtor") ||
+    i.includes("property")
+  ) {
+    return "Hi! Are you looking to buy or sell?";
+  }
+  if (i.includes("clinic") || i.includes("health") || i.includes("medical") || i.includes("dental")) {
+    return "Hi! How can we help you today?";
+  }
+  if (i.includes("travel") || i.includes("tour")) {
+    return "Hi! Where would you like to go?";
+  }
+  return "Hi! What can we help you with today?";
+}
+
+const LIGHT_GREETING_FOLLOWUP = "Hi again! How can I help?";
+const IMPATIENCE_GREETING_REPLY = "Hey! Sorry about that — how can I help?";
+
+const GREETING_ACTIVITY = {
+  niche: "auto_greeting_niche",
+  light: "auto_greeting_light",
+  impatience: "auto_greeting_impatience",
+} as const;
 
 async function countMessagesInConversation(conversationId: string): Promise<number> {
   const [row] = await db
@@ -497,9 +530,9 @@ class ChannelService {
   }
 
   /**
-   * Download provider media (Meta / Twilio / Telegram / WA Cloud) and store to R2 or legacy object storage.
+   * Inbound media is persisted using the provider URL as-is (no separate storage module in this build).
    */
-  private async persistInboundMediaIfNeeded(p: {
+  private async persistInboundMediaIfNeeded(_p: {
     userId: string;
     channel: Channel;
     contentType: string;
@@ -518,75 +551,7 @@ class ChannelService {
     mediaStoredAt?: Date | null;
     mediaType?: string | null;
   }> {
-    const { userId, channel, contentType, telegramMedia } = p;
-    let { mediaUrl, mediaFilename, platformMediaId } = p;
-
-    const hasTg = !!telegramMedia?.botToken && !!telegramMedia?.fileId;
-    const hasMedia =
-      hasTg ||
-      !!(platformMediaId && String(platformMediaId).trim()) ||
-      !!(mediaUrl && String(mediaUrl).trim());
-    if (!hasMedia) return {};
-
-    if (mediaUrl && isAlreadyCanonicalPermanentUrl(mediaUrl) && !platformMediaId) {
-      return {};
-    }
-
-    let auth: PersistInboundMediaAuth = { kind: "public" };
-    if (hasTg) {
-      auth = { kind: "telegram", botToken: telegramMedia!.botToken, fileId: telegramMedia!.fileId };
-    } else if (channel === "facebook" || channel === "instagram") {
-      const setting = await storage.getChannelSetting(userId, channel);
-      const token = (setting?.config as { accessToken?: string })?.accessToken;
-      auth = token ? { kind: "meta-page-bearer", accessToken: token } : { kind: "public" };
-    } else if (channel === "whatsapp" && platformMediaId && !mediaUrl) {
-      auth = { kind: "meta-whatsapp-user", userId };
-    } else if (
-      (channel === "whatsapp" || channel === "sms") &&
-      mediaUrl &&
-      /twilio\.com/i.test(mediaUrl)
-    ) {
-      const user = await storage.getUser(userId);
-      if (!user?.twilioAccountSid || !user?.twilioAuthToken) return {};
-      const tok = isEncrypted(user.twilioAuthToken)
-        ? decryptCredential(user.twilioAuthToken)
-        : user.twilioAuthToken;
-      auth = { kind: "twilio-basic", accountSid: user.twilioAccountSid, authToken: tok };
-    }
-
-    const res = await persistInboundMedia({
-      channel,
-      userId,
-      providerMediaUrl: mediaUrl?.trim() || null,
-      providerMediaId: platformMediaId?.trim() || null,
-      mediaType: contentType || "document",
-      filename: mediaFilename?.trim() || null,
-      auth,
-    });
-
-    if (!res) {
-      if (mediaUrl && looksLikeTransientProviderUrl(mediaUrl)) {
-        return {
-          mediaUrl,
-          mediaFilename,
-          providerMediaUrl: mediaUrl,
-          providerMediaId: platformMediaId || null,
-        };
-      }
-      return {};
-    }
-
-    return {
-      mediaUrl: res.mediaUrl,
-      mediaFilename: res.mediaFilename ?? mediaFilename,
-      providerMediaUrl: res.providerMediaUrl ?? (mediaUrl && looksLikeTransientProviderUrl(mediaUrl) ? mediaUrl : null),
-      providerMediaId: res.providerMediaId ?? platformMediaId ?? null,
-      mediaMimeType: res.mediaMimeType,
-      mediaSize: res.mediaSize,
-      mediaStorageKey: res.mediaStorageKey,
-      mediaStoredAt: res.mediaStoredAt,
-      mediaType: res.mediaMimeType,
-    };
+    return {};
   }
 
   async processIncomingMessage(params: {
@@ -913,7 +878,7 @@ class ChannelService {
 
           if (gKind === "impatience" && !hasEvt(GREETING_ACTIVITY.impatience)) {
             shouldReply = true;
-            replyText = getImpatienceGreetingReply();
+            replyText = IMPATIENCE_GREETING_REPLY;
             source = "auto_reply";
             greetingActivityToLog = GREETING_ACTIVITY.impatience;
           } else if (gKind === "pure") {
@@ -925,7 +890,7 @@ class ChannelService {
               greetingActivityToLog = GREETING_ACTIVITY.niche;
             } else if (priorMessageCount > 0 && !hasEvt(GREETING_ACTIVITY.light)) {
               shouldReply = true;
-              replyText = getLightGreetingFollowup();
+              replyText = LIGHT_GREETING_FOLLOWUP;
               source = "auto_reply";
               greetingActivityToLog = GREETING_ACTIVITY.light;
             }
