@@ -58,6 +58,16 @@ export function Welcome() {
     }
   }, [location, user]);
 
+  // When Shopify App `application_url` is the app root, installs land as `/?shop=…myshopify.com` — forward to OAuth.
+  useLayoutEffect(() => {
+    if (typeof window === "undefined" || location !== "/") return;
+    const params = new URLSearchParams(window.location.search);
+    const shop = params.get("shop");
+    if (shop && /^[a-z0-9][a-z0-9-]*\.myshopify\.com$/i.test(shop)) {
+      window.location.replace(`/api/shopify/install?shop=${encodeURIComponent(shop)}`);
+    }
+  }, [location]);
+
   return (
     <div dir={isRTL ? "rtl" : "ltr"} className={`min-h-screen bg-white overflow-x-hidden ${isRTL ? "text-right" : "text-left"}`}>
       <Helmet>

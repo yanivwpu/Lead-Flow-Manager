@@ -1,5 +1,6 @@
 import { createContext, useContext, ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { getSubscriptionApiUrl, useShopifyShopHint } from "./shopifyBillingHint";
 
 interface SubscriptionLimits {
   plan: string;
@@ -32,6 +33,8 @@ interface SubscriptionData {
     plan: string;
     status: string;
     currentPeriodEnd: string | null;
+    isShopify?: boolean;
+    shopifyBillingTrialDays?: number;
   } | null;
 }
 
@@ -48,8 +51,20 @@ const SubscriptionContext = createContext<SubscriptionContextType>({
 });
 
 export function SubscriptionProvider({ children }: { children: ReactNode }) {
+  const shopHint = useShopifyShopHint();
   const { data, isLoading, refetch } = useQuery<SubscriptionData>({
-    queryKey: ["/api/subscription"],
+    queryKey: ["/api/subscription", shopHint ?? ""],
+    queryFn: async () => {
+      const res = await fetch(getSubscriptionApiUrl(), { credentials: "include" });
+      if (res.status === 401) {
+        throw new Error("401");
+      }
+      if (!res.ok) {
+        const text = (await res.text()) || res.statusText;
+        throw new Error(`${res.status}: ${text}`);
+      }
+      return res.json();
+    },
     staleTime: 60_000,
   });
 

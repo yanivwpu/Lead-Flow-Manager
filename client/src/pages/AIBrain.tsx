@@ -32,6 +32,7 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "@/hooks/use-toast";
 import { getCheckoutReturnPaths } from "@/lib/checkoutReturnPaths";
+import { getSubscriptionApiUrl, useShopifyShopHint } from "@/lib/shopifyBillingHint";
 import { Link } from "wouter";
 import { cn } from "@/lib/utils";
 
@@ -143,12 +144,19 @@ const INDUSTRY_QUALIFY_TEMPLATES: Record<string, QualifyingQuestion[]> = {
 
 function AIBrainContent() {
   const queryClient = useQueryClient();
+  const shopHint = useShopifyShopHint();
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const lastKnowledgeSentRef = useRef<string | null>(null);
   const knowledgeHydratedRef = useRef(false);
   
   const { data: subscription, isLoading: subscriptionLoading } = useQuery<SubscriptionData>({
-    queryKey: ["/api/subscription"],
+    queryKey: ["/api/subscription", shopHint ?? ""],
+    queryFn: async () => {
+      const res = await fetch(getSubscriptionApiUrl(), { credentials: "include" });
+      if (res.status === 401) throw new Error("401");
+      if (!res.ok) throw new Error(await res.text());
+      return res.json();
+    },
   });
   
   const plan = subscription?.limits?.plan || "free";
@@ -178,7 +186,7 @@ function AIBrainContent() {
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [bundleModalOpen, setBundleModalOpen] = useState(false);
   
-  const isShopify = !!(subscription?.subscription?.isShopify);
+  const isShopify = !!(subscription?.subscription?.isShopify) || !!shopHint;
 
   // AI Brain add-on checkout
   const handleAddonCheckout = async () => {

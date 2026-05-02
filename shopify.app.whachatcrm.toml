@@ -1,0 +1,31 @@
+# Active Partner / production app config. Deploy: shopify app deploy --config shopify.app.whachatcrm.toml
+# All app URLs and compliance webhooks use https://app.whachatcrm.com
+
+client_id = "e4585d4da1434c9e5649a2269e716076"
+name = " WhachatCRM"
+application_url = "https://app.whachatcrm.com"
+embedded = false
+
+[webhooks]
+api_version = "2026-01"
+
+  [[webhooks.subscriptions]]
+  uri = "https://app.whachatcrm.com/api/shopify/webhooks/customers/data_request"
+  compliance_topics = [ "customers/data_request" ]
+
+  [[webhooks.subscriptions]]
+  uri = "https://app.whachatcrm.com/api/shopify/webhooks/customers/redact"
+  compliance_topics = [ "customers/redact" ]
+
+  [[webhooks.subscriptions]]
+  uri = "https://app.whachatcrm.com/api/shopify/webhooks/shop/redact"
+  compliance_topics = [ "shop/redact" ]
+
+[access_scopes]
+# Kept in sync with server/shopify.ts
+scopes = "read_customers"
+optional_scopes = [ ]
+use_legacy_install_flow = false
+
+[auth]
+redirect_urls = [ "https://app.whachatcrm.com/api/shopify/callback" ]

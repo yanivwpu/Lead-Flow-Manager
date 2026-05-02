@@ -947,6 +947,7 @@
     "backHome": "Back to Home",
     "backSettings": "Back to Settings",
     "trialBanner": "All paid plans include a 14-day free Pro trial that lets you experience the complete system. No charge during trial.",
+    "shopifyInstallBanner": "You're connected through Shopify. Choose Starter ($19/mo) or Pro ($49/mo) below — checkout and subscription management run in Shopify, not Stripe. Each paid plan includes a 14-day free trial before the first charge. AI Brain is a separate add-on at $29/mo on top of your base plan.",
     "trialNote": "14-day free Pro trial included",
     "hero": {
       "title": "Simple, transparent pricing for growing conversations",

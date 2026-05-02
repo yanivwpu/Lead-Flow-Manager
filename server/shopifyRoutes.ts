@@ -145,24 +145,15 @@ router.get('/callback', async (req: Request, res: Response) => {
     // Register mandatory compliance webhooks
     await registerMandatoryWebhooks(shop, accessToken);
 
-    const HOST = getAppOrigin();
+    // Log the merchant into the web app so they can choose Starter vs Pro on Pricing (Shopify Billing API).
+    await new Promise<void>((resolve, reject) => {
+      (req as any).login(user, (err: unknown) => (err ? reject(err) : resolve()));
+    });
 
-    const billingResult = await createShopifyBillingCharge(
-      shop,
-      accessToken,
-      'Pro',
-      `${HOST}/api/shopify/billing/callback?shop=${shop}`,
-      process.env.NODE_ENV !== 'production'
+    const trialDays = 14;
+    res.redirect(
+      `/pricing?shopify_installed=1&shop=${encodeURIComponent(shop)}&trial_days=${String(trialDays)}`,
     );
-
-    if (billingResult?.confirmationUrl) {
-      await storage.updateUser(user.id, {
-        shopifyChargeId: billingResult.chargeId,
-      });
-      return res.redirect(billingResult.confirmationUrl);
-    }
-
-    res.redirect(`/app?shopify_installed=true&shop=${shop}`);
   } catch (error) {
     console.error('Shopify callback error:', error);
     res.status(500).json({ error: 'Installation failed' });

@@ -13,6 +13,7 @@ import { ConnectTwilioWizard } from "@/components/ConnectTwilioWizard";
 import { ConnectMetaWizard } from "@/components/ConnectMetaWizard";
 import { ChannelSettings } from "@/components/ChannelSettings";
 import { cn } from "@/lib/utils";
+import { getSubscriptionApiUrl, useShopifyShopHint } from "@/lib/shopifyBillingHint";
 
 interface TeamMember {
   id: string;
@@ -51,6 +52,7 @@ interface SubscriptionData {
     plan: string;
     status: string;
     currentPeriodEnd: string | null;
+    isShopify?: boolean;
   } | null;
 }
 
@@ -571,8 +573,16 @@ export function Settings() {
     queryKey: ["/api/phones"],
   });
 
+  const shopHint = useShopifyShopHint();
+
   const { data: subscriptionData, isLoading: subscriptionLoading } = useQuery<SubscriptionData>({
-    queryKey: ["/api/subscription"],
+    queryKey: ["/api/subscription", shopHint ?? ""],
+    queryFn: async () => {
+      const res = await fetch(getSubscriptionApiUrl(), { credentials: "include" });
+      if (res.status === 401) throw new Error("401");
+      if (!res.ok) throw new Error(await res.text());
+      return res.json();
+    },
   });
 
   const effectivePlan =
@@ -592,26 +602,28 @@ export function Settings() {
     typeof usersCountVal === "number" &&
     usersCountVal >= usersLimitVal;
 
-  const isInShopify = typeof window !== 'undefined' && (
-    window.location.search.includes('shop=') || 
-    window.top !== window.self ||
-    document.referrer.includes('shopify')
-  );
+  const isInShopify =
+    !!subscriptionData?.subscription?.isShopify ||
+    !!shopHint ||
+    (typeof window !== "undefined" &&
+      (window.location.search.includes("shop=") ||
+        (window.top != null && window.top !== window.self) ||
+        document.referrer.includes("shopify")));
 
   const shopifyBillingMutation = useMutation({
     mutationFn: async () => {
       const urlParams = new URLSearchParams(window.location.search);
-      const shop = urlParams.get('shop') || localStorage.getItem('shopify_shop');
-      if (!shop) throw new Error('No Shopify shop found');
-      localStorage.setItem('shopify_shop', shop);
-      const res = await fetch(`/api/shopify/billing/change-plan`, {
+      const shop = urlParams.get("shop") || localStorage.getItem("shopify_shop");
+      if (!shop) throw new Error("No Shopify shop found");
+      localStorage.setItem("shopify_shop", shop);
+      const res = await fetch(`/api/shopify/billing/checkout-web`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({ plan: "Pro" }),
       });
       if (!res.ok) {
-        const redirectUrl = `/api/shopify/install?shop=${shop}`;
+        const redirectUrl = `/api/shopify/install?shop=${encodeURIComponent(shop)}`;
         window.location.href = redirectUrl;
         return;
       }
@@ -1094,7 +1106,13 @@ export function Settings() {
                   <p className="text-xs text-gray-500 mb-4">Update payment method or download invoices.</p>
                   
                   <div className="mt-auto pt-6">
-                    {subscriptionData?.subscription?.plan !== "free" ? (
+                    {subscriptionData?.subscription?.isShopify ? (
+                      <p className="text-xs text-gray-500 leading-relaxed">
+                        Subscriptions are billed through Shopify. Open your Shopify admin → Apps → WhachatCRM to manage the
+                        app subscription, or use <span className="font-medium text-gray-700">Pricing</span> in this app to
+                        change plans.
+                      </p>
+                    ) : subscriptionData?.subscription?.plan !== "free" ? (
                       <Button 
                         variant="outline" 
                         className="w-full border-gray-200 hover:bg-gray-50 text-gray-700 font-semibold"

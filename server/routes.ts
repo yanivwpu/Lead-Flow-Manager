@@ -1,4 +1,4 @@
-import type { Express } from "express";
+import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import crypto from "crypto";
 import { db } from "../drizzle/db";
@@ -2650,6 +2650,20 @@ export async function registerRoutes(
 
   // ============= Subscription Endpoints =============
 
+  /** Shopify-linked accounts must use Shopify Billing API — never Stripe checkout or portal. */
+  async function rejectStripeIfShopifyUser(req: Request, res: Response): Promise<boolean> {
+    const u = await storage.getUser(req.user!.id);
+    if (u?.shopifyShop) {
+      res.status(400).json({
+        error:
+          "This account is billed through Shopify. Use Pricing or Settings to subscribe or change plans.",
+        code: "SHOPIFY_BILLING_REQUIRED",
+      });
+      return true;
+    }
+    return false;
+  }
+
   // Get available subscription plans
   app.get("/api/subscription/plans", (_req, res) => {
     const plans = Object.entries(PLAN_LIMITS).map(([id, plan]) => ({
@@ -2670,6 +2684,10 @@ export async function registerRoutes(
       const user = await storage.getUser(req.user.id);
       const usersCount = await storage.getTeamMemberCount(req.user.id);
 
+      const shopQuery = typeof req.query.shop === "string" ? req.query.shop.trim() : "";
+      const shopQueryLooksShopify = /^[a-z0-9][a-z0-9-]*\.myshopify\.com$/i.test(shopQuery);
+      const isShopify = !!(user?.shopifyShop) || shopQueryLooksShopify;
+
       res.json({
         limits: limits ? {
           ...limits,
@@ -2686,7 +2704,8 @@ export async function registerRoutes(
           plan: user.subscriptionPlan,
           status: user.subscriptionStatus,
           currentPeriodEnd: user.currentPeriodEnd,
-          isShopify: !!(user.shopifyShop),
+          isShopify,
+          shopifyBillingTrialDays: isShopify ? 14 : undefined,
         } : null,
       });
     } catch (error) {
@@ -2783,6 +2802,7 @@ export async function registerRoutes(
       if (!req.user) {
         return res.status(401).json({ error: "Unauthorized" });
       }
+      if (await rejectStripeIfShopifyUser(req, res)) return;
 
       const { planId, billingInterval, redirectTo, cancelTo } = req.body as {
         planId?: string;
@@ -2821,6 +2841,7 @@ export async function registerRoutes(
       if (!req.user) {
         return res.status(401).json({ error: "Unauthorized" });
       }
+      if (await rejectStripeIfShopifyUser(req, res)) return;
 
       const { redirectTo, cancelTo } = (req.body || {}) as { redirectTo?: string; cancelTo?: string };
       const baseUrl = getAppOrigin() || `${req.protocol}://${req.get('host')}`;
@@ -2846,6 +2867,7 @@ export async function registerRoutes(
       if (!req.user) {
         return res.status(401).json({ error: "Unauthorized" });
       }
+      if (await rejectStripeIfShopifyUser(req, res)) return;
 
       const { plan, redirectTo, cancelTo } = (req.body || {}) as {
         plan?: string;
@@ -2881,6 +2903,7 @@ export async function registerRoutes(
       if (!req.user) {
         return res.status(401).json({ error: "Unauthorized" });
       }
+      if (await rejectStripeIfShopifyUser(req, res)) return;
 
       const baseUrl = getAppOrigin() || `${req.protocol}://${req.get('host')}`;
       const { redirectTo, cancelTo } = (req.body || {}) as { redirectTo?: string; cancelTo?: string };
@@ -2918,6 +2941,7 @@ export async function registerRoutes(
       if (!req.user) {
         return res.status(401).json({ error: "Unauthorized" });
       }
+      if (await rejectStripeIfShopifyUser(req, res)) return;
 
       const returnUrl = `${resolveStripeCheckoutRedirectOrigin(getAppOrigin())}/app/settings`;
       const result = await subscriptionService.createPortalSession(req.user.id, returnUrl);
@@ -2934,6 +2958,7 @@ export async function registerRoutes(
       if (!req.user) {
         return res.status(401).json({ error: "Unauthorized" });
       }
+      if (await rejectStripeIfShopifyUser(req, res)) return;
 
       const { immediate } = req.body;
       

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import { Helmet } from "react-helmet";
@@ -13,6 +13,7 @@ import { useAuth } from "@/lib/auth-context";
 import { useToast } from "@/hooks/use-toast";
 import { supportedLanguages } from "@/lib/i18n";
 import { getCheckoutReturnPaths } from "@/lib/checkoutReturnPaths";
+import { getSubscriptionApiUrl, getShopifyShopHint, useShopifyShopHint } from "@/lib/shopifyBillingHint";
 
 // ─── Shared structural components ───────────────────────────────────────────
 function FeatureItem({
@@ -78,6 +79,7 @@ function TableCellValue({ val }: { val: boolean | string }) {
 export function Pricing() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
+  const shopHint = useShopifyShopHint();
   const { toast } = useToast();
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
   const { t, i18n } = useTranslation();
@@ -90,15 +92,33 @@ export function Pricing() {
     window.scrollTo(0, 0);
   }, []);
 
+  const showShopifyInstallBanner = useMemo(() => {
+    if (typeof window === "undefined") return false;
+    const p = new URLSearchParams(window.location.search);
+    return p.get("shopify_installed") === "1";
+  }, []);
+
   const { data: subscriptionData, isLoading: subscriptionLoading } = useQuery<{
     limits: {
       plan: string;
       hasAIBrainAddon?: boolean;
       aiBrainBasePlanEligible?: boolean;
     } | null;
-    subscription: { plan: string; status?: string; currentPeriodEnd?: string | null; isShopify?: boolean } | null;
+    subscription: {
+      plan: string;
+      status?: string;
+      currentPeriodEnd?: string | null;
+      isShopify?: boolean;
+      shopifyBillingTrialDays?: number;
+    } | null;
   }>({
-    queryKey: ["/api/subscription"],
+    queryKey: ["/api/subscription", shopHint ?? ""],
+    queryFn: async () => {
+      const res = await fetch(getSubscriptionApiUrl(), { credentials: "include" });
+      if (res.status === 401) throw new Error("401");
+      if (!res.ok) throw new Error(await res.text());
+      return res.json();
+    },
     enabled: !!user,
   });
 
@@ -112,7 +132,8 @@ export function Pricing() {
       : "free";
   const hasAIBrainAddon = limits?.hasAIBrainAddon ?? false;
   const aiBrainBasePlanEligible = limits?.aiBrainBasePlanEligible ?? false;
-  const isShopify = !!(subscriptionData?.subscription?.isShopify);
+  const isShopify =
+    !!(subscriptionData?.subscription?.isShopify) || !!getShopifyShopHint();
   const planButtonsDisabled = !!user && subscriptionLoading;
 
   // Shopify plan name mapping
@@ -197,7 +218,9 @@ export function Pricing() {
 
   const handleUpgrade = (planId: string) => {
     if (!user) {
-      setLocation("/auth?redirect=/pricing");
+      const hint = getShopifyShopHint();
+      const pricingPath = hint ? `/pricing?shop=${encodeURIComponent(hint)}` : "/pricing";
+      setLocation(`/auth?redirect=${encodeURIComponent(pricingPath)}`);
       return;
     }
     if (planId === "free") return;
@@ -318,6 +341,16 @@ export function Pricing() {
             {user ? t(`${p}.backSettings`) : t(`${p}.backHome`)}
           </a>
         </Link>
+
+        {showShopifyInstallBanner && (
+          <div
+            className="mb-6 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900"
+            role="status"
+            data-testid="banner-shopify-install"
+          >
+            {t(`${p}.shopifyInstallBanner`)}
+          </div>
+        )}
 
         {/* ─────────────── FREE TRIAL BANNER ─────────────── */}
         <div className="flex items-start gap-3 bg-emerald-50 border border-emerald-200 rounded-xl px-5 py-4 mb-10 text-sm text-emerald-800" data-testid="banner-free-trial">

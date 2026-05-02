@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getCheckoutReturnPaths } from "@/lib/checkoutReturnPaths";
+import { getSubscriptionApiUrl, useShopifyShopHint } from "@/lib/shopifyBillingHint";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Zap, MessageSquare, Users, Phone, Sparkles, Loader2, Check, Info } from "lucide-react";
@@ -205,6 +206,7 @@ const SHOPIFY_PLAN_MAP: Record<string, string> = { starter: "Starter", pro: "Pro
 
 export function UpgradeModal({ open, onOpenChange, reason, currentPlan, limitInfo }: UpgradeModalProps) {
   const [loadingPlan, setLoadingPlan] = useState<TargetPlan | null>(null);
+  const shopHint = useShopifyShopHint();
 
   const isConversationLimit = reason === "conversation_limit";
   const isAutomationsPaidPlan = reason === "automations_paid_plan";
@@ -212,9 +214,17 @@ export function UpgradeModal({ open, onOpenChange, reason, currentPlan, limitInf
 
   const { data: subscription } = useQuery<{
     subscription: { plan: string; isShopify?: boolean } | null;
-  }>({ queryKey: ["/api/subscription"] });
+  }>({
+    queryKey: ["/api/subscription", shopHint ?? ""],
+    queryFn: async () => {
+      const res = await fetch(getSubscriptionApiUrl(), { credentials: "include" });
+      if (res.status === 401) throw new Error("401");
+      if (!res.ok) throw new Error(await res.text());
+      return res.json();
+    },
+  });
 
-  const isShopify = !!subscription?.subscription?.isShopify;
+  const isShopify = !!(subscription?.subscription?.isShopify) || !!shopHint;
 
   const runCheckout = async (plan: TargetPlan) => {
     setLoadingPlan(plan);

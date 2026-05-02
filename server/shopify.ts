@@ -9,12 +9,18 @@ const API_VERSION = ApiVersion.October24; // Maps to 2025-10 in Shopify dashboar
 
 const SHOPIFY_API_KEY = process.env.SHOPIFY_API_KEY || '';
 const SHOPIFY_API_SECRET = process.env.SHOPIFY_API_SECRET || '';
-const SHOPIFY_SCOPES = ['read_products', 'read_orders', 'read_customers'];
+/**
+ * Shopify OAuth scopes (keep in sync with shopify.app.whachatcrm.toml).
+ * We only request read_customers today: used for GDPR customer/redact flows (correlate phone ↔ chats)
+ * and future CRM sync. Product/order REST reads are not implemented yet — do not add scopes until features ship.
+ */
+const SHOPIFY_SCOPES = ['read_customers'];
 const HOST = process.env.APP_URL || process.env.SHOPIFY_APP_HOST || process.env.HOST || 'https://app.whachatcrm.com';
 
+/** Amounts must match public pricing / App Store listing (Starter $19/mo, Pro $49/mo, AI Brain add-on +$29/mo). */
 export const SHOPIFY_BILLING_PLANS = {
   'Starter': {
-    amount: 0,
+    amount: 19.0,
     currencyCode: 'USD',
     interval: BillingInterval.Every30Days,
     trialDays: 14,
@@ -25,6 +31,7 @@ export const SHOPIFY_BILLING_PLANS = {
     interval: BillingInterval.Every30Days,
     trialDays: 14,
   },
+  /** Separate recurring charge — billed on top of Starter or Pro (App Store add-on disclosure). */
   'AI Brain Add-on': {
     amount: 29.0,
     currencyCode: 'USD',
@@ -158,7 +165,12 @@ export async function createShopifyBillingCharge(
     });
 
     const trialDays = 'trialDays' in planConfig ? (planConfig as any).trialDays : 0;
-    
+
+    const subscriptionName =
+      plan === 'AI Brain Add-on'
+        ? 'WhachatCRM AI Brain add-on'
+        : `WhachatCRM ${plan}`;
+
     const response = await client.request(`
       mutation appSubscriptionCreate($name: String!, $returnUrl: URL!, $lineItems: [AppSubscriptionLineItemInput!]!, $test: Boolean, $trialDays: Int) {
         appSubscriptionCreate(
@@ -180,7 +192,7 @@ export async function createShopifyBillingCharge(
       }
     `, {
       variables: {
-        name: `WhachatCRM ${plan}`,
+        name: subscriptionName,
         returnUrl,
         test: isTest,
         trialDays: trialDays > 0 ? trialDays : null,

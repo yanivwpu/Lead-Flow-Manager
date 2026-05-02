@@ -1,22 +1,23 @@
-# WhachatCRM Shopify App Configuration
-# Deploy this configuration using: shopify app deploy
-# Note: client_id should be set via SHOPIFY_API_KEY environment variable
+# WhachatCRM — reference config (URLs match production).
+# Primary deploy target in this repo: `shopify.app.whachatcrm.toml` (use: shopify app deploy --config shopify.app.whachatcrm.toml).
+# client_id is set from SHOPIFY_API_KEY in CI/CLI when applicable.
 
 name = "WhachatCRM"
-# client_id is managed by Shopify CLI from environment
-application_url = "https://whachatcrm.com"
+client_id = "e4585d4a1434c9e5649a2269e716076"
+application_url = "https://app.whachatcrm.com"
 embedded = false
 
 [access_scopes]
-scopes = "read_products,read_orders,read_customers"
+# Kept in sync with server/shopify.ts — see SHOPIFY_SCOPES comment there.
+scopes = "read_customers"
 
 [auth]
-redirect_urls = ["https://whachatcrm.com/api/shopify/callback"]
+redirect_urls = ["https://app.whachatcrm.com/api/shopify/callback"]
 
 [webhooks]
 api_version = "2026-01"
 
 [webhooks.privacy_compliance]
-customer_deletion_url = "https://whachatcrm.com/api/shopify/webhooks/customers/redact"
-customer_data_request_url = "https://whachatcrm.com/api/shopify/webhooks/customers/data_request"
-shop_deletion_url = "https://whachatcrm.com/api/shopify/webhooks/shop/redact"
+customer_deletion_url = "https://app.whachatcrm.com/api/shopify/webhooks/customers/redact"
+customer_data_request_url = "https://app.whachatcrm.com/api/shopify/webhooks/customers/data_request"
+shop_deletion_url = "https://app.whachatcrm.com/api/shopify/webhooks/shop/redact"
