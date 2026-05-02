@@ -440,7 +440,7 @@ export function UnifiedInbox() {
 
   const isDemoUser = user?.email === "demo@whachat.com";
 
-  const { data: inboxData, isLoading: inboxLoading } = useQuery<InboxItem[]>({
+  const { data: inboxData, isPending: inboxPending } = useQuery<InboxItem[]>({
     queryKey: ["/api/inbox"],
     refetchInterval: 5000,
     refetchIntervalInBackground: true,
@@ -450,6 +450,7 @@ export function UnifiedInbox() {
   const { data: demoChats = [] } = useQuery<any[]>({
     queryKey: ["/api/chats"],
     enabled: isDemoUser,
+    placeholderData: keepPreviousData,
   });
 
   const selectedDemoChat = useMemo(() => {
@@ -458,7 +459,10 @@ export function UnifiedInbox() {
   }, [isDemoUser, selectedContactId, demoChats]);
 
   const inbox: InboxItem[] = useMemo(() => {
-    if (isDemoUser && demoChats.length > 0) {
+    // Demo users: list comes only from /api/chats. Falling back to /api/inbox here caused rows to
+    // swap sources whenever demoChats was briefly empty or still loading (visible flicker loop).
+    if (isDemoUser) {
+      if (demoChats.length === 0) return [];
       return demoChats.map((chat: any, index: number) => {
         const ch = (chat.channel || DEMO_CHANNELS[index % DEMO_CHANNELS.length]) as Channel;
         return {
@@ -797,16 +801,22 @@ export function UnifiedInbox() {
     return match || null;
   }, [handoffTimeline, primaryConversation?.id]);
 
+  /** Stable while polls return new array refs — avoids invalidating timeline every messages refetch. */
+  const tailInboundMessageId = useMemo(() => {
+    if (!realMessages.length) return "";
+    const last = realMessages[realMessages.length - 1];
+    if (last.direction !== "inbound") return "";
+    return last.id;
+  }, [realMessages]);
+
   // When a new inbound arrives, refetch timeline immediately so Copilot flips to Snoozed right away.
   useEffect(() => {
     if (!selectedContactId || isDemoUser) return;
-    if (!realMessages.length) return;
-    const last = realMessages[realMessages.length - 1];
-    if (last.direction !== "inbound") return;
+    if (!tailInboundMessageId) return;
     queryClient.invalidateQueries({
       queryKey: [`/api/contacts/${selectedContactId}/timeline?limit=60`],
     });
-  }, [realMessages, selectedContactId, isDemoUser, queryClient]);
+  }, [tailInboundMessageId, selectedContactId, isDemoUser, queryClient]);
 
   type ChannelHealthEntry = {
     channel: string;
@@ -1374,7 +1384,8 @@ export function UnifiedInbox() {
   const convStatus = primaryConversation?.status || 'open';
   const conversationStatusRow = getConversationStatusRow(convStatus);
 
-  if (inboxLoading && !isDemoUser) {
+  // Only block on first load with no rows yet — never swap the whole page out during background refetch.
+  if (!isDemoUser && inboxPending && inboxData === undefined) {
     return (
       <div className="flex items-center justify-center h-full">
         <Loader2 className="w-8 h-8 animate-spin text-primary" />
