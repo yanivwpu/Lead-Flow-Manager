@@ -882,11 +882,20 @@ export const messages = pgTable("messages", {
   contentType: text("content_type").notNull().default("text"), // text, image, video, audio, document, location, template
   
   // Media attachments
+  /** Permanent URL (e.g. Cloudflare R2 public URL or /objects/uploads) — never rely on provider CDNs long-term */
   mediaUrl: text("media_url"),
-  mediaType: text("media_type"), // image/jpeg, video/mp4, etc.
+  mediaType: text("media_type"), // image | video | audio | document (message category)
   mediaThumbnail: text("media_thumbnail"),
   mediaFilename: text("media_filename"), // Actual filename for documents/attachments
   platformMediaId: text("platform_media_id"), // Platform-assigned media ID (e.g. WhatsApp Meta mediaId) for on-demand proxy fetching
+  /** Original provider URL at ingest time (debug / backfill); do not render in UI */
+  providerMediaUrl: text("provider_media_url"),
+  /** Provider-stable id when no URL (e.g. Telegram file_id, Meta media id duplicate) */
+  providerMediaId: text("provider_media_id"),
+  mediaMimeType: text("media_mime_type"),
+  mediaSize: integer("media_size"),
+  mediaStorageKey: text("media_storage_key"),
+  mediaStoredAt: timestamp("media_stored_at"),
   
   // Template message (for outbound templates)
   templateId: varchar("template_id"),

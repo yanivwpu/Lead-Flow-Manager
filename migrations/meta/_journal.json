@@ -29,6 +29,13 @@
       "when": 1774848000000,
       "tag": "0003_users_entitlement_columns",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1775000000000,
+      "tag": "0004_message_media_persistence",
+      "breakpoints": true
     }
   ]
 }

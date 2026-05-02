@@ -44,6 +44,7 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import { objectStorageClient } from "../replit_integrations/object_storage/objectStorage";
+import { uploadOutboundUserMedia } from "../mediaStorageService";
 
 // ---------------------------------------------------------------------------
 // MIME type → friendly media type
@@ -187,20 +188,40 @@ export function registerMediaRoutes(app: Express): void {
           `https://${(process.env.REPLIT_DOMAINS || "").split(",")[0]}`;
 
         const ext = MIME_TO_EXT[req.file.mimetype] || ".bin";
-        const filename = `${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`;
         const mediaType = ALLOWED_MIME_TYPES[req.file.mimetype] || "document";
 
-        const { mediaUrl, storedOn } = await uploadMediaBuffer(
-          req.file.buffer,
-          req.file.mimetype,
-          filename,
-          appUrl
-        );
+        let mediaUrl: string;
+        let storedOn: string;
+        if (
+          process.env.CLOUDFLARE_R2_ACCOUNT_ID &&
+          process.env.CLOUDFLARE_R2_ACCESS_KEY_ID &&
+          process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY &&
+          process.env.CLOUDFLARE_R2_BUCKET &&
+          process.env.CLOUDFLARE_R2_PUBLIC_URL
+        ) {
+          const up = await uploadOutboundUserMedia({
+            userId: req.user.id,
+            buffer: req.file.buffer,
+            contentType: req.file.mimetype,
+            originChannel: "web-upload",
+          });
+          mediaUrl = up.mediaUrl;
+          storedOn = "r2";
+        } else {
+          const filename = `${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`;
+          const legacy = await uploadMediaBuffer(
+            req.file.buffer,
+            req.file.mimetype,
+            filename,
+            appUrl
+          );
+          mediaUrl = legacy.mediaUrl;
+          storedOn = legacy.storedOn;
+        }
 
         console.log(
           `[MediaUpload] OK — userId=${req.user.id}` +
           ` originalName="${req.file.originalname}"` +
-          ` storedAs="${filename}"` +
           ` mime=${req.file.mimetype}` +
           ` size=${req.file.size}B` +
           ` backend=${storedOn}` +

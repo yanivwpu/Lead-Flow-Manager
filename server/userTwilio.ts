@@ -284,13 +284,22 @@ export async function disconnectUserTwilio(userId: string): Promise<void> {
 }
 
 export function parseIncomingWebhook(body: any) {
+  const numMedia = parseInt(body.NumMedia || "0", 10);
+  let mediaUrl: string | undefined;
+  let mediaContentType: string | undefined;
+  if (numMedia > 0) {
+    mediaUrl = body.MediaUrl0 || body["MediaUrl0"];
+    mediaContentType = body.MediaContentType0 || body["MediaContentType0"];
+  }
   return {
     from: body.From?.replace("whatsapp:", "") || "",
     to: body.To?.replace("whatsapp:", "") || "",
     body: body.Body || "",
     messageSid: body.MessageSid || "",
     accountSid: body.AccountSid || "",
-    numMedia: parseInt(body.NumMedia || "0"),
+    numMedia,
+    mediaUrl,
+    mediaContentType,
     profileName: body.ProfileName || "",
   };
 }

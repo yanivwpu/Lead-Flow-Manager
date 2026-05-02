@@ -15,10 +15,40 @@ export function registerWebhookRoutes(app: Express): void {
       if (update.message) {
         const message = update.message;
         const chatId = String(message.chat.id);
-        const text = message.text || "";
         const senderName = message.from?.first_name
           ? `${message.from.first_name} ${message.from.last_name || ""}`.trim()
           : chatId;
+
+        const tgSetting = await storage.getChannelSetting(userId, "telegram");
+        const botToken: string | undefined = (tgSetting?.config as { botToken?: string })?.botToken;
+        if (!botToken) {
+          console.warn("[Inbound] Telegram bot token missing — skipping message");
+          return res.status(200).json({ ok: true });
+        }
+
+        let text = message.text || message.caption || "";
+        let contentType: "text" | "image" | "video" | "audio" | "document" = "text";
+        let telegramMedia: { botToken: string; fileId: string } | undefined;
+
+        const photos = message.photo as { file_id: string; file_size?: number }[] | undefined;
+        if (photos?.length) {
+          const largest = photos.reduce((a, b) => ((b.file_size ?? 0) > (a.file_size ?? 0) ? b : a));
+          contentType = "image";
+          telegramMedia = { botToken, fileId: largest.file_id };
+        } else if (message.document) {
+          contentType = "document";
+          telegramMedia = { botToken, fileId: message.document.file_id };
+          text = text || message.document.file_name || "";
+        } else if (message.video) {
+          contentType = "video";
+          telegramMedia = { botToken, fileId: message.video.file_id };
+        } else if (message.audio) {
+          contentType = "audio";
+          telegramMedia = { botToken, fileId: message.audio.file_id };
+        } else if (message.voice) {
+          contentType = "audio";
+          telegramMedia = { botToken, fileId: message.voice.file_id };
+        }
 
         console.log(`[Inbound] Channel identified: telegram — from: ${chatId}, messageId: ${message.message_id}`);
         console.log(`[Inbound] Starting processIncomingMessage — channel: telegram, userId: ${userId}`);
@@ -26,11 +56,12 @@ export function registerWebhookRoutes(app: Express): void {
         const { channelService } = await import("../channelService");
         const result = await channelService.processIncomingMessage({
           userId,
-          channel: 'telegram',
+          channel: "telegram",
           channelContactId: chatId,
           contactName: senderName,
           content: text,
-          contentType: 'text',
+          contentType,
+          telegramMedia,
           externalMessageId: String(message.message_id),
         });
 
@@ -193,6 +224,15 @@ export function registerWebhookRoutes(app: Express): void {
       console.log(`[Inbound] Channel identified: ${channel} — userId: ${user.id}, from: ${normalizedFrom}, to: ${matchedPhone}`);
       console.log(`[Inbound] Starting processIncomingMessage — channel: ${channel}, messageSid: ${parsed.messageSid}`);
 
+      const twilioMimeToContent = (ct: string | undefined): "image" | "video" | "audio" | "document" => {
+        if (!ct) return "image";
+        if (ct.startsWith("image/")) return "image";
+        if (ct.startsWith("video/")) return "video";
+        if (ct.startsWith("audio/")) return "audio";
+        return "document";
+      };
+      const hasTwilioMedia = !!parsed.mediaUrl && parsed.numMedia > 0;
+
       const { channelService } = await import("../channelService");
       await channelService.processIncomingMessage({
         userId: user.id,
@@ -200,8 +240,10 @@ export function registerWebhookRoutes(app: Express): void {
         channelContactId: normalizedFrom,
         channelAccountId: matchedPhone, // the business number that received the message
         contactName: parsed.profileName || normalizedFrom,
-        content: parsed.body,
-        contentType: 'text',
+        content: parsed.body || (hasTwilioMedia ? "" : ""),
+        contentType: hasTwilioMedia ? twilioMimeToContent(parsed.mediaContentType) : "text",
+        mediaUrl: parsed.mediaUrl,
+        mediaFilename: hasTwilioMedia ? `mms-${parsed.messageSid}` : undefined,
         externalMessageId: parsed.messageSid,
       });
 

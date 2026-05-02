@@ -1,6 +1,7 @@
 import type { Express } from "express";
 import { CHANNELS } from "@shared/schema";
 import { storage } from "../storage";
+import { channelService } from "../channelService";
 import OpenAI from "openai";
 
 const openai = new OpenAI({
@@ -667,6 +668,35 @@ export function registerContactRoutes(app: Express): void {
     } catch (error) {
       console.error("Error fetching timeline:", error);
       res.status(500).json({ error: "Failed to fetch timeline" });
+    }
+  });
+
+  app.post("/api/contacts/:id/handoff-resolve", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const contact = await storage.getContact(req.params.id);
+      if (!contact) {
+        return res.status(404).json({ error: "Contact not found" });
+      }
+      if (contact.userId !== req.user.id) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+      const conversationId = req.body?.conversationId as string | undefined;
+      const reason = (req.body?.reason as string) || "user_unsnooze";
+      if (!conversationId || typeof conversationId !== "string") {
+        return res.status(400).json({ error: "conversationId is required" });
+      }
+      const conv = await storage.getConversation(conversationId);
+      if (!conv || conv.contactId !== contact.id) {
+        return res.status(400).json({ error: "Invalid conversation for this contact" });
+      }
+      await channelService.resolveHandoffIfActive(req.user.id, contact.id, conversationId, reason);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error resolving handoff:", error);
+      res.status(500).json({ error: "Failed to resolve handoff" });
     }
   });
 }

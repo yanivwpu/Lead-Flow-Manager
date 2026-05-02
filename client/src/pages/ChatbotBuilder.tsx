@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Helmet } from "react-helmet";
 import {
@@ -68,7 +68,8 @@ interface ChatbotNode {
     buttons?: ButtonOption[];
     options?: { label: string; nextNodeId: string }[];
     condition?: { type: string; value: string };
-    action?: { type: string; value: string };
+    /** For assign: value = memberId; memberName is display cache for the builder. */
+    action?: { type: string; value: string; memberName?: string };
     delayMinutes?: number;
     delayUnit?: "minutes" | "hours" | "days";
     variableName?: string;
@@ -175,7 +176,17 @@ const ACTION_TYPES = [
 
 /* ─── Helpers ────────────────────────────────────────────────────────── */
 
-function stepSummary(node: ChatbotNode): string {
+function assignMemberDisplayLabel(
+  action: NonNullable<ChatbotNode["data"]["action"]>,
+  teamMembers: TeamMember[]
+): string {
+  if (action.type !== "assign" || !action.value) return "";
+  if (action.memberName?.trim()) return action.memberName.trim();
+  const m = teamMembers.find((t) => t.memberId === action.value);
+  return (m?.name || m?.email || action.value).trim();
+}
+
+function stepSummary(node: ChatbotNode, teamMembers: TeamMember[] = []): string {
   switch (node.type) {
     case "message":
       if (node.data.messageType === "image") return node.data.mediaCaption ? `📷 ${node.data.mediaCaption}` : "📷 Image";
@@ -193,8 +204,14 @@ function stepSummary(node: ChatbotNode): string {
     }
     case "action": {
       const at = ACTION_TYPES.find(a => a.value === node.data.action?.type);
-      const val = node.data.action?.value;
-      return at ? (val ? `${at.label}: ${val}` : at.label) : "Configure this action";
+      const act = node.data.action;
+      if (!at) return "Configure this action";
+      if (act?.type === "assign" && act.value) {
+        const label = assignMemberDisplayLabel(act, teamMembers);
+        return label ? `${at.label}: ${label}` : at.label;
+      }
+      const val = act?.value;
+      return val ? `${at.label}: ${val}` : at.label;
     }
     default:
       return "";
@@ -203,6 +220,111 @@ function stepSummary(node: ChatbotNode): string {
 
 function stepTypeMeta(type: string) {
   return STEP_TYPES.find(s => s.type === type) || STEP_TYPES[0];
+}
+
+function DelayStepEditor({
+  nodeId,
+  delayMinutes,
+  delayUnit,
+  updateStep,
+}: {
+  nodeId: string;
+  delayMinutes: number | undefined;
+  delayUnit: "minutes" | "hours" | "days" | undefined;
+  updateStep: (id: string, u: Partial<ChatbotNode["data"]>) => void;
+}) {
+  const unit: "minutes" | "hours" | "days" = delayUnit || "minutes";
+  const committed = delayMinutes ?? 5;
+
+  const toDisplay = (m: number, u: "minutes" | "hours" | "days") =>
+    u === "days"
+      ? String(Math.max(0, Math.round(m / 1440)))
+      : u === "hours"
+        ? String(Math.max(0, Math.round(m / 60)))
+        : String(Math.max(0, m));
+
+  const toMinutes = (val: number, u: "minutes" | "hours" | "days") =>
+    u === "days" ? val * 1440 : u === "hours" ? val * 60 : val;
+
+  const [text, setText] = useState(() => toDisplay(committed, unit));
+
+  useEffect(() => {
+    setText(toDisplay(committed, unit));
+  }, [nodeId, committed, unit]);
+
+  const normalizeBlur = () => {
+    const trimmed = text.trim();
+    if (trimmed === "") {
+      const fallback = 1;
+      const m = toMinutes(fallback, unit);
+      updateStep(nodeId, { delayMinutes: m, delayUnit: unit });
+      setText(toDisplay(m, unit));
+      return;
+    }
+    const n = parseInt(trimmed, 10);
+    if (!Number.isFinite(n) || n < 0) {
+      setText(toDisplay(committed, unit));
+      return;
+    }
+    const m = toMinutes(n, unit);
+    updateStep(nodeId, { delayMinutes: m, delayUnit: unit });
+    setText(toDisplay(m, unit));
+  };
+
+  return (
+    <div>
+      <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 block">Delay duration</Label>
+      <div className="flex items-center gap-2">
+        <Input
+          type="text"
+          inputMode="numeric"
+          autoComplete="off"
+          value={text}
+          onChange={(e) => {
+            const v = e.target.value;
+            if (v === "") setText("");
+            else if (/^\d+$/.test(v)) setText(v);
+          }}
+          onBlur={normalizeBlur}
+          className="text-sm w-20 border-gray-200"
+          data-testid={`input-delay-${nodeId}`}
+        />
+        <Select
+          value={unit}
+          onValueChange={(v) => {
+            const newUnit = v as "minutes" | "hours" | "days";
+            const trimmed = text.trim();
+            let qty: number;
+            if (trimmed !== "" && /^\d+$/.test(trimmed)) {
+              const n = parseInt(trimmed, 10);
+              qty = Number.isFinite(n) && n >= 0 ? n : Math.max(1, Math.round(
+                newUnit === "days" ? committed / 1440 : newUnit === "hours" ? committed / 60 : committed
+              ));
+            } else {
+              qty = Math.max(1, Math.round(
+                newUnit === "days" ? committed / 1440 : newUnit === "hours" ? committed / 60 : committed
+              ));
+            }
+            const m = toMinutes(qty, newUnit);
+            updateStep(nodeId, { delayUnit: newUnit, delayMinutes: m });
+            setText(toDisplay(m, newUnit));
+          }}
+        >
+          <SelectTrigger className="text-sm border-gray-200 bg-gray-50 w-28" data-testid={`select-delay-unit-${nodeId}`}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="minutes">Minutes</SelectItem>
+            <SelectItem value="hours">Hours</SelectItem>
+            <SelectItem value="days">Days</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      <p className="text-[11px] text-gray-400 mt-2 leading-relaxed">
+        The flow will pause and resume automatically — even after a server restart. Supports minutes, hours, or days.
+      </p>
+    </div>
+  );
 }
 
 /* ─── Sub-components ─────────────────────────────────────────────────── */
@@ -1045,7 +1167,7 @@ export function ChatbotBuilder() {
                 const meta = stepTypeMeta(node.type);
                 const Icon = meta.icon;
                 const isSelected = selectedStepId === node.id;
-                const summary = stepSummary(node);
+                const summary = stepSummary(node, teamMembers);
 
                 return (
                   <div key={node.id} className="flex flex-col items-center">
@@ -1503,54 +1625,14 @@ export function ChatbotBuilder() {
               )}
 
               {/* ── WAIT ── */}
-              {selectedStep.type === "delay" && (() => {
-                const unit = selectedStep.data.delayUnit || "minutes";
-                const totalMinutes = selectedStep.data.delayMinutes || 0;
-                const displayValue = unit === "days"
-                  ? Math.round(totalMinutes / 1440)
-                  : unit === "hours"
-                  ? Math.round(totalMinutes / 60)
-                  : totalMinutes;
-                const toMinutes = (val: number, u: string) =>
-                  u === "days" ? val * 1440 : u === "hours" ? val * 60 : val;
-                return (
-                  <div>
-                    <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 block">Delay duration</Label>
-                    <div className="flex items-center gap-2">
-                      <Input
-                        type="number"
-                        value={displayValue}
-                        onChange={(e) => updateStep(selectedStep.id, {
-                          delayMinutes: toMinutes(parseInt(e.target.value) || 0, unit),
-                          delayUnit: unit,
-                        })}
-                        min={0}
-                        className="text-sm w-20 border-gray-200"
-                        data-testid={`input-delay-${selectedStep.id}`}
-                      />
-                      <Select value={unit} onValueChange={(v) => {
-                        const newUnit = v as "minutes" | "hours" | "days";
-                        updateStep(selectedStep.id, {
-                          delayUnit: newUnit,
-                          delayMinutes: toMinutes(displayValue, newUnit),
-                        });
-                      }}>
-                        <SelectTrigger className="text-sm border-gray-200 bg-gray-50 w-28" data-testid={`select-delay-unit-${selectedStep.id}`}>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="minutes">Minutes</SelectItem>
-                          <SelectItem value="hours">Hours</SelectItem>
-                          <SelectItem value="days">Days</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <p className="text-[11px] text-gray-400 mt-2 leading-relaxed">
-                      The flow will pause and resume automatically — even after a server restart. Supports minutes, hours, or days.
-                    </p>
-                  </div>
-                );
-              })()}
+              {selectedStep.type === "delay" && (
+                <DelayStepEditor
+                  nodeId={selectedStep.id}
+                  delayMinutes={selectedStep.data.delayMinutes}
+                  delayUnit={selectedStep.data.delayUnit}
+                  updateStep={updateStep}
+                />
+              )}
 
               {/* ── ACTION ── */}
               {selectedStep.type === "action" && (
@@ -1558,7 +1640,22 @@ export function ChatbotBuilder() {
                   <div>
                     <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 block">Action type</Label>
                     <Select value={selectedStep.data.action?.type || "set_tag"}
-                      onValueChange={(val) => updateStep(selectedStep.id, { action: { type: val, value: selectedStep.data.action?.value || "" } })}>
+                      onValueChange={(val) => {
+                        const prev = selectedStep.data.action;
+                        if (val === "assign") {
+                          updateStep(selectedStep.id, {
+                            action: {
+                              type: "assign",
+                              value: prev?.type === "assign" && prev.value ? prev.value : "",
+                              memberName: prev?.type === "assign" ? prev.memberName : undefined,
+                            },
+                          });
+                        } else {
+                          updateStep(selectedStep.id, {
+                            action: { type: val, value: prev?.type === val ? (prev?.value || "") : "" },
+                          });
+                        }
+                      }}>
                       <SelectTrigger className="text-sm border-gray-200 bg-gray-50" data-testid={`select-action-type-${selectedStep.id}`}>
                         <SelectValue />
                       </SelectTrigger>
@@ -1575,7 +1672,16 @@ export function ChatbotBuilder() {
                       <div>
                         <Select
                           value={selectedStep.data.action?.value || ""}
-                          onValueChange={(val) => updateStep(selectedStep.id, { action: { type: "assign", value: val } })}
+                          onValueChange={(val) => {
+                            const m = teamMembers.find((x) => x.memberId === val);
+                            updateStep(selectedStep.id, {
+                              action: {
+                                type: "assign",
+                                value: val,
+                                memberName: (m?.name || m?.email || "").trim(),
+                              },
+                            });
+                          }}
                         >
                           <SelectTrigger className="text-sm border-gray-200 bg-gray-50" data-testid={`select-assign-member-${selectedStep.id}`}>
                             <SelectValue placeholder="Select team member…" />
@@ -1583,6 +1689,13 @@ export function ChatbotBuilder() {
                           <SelectContent>
                             {teamMembers.length === 0 && (
                               <SelectItem value="__none__" disabled>No team members found</SelectItem>
+                            )}
+                            {selectedStep.data.action?.value &&
+                              !teamMembers.some((m) => m.memberId === selectedStep.data.action?.value) && (
+                              <SelectItem value={selectedStep.data.action!.value!}>
+                                {selectedStep.data.action?.memberName?.trim() ||
+                                  `Member (${selectedStep.data.action!.value})`}
+                              </SelectItem>
                             )}
                             {teamMembers.map((m) => (
                               <SelectItem key={m.memberId} value={m.memberId}>
