@@ -21,6 +21,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <meta name="msvalidate.01" content="D34136A426046C3430F8378418B1F090" />
 
+    <!-- Mobile hero WebP: starts download early (single candidate); avoids responsive preload competing with bootstrap -->
+    <link rel="preload" as="image" href="/hero/dashboard-640.webp" type="image/webp" media="(max-width: 768px)" />
+
     <title>WhachatCRM – WhatsApp CRM & Automation Platform</title>
     <meta name="description" content="Convert conversations into customers with WhachatCRM — a WhatsApp CRM and automation platform that unifies messaging, lead qualification, and follow-ups across multiple channels." />
     <link rel="canonical" href="https://www.whachatcrm.com/" />
@@ -62,6 +65,62 @@
       body { margin: 0; font-family: 'Inter', sans-serif; color: #111; background: #fff; }
       /* Hide SSR content - visible only to crawlers */
       [data-ssr-content] { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+      /*
+        Static marketing shell: visible without JS (see Welcome.tsx — English copy matches client/src/locales/en.json landing.*).
+        LCP: hero image + headline paint before React bundle executes.
+      */
+      #whachat-static-shell { background: #fff; overflow-x: hidden; }
+      #whachat-static-shell a { color: inherit; }
+      #whachat-static-shell .wcs-nav { min-height: 56px; padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; max-width: 1280px; margin: 0 auto; box-sizing: border-box; }
+      #whachat-static-shell .wcs-brand { display: flex; align-items: center; gap: 8px; text-decoration: none; }
+      #whachat-static-shell .wcs-logo { height: 32px; width: 32px; background: #059669; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 700; font-size: 1.125rem; }
+      #whachat-static-shell .wcs-wordmark { font-family: 'Plus Jakarta Sans', Inter, sans-serif; font-weight: 700; font-size: 1.25rem; color: #111827; }
+      #whachat-static-shell .wcs-nav-links { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+      #whachat-static-shell .wcs-link { font-size: 0.875rem; font-weight: 500; color: #4b5563; text-decoration: none; padding: 8px 0; }
+      #whachat-static-shell .wcs-link:hover { color: #111827; }
+      #whachat-static-shell .wcs-hide-sm { display: none; }
+      @media (min-width: 640px) {
+        #whachat-static-shell .wcs-hide-sm { display: inline-block; }
+      }
+      #whachat-static-shell .wcs-btn-header { font-size: 0.875rem; font-weight: 500; padding: 8px 16px; border-radius: 9999px; text-decoration: none; border: none; cursor: pointer; font-family: inherit; }
+      #whachat-static-shell .wcs-btn-ghost { color: #4b5563; background: transparent; }
+      #whachat-static-shell .wcs-btn-green { background: #059669; color: #fff; font-weight: 500; }
+      #whachat-static-shell .wcs-hero { padding: 16px 16px 48px; max-width: 1280px; margin: 0 auto; box-sizing: border-box; }
+      #whachat-static-shell .wcs-hero-grid { display: flex; flex-direction: column; gap: 32px; align-items: stretch; }
+      #whachat-static-shell .wcs-order-img { order: 1; width: 100%; }
+      #whachat-static-shell .wcs-order-txt { order: 2; width: 100%; }
+      @media (min-width: 768px) {
+        #whachat-static-shell .wcs-hero { padding: 32px 24px 80px; }
+        #whachat-static-shell .wcs-hero-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: start; }
+        #whachat-static-shell .wcs-order-img { order: 2; }
+        #whachat-static-shell .wcs-order-txt { order: 1; }
+      }
+      #whachat-static-shell .wcs-aspect { position: relative; aspect-ratio: 704 / 384; width: 100%; overflow: hidden; border-radius: 12px; border: 1px solid #e5e7eb; background: #f3f4f6; box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.08); }
+      @media (min-width: 768px) {
+        #whachat-static-shell .wcs-aspect { border-radius: 16px; box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.08); }
+      }
+      #whachat-static-shell .wcs-aspect img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; object-position: center; }
+      #whachat-static-shell h1 { font-family: 'Plus Jakarta Sans', Inter, sans-serif; font-size: clamp(1.75rem, 5vw, 2.25rem); font-weight: 700; line-height: 1.1; margin: 0 0 16px; color: #111827; }
+      @media (min-width: 768px) {
+        #whachat-static-shell h1 { font-size: clamp(2rem, 4vw, 3.75rem); margin-bottom: 24px; }
+      }
+      #whachat-static-shell .wcs-sub { font-size: 1.125rem; color: #4b5563; margin: 0 0 24px; line-height: 1.625; }
+      @media (min-width: 768px) {
+        #whachat-static-shell .wcs-sub { font-size: 1.25rem; margin-bottom: 32px; }
+      }
+      #whachat-static-shell .wcs-stack { display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px; max-width: 100%; }
+      #whachat-static-shell .wcs-btn-row { width: 100%; }
+      @media (min-width: 640px) {
+        #whachat-static-shell .wcs-btn-row { width: auto; }
+      }
+      #whachat-static-shell .wcs-btn-primary { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 56px; padding: 0 32px; background: #059669; color: #fff; font-weight: 600; border-radius: 9999px; text-decoration: none; width: 100%; box-sizing: border-box; box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.08); }
+      #whachat-static-shell .wcs-btn-outline { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; padding: 0 24px; background: #fff; color: #374151; font-weight: 500; border-radius: 9999px; text-decoration: none; border: 1px solid #e5e7eb; width: 100%; box-sizing: border-box; }
+      #whachat-static-shell .wcs-btn-demo { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; padding: 0 24px; background: linear-gradient(to right, #f59e0b, #f97316); color: #fff; font-weight: 500; border-radius: 9999px; text-decoration: none; width: 100%; box-sizing: border-box; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.08); }
+      #whachat-static-shell .wcs-note { font-size: 0.875rem; color: #6b7280; margin: 0 0 24px; }
+      #whachat-static-shell .wcs-badges { font-size: 0.875rem; color: #4b5563; display: flex; flex-wrap: wrap; gap: 12px 16px; align-items: flex-start; }
+      #whachat-static-shell .wcs-badge { display: flex; align-items: flex-start; gap: 8px; max-width: 100%; }
+      #whachat-static-shell .wcs-check { color: #059669; flex-shrink: 0; margin-top: 2px; }
+      html.wcs-hide-static-marketing #whachat-static-shell { display: none !important; }
     </style>
 
     <!-- PWA -->
@@ -124,6 +183,64 @@
     <script type="module" src="/src/main.tsx"></script>
   </head>
   <body>
+    <script>
+      (function () {
+        try {
+          var raw = window.location.pathname || "/";
+          var p = raw.replace(/\/$/, "") || "/";
+          if (p !== "/") document.documentElement.classList.add("wcs-hide-static-marketing");
+        } catch (e) {}
+      })();
+    </script>
+    <!-- Instant above-the-fold (no React): visible on "/" without JS; hidden on other paths via wcs-hide-static-marketing. -->
+    <div id="whachat-static-shell">
+      <header class="wcs-nav" role="banner">
+        <a class="wcs-brand" href="/" aria-label="WhachatCRM home">
+          <span class="wcs-logo" aria-hidden="true">W</span>
+          <span class="wcs-wordmark">WhachatCRM</span>
+        </a>
+        <nav class="wcs-nav-links" aria-label="Primary">
+          <a class="wcs-link wcs-hide-sm" href="/pricing">Pricing</a>
+          <a class="wcs-link wcs-hide-sm" href="/blog">Blog</a>
+          <a class="wcs-btn-header wcs-btn-ghost wcs-hide-sm" href="/auth?mode=login">Login</a>
+          <a class="wcs-btn-header wcs-btn-green" href="/auth">Start Free</a>
+        </nav>
+      </header>
+      <section class="wcs-hero" aria-labelledby="whachat-static-hero-title">
+        <div class="wcs-hero-grid">
+          <div class="wcs-order-img">
+            <div class="wcs-aspect">
+              <picture>
+                <source type="image/avif" srcset="/hero/dashboard-400.avif 400w, /hero/dashboard-640.avif 640w, /hero/dashboard-768.avif 768w, /hero/dashboard-1024.avif 1024w" sizes="(max-width: 768px) calc(100vw - 2rem), min(50vw, 704px)" />
+                <source type="image/webp" srcset="/hero/dashboard-400.webp 400w, /hero/dashboard-640.webp 640w, /hero/dashboard-768.webp 768w, /hero/dashboard-1024.webp 1024w" sizes="(max-width: 768px) calc(100vw - 2rem), min(50vw, 704px)" />
+                <img src="/hero/dashboard-640.webp" alt="WhachatCRM Dashboard - WhatsApp CRM Interface" width="704" height="384" sizes="(max-width: 768px) calc(100vw - 2rem), min(50vw, 704px)" loading="eager" fetchpriority="high" decoding="async" />
+              </picture>
+            </div>
+          </div>
+          <div class="wcs-order-txt">
+            <h1 id="whachat-static-hero-title">One Inbox. Every Channel. Zero Complexity.</h1>
+            <p class="wcs-sub">WhatsApp, SMS, Telegram, Instagram, Facebook, Web Chat — all in one unified inbox. Stop juggling apps. Respond faster, never lose a lead.</p>
+            <div class="wcs-stack">
+              <div class="wcs-btn-row">
+                <a class="wcs-btn-primary" href="/auth" data-testid="button-hero-cta">Start Your 14-Day Pro Trial →</a>
+              </div>
+              <div class="wcs-btn-row">
+                <a class="wcs-btn-outline" href="/pricing" data-testid="button-hero-pricing">Pricing ›</a>
+              </div>
+              <div class="wcs-btn-row">
+                <a class="wcs-btn-demo" href="/contact" data-testid="button-book-demo">Book a Demo</a>
+              </div>
+            </div>
+            <p class="wcs-note">No credit card required</p>
+            <div class="wcs-badges">
+              <span class="wcs-badge"><span class="wcs-check" aria-hidden="true">✓</span><span>Built on the official WhatsApp Business API</span></span>
+              <span class="wcs-badge"><span class="wcs-check" aria-hidden="true">✓</span><span>Secure &amp; compliant — no scraping</span></span>
+              <span class="wcs-badge"><span class="wcs-check" aria-hidden="true">✓</span><span>Designed for founders, sales teams &amp; support teams</span></span>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
     <div id="root"></div>
 
     <!-- Service Worker -->

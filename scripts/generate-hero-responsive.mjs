@@ -24,7 +24,8 @@ const srcWebp = path.join(
   "whatsapp_crm_dashboard_mockup.webp",
 );
 
-const WIDTHS = [400, 640, 1024];
+/** 768w bridges retina phones between 640 and 1024 srcset selection */
+const WIDTHS = [400, 640, 768, 1024];
 
 async function writeWebp(buf, w, q) {
   const name = `dashboard-${w}.webp`;
@@ -60,17 +61,18 @@ async function main() {
 
   const results = [];
   for (const w of WIDTHS) {
-    let webpQ = w <= 400 ? 78 : w <= 640 ? 80 : 82;
-    let avifQ = w <= 400 ? 45 : w <= 640 ? 48 : 52;
+    let webpQ = w <= 400 ? 78 : w <= 640 ? 80 : w <= 768 ? 81 : 82;
+    let avifQ = w <= 400 ? 45 : w <= 640 ? 48 : w <= 768 ? 50 : 52;
 
     let webp = await writeWebp(inputBuf, w, webpQ);
-    while (w <= 640 && webp.bytes > 100 * 1024 && webpQ > 55) {
-      webpQ -= 6;
+    /** Mobile LCP targets ≤ ~80 KB WebP for widths used on phones */
+    while (w <= 768 && webp.bytes > 80 * 1024 && webpQ > 50) {
+      webpQ -= 5;
       webp = await writeWebp(inputBuf, w, webpQ);
     }
 
     let avif = await writeAvif(inputBuf, w, avifQ);
-    while (w <= 640 && avif.bytes > 95 * 1024 && avifQ > 35) {
+    while (w <= 768 && avif.bytes > 75 * 1024 && avifQ > 35) {
       avifQ -= 5;
       avif = await writeAvif(inputBuf, w, avifQ);
     }
