@@ -42,27 +42,78 @@ function extractLocalDiskUploadFilename(mediaUrl: string): string | null {
   }
 }
 
+/**
+ * Ensure JSON response never throws (BigInt, unexpected proxies). Null-safe on row fields.
+ */
+function sanitizeMessagesForResponse(rows: unknown): unknown[] {
+  if (!Array.isArray(rows)) return [];
+  try {
+    return JSON.parse(
+      JSON.stringify(rows, (_k, v) => (typeof v === "bigint" ? v.toString() : v))
+    ) as unknown[];
+  } catch (e) {
+    console.error("[sanitizeMessagesForResponse] JSON clone failed", {
+      message: e instanceof Error ? e.message : String(e),
+      stack: e instanceof Error ? e.stack : undefined,
+    });
+    return [];
+  }
+}
+
 export function registerConversationRoutes(app: Express): void {
   // Get conversation messages
   app.get("/api/conversations/:id/messages", async (req, res) => {
+    const conversationId = req.params.id;
+    const userId = req.user?.id ?? null;
+    const t0 = Date.now();
+    console.log("[GET /api/conversations/:id/messages] start", { conversationId, userId });
     try {
       if (!req.user) {
-        return res.status(401).json({ error: "Unauthorized" });
+        console.warn("[GET /api/conversations/:id/messages] unauthorized");
+        return res.status(401).json([]);
       }
-      const conversation = await storage.getConversation(req.params.id);
+      let conversation;
+      try {
+        conversation = await storage.getConversation(conversationId);
+      } catch (e) {
+        console.error("[GET /api/conversations/:id/messages] getConversation failed", {
+          conversationId,
+          userId,
+          message: e instanceof Error ? e.message : String(e),
+          stack: e instanceof Error ? e.stack : undefined,
+        });
+        return res.json([]);
+      }
       if (!conversation) {
-        return res.status(404).json({ error: "Conversation not found" });
+        console.warn("[GET /api/conversations/:id/messages] conversation not found", { conversationId, userId });
+        return res.json([]);
       }
       if (conversation.userId !== req.user.id) {
-        return res.status(403).json({ error: "Forbidden" });
+        console.warn("[GET /api/conversations/:id/messages] forbidden", { conversationId, userId });
+        return res.json([]);
       }
-      const limit = parseInt(req.query.limit as string) || 100;
-      const offset = parseInt(req.query.offset as string) || 0;
-      const messages = await storage.getMessages(req.params.id, limit, offset);
-      res.json(messages);
+      const rawL = parseInt(String(req.query.limit ?? ""), 10);
+      const rawO = parseInt(String(req.query.offset ?? ""), 10);
+      const limit = Number.isFinite(rawL) ? rawL : 100;
+      const offset = Number.isFinite(rawO) ? rawO : 0;
+      const messages = await storage.getMessages(conversationId, limit, offset);
+      const payload = sanitizeMessagesForResponse(messages);
+      console.log("[GET /api/conversations/:id/messages] end", {
+        conversationId,
+        userId,
+        rowCount: payload.length,
+        ms: Date.now() - t0,
+      });
+      return res.json(payload);
     } catch (error) {
-      console.error("Error fetching messages:", error);
-      res.status(500).json({ error: "Failed to fetch messages" });
+      console.error("[GET /api/conversations/:id/messages] fatal", {
+        conversationId,
+        userId,
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+        ms: Date.now() - t0,
+      });
+      return res.json([]);
     }
   });
 

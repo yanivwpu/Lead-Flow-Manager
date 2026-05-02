@@ -1636,14 +1636,35 @@ export class DbStorage implements IStorage {
     // - If we `orderBy asc(createdAt) limit N`, we'd return the OLDEST messages,
     //   which makes the conversation open at history instead of latest.
     // Strategy: fetch newest N with DESC, then reverse to ASC for display.
-    const rows = await db
-      .select()
-      .from(messages)
-      .where(eq(messages.conversationId, conversationId))
-      .orderBy(desc(messages.createdAt))
-      .limit(limit)
-      .offset(offset);
-    return rows.reverse();
+    const t0 = Date.now();
+    try {
+      const lim = Number.isFinite(limit) ? Number(limit) : 100;
+      const off = Number.isFinite(offset) ? Number(offset) : 0;
+      const safeLimit = Math.min(Math.max(1, lim), 500);
+      const safeOffset = Math.max(0, off);
+      const rows = await db
+        .select()
+        .from(messages)
+        .where(eq(messages.conversationId, conversationId))
+        .orderBy(desc(messages.createdAt))
+        .limit(safeLimit)
+        .offset(safeOffset);
+      const out = rows.reverse();
+      console.log("[storage.getMessages] ok", {
+        conversationId,
+        rowCount: out.length,
+        ms: Date.now() - t0,
+      });
+      return out;
+    } catch (error) {
+      console.error("[storage.getMessages] DB error", {
+        conversationId,
+        ms: Date.now() - t0,
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
+      return [];
+    }
   }
 
   async getMessage(id: string): Promise<Message | undefined> {
