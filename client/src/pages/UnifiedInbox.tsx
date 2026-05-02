@@ -284,26 +284,6 @@ export function UnifiedInbox() {
   const [pathname, setLocation] = useLocation();
   const { user } = useAuth();
 
-  /** Evidence: detect route/layout remount during flicker (do not remove until root cause confirmed). */
-  useEffect(() => {
-    const wp = typeof window !== "undefined" ? window.location.pathname : "";
-    console.log("[InboxEvidence] UnifiedInbox mounted", { windowPath: wp });
-    return () => {
-      const wpUnmount = typeof window !== "undefined" ? window.location.pathname : "";
-      console.warn("[InboxEvidence] UnifiedInbox unmounted", { windowPath: wpUnmount, trace: new Error("unmount").stack });
-    };
-  }, []);
-
-  /** Evidence: auth vs query enabled coupling */
-  useEffect(() => {
-    console.log("[InboxEvidence] auth snapshot", {
-      ts: new Date().toISOString(),
-      pathname,
-      hasUser: !!user,
-      userId: user?.id ?? null,
-      email: user?.email ?? null,
-    });
-  }, [user, pathname]);
   const queryClient = useQueryClient();
   const { toast } = useToast();
   /** Set after `replyWindowNow` exists; WS handler bumps clock when inbound pushes so UI doesn’t wait for the 1m tick. */
@@ -325,12 +305,10 @@ export function UnifiedInbox() {
       ws = new WebSocket(`${protocol}//${window.location.host}/ws/presence`);
 
       ws.onopen = () => {
-        console.log("[WS Inbox] Connected — authenticating userId:", user.id);
         ws!.send(JSON.stringify({ type: "auth", userId: user.id, userName: user.name || "Agent" }));
         heartbeat = setInterval(() => {
           if (ws?.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({ type: "heartbeat" }));
-            console.log("[WS Inbox] Heartbeat sent — connection alive");
           }
         }, 25000);
       };
@@ -339,10 +317,8 @@ export function UnifiedInbox() {
         try {
           const msg = JSON.parse(event.data);
           if (msg.type === "auth_success") {
-            console.log("[WS Inbox] Auth confirmed — ready to receive new_message events");
+            /* no-op */
           } else if (msg.type === "new_message") {
-            console.log("[WS Inbox] new_message received — conversationId:", msg.conversationId, "contactId:", msg.contactId);
-            console.log("[WS Inbox] Force-refetching /api/inbox and messages — triggered by WS push");
             queryClient.refetchQueries({ queryKey: ["/api/inbox"], type: "active" });
             if (msg.conversationId) {
               queryClient.refetchQueries({
@@ -361,7 +337,6 @@ export function UnifiedInbox() {
       ws.onclose = (evt) => {
         clearInterval(heartbeat);
         if (!destroyed) {
-          console.log("[WS Inbox] Connection closed (code:", evt.code, ") — reconnecting in 3s");
           reconnectTimer = setTimeout(connect, 3000);
         }
       };
@@ -470,52 +445,14 @@ export function UnifiedInbox() {
     isEnabled: inboxQueryEnabled,
   } = useQuery<InboxItem[]>({
     queryKey: ["/api/inbox"],
-    // Slightly below refetchInterval so poller + other invalidations see a consistent "fresh" window; does not block refetchInterval fetches.
-    staleTime: 4_000,
-    refetchInterval: 5000,
+    staleTime: 10_000,
+    refetchInterval: () =>
+      typeof document !== "undefined" && document.hidden ? false : 15_000,
     refetchIntervalInBackground: true,
     placeholderData: keepPreviousData,
   });
 
   const inbox: InboxItem[] = useMemo(() => inboxData || [], [inboxData]);
-
-  const inboxEvidencePrevLenRef = useRef<number | null>(null);
-
-  /** Evidence: log whenever React Query delivers a new inboxData snapshot */
-  useEffect(() => {
-    const len = Array.isArray(inboxData) ? inboxData.length : inboxData === undefined ? -1 : -2;
-    const prevLen = inboxEvidencePrevLenRef.current;
-    console.log("[InboxEvidence] inboxData snapshot", {
-      ts: new Date().toISOString(),
-      pathname,
-      inboxDataLength: len,
-      previousLength: prevLen,
-      isPending: inboxPending,
-      isFetching: inboxIsFetching,
-      isRefetching: inboxIsRefetching,
-      fetchStatus: inboxFetchStatus,
-      queryStatus: inboxQueryStatus,
-      queryError: inboxQueryError ?? null,
-      queryEnabled: inboxQueryEnabled,
-      userId: user?.id ?? null,
-      email: user?.email ?? null,
-      inboxDataUndefined: inboxData === undefined,
-      inboxDataIsArray: Array.isArray(inboxData),
-    });
-    inboxEvidencePrevLenRef.current = len;
-  }, [
-    inboxData,
-    pathname,
-    inboxPending,
-    inboxIsFetching,
-    inboxIsRefetching,
-    inboxFetchStatus,
-    inboxQueryStatus,
-    inboxQueryError,
-    inboxQueryEnabled,
-    user?.id,
-    user?.email,
-  ]);
 
   const { data: contactData } = useQuery<{ contact: Contact; conversations: Conversation[] }>({
     queryKey: ["/api/contacts", selectedContactId],
@@ -627,7 +564,9 @@ export function UnifiedInbox() {
   const { data: messages = [], isLoading: messagesLoading, isFetching: messagesFetching } = useQuery<Message[]>({
     queryKey: ["/api/conversations", primaryConversation?.id, "messages"],
     enabled: !!primaryConversation?.id,
-    refetchInterval: 4000,
+    staleTime: 8_000,
+    refetchInterval: () =>
+      typeof document !== "undefined" && document.hidden ? false : 10_000,
     refetchIntervalInBackground: true,
     placeholderData: keepPreviousData,
   });
@@ -1134,14 +1073,18 @@ export function UnifiedInbox() {
       });
       return;
     }
-    console.info("[AI-AUTO-SEND]", "attempting send", {
-      contactId: selectedContactId,
-      length: message.trim().length,
-    });
+    if (import.meta.env.DEV) {
+      console.info("[AI-AUTO-SEND]", "attempting send", {
+        contactId: selectedContactId,
+        length: message.trim().length,
+      });
+    }
     sendMessageMutation.mutate(
       { contactId: selectedContactId, content: message },
       {
-        onSuccess: () => console.info("[AI-AUTO-SEND]", "sent"),
+        onSuccess: () => {
+          if (import.meta.env.DEV) console.info("[AI-AUTO-SEND]", "sent");
+        },
         onError: (err: unknown) =>
           console.warn("[AI-AUTO-SEND]", "failed", err instanceof Error ? err.message : err),
       },
@@ -1286,7 +1229,7 @@ export function UnifiedInbox() {
   const prevRawInboxRowCountRef = useRef(0);
   useEffect(() => {
     const prev = prevRawInboxRowCountRef.current;
-    if (prev > 0 && inbox.length === 0) {
+    if (import.meta.env.DEV && prev > 0 && inbox.length === 0) {
       const selectedChannelsList = Array.from(selectedChannels).sort();
       console.warn("INBOX_ROWS_CLEARED", {
         previousLength: prev,
@@ -2032,7 +1975,7 @@ export function UnifiedInbox() {
               </SheetTitle>
             </SheetHeader>
             <div className="flex-1 min-h-0 overflow-y-auto">
-              {selectedContactId && contact ? (
+              {showDetailsSheet && selectedContactId && contact ? (
                 <InboxLeadDetailsPanel
                   contact={contact}
                   primaryConversation={primaryConversation}
@@ -2062,12 +2005,12 @@ export function UnifiedInbox() {
                   onEditContact={() => { setShowDetailsSheet(false); handleEditContact(); }}
                   onDeleteContact={() => { setShowDetailsSheet(false); setShowDeleteConfirm(true); }}
                 />
-              ) : (
+              ) : !selectedContactId || !contact ? (
                 <div className="flex flex-col items-center justify-center h-40 text-gray-400 text-sm gap-2">
                   <PanelRight className="w-6 h-6 opacity-40" />
                   <p>No contact selected</p>
                 </div>
-              )}
+              ) : null}
             </div>
           </SheetContent>
         </Sheet>

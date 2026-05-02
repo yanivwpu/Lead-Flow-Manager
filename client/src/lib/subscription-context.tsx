@@ -50,7 +50,7 @@ const SubscriptionContext = createContext<SubscriptionContextType>({
 export function SubscriptionProvider({ children }: { children: ReactNode }) {
   const { data, isLoading, refetch } = useQuery<SubscriptionData>({
     queryKey: ["/api/subscription"],
-    staleTime: 30000,
+    staleTime: 60_000,
   });
 
   return (

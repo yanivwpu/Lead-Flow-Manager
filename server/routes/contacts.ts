@@ -419,32 +419,27 @@ export function registerContactRoutes(app: Express): void {
       if (requested && !(CHANNELS as readonly string[]).includes(requested)) {
         return res.status(400).json({ error: "Invalid channel" });
       }
-      if (requested) {
-        console.log(`[api/contacts/send] contactId=${req.params.id} requestedChannel=${requested}`);
+      if (process.env.NODE_ENV !== "production") {
+        const contactRow = await storage.getContact(req.params.id);
+        const channelSettingsRows = await storage.getChannelSettings(req.user.id);
+        const payloadPreview = typeof content === "string" ? content.slice(0, 200) : "";
+        console.log("[api/contacts/send] start", {
+          contactId: req.params.id,
+          requestedChannel: requested ?? null,
+          contentType: contentType || null,
+          payloadPreview,
+          hasMediaUrl: !!mediaUrl,
+          contactFound: !!contactRow,
+          contactPrimaryChannel: contactRow?.primaryChannel ?? null,
+          contactLastIncomingChannel: contactRow?.lastIncomingChannel ?? null,
+          channelSettings: channelSettingsRows.map((s) => ({
+            channel: s.channel,
+            isConnected: s.isConnected,
+            pageId: (s.config as { pageId?: string } | null)?.pageId ?? null,
+            phoneNumberId: (s.config as { phoneNumberId?: string } | null)?.phoneNumberId ?? null,
+          })),
+        });
       }
-      const contactRow = await storage.getContact(req.params.id);
-      const channelSettingsRows = await storage.getChannelSettings(req.user.id);
-      const payloadPreview =
-        typeof content === "string"
-          ? content.slice(0, 200)
-          : "";
-      console.log("[api/contacts/send] start", {
-        userId: req.user.id,
-        contactId: req.params.id,
-        requestedChannel: requested ?? null,
-        contentType: contentType || null,
-        payloadPreview,
-        hasMediaUrl: !!mediaUrl,
-        contactFound: !!contactRow,
-        contactPrimaryChannel: contactRow?.primaryChannel ?? null,
-        contactLastIncomingChannel: contactRow?.lastIncomingChannel ?? null,
-        channelSettings: channelSettingsRows.map((s) => ({
-          channel: s.channel,
-          isConnected: s.isConnected,
-          pageId: (s.config as { pageId?: string } | null)?.pageId ?? null,
-          phoneNumberId: (s.config as { phoneNumberId?: string } | null)?.phoneNumberId ?? null,
-        })),
-      });
       const { channelService } = await import("../channelService");
       const result = await channelService.sendMessage({
         userId: req.user.id,

@@ -1650,11 +1650,13 @@ export class DbStorage implements IStorage {
         .limit(safeLimit)
         .offset(safeOffset);
       const out = rows.reverse();
-      console.log("[storage.getMessages] ok", {
-        conversationId,
-        rowCount: out.length,
-        ms: Date.now() - t0,
-      });
+      if (process.env.NODE_ENV !== "production") {
+        console.log("[storage.getMessages] ok", {
+          conversationId,
+          rowCount: out.length,
+          ms: Date.now() - t0,
+        });
+      }
       return out;
     } catch (error) {
       console.error("[storage.getMessages] DB error", {

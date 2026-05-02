@@ -103,8 +103,8 @@ export function useAICapabilities(): AICapabilities {
   const { data: usageData, isLoading: usageLoading } = useQuery<AIUsageData>({
     queryKey: ["/api/ai/usage"],
     enabled:  !!subscription,
-    staleTime: 30_000,
-    refetchOnWindowFocus: true,
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
   });
 
   if (subLoading || usageLoading || !usageData) {

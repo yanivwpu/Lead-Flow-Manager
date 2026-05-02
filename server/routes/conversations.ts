@@ -83,7 +83,9 @@ export function registerConversationRoutes(app: Express): void {
     const conversationId = req.params.id;
     const userId = req.user?.id ?? null;
     const t0 = Date.now();
-    console.log("[GET /api/conversations/:id/messages] start", { conversationId, userId });
+    if (process.env.NODE_ENV !== "production") {
+      console.log("[GET /api/conversations/:id/messages] start", { conversationId, userId });
+    }
     try {
       if (!req.user) {
         console.warn("[GET /api/conversations/:id/messages] unauthorized");
@@ -118,12 +120,14 @@ export function registerConversationRoutes(app: Express): void {
       const offset = Number.isFinite(rawO) ? rawO : 0;
       const messages = await storage.getMessages(conversationId, limit, offset);
       const payload = sanitizeMessagesForResponse(messages);
-      console.log("[GET /api/conversations/:id/messages] end", {
-        conversationId,
-        userId,
-        rowCount: payload.length,
-        ms: Date.now() - t0,
-      });
+      if (process.env.NODE_ENV !== "production") {
+        console.log("[GET /api/conversations/:id/messages] end", {
+          conversationId,
+          userId,
+          rowCount: payload.length,
+          ms: Date.now() - t0,
+        });
+      }
       return res.json(payload);
     } catch (error) {
       console.error("[GET /api/conversations/:id/messages] fatal", {

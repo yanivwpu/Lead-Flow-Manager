@@ -17,6 +17,7 @@ import {
   getProviderStatus,
 } from "./whatsappService";
 import { storage } from "./storage";
+import { devLog } from "./devLog";
 import { insertChatSchema, insertRegisteredPhoneSchema, insertSalespersonSchema, insertDemoBookingSchema, PLAN_LIMITS, type SubscriptionPlan } from "@shared/schema";
 import { isConversationHandoffActive } from "@shared/handoffActivity";
 import { z } from "zod";
@@ -2072,7 +2073,7 @@ export async function registerRoutes(
           ? (ent as any).messaging.length
           : 0;
       }
-      console.log("[Meta Webhook] incoming request", {
+      devLog("[Meta Webhook] incoming request", {
         object: (req.body as any)?.object ?? null,
         entryCount: entryList.length,
         messagingEventCount: messagingEventTotal,
@@ -2080,9 +2081,9 @@ export async function registerRoutes(
       });
 
       const webhookTimestamp = new Date().toISOString();
-      console.log(`[Meta Webhook] ===== INBOUND WEBHOOK RECEIVED at ${webhookTimestamp} =====`);
-      console.log(`[Meta Webhook] Headers: x-hub-signature-256=${req.headers["x-hub-signature-256"] ? "present" : "MISSING"}, content-type=${req.headers["content-type"]}`);
-      console.log(`[Meta Webhook] Raw payload preview: ${JSON.stringify(req.body).substring(0, 800)}`);
+      devLog(`[Meta Webhook] ===== INBOUND WEBHOOK RECEIVED at ${webhookTimestamp} =====`);
+      devLog(`[Meta Webhook] Headers: x-hub-signature-256=${req.headers["x-hub-signature-256"] ? "present" : "MISSING"}, content-type=${req.headers["content-type"]}`);
+      devLog(`[Meta Webhook] Raw payload preview: ${JSON.stringify(req.body).substring(0, 800)}`);
 
       // Environment mode — drives strict vs. permissive behaviour throughout this handler
       const isProduction = process.env.NODE_ENV === "production";
@@ -2111,7 +2112,7 @@ export async function registerRoutes(
       // Extra diagnostics for Instagram DMs: log the raw bytes (truncated) so we can
       // confirm which object type and entry shape Meta is sending in production.
       if (webhookObjectType === "instagram") {
-        console.log("[Meta Webhook] [IG RAW] rawBody (first 4000 chars)", rawBody.slice(0, 4000));
+        devLog("[Meta Webhook] [IG RAW] rawBody (first 4000 chars)", rawBody.slice(0, 4000));
       }
 
       // --- Signature resolution ---
@@ -2128,9 +2129,9 @@ export async function registerRoutes(
       if (globalAppSecret) {
         hasSecretToVerify = true;
         signatureValid = verifyMetaWebhookSignature(rawBody, signature, globalAppSecret);
-        console.log(`[Meta Webhook] Global META_APP_SECRET check: ${signatureValid ? "PASSED" : "failed"}`);
+        devLog(`[Meta Webhook] Global META_APP_SECRET check: ${signatureValid ? "PASSED" : "failed"}`);
       } else {
-        console.log("[Meta Webhook] No global META_APP_SECRET — trying user-level secrets");
+        devLog("[Meta Webhook] No global META_APP_SECRET — trying user-level secrets");
       }
 
       // If global secret didn't verify, try user-level secrets
@@ -2146,7 +2147,7 @@ export async function registerRoutes(
               ? decryptMetaCredential(user.metaAppSecret)
               : user.metaAppSecret;
             signatureValid = verifyMetaWebhookSignature(rawBody, signature, userSecret);
-            console.log(`[Meta Webhook] User (${user.id}) app secret check for phoneNumberId ${phoneNumberId}: ${signatureValid ? "PASSED" : "failed"}`);
+            devLog(`[Meta Webhook] User (${user.id}) app secret check for phoneNumberId ${phoneNumberId}: ${signatureValid ? "PASSED" : "failed"}`);
           } else if (user) {
             console.warn(`[Meta Webhook] User ${user.id} matched but has no metaAppSecret stored`);
           } else {
@@ -2206,7 +2207,7 @@ export async function registerRoutes(
           }
         }
       } else {
-        console.log("[Meta Webhook] Signature verification: PASSED ✓");
+        devLog("[Meta Webhook] Signature verification: PASSED ✓");
       }
 
       const incomingMessage = parseMetaIncomingWebhook(req.body);
@@ -2215,14 +2216,14 @@ export async function registerRoutes(
       // [Stage 2] Classify the payload by object type so downstream sections are easy to trace
       const webhookEntry0 = req.body.entry?.[0];
       const webhookHasMessaging = !!(webhookEntry0?.messaging?.length);
-      console.log(`[Meta Webhook] [Stage 2] Object type: "${webhookObjectType}" | has messaging array: ${webhookHasMessaging} | WhatsApp parse: ${incomingMessage ? "YES" : "no"} | status-update parse: ${statusUpdate ? "YES" : "no"}`);
+      devLog(`[Meta Webhook] [Stage 2] Object type: "${webhookObjectType}" | has messaging array: ${webhookHasMessaging} | WhatsApp parse: ${incomingMessage ? "YES" : "no"} | status-update parse: ${statusUpdate ? "YES" : "no"}`);
 
       if (incomingMessage) {
-        console.log(`[Meta Webhook] [Stage 2a] WhatsApp inbound — from: ${incomingMessage.from}, type: ${incomingMessage.type}, messageId: ${incomingMessage.messageId}, phoneNumberId: ${incomingMessage.phoneNumberId}, profileName: "${incomingMessage.profileName}"`);
+        devLog(`[Meta Webhook] [Stage 2a] WhatsApp inbound — from: ${incomingMessage.from}, type: ${incomingMessage.type}, messageId: ${incomingMessage.messageId}, phoneNumberId: ${incomingMessage.phoneNumberId}, profileName: "${incomingMessage.profileName}"`);
       } else if (!statusUpdate && !webhookHasMessaging) {
-        console.log("[Meta Webhook] Payload is neither a message nor a status update — likely a notification event, ignoring");
+        devLog("[Meta Webhook] Payload is neither a message nor a status update — likely a notification event, ignoring");
       } else if (!incomingMessage && webhookHasMessaging) {
-        console.log(`[Meta Webhook] [Stage 2b] Non-WhatsApp messaging payload detected — routing to ${webhookObjectType === 'instagram' ? 'Instagram' : webhookObjectType === 'page' ? 'Facebook' : webhookObjectType ?? 'unknown'} handler`);
+        devLog(`[Meta Webhook] [Stage 2b] Non-WhatsApp messaging payload detected — routing to ${webhookObjectType === 'instagram' ? 'Instagram' : webhookObjectType === 'page' ? 'Facebook' : webhookObjectType ?? 'unknown'} handler`);
       }
 
       // Process all inbound messages directly to DB — no queue dependency
@@ -2239,8 +2240,8 @@ export async function registerRoutes(
       if (incomingMessage) {
         const user = await findUserByMetaPhoneNumberId(incomingMessage.phoneNumberId);
         if (user) {
-          console.log(`[Inbound] Webhook received — channel: whatsapp, from: ${incomingMessage.from}, messageId: ${incomingMessage.messageId}`);
-          console.log(`[Inbound] Channel identified: whatsapp — userId: ${user.id}, starting processIncomingMessage`);
+          devLog(`[Inbound] Webhook received — channel: whatsapp, from: ${incomingMessage.from}, messageId: ${incomingMessage.messageId}`);
+          devLog(`[Inbound] Channel identified: whatsapp — userId: ${user.id}, starting processIncomingMessage`);
           directJobs.push(
             metaCs.processIncomingMessage({
               userId: user.id,
@@ -2256,7 +2257,7 @@ export async function registerRoutes(
               metaInboxResult = { chatbotWillFire: result.chatbotWillFire, isNewConversation: result.isNewConversation };
               metaInboxContact = result.contact;
               metaInboxConversationId = result.conversation.id;
-              console.log(`[Inbound] Webhook returned 200 — channel: whatsapp, messageId: ${incomingMessage.messageId}, userId: ${user.id}`);
+              devLog(`[Inbound] Webhook returned 200 — channel: whatsapp, messageId: ${incomingMessage.messageId}, userId: ${user.id}`);
             })
           );
         } else {
@@ -2268,13 +2269,13 @@ export async function registerRoutes(
       // [Stage 3] Parse Instagram Direct messages
       const igEntries: any[] = Array.isArray(req.body.entry) ? req.body.entry : [];
       if (req.body.object === 'instagram') {
-        console.log(`[Meta Webhook] [Stage 3-IG] object=instagram, ${igEntries.length} entry(s)`);
+        devLog(`[Meta Webhook] [Stage 3-IG] object=instagram, ${igEntries.length} entry(s)`);
       }
       for (const igEntry of igEntries) {
         const igEvents: any[] = Array.isArray(igEntry?.messaging) ? igEntry.messaging : [];
         if (!igEvents.length || req.body.object !== 'instagram') continue;
 
-        console.log(`[Meta Webhook] [Stage 3-IG] Entry id=${igEntry?.id ?? null}, ${igEvents.length} messaging event(s)`);
+        devLog(`[Meta Webhook] [Stage 3-IG] Entry id=${igEntry?.id ?? null}, ${igEvents.length} messaging event(s)`);
         for (const event of igEvents) {
           if (event.message) {
             const senderId = event.sender?.id;
@@ -2283,7 +2284,7 @@ export async function registerRoutes(
             const attachments: any[] = Array.isArray(event.message.attachments) ? event.message.attachments : [];
             const hasContent = messageText.length > 0 || attachments.length > 0;
 
-            console.log(`[Meta Webhook] [Stage 3-IG] Event: senderId=${senderId}, recipientId=${event.recipient?.id}, mid=${messageId}, text="${messageText.substring(0, 80)}", attachments=${attachments.length}`);
+            devLog(`[Meta Webhook] [Stage 3-IG] Event: senderId=${senderId}, recipientId=${event.recipient?.id}, mid=${messageId}, text="${messageText.substring(0, 80)}", attachments=${attachments.length}`);
 
             if (senderId && hasContent) {
               const recipientId = event.recipient?.id;
@@ -2297,10 +2298,10 @@ export async function registerRoutes(
                   eqOp(channelSettingsTable.isConnected, true)
                 ));
 
-              console.log(`[Meta Webhook] [Stage 3-IG] Found ${allSettings.length} connected instagram channelSettings — looking for recipientId=${recipientId}`);
+              devLog(`[Meta Webhook] [Stage 3-IG] Found ${allSettings.length} connected instagram channelSettings — looking for recipientId=${recipientId}`);
               allSettings.forEach((s, i) => {
                 const cfg = s.config as any;
-                console.log(`[Meta Webhook] [Stage 3-IG]   [${i}] userId=${s.userId}, pageId=${cfg?.pageId}, instagramAccountId=${cfg?.instagramAccountId}`);
+                devLog(`[Meta Webhook] [Stage 3-IG]   [${i}] userId=${s.userId}, pageId=${cfg?.pageId}, instagramAccountId=${cfg?.instagramAccountId}`);
               });
 
               const matchSetting = allSettings.find(s => {
@@ -2309,9 +2310,9 @@ export async function registerRoutes(
               });
 
               if (matchSetting) {
-                console.log(`[Meta Webhook] [Stage 3-IG] MATCHED channelSettings id=${matchSetting.id}, userId=${matchSetting.userId}`);
-                console.log(`[Inbound] [Stage 4-IG] Webhook received — channel: instagram, from: ${senderId}, messageId: ${messageId}`);
-                console.log(`[Inbound] [Stage 4-IG] Channel identified: instagram — userId: ${matchSetting.userId}, handing off to processIncomingMessage`);
+                devLog(`[Meta Webhook] [Stage 3-IG] MATCHED channelSettings id=${matchSetting.id}, userId=${matchSetting.userId}`);
+                devLog(`[Inbound] [Stage 4-IG] Webhook received — channel: instagram, from: ${senderId}, messageId: ${messageId}`);
+                devLog(`[Inbound] [Stage 4-IG] Channel identified: instagram — userId: ${matchSetting.userId}, handing off to processIncomingMessage`);
 
                 const firstAttachment = attachments[0] as any | undefined;
                 const attachmentMediaUrl: string | undefined = firstAttachment?.payload?.url;
@@ -2319,7 +2320,7 @@ export async function registerRoutes(
                 const content = messageText || firstAttachment?.payload?.title || '';
                 const contentType = messageText ? 'text' : (attachmentType || 'attachment');
 
-                console.log(`[Inbound] [Stage 4-IG] content="${content.substring(0, 60)}", contentType=${contentType}, hasMedia=${!!attachmentMediaUrl}, attachmentType=${attachmentType}`);
+                devLog(`[Inbound] [Stage 4-IG] content="${content.substring(0, 60)}", contentType=${contentType}, hasMedia=${!!attachmentMediaUrl}, attachmentType=${attachmentType}`);
 
                 const igAccessToken: string = (matchSetting.config as any)?.accessToken ?? '';
                 directJobs.push(
@@ -2334,7 +2335,7 @@ export async function registerRoutes(
                     attachmentType,
                     externalMessageId: messageId,
                   }).then(async (result) => {
-                    console.log(`[Inbound] [Stage 10-IG] Pipeline complete — channel: instagram, messageId: ${messageId}, contactId: ${result.contact.id}, conversationId: ${result.conversation.id}, messageId_db: ${result.message.id}, isNewConversation: ${result.isNewConversation}`);
+                    devLog(`[Inbound] [Stage 10-IG] Pipeline complete — channel: instagram, messageId: ${messageId}, contactId: ${result.contact.id}, conversationId: ${result.conversation.id}, messageId_db: ${result.message.id}, isNewConversation: ${result.isNewConversation}`);
                     // Fire-and-forget avatar fetch
                     if (igAccessToken) {
                       const { shouldRefreshAvatar, fetchInstagramAvatar } = await import("./avatarService");
@@ -2351,7 +2352,7 @@ export async function registerRoutes(
                 console.warn("[Meta Webhook] [Stage 3-IG] rawBody snippet", rawBody.slice(0, 1200));
               }
             } else {
-              console.log(`[Meta Webhook] [Stage 3-IG] Skipping event — senderId or content missing (senderId=${senderId}, textLen=${messageText.length}, attachments=${attachments.length})`);
+              devLog(`[Meta Webhook] [Stage 3-IG] Skipping event — senderId or content missing (senderId=${senderId}, textLen=${messageText.length}, attachments=${attachments.length})`);
             }
           }
         }
@@ -2361,23 +2362,23 @@ export async function registerRoutes(
       // object=page covers all Messenger DMs to a Facebook Page
       if (req.body.object === 'page') {
         const fbEntries: any[] = Array.isArray(req.body.entry) ? req.body.entry : [];
-        console.log(`[FB-WEBHOOK] received object=page entries=${fbEntries.length}`);
-        console.log(`[Meta Webhook] [Stage 3-FB] object=page, ${fbEntries.length} entry(s)`);
+        devLog(`[FB-WEBHOOK] received object=page entries=${fbEntries.length}`);
+        devLog(`[Meta Webhook] [Stage 3-FB] object=page, ${fbEntries.length} entry(s)`);
         for (const fbEntry of fbEntries) {
           const fbPageId = fbEntry.id; // The Page that received the message
           const messagingEvents: any[] = Array.isArray(fbEntry.messaging) ? fbEntry.messaging : [];
-          console.log(`[Meta Webhook] [Stage 3-FB] Entry pageId=${fbPageId}, ${messagingEvents.length} messaging event(s)`);
+          devLog(`[Meta Webhook] [Stage 3-FB] Entry pageId=${fbPageId}, ${messagingEvents.length} messaging event(s)`);
 
           for (const event of messagingEvents) {
             // Skip echo messages (messages the Page itself sent — these are outbound echoes)
             if (event.message?.is_echo) {
-              console.log(`[Meta Webhook] [Stage 3-FB] Skipping echo message mid=${event.message?.mid}`);
+              devLog(`[Meta Webhook] [Stage 3-FB] Skipping echo message mid=${event.message?.mid}`);
               continue;
             }
 
             // Must be an actual message event
             if (!event.message) {
-              console.log(`[Meta Webhook] [Stage 3-FB] Skipping non-message event (keys: ${Object.keys(event).join(",")})`);
+              devLog(`[Meta Webhook] [Stage 3-FB] Skipping non-message event (keys: ${Object.keys(event).join(",")})`);
               continue;
             }
 
@@ -2388,7 +2389,7 @@ export async function registerRoutes(
             const attachments: any[] = Array.isArray(event.message.attachments) ? event.message.attachments : [];
             const hasContent = messageText.length > 0 || attachments.length > 0;
 
-            console.log(`[Meta Webhook] [Stage 3-FB] Event: senderId=${senderId} recipientId=${recipientId} mid=${messageId} text="${messageText.substring(0, 80)}" attachments=${attachments.length}`);
+            devLog(`[Meta Webhook] [Stage 3-FB] Event: senderId=${senderId} recipientId=${recipientId} mid=${messageId} text="${messageText.substring(0, 80)}" attachments=${attachments.length}`);
             // Some Instagram DM deliveries can surface via object="page" depending on product configuration.
             // If Meta sends any IG hints in the event, log them so we can adjust routing if needed.
             const igHints = {
@@ -2397,7 +2398,7 @@ export async function registerRoutes(
               messageTags: (event as any)?.message?.tags ?? null,
             };
             if (igHints.is_instagram || igHints.instagram_scoped_id) {
-              console.log("[Meta Webhook] [Stage 3-FB] Instagram-like event hints detected", {
+              devLog("[Meta Webhook] [Stage 3-FB] Instagram-like event hints detected", {
                 fbPageId,
                 recipientId,
                 senderId,
@@ -2407,7 +2408,7 @@ export async function registerRoutes(
             }
 
             if (!senderId || !hasContent) {
-              console.log(`[Meta Webhook] [Stage 3-FB] Skipping — no senderId or no content (senderId=${senderId}, hasContent=${hasContent})`);
+              devLog(`[Meta Webhook] [Stage 3-FB] Skipping — no senderId or no content (senderId=${senderId}, hasContent=${hasContent})`);
               continue;
             }
 
@@ -2421,10 +2422,10 @@ export async function registerRoutes(
                 eqOp(channelSettingsTable.isConnected, true)
               ));
 
-            console.log(`[Meta Webhook] [Stage 3-FB] Found ${allSettings.length} connected facebook channelSettings — looking for recipientId=${recipientId} or pageId=${fbPageId}`);
+            devLog(`[Meta Webhook] [Stage 3-FB] Found ${allSettings.length} connected facebook channelSettings — looking for recipientId=${recipientId} or pageId=${fbPageId}`);
             allSettings.forEach((s, i) => {
               const cfg = s.config as any;
-              console.log(`[Meta Webhook] [Stage 3-FB]   [${i}] userId=${s.userId}, pageId=${cfg?.pageId}`);
+              devLog(`[Meta Webhook] [Stage 3-FB]   [${i}] userId=${s.userId}, pageId=${cfg?.pageId}`);
             });
 
             // Match by recipient ID (page ID in webhook) or entry page ID
@@ -2440,8 +2441,8 @@ export async function registerRoutes(
             }
 
             const matchedConfig = matchSetting.config as any;
-            console.log(`[FB-WEBHOOK] matched userId=${matchSetting.userId} pageId=${matchedConfig?.pageId} senderId=${senderId} mid=${messageId}`);
-            console.log(`[Meta Webhook] [Stage 3-FB] MATCHED: channelSettings id=${matchSetting.id}, userId=${matchSetting.userId}, savedPageId=${matchedConfig?.pageId}`);
+            devLog(`[FB-WEBHOOK] matched userId=${matchSetting.userId} pageId=${matchedConfig?.pageId} senderId=${senderId} mid=${messageId}`);
+            devLog(`[Meta Webhook] [Stage 3-FB] MATCHED: channelSettings id=${matchSetting.id}, userId=${matchSetting.userId}, savedPageId=${matchedConfig?.pageId}`);
 
             // Resolve sender display name + profile picture via Graph API in one call
             let contactName = senderId;
@@ -2453,15 +2454,15 @@ export async function registerRoutes(
               const nameData = (await nameResp.json()) as any;
               if (nameResp.ok && nameData.name) {
                 contactName = nameData.name as string;
-                console.log(`[Meta Webhook] [Stage 3-FB] Resolved sender name: "${contactName}"`);
+                devLog(`[Meta Webhook] [Stage 3-FB] Resolved sender name: "${contactName}"`);
               } else {
-                console.log(`[Meta Webhook] [Stage 3-FB] Could not resolve sender name (${nameData?.error?.message || 'no name field'}) — using PSID`);
+                devLog(`[Meta Webhook] [Stage 3-FB] Could not resolve sender name (${nameData?.error?.message || 'no name field'}) — using PSID`);
               }
               if (nameResp.ok && typeof nameData.profile_pic === 'string') {
                 fbProfilePic = nameData.profile_pic as string;
               }
             } catch {
-              console.log(`[Meta Webhook] [Stage 3-FB] Name lookup failed — using PSID as contactName`);
+              devLog(`[Meta Webhook] [Stage 3-FB] Name lookup failed — using PSID as contactName`);
             }
 
             // Derive content and media info
@@ -2470,7 +2471,7 @@ export async function registerRoutes(
             const content = messageText || firstAttachment?.payload?.title || '';
             const contentType = messageText ? 'text' : (firstAttachment?.type || 'attachment');
 
-            console.log(`[Inbound] [Stage 4-FB] Handing off to processIncomingMessage — channel: facebook, from: ${senderId} ("${contactName}"), content: "${content.substring(0, 60)}", hasMedia: ${!!attachmentMediaUrl}`);
+            devLog(`[Inbound] [Stage 4-FB] Handing off to processIncomingMessage — channel: facebook, from: ${senderId} ("${contactName}"), content: "${content.substring(0, 60)}", hasMedia: ${!!attachmentMediaUrl}`);
             directJobs.push(
               metaCs.processIncomingMessage({
                 userId: matchSetting.userId,
@@ -2483,8 +2484,8 @@ export async function registerRoutes(
                 attachmentType: firstAttachment?.type,
                 externalMessageId: messageId,
               }).then(async (result) => {
-                console.log(`[FB-WEBHOOK] message saved contactId=${result.contact.id} conversationId=${result.conversation.id} dbMessageId=${result.message.id}`);
-                console.log(`[Inbound] [Stage 10-FB] Pipeline complete — channel: facebook, mid=${messageId}, contactId=${result.contact.id}, conversationId=${result.conversation.id}, dbMessageId=${result.message.id}, isNew=${result.isNewConversation}`);
+                devLog(`[FB-WEBHOOK] message saved contactId=${result.contact.id} conversationId=${result.conversation.id} dbMessageId=${result.message.id}`);
+                devLog(`[Inbound] [Stage 10-FB] Pipeline complete — channel: facebook, mid=${messageId}, contactId=${result.contact.id}, conversationId=${result.conversation.id}, dbMessageId=${result.message.id}, isNew=${result.isNewConversation}`);
                 // Update avatar if we got one from the Graph API call and it's due for refresh
                 const { shouldRefreshAvatar } = await import("./avatarService");
                 if (shouldRefreshAvatar(result.contact)) {
@@ -2571,21 +2572,21 @@ export async function registerRoutes(
                     // and captured in metaInboxResult — no extra DB round-trip needed.
                     const chatbotHandlesReplyMeta = (metaInboxResult as { chatbotWillFire: boolean } | null)?.chatbotWillFire ?? false;
                     if (chatbotHandlesReplyMeta) {
-                      console.log(`[W2] Outbound suppressed (Meta) — chatbot owns this reply for userId: ${user.id}`);
+                      devLog(`[W2] Outbound suppressed (Meta) — chatbot owns this reply for userId: ${user.id}`);
                     }
 
                     const freshChat = await storage.getChat(chat.id);
                     if (!freshChat) return;
                     const w2 = await runW2QualificationEngine(user.id, freshChat, incomingMessage.text!, metaInboxContact ?? undefined);
                     if (w2.signalsDetected.length > 0) {
-                      console.log(`[W2] Signals detected for chat ${chat.id}: ${w2.signalsDetected.join(", ")} score+=${w2.scoreAdjustment}`);
+                      devLog(`[W2] Signals detected for chat ${chat.id}: ${w2.signalsDetected.join(", ")} score+=${w2.scoreAdjustment}`);
                     }
                     // Only send qualification question if chatbot is NOT handling this conversation
                     if (!chatbotHandlesReplyMeta && w2.qualificationQuestion && incomingMessage.from) {
                       setTimeout(async () => {
                         try {
                           await sendMetaWhatsAppMessage(user.id, incomingMessage.from, w2.qualificationQuestion!);
-                          console.log(`[W2] Qualification question sent (Meta) to ${incomingMessage.from}`);
+                          devLog(`[W2] Qualification question sent (Meta) to ${incomingMessage.from}`);
                         } catch (err) { console.error("[W2] Failed to send qualification question (Meta):", err); }
                       }, 3000);
                     }
@@ -2599,7 +2600,7 @@ export async function registerRoutes(
                         setTimeout(async () => {
                           try {
                             await sendMetaWhatsAppMessage(user.id, incomingMessage.from, routingMsg);
-                            console.log(`[Routing] ${routing.offerMessage ? "Offer" : "Routing"} message sent (Meta, ${routing.serviceType}) to ${incomingMessage.from}`);
+                            devLog(`[Routing] ${routing.offerMessage ? "Offer" : "Routing"} message sent (Meta, ${routing.serviceType}) to ${incomingMessage.from}`);
                           } catch (err) { console.error("[Routing] Failed to send routing message (Meta):", err); }
                         }, delay);
                       }
@@ -2613,7 +2614,7 @@ export async function registerRoutes(
                             await storage.updateContact(metaInboxContact.id, { tag: newTag }).catch(() => {});
                           }
                           await storage.updateChat(freshChat.id, { tag: newTag }).catch(() => {});
-                          console.log(`[Routing] Tag applied (Meta): "${newTag}" for chat ${freshChat.id}`);
+                          devLog(`[Routing] Tag applied (Meta): "${newTag}" for chat ${freshChat.id}`);
                           if (oldTag !== newTag) {
                             triggerTagChangeWorkflows(user.id, freshChat, oldTag, newTag, metaInboxContact ?? undefined, metaInboxConversationId ?? undefined)
                               .catch(e => console.error('[TagChange] Meta routing:', e));
@@ -2621,7 +2622,7 @@ export async function registerRoutes(
                         } catch (err) { console.error("[Routing] Failed to apply tag (Meta):", err); }
                       }
                       if (routing.taskNote) {
-                        console.log(`[Routing] Internal task created for chat ${freshChat.id}: ${routing.taskNote}`);
+                        devLog(`[Routing] Internal task created for chat ${freshChat.id}: ${routing.taskNote}`);
                       }
                     } catch (err) { console.error("[Routing] Engine error (Meta):", err); }
                   }
@@ -2632,7 +2633,7 @@ export async function registerRoutes(
             // Auto-reply & Business Hours are now handled inside
             // channelService.processIncomingMessage for all channels.
 
-            console.log("Meta message processed successfully");
+            devLog("Meta message processed successfully");
           } catch (legacyErr) {
             console.error("Meta legacy chat write error (non-critical):", legacyErr);
           }
@@ -2640,7 +2641,7 @@ export async function registerRoutes(
       }
 
       if (statusUpdate) {
-        console.log("Meta status update:", statusUpdate);
+        devLog("Meta status update:", statusUpdate);
       }
     } catch (error) {
       console.error("Meta webhook error:", error);
@@ -7112,7 +7113,7 @@ export async function registerRoutes(
   app.get("/api/inbox", async (req, res) => {
     const t0 = Date.now();
     const userId = req.user?.id ?? null;
-    console.log("[InboxEvidence:GET /api/inbox] start", { userId });
+    devLog("[InboxEvidence:GET /api/inbox] start", { userId });
     try {
       if (!req.user) {
         console.warn("[InboxEvidence:GET /api/inbox] unauthorized — no req.user");
@@ -7122,7 +7123,7 @@ export async function registerRoutes(
       const inbox = await storage.getUnifiedInbox(req.user.id, limit);
       const ms = Date.now() - t0;
       const rowCount = Array.isArray(inbox) ? inbox.length : -1;
-      console.log("[InboxEvidence:GET /api/inbox] end", {
+      devLog("[InboxEvidence:GET /api/inbox] end", {
         userId: req.user.id,
         rowCount,
         returnedZero: rowCount === 0,
