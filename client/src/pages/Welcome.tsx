@@ -124,7 +124,7 @@ export function Welcome() {
                 sizes={HERO_SIZES}
                 loading="eager"
                 fetchPriority="high"
-                decoding="sync"
+                decoding="async"
               />
             </picture>
           </div>

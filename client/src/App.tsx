@@ -2,7 +2,6 @@ import { Switch, Route, Redirect } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
-import { Welcome } from "@/pages/Welcome";
 import { AuthProvider, useAuth } from "@/lib/auth-context";
 import { Loader2 } from "lucide-react";
 import { lazy, Suspense, useEffect } from "react";
@@ -39,7 +38,20 @@ const WidgetFrame = lazy(() => import("@/pages/WidgetFrame").then(m => ({ defaul
 const WidgetChat = lazy(() => import("@/pages/WidgetChat").then(m => ({ default: m.WidgetChat })));
 const HelpCenter = lazy(() => import("@/pages/HelpCenter").then(m => ({ default: m.HelpCenter })));
 const NotFound = lazy(() => import("@/pages/not-found"));
+/** Homepage is its own chunk so "/" does not pull the full marketing tree into the bootstrap bundle. */
+const WelcomePage = lazy(() =>
+  import("@/pages/Welcome").then((m) => ({ default: m.Welcome })),
+);
 import { ReferralCapture } from "@/components/ReferralCapture";
+
+/** Inner Suspense so route "/" does not fall back to the full-app PageLoader while Welcome chunk loads. */
+function MarketingHomeRoute() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-white" aria-busy="true" />}>
+      <WelcomePage />
+    </Suspense>
+  );
+}
 
 // Wrapper for protected routes
 function ProtectedRoute({ component: Component, ...rest }: any) {
@@ -63,7 +75,7 @@ function ProtectedRoute({ component: Component, ...rest }: any) {
 function Router() {
   return (
     <Switch>
-      <Route path="/" component={Welcome} />
+      <Route path="/" component={MarketingHomeRoute} />
       <Route path="/auth" component={AuthPage} />
       <Route path="/reset-password" component={ResetPassword} />
       <Route path="/privacy-policy" component={PrivacyPolicy} />
