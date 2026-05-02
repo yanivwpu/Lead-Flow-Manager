@@ -2361,6 +2361,7 @@ export async function registerRoutes(
       // object=page covers all Messenger DMs to a Facebook Page
       if (req.body.object === 'page') {
         const fbEntries: any[] = Array.isArray(req.body.entry) ? req.body.entry : [];
+        console.log(`[FB-WEBHOOK] received object=page entries=${fbEntries.length}`);
         console.log(`[Meta Webhook] [Stage 3-FB] object=page, ${fbEntries.length} entry(s)`);
         for (const fbEntry of fbEntries) {
           const fbPageId = fbEntry.id; // The Page that received the message
@@ -2433,11 +2434,13 @@ export async function registerRoutes(
             });
 
             if (!matchSetting) {
+              console.warn(`[FB-WEBHOOK] no channel_settings match — recipientId=${recipientId} pageId=${fbPageId} senderId=${senderId} (dropped)`);
               console.warn(`[Meta Webhook] [Stage 3-FB] LOOKUP FAILED — no Facebook channelSettings matched recipientId=${recipientId} or pageId=${fbPageId}. Message from senderId=${senderId} DROPPED.`);
               continue;
             }
 
             const matchedConfig = matchSetting.config as any;
+            console.log(`[FB-WEBHOOK] matched userId=${matchSetting.userId} pageId=${matchedConfig?.pageId} senderId=${senderId} mid=${messageId}`);
             console.log(`[Meta Webhook] [Stage 3-FB] MATCHED: channelSettings id=${matchSetting.id}, userId=${matchSetting.userId}, savedPageId=${matchedConfig?.pageId}`);
 
             // Resolve sender display name + profile picture via Graph API in one call
@@ -2480,6 +2483,7 @@ export async function registerRoutes(
                 attachmentType: firstAttachment?.type,
                 externalMessageId: messageId,
               }).then(async (result) => {
+                console.log(`[FB-WEBHOOK] message saved contactId=${result.contact.id} conversationId=${result.conversation.id} dbMessageId=${result.message.id}`);
                 console.log(`[Inbound] [Stage 10-FB] Pipeline complete — channel: facebook, mid=${messageId}, contactId=${result.contact.id}, conversationId=${result.conversation.id}, dbMessageId=${result.message.id}, isNew=${result.isNewConversation}`);
                 // Update avatar if we got one from the Graph API call and it's due for refresh
                 const { shouldRefreshAvatar } = await import("./avatarService");
@@ -2492,6 +2496,7 @@ export async function registerRoutes(
                   }
                 }
               }).catch((err: any) => {
+                console.error(`[FB-WEBHOOK] processIncomingMessage FAILED mid=${messageId}`, err?.message || err, err?.stack);
                 console.error(`[Inbound] [Stage 10-FB] processIncomingMessage FAILED — mid=${messageId}, error:`, err?.message || err);
               })
             );

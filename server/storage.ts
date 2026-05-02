@@ -1663,7 +1663,7 @@ export class DbStorage implements IStorage {
         message: error instanceof Error ? error.message : String(error),
         stack: error instanceof Error ? error.stack : undefined,
       });
-      return [];
+      throw error;
     }
   }
 

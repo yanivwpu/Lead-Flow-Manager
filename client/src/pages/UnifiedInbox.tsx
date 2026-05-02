@@ -560,10 +560,6 @@ export function UnifiedInbox() {
     return reachable[0];
   }, [contactData?.contact, contactReachableChannels]);
 
-  const primaryConversation = contactData?.conversations?.find(
-    (c) => c.channel === effectiveChannel
-  ) || contactData?.conversations?.[0];
-
   /** Immediate UI selection for outbound sends while PATCH /channel refetches; cleared when server state matches. */
   const [sendChannelUi, setSendChannelUi] = useState<Channel | null>(null);
   useEffect(() => { setSendChannelUi(null); }, [selectedContactId]);
@@ -597,6 +593,24 @@ export function UnifiedInbox() {
     effectiveChannel,
   ]);
 
+  /**
+   * Thread shown in the message pane must match the outbound channel (activeChannel), not only
+   * effectiveChannel — otherwise we fetch messages for conv A while POST /send uses conv B (empty).
+   */
+  const primaryConversation = useMemo(() => {
+    const list = contactData?.conversations;
+    if (!list?.length) return undefined;
+    if (activeChannel) {
+      const match = list.find((c) => c.channel === activeChannel);
+      if (match) return match;
+    }
+    if (effectiveChannel) {
+      const match = list.find((c) => c.channel === effectiveChannel);
+      if (match) return match;
+    }
+    return list[0];
+  }, [contactData?.conversations, activeChannel, effectiveChannel]);
+
   /** Single source for POST /send `channel`: mirrors header label each render; mutation reads at request time. */
   const displayedOutboundChannelRef = useRef<Channel | undefined>(undefined);
   const contactReachableChannelsRef = useRef<Channel[]>([]);
@@ -609,9 +623,8 @@ export function UnifiedInbox() {
     if (!activeChannel) return undefined;
     const ch = activeChannel as string;
     if (!['whatsapp', 'facebook', 'instagram'].includes(ch)) return undefined;
-    const conv = contactData?.conversations?.find((c) => c.channel === activeChannel);
-    return conv?.id ?? primaryConversation?.id;
-  }, [activeChannel, contactData?.conversations, primaryConversation?.id]);
+    return primaryConversation?.id;
+  }, [activeChannel, primaryConversation?.id]);
 
   /** Drives reply-window UI every minute without waiting on React Query refetch. */
   const [replyWindowNow, setReplyWindowNow] = useState(() => Date.now());

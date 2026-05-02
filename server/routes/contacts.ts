@@ -422,6 +422,29 @@ export function registerContactRoutes(app: Express): void {
       if (requested) {
         console.log(`[api/contacts/send] contactId=${req.params.id} requestedChannel=${requested}`);
       }
+      const contactRow = await storage.getContact(req.params.id);
+      const channelSettingsRows = await storage.getChannelSettings(req.user.id);
+      const payloadPreview =
+        typeof content === "string"
+          ? content.slice(0, 200)
+          : "";
+      console.log("[api/contacts/send] start", {
+        userId: req.user.id,
+        contactId: req.params.id,
+        requestedChannel: requested ?? null,
+        contentType: contentType || null,
+        payloadPreview,
+        hasMediaUrl: !!mediaUrl,
+        contactFound: !!contactRow,
+        contactPrimaryChannel: contactRow?.primaryChannel ?? null,
+        contactLastIncomingChannel: contactRow?.lastIncomingChannel ?? null,
+        channelSettings: channelSettingsRows.map((s) => ({
+          channel: s.channel,
+          isConnected: s.isConnected,
+          pageId: (s.config as { pageId?: string } | null)?.pageId ?? null,
+          phoneNumberId: (s.config as { phoneNumberId?: string } | null)?.phoneNumberId ?? null,
+        })),
+      });
       const { channelService } = await import("../channelService");
       const result = await channelService.sendMessage({
         userId: req.user.id,
@@ -441,8 +464,15 @@ export function registerContactRoutes(app: Express): void {
         res.status(400).json(result);
       }
     } catch (error) {
-      console.error("Error sending message:", error);
-      res.status(500).json({ error: "Failed to send message" });
+      console.error("[api/contacts/send] Error sending message:", {
+        contactId: req.params.id,
+        userId: req.user?.id,
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
+      res.status(500).json({
+        error: error instanceof Error ? error.message : "Failed to send message",
+      });
     }
   });
 

@@ -52,11 +52,12 @@ function sanitizeMessagesForResponse(rows: unknown): unknown[] {
       JSON.stringify(rows, (_k, v) => (typeof v === "bigint" ? v.toString() : v))
     ) as unknown[];
   } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
     console.error("[sanitizeMessagesForResponse] JSON clone failed", {
-      message: e instanceof Error ? e.message : String(e),
+      message: msg,
       stack: e instanceof Error ? e.stack : undefined,
     });
-    return [];
+    throw new Error(`sanitizeMessagesForResponse: ${msg}`);
   }
 }
 
@@ -70,7 +71,7 @@ export function registerConversationRoutes(app: Express): void {
     try {
       if (!req.user) {
         console.warn("[GET /api/conversations/:id/messages] unauthorized");
-        return res.status(401).json([]);
+        return res.status(401).json({ error: "Unauthorized" });
       }
       let conversation;
       try {
@@ -82,15 +83,18 @@ export function registerConversationRoutes(app: Express): void {
           message: e instanceof Error ? e.message : String(e),
           stack: e instanceof Error ? e.stack : undefined,
         });
-        return res.json([]);
+        return res.status(500).json({
+          error: "Failed to load conversation",
+          detail: e instanceof Error ? e.message : String(e),
+        });
       }
       if (!conversation) {
         console.warn("[GET /api/conversations/:id/messages] conversation not found", { conversationId, userId });
-        return res.json([]);
+        return res.status(404).json({ error: "Conversation not found" });
       }
       if (conversation.userId !== req.user.id) {
         console.warn("[GET /api/conversations/:id/messages] forbidden", { conversationId, userId });
-        return res.json([]);
+        return res.status(403).json({ error: "Forbidden" });
       }
       const rawL = parseInt(String(req.query.limit ?? ""), 10);
       const rawO = parseInt(String(req.query.offset ?? ""), 10);
@@ -113,7 +117,10 @@ export function registerConversationRoutes(app: Express): void {
         stack: error instanceof Error ? error.stack : undefined,
         ms: Date.now() - t0,
       });
-      return res.json([]);
+      return res.status(500).json({
+        error: "Failed to load messages",
+        detail: error instanceof Error ? error.message : String(error),
+      });
     }
   });
 
