@@ -31,7 +31,6 @@ import {
 import { ConnectMetaWizard } from "@/components/ConnectMetaWizard";
 import { ConnectTwilioWizard } from "@/components/ConnectTwilioWizard";
 import { ConnectMetaFbIgWizard } from "@/components/ConnectMetaFbIgWizard";
-import { createMetaWizardTour, createTwilioWizardTour } from "@/lib/tour";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -146,44 +145,6 @@ export function ChannelSettings() {
   const [resubscribeResult, setResubscribeResult] = useState<{ success: boolean; message: string } | null>(null);
   const [manageCopiedUrl, setManageCopiedUrl] = useState(false);
   const [manageCopiedToken, setManageCopiedToken] = useState(false);
-
-  const startMetaTour = () => {
-    const tour = createMetaWizardTour(() => {
-      localStorage.setItem("meta_tour_seen", "true");
-    });
-    tour.drive();
-  };
-
-  const startTwilioTour = () => {
-    const tour = createTwilioWizardTour(() => {
-      localStorage.setItem("twilio_tour_seen", "true");
-    });
-    tour.drive();
-  };
-
-  useEffect(() => {
-    if (connectMetaOpen) {
-      const hasSeenTour = localStorage.getItem("meta_tour_seen");
-      if (!hasSeenTour) {
-        const timer = setTimeout(() => {
-          startMetaTour();
-        }, 600);
-        return () => clearTimeout(timer);
-      }
-    }
-  }, [connectMetaOpen]);
-
-  useEffect(() => {
-    if (connectTwilioOpen) {
-      const hasSeenTour = localStorage.getItem("twilio_tour_seen");
-      if (!hasSeenTour) {
-        const timer = setTimeout(() => {
-          startTwilioTour();
-        }, 600);
-        return () => clearTimeout(timer);
-      }
-    }
-  }, [connectTwilioOpen]);
 
   // Detect OAuth callback: ?meta_oauth=ready&channel=facebook|instagram
   useEffect(() => {

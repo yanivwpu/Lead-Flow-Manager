@@ -1,5 +1,5 @@
 import { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback } from "react";
-import { useRoute, useLocation } from "wouter";
+import { Link, useRoute, useLocation } from "wouter";
 import { useAuth } from "@/lib/auth-context";
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { useSubscription } from "@/lib/subscription-context";
@@ -65,6 +65,8 @@ import { getConversationStatusRow } from "@/lib/conversationStatusUi";
 import { useToast } from "@/hooks/use-toast";
 import { InboxLeadDetailsPanel } from "@/components/InboxLeadDetailsPanel";
 import { useAICapabilities } from "@/lib/useAICapabilities";
+import type { ActivationStatusPayload } from "@/components/ActivationChecklist";
+import { SETTINGS_CHANNELS_HREF } from "@/components/ActivationSetupModal";
 import { analyzeConversation } from "@/lib/conversationIntelligence";
 import type { ContactContext } from "@/components/AIComposer";
 import { isConversationHandoffActive } from "@shared/handoffActivity";
@@ -743,6 +745,12 @@ export function UnifiedInbox() {
     staleTime: 4 * 60 * 1000,
   });
 
+  const { data: activationStatus } = useQuery<ActivationStatusPayload>({
+    queryKey: ["/api/activation-status"],
+    staleTime: 15_000,
+    refetchOnWindowFocus: true,
+  });
+
   // Channels that are connected but failed at least one health check
   const unhealthyChannels = channelHealth.filter(c => c.isConnected && c.healthy === false);
   const [dismissedHealthAlert, setDismissedHealthAlert] = useState<string | null>(null);
@@ -949,6 +957,7 @@ export function UnifiedInbox() {
     },
     onSettled: (_data, _error, vars, context) => {
       queryClient.invalidateQueries({ queryKey: ["/api/inbox"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/activation-status"] });
       if (context?.conversationId) {
         queryClient.invalidateQueries({
           queryKey: ["/api/conversations", context.conversationId, "messages"],
@@ -1225,6 +1234,11 @@ export function UnifiedInbox() {
     }
     return result;
   }, [inbox, searchQuery, filterTab, user?.id, selectedChannels]);
+
+  const showInboxEmptyNoChannels =
+    filteredInbox.length === 0 &&
+    !!activationStatus &&
+    !activationStatus.hasAnyMessagingChannel;
 
   const prevRawInboxRowCountRef = useRef(0);
   useEffect(() => {
@@ -1506,10 +1520,26 @@ export function UnifiedInbox() {
         {/* List */}
         <div className="flex-1 overflow-y-auto">
           {filteredInbox.length === 0 ? (
-            <div className="p-6 text-center text-muted-foreground">
-              <User className="w-10 h-10 mx-auto mb-2 opacity-40" />
-              <p className="text-sm">No conversations</p>
-            </div>
+            showInboxEmptyNoChannels ? (
+              <div className="p-6 text-center" data-testid="inbox-empty-no-channels">
+                <Smartphone className="w-10 h-10 mx-auto mb-3 text-gray-300" aria-hidden />
+                <p className="text-sm font-medium text-gray-900 mb-1">No channels connected yet</p>
+                <p className="text-xs text-muted-foreground mb-4">Connect WhatsApp or Meta to receive conversations here.</p>
+                <Link href={SETTINGS_CHANNELS_HREF}>
+                  <a>
+                    <Button type="button" size="sm" className="gap-2 bg-brand-green hover:bg-brand-dark text-white" data-testid="inbox-cta-connect-whatsapp">
+                      <MessageCircle className="w-4 h-4" />
+                      Connect WhatsApp
+                    </Button>
+                  </a>
+                </Link>
+              </div>
+            ) : (
+              <div className="p-6 text-center text-muted-foreground">
+                <User className="w-10 h-10 mx-auto mb-2 opacity-40" />
+                <p className="text-sm">No conversations</p>
+              </div>
+            )
           ) : (
             filteredInbox.map(item => {
               const fuStatus = getFollowUpStatus(item.contact.followUpDate);

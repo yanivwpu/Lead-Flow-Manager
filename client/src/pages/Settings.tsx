@@ -377,6 +377,17 @@ export function Settings() {
   const [isImporting, setIsImporting] = useState(false);
 
   const [isUploading, setIsUploading] = useState(false);
+  const channelsSectionRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!user) return;
+    const params = new URLSearchParams(searchString);
+    if (params.get("tab") !== "channels") return;
+    const t = window.setTimeout(() => {
+      channelsSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 200);
+    return () => clearTimeout(t);
+  }, [searchString, user]);
 
   // Safety: Settings is a protected route, but in rare cases auth state can be null
   // (expired cookie, blocked third-party cookies, or transient /api/auth/me failure).
@@ -892,7 +903,9 @@ export function Settings() {
         <div className="max-w-4xl mx-auto space-y-6 sm:space-y-8">
           
           {/* Communication Channels - First */}
-          <ChannelSettings />
+          <div ref={channelsSectionRef} id="settings-channels" className="scroll-mt-4">
+            <ChannelSettings />
+          </div>
 
           {/* Auto-Reply & Business Hours */}
           <AutoReplySettings />

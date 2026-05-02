@@ -1,8 +1,50 @@
 import type { Express } from "express";
 import { storage } from "../storage";
 import { getWhatsAppAvailability } from "../whatsappService";
+import { db } from "../../drizzle/db";
+import { messages as messagesTable } from "@shared/schema";
+import { and, eq } from "drizzle-orm";
 
 export function registerChannelRoutes(app: Express): void {
+  /** Activation onboarding: channel connection + first outbound message (for checklist UI). */
+  app.get("/api/activation-status", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const settings = await storage.getChannelSettings(req.user.id);
+      const whatsappConnected = settings.some((s) => s.channel === "whatsapp" && !!s.isConnected);
+      const instagramConnected = settings.some((s) => s.channel === "instagram" && !!s.isConnected);
+      const facebookConnected = settings.some((s) => s.channel === "facebook" && !!s.isConnected);
+      const metaConnected = instagramConnected || facebookConnected;
+      const hasAnyMessagingChannel = whatsappConnected || metaConnected;
+
+      const [outbound] = await db
+        .select({ id: messagesTable.id })
+        .from(messagesTable)
+        .where(
+          and(eq(messagesTable.userId, req.user.id), eq(messagesTable.direction, "outbound")),
+        )
+        .limit(1);
+
+      const hasSentFirstMessage = !!outbound;
+
+      res.json({
+        whatsappConnected,
+        instagramConnected,
+        facebookConnected,
+        metaConnected,
+        hasAnyMessagingChannel,
+        hasSentFirstMessage,
+        checklistComplete:
+          whatsappConnected && metaConnected && hasSentFirstMessage,
+      });
+    } catch (error) {
+      console.error("Error fetching activation status:", error);
+      res.status(500).json({ error: "Failed to fetch activation status" });
+    }
+  });
+
   // Get all channel settings
   app.get("/api/channels", async (req, res) => {
     try {

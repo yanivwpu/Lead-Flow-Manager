@@ -8,13 +8,18 @@ import { UsageWarningBanner } from "@/components/UsageWarningBanner";
 import { TrialPill } from "@/components/TrialPill";
 import { TrialModal } from "@/components/TrialModal";
 import { TrialEndingSoonBanner } from "@/components/TrialEndingSoonBanner";
+import { ActivationSetupModal } from "@/components/ActivationSetupModal";
+import {
+  ActivationChecklist,
+  type ActivationStatusPayload,
+} from "@/components/ActivationChecklist";
 import { SubscriptionProvider, useSubscription } from "@/lib/subscription-context";
 import { getUpgradeProvider } from "@/lib/upgradeRouting";
 import { Loader2 } from "lucide-react";
 import { supportedLanguages, type SupportedLanguage } from "@/lib/i18n";
+import { cn } from "@/lib/utils";
 
 const FollowUps = lazy(() => import("./FollowUps").then(m => ({ default: m.FollowUps })));
-const OnboardingTour = lazy(() => import("@/components/OnboardingTour").then(m => ({ default: m.OnboardingTour })));
 
 const Search = lazy(() => import("./Search").then(m => ({ default: m.Search })));
 const Settings = lazy(() => import("./Settings").then(m => ({ default: m.Settings })));
@@ -37,22 +42,29 @@ const PageLoader = () => (
 
 function AppContent() {
   const { data: subscription, isLoading } = useSubscription();
-  const [showOnboarding, setShowOnboarding] = useState(false);
-  const [onboardingShown, setOnboardingShown] = useState(false);
   const [trialModalOpen, setTrialModalOpen] = useState(false);
+  /** Session-only: closing the modal without connecting avoids an immediate re-open loop; reconnect clears this. */
+  const [activationIntroDismissedSession, setActivationIntroDismissedSession] = useState(false);
   const { i18n } = useTranslation();
-  
-  const { data: user } = useQuery<{ onboardingCompleted?: boolean }>({
-    queryKey: ["/api/auth/me"],
+
+  const { data: activation, isPending: activationPending } = useQuery<ActivationStatusPayload>({
+    queryKey: ["/api/activation-status"],
+    staleTime: 15_000,
+    refetchOnWindowFocus: true,
   });
-  
+
   useEffect(() => {
-    if (user && user.onboardingCompleted === false && !onboardingShown) {
-      setShowOnboarding(true);
-      setOnboardingShown(true);
+    if (activation?.hasAnyMessagingChannel) {
+      setActivationIntroDismissedSession(false);
     }
-  }, [user, onboardingShown]);
-  
+  }, [activation?.hasAnyMessagingChannel]);
+
+  const showActivationIntroModal =
+    !activationPending &&
+    !!activation &&
+    !activation.hasAnyMessagingChannel &&
+    !activationIntroDismissedSession;
+
   const showUsageBanner =
     !isLoading &&
     subscription?.limits &&
@@ -79,11 +91,20 @@ function AppContent() {
 
   const upgradeProvider = useMemo(() => getUpgradeProvider(subMeta ?? null), [subMeta]);
 
-  const currentLang = (i18n.language || 'en') as SupportedLanguage;
-  const isRTL = supportedLanguages[currentLang]?.dir === 'rtl';
+  const showActivationChecklist =
+    !activationPending && !!activation && !activation.checklistComplete;
+
+  const showTopRightCluster = showTrialPill || showActivationChecklist;
+
+  const currentLang = (i18n.language || "en") as SupportedLanguage;
+  const isRTL = supportedLanguages[currentLang]?.dir === "rtl";
 
   return (
-    <div className="fixed top-0 left-0 right-0 flex bg-gray-50 overflow-hidden" style={{ height: 'var(--app-height, 100dvh)' }} dir={isRTL ? 'rtl' : 'ltr'}>
+    <div
+      className="fixed top-0 left-0 right-0 flex bg-gray-50 overflow-hidden"
+      style={{ height: "var(--app-height, 100dvh)" }}
+      dir={isRTL ? "rtl" : "ltr"}
+    >
       <Sidebar />
       <main className="flex-1 flex flex-col min-w-0 bg-white md:mx-3 md:rounded-2xl md:shadow-sm border-gray-200 md:border overflow-hidden relative pb-14 md:pb-0">
         {showTrialEndingSoon && (
@@ -91,21 +112,38 @@ function AppContent() {
             upgradeProviderLabel={upgradeProvider === "shopify" ? "Shopify" : "Stripe"}
           />
         )}
-        {showTrialPill && subscription?.limits && (
-          <div className="shrink-0 flex justify-end items-center gap-2 px-3 sm:px-4 pt-2.5 pb-1.5 border-b border-gray-100/90 bg-white">
-            <TrialPill
-              daysRemaining={daysRem}
-              highlight={pillHighlight}
-              onClick={() => setTrialModalOpen(true)}
-            />
+        {/* Trial pill + activation checklist — absolute top-end, no layout shift */}
+        {showTopRightCluster && (
+          <div
+            className={cn(
+              "pointer-events-none absolute z-40 flex max-w-[calc(100%-1rem)] flex-row-reverse flex-wrap items-start justify-end gap-2 end-3 sm:end-4",
+              showTrialEndingSoon ? "top-14 sm:top-[3.25rem]" : "top-2.5 sm:top-3",
+            )}
+          >
+            {showTrialPill && subscription?.limits && (
+              <div className="pointer-events-auto">
+                <TrialPill
+                  daysRemaining={daysRem}
+                  highlight={pillHighlight}
+                  onClick={() => setTrialModalOpen(true)}
+                />
+              </div>
+            )}
+            {showActivationChecklist && (
+              <div className="pointer-events-auto">
+                <ActivationChecklist />
+              </div>
+            )}
           </div>
         )}
-        <TrialModal
-          open={trialModalOpen}
-          onOpenChange={setTrialModalOpen}
-          daysRemaining={daysRem}
-          upgradeProvider={upgradeProvider}
+        <ActivationSetupModal
+          open={showActivationIntroModal}
+          onOpenChange={(open) => {
+            if (!open) setActivationIntroDismissedSession(true);
+          }}
+          onChannelCta={() => setActivationIntroDismissedSession(true)}
         />
+        <TrialModal open={trialModalOpen} onOpenChange={setTrialModalOpen} daysRemaining={daysRem} />
         {showUsageBanner && subscription?.limits && (
           <UsageWarningBanner
             conversationsUsed={subscription.limits.conversationsUsed}
@@ -118,8 +156,12 @@ function AppContent() {
             <Switch>
               {/* One route w/ optional param so UnifiedInbox is not remounted when opening a thread (was causing list flash / state reset). */}
               <Route path="/app/inbox/:contactId?" component={UnifiedInbox} />
-              <Route path="/app/chats/:id"><Redirect to="/app/inbox" /></Route>
-              <Route path="/app/chats"><Redirect to="/app/inbox" /></Route>
+              <Route path="/app/chats/:id">
+                <Redirect to="/app/inbox" />
+              </Route>
+              <Route path="/app/chats">
+                <Redirect to="/app/inbox" />
+              </Route>
               <Route path="/app/followups" component={FollowUps} />
               <Route path="/app/contacts" component={Contacts} />
               <Route path="/app/workflows" component={Workflows} />
@@ -138,11 +180,7 @@ function AppContent() {
           </Suspense>
         </div>
       </main>
-      
-      <OnboardingTour 
-        isOpen={showOnboarding} 
-        onComplete={() => setShowOnboarding(false)} 
-      />
+
       <MobileNav />
     </div>
   );
