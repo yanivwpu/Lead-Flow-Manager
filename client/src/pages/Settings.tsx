@@ -53,6 +53,7 @@ interface SubscriptionData {
     status: string;
     currentPeriodEnd: string | null;
     isShopify?: boolean;
+    isPaidSubscriber?: boolean;
   } | null;
 }
 
@@ -1073,7 +1074,9 @@ export function Settings() {
                     </p>
                   )}
                   <div className="mt-auto pt-6 space-y-2">
-                    {isInShopify && subscriptionData?.subscription?.plan === "free" && (
+                    {isInShopify &&
+                      effectivePlan === "free" &&
+                      !subscriptionData?.limits?.isInTrial && (
                       <Button 
                         className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold"
                         onClick={() => shopifyBillingMutation.mutate()}
@@ -1091,7 +1094,9 @@ export function Settings() {
                     <Link href="/pricing" className="w-full block">
                       <Button className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold">
                         <Zap className="h-4 w-4 mr-2" />
-                        {subscriptionData?.subscription?.plan === "free" ? "Upgrade Plan" : "View Plans"}
+                        {effectivePlan === "free" && !subscriptionData?.limits?.isInTrial
+                          ? "Upgrade Plan"
+                          : "View Plans"}
                       </Button>
                     </Link>
                   </div>
@@ -1112,7 +1117,8 @@ export function Settings() {
                         app subscription, or use <span className="font-medium text-gray-700">Pricing</span> in this app to
                         change plans.
                       </p>
-                    ) : subscriptionData?.subscription?.plan !== "free" ? (
+                    ) : !subscriptionData?.subscription?.isShopify &&
+                      subscriptionData?.subscription?.isPaidSubscriber ? (
                       <Button 
                         variant="outline" 
                         className="w-full border-gray-200 hover:bg-gray-50 text-gray-700 font-semibold"

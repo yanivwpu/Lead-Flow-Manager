@@ -36,6 +36,13 @@
       "when": 1775000000000,
       "tag": "0004_message_media_persistence",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1780000000000,
+      "tag": "0005_trial_system",
+      "breakpoints": true
     }
   ]
 }

@@ -22,19 +22,36 @@ interface SubscriptionLimits {
   isInTrial: boolean;
   trialEndsAt: string | null;
   trialDaysRemaining: number;
+  effectivePlan?: string;
+  effectiveHasAIBrain?: boolean;
   integrationsEnabled: boolean;
   maxWebhooks: number;
   templatesEnabled: boolean;
 }
 
 interface SubscriptionData {
-  limits: SubscriptionLimits;
+  limits: SubscriptionLimits & {
+    effectivePlan?: string;
+    effectiveHasAIBrain?: boolean;
+  };
   subscription: {
     plan: string;
     status: string;
     currentPeriodEnd: string | null;
     isShopify?: boolean;
     shopifyBillingTrialDays?: number;
+    subscriptionPlan?: string;
+    effectivePlan?: string;
+    effectiveHasAIBrain?: boolean;
+    trialStatus?: string;
+    trialStartedAt?: string | null;
+    trialEndsAt?: string | null;
+    trialDaysRemaining?: number;
+    trialIncludesAIBrain?: boolean;
+    trialPlan?: string | null;
+    upgradeProvider?: "shopify" | "stripe";
+    isPaidSubscriber?: boolean;
+    showTrialUrgency?: boolean;
   } | null;
 }
 

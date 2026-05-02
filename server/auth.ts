@@ -234,15 +234,19 @@ export function registerAuthRoutes(app: Express) {
       // Hash password
       const hashedPassword = await bcrypt.hash(password, 10);
 
-      // Create user with 14-day Pro trial
-      const trialEndsAt = new Date();
+      // 14-day Pro + AI Brain trial (server-side wall clock; persisted — no reset on logout)
+      const trialStartedAt = new Date();
+      const trialEndsAt = new Date(trialStartedAt);
       trialEndsAt.setDate(trialEndsAt.getDate() + 14);
-      
+
       const user = await storage.createUser({
         name,
         email,
         password: hashedPassword,
+        trialStartedAt,
         trialEndsAt,
+        trialStatus: "active",
+        trialPlan: "pro_ai",
       });
 
       // Check for referral attribution (from session or 90-day cookie)

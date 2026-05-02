@@ -215,6 +215,11 @@ export async function triggerNewChatWorkflows(
   conversationId?: string
 ): Promise<void> {
   try {
+    const limits = await subscriptionService.getUserLimits(userId);
+    if (!limits?.workflowsEnabled) {
+      console.log(`[Workflow] Skipping new_chat triggers — plan does not include automations for user ${userId}`);
+      return;
+    }
     const workflows = await storage.getActiveWorkflowsByTrigger(userId, "new_chat");
     for (const workflow of workflows) {
       await executeWorkflowActions(workflow, chat, { trigger: "new_chat" }, contact, conversationId);
@@ -232,6 +237,10 @@ export async function triggerKeywordWorkflows(
   conversationId?: string
 ): Promise<void> {
   try {
+    const limits = await subscriptionService.getUserLimits(userId);
+    if (!limits?.workflowsEnabled) {
+      return;
+    }
     const workflows = await storage.getActiveWorkflowsByTrigger(userId, "keyword");
     for (const workflow of workflows) {
       const conditions = workflow.triggerConditions as WorkflowCondition;
@@ -617,6 +626,10 @@ export async function triggerTagChangeWorkflows(
   conversationId?: string
 ): Promise<void> {
   try {
+    const limits = await subscriptionService.getUserLimits(userId);
+    if (!limits?.workflowsEnabled) {
+      return;
+    }
     const workflows = await storage.getActiveWorkflowsByTrigger(userId, "tag_change");
     for (const workflow of workflows) {
       const conditions = workflow.triggerConditions as WorkflowCondition;

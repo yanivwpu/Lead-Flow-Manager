@@ -1,12 +1,15 @@
-import { useState, useEffect, lazy, Suspense } from "react";
+import { useState, useEffect, lazy, Suspense, useMemo } from "react";
 import { Switch, Route, Redirect } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { Sidebar } from "@/components/Sidebar";
 import { MobileNav } from "@/components/MobileNav";
 import { UsageWarningBanner } from "@/components/UsageWarningBanner";
-import { TrialBanner } from "@/components/TrialBanner";
+import { TrialPill } from "@/components/TrialPill";
+import { TrialModal } from "@/components/TrialModal";
+import { TrialEndingSoonBanner } from "@/components/TrialEndingSoonBanner";
 import { SubscriptionProvider, useSubscription } from "@/lib/subscription-context";
+import { getUpgradeProvider } from "@/lib/upgradeRouting";
 import { Loader2 } from "lucide-react";
 import { supportedLanguages, type SupportedLanguage } from "@/lib/i18n";
 
@@ -36,6 +39,7 @@ function AppContent() {
   const { data: subscription, isLoading } = useSubscription();
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [onboardingShown, setOnboardingShown] = useState(false);
+  const [trialModalOpen, setTrialModalOpen] = useState(false);
   const { i18n } = useTranslation();
   
   const { data: user } = useQuery<{ onboardingCompleted?: boolean }>({
@@ -49,12 +53,31 @@ function AppContent() {
     }
   }, [user, onboardingShown]);
   
-  const showUsageBanner = !isLoading && subscription?.limits && 
+  const showUsageBanner =
+    !isLoading &&
+    subscription?.limits &&
     subscription.limits.conversationsLimit > 0 &&
-    (subscription.limits.conversationsUsed / subscription.limits.conversationsLimit) >= 0.8;
-  
-  const showTrialBanner = !isLoading && subscription?.limits?.isInTrial && 
-    subscription.limits.trialDaysRemaining > 0;
+    subscription.limits.conversationsUsed / subscription.limits.conversationsLimit >= 0.8;
+
+  const subMeta = subscription?.subscription;
+  const daysRem = subscription?.limits?.trialDaysRemaining ?? 0;
+  const showTrialPill =
+    !isLoading &&
+    !!subscription?.limits?.isInTrial &&
+    daysRem > 0 &&
+    !subMeta?.isPaidSubscriber;
+  const pillHighlight = daysRem <= 3 && daysRem > 0;
+
+  const trialEndsMs = subMeta?.trialEndsAt ? new Date(subMeta.trialEndsAt).getTime() : 0;
+  const hoursLeft = trialEndsMs ? (trialEndsMs - Date.now()) / (1000 * 60 * 60) : 999;
+  const showTrialEndingSoon =
+    !isLoading &&
+    !!subscription?.limits?.isInTrial &&
+    !subMeta?.isPaidSubscriber &&
+    hoursLeft > 0 &&
+    hoursLeft <= 24;
+
+  const upgradeProvider = useMemo(() => getUpgradeProvider(subMeta ?? null), [subMeta]);
 
   const currentLang = (i18n.language || 'en') as SupportedLanguage;
   const isRTL = supportedLanguages[currentLang]?.dir === 'rtl';
@@ -63,13 +86,27 @@ function AppContent() {
     <div className="fixed top-0 left-0 right-0 flex bg-gray-50 overflow-hidden" style={{ height: 'var(--app-height, 100dvh)' }} dir={isRTL ? 'rtl' : 'ltr'}>
       <Sidebar />
       <main className="flex-1 flex flex-col min-w-0 bg-white md:mx-3 md:rounded-2xl md:shadow-sm border-gray-200 md:border overflow-hidden relative pb-14 md:pb-0">
-        {showTrialBanner && subscription?.limits && (
-          <TrialBanner
-            daysRemaining={subscription.limits.trialDaysRemaining}
-            planName={subscription.limits.planName}
+        {showTrialEndingSoon && (
+          <TrialEndingSoonBanner
+            upgradeProviderLabel={upgradeProvider === "shopify" ? "Shopify" : "Stripe"}
           />
         )}
-        {showUsageBanner && !showTrialBanner && subscription?.limits && (
+        {showTrialPill && subscription?.limits && (
+          <div className="shrink-0 flex justify-end items-center gap-2 px-3 sm:px-4 pt-2.5 pb-1.5 border-b border-gray-100/90 bg-white">
+            <TrialPill
+              daysRemaining={daysRem}
+              highlight={pillHighlight}
+              onClick={() => setTrialModalOpen(true)}
+            />
+          </div>
+        )}
+        <TrialModal
+          open={trialModalOpen}
+          onOpenChange={setTrialModalOpen}
+          daysRemaining={daysRem}
+          upgradeProvider={upgradeProvider}
+        />
+        {showUsageBanner && subscription?.limits && (
           <UsageWarningBanner
             conversationsUsed={subscription.limits.conversationsUsed}
             conversationsLimit={subscription.limits.conversationsLimit}

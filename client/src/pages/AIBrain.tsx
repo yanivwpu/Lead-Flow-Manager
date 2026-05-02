@@ -55,6 +55,8 @@ interface SubscriptionData {
   limits: {
     plan: string;
     planName: string;
+    isInTrial?: boolean;
+    hasAIBrainAddon?: boolean;
   };
   subscription?: {
     plan: string;
@@ -187,6 +189,7 @@ function AIBrainContent() {
   const [bundleModalOpen, setBundleModalOpen] = useState(false);
   
   const isShopify = !!(subscription?.subscription?.isShopify) || !!shopHint;
+  const isInTrial = !!(subscription?.limits as { isInTrial?: boolean })?.isInTrial;
 
   // AI Brain add-on checkout
   const handleAddonCheckout = async () => {
@@ -573,6 +576,13 @@ function AIBrainContent() {
             </span>
           )}
         </header>
+
+        {isInTrial && hasFullAIBrain && (
+          <div className="rounded-lg border border-emerald-200/80 bg-emerald-50/70 px-4 py-2.5 text-sm text-emerald-950">
+            AI Brain is included in your Pro + AI trial. Upgrade before the trial ends to keep full AI Brain access without
+            interruption.
+          </div>
+        )}
 
         {hasFullAIBrain ? (
           <div className="rounded-xl border border-purple-100/90 bg-gradient-to-br from-purple-50/50 via-white to-blue-50/35 px-5 py-5 shadow-sm shadow-slate-900/[0.04]">

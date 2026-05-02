@@ -110,11 +110,18 @@ router.get('/callback', async (req: Request, res: Response) => {
     if (!user) {
       const tempPassword = crypto.randomBytes(16).toString('hex');
       const hashedPassword = await import('bcryptjs').then(bcrypt => bcrypt.hash(tempPassword, 10));
-      
+      const trialStartedAt = new Date();
+      const trialEndsAt = new Date(trialStartedAt);
+      trialEndsAt.setDate(trialEndsAt.getDate() + 14);
+
       user = await storage.createUser({
         name: shop.replace('.myshopify.com', ''),
         email: `${shop.replace('.myshopify.com', '')}@shopify.whachatcrm.com`,
         password: hashedPassword,
+        trialStartedAt,
+        trialEndsAt,
+        trialStatus: 'active',
+        trialPlan: 'pro_ai',
       });
     }
 

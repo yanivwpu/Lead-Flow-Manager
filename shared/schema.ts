@@ -108,7 +108,12 @@ export const users = pgTable("users", {
   subscriptionStatus: text("subscription_status").default("active"), // active, canceled, past_due
   currentPeriodStart: timestamp("current_period_start"),
   currentPeriodEnd: timestamp("current_period_end"),
-  trialEndsAt: timestamp("trial_ends_at"), // 14-day Pro trial end date
+  trialEndsAt: timestamp("trial_ends_at"), // 14-day Pro + AI trial end date (wall-clock, server-side)
+  trialStartedAt: timestamp("trial_started_at"),
+  /** none | active | expired — persisted so trial is not re-granted on reinstall */
+  trialStatus: text("trial_status").default("none"),
+  /** e.g. pro_ai = full Pro limits + AI Brain for trial window */
+  trialPlan: text("trial_plan"),
   lifetimeConversations: integer("lifetime_conversations").default(0), // for free tier tracking
   monthlyConversations: integer("monthly_conversations").default(0), // current month conversation count
   monthlyTwilioUsage: numeric("monthly_twilio_usage", { precision: 10, scale: 2 }).default("0"), // current month Twilio spend

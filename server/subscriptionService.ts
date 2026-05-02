@@ -1,6 +1,12 @@
 import type Stripe from "stripe";
 import { storage } from "./storage";
 import { PLAN_LIMITS, type SubscriptionPlan, type User } from "@shared/schema";
+import {
+  getEffectivePlanForUser,
+  syncTrialExpiryIfNeeded,
+  hasActivePaidPlan,
+  isProAiTrialActive,
+} from "./trialEntitlements";
 import { getUncachableStripeClient } from "./stripeClient";
 import { resolveStripeCheckoutRedirectOrigin } from "./stripeCheckoutRedirectBase";
 import { getAppOrigin } from "./urlOrigins";
@@ -15,7 +21,7 @@ export type StripeCheckoutRedirectOpts = {
   cancelReturnPath?: string;
 };
 
-export type AIBrainSource = "none" | "stripe" | "shopify" | "manual" | "demo";
+export type AIBrainSource = "none" | "stripe" | "shopify" | "manual" | "demo" | "trial";
 
 /** Shown when user tries AI Brain add-on checkout on Free (effective plan). */
 export const AI_BRAIN_REQUIRES_PAID_PLAN_MESSAGE =
@@ -50,6 +56,8 @@ export interface UserLimits {
   hasAIBrainAddon: boolean;
   /** Why hasAIBrainAddon is true; never inferred from legacy subscriptionPlan. */
   aiBrainSource: AIBrainSource;
+  /** Same as hasAIBrainAddon — alias for API/clarity (trial + paid addons). */
+  effectiveHasAIBrain: boolean;
   /** Realtor Growth Engine: requires effective Pro plan plus AI Brain entitlement. */
   growthEngineEligible: boolean;
   /** Starter or Pro effective plan — required before AI Brain add-on can apply. */
@@ -57,37 +65,34 @@ export interface UserLimits {
 }
 
 class SubscriptionService {
-  /**
-   * Same effective plan as getUserLimits (trial → pro, else override if enabled, else billing).
-   * No I/O; safe for admin lists.
-   */
-  getEffectivePlanForUser(
-    user: Pick<User, "trialEndsAt" | "planOverrideEnabled" | "planOverride" | "billingPlan">,
-    now: Date = new Date(),
-  ): SubscriptionPlan {
-    const isInTrial = user.trialEndsAt ? new Date(user.trialEndsAt) > now : false;
-    if (isInTrial) return "pro";
-    const overrideEnabled = !!user.planOverrideEnabled;
-    const overridePlan = (user.planOverride || "free") as SubscriptionPlan;
-    const billingPlan = (user.billingPlan || "free") as SubscriptionPlan;
-    return overrideEnabled ? overridePlan : billingPlan;
-  }
-
   async getUserLimits(userId: string): Promise<UserLimits | null> {
-    const user = await storage.getUser(userId);
+    let user = await storage.getUser(userId);
     if (!user) return null;
 
+    user = await syncTrialExpiryIfNeeded(user);
+
     const now = new Date();
-    const isInTrial = user.trialEndsAt ? new Date(user.trialEndsAt) > now : false;
-    const trialDaysRemaining = user.trialEndsAt
-      ? Math.max(0, Math.ceil((new Date(user.trialEndsAt).getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))
-      : 0;
+    const isInTrial =
+      !hasActivePaidPlan(user, now) &&
+      !!user.trialEndsAt &&
+      new Date(user.trialEndsAt) > now &&
+      user.trialStatus !== "expired";
+
+    const trialDaysRemaining =
+      user.trialEndsAt && isInTrial
+        ? Math.max(
+            0,
+            Math.ceil(
+              (new Date(user.trialEndsAt).getTime() - now.getTime()) / (1000 * 60 * 60 * 24),
+            ),
+          )
+        : 0;
 
     const overrideEnabled = !!user.planOverrideEnabled;
     const overridePlan = (user.planOverride || "free") as SubscriptionPlan;
     const billingPlan = (user.billingPlan || "free") as SubscriptionPlan;
 
-    const effectivePlan = this.getEffectivePlanForUser(user, now);
+    const effectivePlan = getEffectivePlanForUser(user, now);
     const planLimits = PLAN_LIMITS[effectivePlan];
 
     // MONTHLY RESET LOGIC: Reset conversations if billing period has ended
@@ -122,7 +127,7 @@ class SubscriptionService {
 
     return {
       plan: effectivePlan,
-      planName: isInTrial ? "Pro Trial" : planLimits.name,
+      planName: isInTrial ? "Pro + AI Trial" : planLimits.name,
       conversationsLimit: planLimits.conversationsPerMonth,
       conversationsUsed,
       conversationsRemaining,
@@ -147,6 +152,7 @@ class SubscriptionService {
       trialEndsAt: user.trialEndsAt,
       trialDaysRemaining,
       hasAIBrainAddon,
+      effectiveHasAIBrain: hasAIBrainAddon,
       aiBrainSource,
       growthEngineEligible,
       aiBrainBasePlanEligible,
@@ -246,8 +252,18 @@ class SubscriptionService {
     if (this.isManualAIBrainEmail(user.email ?? undefined)) {
       return { has: true, source: "manual" };
     }
-    if (!!user.shopifyAIBrainEnabled) {
-      return { has: true, source: "shopify" };
+    if (hasActivePaidPlan(user)) {
+      if (!!user.shopifyAIBrainEnabled) {
+        return { has: true, source: "shopify" };
+      }
+      const stripeOk = await this.stripeCustomerHasActiveAIBrainAddon(user.stripeCustomerId);
+      if (stripeOk) {
+        return { has: true, source: "stripe" };
+      }
+      return { has: false, source: "none" };
+    }
+    if (isProAiTrialActive(user)) {
+      return { has: true, source: "trial" };
     }
     const stripeOk = await this.stripeCustomerHasActiveAIBrainAddon(user.stripeCustomerId);
     if (stripeOk) {
@@ -296,7 +312,8 @@ class SubscriptionService {
     userId: string,
     plan: SubscriptionPlan,
     baseUrl: string,
-    billingInterval: "monthly" | "yearly" = "monthly"
+    billingInterval: "monthly" | "yearly" = "monthly",
+    redirect?: StripeCheckoutRedirectOpts,
   ): Promise<{ url: string }> {
     const user = await storage.getUser(userId);
     if (!user) throw new Error("User not found");
@@ -430,7 +447,7 @@ class SubscriptionService {
     const user = await storage.getUser(userId);
     if (!user) throw new Error("User not found");
 
-    if (this.getEffectivePlanForUser(user) !== "free") {
+    if (getEffectivePlanForUser(user) !== "free") {
       throw Object.assign(
         new Error(
           "Plan + AI bundle is only available when your effective plan is Free. Use AI Brain add-on checkout from this page if you already have Starter or Pro.",
@@ -627,3 +644,5 @@ class SubscriptionService {
 }
 
 export const subscriptionService = new SubscriptionService();
+
+export { getEffectivePlanForUser } from "./trialEntitlements";

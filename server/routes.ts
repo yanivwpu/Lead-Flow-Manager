@@ -56,7 +56,8 @@ import {
 import multer from "multer";
 import path from "path";
 import fs from "fs";
-import { subscriptionService } from "./subscriptionService";
+import { subscriptionService, getEffectivePlanForUser } from "./subscriptionService";
+import { computeTrialStatus, isProAiTrialActive, hasActivePaidPlan } from "./trialEntitlements";
 import {
   businessKnowledgeFromAiRecord,
   detectStrongAutoIntent,
@@ -2683,30 +2684,54 @@ export async function registerRoutes(
       const limits = await subscriptionService.getUserLimits(req.user.id);
       const user = await storage.getUser(req.user.id);
       const usersCount = await storage.getTeamMemberCount(req.user.id);
+      const now = new Date();
 
       const shopQuery = typeof req.query.shop === "string" ? req.query.shop.trim() : "";
       const shopQueryLooksShopify = /^[a-z0-9][a-z0-9-]*\.myshopify\.com$/i.test(shopQuery);
       const isShopify = !!(user?.shopifyShop) || shopQueryLooksShopify;
+      const paidProOrAi = user ? hasActivePaidPlan(user, now) : false;
+      const showTrialUrgency =
+        !!limits?.isInTrial && !paidProOrAi && (user?.trialPlan || "pro_ai") === "pro_ai";
 
       res.json({
-        limits: limits ? {
-          ...limits,
-          conversationsLimit: limits.conversationsLimit,
-          conversationsUsed: limits.conversationsUsed,
-          isLifetimeLimit: limits.isLifetimeLimit,
-          usersCount,
-          usersLimit: limits.maxUsers,
-          maxWhatsappNumbers: limits.maxWhatsappNumbers,
-          planName: limits.planName,
-          plan: limits.plan,
-        } : null,
-        subscription: user ? {
-          plan: user.subscriptionPlan,
-          status: user.subscriptionStatus,
-          currentPeriodEnd: user.currentPeriodEnd,
-          isShopify,
-          shopifyBillingTrialDays: isShopify ? 14 : undefined,
-        } : null,
+        limits: limits
+          ? {
+              ...limits,
+              conversationsLimit: limits.conversationsLimit,
+              conversationsUsed: limits.conversationsUsed,
+              isLifetimeLimit: limits.isLifetimeLimit,
+              usersCount,
+              usersLimit: limits.maxUsers,
+              maxWhatsappNumbers: limits.maxWhatsappNumbers,
+              planName: limits.planName,
+              plan: limits.plan,
+              effectivePlan: limits.plan,
+              effectiveHasAIBrain: limits.effectiveHasAIBrain,
+            }
+          : null,
+        subscription: user
+          ? {
+              plan: user.subscriptionPlan,
+              subscriptionPlan: user.subscriptionPlan,
+              effectivePlan: limits?.plan ?? "free",
+              subscriptionStatus: user.subscriptionStatus,
+              currentPeriodEnd: user.currentPeriodEnd,
+              hasAIBrainAddon: limits?.hasAIBrainAddon ?? false,
+              effectiveHasAIBrain: limits?.effectiveHasAIBrain ?? false,
+              trialStatus: computeTrialStatus(user, now),
+              trialStartedAt: user.trialStartedAt,
+              trialEndsAt: user.trialEndsAt,
+              trialDaysRemaining: limits?.trialDaysRemaining ?? 0,
+              trialIncludesAIBrain: isProAiTrialActive(user, now),
+              trialPlan: user.trialPlan ?? null,
+              isShopify,
+              upgradeProvider: isShopify ? ("shopify" as const) : ("stripe" as const),
+              shopifyBillingTrialDays: isShopify ? 14 : undefined,
+              /** Hide countdown promotions when user already pays for Pro (or higher). */
+              isPaidSubscriber: paidProOrAi,
+              showTrialUrgency,
+            }
+          : null,
       });
     } catch (error) {
       console.error("Error fetching subscription:", error);
@@ -6221,7 +6246,6 @@ export async function registerRoutes(
         const partnerName = user.partnerId ? partnerMap.get(user.partnerId) || null : null;
 
         const now = new Date();
-        const isInTrial = !!(user.trialEndsAt && new Date(user.trialEndsAt) > now);
 
         // Source of truth: subscriptionService.getUserLimits()
         let limits: Awaited<ReturnType<typeof subscriptionService.getUserLimits>> | null = null;
@@ -6232,7 +6256,7 @@ export async function registerRoutes(
           limits = null;
         }
 
-        const effectivePlan = limits?.plan || subscriptionService.getEffectivePlanForUser(user, now);
+        const effectivePlan = limits?.plan || getEffectivePlanForUser(user, now);
         const conversationsLimit =
           limits?.conversationsLimit ??
           PLAN_LIMITS[effectivePlan as SubscriptionPlan]?.conversationsPerMonth ??
@@ -6255,7 +6279,7 @@ export async function registerRoutes(
           subscriptionPlanLegacy: user.subscriptionPlan,
           subscriptionStatus: user.subscriptionStatus,
           trialEndsAt: user.trialEndsAt,
-          isInTrial,
+          isInTrial: !!limits?.isInTrial,
           twilioConnected: user.twilioConnected,
           metaConnected: user.metaConnected,
           createdAt: user.createdAt,

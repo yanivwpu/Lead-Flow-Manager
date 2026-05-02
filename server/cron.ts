@@ -1,6 +1,6 @@
 import { db } from '../drizzle/db';
 import { users, chats, contacts, templateEntitlements, channelSettings } from '@shared/schema';
-import { eq, and, lte, gte, isNotNull, or, desc, ne, inArray } from 'drizzle-orm';
+import { eq, and, lte, gte, isNotNull, or, desc, ne, inArray, sql } from 'drizzle-orm';
 import { sendTrialCheckinEmail, sendDailyHotListEmail, type HotLeadEntry } from './email';
 
 const GRAPH = "https://graph.facebook.com/v19.0";
@@ -90,6 +90,24 @@ export async function runMetaWebhookHealthCheck(): Promise<{ checked: number; re
   } catch (err) {
     console.error('[WebhookHealth] Fatal error in webhook health check:', err);
     throw err;
+  }
+}
+
+/** Mark trial_status expired for accounts past trial_ends_at (runs periodically). */
+export async function runTrialExpirySync(): Promise<number> {
+  try {
+    const result = await db.execute(sql`
+      UPDATE users SET trial_status = 'expired'
+      WHERE trial_ends_at IS NOT NULL
+        AND trial_ends_at <= NOW()
+        AND (trial_status IS NULL OR trial_status = 'active')
+    `);
+    const n = Number((result as any).rowCount ?? 0);
+    if (n > 0) console.log(`[Cron] Trial expiry sync: ${n} user(s) marked expired`);
+    return n;
+  } catch (e) {
+    console.error('[Cron] Trial expiry sync failed:', e);
+    return 0;
   }
 }
 
@@ -284,6 +302,7 @@ export function startCronJobs() {
   console.log('[Cron] Starting cron scheduler...');
   
   runTrialCheckinEmails().catch(err => console.error('[Cron] Initial run error:', err));
+  runTrialExpirySync().catch(err => console.error('[Cron] Trial expiry sync error:', err));
 
   // Run webhook health check once at startup (after 30 s to let DB settle)
   setTimeout(() => {
@@ -297,6 +316,10 @@ export function startCronJobs() {
 
     if (utcHour === 14 && utcMin === 0) {
       runTrialCheckinEmails().catch(err => console.error('[Cron] Scheduled run error:', err));
+    }
+
+    if (utcMin === 0) {
+      runTrialExpirySync().catch(err => console.error('[Cron] Trial expiry sync error:', err));
     }
 
     if (utcHour === 13 && utcMin === 0 && !hotListRanToday) {
