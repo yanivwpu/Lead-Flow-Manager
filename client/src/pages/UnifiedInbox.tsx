@@ -2,6 +2,7 @@ import { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback } fr
 import { useRoute, useLocation } from "wouter";
 import { useAuth } from "@/lib/auth-context";
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
+import type { QueryClient } from "@tanstack/react-query";
 import { useSubscription } from "@/lib/subscription-context";
 import { AIComposer } from "@/components/AIComposer";
 import {
@@ -282,7 +283,7 @@ function getFollowUpStatus(followUpDate: string | null | undefined): 'overdue' |
 }
 
 export function UnifiedInbox() {
-  const [match, params] = useRoute("/app/inbox/:contactId");
+  const [match, params] = useRoute("/app/inbox/:contactId?");
   const [, setLocation] = useLocation();
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -436,12 +437,23 @@ export function UnifiedInbox() {
   const [showVarDialog, setShowVarDialog] = useState(false);
   const [varValues, setVarValues] = useState<Record<string, string>>({});
 
-  const selectedContactId = match ? params?.contactId : null;
+  const selectedContactId =
+    match && params?.contactId != null && String(params.contactId).length > 0
+      ? String(params.contactId)
+      : null;
 
   const isDemoUser = user?.email === "demo@whachat.com";
 
-  const { data: inboxData, isPending: inboxPending } = useQuery<InboxItem[]>({
+  const {
+    data: inboxData,
+    isPending: inboxPending,
+    isFetching: inboxIsFetching,
+    isRefetching: inboxIsRefetching,
+    fetchStatus: inboxFetchStatus,
+  } = useQuery<InboxItem[]>({
     queryKey: ["/api/inbox"],
+    // Slightly below refetchInterval so poller + other invalidations see a consistent "fresh" window; does not block refetchInterval fetches.
+    staleTime: 4_000,
     refetchInterval: 5000,
     refetchIntervalInBackground: true,
     placeholderData: keepPreviousData,
@@ -1328,6 +1340,106 @@ export function UnifiedInbox() {
     }
     return result;
   }, [inbox, searchQuery, filterTab, user?.id, selectedChannels]);
+
+  const inboxListSource = isDemoUser ? "demoChats" : "live-/api/inbox";
+
+  const inboxDebugPrev = useRef<{
+    selected: string | null;
+    rowCount: number;
+    filtered: number;
+  } | null>(null);
+  useEffect(() => {
+    if (!import.meta.env.DEV || isDemoUser) return;
+    const prev = inboxDebugPrev.current;
+    if (prev && prev.selected !== selectedContactId) {
+      console.log("[InboxDebug] selectedContactId", prev.selected, "->", selectedContactId);
+    }
+    if (prev && prev.rowCount > 0 && inbox.length === 0) {
+      console.warn("[InboxDebug] rows became []", {
+        was: prev.rowCount,
+        source: inboxListSource,
+        inboxPending,
+        inboxFetchStatus,
+        inboxIsFetching,
+        inboxIsRefetching,
+      });
+    }
+    inboxDebugPrev.current = {
+      selected: selectedContactId,
+      rowCount: inbox.length,
+      filtered: filteredInbox.length,
+    };
+  }, [
+    isDemoUser,
+    selectedContactId,
+    inbox.length,
+    filteredInbox.length,
+    inboxListSource,
+    inboxPending,
+    inboxFetchStatus,
+    inboxIsFetching,
+    inboxIsRefetching,
+  ]);
+
+  useEffect(() => {
+    if (!import.meta.env.DEV || isDemoUser) return;
+    console.log("[InboxDebug] sidebar snapshot", {
+      source: inboxListSource,
+      rowCount: inbox.length,
+      filteredCount: filteredInbox.length,
+      isPending: inboxPending,
+      isFetching: inboxIsFetching,
+      isRefetching: inboxIsRefetching,
+      fetchStatus: inboxFetchStatus,
+      selectedContactId,
+    });
+  }, [
+    isDemoUser,
+    inboxListSource,
+    inbox.length,
+    filteredInbox.length,
+    inboxPending,
+    inboxIsFetching,
+    inboxIsRefetching,
+    inboxFetchStatus,
+    selectedContactId,
+  ]);
+
+  useEffect(() => {
+    if (!import.meta.env.DEV || isDemoUser) return;
+    const unsub = queryClient.getQueryCache().subscribe((event: { type: string; query?: { queryKey: unknown[] }; action?: { type?: string } }) => {
+      if (event.type !== "updated" || !event.query) return;
+      const key = event.query.queryKey;
+      if (!Array.isArray(key) || key[0] !== "/api/inbox") return;
+      if (event.action?.type === "invalidate") {
+        console.log("[InboxDebug] invalidateQueries→cache updated (inbox)", event.action);
+      }
+    });
+    return unsub;
+  }, [queryClient, isDemoUser]);
+
+  useEffect(() => {
+    if (!import.meta.env.DEV || isDemoUser) return;
+    const qc = queryClient as QueryClient & { __inboxInvLog?: boolean };
+    if (qc.__inboxInvLog) return;
+    qc.__inboxInvLog = true;
+    const orig = queryClient.invalidateQueries.bind(queryClient);
+    queryClient.invalidateQueries = (filters: Parameters<QueryClient["invalidateQueries"]>[0], ...rest: unknown[]) => {
+      const f = filters as { queryKey?: unknown[] } | undefined;
+      const qk = f?.queryKey;
+      if (Array.isArray(qk)) {
+        const h = qk[0];
+        if (h === "/api/inbox" || h === "/api/conversations" || (typeof h === "string" && h.startsWith("/api/contacts"))) {
+          console.log("[InboxDebug] invalidateQueries call", qk);
+        }
+      }
+      return orig(filters, ...(rest as []));
+    };
+    return () => {
+      queryClient.invalidateQueries = orig;
+      qc.__inboxInvLog = false;
+    };
+  }, [queryClient, isDemoUser]);
 
   // --- Helpers ---
 

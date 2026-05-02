@@ -79,8 +79,8 @@ function AppContent() {
         <div className="flex-1 min-h-0 overflow-auto">
           <Suspense fallback={<PageLoader />}>
             <Switch>
-              <Route path="/app/inbox/:contactId" component={UnifiedInbox} />
-              <Route path="/app/inbox" component={UnifiedInbox} />
+              {/* One route w/ optional param so UnifiedInbox is not remounted when opening a thread (was causing list flash / state reset). */}
+              <Route path="/app/inbox/:contactId?" component={UnifiedInbox} />
               <Route path="/app/chats/:id"><Redirect to="/app/inbox" /></Route>
               <Route path="/app/chats"><Redirect to="/app/inbox" /></Route>
               <Route path="/app/followups" component={FollowUps} />
