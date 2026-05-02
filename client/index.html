@@ -1,13 +1,20 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
-    <!-- Google Analytics -->
-    <script async src="https://www.googletagmanager.com/gtag/js?id=G-6Y1CWBVBHL"></script>
+    <!-- Google Analytics — deferred until after load to reduce main-thread during LCP/FCP -->
     <script>
       window.dataLayer = window.dataLayer || [];
       function gtag(){dataLayer.push(arguments);}
-      gtag('js', new Date());
-      gtag('config', 'G-6Y1CWBVBHL');
+      window.addEventListener('load', function () {
+        var s = document.createElement('script');
+        s.async = true;
+        s.src = 'https://www.googletagmanager.com/gtag/js?id=G-6Y1CWBVBHL';
+        document.head.appendChild(s);
+        s.onload = function () {
+          gtag('js', new Date());
+          gtag('config', 'G-6Y1CWBVBHL');
+        };
+      });
     </script>
 
     <meta charset="UTF-8" />
@@ -60,10 +67,6 @@
     <!-- PWA -->
     <link rel="manifest" href="/manifest.json" />
     <meta name="theme-color" content="#22c55e" />
-
-    <!-- Prefetch Key Pages -->
-    <link rel="prefetch" href="/auth" />
-    <link rel="prefetch" href="/pricing" />
 
     <!-- Structured Data (Organization, Software, Website, WebPage) -->
     <script type="application/ld+json">
@@ -134,16 +137,6 @@
       }
     </script>
 
-    <!-- Lazy Loading Images with Alt -->
-    <script>
-      document.addEventListener('DOMContentLoaded', () => {
-        document.querySelectorAll('img').forEach((img, i) => {
-          if (!img.hasAttribute('alt')) img.setAttribute('alt', 'WhachatCRM image');
-          img.setAttribute('loading', i === 0 ? 'eager' : 'lazy');
-        });
-      });
-    </script>
-
     <!-- Mobile keyboard / viewport fix:
          iOS Safari and Brave on iPhone do not resize fixed containers when
          the virtual keyboard opens.  We track the visual-viewport height and
@@ -151,17 +144,22 @@
          of 100dvh / 100vh (which are unreliable across iOS browser versions). -->
     <script>
       (function () {
+        var raf = 0;
         function setVh() {
-          var vp = window.visualViewport;
-          var h = vp ? vp.height : window.innerHeight;
-          document.documentElement.style.setProperty('--app-height', h + 'px');
+          if (raf) return;
+          raf = requestAnimationFrame(function () {
+            raf = 0;
+            var vp = window.visualViewport;
+            var h = vp ? vp.height : window.innerHeight;
+            document.documentElement.style.setProperty('--app-height', h + 'px');
+          });
         }
         setVh();
         if (window.visualViewport) {
-          window.visualViewport.addEventListener('resize', setVh);
-          window.visualViewport.addEventListener('scroll', setVh);
+          window.visualViewport.addEventListener('resize', setVh, { passive: true });
+          window.visualViewport.addEventListener('scroll', setVh, { passive: true });
         }
-        window.addEventListener('resize', setVh);
+        window.addEventListener('resize', setVh, { passive: true });
       })();
     </script>
   </body>

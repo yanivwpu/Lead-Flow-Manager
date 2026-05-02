@@ -241,6 +241,34 @@
   opacity: 0;
 }
 
+/* Mobile / reduced-motion: skip entrance animations — opacity 0 delays LCP and increases main-thread work */
+@media (max-width: 767px) {
+  .animate-hero-text,
+  .animate-hero-image {
+    animation: none !important;
+    opacity: 1 !important;
+  }
+  .animate-fade-in-up,
+  .animate-scale-in,
+  .animate-scale-in-right,
+  .animate-scale-in-left {
+    animation: none !important;
+    opacity: 1 !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-hero-text,
+  .animate-hero-image,
+  .animate-fade-in-up,
+  .animate-scale-in,
+  .animate-scale-in-right,
+  .animate-scale-in-left {
+    animation: none !important;
+    opacity: 1 !important;
+  }
+}
+
 /* RTL Support for Hebrew */
 html[dir="rtl"] {
   text-align: right;

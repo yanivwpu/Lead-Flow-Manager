@@ -54,6 +54,12 @@ export default defineConfig({
           if (id.includes('node_modules/@tanstack/')) {
             return 'query-vendor';
           }
+          if (id.includes('node_modules/react-helmet')) {
+            return 'helmet-vendor';
+          }
+          if (id.includes('node_modules/i18next') || id.includes('react-i18next')) {
+            return 'i18n-vendor';
+          }
         },
       },
     },

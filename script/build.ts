@@ -1,6 +1,12 @@
+import { execSync } from "child_process";
+import path from "path";
+import { fileURLToPath } from "url";
 import { build as esbuild } from "esbuild";
 import { build as viteBuild } from "vite";
 import { rm, readFile } from "fs/promises";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const repoRoot = path.join(__dirname, "..");
 
 // server deps to bundle to reduce openat(2) syscalls
 // which helps cold start times
@@ -25,6 +31,12 @@ const allowlist = [
 
 async function buildAll() {
   await rm("dist", { recursive: true, force: true });
+
+  console.log("generating responsive hero assets...");
+  execSync("node scripts/generate-hero-responsive.mjs", {
+    cwd: repoRoot,
+    stdio: "inherit",
+  });
 
   console.log("building client...");
   await viteBuild();
