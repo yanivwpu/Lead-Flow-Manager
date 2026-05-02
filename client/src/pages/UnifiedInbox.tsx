@@ -208,8 +208,6 @@ const CHANNEL_CONFIG: Record<string, { icon: any; color: string; label: string }
   gohighlevel: { icon: Zap, color: '#F97316', label: 'GoHighLevel' },
 };
 
-const DEMO_CHANNELS: Channel[] = ['whatsapp', 'instagram', 'facebook', 'telegram', 'sms', 'webchat'];
-
 function contactHasWebchatReachability(
   c: Contact,
   conversations?: Array<{ channel: Channel | string }>
@@ -396,7 +394,6 @@ export function UnifiedInbox() {
   const [filterTab, setFilterTab] = useState<FilterTab>('all');
   const allChannels: Channel[] = ['whatsapp', 'instagram', 'facebook', 'sms', 'webchat', 'telegram', 'tiktok'];
   const [selectedChannels, setSelectedChannels] = useState<Set<Channel>>(new Set(allChannels));
-  const [demoChannelOverrides, setDemoChannelOverrides] = useState<Record<string, Channel>>({});
   const [messageInput, setMessageInput] = useState("");
   const isMobile = useIsMobile();
   const [showEditContact, setShowEditContact] = useState(false);
@@ -442,8 +439,6 @@ export function UnifiedInbox() {
       ? String(params.contactId)
       : null;
 
-  const isDemoUser = user?.email === "demo@whachat.com";
-
   const {
     data: inboxData,
     isPending: inboxPending,
@@ -459,102 +454,13 @@ export function UnifiedInbox() {
     placeholderData: keepPreviousData,
   });
 
-  const { data: demoChats = [] } = useQuery<any[]>({
-    queryKey: ["/api/chats"],
-    enabled: isDemoUser,
-    placeholderData: keepPreviousData,
-  });
+  const inbox: InboxItem[] = useMemo(() => inboxData || [], [inboxData]);
 
-  const selectedDemoChat = useMemo(() => {
-    if (!isDemoUser || !selectedContactId) return null;
-    return demoChats.find((c: any) => String(c.id) === String(selectedContactId)) || null;
-  }, [isDemoUser, selectedContactId, demoChats]);
-
-  const inbox: InboxItem[] = useMemo(() => {
-    // Demo users: list comes only from /api/chats. Falling back to /api/inbox here caused rows to
-    // swap sources whenever demoChats was briefly empty or still loading (visible flicker loop).
-    if (isDemoUser) {
-      if (demoChats.length === 0) return [];
-      return demoChats.map((chat: any, index: number) => {
-        const ch = (chat.channel || DEMO_CHANNELS[index % DEMO_CHANNELS.length]) as Channel;
-        return {
-          contact: {
-            id: chat.id,
-            name: chat.name,
-            avatar: chat.avatar,
-            primaryChannel: ch,
-            tag: chat.tag,
-            pipelineStage: chat.pipelineStage,
-            notes: chat.notes || '',
-            followUp: chat.followUp || null,
-            followUpDate: chat.followUpDate || null,
-            assignedTo: chat.assignedTo || null,
-            createdAt: chat.createdAt || new Date().toISOString(),
-          },
-          conversation: {
-            id: chat.id,
-            channel: ch,
-            status: chat.status || 'open',
-            unreadCount: chat.unread || 0,
-          },
-          channel: ch,
-          lastMessage: chat.lastMessage,
-          lastMessageAt: chat.createdAt || new Date().toISOString(),
-          unreadCount: chat.unread || 0,
-        };
-      });
-    }
-    return inboxData || [];
-  }, [isDemoUser, inboxData, demoChats]);
-
-  const { data: realContactData } = useQuery<{ contact: Contact; conversations: Conversation[] }>({
+  const { data: contactData } = useQuery<{ contact: Contact; conversations: Conversation[] }>({
     queryKey: ["/api/contacts", selectedContactId],
-    enabled: !!selectedContactId && (!isDemoUser || !selectedDemoChat),
+    enabled: !!selectedContactId,
     placeholderData: keepPreviousData,
   });
-
-  const contactData = useMemo(() => {
-    if (isDemoUser && selectedDemoChat) {
-      const chatIndex = demoChats.findIndex((c: any) => String(c.id) === String(selectedDemoChat.id));
-      const baseCh = (selectedDemoChat.channel || DEMO_CHANNELS[chatIndex >= 0 ? chatIndex % DEMO_CHANNELS.length : 0]) as Channel;
-      const overrideCh = demoChannelOverrides[selectedDemoChat.id] as Channel | undefined;
-      const activeCh = overrideCh || baseCh;
-      const waDigits = selectedDemoChat.whatsappPhone
-        ? String(selectedDemoChat.whatsappPhone).replace(/\D/g, '')
-        : '';
-      return {
-        contact: {
-          id: selectedDemoChat.id,
-          name: selectedDemoChat.name,
-          avatar: selectedDemoChat.avatar,
-          phone: activeCh === 'sms' || activeCh === 'whatsapp' ? (selectedDemoChat.whatsappPhone || '') : '',
-          email: '',
-          primaryChannel: baseCh,
-          primaryChannelOverride: overrideCh,
-          lastIncomingChannel: activeCh,
-          whatsappId: activeCh === 'whatsapp' && waDigits ? waDigits : activeCh === 'whatsapp' ? '15555550100' : undefined,
-          instagramId: activeCh === 'instagram' ? 'demo_instagram' : undefined,
-          facebookId: activeCh === 'facebook' ? 'demo_psid' : undefined,
-          telegramId: activeCh === 'telegram' ? 'demo_telegram' : undefined,
-          source: activeCh === 'webchat' ? 'webchat' : undefined,
-          tag: selectedDemoChat.tag,
-          pipelineStage: selectedDemoChat.pipelineStage,
-          notes: selectedDemoChat.notes || '',
-          followUp: selectedDemoChat.followUp || null,
-          followUpDate: selectedDemoChat.followUpDate || null,
-          assignedTo: selectedDemoChat.assignedTo || null,
-          createdAt: selectedDemoChat.createdAt || new Date().toISOString(),
-        },
-        conversations: [{
-          id: selectedDemoChat.id,
-          channel: activeCh,
-          status: selectedDemoChat.status || 'open',
-          unreadCount: selectedDemoChat.unread || 0,
-        }]
-      };
-    }
-    return realContactData;
-  }, [isDemoUser, selectedDemoChat, realContactData, demoChats, demoChannelOverrides]);
 
   const contactReachableChannels = useMemo(
     () =>
@@ -657,40 +563,26 @@ export function UnifiedInbox() {
     bumpReplyWindowClockRef.current = () => setReplyWindowNow(Date.now());
   }, []);
 
-  const { data: realMessages = [], isLoading: messagesLoading, isFetching: messagesFetching } = useQuery<Message[]>({
+  const { data: messages = [], isLoading: messagesLoading, isFetching: messagesFetching } = useQuery<Message[]>({
     queryKey: ["/api/conversations", primaryConversation?.id, "messages"],
-    enabled: !!primaryConversation?.id && (!isDemoUser || !selectedDemoChat),
+    enabled: !!primaryConversation?.id,
     refetchInterval: 4000,
     refetchIntervalInBackground: true,
     placeholderData: keepPreviousData,
   });
 
-  const messages: Message[] = useMemo(() => {
-    if (isDemoUser && selectedDemoChat) {
-      return selectedDemoChat.messages.map((m: any, i: number) => ({
-        id: m.id || `demo-msg-${i}`,
-        direction: (m.role === 'assistant' || m.sender === 'me' || m.sender === 'agent' ? 'outbound' : 'inbound') as 'outbound' | 'inbound',
-        content: m.text || m.content,
-        contentType: 'text',
-        status: 'sent',
-        createdAt: new Date().toISOString(),
-      }));
-    }
-    return realMessages;
-  }, [isDemoUser, selectedDemoChat, realMessages]);
-
   const { data: windowStatus } = useQuery<WindowStatus>({
     queryKey: ["/api/conversations", windowConversationId, "window-status"],
-    enabled: !!windowConversationId && !isDemoUser,
+    enabled: !!windowConversationId,
     refetchInterval: 60000,
   });
 
   // Refetch window status when polling delivers a new inbound message (WS may be unavailable).
   useEffect(() => {
-    if (isDemoUser || !realMessages.length) return;
+    if (!messages.length) return;
     const convId = primaryConversation?.id;
     if (!convId) return;
-    const last = realMessages[realMessages.length - 1];
+    const last = messages[messages.length - 1];
     if (last.direction !== "inbound") return;
 
     const prev = lastInboundTailRef.current;
@@ -711,10 +603,9 @@ export function UnifiedInbox() {
     });
     bumpReplyWindowClockRef.current();
   }, [
-    realMessages,
+    messages,
     primaryConversation?.id,
     windowConversationId,
-    isDemoUser,
     queryClient,
   ]);
 
@@ -781,7 +672,7 @@ export function UnifiedInbox() {
 
   const { data: inboxTemplates = [] } = useQuery<MessageTemplate[]>({
     queryKey: ["/api/templates"],
-    enabled: isWhatsAppContact && !isDemoUser,
+    enabled: isWhatsAppContact,
     retry: false,
   });
 
@@ -815,20 +706,20 @@ export function UnifiedInbox() {
 
   /** Stable while polls return new array refs — avoids invalidating timeline every messages refetch. */
   const tailInboundMessageId = useMemo(() => {
-    if (!realMessages.length) return "";
-    const last = realMessages[realMessages.length - 1];
+    if (!messages.length) return "";
+    const last = messages[messages.length - 1];
     if (last.direction !== "inbound") return "";
     return last.id;
-  }, [realMessages]);
+  }, [messages]);
 
   // When a new inbound arrives, refetch timeline immediately so Copilot flips to Snoozed right away.
   useEffect(() => {
-    if (!selectedContactId || isDemoUser) return;
+    if (!selectedContactId) return;
     if (!tailInboundMessageId) return;
     queryClient.invalidateQueries({
       queryKey: [`/api/contacts/${selectedContactId}/timeline?limit=60`],
     });
-  }, [tailInboundMessageId, selectedContactId, isDemoUser, queryClient]);
+  }, [tailInboundMessageId, selectedContactId, queryClient]);
 
   type ChannelHealthEntry = {
     channel: string;
@@ -921,7 +812,7 @@ export function UnifiedInbox() {
 
   // Mark conversation as read when opened
   useEffect(() => {
-    if (!primaryConversation?.id || isDemoUser) return;
+    if (!primaryConversation?.id) return;
     fetch(`/api/conversations/${primaryConversation.id}/read`, {
       method: "POST",
       credentials: "include",
@@ -935,7 +826,7 @@ export function UnifiedInbox() {
         );
       });
     }).catch(() => {});
-  }, [primaryConversation?.id, isDemoUser]);
+  }, [primaryConversation?.id, selectedContactId, queryClient]);
 
   // --- Mutations ---
 
@@ -1075,11 +966,7 @@ export function UnifiedInbox() {
   const updateContactMutation = useMutation({
     mutationFn: async (data: Record<string, unknown> & { contactId: string }) => {
       const { contactId, ...body } = data;
-      // Demo contacts live in the chats table, not contacts table
-      const url = isDemoUser
-        ? `/api/chats/${contactId}`
-        : `/api/contacts/${contactId}`;
-      const res = await fetch(url, {
+      const res = await fetch(`/api/contacts/${contactId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -1091,18 +978,13 @@ export function UnifiedInbox() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/contacts"] });
       queryClient.invalidateQueries({ queryKey: ["/api/inbox"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/chats"] });
       setShowEditContact(false);
     },
   });
 
   const updateConversationMutation = useMutation({
     mutationFn: async (data: { conversationId: string; status: string }) => {
-      // Demo conversations are chat records — update via chats endpoint
-      const url = isDemoUser
-        ? `/api/chats/${data.conversationId}`
-        : `/api/conversations/${data.conversationId}`;
-      const res = await fetch(url, {
+      const res = await fetch(`/api/conversations/${data.conversationId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -1114,7 +996,6 @@ export function UnifiedInbox() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/contacts"] });
       queryClient.invalidateQueries({ queryKey: ["/api/inbox"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/chats"] });
     },
   });
 
@@ -1341,7 +1222,7 @@ export function UnifiedInbox() {
     return result;
   }, [inbox, searchQuery, filterTab, user?.id, selectedChannels]);
 
-  const inboxListSource = isDemoUser ? "demoChats" : "live-/api/inbox";
+  const inboxListSource = "live-/api/inbox";
 
   const inboxDebugPrev = useRef<{
     selected: string | null;
@@ -1349,7 +1230,7 @@ export function UnifiedInbox() {
     filtered: number;
   } | null>(null);
   useEffect(() => {
-    if (!import.meta.env.DEV || isDemoUser) return;
+    if (!import.meta.env.DEV) return;
     const prev = inboxDebugPrev.current;
     if (prev && prev.selected !== selectedContactId) {
       console.log("[InboxDebug] selectedContactId", prev.selected, "->", selectedContactId);
@@ -1370,7 +1251,6 @@ export function UnifiedInbox() {
       filtered: filteredInbox.length,
     };
   }, [
-    isDemoUser,
     selectedContactId,
     inbox.length,
     filteredInbox.length,
@@ -1382,7 +1262,7 @@ export function UnifiedInbox() {
   ]);
 
   useEffect(() => {
-    if (!import.meta.env.DEV || isDemoUser) return;
+    if (!import.meta.env.DEV) return;
     console.log("[InboxDebug] sidebar snapshot", {
       source: inboxListSource,
       rowCount: inbox.length,
@@ -1394,7 +1274,6 @@ export function UnifiedInbox() {
       selectedContactId,
     });
   }, [
-    isDemoUser,
     inboxListSource,
     inbox.length,
     filteredInbox.length,
@@ -1406,7 +1285,7 @@ export function UnifiedInbox() {
   ]);
 
   useEffect(() => {
-    if (!import.meta.env.DEV || isDemoUser) return;
+    if (!import.meta.env.DEV) return;
     const unsub = queryClient.getQueryCache().subscribe((event: { type: string; query?: { queryKey: unknown[] }; action?: { type?: string } }) => {
       if (event.type !== "updated" || !event.query) return;
       const key = event.query.queryKey;
@@ -1416,10 +1295,10 @@ export function UnifiedInbox() {
       }
     });
     return unsub;
-  }, [queryClient, isDemoUser]);
+  }, [queryClient]);
 
   useEffect(() => {
-    if (!import.meta.env.DEV || isDemoUser) return;
+    if (!import.meta.env.DEV) return;
     const qc = queryClient as QueryClient & { __inboxInvLog?: boolean };
     if (qc.__inboxInvLog) return;
     qc.__inboxInvLog = true;
@@ -1439,7 +1318,7 @@ export function UnifiedInbox() {
       queryClient.invalidateQueries = orig;
       qc.__inboxInvLog = false;
     };
-  }, [queryClient, isDemoUser]);
+  }, [queryClient]);
 
   // --- Helpers ---
 
@@ -1497,7 +1376,7 @@ export function UnifiedInbox() {
   const conversationStatusRow = getConversationStatusRow(convStatus);
 
   // Only block on first load with no rows yet — never swap the whole page out during background refetch.
-  if (!isDemoUser && inboxPending && inboxData === undefined) {
+  if (inboxPending && inboxData === undefined) {
     return (
       <div className="flex items-center justify-center h-full">
         <Loader2 className="w-8 h-8 animate-spin text-primary" />
@@ -1843,9 +1722,7 @@ export function UnifiedInbox() {
                           key={key}
                           onClick={() => {
                             setSendChannelUi(key as Channel);
-                            if (isDemoUser && selectedContactId) {
-                              setDemoChannelOverrides(prev => ({ ...prev, [selectedContactId]: key as Channel }));
-                            } else if (selectedContactId) {
+                            if (selectedContactId) {
                               switchChannelMutation.mutate({ contactId: selectedContactId, channel: key as Channel });
                             }
                           }}
@@ -2280,70 +2157,49 @@ export function UnifiedInbox() {
               Send WhatsApp Template
             </DialogTitle>
           </DialogHeader>
-          {isDemoUser ? (
-            <div className="flex flex-col items-center gap-4 py-6 text-center">
-              <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center">
-                <LayoutTemplate className="w-6 h-6 text-gray-600" />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-gray-800 mb-1">Connect WhatsApp to send templates</p>
-                <p className="text-xs text-gray-500 max-w-xs mx-auto">
-                  Template messaging lets you reach contacts outside the 24-hour window. Connect your WhatsApp account in Settings to use this feature.
-                </p>
-              </div>
-              <a
-                href="/app/settings"
-                className="inline-flex items-center gap-1.5 px-4 py-2 bg-gray-900 hover:bg-gray-800 text-white text-sm font-medium rounded-lg transition-colors"
-                data-testid="link-connect-whatsapp"
-              >
-                Go to Settings
-              </a>
-            </div>
-          ) : (
-            <div className="flex flex-col gap-3">
-              <Input
-                placeholder="Search templates…"
-                value={templateSearch}
-                onChange={(e) => setTemplateSearch(e.target.value)}
-                data-testid="input-template-search"
-              />
-              {inboxTemplates.length === 0 ? (
-                <p className="text-sm text-gray-500 text-center py-6">
-                  No templates found. Go to the Templates page to sync your WhatsApp templates.
-                </p>
-              ) : (
-                <div className="flex flex-col gap-2 max-h-80 overflow-y-auto">
-                  {inboxTemplates
-                    .filter((t) =>
-                      t.status === "approved" &&
-                      (t.name.toLowerCase().includes(templateSearch.toLowerCase()) ||
-                        t.bodyText?.toLowerCase().includes(templateSearch.toLowerCase()))
-                    )
-                    .map((t) => (
-                      <button
-                        key={t.id}
-                        onClick={() => handleSelectTemplate(t)}
-                        className="text-left p-3 border border-gray-200 rounded-lg hover:border-gray-300 hover:bg-gray-50 transition-colors"
-                        data-testid={`template-item-${t.id}`}
-                      >
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="text-sm font-medium text-gray-900">{t.name}</span>
-                          <span className="text-[10px] text-gray-400 uppercase">{t.language}</span>
-                        </div>
-                        <p className="text-xs text-gray-500 line-clamp-2">{t.bodyText}</p>
-                      </button>
-                    ))}
-                  {inboxTemplates.filter((t) =>
+          <div className="flex flex-col gap-3">
+            <Input
+              placeholder="Search templates…"
+              value={templateSearch}
+              onChange={(e) => setTemplateSearch(e.target.value)}
+              data-testid="input-template-search"
+            />
+            {inboxTemplates.length === 0 ? (
+              <p className="text-sm text-gray-500 text-center py-6">
+                No templates found. Go to the Templates page to sync your WhatsApp templates.
+              </p>
+            ) : (
+              <div className="flex flex-col gap-2 max-h-80 overflow-y-auto">
+                {inboxTemplates
+                  .filter((t) =>
                     t.status === "approved" &&
                     (t.name.toLowerCase().includes(templateSearch.toLowerCase()) ||
                       t.bodyText?.toLowerCase().includes(templateSearch.toLowerCase()))
-                  ).length === 0 && (
-                    <p className="text-sm text-gray-500 text-center py-4">No approved templates match your search.</p>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
+                  )
+                  .map((t) => (
+                    <button
+                      key={t.id}
+                      onClick={() => handleSelectTemplate(t)}
+                      className="text-left p-3 border border-gray-200 rounded-lg hover:border-gray-300 hover:bg-gray-50 transition-colors"
+                      data-testid={`template-item-${t.id}`}
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-sm font-medium text-gray-900">{t.name}</span>
+                        <span className="text-[10px] text-gray-400 uppercase">{t.language}</span>
+                      </div>
+                      <p className="text-xs text-gray-500 line-clamp-2">{t.bodyText}</p>
+                    </button>
+                  ))}
+                {inboxTemplates.filter((t) =>
+                  t.status === "approved" &&
+                  (t.name.toLowerCase().includes(templateSearch.toLowerCase()) ||
+                    t.bodyText?.toLowerCase().includes(templateSearch.toLowerCase()))
+                ).length === 0 && (
+                  <p className="text-sm text-gray-500 text-center py-4">No approved templates match your search.</p>
+                )}
+              </div>
+            )}
+          </div>
         </DialogContent>
       </Dialog>
 
