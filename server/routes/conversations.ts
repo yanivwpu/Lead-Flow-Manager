@@ -1,5 +1,21 @@
 import type { Express } from "express";
 import { storage } from "../storage";
+
+/** Include Postgres `code` / `detail` when present (node-postgres / Drizzle). */
+function dbErrorPayload(err: unknown): {
+  message: string;
+  code?: string;
+  detail?: string;
+  stack?: string;
+} {
+  const e = err as { code?: string; detail?: string };
+  return {
+    message: err instanceof Error ? err.message : String(err),
+    ...(typeof e.code === "string" ? { code: e.code } : {}),
+    ...(typeof e.detail === "string" ? { detail: e.detail } : {}),
+    ...(err instanceof Error ? { stack: err.stack } : {}),
+  };
+}
 import { getMediaUrl, downloadMedia } from "../userMeta";
 import fs from "fs";
 import path from "path";
@@ -85,7 +101,7 @@ export function registerConversationRoutes(app: Express): void {
         });
         return res.status(500).json({
           error: "Failed to load conversation",
-          detail: e instanceof Error ? e.message : String(e),
+          ...dbErrorPayload(e),
         });
       }
       if (!conversation) {
@@ -119,7 +135,7 @@ export function registerConversationRoutes(app: Express): void {
       });
       return res.status(500).json({
         error: "Failed to load messages",
-        detail: error instanceof Error ? error.message : String(error),
+        ...dbErrorPayload(error),
       });
     }
   });
