@@ -7105,14 +7105,28 @@ export async function registerRoutes(
 
   // Get unified inbox - all contacts sorted by last activity
   app.get("/api/inbox", async (req, res) => {
+    const t0 = Date.now();
+    const userId = req.user?.id ?? null;
+    console.log("[InboxEvidence:GET /api/inbox] start", { userId });
     try {
       if (!req.user) {
+        console.warn("[InboxEvidence:GET /api/inbox] unauthorized — no req.user");
         return res.status(401).json({ error: "Unauthorized" });
       }
       const limit = parseInt(req.query.limit as string) || 100;
       const inbox = await storage.getUnifiedInbox(req.user.id, limit);
+      const ms = Date.now() - t0;
+      const rowCount = Array.isArray(inbox) ? inbox.length : -1;
+      console.log("[InboxEvidence:GET /api/inbox] end", {
+        userId: req.user.id,
+        rowCount,
+        returnedZero: rowCount === 0,
+        ms,
+      });
       res.json(inbox);
     } catch (error) {
+      const ms = Date.now() - t0;
+      console.error("[InboxEvidence:GET /api/inbox] error", { userId, ms, error });
       console.error("Error fetching unified inbox:", error);
       res.status(500).json({ error: "Failed to fetch inbox" });
     }

@@ -2,7 +2,6 @@ import { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback } fr
 import { useRoute, useLocation } from "wouter";
 import { useAuth } from "@/lib/auth-context";
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
-import type { QueryClient } from "@tanstack/react-query";
 import { useSubscription } from "@/lib/subscription-context";
 import { AIComposer } from "@/components/AIComposer";
 import {
@@ -282,8 +281,29 @@ function getFollowUpStatus(followUpDate: string | null | undefined): 'overdue' |
 
 export function UnifiedInbox() {
   const [match, params] = useRoute("/app/inbox/:contactId?");
-  const [, setLocation] = useLocation();
+  const [pathname, setLocation] = useLocation();
   const { user } = useAuth();
+
+  /** Evidence: detect route/layout remount during flicker (do not remove until root cause confirmed). */
+  useEffect(() => {
+    const wp = typeof window !== "undefined" ? window.location.pathname : "";
+    console.log("[InboxEvidence] UnifiedInbox mounted", { windowPath: wp });
+    return () => {
+      const wpUnmount = typeof window !== "undefined" ? window.location.pathname : "";
+      console.warn("[InboxEvidence] UnifiedInbox unmounted", { windowPath: wpUnmount, trace: new Error("unmount").stack });
+    };
+  }, []);
+
+  /** Evidence: auth vs query enabled coupling */
+  useEffect(() => {
+    console.log("[InboxEvidence] auth snapshot", {
+      ts: new Date().toISOString(),
+      pathname,
+      hasUser: !!user,
+      userId: user?.id ?? null,
+      email: user?.email ?? null,
+    });
+  }, [user, pathname]);
   const queryClient = useQueryClient();
   const { toast } = useToast();
   /** Set after `replyWindowNow` exists; WS handler bumps clock when inbound pushes so UI doesn’t wait for the 1m tick. */
@@ -445,6 +465,9 @@ export function UnifiedInbox() {
     isFetching: inboxIsFetching,
     isRefetching: inboxIsRefetching,
     fetchStatus: inboxFetchStatus,
+    status: inboxQueryStatus,
+    error: inboxQueryError,
+    isEnabled: inboxQueryEnabled,
   } = useQuery<InboxItem[]>({
     queryKey: ["/api/inbox"],
     // Slightly below refetchInterval so poller + other invalidations see a consistent "fresh" window; does not block refetchInterval fetches.
@@ -455,6 +478,44 @@ export function UnifiedInbox() {
   });
 
   const inbox: InboxItem[] = useMemo(() => inboxData || [], [inboxData]);
+
+  const inboxEvidencePrevLenRef = useRef<number | null>(null);
+
+  /** Evidence: log whenever React Query delivers a new inboxData snapshot */
+  useEffect(() => {
+    const len = Array.isArray(inboxData) ? inboxData.length : inboxData === undefined ? -1 : -2;
+    const prevLen = inboxEvidencePrevLenRef.current;
+    console.log("[InboxEvidence] inboxData snapshot", {
+      ts: new Date().toISOString(),
+      pathname,
+      inboxDataLength: len,
+      previousLength: prevLen,
+      isPending: inboxPending,
+      isFetching: inboxIsFetching,
+      isRefetching: inboxIsRefetching,
+      fetchStatus: inboxFetchStatus,
+      queryStatus: inboxQueryStatus,
+      queryError: inboxQueryError ?? null,
+      queryEnabled: inboxQueryEnabled,
+      userId: user?.id ?? null,
+      email: user?.email ?? null,
+      inboxDataUndefined: inboxData === undefined,
+      inboxDataIsArray: Array.isArray(inboxData),
+    });
+    inboxEvidencePrevLenRef.current = len;
+  }, [
+    inboxData,
+    pathname,
+    inboxPending,
+    inboxIsFetching,
+    inboxIsRefetching,
+    inboxFetchStatus,
+    inboxQueryStatus,
+    inboxQueryError,
+    inboxQueryEnabled,
+    user?.id,
+    user?.email,
+  ]);
 
   const { data: contactData } = useQuery<{ contact: Contact; conversations: Conversation[] }>({
     queryKey: ["/api/contacts", selectedContactId],
@@ -1222,103 +1283,49 @@ export function UnifiedInbox() {
     return result;
   }, [inbox, searchQuery, filterTab, user?.id, selectedChannels]);
 
-  const inboxListSource = "live-/api/inbox";
-
-  const inboxDebugPrev = useRef<{
-    selected: string | null;
-    rowCount: number;
-    filtered: number;
-  } | null>(null);
+  const prevRawInboxRowCountRef = useRef(0);
   useEffect(() => {
-    if (!import.meta.env.DEV) return;
-    const prev = inboxDebugPrev.current;
-    if (prev && prev.selected !== selectedContactId) {
-      console.log("[InboxDebug] selectedContactId", prev.selected, "->", selectedContactId);
-    }
-    if (prev && prev.rowCount > 0 && inbox.length === 0) {
-      console.warn("[InboxDebug] rows became []", {
-        was: prev.rowCount,
-        source: inboxListSource,
-        inboxPending,
-        inboxFetchStatus,
-        inboxIsFetching,
-        inboxIsRefetching,
+    const prev = prevRawInboxRowCountRef.current;
+    if (prev > 0 && inbox.length === 0) {
+      const selectedChannelsList = Array.from(selectedChannels).sort();
+      console.warn("INBOX_ROWS_CLEARED", {
+        previousLength: prev,
+        newLength: inbox.length,
+        filteredLength: filteredInbox.length,
+        pathname,
+        windowPath: typeof window !== "undefined" ? window.location.pathname : "",
+        selectedContactId,
+        inboxDataRaw: inboxData,
+        filterTab,
+        searchQuery,
+        selectedChannels: selectedChannelsList,
+        channelFilterActive: selectedChannels.size < 7,
+        queryStatus: inboxQueryStatus,
+        fetchStatus: inboxFetchStatus,
+        isPending: inboxPending,
+        isFetching: inboxIsFetching,
+        isRefetching: inboxIsRefetching,
+        queryError: inboxQueryError ?? null,
+        stack: new Error("INBOX_ROWS_CLEARED").stack,
       });
     }
-    inboxDebugPrev.current = {
-      selected: selectedContactId,
-      rowCount: inbox.length,
-      filtered: filteredInbox.length,
-    };
+    prevRawInboxRowCountRef.current = inbox.length;
   }, [
+    inbox.length,
+    filteredInbox.length,
+    inboxData,
+    pathname,
     selectedContactId,
-    inbox.length,
-    filteredInbox.length,
-    inboxListSource,
-    inboxPending,
+    filterTab,
+    searchQuery,
+    selectedChannels,
+    inboxQueryStatus,
     inboxFetchStatus,
-    inboxIsFetching,
-    inboxIsRefetching,
-  ]);
-
-  useEffect(() => {
-    if (!import.meta.env.DEV) return;
-    console.log("[InboxDebug] sidebar snapshot", {
-      source: inboxListSource,
-      rowCount: inbox.length,
-      filteredCount: filteredInbox.length,
-      isPending: inboxPending,
-      isFetching: inboxIsFetching,
-      isRefetching: inboxIsRefetching,
-      fetchStatus: inboxFetchStatus,
-      selectedContactId,
-    });
-  }, [
-    inboxListSource,
-    inbox.length,
-    filteredInbox.length,
     inboxPending,
     inboxIsFetching,
     inboxIsRefetching,
-    inboxFetchStatus,
-    selectedContactId,
+    inboxQueryError,
   ]);
-
-  useEffect(() => {
-    if (!import.meta.env.DEV) return;
-    const unsub = queryClient.getQueryCache().subscribe((event: { type: string; query?: { queryKey: unknown[] }; action?: { type?: string } }) => {
-      if (event.type !== "updated" || !event.query) return;
-      const key = event.query.queryKey;
-      if (!Array.isArray(key) || key[0] !== "/api/inbox") return;
-      if (event.action?.type === "invalidate") {
-        console.log("[InboxDebug] invalidateQueries→cache updated (inbox)", event.action);
-      }
-    });
-    return unsub;
-  }, [queryClient]);
-
-  useEffect(() => {
-    if (!import.meta.env.DEV) return;
-    const qc = queryClient as QueryClient & { __inboxInvLog?: boolean };
-    if (qc.__inboxInvLog) return;
-    qc.__inboxInvLog = true;
-    const orig = queryClient.invalidateQueries.bind(queryClient);
-    queryClient.invalidateQueries = (filters: Parameters<QueryClient["invalidateQueries"]>[0], ...rest: unknown[]) => {
-      const f = filters as { queryKey?: unknown[] } | undefined;
-      const qk = f?.queryKey;
-      if (Array.isArray(qk)) {
-        const h = qk[0];
-        if (h === "/api/inbox" || h === "/api/conversations" || (typeof h === "string" && h.startsWith("/api/contacts"))) {
-          console.log("[InboxDebug] invalidateQueries call", qk);
-        }
-      }
-      return orig(filters, ...(rest as []));
-    };
-    return () => {
-      queryClient.invalidateQueries = orig;
-      qc.__inboxInvLog = false;
-    };
-  }, [queryClient]);
 
   // --- Helpers ---
 
