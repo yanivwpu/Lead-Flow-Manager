@@ -26,6 +26,7 @@ import { MARKETING_URL } from "@/lib/marketingUrl";
 const HERO = "/hero/dashboard";
 const HERO_AVIF_SRCSET = `${HERO}-400.avif 400w, ${HERO}-640.avif 640w, ${HERO}-1024.avif 1024w`;
 const HERO_WEBP_SRCSET = `${HERO}-400.webp 400w, ${HERO}-640.webp 640w, ${HERO}-1024.webp 1024w`;
+/** Mobile: full viewport width → browser picks 400/640w (~6–12 KB WebP). Desktop: half column → 1024w. */
 const HERO_SIZES = "(max-width: 768px) 100vw, 50vw";
 const HERO_IMG_FALLBACK = `${HERO}-640.webp`;
 
@@ -65,8 +66,6 @@ export function Welcome() {
           name="twitter:description"
           content="Manage WhatsApp, Instagram, and SMS in one unified mailbox. The simple CRM for SMBs and Shopify sellers."
         />
-        {/* Mobile LCP candidate — typical hero column width; desktop loads via picture/srcset. */}
-        <link rel="preload" as="image" href={`${HERO}-640.webp`} type="image/webp" media="(max-width: 768px)" />
       </Helmet>
       {showDemoModal ? (
         <Suspense fallback={null}>
@@ -110,8 +109,27 @@ export function Welcome() {
 
       {/* Hero Section */}
       <section className="px-4 md:px-6 pt-4 md:pt-8 pb-12 md:pb-20 max-w-7xl xl:max-w-[1440px] 2xl:max-w-[1536px] mx-auto">
-        <div className="grid md:grid-cols-2 gap-8 md:gap-12 xl:gap-16 2xl:gap-20 items-start">
-          <div className="animate-hero-text">
+        {/* Picture first in DOM (earlier fetch); mobile image above fold; md+: headline left via order */}
+        <div className="flex flex-col gap-8 md:grid md:grid-cols-2 md:gap-12 xl:gap-16 2xl:gap-20 items-start">
+          <div className="relative animate-hero-image overflow-visible order-1 md:order-2">
+            <picture>
+              <source type="image/avif" srcSet={HERO_AVIF_SRCSET} sizes={HERO_SIZES} />
+              <source type="image/webp" srcSet={HERO_WEBP_SRCSET} sizes={HERO_SIZES} />
+              <img
+                src={HERO_IMG_FALLBACK}
+                alt="WhachatCRM Dashboard - WhatsApp CRM Interface"
+                className="w-full rounded-xl md:rounded-2xl shadow-lg md:shadow-2xl border border-gray-200 md:scale-[1.02] xl:scale-105 origin-top relative z-10"
+                width={704}
+                height={384}
+                sizes={HERO_SIZES}
+                loading="eager"
+                fetchPriority="high"
+                decoding="sync"
+              />
+            </picture>
+          </div>
+
+          <div className="animate-hero-text order-2 md:order-1">
             <h1 className="text-3xl md:text-5xl lg:text-6xl xl:text-7xl font-display font-bold text-gray-900 leading-[1.1] mb-4 md:mb-6">{t("landing.heroTitle")}</h1>
             <p className="text-lg md:text-xl xl:text-2xl text-gray-600 mb-6 md:mb-8 leading-relaxed">{t("landing.heroSubtitle")}</p>
 
@@ -169,24 +187,6 @@ export function Welcome() {
                 <span>{t("home.hero.badge3")}</span>
               </div>
             </div>
-          </div>
-
-          <div className="relative animate-hero-image overflow-visible">
-            <picture>
-              <source type="image/avif" srcSet={HERO_AVIF_SRCSET} sizes={HERO_SIZES} />
-              <source type="image/webp" srcSet={HERO_WEBP_SRCSET} sizes={HERO_SIZES} />
-              <img
-                src={HERO_IMG_FALLBACK}
-                alt="WhachatCRM Dashboard - WhatsApp CRM Interface"
-                className="w-full rounded-xl md:rounded-2xl shadow-lg md:shadow-2xl border border-gray-200 md:scale-[1.02] xl:scale-105 origin-top relative z-10"
-                width={704}
-                height={384}
-                sizes={HERO_SIZES}
-                loading="eager"
-                fetchPriority="high"
-                decoding="async"
-              />
-            </picture>
           </div>
         </div>
       </section>
