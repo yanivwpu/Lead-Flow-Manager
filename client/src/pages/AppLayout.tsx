@@ -5,14 +5,12 @@ import { useTranslation } from "react-i18next";
 import { Sidebar } from "@/components/Sidebar";
 import { MobileNav } from "@/components/MobileNav";
 import { UsageWarningBanner } from "@/components/UsageWarningBanner";
-import { TrialPill } from "@/components/TrialPill";
 import { TrialModal } from "@/components/TrialModal";
+import { TrialSetupCluster } from "@/components/TrialSetupCluster";
+import { TrialModalOpenProvider } from "@/lib/trial-modal-context";
 import { TrialEndingSoonBanner } from "@/components/TrialEndingSoonBanner";
 import { ActivationSetupModal } from "@/components/ActivationSetupModal";
-import {
-  ActivationChecklist,
-  type ActivationStatusPayload,
-} from "@/components/ActivationChecklist";
+import type { ActivationStatusPayload } from "@/components/ActivationChecklist";
 import { SubscriptionProvider, useSubscription } from "@/lib/subscription-context";
 import { getUpgradeProvider } from "@/lib/upgradeRouting";
 import { Loader2 } from "lucide-react";
@@ -73,12 +71,6 @@ function AppContent() {
 
   const subMeta = subscription?.subscription;
   const daysRem = subscription?.limits?.trialDaysRemaining ?? 0;
-  const showTrialPill =
-    !isLoading &&
-    !!subscription?.limits?.isInTrial &&
-    daysRem > 0 &&
-    !subMeta?.isPaidSubscriber;
-  const pillHighlight = daysRem <= 3 && daysRem > 0;
 
   const trialEndsMs = subMeta?.trialEndsAt ? new Date(subMeta.trialEndsAt).getTime() : 0;
   const hoursLeft = trialEndsMs ? (trialEndsMs - Date.now()) / (1000 * 60 * 60) : 999;
@@ -91,11 +83,6 @@ function AppContent() {
 
   const upgradeProvider = useMemo(() => getUpgradeProvider(subMeta ?? null), [subMeta]);
 
-  const showActivationChecklist =
-    !activationPending && !!activation && !activation.checklistComplete;
-
-  const showTopRightCluster = showTrialPill || showActivationChecklist;
-
   const currentLang = (i18n.language || "en") as SupportedLanguage;
   const isRTL = supportedLanguages[currentLang]?.dir === "rtl";
 
@@ -105,37 +92,23 @@ function AppContent() {
       style={{ height: "var(--app-height, 100dvh)" }}
       dir={isRTL ? "rtl" : "ltr"}
     >
-      <Sidebar />
-      <main className="flex-1 flex flex-col min-w-0 bg-white md:mx-3 md:rounded-2xl md:shadow-sm border-gray-200 md:border overflow-hidden relative pb-14 md:pb-0">
-        {showTrialEndingSoon && (
-          <TrialEndingSoonBanner
-            upgradeProviderLabel={upgradeProvider === "shopify" ? "Shopify" : "Stripe"}
-          />
-        )}
-        {/* Trial pill + activation checklist — absolute top-end, no layout shift */}
-        {showTopRightCluster && (
+      <TrialModalOpenProvider openTrialModal={() => setTrialModalOpen(true)}>
+        <Sidebar />
+        <main className="flex-1 flex flex-col min-w-0 bg-white md:mx-3 md:rounded-2xl md:shadow-sm border-gray-200 md:border overflow-hidden relative pb-14 md:pb-0">
+          {showTrialEndingSoon && (
+            <TrialEndingSoonBanner
+              upgradeProviderLabel={upgradeProvider === "shopify" ? "Shopify" : "Stripe"}
+            />
+          )}
+          {/* Mobile: trial + setup — absolute so main scroll area has no extra top row */}
           <div
             className={cn(
-              "pointer-events-none absolute z-40 flex max-w-[calc(100%-1rem)] flex-row-reverse flex-wrap items-start justify-end gap-2 end-3 sm:end-4",
+              "pointer-events-none absolute z-40 flex max-w-[calc(100%-1rem)] justify-end end-3 md:hidden",
               showTrialEndingSoon ? "top-14 sm:top-[3.25rem]" : "top-2.5 sm:top-3",
             )}
           >
-            {showTrialPill && subscription?.limits && (
-              <div className="pointer-events-auto">
-                <TrialPill
-                  daysRemaining={daysRem}
-                  highlight={pillHighlight}
-                  onClick={() => setTrialModalOpen(true)}
-                />
-              </div>
-            )}
-            {showActivationChecklist && (
-              <div className="pointer-events-auto">
-                <ActivationChecklist />
-              </div>
-            )}
+            <TrialSetupCluster />
           </div>
-        )}
         <ActivationSetupModal
           open={showActivationIntroModal}
           onOpenChange={(open) => {
@@ -180,6 +153,7 @@ function AppContent() {
           </Suspense>
         </div>
       </main>
+      </TrialModalOpenProvider>
 
       <MobileNav />
     </div>

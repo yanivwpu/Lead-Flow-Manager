@@ -24,6 +24,7 @@ import { useAuth } from "@/lib/auth-context";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { LanguageSelector } from "./LanguageSelector";
+import { TrialSetupCluster } from "@/components/TrialSetupCluster";
 import { getDirection } from "@/lib/i18n";
 import {
   Tooltip,
@@ -168,6 +169,11 @@ export function Sidebar() {
               {collapsed ? "Expand sidebar" : "Collapse sidebar"}
             </TooltipContent>
           </Tooltip>
+        </div>
+
+        {/* Trial + Setup — desktop sidebar only; mobile uses absolute cluster in AppLayout main */}
+        <div className="hidden md:flex flex-shrink-0 flex-col px-2 pb-2">
+          <TrialSetupCluster />
         </div>
 
         {/* ── Navigation ── */}

@@ -66,7 +66,7 @@ import { useToast } from "@/hooks/use-toast";
 import { InboxLeadDetailsPanel } from "@/components/InboxLeadDetailsPanel";
 import { useAICapabilities } from "@/lib/useAICapabilities";
 import type { ActivationStatusPayload } from "@/components/ActivationChecklist";
-import { SETTINGS_CHANNELS_HREF } from "@/components/ActivationSetupModal";
+import { settingsChannelsHref } from "@/lib/settingsChannelsNavigation";
 import { analyzeConversation } from "@/lib/conversationIntelligence";
 import type { ContactContext } from "@/components/AIComposer";
 import { isConversationHandoffActive } from "@shared/handoffActivity";
@@ -1525,7 +1525,7 @@ export function UnifiedInbox() {
                 <Smartphone className="w-10 h-10 mx-auto mb-3 text-gray-300" aria-hidden />
                 <p className="text-sm font-medium text-gray-900 mb-1">No channels connected yet</p>
                 <p className="text-xs text-muted-foreground mb-4">Connect WhatsApp or Meta to receive conversations here.</p>
-                <Link href={SETTINGS_CHANNELS_HREF}>
+                <Link href={settingsChannelsHref({ provider: "whatsapp" })}>
                   <a>
                     <Button type="button" size="sm" className="gap-2 bg-brand-green hover:bg-brand-dark text-white" data-testid="inbox-cta-connect-whatsapp">
                       <MessageCircle className="w-4 h-4" />

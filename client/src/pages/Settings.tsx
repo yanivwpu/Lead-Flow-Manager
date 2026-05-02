@@ -382,7 +382,7 @@ export function Settings() {
   useEffect(() => {
     if (!user) return;
     const params = new URLSearchParams(searchString);
-    if (params.get("tab") !== "channels") return;
+    if (params.get("section") !== "channels" && params.get("tab") !== "channels") return;
     const t = window.setTimeout(() => {
       channelsSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 200);

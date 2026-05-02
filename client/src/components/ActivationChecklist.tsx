@@ -8,7 +8,7 @@ import {
 import { CheckCircle2, Circle, ListChecks } from "lucide-react";
 import { Link } from "wouter";
 import { cn } from "@/lib/utils";
-import { SETTINGS_CHANNELS_HREF } from "@/components/ActivationSetupModal";
+import { settingsChannelsHref } from "@/lib/settingsChannelsNavigation";
 
 export interface ActivationStatusPayload {
   whatsappConnected: boolean;
@@ -82,8 +82,16 @@ export function ActivationChecklist({ className }: ActivationChecklistProps) {
       <PopoverContent align="end" className="w-80 p-4" data-testid="popover-activation-checklist">
         <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-3">Get started</p>
         <div className="divide-y divide-gray-100">
-          <Row done={whatsappDone} label="Connect WhatsApp" href={SETTINGS_CHANNELS_HREF} />
-          <Row done={metaDone} label="Connect Instagram or Facebook" href={SETTINGS_CHANNELS_HREF} />
+          <Row
+            done={whatsappDone}
+            label="Connect WhatsApp"
+            href={settingsChannelsHref({ provider: "whatsapp" })}
+          />
+          <Row
+            done={metaDone}
+            label="Connect Instagram or Facebook"
+            href={settingsChannelsHref()}
+          />
           <Row done={messageDone} label="Send your first message" href="/app/inbox" />
         </div>
         {!messageDone && (
@@ -91,7 +99,7 @@ export function ActivationChecklist({ className }: ActivationChecklistProps) {
             Open the inbox and send a reply to a contact — or message yourself from your phone.
           </p>
         )}
-        <Link href={SETTINGS_CHANNELS_HREF}>
+        <Link href={settingsChannelsHref()}>
           <a className="mt-4 block">
             <Button type="button" variant="outline" size="sm" className="w-full border-gray-200 text-xs">
               Channel settings

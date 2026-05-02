@@ -85,7 +85,7 @@ export function TrialModal({ open, onOpenChange, daysRemaining }: TrialModalProp
             onClick={handlePrimary}
             disabled={loading}
             data-testid="button-trial-upgrade-primary"
-            className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-green-600 px-4 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-green-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-green-600 disabled:pointer-events-none disabled:opacity-50"
+            className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-brand-green px-4 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-dark focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-green disabled:pointer-events-none disabled:opacity-50"
           >
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Unlock Pro + AI permanently"}
           </button>

@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useSearch } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   MessageCircle,
@@ -31,6 +32,7 @@ import {
 import { ConnectMetaWizard } from "@/components/ConnectMetaWizard";
 import { ConnectTwilioWizard } from "@/components/ConnectTwilioWizard";
 import { ConnectMetaFbIgWizard } from "@/components/ConnectMetaFbIgWizard";
+import type { SettingsChannelProvider } from "@/lib/settingsChannelsNavigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -123,6 +125,7 @@ const CHANNEL_CONFIG: Record<Channel, {
 };
 
 export function ChannelSettings() {
+  const searchString = useSearch();
   const queryClient = useQueryClient();
   const [configChannel, setConfigChannel] = useState<Channel | null>(null);
   const [telegramToken, setTelegramToken] = useState("");
@@ -176,6 +179,26 @@ export function ChannelSettings() {
       });
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /** Deep link: ?section=channels&provider=whatsapp|instagram|facebook (legacy: tab=channels) */
+  useEffect(() => {
+    const params = new URLSearchParams(searchString);
+    const sectionOk =
+      params.get("section") === "channels" || params.get("tab") === "channels";
+    if (!sectionOk) return;
+    const raw = params.get("provider");
+    if (raw !== "whatsapp" && raw !== "instagram" && raw !== "facebook") return;
+    const provider = raw as SettingsChannelProvider;
+    const scrollTimer = window.setTimeout(() => {
+      const el = document.getElementById(`channel-card-${provider}`);
+      el?.scrollIntoView({ behavior: "smooth", block: "center" });
+      el?.classList.add("ring-2", "ring-brand-green/90", "ring-offset-2", "rounded-lg");
+      window.setTimeout(() => {
+        el?.classList.remove("ring-2", "ring-brand-green/90", "ring-offset-2", "rounded-lg");
+      }, 2600);
+    }, 450);
+    return () => clearTimeout(scrollTimer);
+  }, [searchString]);
 
   const { data: channels = [], isLoading } = useQuery<ChannelSetting[]>({
     queryKey: ["/api/channels"],
@@ -510,6 +533,7 @@ export function ChannelSettings() {
             return (
               <div
                 key={channel}
+                id={`channel-card-${channel}`}
                 className={cn(
                   "flex items-center justify-between p-3 sm:p-4 rounded-lg border transition-colors",
                   status === 'connected'
@@ -934,16 +958,8 @@ export function ChannelSettings() {
         </DialogContent>
       </Dialog>
 
-      <ConnectMetaWizard
-        open={connectMetaOpen}
-        onOpenChange={setConnectMetaOpen}
-        onStartTour={startMetaTour}
-      />
-      <ConnectTwilioWizard
-        open={connectTwilioOpen}
-        onOpenChange={setConnectTwilioOpen}
-        onStartTour={startTwilioTour}
-      />
+      <ConnectMetaWizard open={connectMetaOpen} onOpenChange={setConnectMetaOpen} />
+      <ConnectTwilioWizard open={connectTwilioOpen} onOpenChange={setConnectTwilioOpen} />
 
       {/* Telegram */}
       {(() => {

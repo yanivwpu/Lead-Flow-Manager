@@ -9,8 +9,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { MessageCircle, Instagram, Facebook } from "lucide-react";
 import { Link } from "wouter";
-
-export const SETTINGS_CHANNELS_HREF = "/app/settings?tab=channels";
+import { settingsChannelsHref } from "@/lib/settingsChannelsNavigation";
 
 interface ActivationSetupModalProps {
   open: boolean;
@@ -33,7 +32,7 @@ export function ActivationSetupModal({ open, onOpenChange, onChannelCta }: Activ
           </DialogDescription>
         </DialogHeader>
         <DialogFooter className="flex-col gap-2 sm:flex-col">
-          <Link href={SETTINGS_CHANNELS_HREF}>
+          <Link href={settingsChannelsHref({ provider: "whatsapp" })}>
             <a className="block w-full" data-testid="activation-connect-whatsapp">
               <Button
                 type="button"
@@ -45,7 +44,7 @@ export function ActivationSetupModal({ open, onOpenChange, onChannelCta }: Activ
               </Button>
             </a>
           </Link>
-          <Link href={SETTINGS_CHANNELS_HREF}>
+          <Link href={settingsChannelsHref({ provider: "instagram" })}>
             <a className="block w-full" data-testid="activation-connect-instagram">
               <Button
                 type="button"
@@ -58,7 +57,7 @@ export function ActivationSetupModal({ open, onOpenChange, onChannelCta }: Activ
               </Button>
             </a>
           </Link>
-          <Link href={SETTINGS_CHANNELS_HREF}>
+          <Link href={settingsChannelsHref({ provider: "facebook" })}>
             <a className="block w-full" data-testid="activation-connect-facebook">
               <Button
                 type="button"
