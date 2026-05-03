@@ -61,7 +61,7 @@ function IntegrationBrandLogo({
     integrationId === "leadconnector" || integrationId === "salesforce";
   const imgSizeClass = strongSizeBoost
     ? "max-h-[115%] max-w-[115%] origin-center scale-[1.2]"
-    : "max-h-[82%] max-w-[82%]";
+    : "max-h-full max-w-full";
   return (
     <div
       className={cn(
@@ -75,10 +75,7 @@ function IntegrationBrandLogo({
         <img
           src={logoUrl}
           alt=""
-          className={cn(
-            "box-border h-auto w-auto object-contain object-center",
-            imgSizeClass,
-          )}
+          className={cn("box-border object-contain object-center", imgSizeClass)}
           loading="lazy"
           decoding="async"
         />
@@ -153,6 +150,22 @@ const NATIVE_INTEGRATIONS: IntegrationConfig[] = [
       { id: "abandoned_carts", label: "Abandoned Carts", description: "Create a chat for abandoned checkouts" },
       { id: "new_customers", label: "New Customers", description: "Create a chat when a customer signs up" },
     ]
+  },
+  {
+    id: "woocommerce",
+    name: "WooCommerce",
+    icon: ShoppingCart,
+    description:
+      "Connect your WooCommerce store to sync customers, orders, and automate WhatsApp follow-ups.",
+    color: "bg-violet-700",
+    category: "commerce",
+    tagline: "Customers, orders & WhatsApp follow-ups",
+    fields: [],
+    syncOptions: [
+      { id: "new_orders", label: "New Orders", description: "Create a chat when a new order is placed" },
+      { id: "new_customers", label: "New Customers", description: "Create a chat when a new customer is created" },
+      { id: "order_updates", label: "Order updates", description: "Notify on order status changes" },
+    ],
   },
   { 
     id: "google_sheets", 
@@ -413,6 +426,7 @@ export function Integrations() {
   const [integrationForm, setIntegrationForm] = useState<Record<string, string>>({});
   const [selectedSyncOptions, setSelectedSyncOptions] = useState<string[]>([]);
   const [showShopifyInfo, setShowShopifyInfo] = useState(false);
+  const [showWooCommerceInfo, setShowWooCommerceInfo] = useState(false);
   const [checkingLcConnection, setCheckingLcConnection] = useState(false);
   const [manageIntegrationId, setManageIntegrationId] = useState<string | null>(null);
   const [leadManageOpen, setLeadManageOpen] = useState(false);
@@ -657,6 +671,8 @@ export function Integrations() {
                         primaryAction = () => setManageIntegrationId(integration.id);
                       } else if (integration.id === "shopify") {
                         primaryAction = () => setShowShopifyInfo(true);
+                      } else if (integration.id === "woocommerce") {
+                        primaryAction = () => setShowWooCommerceInfo(true);
                       }
 
                       return (
@@ -973,6 +989,51 @@ export function Integrations() {
                 Go to Shopify App Store
                 <ExternalLink className="h-3 w-3 ml-2" />
               </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* WooCommerce — connect guidance (native card; setup via contact / future OAuth) */}
+        <Dialog open={showWooCommerceInfo} onOpenChange={setShowWooCommerceInfo}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <div className="flex items-center gap-3">
+                <IntegrationBrandLogo
+                  name="WooCommerce"
+                  logoUrl={INTEGRATION_LOGO_BY_ID.woocommerce}
+                  integrationId="woocommerce"
+                />
+                <div>
+                  <DialogTitle>Connect WooCommerce</DialogTitle>
+                  <DialogDescription>
+                    Connect your WooCommerce store to sync customers, orders, and automate WhatsApp follow-ups.
+                  </DialogDescription>
+                </div>
+              </div>
+            </DialogHeader>
+            <div className="space-y-4 py-2">
+              <div className="rounded-lg border border-violet-200 bg-violet-50 p-3 text-sm text-violet-900">
+                <p className="font-medium">How it works</p>
+                <p className="mt-1 text-xs text-violet-800">
+                  We&apos;ll help you link your store so new customers and orders can flow into WhachatCRM and trigger
+                  WhatsApp follow-ups. Tell us your store URL and we&apos;ll guide you through the next steps.
+                </p>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowWooCommerceInfo(false)}>
+                Close
+              </Button>
+              <Link href="/contact">
+                <Button
+                  className="bg-violet-700 hover:bg-violet-800 text-white"
+                  onClick={() => setShowWooCommerceInfo(false)}
+                  data-testid="button-woocommerce-contact"
+                >
+                  Contact us
+                  <ExternalLink className="ml-2 h-3 w-3" />
+                </Button>
+              </Link>
             </DialogFooter>
           </DialogContent>
         </Dialog>
