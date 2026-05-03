@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSubscription } from "@/lib/subscription-context";
 import { Button } from "@/components/ui/button";
@@ -449,6 +449,7 @@ export function Integrations() {
   const [wooError, setWooError] = useState<string | null>(null);
   const [wooSuccess, setWooSuccess] = useState(false);
   const [wooOrderHint, setWooOrderHint] = useState<string | null>(null);
+  const wooStoreUrlInputRef = useRef<HTMLInputElement>(null);
   const [checkingLcConnection, setCheckingLcConnection] = useState(false);
   const [manageIntegrationId, setManageIntegrationId] = useState<string | null>(null);
   const [leadManageOpen, setLeadManageOpen] = useState(false);
@@ -1154,37 +1155,12 @@ export function Integrations() {
                     <li>Click &quot;Add Key&quot;</li>
                     <li>Copy Consumer Key &amp; Consumer Secret</li>
                   </ol>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="mt-3 w-full border-violet-200 bg-white font-medium text-violet-900 hover:bg-violet-100/80"
-                    onClick={() => {
-                      const base = normalizeWooStoreUrlInput(wooForm.storeUrl);
-                      if (!base) {
-                        toast({
-                          title: "Enter store URL first",
-                          description: "Add your store URL (e.g. https://yourstore.com) before opening API settings.",
-                          variant: "destructive",
-                        });
-                        return;
-                      }
-                      window.open(
-                        `${base}/wp-admin/admin.php?page=wc-settings&tab=advanced&section=keys`,
-                        "_blank",
-                        "noopener,noreferrer",
-                      );
-                    }}
-                    data-testid="button-woocommerce-open-api-settings"
-                  >
-                    Open WooCommerce API Settings
-                    <ExternalLink className="ml-2 h-3.5 w-3.5" />
-                  </Button>
                 </div>
 
                 <div className="space-y-2">
                   <Label htmlFor="woo-store-url">Store URL</Label>
                   <Input
+                    ref={wooStoreUrlInputRef}
                     id="woo-store-url"
                     required
                     autoComplete="url"
@@ -1194,7 +1170,42 @@ export function Integrations() {
                     disabled={wooConnectMutation.isPending}
                     data-testid="input-woocommerce-store-url"
                   />
+                  <p className="text-xs text-gray-500">
+                    Enter your store URL to enable quick access to API settings
+                  </p>
                 </div>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className={cn(
+                    "w-full border-violet-200 bg-white font-medium text-violet-900 hover:bg-violet-100/80",
+                    !wooForm.storeUrl.trim() && "cursor-not-allowed opacity-50",
+                  )}
+                  disabled={wooConnectMutation.isPending}
+                  aria-disabled={!wooForm.storeUrl.trim()}
+                  onClick={() => {
+                    if (!wooForm.storeUrl.trim()) {
+                      wooStoreUrlInputRef.current?.focus();
+                      return;
+                    }
+                    const base = normalizeWooStoreUrlInput(wooForm.storeUrl);
+                    if (!base) {
+                      wooStoreUrlInputRef.current?.focus();
+                      return;
+                    }
+                    window.open(
+                      `${base}/wp-admin/admin.php?page=wc-settings&tab=advanced&section=keys`,
+                      "_blank",
+                      "noopener,noreferrer",
+                    );
+                  }}
+                  data-testid="button-woocommerce-open-api-settings"
+                >
+                  Open WooCommerce API Settings
+                  <ExternalLink className="ml-2 h-3.5 w-3.5" />
+                </Button>
                 <div className="space-y-2">
                   <Label htmlFor="woo-consumer-key">Consumer Key</Label>
                   <Input
