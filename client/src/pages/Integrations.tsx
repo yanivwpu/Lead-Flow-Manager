@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { toast } from "@/hooks/use-toast";
-import { IntegrationBrandLogo, type IntegrationLogoId } from "@/components/integrations/IntegrationBrandLogo";
+import { IntegrationBrandLogo } from "@/components/integrations/IntegrationBrandLogo";
 
 const WEBHOOK_EVENTS = [
   { id: "new_chat", label: "New Conversation", description: "When a new chat is created" },
@@ -165,6 +165,8 @@ const NATIVE_INTEGRATIONS: IntegrationConfig[] = [
     icon: Home, 
     description: "Real estate lead capture and property inquiries", 
     color: "bg-red-500",
+    category: "industry",
+    tagline: "IDX leads & property inquiries",
     fields: [
       { key: "apiKey", label: "API Key", placeholder: "xxxxx-xxxxx-xxxxx", type: "password", helpText: "From Showcase IDX dashboard" },
       { key: "siteId", label: "Site ID", placeholder: "12345", helpText: "Your Showcase IDX site identifier" },
@@ -597,7 +599,7 @@ export function Integrations() {
                           data-testid={`integration-card-${integration.id}`}
                         >
                           <div className="flex items-start gap-3">
-                            <IntegrationBrandLogo id={integration.id as IntegrationLogoId} />
+                            <IntegrationBrandLogo name={integration.name} />
                             <div className="min-w-0 flex-1 pt-0.5">
                               <h3 className="text-sm font-semibold leading-snug text-gray-900">{integration.name}</h3>
                             </div>
@@ -860,7 +862,7 @@ export function Integrations() {
           <DialogContent className="max-w-md">
             <DialogHeader>
               <div className="flex items-center gap-3">
-                <IntegrationBrandLogo id="shopify" />
+                <IntegrationBrandLogo name="Shopify" />
                 <div>
                   <DialogTitle>Install WhachatCRM on Shopify</DialogTitle>
                   <DialogDescription>Connect your Shopify store via the Shopify App Store</DialogDescription>
@@ -905,7 +907,7 @@ export function Integrations() {
           <DialogContent className="max-w-md">
             <DialogHeader>
               <div className="flex items-center gap-3">
-                <IntegrationBrandLogo id="leadconnector" />
+                <IntegrationBrandLogo name="LeadConnector" />
                 <div>
                   <DialogTitle>LeadConnector</DialogTitle>
                   <DialogDescription>Install the app and verify your connection</DialogDescription>
@@ -965,7 +967,7 @@ export function Integrations() {
               <>
                 <DialogHeader>
                   <div className="flex items-center gap-3">
-                    <IntegrationBrandLogo id={managingIntegration.id as IntegrationLogoId} />
+                    <IntegrationBrandLogo name={managingIntegration.name} />
                     <div>
                       <DialogTitle>{managingIntegration.name}</DialogTitle>
                       <DialogDescription>{managingIntegration.description}</DialogDescription>
@@ -1036,7 +1038,7 @@ export function Integrations() {
               <>
                 <DialogHeader className="flex-shrink-0 p-6 pb-2">
                   <div className="flex items-center gap-3">
-                    <IntegrationBrandLogo id={connectingIntegration.id as IntegrationLogoId} />
+                    <IntegrationBrandLogo name={connectingIntegration.name} />
                     <div>
                       <DialogTitle>Connect {connectingIntegration.name}</DialogTitle>
                       <DialogDescription>{connectingIntegration.description}</DialogDescription>
