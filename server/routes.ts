@@ -91,6 +91,8 @@ import {
   calendlyListEventTypes,
 } from "./calendlyApi";
 import { isUserCalendlyBookingConnected } from "./calendlyBookingConnected";
+import { hubspotValidatePrivateAppToken } from "./hubspotApi";
+import { pushLeadsToHubSpot } from "./hubspotSync";
 
 import { registerTemplateRoutes } from "./templateRoutes";
 import { registerMediaRoutes } from "./routes/media";
@@ -5512,6 +5514,24 @@ export async function registerRoutes(
         calendlyExtra = { calendlyEventTypes: eventNames };
       }
 
+      if (type === "hubspot") {
+        const token = String(config.accessToken || "").trim();
+        if (!token) {
+          return res.status(400).json({ error: "Private app access token is required" });
+        }
+        const tokenOk = await hubspotValidatePrivateAppToken(token);
+        if (!tokenOk) {
+          return res.status(400).json({ error: "Invalid HubSpot token" });
+        }
+        const syncOptions = ["sync_contacts"];
+        finalConfig = {
+          ...config,
+          accessToken: token,
+          syncOptions,
+          connectionStatus: "connected",
+        };
+      }
+
       // Encrypt sensitive fields before storing
       const encryptedConfig = encryptIntegrationConfig(finalConfig);
       
@@ -5710,11 +5730,18 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Integration is paused. Activate it to sync." });
       }
       
-      const config = integration.config as Record<string, any>;
+      const rawIntegrationConfig = integration.config as Record<string, any>;
+      const config = decryptIntegrationConfig(rawIntegrationConfig);
       const syncOptions = config.syncOptions || [];
-      let syncResult = { success: true, message: `${integration.name} sync started`, details: '' };
-      
-      if (integration.type === 'google_sheets' && syncOptions.includes('export_leads')) {
+      let syncResult: {
+        success: boolean;
+        message: string;
+        details: string;
+        lastHubSpotSync?: Record<string, unknown>;
+        error?: string;
+      } = { success: true, message: `${integration.name} sync started`, details: "" };
+
+      if (integration.type === "google_sheets" && syncOptions.includes("export_leads")) {
         const chats = await storage.getChats(req.user.id);
         // Phase E Step 2: overlay CRM fields from contacts (authoritative source)
         const contactsForSync = await storage.getContacts(req.user.id);
@@ -5745,14 +5772,100 @@ export async function registerRoutes(
         
         syncResult.details = `Prepared ${rows.length} leads for export. Configure Google Sheets API to enable automatic sync.`;
         console.log(`Google Sheets sync: ${rows.length} leads ready for user ${req.user.id}`);
-      } else if (integration.type === 'hubspot' && syncOptions.includes('sync_contacts')) {
+      } else if (integration.type === "hubspot") {
+        if (config.connectionStatus !== "connected") {
+          return res.status(400).json({
+            success: false,
+            error: "HubSpot is not connected. Disconnect and reconnect with a valid token.",
+          });
+        }
+        if (!syncOptions.includes("sync_contacts")) {
+          return res.status(400).json({
+            success: false,
+            error: 'Enable "Sync Contacts" for this integration to push contacts to HubSpot.',
+          });
+        }
+        const token = typeof config.accessToken === "string" ? config.accessToken.trim() : "";
+        if (!token) {
+          return res.status(400).json({
+            success: false,
+            error: "Missing HubSpot token. Disconnect and reconnect the integration.",
+          });
+        }
         const chats = await storage.getChats(req.user.id);
-        syncResult.details = `${chats.length} contacts ready to sync to HubSpot.`;
-        console.log(`HubSpot sync requested for ${chats.length} contacts`);
+        const contactsForSync = await storage.getContacts(req.user.id);
+        const contactCrmSync = new Map(
+          contactsForSync
+            .filter((c) => c.whatsappId || c.phone)
+            .map((c) => [(c.whatsappId || c.phone || "").replace(/\D/g, ""), c])
+        );
+
+        const leads = chats.map((chat) => {
+          const rawPhone = chat.whatsappPhone || "";
+          const norm = isLegacyCalendlyWorkflowChat(rawPhone) ? "" : rawPhone.replace(/\D/g, "");
+          const ct = norm ? contactCrmSync.get(norm) : undefined;
+          const phoneField = isLegacyCalendlyWorkflowChat(rawPhone)
+            ? rawPhone.slice(LEGACY_CHAT_CALENDLY_PREFIX.length)
+            : rawPhone;
+          const email = ct?.email?.trim() || undefined;
+          const phone = phoneField || ct?.phone || undefined;
+          const name = ((ct?.name || chat.name || "").trim() || "WhatsApp lead").slice(0, 500);
+          const pipelineStage = (ct?.pipelineStage ?? chat.pipelineStage)?.trim() || undefined;
+          const tag = (ct?.tag ?? chat.tag)?.trim() || undefined;
+          return { email: email || undefined, phone, name, pipelineStage, tag };
+        });
+
+        let outcome;
+        try {
+          outcome = await pushLeadsToHubSpot(token, leads);
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : "HubSpot sync failed";
+          console.error(`HubSpot sync error for user ${req.user.id}:`, msg);
+          return res.status(502).json({
+            success: false,
+            error: msg,
+            message: "HubSpot sync failed",
+            details: "",
+          });
+        }
+
+        const lastHubSpotSync = {
+          at: new Date().toISOString(),
+          pushed: outcome.pushed,
+          failed: outcome.failed,
+          skipped: outcome.skipped,
+          errors: outcome.errors,
+          summary: outcome.summary,
+        };
+
+        const mergedHubspotConfig = encryptIntegrationConfig({
+          ...config,
+          lastHubSpotSync,
+        });
+
+        await storage.updateIntegration(req.params.id, {
+          lastSyncAt: new Date(),
+          config: mergedHubspotConfig,
+        });
+
+        syncResult = {
+          success: outcome.failed === 0,
+          message:
+            outcome.failed === 0
+              ? "HubSpot sync completed"
+              : "HubSpot sync completed with errors",
+          details: outcome.summary,
+          lastHubSpotSync,
+        };
+
+        console.log(
+          `HubSpot sync user=${req.user.id} pushed=${outcome.pushed} failed=${outcome.failed} skipped=${outcome.skipped}`
+        );
+        return res.json(syncResult);
       } else {
-        syncResult.details = 'Sync initiated. External service will send data via webhook.';
+        syncResult.details = "Sync initiated. External service will send data via webhook.";
       }
-      
+
       await storage.updateIntegration(req.params.id, { lastSyncAt: new Date() });
       
       console.log(`Sync triggered for ${integration.type} integration ${integration.id}`);

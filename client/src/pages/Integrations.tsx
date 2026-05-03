@@ -126,7 +126,13 @@ interface IntegrationConfig {
   /** Single-line summary on marketplace cards */
   tagline: string;
   fields: { key: string; label: string; placeholder: string; type?: string; helpText?: string }[];
-  syncOptions?: { id: string; label: string; description: string }[];
+  syncOptions?: {
+    id: string;
+    label: string;
+    description: string;
+    comingSoon?: boolean;
+    required?: boolean;
+  }[];
 }
 
 const CATEGORY_SECTIONS: { key: IntegrationCategory; title: string }[] = [
@@ -221,17 +227,22 @@ const NATIVE_INTEGRATIONS: IntegrationConfig[] = [
     id: "hubspot", 
     name: "HubSpot", 
     icon: Users, 
-    description: "Bi-directional contact and deal sync", 
+    description: "Push WhatsApp leads to HubSpot as contacts (validated token, encrypted storage).",
     color: "bg-orange-500",
     category: "crm",
-    tagline: "Contacts, deals & pipeline sync",
+    tagline: "Contact sync to HubSpot CRM",
     fields: [
-      { key: "accessToken", label: "Private App Access Token", placeholder: "pat-na1-xxxxx", type: "password", helpText: "Create in HubSpot Settings > Integrations > Private Apps" },
+      { key: "accessToken", label: "Private App Access Token", placeholder: "pat-na1-xxxxx", type: "password", helpText: "HubSpot → Settings → Integrations → Private Apps. Scopes: crm.objects.contacts.read and crm.objects.contacts.write. Optional custom properties: whachat_pipeline_stage, whachat_tag (create in HubSpot first)." },
     ],
     syncOptions: [
-      { id: "sync_contacts", label: "Sync Contacts", description: "Keep WhatsApp leads synced with HubSpot contacts" },
-      { id: "sync_deals", label: "Sync Deals", description: "Create HubSpot deals from pipeline changes" },
-      { id: "import_contacts", label: "Import Contacts", description: "Import existing HubSpot contacts as chats" },
+      {
+        id: "sync_contacts",
+        label: "Sync Contacts",
+        description: "Push chats to HubSpot contacts (Manage → Sync now). Required for this integration.",
+        required: true,
+      },
+      { id: "sync_deals", label: "Sync Deals", description: "Create HubSpot deals from pipeline changes", comingSoon: true },
+      { id: "import_contacts", label: "Import Contacts", description: "Import HubSpot contacts as chats", comingSoon: true },
     ]
   },
   { 
@@ -390,11 +401,9 @@ function WebhookUrlDisplay({ integrationType }: { integrationType: string }) {
         ];
       case 'hubspot':
         return [
-          "Go to HubSpot → Settings → Integrations → Private Apps",
-          "Create or edit your app",
-          "Go to Webhooks tab",
-          "Add subscription for 'contact.creation'",
-          "Set webhook URL to the URL above"
+          "Inbound HubSpot webhooks are not used in this version.",
+          "Use Connect with a Private App token; we validate it against HubSpot before saving.",
+          "Open Manage → Sync now to push contacts to HubSpot.",
         ];
       default:
         return ["Configure the webhook URL in your service"];
@@ -553,11 +562,27 @@ export function Integrations() {
           description: `Event types: ${types.slice(0, 5).join(", ")}${types.length > 5 ? "…" : ""}`,
         });
       }
+      if (data?.type === "hubspot") {
+        toast({
+          title: "HubSpot connected",
+          description: "Token validated. Use Manage → Sync now to push contacts.",
+        });
+      }
     },
     onError: (err: Error) => {
+      let description = err.message || "Could not save integration";
+      const brace = description.indexOf("{");
+      if (brace >= 0) {
+        try {
+          const parsed = JSON.parse(description.slice(brace)) as { error?: string };
+          if (typeof parsed.error === "string") description = parsed.error;
+        } catch {
+          /* keep full message */
+        }
+      }
       toast({
         title: "Connection failed",
-        description: err.message || "Could not save integration",
+        description,
         variant: "destructive",
       });
     },
@@ -583,9 +608,45 @@ export function Integrations() {
 
   const syncIntegrationMutation = useMutation({
     mutationFn: async (id: string) => {
-      return apiRequest("POST", `/api/integrations/${id}/sync`);
+      const res = await fetch(`/api/integrations/${id}/sync`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        success?: boolean;
+        error?: string;
+        message?: string;
+        details?: string;
+        lastHubSpotSync?: Record<string, unknown>;
+      };
+      if (!res.ok) {
+        throw new Error(data.error || data.message || `Sync failed (${res.status})`);
+      }
+      return data;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/integrations"] }),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/integrations"] });
+      const partial = data.success === false;
+      const title = partial ? "Sync finished with issues" : "Sync complete";
+      const description =
+        (typeof data.details === "string" && data.details) ||
+        (typeof data.message === "string" && data.message) ||
+        "Integration sync finished.";
+      toast({
+        title,
+        description,
+        variant: partial ? "destructive" : "default",
+      });
+    },
+    onError: (err: Error) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/integrations"] });
+      toast({
+        title: "Sync failed",
+        description: err.message || "Could not sync integration",
+        variant: "destructive",
+      });
+    },
   });
 
   const wooConnectMutation = useMutation({
@@ -709,19 +770,21 @@ export function Integrations() {
   };
 
   const handleSyncOptionToggle = (optionId: string) => {
-    setSelectedSyncOptions(prev =>
-      prev.includes(optionId)
-        ? prev.filter(o => o !== optionId)
-        : [...prev, optionId]
+    setSelectedSyncOptions((prev) =>
+      prev.includes(optionId) ? prev.filter((o) => o !== optionId) : [...prev, optionId]
     );
   };
 
   const handleConnectIntegration = () => {
     if (!connectingIntegration) return;
+    const syncOptions =
+      connectingIntegration.id === "hubspot"
+        ? ["sync_contacts"]
+        : selectedSyncOptions;
     createIntegrationMutation.mutate({
       type: connectingIntegration.id,
       name: connectingIntegration.name,
-      config: { ...integrationForm, syncOptions: selectedSyncOptions },
+      config: { ...integrationForm, syncOptions },
     });
   };
 
@@ -823,13 +886,17 @@ export function Integrations() {
                       const lcConnected = !!lcStatus?.connected;
                       const wooConnected = integration.id === "woocommerce" && !!connected;
                       const calendlyConnected = integration.id === "calendly" && !!connected;
+                      const hubspotValidated =
+                        integration.id === "hubspot" &&
+                        !!connected &&
+                        (connected.config as Record<string, unknown>)?.connectionStatus === "connected";
 
                       let primaryLabel = "Connect";
                       let primaryDisabled = false;
                       let primaryAction: () => void = () => {
                         setConnectingIntegration(integration);
                         setIntegrationForm({});
-                        setSelectedSyncOptions([]);
+                        setSelectedSyncOptions(integration.id === "hubspot" ? ["sync_contacts"] : []);
                       };
                       let primaryTestId = `button-connect-${integration.id}`;
 
@@ -885,7 +952,10 @@ export function Integrations() {
                             />
                             <div className="min-w-0 flex-1 flex items-center gap-2">
                               <h3 className="text-sm font-semibold leading-snug text-gray-900">{integration.name}</h3>
-                              {(wooConnected || calendlyConnected || (isLeadConnector && lcConnected)) && (
+                              {(wooConnected ||
+                                calendlyConnected ||
+                                hubspotValidated ||
+                                (isLeadConnector && lcConnected)) && (
                                 <Badge
                                   variant="outline"
                                   className="shrink-0 border-emerald-200 bg-emerald-50 text-[10px] font-semibold uppercase tracking-wide text-emerald-800"
@@ -1553,7 +1623,7 @@ export function Integrations() {
                       </span>
                     </div>
                   )}
-                  {["shopify", "calendly", "stripe", "hubspot"].includes(managingIntegration.id) && (
+                  {["shopify", "calendly", "stripe"].includes(managingIntegration.id) && (
                     <WebhookUrlDisplay integrationType={managingIntegration.id} />
                   )}
                   <div className="flex gap-2 pt-2">
@@ -1626,22 +1696,50 @@ export function Integrations() {
                     <div className="space-y-2 pt-2">
                       <Label>Sync Options</Label>
                       <div className="space-y-2 border rounded-md p-3">
-                        {connectingIntegration.syncOptions.map((option) => (
-                          <div key={option.id} className="flex items-start space-x-2">
-                            <Checkbox
-                              id={`sync-${option.id}`}
-                              checked={selectedSyncOptions.includes(option.id)}
-                              onCheckedChange={() => handleSyncOptionToggle(option.id)}
-                              data-testid={`checkbox-sync-${option.id}`}
-                            />
-                            <div className="grid gap-0.5 leading-none">
-                              <label htmlFor={`sync-${option.id}`} className="text-sm font-medium cursor-pointer">
-                                {option.label}
-                              </label>
-                              <p className="text-xs text-gray-500">{option.description}</p>
+                        {connectingIntegration.syncOptions.map((option) => {
+                          const locked = !!option.comingSoon || !!option.required;
+                          const checked = option.comingSoon
+                            ? false
+                            : option.required
+                              ? true
+                              : selectedSyncOptions.includes(option.id);
+                          return (
+                            <div key={option.id} className="flex items-start space-x-2">
+                              <Checkbox
+                                id={`sync-${option.id}`}
+                                checked={checked}
+                                disabled={locked}
+                                onCheckedChange={() => {
+                                  if (locked) return;
+                                  handleSyncOptionToggle(option.id);
+                                }}
+                                data-testid={`checkbox-sync-${option.id}`}
+                              />
+                              <div className="grid min-w-0 flex-1 gap-0.5 leading-none">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <label
+                                    htmlFor={`sync-${option.id}`}
+                                    className={cn(
+                                      "text-sm font-medium",
+                                      locked && !option.required ? "cursor-default text-gray-500" : "cursor-pointer",
+                                    )}
+                                  >
+                                    {option.label}
+                                  </label>
+                                  {option.comingSoon && (
+                                    <Badge
+                                      variant="secondary"
+                                      className="h-5 text-[10px] font-semibold uppercase tracking-wide"
+                                    >
+                                      Coming soon
+                                    </Badge>
+                                  )}
+                                </div>
+                                <p className="text-xs text-gray-500">{option.description}</p>
+                              </div>
                             </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
                   )}
