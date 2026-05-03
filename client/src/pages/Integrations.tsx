@@ -54,7 +54,7 @@ function IntegrationBrandLogo({
   return (
     <div
       className={cn(
-        "flex h-8 w-8 min-h-[28px] min-w-[28px] max-h-8 max-w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-gray-100 bg-white",
+        "flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-gray-100 bg-white",
         className,
       )}
       aria-hidden
@@ -63,12 +63,12 @@ function IntegrationBrandLogo({
         <img
           src={logoUrl}
           alt=""
-          className="max-h-8 max-w-8 h-8 w-8 object-contain object-center"
+          className="box-border h-auto w-auto max-h-[82%] max-w-[82%] object-contain object-center"
           loading="lazy"
           decoding="async"
         />
       ) : (
-        <span className="text-sm font-semibold leading-none text-gray-700">{letter}</span>
+        <span className="text-base font-semibold leading-none text-gray-700">{letter}</span>
       )}
     </div>
   );
