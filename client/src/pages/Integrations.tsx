@@ -509,6 +509,7 @@ export function Integrations() {
     },
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/integrations"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/templates/realtor-growth-engine/status"] });
       setConnectingIntegration(null);
       setIntegrationForm({});
       setSelectedSyncOptions([]);
@@ -542,6 +543,7 @@ export function Integrations() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/integrations"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/templates/realtor-growth-engine/status"] });
       setManageIntegrationId(null);
     },
   });

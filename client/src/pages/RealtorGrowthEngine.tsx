@@ -1507,6 +1507,12 @@ export function RealtorGrowthEngine() {
       enabled: status === 'installed',
     });
 
+    const { data: engineStatusData } = useQuery({
+      queryKey: ["/api/templates/realtor-growth-engine/status"],
+      enabled: status === "installed",
+    });
+    const calendlyConnected = !!(engineStatusData as { calendlyConnected?: boolean } | undefined)?.calendlyConnected;
+
     const savedPrefs = (prefsData as any)?.preferences || {};
 
     const openModal = (wf: any) => {
@@ -1533,13 +1539,18 @@ export function RealtorGrowthEngine() {
     const handleSave = async () => {
       setSaving(true);
       try {
-        const savePrefs = apiRequest("PUT", "/api/templates/realtor-growth-engine/preferences", { preferences: localPrefs });
+        const prefsToSave = { ...localPrefs };
+        if (calendlyConnected) {
+          delete prefsToSave.W3_bookingLink;
+        }
+        const savePrefs = apiRequest("PUT", "/api/templates/realtor-growth-engine/preferences", { preferences: prefsToSave });
         const saveRouting = selectedWf?.key === "W2"
           ? apiRequest("PUT", "/api/templates/realtor-growth-engine/routing-config", { services: routingServices })
           : Promise.resolve();
         await Promise.all([savePrefs, saveRouting]);
         queryClient.invalidateQueries({ queryKey: ["/api/templates/realtor-growth-engine/preferences"] });
         queryClient.invalidateQueries({ queryKey: ["/api/templates/realtor-growth-engine/routing-config"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/templates/realtor-growth-engine/status"] });
         toast({ title: "Settings saved", description: `Preferences for "${selectedWf?.name}" updated.` });
         setSelectedWf(null);
       } catch {
@@ -1870,6 +1881,16 @@ export function RealtorGrowthEngine() {
           {fields.map(field => {
             const prefKey = `${wfKey}_${field}`;
             if (field === "bookingLink") {
+              if (calendlyConnected) {
+                return (
+                  <div key={field} className="rounded-md border border-sky-200 bg-sky-50/90 px-3 py-2.5 text-sm text-sky-950">
+                    <p className="font-medium text-sky-950">Calendly is connected. Booking links are managed automatically.</p>
+                    <p className="text-[11px] text-sky-900/85 mt-1.5 leading-snug">
+                      The manual booking link is disabled so scheduling only flows from your Calendly integration (no duplicate prompts).
+                    </p>
+                  </div>
+                );
+              }
               return (
                 <div key={field}>
                   <Label className="text-sm font-medium">Booking Link (Calendly / TidyCal)</Label>

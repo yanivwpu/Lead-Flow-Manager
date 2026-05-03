@@ -8,6 +8,7 @@ import { subscriptionService } from "./subscriptionService";
 import { z } from "zod";
 import { getAppOrigin } from "./urlOrigins";
 import { buildPostCheckoutSuccessUrl, buildStripeCancelUrl, sanitizeStripeReturnPath } from "./checkoutReturnPath";
+import { isUserCalendlyBookingConnected } from "./calendlyBookingConnected";
 
 const TEMPLATE_ID = "realtor-growth-engine";
 const TEMPLATE_PRICE_CENTS = 19900;
@@ -370,6 +371,8 @@ export function registerTemplateRoutes(app: Express) {
       const install = await storage.getTemplateInstall(userId, TEMPLATE_ID);
       const submission = await storage.getRealtorOnboardingSubmission(userId);
 
+      const calendlyConnected = await isUserCalendlyBookingConnected(userId);
+
       res.json({
         entitlement: entitlement
           ? {
@@ -389,6 +392,7 @@ export function registerTemplateRoutes(app: Express) {
               normalized: submission.normalized,
             }
           : null,
+        calendlyConnected,
       });
     } catch (error: any) {
       console.error("[Template] Status error:", error);
@@ -399,7 +403,12 @@ export function registerTemplateRoutes(app: Express) {
     try {
       const userId = (req.user as any).id;
       const prefs = await storage.getUserTemplateDataByKey(userId, TEMPLATE_ID, "preferences", "realtor_growth_engine_preferences");
-      res.json({ preferences: prefs?.definition || null });
+      let def = (prefs?.definition as Record<string, unknown> | null) || null;
+      if (def && (await isUserCalendlyBookingConnected(userId))) {
+        def = { ...def };
+        delete def.W3_bookingLink;
+      }
+      res.json({ preferences: def });
     } catch (error: any) {
       console.error("[Template] Preferences fetch error:", error);
       res.status(500).json({ error: "Failed to fetch preferences" });
@@ -413,8 +422,12 @@ export function registerTemplateRoutes(app: Express) {
       if (!preferences || typeof preferences !== "object") {
         return res.status(400).json({ error: "Invalid preferences payload" });
       }
+      const prefsIn = { ...preferences } as Record<string, unknown>;
+      if (await isUserCalendlyBookingConnected(userId)) {
+        delete prefsIn.W3_bookingLink;
+      }
       const result = await storage.upsertUserTemplateData(
-        userId, TEMPLATE_ID, "preferences", "realtor_growth_engine_preferences", preferences
+        userId, TEMPLATE_ID, "preferences", "realtor_growth_engine_preferences", prefsIn
       );
       res.json({ success: true, preferences: result.definition });
     } catch (error: any) {

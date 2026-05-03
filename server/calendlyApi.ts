@@ -18,10 +18,9 @@ async function calendlyJson<T>(
 }
 
 export async function calendlyGetCurrentUser(token: string) {
-  return calendlyJson<{ resource?: { uri?: string; current_organization?: string } }>(
-    "/users/me",
-    token
-  );
+  return calendlyJson<{
+    resource?: { uri?: string; current_organization?: string; scheduling_url?: string };
+  }>("/users/me", token);
 }
 
 export async function calendlyCreateWebhookSubscription(
@@ -51,8 +50,7 @@ export async function calendlyDeleteWebhookSubscription(token: string, subscript
 
 export async function calendlyListEventTypes(token: string, organizationUri: string) {
   const q = encodeURIComponent(organizationUri);
-  return calendlyJson<{ collection?: Array<{ name?: string; slug?: string; uri?: string }> }>(
-    `/event_types?organization=${q}&active=true`,
-    token
-  );
+  return calendlyJson<{
+    collection?: Array<{ name?: string; slug?: string; uri?: string; scheduling_url?: string }>;
+  }>(`/event_types?organization=${q}&active=true`, token);
 }

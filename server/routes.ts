@@ -90,6 +90,7 @@ import {
   calendlyGetCurrentUser,
   calendlyListEventTypes,
 } from "./calendlyApi";
+import { isUserCalendlyBookingConnected } from "./calendlyBookingConnected";
 
 import { registerTemplateRoutes } from "./templateRoutes";
 import { registerMediaRoutes } from "./routes/media";
@@ -5482,11 +5483,20 @@ export async function registerRoutes(
           return res.status(400).json({ error: "Calendly did not return webhook URI or signing key" });
         }
         let eventNames: string[] | undefined;
+        const userScheduling = me.data?.resource?.scheduling_url;
+        let calendlyPrimarySchedulingUrl =
+          typeof userScheduling === "string" && /^https?:\/\//i.test(userScheduling) ? userScheduling.trim() : "";
         const et = await calendlyListEventTypes(token, orgUri);
         if (et.ok) {
-          const coll = (et.data as { collection?: { name?: string }[] })?.collection;
+          const coll = (et.data as { collection?: { name?: string; scheduling_url?: string }[] })?.collection;
           if (Array.isArray(coll)) {
             eventNames = coll.map((x) => x.name).filter(Boolean).slice(0, 20) as string[];
+            if (!calendlyPrimarySchedulingUrl) {
+              const fromEt = coll
+                .map((x) => x.scheduling_url)
+                .find((u) => typeof u === "string" && /^https?:\/\//i.test(u));
+              if (fromEt) calendlyPrimarySchedulingUrl = fromEt.trim();
+            }
           }
         }
         finalConfig = {
@@ -5497,6 +5507,7 @@ export async function registerRoutes(
           calendlyOrganizationUri: orgUri,
           calendlyUserUri: me.data?.resource?.uri,
           connectionStatus: "connected",
+          calendlyPrimarySchedulingUrl,
         };
         calendlyExtra = { calendlyEventTypes: eventNames };
       }
@@ -7604,7 +7615,7 @@ export async function registerRoutes(
       }
       const userId = req.user.id;
       const knowledge = await storage.getAiBusinessKnowledge(userId);
-      res.json(knowledge || {
+      const defaults = {
         businessName: "",
         industry: "",
         servicesProducts: "",
@@ -7615,7 +7626,13 @@ export async function registerRoutes(
         salesGoals: "",
         customInstructions: "",
         qualifyingQuestions: [],
-      });
+      };
+      const base = knowledge || defaults;
+      if (await isUserCalendlyBookingConnected(userId)) {
+        res.json({ ...base, bookingLink: "" });
+      } else {
+        res.json(base);
+      }
     } catch (error) {
       console.error("Business knowledge fetch error:", error);
       res.status(500).json({ error: "Failed to fetch business knowledge" });
@@ -7629,7 +7646,11 @@ export async function registerRoutes(
         return res.status(401).json({ error: "Unauthorized" });
       }
       const userId = req.user.id;
-      const knowledge = await storage.upsertAiBusinessKnowledge(userId, req.body);
+      const body =
+        (await isUserCalendlyBookingConnected(userId))
+          ? { ...req.body, bookingLink: "" }
+          : req.body;
+      const knowledge = await storage.upsertAiBusinessKnowledge(userId, body);
       res.json(knowledge);
     } catch (error) {
       console.error("Business knowledge update error:", error);
@@ -7691,7 +7712,10 @@ export async function registerRoutes(
       }
 
       const { aiService } = await import("./aiService");
-      const knowledge = await storage.getAiBusinessKnowledge(userId);
+      const knowledgeRaw = await storage.getAiBusinessKnowledge(userId);
+      const calBook = await isUserCalendlyBookingConnected(userId);
+      const knowledge =
+        knowledgeRaw && calBook ? { ...knowledgeRaw, bookingLink: "" as const } : knowledgeRaw;
       const workflow = await aiService.generateAutomation(prompt, knowledge || undefined);
       
       // Track usage
@@ -7808,7 +7832,12 @@ export async function registerRoutes(
         });
 
       const { aiService } = await import("./aiService");
-      const knowledge = await storage.getAiBusinessKnowledge(userId);
+      const knowledgeRaw = await storage.getAiBusinessKnowledge(userId);
+      const calendlyBookingConnected = await isUserCalendlyBookingConnected(userId);
+      const knowledge =
+        knowledgeRaw && calendlyBookingConnected
+          ? { ...knowledgeRaw, bookingLink: "" as const }
+          : knowledgeRaw;
       const settings = await storage.getAiSettings(userId);
 
       // ── Human handoff: hard block AI reply generation/autosend ──────────────
