@@ -22,7 +22,11 @@ interface ActivationSetupModalProps {
 export function ActivationSetupModal({ open, onOpenChange, onChannelCta }: ActivationSetupModalProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md gap-4 p-6 sm:p-8" data-testid="modal-activation-setup">
+      <DialogContent
+        overlayClassName="bg-black/30"
+        className="sm:max-w-md gap-4 p-6 sm:p-8"
+        data-testid="modal-activation-setup"
+      >
         <DialogHeader className="space-y-2 text-center sm:text-center">
           <DialogTitle className="text-xl font-semibold tracking-tight text-gray-900">
             Let&apos;s get you set up

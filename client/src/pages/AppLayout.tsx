@@ -10,7 +10,14 @@ import { TrialSetupCluster } from "@/components/TrialSetupCluster";
 import { TrialModalOpenProvider } from "@/lib/trial-modal-context";
 import { TrialEndingSoonBanner } from "@/components/TrialEndingSoonBanner";
 import { ActivationSetupModal } from "@/components/ActivationSetupModal";
-import type { ActivationStatusPayload } from "@/components/ActivationChecklist";
+import {
+  type ActivationStatusPayload,
+  activationSetupModalStorageKey,
+  readActivationSetupModalLastShownDay,
+  writeActivationSetupModalLastShownDay,
+  todayLocalYYYYMMDD,
+} from "@/lib/activationStatus";
+import { useAuth } from "@/lib/auth-context";
 import { SubscriptionProvider, useSubscription } from "@/lib/subscription-context";
 import { getUpgradeProvider } from "@/lib/upgradeRouting";
 import { Loader2 } from "lucide-react";
@@ -39,11 +46,21 @@ const PageLoader = () => (
 );
 
 function AppContent() {
+  const { user } = useAuth();
   const { data: subscription, isLoading } = useSubscription();
   const [trialModalOpen, setTrialModalOpen] = useState(false);
-  /** Session-only: closing the modal without connecting avoids an immediate re-open loop; reconnect clears this. */
+  /** Same-tab: after dismiss or CTA, avoid re-open until localStorage day key updates on next render. */
   const [activationIntroDismissedSession, setActivationIntroDismissedSession] = useState(false);
   const { i18n } = useTranslation();
+
+  const activationDayKey = activationSetupModalStorageKey(user?.id);
+  const shownActivationModalToday =
+    typeof window !== "undefined" &&
+    readActivationSetupModalLastShownDay(activationDayKey) === todayLocalYYYYMMDD();
+
+  const markActivationSetupModalShownToday = () => {
+    writeActivationSetupModalLastShownDay(activationDayKey, todayLocalYYYYMMDD());
+  };
 
   const { data: activation, isPending: activationPending } = useQuery<ActivationStatusPayload>({
     queryKey: ["/api/activation-status"],
@@ -61,7 +78,8 @@ function AppContent() {
     !activationPending &&
     !!activation &&
     !activation.hasAnyMessagingChannel &&
-    !activationIntroDismissedSession;
+    !activationIntroDismissedSession &&
+    !shownActivationModalToday;
 
   const showUsageBanner =
     !isLoading &&
@@ -100,7 +118,7 @@ function AppContent() {
               upgradeProviderLabel={upgradeProvider === "shopify" ? "Shopify" : "Stripe"}
             />
           )}
-          {/* Mobile: trial + setup — absolute so main scroll area has no extra top row */}
+          {/* Mobile: trial pill — absolute so main scroll area has no extra top row */}
           <div
             className={cn(
               "pointer-events-none absolute z-40 flex max-w-[calc(100%-1rem)] justify-end end-3 md:hidden",
@@ -112,9 +130,15 @@ function AppContent() {
         <ActivationSetupModal
           open={showActivationIntroModal}
           onOpenChange={(open) => {
-            if (!open) setActivationIntroDismissedSession(true);
+            if (!open) {
+              setActivationIntroDismissedSession(true);
+              markActivationSetupModalShownToday();
+            }
           }}
-          onChannelCta={() => setActivationIntroDismissedSession(true)}
+          onChannelCta={() => {
+            setActivationIntroDismissedSession(true);
+            markActivationSetupModalShownToday();
+          }}
         />
         <TrialModal open={trialModalOpen} onOpenChange={setTrialModalOpen} daysRemaining={daysRem} />
         {showUsageBanner && subscription?.limits && (

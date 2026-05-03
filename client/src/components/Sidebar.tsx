@@ -171,7 +171,7 @@ export function Sidebar() {
           </Tooltip>
         </div>
 
-        {/* Trial + Setup — desktop sidebar only; mobile uses absolute cluster in AppLayout main */}
+        {/* Trial pill — desktop sidebar only; mobile uses absolute cluster in AppLayout main */}
         <div className="hidden md:flex flex-shrink-0 flex-col px-2 pb-2">
           <TrialSetupCluster />
         </div>

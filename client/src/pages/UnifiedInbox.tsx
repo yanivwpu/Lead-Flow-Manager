@@ -65,7 +65,7 @@ import { getConversationStatusRow } from "@/lib/conversationStatusUi";
 import { useToast } from "@/hooks/use-toast";
 import { InboxLeadDetailsPanel } from "@/components/InboxLeadDetailsPanel";
 import { useAICapabilities } from "@/lib/useAICapabilities";
-import type { ActivationStatusPayload } from "@/components/ActivationChecklist";
+import type { ActivationStatusPayload } from "@/lib/activationStatus";
 import { settingsChannelsHref } from "@/lib/settingsChannelsNavigation";
 import { analyzeConversation } from "@/lib/conversationIntelligence";
 import type { ContactContext } from "@/components/AIComposer";
