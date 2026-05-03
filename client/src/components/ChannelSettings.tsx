@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useSearch } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
+  MessageCircle,
   Smartphone,
   Globe,
   CheckCircle2,
@@ -540,8 +541,8 @@ export function ChannelSettings() {
   return (
     <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 shadow-sm">
       <div className="flex items-center gap-3 mb-4 sm:mb-6">
-        <div className="w-10 h-10 flex items-center justify-center rounded-lg flex-shrink-0 bg-gray-100">
-          <img src="/logos/sms.svg" alt="Messaging channels" className="w-6 h-6 object-contain" />
+        <div className="h-9 w-9 sm:h-10 sm:w-10 bg-emerald-50 rounded-lg flex items-center justify-center flex-shrink-0">
+          <MessageCircle className="h-4 w-4 sm:h-5 sm:w-5 text-emerald-600" />
         </div>
         <div className="min-w-0">
           <h2 className="text-base sm:text-lg font-bold text-gray-900">Communication Channels</h2>
