@@ -30,6 +30,7 @@ function integrationBrandLogoLetter(name: string) {
 
 /** Static brand marks under client/public/logos — same-origin only. */
 const INTEGRATION_LOGO_BY_ID: Record<string, string> = {
+  /** Icon-only mark (no wordmark) — `client/public/logos/ghl.svg` */
   leadconnector: "/logos/ghl.svg",
   shopify: "/logos/shopify.svg",
   stripe: "/logos/stripe.svg",
@@ -39,22 +40,31 @@ const INTEGRATION_LOGO_BY_ID: Record<string, string> = {
   calendly: "/logos/calendly.svg",
   slack: "/logos/slack.svg",
   woocommerce: "/logos/woocommerce.svg",
+  mailchimp: "/logos/mailchimp.svg",
+  showcase_idx: "/logos/showcase-idx.svg",
 };
 
 function IntegrationBrandLogo({
   name,
   logoUrl,
+  integrationId,
   className,
 }: {
   name: string;
   logoUrl?: string;
+  /** Optional id for integration-specific in-box scale (does not change layout). */
+  integrationId?: string;
   className?: string;
 }) {
   const letter = integrationBrandLogoLetter(name);
+  const logoMaxPct =
+    integrationId === "leadconnector" || integrationId === "salesforce"
+      ? "max-h-[85%] max-w-[85%]"
+      : "max-h-[82%] max-w-[82%]";
   return (
     <div
       className={cn(
-        "flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-gray-100 bg-white",
+        "flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-gray-100 bg-white",
         className,
       )}
       aria-hidden
@@ -63,7 +73,10 @@ function IntegrationBrandLogo({
         <img
           src={logoUrl}
           alt=""
-          className="box-border h-auto w-auto max-h-[82%] max-w-[82%] object-contain object-center"
+          className={cn(
+            "box-border h-auto w-auto object-contain object-center",
+            logoMaxPct,
+          )}
           loading="lazy"
           decoding="async"
         />
@@ -654,6 +667,7 @@ export function Integrations() {
                             <IntegrationBrandLogo
                               name={integration.name}
                               logoUrl={INTEGRATION_LOGO_BY_ID[integration.id]}
+                              integrationId={integration.id}
                             />
                             <div className="min-w-0 flex-1">
                               <h3 className="text-sm font-semibold leading-snug text-gray-900">{integration.name}</h3>
@@ -917,7 +931,11 @@ export function Integrations() {
           <DialogContent className="max-w-md">
             <DialogHeader>
               <div className="flex items-center gap-3">
-                <IntegrationBrandLogo name="Shopify" logoUrl={INTEGRATION_LOGO_BY_ID.shopify} />
+                <IntegrationBrandLogo
+                  name="Shopify"
+                  logoUrl={INTEGRATION_LOGO_BY_ID.shopify}
+                  integrationId="shopify"
+                />
                 <div>
                   <DialogTitle>Install WhachatCRM on Shopify</DialogTitle>
                   <DialogDescription>Connect your Shopify store via the Shopify App Store</DialogDescription>
@@ -965,6 +983,7 @@ export function Integrations() {
                 <IntegrationBrandLogo
                   name="LeadConnector"
                   logoUrl={INTEGRATION_LOGO_BY_ID.leadconnector}
+                  integrationId="leadconnector"
                 />
                 <div>
                   <DialogTitle>LeadConnector</DialogTitle>
@@ -1100,9 +1119,10 @@ export function Integrations() {
                 <DialogHeader className="flex-shrink-0 p-6 pb-2">
                   <div className="flex items-center gap-3">
                     <IntegrationBrandLogo
-                    name={connectingIntegration.name}
-                    logoUrl={INTEGRATION_LOGO_BY_ID[connectingIntegration.id]}
-                  />
+                      name={connectingIntegration.name}
+                      logoUrl={INTEGRATION_LOGO_BY_ID[connectingIntegration.id]}
+                      integrationId={connectingIntegration.id}
+                    />
                     <div>
                       <DialogTitle>Connect {connectingIntegration.name}</DialogTitle>
                       <DialogDescription>{connectingIntegration.description}</DialogDescription>
