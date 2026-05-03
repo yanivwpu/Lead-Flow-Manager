@@ -227,23 +227,13 @@ const NATIVE_INTEGRATIONS: IntegrationConfig[] = [
     id: "hubspot", 
     name: "HubSpot", 
     icon: Users, 
-    description: "Push WhatsApp leads to HubSpot as contacts (validated token, encrypted storage).",
+    description: "Sync WhachatCRM leads to HubSpot contacts. Token is validated on connect and stored encrypted.",
     color: "bg-orange-500",
     category: "crm",
-    tagline: "Contact sync to HubSpot CRM",
+    tagline: "HubSpot contact sync",
     fields: [
-      { key: "accessToken", label: "Private App Access Token", placeholder: "pat-na1-xxxxx", type: "password", helpText: "HubSpot → Settings → Integrations → Private Apps. Scopes: crm.objects.contacts.read and crm.objects.contacts.write. Optional custom properties: whachat_pipeline_stage, whachat_tag (create in HubSpot first)." },
+      { key: "accessToken", label: "Private App Access Token", placeholder: "pat-na1-xxxxx", type: "password", helpText: "HubSpot → Settings → Integrations → Private Apps. Scopes: crm.objects.contacts.read and crm.objects.contacts.write. Optional: create contact properties whachat_pipeline_stage and whachat_tag to map pipeline and tags." },
     ],
-    syncOptions: [
-      {
-        id: "sync_contacts",
-        label: "Sync Contacts",
-        description: "Push chats to HubSpot contacts (Manage → Sync now). Required for this integration.",
-        required: true,
-      },
-      { id: "sync_deals", label: "Sync Deals", description: "Create HubSpot deals from pipeline changes", comingSoon: true },
-      { id: "import_contacts", label: "Import Contacts", description: "Import HubSpot contacts as chats", comingSoon: true },
-    ]
   },
   { 
     id: "salesforce", 
@@ -1626,18 +1616,10 @@ export function Integrations() {
                   {managingIntegration.id === "hubspot" &&
                     (managingConnected.config as Record<string, unknown>)?.connectionStatus === "connected" && (
                       <div className="rounded-md border border-emerald-100 bg-emerald-50/80 p-3 text-sm space-y-1.5">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-medium text-emerald-900">Auto-sync enabled</span>
-                          <Badge
-                            variant="outline"
-                            className="border-emerald-200 bg-white text-[10px] font-semibold uppercase tracking-wide text-emerald-800"
-                          >
-                            Live
-                          </Badge>
-                        </div>
+                        <p className="font-medium text-emerald-900">Auto-sync enabled</p>
                         <p className="text-xs text-emerald-900/90 leading-snug">
-                          New and updated WhachatCRM contacts are automatically synced to HubSpot (about every 2 minutes per
-                          contact when fields are unchanged). Use Sync now below for a full backfill.
+                          New and updated contacts are pushed to HubSpot in the background. Use Sync now for a full
+                          backfill.
                         </p>
                         {typeof (managingConnected.config as Record<string, unknown>)?.lastHubSpotAutoSyncAt ===
                           "string" && (
@@ -1697,9 +1679,14 @@ export function Integrations() {
                   {managingIntegration.id === "hubspot" &&
                     (managingConnected.config as Record<string, unknown>)?.connectionStatus !== "connected" && (
                       <p className="text-xs text-amber-800">
-                        Reconnect with a valid token to enable sync and auto-sync.
+                        Reconnect with a valid token to enable contact sync.
                       </p>
                     )}
+                  {managingIntegration.id === "hubspot" && (
+                    <p className="text-xs text-gray-400 leading-snug">
+                      More advanced HubSpot features will be added in future updates.
+                    </p>
+                  )}
                   {["shopify", "calendly", "stripe"].includes(managingIntegration.id) && (
                     <WebhookUrlDisplay integrationType={managingIntegration.id} />
                   )}
@@ -1746,8 +1733,16 @@ export function Integrations() {
                       integrationId={connectingIntegration.id}
                     />
                     <div>
-                      <DialogTitle>Connect {connectingIntegration.name}</DialogTitle>
-                      <DialogDescription>{connectingIntegration.description}</DialogDescription>
+                      <DialogTitle>
+                        {connectingIntegration.id === "hubspot"
+                          ? "Connect HubSpot"
+                          : `Connect ${connectingIntegration.name}`}
+                      </DialogTitle>
+                      <DialogDescription>
+                        {connectingIntegration.id === "hubspot"
+                          ? "Link your HubSpot private app to sync contacts."
+                          : connectingIntegration.description}
+                      </DialogDescription>
                     </div>
                   </div>
                 </DialogHeader>
@@ -1768,57 +1763,73 @@ export function Integrations() {
                       )}
                     </div>
                   ))}
-                  
-                  {connectingIntegration.syncOptions && connectingIntegration.syncOptions.length > 0 && (
-                    <div className="space-y-2 pt-2">
-                      <Label>Sync Options</Label>
-                      <div className="space-y-2 border rounded-md p-3">
-                        {connectingIntegration.syncOptions.map((option) => {
-                          const locked = !!option.comingSoon || !!option.required;
-                          const checked = option.comingSoon
-                            ? false
-                            : option.required
-                              ? true
-                              : selectedSyncOptions.includes(option.id);
-                          return (
-                            <div key={option.id} className="flex items-start space-x-2">
-                              <Checkbox
-                                id={`sync-${option.id}`}
-                                checked={checked}
-                                disabled={locked}
-                                onCheckedChange={() => {
-                                  if (locked) return;
-                                  handleSyncOptionToggle(option.id);
-                                }}
-                                data-testid={`checkbox-sync-${option.id}`}
-                              />
-                              <div className="grid min-w-0 flex-1 gap-0.5 leading-none">
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <label
-                                    htmlFor={`sync-${option.id}`}
-                                    className={cn(
-                                      "text-sm font-medium",
-                                      locked && !option.required ? "cursor-default text-gray-500" : "cursor-pointer",
-                                    )}
-                                  >
-                                    {option.label}
-                                  </label>
-                                  {option.comingSoon && (
-                                    <Badge
-                                      variant="secondary"
-                                      className="h-5 text-[10px] font-semibold uppercase tracking-wide"
-                                    >
-                                      Coming soon
-                                    </Badge>
-                                  )}
-                                </div>
-                                <p className="text-xs text-gray-500">{option.description}</p>
-                              </div>
-                            </div>
-                          );
-                        })}
+
+                  {connectingIntegration.id === "hubspot" ? (
+                    <>
+                      <div className="space-y-2 rounded-lg border border-gray-200 bg-gray-50/90 p-4">
+                        <p className="text-sm font-medium text-gray-900">Sync contacts</p>
+                        <p className="text-sm text-gray-600 leading-relaxed">
+                          Automatically sync new and updated WhachatCRM leads to HubSpot contacts.
+                        </p>
+                        <p className="text-xs text-gray-500">Auto-sync runs in the background (~2 minutes).</p>
                       </div>
-                    </div>
+                      <p className="text-xs text-gray-400 leading-snug">
+                        More advanced HubSpot features will be added in future updates.
+                      </p>
+                    </>
+                  ) : (
+                    connectingIntegration.syncOptions &&
+                    connectingIntegration.syncOptions.length > 0 && (
+                      <div className="space-y-2 pt-2">
+                        <Label>Sync Options</Label>
+                        <div className="space-y-2 border rounded-md p-3">
+                          {connectingIntegration.syncOptions.map((option) => {
+                            const locked = !!option.comingSoon || !!option.required;
+                            const checked = option.comingSoon
+                              ? false
+                              : option.required
+                                ? true
+                                : selectedSyncOptions.includes(option.id);
+                            return (
+                              <div key={option.id} className="flex items-start space-x-2">
+                                <Checkbox
+                                  id={`sync-${option.id}`}
+                                  checked={checked}
+                                  disabled={locked}
+                                  onCheckedChange={() => {
+                                    if (locked) return;
+                                    handleSyncOptionToggle(option.id);
+                                  }}
+                                  data-testid={`checkbox-sync-${option.id}`}
+                                />
+                                <div className="grid min-w-0 flex-1 gap-0.5 leading-none">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <label
+                                      htmlFor={`sync-${option.id}`}
+                                      className={cn(
+                                        "text-sm font-medium",
+                                        locked && !option.required ? "cursor-default text-gray-500" : "cursor-pointer",
+                                      )}
+                                    >
+                                      {option.label}
+                                    </label>
+                                    {option.comingSoon && (
+                                      <Badge
+                                        variant="secondary"
+                                        className="h-5 text-[10px] font-semibold uppercase tracking-wide"
+                                      >
+                                        Coming soon
+                                      </Badge>
+                                    )}
+                                  </div>
+                                  <p className="text-xs text-gray-500">{option.description}</p>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )
                   )}
                 </div>
                 <DialogFooter className="flex-shrink-0 border-t p-6 mt-0">
