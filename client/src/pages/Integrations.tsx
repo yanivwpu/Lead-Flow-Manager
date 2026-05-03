@@ -20,7 +20,47 @@ import {
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { toast } from "@/hooks/use-toast";
-import { IntegrationBrandLogo } from "@/components/integrations/IntegrationBrandLogo";
+import { cn } from "@/lib/utils";
+
+function integrationBrandLogoLetter(name: string) {
+  const c = name.trim().charAt(0);
+  if (c && /[A-Za-z0-9]/.test(c)) return c.toUpperCase();
+  return null;
+}
+
+function IntegrationBrandLogo({
+  name,
+  logoUrl,
+  className,
+}: {
+  name: string;
+  logoUrl?: string;
+  className?: string;
+}) {
+  const letter = integrationBrandLogoLetter(name);
+  return (
+    <div
+      className={cn(
+        "flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-gray-100 bg-white",
+        className,
+      )}
+      aria-hidden
+    >
+      {logoUrl ? (
+        <img src={logoUrl} alt="" className="h-full w-full object-contain p-1.5" loading="lazy" />
+      ) : letter ? (
+        <span className="text-sm font-semibold text-gray-700">{letter}</span>
+      ) : (
+        <svg className="h-5 w-5 text-gray-400" viewBox="0 0 24 24" aria-hidden>
+          <circle cx="8" cy="8" r="1.5" fill="currentColor" />
+          <circle cx="16" cy="8" r="1.5" fill="currentColor" />
+          <circle cx="8" cy="16" r="1.5" fill="currentColor" />
+          <circle cx="16" cy="16" r="1.5" fill="currentColor" />
+        </svg>
+      )}
+    </div>
+  );
+}
 
 const WEBHOOK_EVENTS = [
   { id: "new_chat", label: "New Conversation", description: "When a new chat is created" },
