@@ -2,13 +2,8 @@ import { useState, useEffect } from "react";
 import { useSearch } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
-  MessageCircle,
-  Instagram,
-  Facebook,
   Smartphone,
   Globe,
-  Send,
-  Video,
   CheckCircle2,
   XCircle,
   Loader2,
@@ -48,6 +43,52 @@ import { cn } from "@/lib/utils";
 
 type Channel = 'whatsapp' | 'instagram' | 'facebook' | 'sms' | 'webchat' | 'telegram' | 'tiktok';
 
+type ChannelWithBrandLogo = Exclude<Channel, 'webchat'>;
+
+const CHANNEL_BRAND: Record<
+  ChannelWithBrandLogo,
+  { logoSrc: string; logoBgClass: string; label: string }
+> = {
+  whatsapp: { logoSrc: '/logos/whatsapp.svg', logoBgClass: 'bg-[#25D366]', label: 'WhatsApp' },
+  instagram: { logoSrc: '/logos/instagram.svg', logoBgClass: 'bg-[#FF0069]', label: 'Instagram' },
+  facebook: { logoSrc: '/logos/facebook.svg', logoBgClass: 'bg-[#0866FF]', label: 'Facebook Messenger' },
+  sms: { logoSrc: '/logos/sms.svg', logoBgClass: 'bg-gray-100', label: 'SMS' },
+  telegram: { logoSrc: '/logos/telegram.svg', logoBgClass: 'bg-[#26A5E4]', label: 'Telegram' },
+  tiktok: { logoSrc: '/logos/tiktok.svg', logoBgClass: 'bg-black', label: 'TikTok' },
+};
+
+function ChannelBrandIcon({
+  channel,
+  className,
+}: {
+  channel: ChannelWithBrandLogo;
+  className?: string;
+}) {
+  const b = CHANNEL_BRAND[channel];
+  /** Simple Icons paths are dark; invert on saturated brand tiles (SMS stays dark on gray). */
+  const lightGlyph =
+    channel === 'whatsapp' ||
+    channel === 'instagram' ||
+    channel === 'facebook' ||
+    channel === 'telegram' ||
+    channel === 'tiktok';
+  return (
+    <div
+      className={cn(
+        'w-10 h-10 flex items-center justify-center rounded-lg flex-shrink-0',
+        b.logoBgClass,
+        className
+      )}
+    >
+      <img
+        src={b.logoSrc}
+        alt={b.label}
+        className={cn('w-6 h-6 object-contain', lightGlyph && 'brightness-0 invert')}
+      />
+    </div>
+  );
+}
+
 interface ChannelSetting {
   id: string;
   channel: string;
@@ -67,56 +108,48 @@ interface Integration {
 }
 
 const CHANNEL_CONFIG: Record<Channel, {
-  icon: any;
   color: string;
   label: string;
   description: string;
   isMessaging: boolean;
 }> = {
   whatsapp: {
-    icon: MessageCircle,
     color: '#25D366',
     label: 'WhatsApp',
     description: 'Primary messaging channel',
     isMessaging: true,
   },
   instagram: {
-    icon: Instagram,
-    color: '#E4405F',
+    color: '#FF0069',
     label: 'Instagram',
     description: 'Direct messages via Meta Graph API',
     isMessaging: true,
   },
   facebook: {
-    icon: Facebook,
-    color: '#1877F2',
+    color: '#0866FF',
     label: 'Facebook Messenger',
     description: 'Messages via Meta Graph API',
     isMessaging: true,
   },
   sms: {
-    icon: Smartphone,
     color: '#6B7280',
     label: 'SMS',
     description: 'Text messages via Twilio',
     isMessaging: true,
   },
   webchat: {
-    icon: Globe,
     color: '#3B82F6',
     label: 'Web Chat',
     description: 'Embed a chat widget on your website',
     isMessaging: true,
   },
   telegram: {
-    icon: Send,
-    color: '#0088CC',
+    color: '#26A5E4',
     label: 'Telegram',
     description: 'Connect your Telegram bot',
     isMessaging: true,
   },
   tiktok: {
-    icon: Video,
     color: '#000000',
     label: 'TikTok',
     description: 'Lead intake only (not messaging)',
@@ -507,8 +540,8 @@ export function ChannelSettings() {
   return (
     <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 shadow-sm">
       <div className="flex items-center gap-3 mb-4 sm:mb-6">
-        <div className="h-9 w-9 sm:h-10 sm:w-10 bg-emerald-50 rounded-lg flex items-center justify-center flex-shrink-0">
-          <MessageCircle className="h-4 w-4 sm:h-5 sm:w-5 text-emerald-600" />
+        <div className="w-10 h-10 flex items-center justify-center rounded-lg flex-shrink-0 bg-gray-100">
+          <img src="/logos/sms.svg" alt="Messaging channels" className="w-6 h-6 object-contain" />
         </div>
         <div className="min-w-0">
           <h2 className="text-base sm:text-lg font-bold text-gray-900">Communication Channels</h2>
@@ -521,7 +554,6 @@ export function ChannelSettings() {
           .filter(channel => channel !== 'webchat')
           .map((channel) => {
             const config = CHANNEL_CONFIG[channel];
-            const Icon = config.icon;
             const status = getChannelStatus(channel);
             const enabled = isChannelEnabled(channel);
             const isFbIg = channel === 'facebook' || channel === 'instagram';
@@ -544,12 +576,7 @@ export function ChannelSettings() {
                 )}
               >
                 <div className="flex items-center gap-3 min-w-0 flex-1">
-                  <div
-                    className="h-9 w-9 rounded-lg flex items-center justify-center flex-shrink-0"
-                    style={{ backgroundColor: `${config.color}15` }}
-                  >
-                    <Icon className="h-4 w-4" style={{ color: config.color }} />
-                  </div>
+                  <ChannelBrandIcon channel={channel as ChannelWithBrandLogo} />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-medium text-gray-900">{config.label}</span>
@@ -716,17 +743,9 @@ export function ChannelSettings() {
         <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <div className="flex items-center gap-3">
-              <div
-                className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
-                style={{
-                  backgroundColor: manageFbIgChannel === 'facebook' ? '#1877F220' : '#E4405F20',
-                }}
-              >
-                {manageFbIgChannel === 'facebook'
-                  ? <Facebook className="h-5 w-5 text-blue-600" />
-                  : <Instagram className="h-5 w-5 text-pink-600" />
-                }
-              </div>
+              <ChannelBrandIcon
+                channel={manageFbIgChannel === 'facebook' ? 'facebook' : 'instagram'}
+              />
               <div>
                 <DialogTitle>
                   {manageFbIgChannel === 'facebook' ? 'Facebook Messenger' : 'Instagram'} Settings
@@ -829,7 +848,7 @@ export function ChannelSettings() {
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <MessageCircle className="h-5 w-5" style={{ color: CHANNEL_CONFIG.whatsapp.color }} />
+              <ChannelBrandIcon channel="whatsapp" />
               WhatsApp Provider
             </DialogTitle>
           </DialogHeader>
@@ -981,7 +1000,7 @@ export function ChannelSettings() {
             <DialogContent className="max-w-sm">
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2">
-                  <Send className="h-5 w-5" style={{ color: CHANNEL_CONFIG.telegram.color }} />
+                  <ChannelBrandIcon channel="telegram" />
                   {activeResult ? 'Telegram Connected' : 'Connect Telegram'}
                 </DialogTitle>
               </DialogHeader>
@@ -1279,7 +1298,7 @@ export function ChannelSettings() {
             <DialogContent className="max-w-sm">
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2">
-                  <Video className="h-5 w-5" />
+                  <ChannelBrandIcon channel="tiktok" />
                   TikTok Lead Capture
                 </DialogTitle>
               </DialogHeader>
