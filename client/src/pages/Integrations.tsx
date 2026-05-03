@@ -1617,12 +1617,89 @@ export function Integrations() {
                   </div>
                   {managingConnected.lastSyncAt && (
                     <div className="flex items-center justify-between text-sm">
-                      <span className="text-gray-500">Last sync</span>
+                      <span className="text-gray-500">Last manual sync</span>
                       <span className="text-gray-700">
-                        {new Date(managingConnected.lastSyncAt).toLocaleDateString()}
+                        {new Date(managingConnected.lastSyncAt).toLocaleString()}
                       </span>
                     </div>
                   )}
+                  {managingIntegration.id === "hubspot" &&
+                    (managingConnected.config as Record<string, unknown>)?.connectionStatus === "connected" && (
+                      <div className="rounded-md border border-emerald-100 bg-emerald-50/80 p-3 text-sm space-y-1.5">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-medium text-emerald-900">Auto-sync enabled</span>
+                          <Badge
+                            variant="outline"
+                            className="border-emerald-200 bg-white text-[10px] font-semibold uppercase tracking-wide text-emerald-800"
+                          >
+                            Live
+                          </Badge>
+                        </div>
+                        <p className="text-xs text-emerald-900/90 leading-snug">
+                          New and updated WhachatCRM contacts are automatically synced to HubSpot (about every 2 minutes per
+                          contact when fields are unchanged). Use Sync now below for a full backfill.
+                        </p>
+                        {typeof (managingConnected.config as Record<string, unknown>)?.lastHubSpotAutoSyncAt ===
+                          "string" && (
+                          <p className="text-xs text-emerald-800/90">
+                            Last auto-sync:{" "}
+                            <span className="font-medium">
+                              {new Date(
+                                (managingConnected.config as Record<string, string>).lastHubSpotAutoSyncAt
+                              ).toLocaleString()}
+                            </span>
+                          </p>
+                        )}
+                        {(() => {
+                          const err = (managingConnected.config as Record<string, unknown>)?.lastHubSpotAutoSyncError as
+                            | { at?: string; message?: string }
+                            | undefined;
+                          if (!err?.message) return null;
+                          return (
+                            <p className="text-xs text-red-700 leading-snug" role="alert">
+                              Auto-sync error
+                              {err.at ? ` (${new Date(err.at).toLocaleString()})` : ""}: {err.message}
+                            </p>
+                          );
+                        })()}
+                      </div>
+                    )}
+                  {managingIntegration.id === "hubspot" &&
+                    (() => {
+                      const last = (managingConnected.config as Record<string, unknown>)?.lastHubSpotSync as
+                        | {
+                            summary?: string;
+                            at?: string;
+                            pushed?: number;
+                            failed?: number;
+                            skipped?: number;
+                            errors?: string[];
+                          }
+                        | undefined;
+                      if (!last?.at && !last?.summary) return null;
+                      return (
+                        <div className="rounded-md border border-gray-200 bg-gray-50 p-3 text-sm space-y-1.5">
+                          <p className="font-medium text-gray-900">Last manual HubSpot sync</p>
+                          {last.at && (
+                            <p className="text-xs text-gray-500">{new Date(last.at).toLocaleString()}</p>
+                          )}
+                          {last.summary && <p className="text-gray-800">{last.summary}</p>}
+                          {Array.isArray(last.errors) && last.errors.length > 0 && (
+                            <ul className="list-disc pl-4 text-xs text-red-700 space-y-0.5 max-h-32 overflow-y-auto">
+                              {last.errors.slice(0, 12).map((e, i) => (
+                                <li key={i}>{e}</li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+                      );
+                    })()}
+                  {managingIntegration.id === "hubspot" &&
+                    (managingConnected.config as Record<string, unknown>)?.connectionStatus !== "connected" && (
+                      <p className="text-xs text-amber-800">
+                        Reconnect with a valid token to enable sync and auto-sync.
+                      </p>
+                    )}
                   {["shopify", "calendly", "stripe"].includes(managingIntegration.id) && (
                     <WebhookUrlDisplay integrationType={managingIntegration.id} />
                   )}

@@ -2,6 +2,7 @@ import { storage } from "./storage";
 import { type ChatbotFlow } from "@shared/schema";
 import { sendMetaWhatsAppTemplate } from "./userMeta";
 import { getUserTwilioClient } from "./userTwilio";
+import { scheduleHubSpotAutoSync } from "./hubspotAutoSync";
 
 // ─── Button types ──────────────────────────────────────────────────────────
 
@@ -464,6 +465,7 @@ async function executeActionNode(
       case "set_tag":
         if (value) {
           await storage.updateContact(ctx.contactId, { tag: value });
+          scheduleHubSpotAutoSync(ctx.userId, ctx.contactId);
           console.log(`[Chatbot] Action — set_tag: "${value}" on contactId: ${ctx.contactId}`);
         }
         break;
@@ -482,6 +484,7 @@ async function executeActionNode(
       case "set_pipeline":
         if (value) {
           await storage.updateContact(ctx.contactId, { pipelineStage: value });
+          scheduleHubSpotAutoSync(ctx.userId, ctx.contactId);
           console.log(`[Chatbot] Action — set_pipeline: "${value}" on contactId: ${ctx.contactId}`);
         }
         break;

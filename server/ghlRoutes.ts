@@ -6,6 +6,7 @@ import { db } from '../drizzle/db';
 import { contacts, conversations } from '@shared/schema';
 import { eq, and, inArray, notInArray } from 'drizzle-orm';
 import { getAppOrigin } from './urlOrigins';
+import { scheduleHubSpotAutoSync } from './hubspotAutoSync';
 
 const router = Router();
 
@@ -251,6 +252,7 @@ router.post('/webhook', async (req: Request, res: Response) => {
                 allTags: contact.tags,
               }),
             });
+            scheduleHubSpotAutoSync(userId, existingContact.id);
             console.log(`[LeadConnector Webhook] ${timestamp} | Updated existing contact: ${ghlId || incomingPhone || incomingEmail}`);
           } else {
             // Contact does not exist locally — skip creation.
@@ -279,6 +281,7 @@ router.post('/webhook', async (req: Request, res: Response) => {
                   allTags: tags,
                 }),
               });
+              scheduleHubSpotAutoSync(userId, existingContact.id);
               console.log(`[LeadConnector Webhook] ${timestamp} | Updated tags for contact: ${ghlId}`);
             }
           }
@@ -356,6 +359,7 @@ router.post('/webhook', async (req: Request, res: Response) => {
           });
           
           console.log(`[LeadConnector Webhook] ${timestamp} | Created message for contact: ${ghlContactId}`);
+          scheduleHubSpotAutoSync(userId, contact.id);
         } catch (msgErr) {
           console.error(`[LeadConnector Webhook] ${timestamp} | Error processing message:`, msgErr);
         }
@@ -400,6 +404,7 @@ router.post('/webhook', async (req: Request, res: Response) => {
             const target = allContacts.find((c: any) => c.ghlId === ghlId);
             if (target) {
               await storage.updateContact(target.id, { tag: 'deleted_in_ghl' });
+              scheduleHubSpotAutoSync(userId, target.id);
               console.log(`[LeadConnector Webhook] ${timestamp} | Soft-deleted contact: ${ghlId}`);
             }
           }
@@ -512,6 +517,7 @@ router.post('/webhook', async (req: Request, res: Response) => {
           if (Object.keys(updatePayload).length > 0) {
             // Call storage directly — never through API route (loop prevention)
             await storage.updateContact(contact.id, updatePayload);
+            scheduleHubSpotAutoSync(userId, contact.id);
             console.log(
               `[LeadConnector Webhook] ${timestamp} | ${type} — contact "${contact.id}" ` +
               `${crmStage ? `stage → "${crmStage}"` : '(no stage change)'}, ` +

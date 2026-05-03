@@ -2,6 +2,7 @@ import type { Express } from "express";
 import { CHANNELS } from "@shared/schema";
 import { storage } from "../storage";
 import { channelService } from "../channelService";
+import { scheduleHubSpotAutoSync, contactPatchAffectsHubSpot } from "../hubspotAutoSync";
 import OpenAI from "openai";
 
 const openai = new OpenAI({
@@ -105,6 +106,7 @@ export function registerContactRoutes(app: Express): void {
         ...req.body,
         userId: req.user.id,
       });
+      scheduleHubSpotAutoSync(req.user.id, contact.id);
       res.status(201).json(contact);
     } catch (error) {
       console.error("Error creating contact:", error);
@@ -169,6 +171,10 @@ export function registerContactRoutes(app: Express): void {
             ).catch(() => {});
           }).catch(() => {});
         }
+      }
+
+      if (contactPatchAffectsHubSpot(body as Record<string, unknown>)) {
+        scheduleHubSpotAutoSync(req.user.id, req.params.id);
       }
 
       res.json(updated);
@@ -259,6 +265,7 @@ export function registerContactRoutes(app: Express): void {
       }
 
       const updated = await storage.updateContact(contact.id, { tag: desiredTag });
+      scheduleHubSpotAutoSync(req.user.id, contact.id);
 
       console.info("[system-score-tag] applied", {
         contactId: contact.id,
@@ -333,6 +340,7 @@ export function registerContactRoutes(app: Express): void {
       }
 
       const merged = await storage.mergeContacts(targetId, sourceId);
+      scheduleHubSpotAutoSync(req.user.id, merged.id);
       res.json(merged);
     } catch (error) {
       console.error("Error merging contacts:", error);

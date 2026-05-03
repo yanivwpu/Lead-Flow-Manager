@@ -7,6 +7,7 @@ import {
 } from "./calendlyBookingConnected";
 import { channelService } from "./channelService";
 import { sendUserWhatsAppMessage, isLegacyCalendlyWorkflowChat } from "./userTwilio";
+import { scheduleHubSpotAutoSync } from "./hubspotAutoSync";
 import { sendMetaWhatsAppMessage } from "./userMeta";
 
 export interface WorkflowAction {
@@ -60,6 +61,10 @@ async function dualWriteContact(
 ) {
   if (contact) {
     await storage.updateContact(contact.id, contactUpdates).catch(() => {});
+    const keys = Object.keys(contactUpdates);
+    if (keys.some((k) => ["tag", "pipelineStage", "name", "email", "phone"].includes(k))) {
+      scheduleHubSpotAutoSync(contact.userId, contact.id);
+    }
   }
   await storage.updateChat(chat.id, chatUpdates).catch(() => {});
 }

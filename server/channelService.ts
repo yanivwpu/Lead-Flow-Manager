@@ -12,6 +12,7 @@ import {
 import { db } from "../drizzle/db";
 import { messages as messagesTbl } from "@shared/schema";
 import { eq, sql } from "drizzle-orm";
+import { scheduleHubSpotAutoSync } from "./hubspotAutoSync";
 
 type ForceChannelInput = Channel | string | undefined;
 
@@ -801,6 +802,7 @@ class ChannelService {
     // Handoff means: stop all automated responses (AI, chatbot, auto-replies).
     // The conversation is effectively "Snoozed" and a human should take over.
     if (handoffTriggered) {
+      scheduleHubSpotAutoSync(userId, contact.id);
       return {
         contact,
         conversation,
@@ -849,6 +851,7 @@ class ChannelService {
       console.log(`[AutoReply] Suppressed — chatbot will fire for userId: ${userId}, channel: ${channel}`);
     }
 
+    scheduleHubSpotAutoSync(userId, contact.id);
     return { contact, conversation, message, isNewConversation, chatbotWillFire };
   }
 

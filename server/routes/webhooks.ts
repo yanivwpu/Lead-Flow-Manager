@@ -2,6 +2,7 @@ import type { Express } from "express";
 import { storage } from "../storage";
 import { parseIncomingWebhook, findUserByTwilioCredentials } from "../userTwilio";
 import { handleCalendlyWebhook } from "../calendlyWebhook";
+import { scheduleHubSpotAutoSync } from "../hubspotAutoSync";
 
 export function registerWebhookRoutes(app: Express): void {
   // ============= UNIFIED INBOX WEBHOOKS =============
@@ -108,6 +109,7 @@ export function registerWebhookRoutes(app: Express): void {
         source: 'tiktok',
         notes: metadata ? JSON.stringify(metadata) : undefined,
       });
+      scheduleHubSpotAutoSync(userId, contact.id);
 
       const { channelService } = await import("../channelService");
       await channelService.logActivity(userId, contact.id, undefined, 'lead_created', {

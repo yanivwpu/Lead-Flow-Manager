@@ -1989,6 +1989,9 @@ export async function registerRoutes(
                   try {
                     if (inboxContact) {
                       await storage.updateContact(inboxContact.id, { tag: newTag }).catch(() => {});
+                      void import("./hubspotAutoSync").then(({ scheduleHubSpotAutoSync }) =>
+                        scheduleHubSpotAutoSync(userId, inboxContact.id)
+                      );
                     }
                     await storage.updateChat(updatedChat.id, { tag: newTag }).catch(() => {});
                     console.log(`[Routing] Tag applied (Twilio): "${newTag}" for chat ${updatedChat.id}`);
@@ -2633,6 +2636,9 @@ export async function registerRoutes(
                         try {
                           if (metaInboxContact) {
                             await storage.updateContact(metaInboxContact.id, { tag: newTag }).catch(() => {});
+                            void import("./hubspotAutoSync").then(({ scheduleHubSpotAutoSync }) =>
+                              scheduleHubSpotAutoSync(user.id, metaInboxContact.id)
+                            );
                           }
                           await storage.updateChat(freshChat.id, { tag: newTag }).catch(() => {});
                           devLog(`[Routing] Tag applied (Meta): "${newTag}" for chat ${freshChat.id}`);
