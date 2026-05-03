@@ -651,7 +651,13 @@ router.post('/refresh-token', async (req: Request, res: Response) => {
 
 router.get('/connection-status', async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).user?.id;
+    // Passport session (same as /api/auth/me) — not all code paths use the same cast
+    const authUser = (req as Request & { user?: { id?: string } }).user;
+    const userId =
+      authUser?.id ||
+      (typeof (req as any).session?.passport?.user === "string"
+        ? ((req as any).session.passport.user as string)
+        : undefined);
     if (!userId) {
       return res.json({ connected: false });
     }

@@ -137,7 +137,12 @@ const CATEGORY_SECTIONS: { key: IntegrationCategory; title: string }[] = [
   { key: "industry", title: "Industry-specific" },
 ];
 
-const LEADCONNECTOR_INSTALL_URL = import.meta.env.VITE_LEADCONNECTOR_INSTALL_URL;
+/** Marketplace / install entry — override with VITE_LEADCONNECTOR_INSTALL_URL if you use a direct app link. */
+const DEFAULT_LEADCONNECTOR_INSTALL_URL = "https://marketplace.gohighlevel.com/";
+const LEADCONNECTOR_INSTALL_URL =
+  (typeof import.meta.env.VITE_LEADCONNECTOR_INSTALL_URL === "string" &&
+    import.meta.env.VITE_LEADCONNECTOR_INSTALL_URL.trim()) ||
+  DEFAULT_LEADCONNECTOR_INSTALL_URL;
 
 const NATIVE_INTEGRATIONS: IntegrationConfig[] = [
   { 
@@ -466,15 +471,31 @@ export function Integrations() {
 
   const lcLocationId = integrations.find(i => i.type === 'gohighlevel')?.config?.locationId as string | undefined;
 
-  const { data: lcStatus, isLoading: lcStatusLoading, refetch: refetchLcStatus } = useQuery<{ connected: boolean; tokenExpired?: boolean; locationId?: string; companyId?: string; installedAt?: string }>({
-    queryKey: ["/api/ext/connection-status", lcLocationId],
+  const {
+    data: lcStatus,
+    isFetching: lcStatusFetching,
+    isError: lcStatusError,
+    refetch: refetchLcStatus,
+  } = useQuery<{ connected: boolean; tokenExpired?: boolean; locationId?: string; companyId?: string; installedAt?: string }>({
+    queryKey: ["/api/ext/connection-status", lcLocationId ?? ""],
     queryFn: async () => {
-      const params = lcLocationId ? `?locationId=${encodeURIComponent(lcLocationId)}` : '';
-      const res = await fetch(`/api/ext/connection-status${params}`, { credentials: 'include' });
-      if (!res.ok) throw new Error('Failed to check connection status');
-      return res.json();
+      const params = lcLocationId ? `?locationId=${encodeURIComponent(lcLocationId)}` : "";
+      const res = await fetch(`/api/ext/connection-status${params}`, { credentials: "include" });
+      if (!res.ok) {
+        const snippet = (await res.text().catch(() => "")).slice(0, 200);
+        console.warn("[LeadConnector] /api/ext/connection-status failed:", res.status, snippet);
+        return { connected: false, tokenExpired: false };
+      }
+      return res.json() as Promise<{
+        connected: boolean;
+        tokenExpired?: boolean;
+        locationId?: string;
+        companyId?: string;
+        installedAt?: string;
+      }>;
     },
     enabled: !!integrationsEnabled,
+    placeholderData: { connected: false, tokenExpired: false },
   });
 
   const createWebhookMutation = useMutation({
@@ -653,7 +674,10 @@ export function Integrations() {
   };
 
   const getConnectedIntegration = (type: string) => {
-    return integrations.find(i => i.type === type);
+    if (type === "leadconnector") {
+      return integrations.find((i) => i.type === "gohighlevel");
+    }
+    return integrations.find((i) => i.type === type);
   };
 
   const managingIntegration = manageIntegrationId
@@ -740,7 +764,7 @@ export function Integrations() {
 
                       if (isLeadConnector) {
                         primaryTestId = lcConnected ? "button-manage-leadconnector" : "button-install-leadconnector";
-                        if (lcStatusLoading) {
+                        if (lcStatusFetching) {
                           primaryDisabled = true;
                           primaryLabel = "Connect";
                         } else if (lcConnected) {
@@ -784,7 +808,7 @@ export function Integrations() {
                             />
                             <div className="min-w-0 flex-1 flex items-center gap-2">
                               <h3 className="text-sm font-semibold leading-snug text-gray-900">{integration.name}</h3>
-                              {(wooConnected || calendlyConnected) && (
+                              {(wooConnected || calendlyConnected || (isLeadConnector && lcConnected)) && (
                                 <Badge
                                   variant="outline"
                                   className="shrink-0 border-emerald-200 bg-emerald-50 text-[10px] font-semibold uppercase tracking-wide text-emerald-800"
@@ -806,7 +830,7 @@ export function Integrations() {
                               onClick={primaryAction}
                               data-testid={primaryTestId}
                             >
-                              {lcStatusLoading && isLeadConnector ? (
+                              {lcStatusFetching && isLeadConnector ? (
                                 <span className="inline-flex items-center gap-2">
                                   <RefreshCw className="h-3.5 w-3.5 animate-spin text-gray-400" />
                                   Loading…
@@ -831,6 +855,12 @@ export function Integrations() {
                               >
                                 Manage integration
                               </Button>
+                            )}
+                            {isLeadConnector && lcStatusError && (
+                              <p className="text-xs text-amber-800" role="alert">
+                                Could not verify connection with the server. You can still open the marketplace to
+                                install or manage LeadConnector.
+                              </p>
                             )}
                           </div>
                         </div>
