@@ -25,8 +25,21 @@ import { cn } from "@/lib/utils";
 function integrationBrandLogoLetter(name: string) {
   const c = name.trim().charAt(0);
   if (c && /[A-Za-z0-9]/.test(c)) return c.toUpperCase();
-  return null;
+  return "?";
 }
+
+/** Static brand marks under client/public/logos — same-origin only. */
+const INTEGRATION_LOGO_BY_ID: Record<string, string> = {
+  leadconnector: "/logos/ghl.svg",
+  shopify: "/logos/shopify.svg",
+  stripe: "/logos/stripe.svg",
+  hubspot: "/logos/hubspot.svg",
+  salesforce: "/logos/salesforce.svg",
+  google_sheets: "/logos/google-sheets.svg",
+  calendly: "/logos/calendly.svg",
+  slack: "/logos/slack.svg",
+  woocommerce: "/logos/woocommerce.svg",
+};
 
 function IntegrationBrandLogo({
   name,
@@ -41,22 +54,21 @@ function IntegrationBrandLogo({
   return (
     <div
       className={cn(
-        "flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-gray-100 bg-white",
+        "flex h-8 w-8 min-h-[28px] min-w-[28px] max-h-8 max-w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-gray-100 bg-white",
         className,
       )}
       aria-hidden
     >
       {logoUrl ? (
-        <img src={logoUrl} alt="" className="h-full w-full object-contain p-1.5" loading="lazy" />
-      ) : letter ? (
-        <span className="text-sm font-semibold text-gray-700">{letter}</span>
+        <img
+          src={logoUrl}
+          alt=""
+          className="max-h-8 max-w-8 h-8 w-8 object-contain object-center"
+          loading="lazy"
+          decoding="async"
+        />
       ) : (
-        <svg className="h-5 w-5 text-gray-400" viewBox="0 0 24 24" aria-hidden>
-          <circle cx="8" cy="8" r="1.5" fill="currentColor" />
-          <circle cx="16" cy="8" r="1.5" fill="currentColor" />
-          <circle cx="8" cy="16" r="1.5" fill="currentColor" />
-          <circle cx="16" cy="16" r="1.5" fill="currentColor" />
-        </svg>
+        <span className="text-sm font-semibold leading-none text-gray-700">{letter}</span>
       )}
     </div>
   );
@@ -638,9 +650,12 @@ export function Integrations() {
                           className="flex h-full min-h-[200px] flex-col rounded-xl border border-gray-200 bg-white p-5 shadow-sm transition-shadow hover:shadow-md"
                           data-testid={`integration-card-${integration.id}`}
                         >
-                          <div className="flex items-start gap-3">
-                            <IntegrationBrandLogo name={integration.name} />
-                            <div className="min-w-0 flex-1 pt-0.5">
+                          <div className="flex items-center gap-3">
+                            <IntegrationBrandLogo
+                              name={integration.name}
+                              logoUrl={INTEGRATION_LOGO_BY_ID[integration.id]}
+                            />
+                            <div className="min-w-0 flex-1">
                               <h3 className="text-sm font-semibold leading-snug text-gray-900">{integration.name}</h3>
                             </div>
                           </div>
@@ -902,7 +917,7 @@ export function Integrations() {
           <DialogContent className="max-w-md">
             <DialogHeader>
               <div className="flex items-center gap-3">
-                <IntegrationBrandLogo name="Shopify" />
+                <IntegrationBrandLogo name="Shopify" logoUrl={INTEGRATION_LOGO_BY_ID.shopify} />
                 <div>
                   <DialogTitle>Install WhachatCRM on Shopify</DialogTitle>
                   <DialogDescription>Connect your Shopify store via the Shopify App Store</DialogDescription>
@@ -947,7 +962,10 @@ export function Integrations() {
           <DialogContent className="max-w-md">
             <DialogHeader>
               <div className="flex items-center gap-3">
-                <IntegrationBrandLogo name="LeadConnector" />
+                <IntegrationBrandLogo
+                  name="LeadConnector"
+                  logoUrl={INTEGRATION_LOGO_BY_ID.leadconnector}
+                />
                 <div>
                   <DialogTitle>LeadConnector</DialogTitle>
                   <DialogDescription>Install the app and verify your connection</DialogDescription>
@@ -1007,7 +1025,10 @@ export function Integrations() {
               <>
                 <DialogHeader>
                   <div className="flex items-center gap-3">
-                    <IntegrationBrandLogo name={managingIntegration.name} />
+                    <IntegrationBrandLogo
+                      name={managingIntegration.name}
+                      logoUrl={INTEGRATION_LOGO_BY_ID[managingIntegration.id]}
+                    />
                     <div>
                       <DialogTitle>{managingIntegration.name}</DialogTitle>
                       <DialogDescription>{managingIntegration.description}</DialogDescription>
@@ -1078,7 +1099,10 @@ export function Integrations() {
               <>
                 <DialogHeader className="flex-shrink-0 p-6 pb-2">
                   <div className="flex items-center gap-3">
-                    <IntegrationBrandLogo name={connectingIntegration.name} />
+                    <IntegrationBrandLogo
+                    name={connectingIntegration.name}
+                    logoUrl={INTEGRATION_LOGO_BY_ID[connectingIntegration.id]}
+                  />
                     <div>
                       <DialogTitle>Connect {connectingIntegration.name}</DialogTitle>
                       <DialogDescription>{connectingIntegration.description}</DialogDescription>
