@@ -163,11 +163,21 @@ app.use('/api/webhook/meta', express.json({
   }
 }));
 
+// Calendly CRM webhooks — raw body required for HMAC signature verification
+app.use('/api/webhooks/calendly', express.json({
+  verify: (req: any, _res, buf) => {
+    req.rawBody = buf;
+  }
+}));
+
 // Do NOT run the global JSON parser on /api/webhook/meta — a second parse can
 // consume an already-read stream and replace req.body with {}, breaking HMAC + routing.
 const globalJsonParser = express.json();
 app.use((req: Request, _res: Response, next: NextFunction) => {
   if (req.path.startsWith("/api/webhook/meta")) {
+    return next();
+  }
+  if (req.path.startsWith("/api/webhooks/calendly")) {
     return next();
   }
   return globalJsonParser(req, _res, next);

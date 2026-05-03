@@ -1414,6 +1414,21 @@ export class DbStorage implements IStorage {
       case 'telegram':
         whereClause = and(eq(contacts.userId, userId), eq(contacts.telegramId, channelId));
         break;
+      case 'calendly': {
+        const em = channelId.trim().toLowerCase();
+        const r = await db
+          .select()
+          .from(contacts)
+          .where(
+            and(
+              eq(contacts.userId, userId),
+              sql`lower(trim(${contacts.email})) = ${em}`,
+            ),
+          )
+          .orderBy(asc(contacts.createdAt))
+          .limit(1);
+        return r[0];
+      }
       default:
         whereClause = and(eq(contacts.userId, userId), eq(contacts.phone, channelId));
     }

@@ -30,6 +30,7 @@ import {
   PanelRight,
   LayoutTemplate,
   ImageOff,
+  Calendar,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -207,6 +208,7 @@ const CHANNEL_CONFIG: Record<string, { icon: any; color: string; label: string }
   telegram: { icon: Send, color: '#0088CC', label: 'Telegram' },
   tiktok: { icon: Video, color: '#000000', label: 'TikTok' },
   gohighlevel: { icon: Zap, color: '#F97316', label: 'GoHighLevel' },
+  calendly: { icon: Calendar, color: '#006BFF', label: 'Calendly' },
 };
 
 function contactHasWebchatReachability(
@@ -258,6 +260,7 @@ const SOURCE_LABELS: Record<string, string> = {
   tiktok: 'TikTok',
   sms: 'SMS',
   telegram: 'Telegram',
+  calendly: 'Calendly',
 };
 
 const SOURCE_OPTIONS = [
@@ -389,7 +392,7 @@ export function UnifiedInbox() {
 
   const [searchQuery, setSearchQuery] = useState("");
   const [filterTab, setFilterTab] = useState<FilterTab>('all');
-  const allChannels: Channel[] = ['whatsapp', 'instagram', 'facebook', 'sms', 'webchat', 'telegram', 'tiktok'];
+  const allChannels: Channel[] = ['whatsapp', 'instagram', 'facebook', 'sms', 'webchat', 'telegram', 'tiktok', 'calendly'];
   const [selectedChannels, setSelectedChannels] = useState<Set<Channel>>(new Set(allChannels));
   const [messageInput, setMessageInput] = useState("");
   const isMobile = useIsMobile();
@@ -1256,7 +1259,7 @@ export function UnifiedInbox() {
         filterTab,
         searchQuery,
         selectedChannels: selectedChannelsList,
-        channelFilterActive: selectedChannels.size < 7,
+        channelFilterActive: selectedChannels.size < allChannels.length,
         queryStatus: inboxQueryStatus,
         fetchStatus: inboxFetchStatus,
         isPending: inboxPending,

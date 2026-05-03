@@ -352,6 +352,31 @@ export async function findUserByTwilioCredentials(
   return { user: userRow[0], matchedPhone: normalizedPhone };
 }
 
+/**
+ * Non–phone values stored in `chats.whatsapp_phone` for legacy workflow dual-write
+ * (e.g. Calendly). Prefix is never digits-only, so it cannot collide with Twilio’s
+ * normalized numeric `whatsappPhone` keys.
+ */
+export const LEGACY_CHAT_CALENDLY_PREFIX = "calendly:" as const;
+
+export function isLegacyCalendlyWorkflowChat(whatsappPhone: string | null | undefined): boolean {
+  return !!whatsappPhone && whatsappPhone.startsWith(LEGACY_CHAT_CALENDLY_PREFIX);
+}
+
+/** Storage key for `chats.whatsapp_phone` — pass already-normalized email. */
+export function legacyCalendlyChatStorageKey(normalizedEmail: string): string {
+  return `${LEGACY_CHAT_CALENDLY_PREFIX}${normalizedEmail.trim().toLowerCase()}`;
+}
+
+/** Legacy `chats` row for workflow triggers — same table as WhatsApp, distinct key namespace. */
+export async function findOrCreateLegacyCalendlyWorkflowChat(
+  userId: string,
+  normalizedEmail: string,
+  name: string
+): Promise<Chat> {
+  return findOrCreateChatByPhone(userId, legacyCalendlyChatStorageKey(normalizedEmail), name);
+}
+
 export async function findOrCreateChatByPhone(
   userId: string,
   phone: string,

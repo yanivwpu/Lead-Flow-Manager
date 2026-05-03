@@ -1,9 +1,14 @@
 import type { Express } from "express";
 import { storage } from "../storage";
 import { parseIncomingWebhook, findUserByTwilioCredentials } from "../userTwilio";
+import { handleCalendlyWebhook } from "../calendlyWebhook";
 
 export function registerWebhookRoutes(app: Express): void {
   // ============= UNIFIED INBOX WEBHOOKS =============
+
+  app.post("/api/webhooks/calendly/:userId", (req, res) => {
+    void handleCalendlyWebhook(req, res);
+  });
 
   // Telegram webhook for incoming messages
   app.post("/api/webhook/telegram/:userId", async (req, res) => {

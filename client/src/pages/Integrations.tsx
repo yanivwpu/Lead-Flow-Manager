@@ -284,8 +284,7 @@ const NATIVE_INTEGRATIONS: IntegrationConfig[] = [
     category: "scheduling",
     tagline: "Meetings booked, cancellations & reschedules",
     fields: [
-      { key: "accessToken", label: "Personal Access Token", placeholder: "eyJraWQiOiIxY...", type: "password", helpText: "Create at calendly.com/integrations/api_webhooks" },
-      { key: "webhookSigningKey", label: "Webhook Signing Key", placeholder: "xxxxx", type: "password", helpText: "Optional: For webhook signature verification" },
+      { key: "accessToken", label: "Personal Access Token", placeholder: "eyJraWQiOiIxY...", type: "password", helpText: "Create at calendly.com/integrations/api_webhooks — we register the CRM webhook automatically" },
     ],
     syncOptions: [
       { id: "new_bookings", label: "New Bookings", description: "Create a chat when someone books a meeting" },
@@ -363,11 +362,9 @@ function WebhookUrlDisplay({ integrationType }: { integrationType: string }) {
         ];
       case 'calendly':
         return [
-          "Go to Calendly → Integrations → Webhooks",
-          "Click 'Create Webhook'",
-          "Paste the webhook URL above",
-          "Select events: invitee.created, invitee.canceled",
-          "Click 'Subscribe'"
+          "Click Connect and paste your Personal Access Token",
+          "WhachatCRM registers the webhook with Calendly for you",
+          "Bookings, cancellations, and reschedules sync to the inbox automatically",
         ];
       case 'stripe':
         return [
@@ -507,13 +504,28 @@ export function Integrations() {
 
   const createIntegrationMutation = useMutation({
     mutationFn: async (data: { type: string; name: string; config: Record<string, any> }) => {
-      return apiRequest("POST", "/api/integrations", data);
+      const res = await apiRequest("POST", "/api/integrations", data);
+      return res.json() as Promise<Record<string, unknown>>;
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/integrations"] });
       setConnectingIntegration(null);
       setIntegrationForm({});
       setSelectedSyncOptions([]);
+      const types = data?.calendlyEventTypes as string[] | undefined;
+      if (Array.isArray(types) && types.length > 0) {
+        toast({
+          title: "Calendly connected",
+          description: `Event types: ${types.slice(0, 5).join(", ")}${types.length > 5 ? "…" : ""}`,
+        });
+      }
+    },
+    onError: (err: Error) => {
+      toast({
+        title: "Connection failed",
+        description: err.message || "Could not save integration",
+        variant: "destructive",
+      });
     },
   });
 
@@ -713,6 +725,7 @@ export function Integrations() {
                       const isLeadConnector = integration.id === "leadconnector";
                       const lcConnected = !!lcStatus?.connected;
                       const wooConnected = integration.id === "woocommerce" && !!connected;
+                      const calendlyConnected = integration.id === "calendly" && !!connected;
 
                       let primaryLabel = "Connect";
                       let primaryDisabled = false;
@@ -740,6 +753,11 @@ export function Integrations() {
                         primaryDisabled = true;
                         primaryTestId = "button-woocommerce-connected";
                         primaryAction = () => {};
+                      } else if (calendlyConnected) {
+                        primaryLabel = "Connected";
+                        primaryDisabled = true;
+                        primaryTestId = "button-calendly-connected";
+                        primaryAction = () => {};
                       } else if (connected) {
                         primaryLabel = "Manage";
                         primaryTestId = `button-manage-${integration.id}`;
@@ -764,7 +782,7 @@ export function Integrations() {
                             />
                             <div className="min-w-0 flex-1 flex items-center gap-2">
                               <h3 className="text-sm font-semibold leading-snug text-gray-900">{integration.name}</h3>
-                              {wooConnected && (
+                              {(wooConnected || calendlyConnected) && (
                                 <Badge
                                   variant="outline"
                                   className="shrink-0 border-emerald-200 bg-emerald-50 text-[10px] font-semibold uppercase tracking-wide text-emerald-800"
@@ -791,7 +809,7 @@ export function Integrations() {
                                   <RefreshCw className="h-3.5 w-3.5 animate-spin text-gray-400" />
                                   Loading…
                                 </span>
-                              ) : wooConnected ? (
+                              ) : wooConnected || calendlyConnected ? (
                                 <span className="inline-flex items-center justify-center gap-1.5 text-emerald-800">
                                   <Check className="h-3.5 w-3.5" aria-hidden />
                                   Connected

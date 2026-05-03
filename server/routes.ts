@@ -33,6 +33,8 @@ import {
   encryptCredential,
   decryptCredential,
   isEncrypted,
+  isLegacyCalendlyWorkflowChat,
+  LEGACY_CHAT_CALENDLY_PREFIX,
   type WhatsAppMessage,
   type TwilioCredentials,
 } from "./userTwilio";
@@ -82,6 +84,12 @@ import {
   verifyWooCommerceRestCredentials,
   fetchWooCommerceSampleOrders,
 } from "./woocommerceIntegration";
+import {
+  calendlyCreateWebhookSubscription,
+  calendlyDeleteWebhookSubscription,
+  calendlyGetCurrentUser,
+  calendlyListEventTypes,
+} from "./calendlyApi";
 
 import { registerTemplateRoutes } from "./templateRoutes";
 import { registerMediaRoutes } from "./routes/media";
@@ -242,11 +250,15 @@ export async function registerRoutes(
       );
       const headers = ['Name', 'Phone', 'Tag', 'Pipeline Stage', 'Status', 'Notes', 'Follow-up', 'Last Message', 'Created'];
       const rows = chats.map((chat: any) => {
-        const norm = (chat.whatsappPhone || '').replace(/\D/g, '');
+        const rawPhone = chat.whatsappPhone || '';
+        const norm = isLegacyCalendlyWorkflowChat(rawPhone) ? "" : rawPhone.replace(/\D/g, "");
         const ct = norm ? contactCrmByPhone.get(norm) : undefined;
+        const phoneColumn = isLegacyCalendlyWorkflowChat(rawPhone)
+          ? rawPhone.slice(LEGACY_CHAT_CALENDLY_PREFIX.length)
+          : rawPhone;
         return [
           chat.name || '',
-          chat.whatsappPhone || '',
+          phoneColumn,
           (ct?.tag ?? chat.tag) || '',
           (ct?.pipelineStage ?? chat.pipelineStage) || '',
           chat.status || '',
@@ -3579,7 +3591,8 @@ export async function registerRoutes(
       );
 
       for (const chat of oldChats) {
-        const norm = ((chat as any).whatsappPhone || '').replace(/\D/g, '');
+        const rawPhone = ((chat as any).whatsappPhone || "") as string;
+        const norm = isLegacyCalendlyWorkflowChat(rawPhone) ? "" : rawPhone.replace(/\D/g, "");
         const ct = norm ? contactByPhone.get(norm) : undefined;
         const resolvedId = ct?.id || chat.id;
 
@@ -3783,6 +3796,7 @@ export async function registerRoutes(
     "refreshToken",
     "apiKey",
     "webhookSecret",
+    "webhookSigningKey",
     "consumerKey",
     "consumerSecret",
   ];
@@ -5420,9 +5434,75 @@ export async function registerRoutes(
       if (existingOfType) {
         return res.status(400).json({ error: `You already have a ${name} integration connected. Disconnect it first to add a new one.` });
       }
-      
+
+      let finalConfig: Record<string, any> = { ...config };
+      let calendlyExtra: { calendlyEventTypes?: string[] } = {};
+
+      if (type === "calendly") {
+        const token = String(config.accessToken || "").trim();
+        if (!token) {
+          return res.status(400).json({ error: "Personal access token is required" });
+        }
+        const me = await calendlyGetCurrentUser(token);
+        if (me.status === 401 || !me.ok) {
+          const msg =
+            me.status === 401
+              ? "Invalid Calendly token"
+              : (me.data as { message?: string })?.message || "Could not validate Calendly token";
+          return res.status(400).json({ error: msg });
+        }
+        const orgUri = me.data?.resource?.current_organization;
+        if (!orgUri) {
+          return res.status(400).json({ error: "Calendly account has no organization URI" });
+        }
+        const base = (getAppOrigin() || "").replace(/\/+$/, "");
+        if (!base) {
+          return res.status(500).json({ error: "APP_URL is not configured — cannot register webhook" });
+        }
+        const webhookUrl = `${base}/api/webhooks/calendly/${req.user.id}`;
+        const sub = await calendlyCreateWebhookSubscription(token, {
+          url: webhookUrl,
+          events: ["invitee.created", "invitee.canceled", "invitee.rescheduled"],
+          organization: orgUri,
+          scope: "organization",
+        });
+        if (!sub.ok) {
+          const d = sub.data as { message?: string; title?: string; details?: { message?: string }[] };
+          const msg =
+            d?.message ||
+            d?.title ||
+            (Array.isArray(d?.details) && d.details[0]?.message) ||
+            "Calendly webhook registration failed";
+          return res.status(400).json({ error: msg });
+        }
+        const resource = (sub.data as { resource?: { uri?: string; signing_key?: string } })?.resource;
+        const signingKey = resource?.signing_key;
+        const webhookUri = resource?.uri;
+        if (!signingKey || !webhookUri) {
+          return res.status(400).json({ error: "Calendly did not return webhook URI or signing key" });
+        }
+        let eventNames: string[] | undefined;
+        const et = await calendlyListEventTypes(token, orgUri);
+        if (et.ok) {
+          const coll = (et.data as { collection?: { name?: string }[] })?.collection;
+          if (Array.isArray(coll)) {
+            eventNames = coll.map((x) => x.name).filter(Boolean).slice(0, 20) as string[];
+          }
+        }
+        finalConfig = {
+          ...config,
+          accessToken: token,
+          webhookSigningKey: signingKey,
+          calendlyWebhookSubscriptionUri: webhookUri,
+          calendlyOrganizationUri: orgUri,
+          calendlyUserUri: me.data?.resource?.uri,
+          connectionStatus: "connected",
+        };
+        calendlyExtra = { calendlyEventTypes: eventNames };
+      }
+
       // Encrypt sensitive fields before storing
-      const encryptedConfig = encryptIntegrationConfig(config);
+      const encryptedConfig = encryptIntegrationConfig(finalConfig);
       
       const integration = await storage.createIntegration({
         userId: req.user.id,
@@ -5484,8 +5564,9 @@ export async function registerRoutes(
       // Return with masked config (+ webhook setup info for Meta channels)
       res.status(201).json({
         ...integration,
-        config: maskIntegrationConfig(config),
+        config: maskIntegrationConfig(finalConfig),
         ...(metaWebhookConfig ? { webhookSetup: metaWebhookConfig } : {}),
+        ...(type === "calendly" ? calendlyExtra : {}),
       });
     } catch (error) {
       console.error("Error creating integration:", error);
@@ -5568,7 +5649,20 @@ export async function registerRoutes(
       if (!integration || integration.userId !== req.user.id) {
         return res.status(404).json({ error: "Integration not found" });
       }
-      
+
+      if (integration.type === "calendly") {
+        const raw = integration.config as Record<string, any>;
+        const dec = decryptIntegrationConfig(raw);
+        const token = typeof dec.accessToken === "string" ? dec.accessToken.trim() : "";
+        const whUri = typeof dec.calendlyWebhookSubscriptionUri === "string" ? dec.calendlyWebhookSubscriptionUri : "";
+        if (token && whUri) {
+          const del = await calendlyDeleteWebhookSubscription(token, whUri);
+          if (!del.ok) {
+            console.warn(`[Calendly] Unsubscribe failed (${del.status}) for user ${req.user.id}`, del.data);
+          }
+        }
+      }
+
       await storage.deleteIntegration(req.params.id);
 
       // Dual-write: disconnect channelSettings for Facebook/Instagram on delete
@@ -5619,11 +5713,15 @@ export async function registerRoutes(
             .map(c => [(c.whatsappId || c.phone || '').replace(/\D/g, ''), c])
         );
         const rows = chats.map(chat => {
-          const norm = (chat.whatsappPhone || '').replace(/\D/g, '');
+          const rawPhone = chat.whatsappPhone || "";
+          const norm = isLegacyCalendlyWorkflowChat(rawPhone) ? "" : rawPhone.replace(/\D/g, "");
           const ct = norm ? contactCrmSync.get(norm) : undefined;
+          const phoneField = isLegacyCalendlyWorkflowChat(rawPhone)
+            ? rawPhone.slice(LEGACY_CHAT_CALENDLY_PREFIX.length)
+            : rawPhone;
           return {
             name: chat.name,
-            phone: chat.whatsappPhone || '',
+            phone: phoneField,
             tag: ct?.tag ?? chat.tag,
             pipelineStage: ct?.pipelineStage ?? chat.pipelineStage,
             status: chat.status,

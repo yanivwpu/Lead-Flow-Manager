@@ -125,6 +125,7 @@ class ChannelService {
         facebook:  'facebookId',
         sms:       'phone',
         telegram:  'telegramId',
+        calendly:  'email',
       };
       const idField = channelIdField[override];
       const hasId = !idField || !!contact[idField];
@@ -174,6 +175,7 @@ class ChannelService {
       facebook: 'facebookId',
       sms: 'phone',
       telegram: 'telegramId',
+      calendly: 'email',
     };
     const idField = channelIdField[channel];
     if (!idField) return true;
@@ -209,6 +211,7 @@ class ChannelService {
         facebook: 'facebookId',
         sms: 'phone',
         telegram: 'telegramId',
+        calendly: 'email',
       };
       const idField = channelIdField[channel];
       if (idField && !contact[idField]) {
@@ -599,6 +602,9 @@ class ChannelService {
     if (channel === 'whatsapp' || channel === 'sms') {
       channelContactId = channelContactId.replace(/\D/g, '');
     }
+    if (channel === 'calendly') {
+      channelContactId = channelContactId.trim().toLowerCase();
+    }
 
     console.log(`[Inbound] Webhook received — channel: ${channel}, from: ${channelContactId}, userId: ${userId}, messageId: ${externalMessageId}`);
 
@@ -621,11 +627,17 @@ class ChannelService {
     if (!contact) {
       console.log(`[Inbox Worker] Contact not found for channelId=${channelContactId}, creating new contact`);
       const channelIdField = this.getChannelIdField(channel);
+      const phoneFields =
+        channel === "whatsapp" || channel === "sms" ? { phone: channelContactId as string } : {};
+      const channelIdPatch =
+        channel === "calendly"
+          ? { email: channelContactId }
+          : { [channelIdField]: channelContactId as string };
       contact = await storage.createContact({
         userId,
         name: contactName || channelContactId,
-        phone: channel === 'whatsapp' || channel === 'sms' ? channelContactId : undefined,
-        [channelIdField]: channelContactId,
+        ...phoneFields,
+        ...channelIdPatch,
         primaryChannel: channel,
         lastIncomingChannel: channel,
         lastIncomingAt: new Date(),
@@ -978,6 +990,7 @@ class ChannelService {
       case 'instagram': return 'instagramId';
       case 'facebook': return 'facebookId';
       case 'telegram': return 'telegramId';
+      case 'calendly': return 'email';
       default: return 'phone';
     }
   }
