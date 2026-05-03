@@ -15,11 +15,12 @@ import { Link } from "wouter";
 import { 
   Plug, Plus, Trash2, Copy, Check, ExternalLink, Zap, Lock,
   ShoppingCart, FileSpreadsheet, Users, CreditCard, Building2, Home,
-  Webhook, Eye, EyeOff, RefreshCw, CheckCircle2, XCircle, Settings2,
+  Webhook, Eye, EyeOff, RefreshCw,
   Calendar, Mail, Link2
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { toast } from "@/hooks/use-toast";
+import { IntegrationBrandLogo, type IntegrationLogoId } from "@/components/integrations/IntegrationBrandLogo";
 
 const WEBHOOK_EVENTS = [
   { id: "new_chat", label: "New Conversation", description: "When a new chat is created" },
@@ -31,15 +32,28 @@ const WEBHOOK_EVENTS = [
   { id: "chat_assigned", label: "Chat Assigned", description: "When a chat is assigned to a team member" },
 ];
 
+type IntegrationCategory = "crm" | "commerce" | "scheduling" | "marketing" | "industry";
+
 interface IntegrationConfig {
   id: string;
   name: string;
   icon: any;
   description: string;
   color: string;
+  category: IntegrationCategory;
+  /** Single-line summary on marketplace cards */
+  tagline: string;
   fields: { key: string; label: string; placeholder: string; type?: string; helpText?: string }[];
   syncOptions?: { id: string; label: string; description: string }[];
 }
+
+const CATEGORY_SECTIONS: { key: IntegrationCategory; title: string }[] = [
+  { key: "crm", title: "CRM & Sales" },
+  { key: "commerce", title: "Commerce & Revenue" },
+  { key: "scheduling", title: "Scheduling & Ops" },
+  { key: "marketing", title: "Marketing" },
+  { key: "industry", title: "Industry-specific" },
+];
 
 const LEADCONNECTOR_INSTALL_URL = import.meta.env.VITE_LEADCONNECTOR_INSTALL_URL;
 
@@ -50,6 +64,8 @@ const NATIVE_INTEGRATIONS: IntegrationConfig[] = [
     icon: Link2, 
     description: "Connect WhachatCRM with your LeadConnector account to sync leads and activity", 
     color: "bg-indigo-600",
+    category: "crm",
+    tagline: "Sync leads & activity with LeadConnector",
     fields: [],
     syncOptions: [
       { id: "sync_contacts", label: "Sync Contacts", description: "Keep leads synced between platforms" },
@@ -62,6 +78,8 @@ const NATIVE_INTEGRATIONS: IntegrationConfig[] = [
     icon: ShoppingCart, 
     description: "Auto-create leads from new orders and customers", 
     color: "bg-green-500",
+    category: "commerce",
+    tagline: "Orders, customers & abandoned carts",
     fields: [],
     syncOptions: [
       { id: "new_orders", label: "New Orders", description: "Create a chat when a new order is placed" },
@@ -75,6 +93,8 @@ const NATIVE_INTEGRATIONS: IntegrationConfig[] = [
     icon: FileSpreadsheet, 
     description: "Export leads and conversations to spreadsheets", 
     color: "bg-emerald-500",
+    category: "scheduling",
+    tagline: "Export leads & conversations to Sheets",
     fields: [
       { key: "spreadsheetId", label: "Spreadsheet ID", placeholder: "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms", helpText: "Found in the spreadsheet URL after /d/" },
       { key: "serviceAccountEmail", label: "Service Account Email", placeholder: "your-service@project.iam.gserviceaccount.com", helpText: "Share your spreadsheet with this email" },
@@ -91,6 +111,8 @@ const NATIVE_INTEGRATIONS: IntegrationConfig[] = [
     icon: Users, 
     description: "Bi-directional contact and deal sync", 
     color: "bg-orange-500",
+    category: "crm",
+    tagline: "Contacts, deals & pipeline sync",
     fields: [
       { key: "accessToken", label: "Private App Access Token", placeholder: "pat-na1-xxxxx", type: "password", helpText: "Create in HubSpot Settings > Integrations > Private Apps" },
     ],
@@ -106,6 +128,8 @@ const NATIVE_INTEGRATIONS: IntegrationConfig[] = [
     icon: Building2, 
     description: "Enterprise CRM integration for leads and opportunities", 
     color: "bg-blue-500",
+    category: "crm",
+    tagline: "Enterprise CRM leads & opportunities",
     fields: [
       { key: "instanceUrl", label: "Instance URL", placeholder: "https://yourcompany.salesforce.com", helpText: "Your Salesforce org URL" },
       { key: "clientId", label: "Consumer Key", placeholder: "3MVG9...", helpText: "From Connected App settings" },
@@ -123,6 +147,8 @@ const NATIVE_INTEGRATIONS: IntegrationConfig[] = [
     icon: CreditCard, 
     description: "Create leads from payments and subscriptions", 
     color: "bg-purple-500",
+    category: "commerce",
+    tagline: "Payments, customers & subscriptions",
     fields: [
       { key: "secretKey", label: "Secret Key", placeholder: "sk_live_xxxxx", type: "password", helpText: "Found in Stripe Dashboard > Developers > API keys" },
       { key: "webhookSecret", label: "Webhook Signing Secret", placeholder: "whsec_xxxxx", type: "password", helpText: "From webhook endpoint settings" },
@@ -155,6 +181,8 @@ const NATIVE_INTEGRATIONS: IntegrationConfig[] = [
     icon: Calendar, 
     description: "Auto-create leads when meetings are booked", 
     color: "bg-blue-600",
+    category: "scheduling",
+    tagline: "Meetings booked, cancellations & reschedules",
     fields: [
       { key: "accessToken", label: "Personal Access Token", placeholder: "eyJraWQiOiIxY...", type: "password", helpText: "Create at calendly.com/integrations/api_webhooks" },
       { key: "webhookSigningKey", label: "Webhook Signing Key", placeholder: "xxxxx", type: "password", helpText: "Optional: For webhook signature verification" },
@@ -171,6 +199,8 @@ const NATIVE_INTEGRATIONS: IntegrationConfig[] = [
     icon: Mail, 
     description: "Sync contacts to email lists and trigger campaigns", 
     color: "bg-yellow-500",
+    category: "marketing",
+    tagline: "Audiences, tags & automations",
     fields: [
       { key: "apiKey", label: "API Key", placeholder: "xxxxxxxx-us21", type: "password", helpText: "Found in Mailchimp > Account > Extras > API keys" },
       { key: "serverPrefix", label: "Server Prefix", placeholder: "us21", helpText: "The 'usX' at the end of your API key (e.g., us21)" },
@@ -315,6 +345,8 @@ export function Integrations() {
   const [selectedSyncOptions, setSelectedSyncOptions] = useState<string[]>([]);
   const [showShopifyInfo, setShowShopifyInfo] = useState(false);
   const [checkingLcConnection, setCheckingLcConnection] = useState(false);
+  const [manageIntegrationId, setManageIntegrationId] = useState<string | null>(null);
+  const [leadManageOpen, setLeadManageOpen] = useState(false);
 
   const integrationsEnabled = subscription?.limits?.integrationsEnabled;
   const maxWebhooks = (subscription?.limits as any)?.maxWebhooks || 0;
@@ -390,7 +422,10 @@ export function Integrations() {
     mutationFn: async (id: string) => {
       return apiRequest("DELETE", `/api/integrations/${id}`);
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/integrations"] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/integrations"] });
+      setManageIntegrationId(null);
+    },
   });
 
   const syncIntegrationMutation = useMutation({
@@ -455,6 +490,13 @@ export function Integrations() {
     return integrations.find(i => i.type === type);
   };
 
+  const managingIntegration = manageIntegrationId
+    ? NATIVE_INTEGRATIONS.find((i) => i.id === manageIntegrationId)
+    : undefined;
+  const managingConnected = manageIntegrationId
+    ? getConnectedIntegration(manageIntegrationId)
+    : undefined;
+
   if (subLoading) {
     return (
       <div className="flex-1 flex items-center justify-center">
@@ -486,11 +528,11 @@ export function Integrations() {
 
   return (
     <div className="h-full overflow-y-auto">
-      <div className="p-4 md:p-6 max-w-4xl mx-auto pb-20">
-        <div className="mb-6 flex items-center justify-between">
+      <div className="p-4 md:p-6 max-w-7xl mx-auto pb-20">
+        <div className="mb-8 flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Integrations</h1>
-            <p className="text-gray-500 mt-1">Connect WhachatCRM with your existing tools and workflows</p>
+            <h1 className="text-2xl font-semibold tracking-tight text-gray-900">Integrations</h1>
+            <p className="text-sm text-gray-500 mt-1">Connect tools your team already uses</p>
           </div>
         </div>
 
@@ -506,182 +548,99 @@ export function Integrations() {
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="native" className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-2">
-              {NATIVE_INTEGRATIONS.map((integration) => {
-                const connected = getConnectedIntegration(integration.id);
-                return (
-                  <Card key={integration.id} className="relative overflow-hidden" data-testid={`integration-card-${integration.id}`}>
-                    {integration.id !== 'leadconnector' && connected && (
-                      <div className="absolute top-2 right-2">
-                        <Badge className="bg-green-100 text-green-700 border-green-200">
-                          <CheckCircle2 className="h-3 w-3 mr-1" />
-                          Connected
-                        </Badge>
-                      </div>
-                    )}
-                    <CardHeader className="pb-3">
-                      <div className="flex items-center gap-3">
-                        <div className={`w-10 h-10 rounded-lg ${integration.color} flex items-center justify-center`}>
-                          <integration.icon className="h-5 w-5 text-white" />
-                        </div>
-                        <div>
-                          <CardTitle className="text-base">{integration.name}</CardTitle>
-                          <CardDescription className="text-xs">{integration.description}</CardDescription>
-                        </div>
-                      </div>
-                    </CardHeader>
-                    <CardContent>
-                      {integration.id === 'leadconnector' ? (
-                        <div className="space-y-3">
-                          <div className="flex items-center justify-between text-sm">
-                            <span className="text-gray-500">Status</span>
-                            {lcStatusLoading ? (
-                              <RefreshCw className="h-3 w-3 animate-spin text-gray-400" />
-                            ) : lcStatus?.connected ? (
-                              <Badge className="bg-green-100 text-green-700 border-green-200">
-                                <CheckCircle2 className="h-3 w-3 mr-1" />
-                                Connected
-                              </Badge>
-                            ) : (
-                              <Badge variant="secondary" className="text-gray-500">
-                                <XCircle className="h-3 w-3 mr-1" />
-                                Not Connected
-                              </Badge>
-                            )}
-                          </div>
-                          <Button 
-                            variant="default" 
-                            size="sm" 
-                            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white"
-                            onClick={() => window.open(LEADCONNECTOR_INSTALL_URL, '_blank')}
-                            data-testid="button-install-leadconnector"
-                          >
-                            Install LeadConnector App
-                            <ExternalLink className="h-3 w-3 ml-2" />
-                          </Button>
-                          {!lcStatus?.connected && (
-                            <div className="flex items-center gap-2">
-                              <p className="text-xs text-gray-500 flex-1">
-                                Install the app in LeadConnector and return here to verify connection.
-                              </p>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="shrink-0 text-xs h-7"
-                                onClick={handleCheckLcConnection}
-                                disabled={checkingLcConnection}
-                                data-testid="button-check-leadconnector-connection"
-                              >
-                                <RefreshCw className={`h-3 w-3 mr-1 ${checkingLcConnection ? 'animate-spin' : ''}`} />
-                                {checkingLcConnection ? 'Checking...' : 'Check'}
-                              </Button>
+          <TabsContent value="native" className="space-y-12">
+            {CATEGORY_SECTIONS.map(({ key, title }) => {
+              const items = NATIVE_INTEGRATIONS.filter((i) => i.category === key);
+              if (items.length === 0) return null;
+              return (
+                <section key={key} className="space-y-4">
+                  <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-500">{title}</h2>
+                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                    {items.map((integration) => {
+                      const connected = getConnectedIntegration(integration.id);
+                      const isLeadConnector = integration.id === "leadconnector";
+                      const lcConnected = !!lcStatus?.connected;
+
+                      let primaryLabel = "Connect";
+                      let primaryDisabled = false;
+                      let primaryAction: () => void = () => {
+                        setConnectingIntegration(integration);
+                        setIntegrationForm({});
+                        setSelectedSyncOptions([]);
+                      };
+                      let primaryTestId = `button-connect-${integration.id}`;
+
+                      if (isLeadConnector) {
+                        primaryTestId = lcConnected ? "button-manage-leadconnector" : "button-install-leadconnector";
+                        if (lcStatusLoading) {
+                          primaryDisabled = true;
+                          primaryLabel = "Connect";
+                        } else if (lcConnected) {
+                          primaryLabel = "Manage";
+                          primaryAction = () => setLeadManageOpen(true);
+                        } else {
+                          primaryLabel = "Connect";
+                          primaryAction = () => window.open(LEADCONNECTOR_INSTALL_URL, "_blank");
+                        }
+                      } else if (connected) {
+                        primaryLabel = "Manage";
+                        primaryTestId = `button-manage-${integration.id}`;
+                        primaryAction = () => setManageIntegrationId(integration.id);
+                      } else if (integration.id === "shopify") {
+                        primaryAction = () => setShowShopifyInfo(true);
+                      }
+
+                      return (
+                        <div
+                          key={integration.id}
+                          className="flex h-full min-h-[200px] flex-col rounded-xl border border-gray-200 bg-white p-5 shadow-sm transition-shadow hover:shadow-md"
+                          data-testid={`integration-card-${integration.id}`}
+                        >
+                          <div className="flex items-start gap-3">
+                            <IntegrationBrandLogo id={integration.id as IntegrationLogoId} />
+                            <div className="min-w-0 flex-1 pt-0.5">
+                              <h3 className="text-sm font-semibold leading-snug text-gray-900">{integration.name}</h3>
                             </div>
-                          )}
-                          {lcStatus?.connected && (
+                          </div>
+                          <p className="mt-3 flex-1 text-sm leading-snug text-gray-500 line-clamp-1">
+                            {integration.tagline}
+                          </p>
+                          <div className="mt-5">
                             <Button
                               variant="outline"
                               size="sm"
-                              className="w-full"
-                              onClick={handleCheckLcConnection}
-                              disabled={checkingLcConnection}
-                              data-testid="button-verify-leadconnector"
+                              className="w-full border-gray-200 bg-white font-medium text-gray-900 shadow-none hover:bg-gray-50"
+                              disabled={primaryDisabled}
+                              onClick={primaryAction}
+                              data-testid={primaryTestId}
                             >
-                              <RefreshCw className={`h-3 w-3 mr-1 ${checkingLcConnection ? 'animate-spin' : ''}`} />
-                              {checkingLcConnection ? 'Verifying...' : 'Verify Connection'}
-                            </Button>
-                          )}
-                        </div>
-                      ) : connected ? (
-                        <div className="space-y-3">
-                          <div className="flex items-center justify-between text-sm">
-                            <span className="text-gray-500">Status</span>
-                            <div className="flex items-center gap-2">
-                              <Switch
-                                checked={connected.isActive}
-                                onCheckedChange={(checked) => toggleIntegrationMutation.mutate({ id: connected.id, isActive: checked })}
-                                data-testid={`switch-integration-${integration.id}`}
-                              />
-                              <span className={connected.isActive ? "text-green-600" : "text-gray-400"}>
-                                {connected.isActive ? "Active" : "Paused"}
-                              </span>
-                            </div>
-                          </div>
-                          {connected.lastSyncAt && (
-                            <div className="flex items-center justify-between text-sm">
-                              <span className="text-gray-500">Last Sync</span>
-                              <span className="text-gray-700">
-                                {new Date(connected.lastSyncAt).toLocaleDateString()}
-                              </span>
-                            </div>
-                          )}
-                          {['shopify', 'calendly', 'stripe', 'hubspot'].includes(integration.id) && (
-                            <WebhookUrlDisplay integrationType={integration.id} />
-                          )}
-                          <div className="flex gap-2 pt-2">
-                            <Button 
-                              variant="outline" 
-                              size="sm" 
-                              className="flex-1"
-                              onClick={() => syncIntegrationMutation.mutate(connected.id)}
-                              disabled={syncIntegrationMutation.isPending}
-                              data-testid={`button-sync-${integration.id}`}
-                            >
-                              <RefreshCw className={`h-3 w-3 mr-1 ${syncIntegrationMutation.isPending ? 'animate-spin' : ''}`} />
-                              Sync Now
-                            </Button>
-                            <Button 
-                              variant="outline" 
-                              size="sm"
-                              className="text-red-500 hover:text-red-600 hover:bg-red-50"
-                              onClick={() => deleteIntegrationMutation.mutate(connected.id)}
-                              data-testid={`button-disconnect-${integration.id}`}
-                            >
-                              <XCircle className="h-3 w-3" />
+                              {lcStatusLoading && isLeadConnector ? (
+                                <span className="inline-flex items-center gap-2">
+                                  <RefreshCw className="h-3.5 w-3.5 animate-spin text-gray-400" />
+                                  Loading…
+                                </span>
+                              ) : (
+                                primaryLabel
+                              )}
                             </Button>
                           </div>
                         </div>
-                      ) : integration.id === 'shopify' ? (
-                        <Button 
-                          variant="outline" 
-                          size="sm" 
-                          className="w-full"
-                          onClick={() => setShowShopifyInfo(true)}
-                          data-testid={`button-connect-${integration.id}`}
-                        >
-                          Install on Shopify
-                          <ExternalLink className="h-3 w-3 ml-2" />
-                        </Button>
-                      ) : (
-                        <Button 
-                          variant="outline" 
-                          size="sm" 
-                          className="w-full"
-                          onClick={() => {
-                            setConnectingIntegration(integration);
-                            setIntegrationForm({});
-                            setSelectedSyncOptions([]);
-                          }}
-                          data-testid={`button-connect-${integration.id}`}
-                        >
-                          Connect
-                          <ExternalLink className="h-3 w-3 ml-2" />
-                        </Button>
-                      )}
-                    </CardContent>
-                  </Card>
-                );
-              })}
-            </div>
+                      );
+                    })}
+                  </div>
+                </section>
+              );
+            })}
 
-            <Card>
-              <CardContent className="py-6 text-center">
-                <p className="text-gray-500 text-sm">
-                  Need a specific integration? Use webhooks to connect with any app via Zapier or Make.com, 
-                  or <a href="/contact" className="text-brand-green hover:underline">contact us</a> to request a native integration.
-                </p>
-              </CardContent>
-            </Card>
+            <div className="rounded-xl border border-gray-200 bg-gray-50/50 px-6 py-8 text-center">
+              <p className="text-sm text-gray-500">
+                Need a specific integration? Use webhooks with Zapier or Make.com, or{" "}
+                <a href="/contact" className="text-gray-900 underline underline-offset-2 hover:text-gray-700">
+                  contact us
+                </a>{" "}
+                to request a native integration.
+              </p>
+            </div>
           </TabsContent>
 
           <TabsContent value="webhooks" className="space-y-4">
@@ -901,9 +860,7 @@ export function Integrations() {
           <DialogContent className="max-w-md">
             <DialogHeader>
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-green-500 flex items-center justify-center">
-                  <ShoppingCart className="h-5 w-5 text-white" />
-                </div>
+                <IntegrationBrandLogo id="shopify" />
                 <div>
                   <DialogTitle>Install WhachatCRM on Shopify</DialogTitle>
                   <DialogDescription>Connect your Shopify store via the Shopify App Store</DialogDescription>
@@ -943,6 +900,135 @@ export function Integrations() {
           </DialogContent>
         </Dialog>
 
+        {/* LeadConnector — manage (install, check, verify) */}
+        <Dialog open={leadManageOpen} onOpenChange={setLeadManageOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <div className="flex items-center gap-3">
+                <IntegrationBrandLogo id="leadconnector" />
+                <div>
+                  <DialogTitle>LeadConnector</DialogTitle>
+                  <DialogDescription>Install the app and verify your connection</DialogDescription>
+                </div>
+              </div>
+            </DialogHeader>
+            <div className="space-y-3 pt-1">
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full border-gray-200 font-medium"
+                onClick={() => window.open(LEADCONNECTOR_INSTALL_URL, "_blank")}
+                data-testid="button-install-leadconnector-dialog"
+              >
+                Open install page
+                <ExternalLink className="h-3 w-3 ml-2" />
+              </Button>
+              {!lcStatus?.connected && (
+                <div className="flex items-center gap-2 rounded-lg border border-gray-100 bg-gray-50/80 p-3">
+                  <p className="text-xs text-gray-600 flex-1">
+                    Install the app in LeadConnector, then check status here.
+                  </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="shrink-0 text-xs h-8"
+                    onClick={handleCheckLcConnection}
+                    disabled={checkingLcConnection}
+                    data-testid="button-check-leadconnector-connection"
+                  >
+                    <RefreshCw className={`h-3 w-3 mr-1 ${checkingLcConnection ? "animate-spin" : ""}`} />
+                    {checkingLcConnection ? "Checking…" : "Check"}
+                  </Button>
+                </div>
+              )}
+              {lcStatus?.connected && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full border-gray-200"
+                  onClick={handleCheckLcConnection}
+                  disabled={checkingLcConnection}
+                  data-testid="button-verify-leadconnector"
+                >
+                  <RefreshCw className={`h-3 w-3 mr-1 ${checkingLcConnection ? "animate-spin" : ""}`} />
+                  {checkingLcConnection ? "Verifying…" : "Verify connection"}
+                </Button>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Native integration — manage connected account */}
+        <Dialog open={manageIntegrationId !== null} onOpenChange={(open) => !open && setManageIntegrationId(null)}>
+          <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+            {managingIntegration && managingConnected && (
+              <>
+                <DialogHeader>
+                  <div className="flex items-center gap-3">
+                    <IntegrationBrandLogo id={managingIntegration.id as IntegrationLogoId} />
+                    <div>
+                      <DialogTitle>{managingIntegration.name}</DialogTitle>
+                      <DialogDescription>{managingIntegration.description}</DialogDescription>
+                    </div>
+                  </div>
+                </DialogHeader>
+                <div className="space-y-3 pt-2">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-gray-500">Sync</span>
+                    <div className="flex items-center gap-2">
+                      <Switch
+                        checked={managingConnected.isActive}
+                        onCheckedChange={(checked) =>
+                          toggleIntegrationMutation.mutate({ id: managingConnected.id, isActive: checked })
+                        }
+                        data-testid={`switch-integration-${managingIntegration.id}`}
+                      />
+                      <span className={managingConnected.isActive ? "text-gray-900" : "text-gray-400"}>
+                        {managingConnected.isActive ? "Active" : "Paused"}
+                      </span>
+                    </div>
+                  </div>
+                  {managingConnected.lastSyncAt && (
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-gray-500">Last sync</span>
+                      <span className="text-gray-700">
+                        {new Date(managingConnected.lastSyncAt).toLocaleDateString()}
+                      </span>
+                    </div>
+                  )}
+                  {["shopify", "calendly", "stripe", "hubspot"].includes(managingIntegration.id) && (
+                    <WebhookUrlDisplay integrationType={managingIntegration.id} />
+                  )}
+                  <div className="flex gap-2 pt-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="flex-1 border-gray-200"
+                      onClick={() => syncIntegrationMutation.mutate(managingConnected.id)}
+                      disabled={syncIntegrationMutation.isPending}
+                      data-testid={`button-sync-${managingIntegration.id}`}
+                    >
+                      <RefreshCw
+                        className={`h-3 w-3 mr-1 ${syncIntegrationMutation.isPending ? "animate-spin" : ""}`}
+                      />
+                      Sync now
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="border-gray-200 text-gray-700 hover:bg-red-50 hover:text-red-600"
+                      onClick={() => deleteIntegrationMutation.mutate(managingConnected.id)}
+                      data-testid={`button-disconnect-${managingIntegration.id}`}
+                    >
+                      Disconnect
+                    </Button>
+                  </div>
+                </div>
+              </>
+            )}
+          </DialogContent>
+        </Dialog>
+
         {/* Integration Connection Dialog */}
         <Dialog open={!!connectingIntegration} onOpenChange={(open) => !open && setConnectingIntegration(null)}>
           <DialogContent className="max-w-lg h-[90vh] sm:h-auto sm:max-h-[85vh] flex flex-col p-0 overflow-hidden">
@@ -950,9 +1036,7 @@ export function Integrations() {
               <>
                 <DialogHeader className="flex-shrink-0 p-6 pb-2">
                   <div className="flex items-center gap-3">
-                    <div className={`w-10 h-10 rounded-lg ${connectingIntegration.color} flex items-center justify-center`}>
-                      <connectingIntegration.icon className="h-5 w-5 text-white" />
-                    </div>
+                    <IntegrationBrandLogo id={connectingIntegration.id as IntegrationLogoId} />
                     <div>
                       <DialogTitle>Connect {connectingIntegration.name}</DialogTitle>
                       <DialogDescription>{connectingIntegration.description}</DialogDescription>
