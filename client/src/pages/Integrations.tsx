@@ -57,16 +57,16 @@ function IntegrationBrandLogo({
   className?: string;
 }) {
   const letter = integrationBrandLogoLetter(name);
-  const logoMaxPct =
-    integrationId === "leadconnector"
-      ? "max-h-[94%] max-w-[94%]"
-      : integrationId === "salesforce"
-        ? "max-h-[90%] max-w-[90%]"
-        : "max-h-[82%] max-w-[82%]";
+  const strongSizeBoost =
+    integrationId === "leadconnector" || integrationId === "salesforce";
+  const imgSizeClass = strongSizeBoost
+    ? "max-h-[115%] max-w-[115%] origin-center scale-[1.2]"
+    : "max-h-[82%] max-w-[82%]";
   return (
     <div
       className={cn(
         "flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-gray-100 bg-white",
+        strongSizeBoost && "overflow-visible",
         className,
       )}
       aria-hidden
@@ -77,7 +77,7 @@ function IntegrationBrandLogo({
           alt=""
           className={cn(
             "box-border h-auto w-auto object-contain object-center",
-            logoMaxPct,
+            imgSizeClass,
           )}
           loading="lazy"
           decoding="async"
