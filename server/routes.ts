@@ -77,6 +77,11 @@ import { triggerNewChatWorkflows, triggerKeywordWorkflows, triggerTagChangeWorkf
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import shopifyRoutes from "./shopifyRoutes";
 import ghlRoutes from "./ghlRoutes";
+import {
+  normalizeWooCommerceStoreUrl,
+  verifyWooCommerceRestCredentials,
+  fetchWooCommerceSampleOrders,
+} from "./woocommerceIntegration";
 
 import { registerTemplateRoutes } from "./templateRoutes";
 import { registerMediaRoutes } from "./routes/media";
@@ -3770,7 +3775,17 @@ export async function registerRoutes(
   // ============= Native Integration Endpoints =============
 
   // Helper to encrypt sensitive integration config fields
-  const SENSITIVE_CONFIG_KEYS = ['accessToken', 'secretKey', 'privateKey', 'clientSecret', 'refreshToken', 'apiKey', 'webhookSecret'];
+  const SENSITIVE_CONFIG_KEYS = [
+    "accessToken",
+    "secretKey",
+    "privateKey",
+    "clientSecret",
+    "refreshToken",
+    "apiKey",
+    "webhookSecret",
+    "consumerKey",
+    "consumerSecret",
+  ];
 
   // Startup backfill: repair any existing Facebook/Instagram integrations that
   // pre-date the dual-write fix and never populated channelSettings.
@@ -5098,6 +5113,102 @@ export async function registerRoutes(
     } catch (err: any) {
       console.error("[Telegram Connect] error:", err);
       res.status(500).json({ error: err.message ?? "Unexpected error" });
+    }
+  });
+
+  // ─── WooCommerce (REST API keys) ───────────────────────────────────────────
+  app.post("/api/integrations/woocommerce/connect", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+
+      const limits = await subscriptionService.getUserLimits(req.user.id);
+      if (!limits?.integrationsEnabled) {
+        return res.status(403).json({ error: "Integrations are not available on your plan" });
+      }
+
+      const { storeUrl, consumerKey, consumerSecret } = req.body as {
+        storeUrl?: string;
+        consumerKey?: string;
+        consumerSecret?: string;
+      };
+
+      const ck = typeof consumerKey === "string" ? consumerKey.trim() : "";
+      const cs = typeof consumerSecret === "string" ? consumerSecret.trim() : "";
+      const rawUrl = typeof storeUrl === "string" ? storeUrl.trim() : "";
+
+      if (!rawUrl || !ck || !cs) {
+        return res.status(400).json({ error: "Store URL, Consumer Key, and Consumer Secret are required" });
+      }
+
+      const normalizedUrl = normalizeWooCommerceStoreUrl(rawUrl);
+      if (!normalizedUrl) {
+        return res.status(400).json({ error: "Invalid store URL" });
+      }
+
+      try {
+        const verify = await verifyWooCommerceRestCredentials(normalizedUrl, ck, cs);
+        if (!verify.ok) {
+          return res.status(400).json({ error: "Invalid credentials or store URL" });
+        }
+
+        const plainConfig: Record<string, unknown> = {
+          storeUrl: normalizedUrl,
+          consumerKey: ck,
+          consumerSecret: cs,
+          status: "connected",
+          syncOptions: [],
+        };
+        const encryptedConfig = encryptIntegrationConfig(plainConfig as Record<string, any>);
+
+        const userIntegrations = await storage.getIntegrations(req.user.id);
+        const existingWoo = userIntegrations.find((i) => i.type === "woocommerce");
+        let row;
+        if (existingWoo) {
+          row = await storage.updateIntegration(existingWoo.id, {
+            name: "WooCommerce",
+            config: encryptedConfig as any,
+            isActive: true,
+          });
+        } else {
+          row = await storage.createIntegration({
+            userId: req.user.id,
+            type: "woocommerce",
+            name: "WooCommerce",
+            config: encryptedConfig as any,
+            isActive: true,
+          });
+        }
+
+        if (!row) {
+          return res.status(500).json({ error: "Failed to save integration" });
+        }
+
+        let sampleOrders: { id: number; status: string; dateCreated: string | null }[] = [];
+        try {
+          sampleOrders = await fetchWooCommerceSampleOrders(normalizedUrl, ck, cs);
+        } catch {
+          sampleOrders = [];
+        }
+
+        const safe = {
+          ...row,
+          config: maskIntegrationConfig(row.config as Record<string, any>),
+        };
+
+        return res.status(201).json({
+          ok: true,
+          integration: safe,
+          sampleOrders,
+        });
+      } catch (err: any) {
+        console.error("[WooCommerce Connect] upstream or save error");
+        return res.status(502).json({
+          error: "Unable to reach your store. Check the URL, SSL, and firewall rules, then try again.",
+        });
+      }
+    } catch (err: any) {
+      console.error("[WooCommerce Connect] error:", err?.message ?? err);
+      return res.status(500).json({ error: err?.message ?? "Unexpected error" });
     }
   });
 

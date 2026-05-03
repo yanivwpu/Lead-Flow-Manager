@@ -28,6 +28,24 @@ function integrationBrandLogoLetter(name: string) {
   return "?";
 }
 
+/** Normalizes store URL to origin (scheme + host) for WooCommerce admin / REST URLs. */
+function normalizeWooStoreUrlInput(raw: string): string | null {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  let withProto = trimmed;
+  if (!/^https?:\/\//i.test(withProto)) {
+    withProto = `https://${withProto}`;
+  }
+  try {
+    const u = new URL(withProto);
+    if (u.protocol !== "http:" && u.protocol !== "https:") return null;
+    if (!u.hostname) return null;
+    return `${u.protocol}//${u.host}`.replace(/\/$/, "");
+  } catch {
+    return null;
+  }
+}
+
 /** Static brand marks under client/public/logos — same-origin only. */
 const INTEGRATION_LOGO_BY_ID: Record<string, string> = {
   /** Icon-only mark (no wordmark) — `client/public/logos/ghl.svg` */
@@ -427,6 +445,10 @@ export function Integrations() {
   const [selectedSyncOptions, setSelectedSyncOptions] = useState<string[]>([]);
   const [showShopifyInfo, setShowShopifyInfo] = useState(false);
   const [showWooCommerceInfo, setShowWooCommerceInfo] = useState(false);
+  const [wooForm, setWooForm] = useState({ storeUrl: "", consumerKey: "", consumerSecret: "" });
+  const [wooError, setWooError] = useState<string | null>(null);
+  const [wooSuccess, setWooSuccess] = useState(false);
+  const [wooOrderHint, setWooOrderHint] = useState<string | null>(null);
   const [checkingLcConnection, setCheckingLcConnection] = useState(false);
   const [manageIntegrationId, setManageIntegrationId] = useState<string | null>(null);
   const [leadManageOpen, setLeadManageOpen] = useState(false);
@@ -517,6 +539,52 @@ export function Integrations() {
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/integrations"] }),
   });
+
+  const wooConnectMutation = useMutation({
+    mutationFn: async (body: { storeUrl: string; consumerKey: string; consumerSecret: string }) => {
+      const res = await fetch("/api/integrations/woocommerce/connect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(body),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        sampleOrders?: { id: number }[];
+      };
+      if (!res.ok) {
+        throw new Error(data.error || "Connection failed");
+      }
+      return data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/integrations"] });
+      setWooSuccess(true);
+      setWooError(null);
+      const n = data?.sampleOrders?.length ?? 0;
+      setWooOrderHint(
+        n > 0 ? `Fetched ${n} recent order${n === 1 ? "" : "s"} from your store (read test).` : null,
+      );
+    },
+    onError: (err: Error) => {
+      setWooSuccess(false);
+      setWooError(err.message);
+    },
+  });
+
+  useEffect(() => {
+    if (!wooSuccess || !showWooCommerceInfo) return;
+    const t = window.setTimeout(() => {
+      setShowWooCommerceInfo(false);
+      setWooSuccess(false);
+      setWooOrderHint(null);
+      setWooForm({ storeUrl: "", consumerKey: "", consumerSecret: "" });
+      setWooError(null);
+      wooConnectMutation.reset();
+    }, 2000);
+    return () => window.clearTimeout(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- only close timer on success + modal open
+  }, [wooSuccess, showWooCommerceInfo]);
 
   const copyToClipboard = (text: string, id: string) => {
     navigator.clipboard.writeText(text);
@@ -643,6 +711,7 @@ export function Integrations() {
                       const connected = getConnectedIntegration(integration.id);
                       const isLeadConnector = integration.id === "leadconnector";
                       const lcConnected = !!lcStatus?.connected;
+                      const wooConnected = integration.id === "woocommerce" && !!connected;
 
                       let primaryLabel = "Connect";
                       let primaryDisabled = false;
@@ -665,6 +734,11 @@ export function Integrations() {
                           primaryLabel = "Connect";
                           primaryAction = () => window.open(LEADCONNECTOR_INSTALL_URL, "_blank");
                         }
+                      } else if (wooConnected) {
+                        primaryLabel = "Connected";
+                        primaryDisabled = true;
+                        primaryTestId = "button-woocommerce-connected";
+                        primaryAction = () => {};
                       } else if (connected) {
                         primaryLabel = "Manage";
                         primaryTestId = `button-manage-${integration.id}`;
@@ -687,14 +761,22 @@ export function Integrations() {
                               logoUrl={INTEGRATION_LOGO_BY_ID[integration.id]}
                               integrationId={integration.id}
                             />
-                            <div className="min-w-0 flex-1">
+                            <div className="min-w-0 flex-1 flex items-center gap-2">
                               <h3 className="text-sm font-semibold leading-snug text-gray-900">{integration.name}</h3>
+                              {wooConnected && (
+                                <Badge
+                                  variant="outline"
+                                  className="shrink-0 border-emerald-200 bg-emerald-50 text-[10px] font-semibold uppercase tracking-wide text-emerald-800"
+                                >
+                                  Connected
+                                </Badge>
+                              )}
                             </div>
                           </div>
                           <p className="mt-3 flex-1 text-sm leading-snug text-gray-500 line-clamp-1">
                             {integration.tagline}
                           </p>
-                          <div className="mt-5">
+                          <div className="mt-5 space-y-2">
                             <Button
                               variant="outline"
                               size="sm"
@@ -708,10 +790,27 @@ export function Integrations() {
                                   <RefreshCw className="h-3.5 w-3.5 animate-spin text-gray-400" />
                                   Loading…
                                 </span>
+                              ) : wooConnected ? (
+                                <span className="inline-flex items-center justify-center gap-1.5 text-emerald-800">
+                                  <Check className="h-3.5 w-3.5" aria-hidden />
+                                  Connected
+                                </span>
                               ) : (
                                 primaryLabel
                               )}
                             </Button>
+                            {wooConnected && (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="h-auto w-full py-1 text-xs text-gray-600 hover:text-gray-900"
+                                onClick={() => setManageIntegrationId(integration.id)}
+                                data-testid="button-woocommerce-manage"
+                              >
+                                Manage integration
+                              </Button>
+                            )}
                           </div>
                         </div>
                       );
@@ -993,9 +1092,25 @@ export function Integrations() {
           </DialogContent>
         </Dialog>
 
-        {/* WooCommerce — connect guidance (native card; setup via contact / future OAuth) */}
-        <Dialog open={showWooCommerceInfo} onOpenChange={setShowWooCommerceInfo}>
-          <DialogContent className="max-w-md">
+        {/* WooCommerce — REST API key connection */}
+        <Dialog
+          open={showWooCommerceInfo}
+          onOpenChange={(open) => {
+            setShowWooCommerceInfo(open);
+            if (open) {
+              setWooError(null);
+              setWooSuccess(false);
+              setWooOrderHint(null);
+            } else {
+              setWooError(null);
+              setWooSuccess(false);
+              setWooOrderHint(null);
+              setWooForm({ storeUrl: "", consumerKey: "", consumerSecret: "" });
+              wooConnectMutation.reset();
+            }
+          }}
+        >
+          <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <div className="flex items-center gap-3">
                 <IntegrationBrandLogo
@@ -1011,29 +1126,141 @@ export function Integrations() {
                 </div>
               </div>
             </DialogHeader>
-            <div className="space-y-4 py-2">
-              <div className="rounded-lg border border-violet-200 bg-violet-50 p-3 text-sm text-violet-900">
-                <p className="font-medium">How it works</p>
-                <p className="mt-1 text-xs text-violet-800">
-                  We&apos;ll help you link your store so new customers and orders can flow into WhachatCRM and trigger
-                  WhatsApp follow-ups. Tell us your store URL and we&apos;ll guide you through the next steps.
-                </p>
+
+            {wooSuccess ? (
+              <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-center text-sm text-emerald-900">
+                <p className="font-semibold">Connected ✅</p>
+                {wooOrderHint && <p className="mt-2 text-xs text-emerald-800">{wooOrderHint}</p>}
               </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setShowWooCommerceInfo(false)}>
-                Close
+            ) : (
+              <form
+                id="woo-connect-form"
+                className="space-y-4 py-2"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  setWooError(null);
+                  wooConnectMutation.mutate({
+                    storeUrl: wooForm.storeUrl.trim(),
+                    consumerKey: wooForm.consumerKey.trim(),
+                    consumerSecret: wooForm.consumerSecret.trim(),
+                  });
+                }}
+              >
+                <div className="rounded-lg border border-violet-200 bg-violet-50 p-3 text-sm text-violet-950">
+                  <p className="font-medium">How to get your API keys</p>
+                  <ol className="mt-2 list-decimal list-inside space-y-1 text-xs text-violet-900">
+                    <li>Go to your WooCommerce admin</li>
+                    <li>Settings → Advanced → REST API</li>
+                    <li>Click &quot;Add Key&quot;</li>
+                    <li>Copy Consumer Key &amp; Consumer Secret</li>
+                  </ol>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="mt-3 w-full border-violet-200 bg-white font-medium text-violet-900 hover:bg-violet-100/80"
+                    onClick={() => {
+                      const base = normalizeWooStoreUrlInput(wooForm.storeUrl);
+                      if (!base) {
+                        toast({
+                          title: "Enter store URL first",
+                          description: "Add your store URL (e.g. https://yourstore.com) before opening API settings.",
+                          variant: "destructive",
+                        });
+                        return;
+                      }
+                      window.open(
+                        `${base}/wp-admin/admin.php?page=wc-settings&tab=advanced&section=keys`,
+                        "_blank",
+                        "noopener,noreferrer",
+                      );
+                    }}
+                    data-testid="button-woocommerce-open-api-settings"
+                  >
+                    Open WooCommerce API Settings
+                    <ExternalLink className="ml-2 h-3.5 w-3.5" />
+                  </Button>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="woo-store-url">Store URL</Label>
+                  <Input
+                    id="woo-store-url"
+                    required
+                    autoComplete="url"
+                    placeholder="https://yourstore.com"
+                    value={wooForm.storeUrl}
+                    onChange={(e) => setWooForm((f) => ({ ...f, storeUrl: e.target.value }))}
+                    disabled={wooConnectMutation.isPending}
+                    data-testid="input-woocommerce-store-url"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="woo-consumer-key">Consumer Key</Label>
+                  <Input
+                    id="woo-consumer-key"
+                    required
+                    autoComplete="off"
+                    placeholder="ck_xxxxx"
+                    value={wooForm.consumerKey}
+                    onChange={(e) => setWooForm((f) => ({ ...f, consumerKey: e.target.value }))}
+                    disabled={wooConnectMutation.isPending}
+                    data-testid="input-woocommerce-consumer-key"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="woo-consumer-secret">Consumer Secret</Label>
+                  <Input
+                    id="woo-consumer-secret"
+                    required
+                    type="password"
+                    autoComplete="new-password"
+                    placeholder="cs_xxxxx"
+                    value={wooForm.consumerSecret}
+                    onChange={(e) => setWooForm((f) => ({ ...f, consumerSecret: e.target.value }))}
+                    disabled={wooConnectMutation.isPending}
+                    data-testid="input-woocommerce-consumer-secret"
+                  />
+                </div>
+
+                {wooError && (
+                  <div
+                    className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800"
+                    role="alert"
+                  >
+                    {wooError}
+                  </div>
+                )}
+              </form>
+            )}
+
+            <DialogFooter className="gap-2 sm:justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setShowWooCommerceInfo(false)}
+                disabled={wooConnectMutation.isPending}
+              >
+                {wooSuccess ? "Close" : "Cancel"}
               </Button>
-              <Link href="/contact">
+              {!wooSuccess && (
                 <Button
+                  type="submit"
+                  form="woo-connect-form"
                   className="bg-violet-700 hover:bg-violet-800 text-white"
-                  onClick={() => setShowWooCommerceInfo(false)}
-                  data-testid="button-woocommerce-contact"
+                  disabled={wooConnectMutation.isPending}
+                  data-testid="button-woocommerce-connect-store"
                 >
-                  Contact us
-                  <ExternalLink className="ml-2 h-3 w-3" />
+                  {wooConnectMutation.isPending ? (
+                    <span className="inline-flex items-center gap-2">
+                      <RefreshCw className="h-4 w-4 animate-spin" aria-hidden />
+                      Connecting…
+                    </span>
+                  ) : (
+                    "Connect Store"
+                  )}
                 </Button>
-              </Link>
+              )}
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -1114,6 +1341,15 @@ export function Integrations() {
                     <div>
                       <DialogTitle>{managingIntegration.name}</DialogTitle>
                       <DialogDescription>{managingIntegration.description}</DialogDescription>
+                      {managingIntegration.id === "woocommerce" &&
+                        typeof (managingConnected.config as Record<string, unknown>)?.storeUrl === "string" && (
+                          <p className="mt-1 text-xs text-gray-600">
+                            Store:{" "}
+                            <span className="font-medium text-gray-800">
+                              {(managingConnected.config as Record<string, string>).storeUrl}
+                            </span>
+                          </p>
+                        )}
                     </div>
                   </div>
                 </DialogHeader>
