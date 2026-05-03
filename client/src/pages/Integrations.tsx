@@ -144,6 +144,15 @@ const LEADCONNECTOR_INSTALL_URL =
     import.meta.env.VITE_LEADCONNECTOR_INSTALL_URL.trim()) ||
   DEFAULT_LEADCONNECTOR_INSTALL_URL;
 
+const VITE_SHOPIFY_APP_STORE_URL =
+  typeof import.meta.env.VITE_SHOPIFY_APP_STORE_URL === "string"
+    ? import.meta.env.VITE_SHOPIFY_APP_STORE_URL.trim()
+    : "";
+const VITE_SHOPIFY_MANUAL_INSTALL_URL =
+  typeof import.meta.env.VITE_SHOPIFY_MANUAL_INSTALL_URL === "string"
+    ? import.meta.env.VITE_SHOPIFY_MANUAL_INSTALL_URL.trim()
+    : "";
+
 const NATIVE_INTEGRATIONS: IntegrationConfig[] = [
   { 
     id: "leadconnector", 
@@ -446,6 +455,9 @@ export function Integrations() {
   const [integrationForm, setIntegrationForm] = useState<Record<string, string>>({});
   const [selectedSyncOptions, setSelectedSyncOptions] = useState<string[]>([]);
   const [showShopifyInfo, setShowShopifyInfo] = useState(false);
+  type ShopifyListingState = "checking" | "live" | "unavailable";
+  const [shopifyListingState, setShopifyListingState] = useState<ShopifyListingState>("unavailable");
+  const [shopifyManualInstallInput, setShopifyManualInstallInput] = useState("");
   const [showWooCommerceInfo, setShowWooCommerceInfo] = useState(false);
   const [wooForm, setWooForm] = useState({ storeUrl: "", consumerKey: "", consumerSecret: "" });
   const [wooError, setWooError] = useState<string | null>(null);
@@ -622,6 +634,65 @@ export function Integrations() {
   // eslint-disable-next-line react-hooks/exhaustive-deps -- only close timer on success + modal open
   }, [wooSuccess, showWooCommerceInfo]);
 
+  useEffect(() => {
+    if (!showShopifyInfo) return;
+
+    setShopifyManualInstallInput(VITE_SHOPIFY_MANUAL_INSTALL_URL);
+
+    if (!VITE_SHOPIFY_APP_STORE_URL) {
+      setShopifyListingState("unavailable");
+      return;
+    }
+
+    setShopifyListingState("checking");
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch(
+          `/api/shopify/listing-check?target=${encodeURIComponent(VITE_SHOPIFY_APP_STORE_URL)}`,
+          { credentials: "include" },
+        );
+        const data = (await res.json().catch(() => ({ available: false }))) as { available?: boolean };
+        if (cancelled) return;
+        setShopifyListingState(data.available ? "live" : "unavailable");
+      } catch {
+        if (!cancelled) setShopifyListingState("unavailable");
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [showShopifyInfo]);
+
+  const openShopifyInstallCTA = () => {
+    if (shopifyListingState === "live" && VITE_SHOPIFY_APP_STORE_URL) {
+      window.open(VITE_SHOPIFY_APP_STORE_URL, "_blank", "noopener,noreferrer");
+      return;
+    }
+    const link = shopifyManualInstallInput.trim() || VITE_SHOPIFY_MANUAL_INSTALL_URL;
+    if (!link) {
+      toast({
+        title: "Install link required",
+        description:
+          "Paste the HTTPS install link provided by our team, or set VITE_SHOPIFY_MANUAL_INSTALL_URL for this environment.",
+        variant: "destructive",
+      });
+      return;
+    }
+    try {
+      const u = new URL(link);
+      if (u.protocol !== "http:" && u.protocol !== "https:") throw new Error("bad proto");
+      window.open(u.href, "_blank", "noopener,noreferrer");
+    } catch {
+      toast({
+        title: "Invalid link",
+        description: "Enter a full URL starting with https://",
+        variant: "destructive",
+      });
+    }
+  };
+
   const copyToClipboard = (text: string, id: string) => {
     navigator.clipboard.writeText(text);
     setCopiedId(id);
@@ -789,7 +860,13 @@ export function Integrations() {
                         primaryTestId = `button-manage-${integration.id}`;
                         primaryAction = () => setManageIntegrationId(integration.id);
                       } else if (integration.id === "shopify") {
-                        primaryAction = () => setShowShopifyInfo(true);
+                        primaryAction = () => {
+                          setShopifyManualInstallInput(VITE_SHOPIFY_MANUAL_INSTALL_URL);
+                          setShopifyListingState(
+                            VITE_SHOPIFY_APP_STORE_URL ? "checking" : "unavailable"
+                          );
+                          setShowShopifyInfo(true);
+                        };
                       } else if (integration.id === "woocommerce") {
                         primaryAction = () => setShowWooCommerceInfo(true);
                       }
@@ -1106,7 +1183,11 @@ export function Integrations() {
                 />
                 <div>
                   <DialogTitle>Install WhachatCRM on Shopify</DialogTitle>
-                  <DialogDescription>Connect your Shopify store via the Shopify App Store</DialogDescription>
+                  <DialogDescription>
+                    {shopifyListingState === "live"
+                      ? "Connect your Shopify store via the Shopify App Store"
+                      : "Install using a private link while our App Store listing is in review or unavailable"}
+                  </DialogDescription>
                 </div>
               </div>
             </DialogHeader>
@@ -1115,28 +1196,62 @@ export function Integrations() {
                 <p className="font-medium">Transparent Pricing:</p>
                 <p className="text-xs">Unlike other CRMs, WhachatCRM has <strong>zero per-message fees</strong> and <strong>unlimited automation flows</strong>. Your plan includes everything you need to scale without hidden costs.</p>
               </div>
-              <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-sm text-green-800 space-y-1">
-                <p className="font-medium">How to install:</p>
-                <ol className="list-decimal list-inside text-xs space-y-1 text-green-700">
-                  <li>Visit the Shopify App Store and search for "WhachatCRM"</li>
-                  <li>Click "Add app" on the listing page</li>
-                  <li>Review the permissions and approve the app in your Shopify admin</li>
-                  <li>You'll be redirected back here automatically once installed</li>
-                </ol>
-              </div>
-              <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 text-sm text-gray-700">
-                <p className="text-xs">The installation is initiated directly from Shopify to ensure a secure, verified connection. No manual configuration is needed — everything is set up automatically.</p>
-              </div>
+              {shopifyListingState === "live" ? (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-sm text-green-800 space-y-1">
+                  <p className="font-medium">How to install:</p>
+                  <ol className="list-decimal list-inside text-xs space-y-1 text-green-700">
+                    <li>Open our listing on the Shopify App Store using the button below</li>
+                    <li>Click &quot;Add app&quot; on the listing page</li>
+                    <li>Review the permissions and approve the app in your Shopify admin</li>
+                    <li>You&apos;ll be redirected back here automatically once installed</li>
+                  </ol>
+                </div>
+              ) : (
+                <>
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-900 space-y-1">
+                    <p className="font-medium">App Store listing</p>
+                    <p className="text-xs">
+                      This app is currently in review on Shopify. Use the install link provided by our team.
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="shopify-manual-install-url">Install link (optional)</Label>
+                    <Input
+                      id="shopify-manual-install-url"
+                      placeholder="https://… (paste link from our team)"
+                      value={shopifyManualInstallInput}
+                      onChange={(e) => setShopifyManualInstallInput(e.target.value)}
+                      className="font-mono text-xs"
+                      data-testid="input-shopify-manual-install-url"
+                    />
+                    <p className="text-xs text-gray-500">
+                      If your environment sets <span className="font-mono">VITE_SHOPIFY_MANUAL_INSTALL_URL</span>, it
+                      appears here automatically. You can override it before opening the link.
+                    </p>
+                  </div>
+                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 text-sm text-gray-700">
+                    <p className="text-xs">
+                      Private installs use the same secure OAuth flow as the App Store — you only change how you reach
+                      the install page until the listing is live.
+                    </p>
+                  </div>
+                </>
+              )}
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setShowShopifyInfo(false)}>Close</Button>
-              <Button 
-                onClick={() => window.open('https://apps.shopify.com/whachatcrm', '_blank')}
+              <Button
+                onClick={openShopifyInstallCTA}
+                disabled={shopifyListingState === "checking"}
                 className="bg-green-600 hover:bg-green-700 text-white"
                 data-testid="button-shopify-app-store"
               >
                 <ShoppingCart className="h-4 w-4 mr-2" />
-                Go to Shopify App Store
+                {shopifyListingState === "checking"
+                  ? "Checking listing…"
+                  : shopifyListingState === "live"
+                    ? "Go to Shopify App Store"
+                    : "Install via Shopify (Private Link)"}
                 <ExternalLink className="h-3 w-3 ml-2" />
               </Button>
             </DialogFooter>

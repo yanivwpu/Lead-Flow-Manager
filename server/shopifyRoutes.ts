@@ -19,6 +19,47 @@ const router = Router();
 
 const SHOPIFY_API_SECRET = process.env.SHOPIFY_API_SECRET || '';
 
+/** Prevent SSRF — only Shopify-owned hosts may be probed for App Store listing checks. */
+function isSafeShopifyListingUrl(urlStr: string): boolean {
+  try {
+    const u = new URL(urlStr);
+    if (u.protocol !== "http:" && u.protocol !== "https:") return false;
+    const host = u.hostname.toLowerCase();
+    return host === "apps.shopify.com" || host.endsWith(".shopify.com");
+  } catch {
+    return false;
+  }
+}
+
+async function probeListingUrl(urlStr: string): Promise<{ ok: boolean; status: number }> {
+  const ac = new AbortController();
+  const tid = setTimeout(() => ac.abort(), 12_000);
+  try {
+    let r = await fetch(urlStr, {
+      method: "HEAD",
+      redirect: "follow",
+      signal: ac.signal,
+      headers: { "User-Agent": "WhachatCRM-listing-check/1.0" },
+    });
+    if (r.status === 405) {
+      r = await fetch(urlStr, {
+        method: "GET",
+        redirect: "follow",
+        signal: ac.signal,
+        headers: {
+          "User-Agent": "WhachatCRM-listing-check/1.0",
+          Range: "bytes=0-0",
+        },
+      });
+    }
+    return { ok: r.ok, status: r.status };
+  } catch {
+    return { ok: false, status: 0 };
+  } finally {
+    clearTimeout(tid);
+  }
+}
+
 function verifyShopifyHmac(query: Record<string, any>): boolean {
   if (!SHOPIFY_API_SECRET) return false;
   
@@ -46,6 +87,25 @@ router.get('/status', (req: Request, res: Response) => {
     configured: isShopifyConfigured(),
     plans: Object.keys(SHOPIFY_BILLING_PLANS),
   });
+});
+
+/**
+ * Public (no auth): checks whether an App Store listing URL responds as live.
+ * Used by Integrations when VITE_SHOPIFY_APP_STORE_URL is set — avoids blind CORS from the browser.
+ */
+router.get("/listing-check", async (req: Request, res: Response) => {
+  try {
+    const target = typeof req.query.target === "string" ? req.query.target.trim() : "";
+    if (!target || !isSafeShopifyListingUrl(target)) {
+      return res.status(400).json({ error: "Invalid or disallowed target URL", available: false });
+    }
+    const { ok, status } = await probeListingUrl(target);
+    const available = ok && status !== 404;
+    res.json({ available, status });
+  } catch (e) {
+    console.error("[Shopify] listing-check error:", e);
+    res.json({ available: false, status: 0 });
+  }
 });
 
 router.get('/install', (req: Request, res: Response) => {
