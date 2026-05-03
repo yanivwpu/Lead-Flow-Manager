@@ -58,9 +58,11 @@ function IntegrationBrandLogo({
 }) {
   const letter = integrationBrandLogoLetter(name);
   const logoMaxPct =
-    integrationId === "leadconnector" || integrationId === "salesforce"
-      ? "max-h-[85%] max-w-[85%]"
-      : "max-h-[82%] max-w-[82%]";
+    integrationId === "leadconnector"
+      ? "max-h-[94%] max-w-[94%]"
+      : integrationId === "salesforce"
+        ? "max-h-[90%] max-w-[90%]"
+        : "max-h-[82%] max-w-[82%]";
   return (
     <div
       className={cn(
