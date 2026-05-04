@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,6 +23,8 @@ import { Textarea } from "@/components/ui/textarea";
 export type WidgetTriggerType = "always" | "delay" | "scroll" | "exit_intent";
 
 export interface WidgetPageRule {
+  /** Stable list key (client-only; stripped before save). */
+  id: string;
   urlContains: string;
   greeting: string;
   prefilledMessage: string;
@@ -42,10 +44,57 @@ interface WidgetSettings {
 }
 
 const DEFAULT_PAGE_RULES: WidgetPageRule[] = [
-  { urlContains: "/pricing", greeting: "Questions about pricing?", prefilledMessage: "Hi! I have a question about your pricing." },
-  { urlContains: "/contact", greeting: "Let us get in touch", prefilledMessage: "Hi! I would like to get in touch." },
-  { urlContains: "/services", greeting: "Tell us what you need", prefilledMessage: "Hi! I am interested in your services." },
+  {
+    id: "default-pricing",
+    urlContains: "/pricing",
+    greeting: "Questions about pricing?",
+    prefilledMessage: "Hi! I have a question about your pricing.",
+  },
+  {
+    id: "default-contact",
+    urlContains: "/contact",
+    greeting: "Let us get in touch",
+    prefilledMessage: "Hi! I would like to get in touch.",
+  },
+  {
+    id: "default-services",
+    urlContains: "/services",
+    greeting: "Tell us what you need",
+    prefilledMessage: "Hi! I am interested in your services.",
+  },
 ];
+
+function newRuleId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `rule-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+/** Ensure every rule has an id for stable React keys (API may omit id). */
+function normalizePageRulesFromServer(
+  rules: Array<{ urlContains?: string; greeting?: string; prefilledMessage?: string; id?: string }>
+): WidgetPageRule[] {
+  return rules.map((r) => ({
+    urlContains: String(r.urlContains ?? ""),
+    greeting: String(r.greeting ?? ""),
+    prefilledMessage: String(r.prefilledMessage ?? ""),
+    id: typeof r.id === "string" && r.id.length > 0 ? r.id : newRuleId(),
+  }));
+}
+
+function stripPageRuleIds(settings: WidgetSettings): Omit<WidgetSettings, "pageRules"> & {
+  pageRules: { urlContains: string; greeting: string; prefilledMessage: string }[];
+} {
+  return {
+    ...settings,
+    pageRules: settings.pageRules.map(({ urlContains, greeting, prefilledMessage }) => ({
+      urlContains,
+      greeting,
+      prefilledMessage,
+    })),
+  };
+}
 
 const DEFAULT_SETTINGS: WidgetSettings = {
   enabled: true,
@@ -61,11 +110,15 @@ const DEFAULT_SETTINGS: WidgetSettings = {
 };
 
 function mergeWidgetSettings(input: Partial<WidgetSettings> | undefined): WidgetSettings {
-  if (!input || typeof input !== "object") return { ...DEFAULT_SETTINGS, pageRules: [...DEFAULT_PAGE_RULES] };
+  if (!input || typeof input !== "object") {
+    return { ...DEFAULT_SETTINGS, pageRules: DEFAULT_PAGE_RULES.map((r) => ({ ...r })) };
+  }
   return {
     ...DEFAULT_SETTINGS,
     ...input,
-    pageRules: Array.isArray(input.pageRules) ? input.pageRules : [...DEFAULT_PAGE_RULES],
+    pageRules: Array.isArray(input.pageRules)
+      ? normalizePageRulesFromServer(input.pageRules as WidgetPageRule[])
+      : DEFAULT_PAGE_RULES.map((r) => ({ ...r })),
   };
 }
 
@@ -165,9 +218,22 @@ export function WebsiteWidget() {
   const [copiedType, setCopiedType] = useState<
     "script" | "iframe" | "iframeParent" | "hosted" | null
   >(null);
-  const [settings, setSettings] = useState<WidgetSettings>(DEFAULT_SETTINGS);
+  const [settings, setSettings] = useState<WidgetSettings>(() => ({
+    ...DEFAULT_SETTINGS,
+    pageRules: DEFAULT_PAGE_RULES.map((r) => ({ ...r })),
+  }));
   const [leadSource, setLeadSource] = useState("");
-  
+  /** Avoid resetting local form on every widget-settings refetch (fixes Page Rules focus / cursor bugs). */
+  const didHydrateFromWidgetQuery = useRef(false);
+  const pageRulesSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearPageRulesSaveDebounce = useCallback(() => {
+    if (pageRulesSaveTimerRef.current !== null) {
+      clearTimeout(pageRulesSaveTimerRef.current);
+      pageRulesSaveTimerRef.current = null;
+    }
+  }, []);
+
   const { data: user } = useQuery<{ id: string }>({
     queryKey: ["/api/auth/me"],
   });
@@ -177,24 +243,47 @@ export function WebsiteWidget() {
   });
   
   useEffect(() => {
-    if (savedSettings) {
-      setSettings(mergeWidgetSettings(savedSettings));
-    }
+    if (savedSettings === undefined) return;
+    if (didHydrateFromWidgetQuery.current) return;
+    setSettings(mergeWidgetSettings(savedSettings));
+    didHydrateFromWidgetQuery.current = true;
   }, [savedSettings]);
   
   const saveMutation = useMutation({
     mutationFn: async (newSettings: WidgetSettings) => {
-      return apiRequest("PATCH", "/api/widget-settings", newSettings);
+      return apiRequest("PATCH", "/api/widget-settings", stripPageRuleIds(newSettings));
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/widget-settings"] });
     },
   });
+
+  const persistWidgetSettings = useCallback(
+    (next: WidgetSettings) => {
+      saveMutation.mutate(next);
+    },
+    [saveMutation]
+  );
+
+  const schedulePageRulesDebouncedSave = useCallback(
+    (next: WidgetSettings) => {
+      clearPageRulesSaveDebounce();
+      pageRulesSaveTimerRef.current = setTimeout(() => {
+        pageRulesSaveTimerRef.current = null;
+        persistWidgetSettings(next);
+      }, 550);
+    },
+    [clearPageRulesSaveDebounce, persistWidgetSettings]
+  );
   
   const updateSettings = (updates: Partial<WidgetSettings>) => {
-    const newSettings = { ...settings, ...updates };
-    setSettings(newSettings);
-    saveMutation.mutate(newSettings);
+    clearPageRulesSaveDebounce();
+    let next!: WidgetSettings;
+    setSettings((prev) => {
+      next = { ...prev, ...updates };
+      return next;
+    });
+    persistWidgetSettings(next);
   };
   
   const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
@@ -269,24 +358,41 @@ export function WebsiteWidget() {
   };
 
   const updatePageRule = (index: number, patch: Partial<WidgetPageRule>) => {
-    const next = settings.pageRules.map((r, i) =>
-      i === index ? { ...r, ...patch } : r
-    );
-    updateSettings({ pageRules: next });
+    setSettings((prev) => {
+      const next = {
+        ...prev,
+        pageRules: prev.pageRules.map((r, i) =>
+          i === index ? { ...r, ...patch, id: r.id } : r
+        ),
+      };
+      schedulePageRulesDebouncedSave(next);
+      return next;
+    });
   };
 
   const addPageRule = () => {
-    updateSettings({
-      pageRules: [
-        ...settings.pageRules,
-        { urlContains: "", greeting: "", prefilledMessage: "" },
-      ],
+    setSettings((prev) => {
+      const next = {
+        ...prev,
+        pageRules: [
+          ...prev.pageRules,
+          { id: newRuleId(), urlContains: "", greeting: "", prefilledMessage: "" },
+        ],
+      };
+      schedulePageRulesDebouncedSave(next);
+      return next;
     });
   };
 
   const removePageRule = (index: number) => {
-    updateSettings({
-      pageRules: settings.pageRules.filter((_, i) => i !== index),
+    clearPageRulesSaveDebounce();
+    setSettings((prev) => {
+      const next = {
+        ...prev,
+        pageRules: prev.pageRules.filter((_, i) => i !== index),
+      };
+      persistWidgetSettings(next);
+      return next;
     });
   };
   
@@ -344,6 +450,88 @@ export function WebsiteWidget() {
             </CardHeader>
             <CardContent className="p-3 sm:p-4 pt-0">
               <WidgetPreview settings={settings} />
+            </CardContent>
+          </Card>
+
+          <Card className="border border-gray-200 shadow-sm overflow-hidden rounded-xl">
+            <CardHeader className="px-3 py-2 sm:px-4 sm:py-2.5 pb-0">
+              <CardTitle className="text-base sm:text-lg font-bold">Appearance</CardTitle>
+              <CardDescription className="text-[11px] sm:text-xs leading-snug">
+                Default look when no page rule overrides the greeting
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="px-3 py-2 sm:px-4 sm:pb-3 pt-2 space-y-2.5">
+              <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between md:gap-6">
+                <div className="space-y-1 min-w-0 flex-1">
+                  <Label className="text-[11px] font-semibold text-gray-600">Color</Label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {COLOR_PRESETS.map((color) => (
+                      <button
+                        type="button"
+                        key={color.value}
+                        onClick={() => updateSettings({ color: color.value })}
+                        className={cn(
+                          "w-7 h-7 sm:w-8 sm:h-8 rounded-lg border-2 transition-all shrink-0",
+                          settings.color === color.value
+                            ? "ring-2 ring-emerald-500 ring-offset-1 border-transparent"
+                            : "border-gray-200"
+                        )}
+                        style={{ backgroundColor: color.value }}
+                        title={color.name}
+                        data-testid={`color-${color.value}`}
+                      />
+                    ))}
+                    <input
+                      type="color"
+                      value={settings.color}
+                      onChange={(e) => updateSettings({ color: e.target.value })}
+                      className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg cursor-pointer border-2 border-dashed border-gray-300 bg-white shrink-0"
+                      title="Custom"
+                      data-testid="input-custom-color"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-1 w-full md:w-auto md:min-w-[148px] shrink-0">
+                  <Label className="text-[11px] font-semibold text-gray-600">Position</Label>
+                  <div className="flex p-0.5 bg-gray-100 rounded-lg max-w-xs md:max-w-none">
+                    <button
+                      type="button"
+                      onClick={() => updateSettings({ position: "left" })}
+                      className={cn(
+                        "flex-1 py-1.5 text-xs font-medium rounded-md transition-all",
+                        settings.position === "left" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500"
+                      )}
+                      data-testid="button-position-left"
+                    >
+                      Left
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => updateSettings({ position: "right" })}
+                      className={cn(
+                        "flex-1 py-1.5 text-xs font-medium rounded-md transition-all",
+                        settings.position === "right" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500"
+                      )}
+                      data-testid="button-position-right"
+                    >
+                      Right
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="welcome-message" className="text-[11px] font-semibold text-gray-600">
+                  Default greeting
+                </Label>
+                <Input
+                  id="welcome-message"
+                  value={settings.welcomeMessage}
+                  onChange={(e) => updateSettings({ welcomeMessage: e.target.value })}
+                  className="h-9 text-sm border-gray-200 rounded-lg"
+                  placeholder="Hi! How can we help?"
+                  data-testid="input-welcome-message"
+                />
+              </div>
             </CardContent>
           </Card>
 
@@ -457,7 +645,7 @@ export function WebsiteWidget() {
             <CardHeader className="p-3 sm:p-4 pb-2">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <CardTitle className="text-base sm:text-lg font-semibold">Page rules</CardTitle>
+                  <CardTitle className="text-base sm:text-lg font-semibold">Page Rules</CardTitle>
                   <CardDescription className="text-xs">
                     If the visitor&apos;s URL contains your text, use that greeting and optional prefilled message.
                     First matching rule wins.
@@ -472,7 +660,7 @@ export function WebsiteWidget() {
             <CardContent className="p-3 sm:p-4 pt-0 space-y-4">
               {settings.pageRules.map((rule, index) => (
                 <div
-                  key={`rule-${index}-${rule.urlContains}`}
+                  key={rule.id}
                   className="rounded-xl border border-gray-100 bg-gray-50/50 p-3 space-y-3"
                   data-testid={`page-rule-${index}`}
                 >
@@ -522,79 +710,6 @@ export function WebsiteWidget() {
                   </div>
                 </div>
               ))}
-            </CardContent>
-          </Card>
-
-          <Card className="border border-gray-200 shadow-sm">
-            <CardHeader className="p-3 sm:p-4 pb-2">
-              <CardTitle className="text-base sm:text-lg font-bold">Appearance</CardTitle>
-              <CardDescription className="text-xs">Default look when no page rule overrides the greeting</CardDescription>
-            </CardHeader>
-            <CardContent className="p-3 sm:p-4 pt-0 space-y-4">
-              <div className="space-y-2">
-                <Label className="text-xs font-semibold text-gray-600">Color</Label>
-                <div className="flex flex-wrap gap-2">
-                  {COLOR_PRESETS.map((color) => (
-                    <button
-                      key={color.value}
-                      onClick={() => updateSettings({ color: color.value })}
-                      className={cn(
-                        "w-8 h-8 rounded-lg border-2 transition-all",
-                        settings.color === color.value ? 'ring-2 ring-emerald-500 ring-offset-1 border-transparent' : 'border-gray-200'
-                      )}
-                      style={{ backgroundColor: color.value }}
-                      title={color.name}
-                      data-testid={`color-${color.value}`}
-                    />
-                  ))}
-                  <input
-                    type="color"
-                    value={settings.color}
-                    onChange={(e) => updateSettings({ color: e.target.value })}
-                    className="w-8 h-8 rounded-lg cursor-pointer border-2 border-dashed border-gray-300 bg-white"
-                    title="Custom"
-                    data-testid="input-custom-color"
-                  />
-                </div>
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="welcome-message" className="text-xs font-semibold text-gray-600">Default greeting</Label>
-                <Input
-                  id="welcome-message"
-                  value={settings.welcomeMessage}
-                  onChange={(e) => updateSettings({ welcomeMessage: e.target.value })}
-                  className="h-10 text-sm border-gray-200 rounded-lg"
-                  placeholder="Hi! How can we help?"
-                  data-testid="input-welcome-message"
-                />
-              </div>
-              
-              <div className="space-y-2 max-w-xs">
-                <Label className="text-xs font-semibold text-gray-600">Position</Label>
-                <div className="flex p-0.5 bg-gray-100 rounded-lg">
-                  <button
-                    onClick={() => updateSettings({ position: "left" })}
-                    className={cn(
-                      "flex-1 py-1.5 text-xs font-medium rounded-md transition-all",
-                      settings.position === "left" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500"
-                    )}
-                    data-testid="button-position-left"
-                  >
-                    Left
-                  </button>
-                  <button
-                    onClick={() => updateSettings({ position: "right" })}
-                    className={cn(
-                      "flex-1 py-1.5 text-xs font-medium rounded-md transition-all",
-                      settings.position === "right" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500"
-                    )}
-                    data-testid="button-position-right"
-                  >
-                    Right
-                  </button>
-                </div>
-              </div>
             </CardContent>
           </Card>
 
