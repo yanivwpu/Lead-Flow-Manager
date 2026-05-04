@@ -325,12 +325,8 @@ function AIBrainContent() {
       if (!res.ok) throw new Error("Failed to save settings");
       return res.json();
     },
-    onSuccess: (_data, variables) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/ai/settings"] });
-      const keys = Object.keys(variables as Record<string, unknown>);
-      if (keys.length === 1 && keys[0] === "aiMode") {
-        toast({ title: "AI mode updated." });
-      }
     },
     onError: () => {
       toast({ title: "Error", description: "Failed to save settings. Please try again.", variant: "destructive" });
@@ -547,11 +543,11 @@ function AIBrainContent() {
   
   const segmentTabClass = (selected: boolean) =>
     cn(
-      "h-9 px-3.5 rounded-lg border text-sm font-medium transition-colors duration-200",
+      "box-border h-9 min-h-[2.25rem] shrink-0 px-3.5 rounded-lg border border-solid text-sm font-medium transition-colors duration-150 ease-out",
       selected
-        ? "bg-brand-green/10 text-emerald-900 border-brand-green/45 shadow-sm shadow-brand-green/10"
+        ? "bg-brand-green/10 text-emerald-900 border-brand-green/45"
         : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-white hover:border-slate-300 hover:text-slate-900",
-      saveSettingsMutation.isPending && "opacity-60 pointer-events-none",
+      saveSettingsMutation.isPending && "pointer-events-none cursor-wait",
     );
 
   return (
