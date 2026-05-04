@@ -75,6 +75,8 @@ export interface AIComposerProps {
   className?: string;
   /** Meta reply-window hint (Inbox only); merged into composer chip bar. */
   metaReplyWindowNotice?: { variant: "soon" | "expired"; text: string } | null;
+  /** When true, Send works with empty text (attachment-only send). */
+  hasPendingAttachment?: boolean;
 }
 
 const MIN_TEXTAREA_HEIGHT = 58;
@@ -130,6 +132,7 @@ export function AIComposer({
   handoffKeywords,
   contactId = null,
   metaReplyWindowNotice = null,
+  hasPendingAttachment = false,
 }: AIComposerProps) {
   const isMobile = useIsMobile();
   // Resolve effective access from capabilities (falls back to legacy aiEnabled prop)
@@ -517,7 +520,7 @@ export function AIComposer({
     }
   };
 
-  const canSend = value.trim().length > 0;
+  const canSend = value.trim().length > 0 || !!hasPendingAttachment;
 
   const handleSendClick = () => {
     if (!canSend) return;

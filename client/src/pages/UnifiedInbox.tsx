@@ -73,6 +73,11 @@ import { analyzeConversation } from "@/lib/conversationIntelligence";
 import type { ContactContext } from "@/components/AIComposer";
 import { isConversationHandoffActive } from "@shared/handoffActivity";
 import { isMetaReplyWindowExpiredError } from "@/lib/metaReplyWindowError";
+import {
+  isMediaChannelValidationError,
+  mediaChannelValidationBubbleText,
+} from "@/lib/mediaChannelValidationError";
+import { outboundDocumentBlockHint } from "@/lib/outboundAttachmentChannelGate";
 
 type Channel = 'whatsapp' | 'instagram' | 'facebook' | 'sms' | 'webchat' | 'telegram' | 'tiktok' | 'gohighlevel' | string;
 type FilterTab = 'all' | 'unread' | 'mine';
@@ -125,8 +130,10 @@ interface Message {
   createdAt: string;
   sentViaFallback?: boolean;
   fallbackChannel?: Channel;
-  /** Set client-side when send fails with Meta reply-window policy */
-  deliveryFailureKind?: "meta_reply_window";
+  /** Set client-side when send fails with Meta reply-window policy or channel media rules */
+  deliveryFailureKind?: "meta_reply_window" | "media_validation";
+  /** User-facing line for `media_validation` (shown in bubble only, no toast). */
+  deliveryFailureInline?: string;
 }
 
 /** Prefer direct <img src> for permanent URLs (R2, app uploads); never use expiring provider CDNs. */
@@ -432,6 +439,8 @@ export function UnifiedInbox() {
     mimeType: string;
   } | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  /** Inline hint under composer (replaces toast for picker / type validation). */
+  const [filePickerHint, setFilePickerHint] = useState<string | null>(null);
 
   const [showTemplatePicker, setShowTemplatePicker] = useState(false);
   const [templateSearch, setTemplateSearch] = useState("");
@@ -443,6 +452,10 @@ export function UnifiedInbox() {
     match && params?.contactId != null && String(params.contactId).length > 0
       ? String(params.contactId)
       : null;
+
+  useEffect(() => {
+    setFilePickerHint(null);
+  }, [selectedContactId]);
 
   const {
     data: inboxData,
@@ -953,6 +966,7 @@ export function UnifiedInbox() {
     onError: (error: Error, data, context) => {
       const errMsg = error.message || "";
       const isReplyWindow = isMetaReplyWindowExpiredError(errMsg);
+      const isMediaValidation = isMediaChannelValidationError(errMsg);
 
       if (isReplyWindow && context?.conversationId) {
         const messagesKey = ["/api/conversations", context.conversationId, "messages"] as const;
@@ -984,6 +998,46 @@ export function UnifiedInbox() {
         return;
       }
 
+      if (isMediaValidation && context?.conversationId) {
+        const messagesKey = ["/api/conversations", context.conversationId, "messages"] as const;
+        const before = queryClient.getQueryData<Message[]>(messagesKey);
+        let patchIdx = -1;
+        if (before?.length) {
+          for (let i = before.length - 1; i >= 0; i--) {
+            if (before[i].id.startsWith("optimistic-") && before[i].status === "sending") {
+              patchIdx = i;
+              break;
+            }
+          }
+        }
+        if (patchIdx >= 0 && before) {
+          const next = [...before];
+          next[patchIdx] = {
+            ...next[patchIdx],
+            status: "failed",
+            deliveryFailureKind: "media_validation",
+            deliveryFailureInline: mediaChannelValidationBubbleText(errMsg),
+          };
+          queryClient.setQueryData(messagesKey, next);
+        } else if (context.previousMessages !== undefined) {
+          queryClient.setQueryData(messagesKey, context.previousMessages);
+        }
+        if (context.previousInbox !== undefined) {
+          queryClient.setQueryData(["/api/inbox"], context.previousInbox);
+        }
+        setMessageInput(data.content);
+        if (data.mediaUrl && data.mediaType) {
+          setPendingFile({
+            localPreview: data.mediaUrl,
+            mediaUrl: data.mediaUrl,
+            mediaType: String(data.mediaType),
+            mediaFilename: data.mediaFilename || "Attachment",
+            mimeType: "",
+          });
+        }
+        return;
+      }
+
       if (context?.conversationId && context.previousMessages !== undefined) {
         queryClient.setQueryData(
           ["/api/conversations", context.conversationId, "messages"],
@@ -1000,7 +1054,8 @@ export function UnifiedInbox() {
       queryClient.invalidateQueries({ queryKey: ["/api/inbox"] });
       queryClient.invalidateQueries({ queryKey: ["/api/activation-status"] });
       const errMsg = error instanceof Error ? error.message : "";
-      const skipMessagesRefresh = isMetaReplyWindowExpiredError(errMsg);
+      const skipMessagesRefresh =
+        isMetaReplyWindowExpiredError(errMsg) || isMediaChannelValidationError(errMsg);
       if (context?.conversationId && !skipMessagesRefresh) {
         queryClient.invalidateQueries({
           queryKey: ["/api/conversations", context.conversationId, "messages"],
@@ -1095,6 +1150,18 @@ export function UnifiedInbox() {
   const handleSendMessage = () => {
     if (!messageInput.trim() && !pendingFile) return;
     if (!selectedContactId) return;
+    setFilePickerHint(null);
+    if (pendingFile) {
+      const outboundChannel = clampOutboundChannel(
+        displayedOutboundChannelRef.current,
+        contactReachableChannelsRef.current
+      );
+      const docHint = outboundDocumentBlockHint(outboundChannel, pendingFile.mediaType);
+      if (docHint) {
+        setFilePickerHint(docHint);
+        return;
+      }
+    }
     if (contactReachableChannels.length === 0) {
       toast({
         title: 'Cannot send',
@@ -1155,14 +1222,27 @@ export function UnifiedInbox() {
     const file = e.target.files?.[0];
     if (!file) return;
     if (e.target) e.target.value = "";
+    setFilePickerHint(null);
 
     const mediaType = ACCEPTED_TYPES[file.type];
     if (!mediaType) {
-      toast({ title: "Unsupported file type", description: "Allowed: JPEG, PNG, WebP, PDF, MP3, M4A, OGG, MP4", variant: "destructive" });
+      setFilePickerHint(
+        "That file type is not supported here. Use JPEG, PNG, WebP, PDF, MP3, M4A, OGG, or MP4.",
+      );
       return;
     }
     if (file.size > 16 * 1024 * 1024) {
-      toast({ title: "File too large", description: "Maximum file size is 16 MB", variant: "destructive" });
+      setFilePickerHint("This file is too large. Maximum size is 16 MB.");
+      return;
+    }
+
+    const outboundChannel = clampOutboundChannel(
+      displayedOutboundChannelRef.current,
+      contactReachableChannelsRef.current
+    );
+    const docHint = outboundDocumentBlockHint(outboundChannel, mediaType);
+    if (docHint) {
+      setFilePickerHint(docHint);
       return;
     }
 
@@ -1179,6 +1259,7 @@ export function UnifiedInbox() {
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Upload failed");
+      setFilePickerHint(null);
       setPendingFile({
         localPreview,
         mediaUrl: json.mediaUrl,
@@ -1824,6 +1905,18 @@ export function UnifiedInbox() {
                           isSending && "opacity-75"
                         )}>
                           {(() => {
+                            if (
+                              isOut &&
+                              msg.status === "failed" &&
+                              msg.deliveryFailureKind === "media_validation" &&
+                              msg.deliveryFailureInline
+                            ) {
+                              return (
+                                <p className="leading-snug text-sm text-gray-800">
+                                  {msg.deliveryFailureInline}
+                                </p>
+                              );
+                            }
                             const hasMedia = !!(msg.mediaUrl || msg.mediaFilename);
                             const isOptimistic = msg.id.startsWith('optimistic-');
                             const proxyUrl = `/api/media/proxy?messageId=${encodeURIComponent(msg.id)}`;
@@ -1900,7 +1993,8 @@ export function UnifiedInbox() {
                               isSending
                                 ? <Loader2 className="w-2.5 h-2.5 text-gray-400 animate-spin" />
                                 : msg.status === 'failed'
-                                  ? msg.deliveryFailureKind === 'meta_reply_window'
+                                  ? msg.deliveryFailureKind === 'meta_reply_window' ||
+                                      msg.deliveryFailureKind === 'media_validation'
                                     ? null
                                     : <span className="text-[10px] text-red-500 font-medium">Not sent</span>
                                   : <span className="text-[10px] text-gray-400">
@@ -1908,7 +2002,9 @@ export function UnifiedInbox() {
                                     </span>
                             )}
                           </div>
-                          {isOut && msg.status === 'failed' && (
+                          {isOut &&
+                            msg.status === "failed" &&
+                            msg.deliveryFailureKind !== "media_validation" && (
                             <div
                               className={cn(
                                 "mt-0.5 text-right space-y-0.5",
@@ -1924,8 +2020,10 @@ export function UnifiedInbox() {
                                     You can reply after the customer messages you again or use an approved message template.
                                   </p>
                                 </>
-                              ) : (
-                                <p className="text-[10px] text-red-600/90">Delivery failed — check channel settings</p>
+                              ) : msg.deliveryFailureKind === "media_validation" ? null : (
+                                <p className="text-[10px] text-gray-600 leading-snug">
+                                  Couldn&apos;t send this message. Check your connection or try again.
+                                </p>
                               )}
                             </div>
                           )}
@@ -1951,6 +2049,13 @@ export function UnifiedInbox() {
                 </button>
               )}
             </div>
+
+            {filePickerHint && (
+              <div className="border-t border-amber-100 bg-amber-50/70 px-4 py-2.5 text-xs text-gray-800 flex gap-2 items-start shrink-0">
+                <AlertCircle className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" aria-hidden />
+                <span>{filePickerHint}</span>
+              </div>
+            )}
 
             {/* File preview strip */}
             {(pendingFile || isUploading) && (
@@ -1979,7 +2084,11 @@ export function UnifiedInbox() {
                     )}
                     <button
                       data-testid="button-remove-attachment"
-                      onClick={() => { setPendingFile(null); URL.revokeObjectURL(pendingFile.localPreview); }}
+                      onClick={() => {
+                        setPendingFile(null);
+                        setFilePickerHint(null);
+                        URL.revokeObjectURL(pendingFile.localPreview);
+                      }}
                       className="ml-auto p-1 rounded-full hover:bg-gray-200 text-gray-500"
                       title="Remove attachment"
                     >
@@ -2013,6 +2122,7 @@ export function UnifiedInbox() {
               fileInputRef={fileInputRef}
               handleFileSelect={handleFileSelect}
               metaReplyWindowNotice={metaComposerWindowNotice}
+              hasPendingAttachment={!!pendingFile}
             />
           </>
         ) : (
