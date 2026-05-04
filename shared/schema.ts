@@ -93,6 +93,17 @@ export const users = pgTable("users", {
   metaAppSecret: text("meta_app_secret"),
   metaWebhookVerifyToken: text("meta_webhook_verify_token"),
   metaConnected: boolean("meta_connected").default(false),
+  /** embedded_signup | coexistence | manual_legacy — how Meta WhatsApp was connected */
+  metaConnectionType: text("meta_connection_type"),
+  metaTokenExpiresAt: timestamp("meta_token_expires_at"),
+  metaWebhookSubscribed: boolean("meta_webhook_subscribed").default(false),
+  metaWebhookLastCheckedAt: timestamp("meta_webhook_last_checked_at"),
+  /** connected | needs_attention | failed | disconnected | pending */
+  metaIntegrationStatus: text("meta_integration_status"),
+  metaLastErrorCode: text("meta_last_error_code"),
+  metaLastErrorMessage: text("meta_last_error_message"),
+  metaDisplayPhoneNumber: text("meta_display_phone_number"),
+  metaVerifiedName: text("meta_verified_name"),
   // Active provider selection
   whatsappProvider: text("whatsapp_provider").default("twilio"), // 'twilio' or 'meta'
   // Subscription fields
@@ -146,6 +157,17 @@ export const users = pgTable("users", {
   createdAt: timestamp("created_at").defaultNow(),
   // Trial re-engagement email tracking
   checkinEmailSent: boolean("checkin_email_sent").default(false),
+});
+
+/** CSRF state for Meta WhatsApp Embedded Signup OAuth (short-lived). */
+export const whatsappOauthStates = pgTable("whatsapp_oauth_states", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  stateToken: text("state_token").notNull().unique(),
+  /** embedded | coexistence */
+  flow: text("flow").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  expiresAt: timestamp("expires_at").notNull(),
 });
 
 export const chats = pgTable("chats", {

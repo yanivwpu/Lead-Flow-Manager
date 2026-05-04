@@ -1,4 +1,6 @@
-const GRAPH = "https://graph.facebook.com/v19.0";
+import { getMetaGraphApiBase, getMetaFacebookOAuthDialogBase } from "./metaGraphVersion";
+
+const GRAPH = () => getMetaGraphApiBase();
 
 // ── Facebook Messenger / Pages flow ──────────────────────────────────────────
 // Only the three permissions needed for Messenger webhooks + messaging.
@@ -55,7 +57,7 @@ export function buildMetaOAuthUrl(state: string, redirectUri: string, channel: "
   console.log(`[Meta OAuth] Building auth URL — channel: ${channel}, scopes: ${scopes}`);
 
   return (
-    `https://www.facebook.com/dialog/oauth` +
+    `${getMetaFacebookOAuthDialogBase()}` +
     `?client_id=${encodeURIComponent(appId)}` +
     `&redirect_uri=${encodeURIComponent(redirectUri)}` +
     `&scope=${encodeURIComponent(scopes)}` +
@@ -68,7 +70,7 @@ export async function exchangeCodeForToken(code: string, redirectUri: string): P
   const appId = process.env.META_APP_ID!;
   const appSecret = process.env.META_APP_SECRET!;
   const url =
-    `${GRAPH}/oauth/access_token` +
+    `${GRAPH()}/oauth/access_token` +
     `?client_id=${encodeURIComponent(appId)}` +
     `&client_secret=${encodeURIComponent(appSecret)}` +
     `&redirect_uri=${encodeURIComponent(redirectUri)}` +
@@ -82,23 +84,39 @@ export async function exchangeCodeForToken(code: string, redirectUri: string): P
 }
 
 export async function exchangeForLongLivedToken(shortToken: string): Promise<string> {
+  const r = await exchangeForLongLivedUserToken(shortToken);
+  return r.accessToken;
+}
+
+/** Long-lived user token exchange; includes expiry when Meta returns `expires_in`. */
+export async function exchangeForLongLivedUserToken(shortToken: string): Promise<{
+  accessToken: string;
+  expiresAt: Date | null;
+}> {
   const appId = process.env.META_APP_ID!;
   const appSecret = process.env.META_APP_SECRET!;
   const url =
-    `${GRAPH}/oauth/access_token` +
+    `${GRAPH()}/oauth/access_token` +
     `?grant_type=fb_exchange_token` +
     `&client_id=${encodeURIComponent(appId)}` +
     `&client_secret=${encodeURIComponent(appSecret)}` +
     `&fb_exchange_token=${encodeURIComponent(shortToken)}`;
   const resp = await fetch(url);
   const data = (await resp.json()) as any;
-  if (!resp.ok || !data.access_token) return shortToken; // Non-fatal — keep short-lived
-  return data.access_token as string;
+  if (!resp.ok || !data.access_token) {
+    return { accessToken: shortToken, expiresAt: null };
+  }
+  const expiresIn = data.expires_in;
+  let expiresAt: Date | null = null;
+  if (typeof expiresIn === "number" && expiresIn > 0) {
+    expiresAt = new Date(Date.now() + expiresIn * 1000);
+  }
+  return { accessToken: data.access_token as string, expiresAt };
 }
 
 export async function fetchUserPages(userToken: string): Promise<MetaPage[]> {
   // First debug the token to understand what permissions were actually granted
-  const debugUrl = `${GRAPH}/debug_token?input_token=${encodeURIComponent(userToken)}&access_token=${encodeURIComponent(process.env.META_APP_ID + '|' + process.env.META_APP_SECRET)}`;
+  const debugUrl = `${GRAPH()}/debug_token?input_token=${encodeURIComponent(userToken)}&access_token=${encodeURIComponent(process.env.META_APP_ID + '|' + process.env.META_APP_SECRET)}`;
   try {
     const debugResp = await fetch(debugUrl);
     const debugData = (await debugResp.json()) as any;
@@ -115,7 +133,7 @@ export async function fetchUserPages(userToken: string): Promise<MetaPage[]> {
 
   // --- Try /me/accounts first (works for pages directly administered by the personal FB account) ---
   const url =
-    `${GRAPH}/me/accounts` +
+    `${GRAPH()}/me/accounts` +
     `?fields=id,name,category,picture,access_token` +
     `&access_token=${encodeURIComponent(userToken)}` +
     `&limit=50`;
@@ -140,7 +158,7 @@ export async function fetchUserPages(userToken: string): Promise<MetaPage[]> {
   console.log('[Meta OAuth] /me/accounts returned 0 pages — trying Business Portfolio API fallback');
   try {
     const bizResp = await fetch(
-      `${GRAPH}/me/businesses?fields=id,name&access_token=${encodeURIComponent(userToken)}&limit=10`
+      `${GRAPH()}/me/businesses?fields=id,name&access_token=${encodeURIComponent(userToken)}&limit=10`
     );
     const bizData = (await bizResp.json()) as any;
     console.log('[Meta OAuth] /me/businesses response:', JSON.stringify({
@@ -154,7 +172,7 @@ export async function fetchUserPages(userToken: string): Promise<MetaPage[]> {
       for (const biz of bizData.data) {
         try {
           const pagesResp = await fetch(
-            `${GRAPH}/${biz.id}/owned_pages?fields=id,name,category,picture,access_token&access_token=${encodeURIComponent(userToken)}&limit=50`
+            `${GRAPH()}/${biz.id}/owned_pages?fields=id,name,category,picture,access_token&access_token=${encodeURIComponent(userToken)}&limit=50`
           );
           const pagesData = (await pagesResp.json()) as any;
           console.log(`[Meta OAuth] Business ${biz.id} owned_pages:`, JSON.stringify({
@@ -198,7 +216,7 @@ export async function enrichWithInstagramData(pages: MetaPage[], userAccessToken
   // Helper: fetch IG profile (id + username) given an IG account ID and a page token
   async function fetchIgProfile(igId: string, token: string): Promise<{ id: string; username?: string }> {
     try {
-      const r = await fetch(`${GRAPH}/${igId}?fields=id,username&access_token=${encodeURIComponent(token)}`);
+      const r = await fetch(`${GRAPH()}/${igId}?fields=id,username&access_token=${encodeURIComponent(token)}`);
       const d = (await r.json()) as any;
       return { id: igId, username: (d.username as string) || undefined };
     } catch {
@@ -212,7 +230,7 @@ export async function enrichWithInstagramData(pages: MetaPage[], userAccessToken
         // Attempt 1: instagram_business_account (Business accounts)
         // Attempt 2: connected_instagram_account (Creator accounts)
         const resp = await fetch(
-          `${GRAPH}/${page.id}?fields=instagram_business_account,connected_instagram_account&access_token=${encodeURIComponent(page.accessToken)}`
+          `${GRAPH()}/${page.id}?fields=instagram_business_account,connected_instagram_account&access_token=${encodeURIComponent(page.accessToken)}`
         );
         const data = (await resp.json()) as any;
         const igId: string | undefined =
@@ -243,7 +261,7 @@ export async function enrichWithInstagramData(pages: MetaPage[], userAccessToken
     console.log('[Meta OAuth] enrichWithInstagramData — no IG found via page tokens; trying user-level /me/accounts with IG fields');
     try {
       const r = await fetch(
-        `${GRAPH}/me/accounts?fields=id,name,access_token,instagram_business_account,connected_instagram_account&access_token=${encodeURIComponent(userAccessToken)}&limit=50`
+        `${GRAPH()}/me/accounts?fields=id,name,access_token,instagram_business_account,connected_instagram_account&access_token=${encodeURIComponent(userAccessToken)}&limit=50`
       );
       const d = (await r.json()) as any;
       console.log('[Meta OAuth] enrichWithInstagramData — user /me/accounts with IG fields:', JSON.stringify({
@@ -281,7 +299,7 @@ export async function enrichWithInstagramData(pages: MetaPage[], userAccessToken
     console.log('[Meta OAuth] enrichWithInstagramData — Attempt 4: Business Manager instagram_accounts edge');
     try {
       const bizResp = await fetch(
-        `${GRAPH}/me/businesses?fields=id,name&access_token=${encodeURIComponent(userAccessToken)}&limit=10`
+        `${GRAPH()}/me/businesses?fields=id,name&access_token=${encodeURIComponent(userAccessToken)}&limit=10`
       );
       const bizData = (await bizResp.json()) as any;
       console.log('[Meta OAuth] enrichWithInstagramData — /me/businesses:', JSON.stringify({
@@ -298,7 +316,7 @@ export async function enrichWithInstagramData(pages: MetaPage[], userAccessToken
           for (const edge of ['owned_instagram_accounts', 'client_instagram_accounts'] as const) {
             try {
               const igResp = await fetch(
-                `${GRAPH}/${biz.id}/${edge}?fields=id,username&access_token=${encodeURIComponent(userAccessToken)}&limit=10`
+                `${GRAPH()}/${biz.id}/${edge}?fields=id,username&access_token=${encodeURIComponent(userAccessToken)}&limit=10`
               );
               const igData = (await igResp.json()) as any;
               console.log(`[Meta OAuth] enrichWithInstagramData — Business ${biz.id} ${edge}:`, JSON.stringify({
@@ -333,7 +351,7 @@ export async function enrichWithInstagramData(pages: MetaPage[], userAccessToken
             for (const ig of allBizIgAccounts) {
               try {
                 const connResp = await fetch(
-                  `${GRAPH}/${ig.id}?fields=connected_page&access_token=${encodeURIComponent(enriched[i].accessToken)}`
+                  `${GRAPH()}/${ig.id}?fields=connected_page&access_token=${encodeURIComponent(enriched[i].accessToken)}`
                 );
                 const connData = (await connResp.json()) as any;
                 const connectedPageId = connData?.connected_page?.id;
@@ -377,11 +395,11 @@ export async function connectPage(
   // This uses app-level credentials (APP_ID|APP_SECRET), so it requires NO page permissions.
   // It is the correct Meta-compliant way to inspect any token.
   const appToken = `${process.env.META_APP_ID}|${process.env.META_APP_SECRET}`;
-  const debugEndpoint = `${GRAPH}/debug_token?input_token=<page_token>&access_token=<app_token>`;
+  const debugEndpoint = `${GRAPH()}/debug_token?input_token=<page_token>&access_token=<app_token>`;
   console.log(`[MetaOAuth] Step 1: GET ${debugEndpoint}`);
   try {
     const debugResp = await fetch(
-      `${GRAPH}/debug_token` +
+      `${GRAPH()}/debug_token` +
       `?input_token=${encodeURIComponent(page.accessToken)}` +
       `&access_token=${encodeURIComponent(appToken)}`
     );
@@ -448,7 +466,7 @@ export async function connectPage(
           "messages,messaging_postbacks",
           "messages",
         ];
-  const subEndpoint = `${GRAPH}/${page.id}/subscribed_apps`;
+  const subEndpoint = `${GRAPH()}/${page.id}/subscribed_apps`;
   console.log(`[MetaOAuth] Step 3: POST ${subEndpoint} subscribed_fields candidates=${trySubscribedFields.join(" | ")}`);
   try {
     for (const subscribedFields of trySubscribedFields) {
@@ -489,11 +507,11 @@ export async function connectPage(
   let instagramAccountId = page.instagramAccountId;
   let instagramUsername = page.instagramUsername;
   if (channel === "instagram" && !instagramAccountId) {
-    const igEndpoint = `${GRAPH}/${page.id}?fields=instagram_business_account,connected_instagram_account`;
+    const igEndpoint = `${GRAPH()}/${page.id}?fields=instagram_business_account,connected_instagram_account`;
     console.log(`[MetaOAuth] Step 4: GET ${igEndpoint}`);
     try {
       const igPageResp = await fetch(
-        `${GRAPH}/${page.id}?fields=instagram_business_account,connected_instagram_account&access_token=${encodeURIComponent(page.accessToken)}`
+        `${GRAPH()}/${page.id}?fields=instagram_business_account,connected_instagram_account&access_token=${encodeURIComponent(page.accessToken)}`
       );
       const igPageData = (await igPageResp.json()) as any;
       const detectedIgId: string | undefined =
@@ -510,7 +528,7 @@ export async function connectPage(
       if (igPageResp.ok && detectedIgId) {
         instagramAccountId = detectedIgId;
         const igResp = await fetch(
-          `${GRAPH}/${instagramAccountId}?fields=id,username&access_token=${encodeURIComponent(page.accessToken)}`
+          `${GRAPH()}/${instagramAccountId}?fields=id,username&access_token=${encodeURIComponent(page.accessToken)}`
         );
         const igData = (await igResp.json()) as any;
         instagramUsername = (igData.username as string) || undefined;

@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import { storage } from "./storage";
 import type { User, Chat } from "@shared/schema";
+import { getMetaGraphApiBase } from "./metaGraphVersion";
 
 export interface WhatsAppMessage {
   id: string;
@@ -14,7 +15,6 @@ export interface WhatsAppMessage {
 
 const ENCRYPTION_KEY = process.env.META_ENCRYPTION_KEY || process.env.SESSION_SECRET || "default-encryption-key-change-in-production";
 const ALGORITHM = "aes-256-gcm";
-const META_GRAPH_API_URL = "https://graph.facebook.com/v19.0";
 
 function getEncryptionKey(): Buffer {
   return crypto.scryptSync(ENCRYPTION_KEY, "salt", 32);
@@ -62,6 +62,16 @@ export interface MetaCredentials {
   webhookVerifyToken?: string;
 }
 
+/** Extra columns when connecting via Embedded Signup vs manual paste. */
+export interface MetaConnectExtras {
+  connectionType?: "embedded_signup" | "coexistence" | "manual_legacy";
+  displayPhoneNumber?: string | null;
+  verifiedName?: string | null;
+  tokenExpiresAt?: Date | null;
+  webhookSubscribed?: boolean;
+  metaIntegrationStatus?: string;
+}
+
 export async function getMetaAccessToken(userId: string): Promise<string | null> {
   const user = await storage.getUser(userId);
   if (!user || !user.metaAccessToken || !user.metaConnected) {
@@ -88,11 +98,21 @@ export async function verifyMetaConnection(userId: string): Promise<boolean> {
 
   try {
     const response = await fetch(
-      `${META_GRAPH_API_URL}/${phoneNumberId}?access_token=${accessToken}`
+      `${getMetaGraphApiBase()}/${phoneNumberId}?access_token=${accessToken}`
     );
     
     if (!response.ok) {
-      console.error("Meta connection verification failed:", await response.text());
+      let errCode: unknown;
+      try {
+        const body = (await response.json()) as { error?: { code?: number; message?: string } };
+        errCode = body?.error?.code;
+      } catch {
+        /* ignore body parse errors */
+      }
+      console.error("Meta connection verification failed:", {
+        status: response.status,
+        errorCode: errCode,
+      });
       return false;
     }
     
@@ -106,7 +126,7 @@ export async function verifyMetaConnection(userId: string): Promise<boolean> {
 export async function validateMetaCredentials(credentials: MetaCredentials): Promise<{ valid: boolean; error?: string; phoneNumber?: string }> {
   try {
     const response = await fetch(
-      `${META_GRAPH_API_URL}/${credentials.phoneNumberId}?fields=display_phone_number,verified_name,quality_rating&access_token=${credentials.accessToken}`
+      `${getMetaGraphApiBase()}/${credentials.phoneNumberId}?fields=display_phone_number,verified_name,quality_rating&access_token=${credentials.accessToken}`
     );
 
     if (!response.ok) {
@@ -132,7 +152,8 @@ export async function validateMetaCredentials(credentials: MetaCredentials): Pro
 
 export async function connectUserMeta(
   userId: string,
-  credentials: MetaCredentials
+  credentials: MetaCredentials,
+  extras?: MetaConnectExtras
 ): Promise<{ success: boolean; error?: string; phoneNumber?: string }> {
   const validation = await validateMetaCredentials(credentials);
   if (!validation.valid) {
@@ -141,8 +162,14 @@ export async function connectUserMeta(
 
   const encryptedAccessToken = encryptCredential(credentials.accessToken);
   const encryptedAppSecret = credentials.appSecret ? encryptCredential(credentials.appSecret) : null;
-  const webhookVerifyToken = credentials.webhookVerifyToken || crypto.randomBytes(32).toString('hex');
+  const globalVerify = process.env.META_WEBHOOK_VERIFY_TOKEN;
+  const webhookVerifyToken =
+    credentials.webhookVerifyToken ||
+    (extras?.connectionType === "embedded_signup" || extras?.connectionType === "coexistence"
+      ? globalVerify || crypto.randomBytes(32).toString("hex")
+      : crypto.randomBytes(32).toString("hex"));
 
+  const now = new Date();
   await storage.updateUser(userId, {
     metaAccessToken: encryptedAccessToken,
     metaPhoneNumberId: credentials.phoneNumberId,
@@ -151,6 +178,15 @@ export async function connectUserMeta(
     metaWebhookVerifyToken: webhookVerifyToken,
     metaConnected: true,
     whatsappProvider: "meta",
+    metaConnectionType: extras?.connectionType ?? "manual_legacy",
+    metaDisplayPhoneNumber: extras?.displayPhoneNumber ?? validation.phoneNumber ?? null,
+    metaVerifiedName: extras?.verifiedName ?? null,
+    metaTokenExpiresAt: extras?.tokenExpiresAt ?? null,
+    metaWebhookSubscribed: extras?.webhookSubscribed ?? false,
+    metaWebhookLastCheckedAt: extras?.webhookSubscribed ? now : null,
+    metaIntegrationStatus: extras?.metaIntegrationStatus ?? "connected",
+    metaLastErrorCode: null,
+    metaLastErrorMessage: null,
   });
 
   return { success: true, phoneNumber: validation.phoneNumber };
@@ -158,12 +194,6 @@ export async function connectUserMeta(
 
 export async function disconnectUserMeta(userId: string): Promise<void> {
   const user = await storage.getUser(userId);
-  
-  console.log('[disconnectUserMeta] Starting disconnect for user:', userId, {
-    currentProvider: user?.whatsappProvider,
-    metaConnected: user?.metaConnected,
-    twilioConnected: user?.twilioConnected,
-  });
   
   // Determine the provider after disconnect:
   // - If Twilio is connected, switch to it
@@ -178,6 +208,15 @@ export async function disconnectUserMeta(userId: string): Promise<void> {
     metaWebhookVerifyToken: null,
     metaConnected: false,
     whatsappProvider: newProvider,
+    metaConnectionType: null,
+    metaTokenExpiresAt: null,
+    metaWebhookSubscribed: false,
+    metaWebhookLastCheckedAt: null,
+    metaIntegrationStatus: "disconnected",
+    metaLastErrorCode: null,
+    metaLastErrorMessage: null,
+    metaDisplayPhoneNumber: null,
+    metaVerifiedName: null,
   });
   
   // Update channel settings to reflect connection state
@@ -186,17 +225,9 @@ export async function disconnectUserMeta(userId: string): Promise<void> {
     await storage.upsertChannelSetting(userId, 'whatsapp', {
       isConnected: user?.twilioConnected || false,
     });
-    console.log('[disconnectUserMeta] Channel settings updated, isConnected:', user?.twilioConnected || false);
   } catch (error) {
     console.error('[disconnectUserMeta] Failed to update channel settings:', error);
   }
-  
-  console.log('[disconnectUserMeta] Meta disconnected successfully, new state:', {
-    whatsappProvider: newProvider,
-    metaConnected: false,
-    twilioConnected: user?.twilioConnected || false,
-    whatsappIsConnected: user?.twilioConnected || false,
-  });
 }
 
 export async function switchProvider(userId: string, provider: "twilio" | "meta"): Promise<{ success: boolean; error?: string }> {
@@ -232,7 +263,7 @@ export async function sendMetaWhatsAppMessage(
   const normalizedPhone = toPhone.replace(/[^\d]/g, "");
 
   const response = await fetch(
-    `${META_GRAPH_API_URL}/${phoneNumberId}/messages`,
+    `${getMetaGraphApiBase()}/${phoneNumberId}/messages`,
     {
       method: "POST",
       headers: {
@@ -299,7 +330,7 @@ export async function sendMetaWhatsAppMedia(
   );
 
   const response = await fetch(
-    `${META_GRAPH_API_URL}/${phoneNumberId}/messages`,
+    `${getMetaGraphApiBase()}/${phoneNumberId}/messages`,
     {
       method: "POST",
       headers: {
@@ -363,7 +394,7 @@ export async function sendMetaWhatsAppTemplate(
   }
 
   const response = await fetch(
-    `${META_GRAPH_API_URL}/${phoneNumberId}/messages`,
+    `${getMetaGraphApiBase()}/${phoneNumberId}/messages`,
     {
       method: "POST",
       headers: {
@@ -408,7 +439,7 @@ export async function sendMetaInteractiveMessage(
   const normalizedPhone = toPhone.replace(/[^\d]/g, "");
 
   const response = await fetch(
-    `${META_GRAPH_API_URL}/${phoneNumberId}/messages`,
+    `${getMetaGraphApiBase()}/${phoneNumberId}/messages`,
     {
       method: "POST",
       headers: {
@@ -453,7 +484,7 @@ export async function markMessageAsRead(
 
   try {
     const response = await fetch(
-      `${META_GRAPH_API_URL}/${phoneNumberId}/messages`,
+      `${getMetaGraphApiBase()}/${phoneNumberId}/messages`,
       {
         method: "POST",
         headers: {
@@ -485,7 +516,7 @@ export async function getMetaMessageTemplates(
   }
 
   const response = await fetch(
-    `${META_GRAPH_API_URL}/${user.metaBusinessAccountId}/message_templates?fields=id,name,status,language,category,components&limit=100&access_token=${accessToken}`
+    `${getMetaGraphApiBase()}/${user.metaBusinessAccountId}/message_templates?fields=id,name,status,language,category,components&limit=100&access_token=${accessToken}`
   );
 
   if (!response.ok) {
@@ -665,9 +696,17 @@ export async function findUserByMetaPhoneNumberId(phoneNumberId: string): Promis
   const { users } = await import("@shared/schema");
   const { eq } = await import("drizzle-orm");
 
-  const result = await db.select().from(users).where(
-    eq(users.metaPhoneNumberId, phoneNumberId)
-  );
+  const result = await db
+    .select()
+    .from(users)
+    .where(eq(users.metaPhoneNumberId, phoneNumberId))
+    .limit(2);
+
+  if (result.length > 1) {
+    console.warn(
+      `[Meta WhatsApp] Multiple users share metaPhoneNumberId=${phoneNumberId}; using the first match. Assign unique phone number IDs per tenant.`
+    );
+  }
 
   return result[0];
 }
@@ -681,7 +720,7 @@ export async function getMediaUrl(
 
   try {
     const response = await fetch(
-      `${META_GRAPH_API_URL}/${mediaId}?access_token=${accessToken}`
+      `${getMetaGraphApiBase()}/${mediaId}?access_token=${accessToken}`
     );
 
     if (!response.ok) return null;

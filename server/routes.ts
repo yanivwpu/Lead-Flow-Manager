@@ -38,6 +38,7 @@ import {
   type WhatsAppMessage,
   type TwilioCredentials,
 } from "./userTwilio";
+import { getAccessTokenExpiryFromDebug } from "./whatsappEmbeddedSignup";
 import {
   sendMetaWhatsAppMessage,
   connectUserMeta,
@@ -96,6 +97,7 @@ import { pushLeadsToHubSpot } from "./hubspotSync";
 
 import { registerTemplateRoutes } from "./templateRoutes";
 import { registerMediaRoutes } from "./routes/media";
+import { registerWhatsappIntegrationRoutes } from "./routes/whatsappIntegrationRoutes";
 
 const TWILIO_BASE_COST_PER_MESSAGE = 0.005;
 const MARKUP_PERCENT = 5;
@@ -1697,7 +1699,17 @@ export async function registerRoutes(
         webhookVerifyToken,
       };
 
-      const result = await connectUserMeta(req.user.id, credentials);
+      let tokenExpiresAt: Date | null = null;
+      try {
+        tokenExpiresAt = await getAccessTokenExpiryFromDebug(accessToken);
+      } catch {
+        /* expiration hint is optional for legacy manual tokens */
+      }
+
+      const result = await connectUserMeta(req.user.id, credentials, {
+        connectionType: "manual_legacy",
+        tokenExpiresAt,
+      });
 
       if (!result.success) {
         return res.status(400).json({ error: result.error });
@@ -8367,6 +8379,7 @@ export async function registerRoutes(
 
   // ============= ROUTE MODULES =============
   registerMediaRoutes(app);
+  registerWhatsappIntegrationRoutes(app);
   registerContactRoutes(app);
   registerConversationRoutes(app);
   registerChannelRoutes(app);
