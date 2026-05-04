@@ -1110,5 +1110,36 @@
       "startFree": "התחל בחינם",
       "talkSales": "שוחח עם צוות המכירות"
     }
+  },
+  "unifiedInbox": {
+    "emptyNoChannelsTitle": "עדיין לא חיברת ערוצים",
+    "emptyNoChannelsHint": "חבר את WhatsApp או Meta כדי לקבל כאן שיחות.",
+    "connectWhatsAppCta": "חיבור WhatsApp"
+  },
+  "trial": {
+    "modal": {
+      "title": "אתה ב-Pro + AI Trial 🚀",
+      "subtitle": "14 ימים לחוות את כוח האוטומציה המלא",
+      "daysLeft_one": "נותר יום אחד בניסיון שלך.",
+      "daysLeft_other": "נותרו {{count}} ימים בניסיון שלך.",
+      "bullet1": "הצעות תגובה עם AI ותיבת דואר נכנס ידידותית לאוטומציה",
+      "bullet2": "הסמכת לידים, ניקוד וזרימות מוכנות ל-Growth Engine",
+      "bullet3": "מגבלות שיחה גבוהות יותר ותכונות CRM של Pro",
+      "bullet4": "בונה זרימות ואוטומציה מלא במהלך הניסיון",
+      "footerNote": "לאחר הניסיון החשבון עובר ל-Free אלא אם משדרגים. הנתונים נשארים בטוחים, אך אוטומציות Pro ו-AI עשויות להיעצר עד להרשמה.",
+      "ctaUnlock": "פתיחת Pro + AI לצמיתות",
+      "ctaViewPlans": "צפה בתוכניות"
+    },
+    "pill": {
+      "badge": "Pro + AI Trial",
+      "daysLeftCompact": "נותרו {{days}} ימים"
+    }
+  },
+  "activation": {
+    "title": "בוא נכין אותך לעבודה",
+    "description": "חבר את הערוץ הראשון שלך כדי להתחיל שיחות",
+    "connectWhatsApp": "חיבור WhatsApp",
+    "connectInstagram": "חיבור Instagram",
+    "connectFacebook": "חיבור Facebook"
   }
 }

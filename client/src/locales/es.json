@@ -1020,5 +1020,36 @@
       "startFree": "Empezar Gratis",
       "talkSales": "Hablar con Ventas"
     }
+  },
+  "unifiedInbox": {
+    "emptyNoChannelsTitle": "Aún no hay canales conectados",
+    "emptyNoChannelsHint": "Conecta WhatsApp o Meta para recibir conversaciones aquí.",
+    "connectWhatsAppCta": "Conectar WhatsApp"
+  },
+  "trial": {
+    "modal": {
+      "title": "Estás en Pro + AI Trial 🚀",
+      "subtitle": "14 días para experimentar el poder completo de la automatización",
+      "daysLeft_one": "Te queda {{count}} día de prueba.",
+      "daysLeft_other": "Te quedan {{count}} días de prueba.",
+      "bullet1": "Sugerencias de respuesta con IA y bandeja preparada para automatización",
+      "bullet2": "Calificación de leads, puntuación y flujos listos para Growth Engine",
+      "bullet3": "Límites de conversación más altos y funciones CRM Pro",
+      "bullet4": "Constructor completo de flujos y automatización durante la prueba",
+      "footerNote": "Después de la prueba, tu cuenta pasará a Free salvo que actualices. Tus datos permanecen seguros, pero las automatizaciones Pro y AI pueden pausarse hasta que te suscribas.",
+      "ctaUnlock": "Desbloquear Pro + AI de forma permanente",
+      "ctaViewPlans": "Ver planes"
+    },
+    "pill": {
+      "badge": "Pro + AI Trial",
+      "daysLeftCompact": "{{days}}d restantes"
+    }
+  },
+  "activation": {
+    "title": "Configuremos todo para ti",
+    "description": "Conecta tu primer canal para empezar las conversaciones",
+    "connectWhatsApp": "Conectar WhatsApp",
+    "connectInstagram": "Conectar Instagram",
+    "connectFacebook": "Conectar Facebook"
   }
 }
