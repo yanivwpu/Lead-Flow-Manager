@@ -1,24 +1,24 @@
 import { useEffect, useState } from "react";
 import { useRoute } from "wouter";
 import { Loader2 } from "lucide-react";
+import { WebchatWidget } from "@/pages/WidgetFrame";
 
+/**
+ * Full-page hosted chat at `/chat/:widgetId`.
+ * Uses the same WebchatWidget as the iframe embed; passes the page URL so the API can
+ * resolve `pageRules` (when the hosted URL contains the rule fragment) and default greeting/prefill.
+ * Does not load `/widget.js` — the floating script is for third-party sites only.
+ */
 export function WidgetChat() {
   const [match, params] = useRoute("/chat/:widgetId");
-  const [isLoading, setIsLoading] = useState(true);
-  const [source, setSource] = useState<string | null>(null);
+  const widgetId = params?.widgetId;
+  const [pageHref, setPageHref] = useState<string | null>(null);
 
   useEffect(() => {
-    if (params?.widgetId) {
-      const urlParams = new URLSearchParams(window.location.search);
-      const sourceParam = urlParams.get("source");
-      if (sourceParam) {
-        setSource(sourceParam);
-      }
-      setIsLoading(false);
-    }
-  }, [params?.widgetId]);
+    setPageHref(window.location.href);
+  }, []);
 
-  if (!match || !params?.widgetId) {
+  if (!match || !widgetId) {
     return (
       <div className="flex h-screen items-center justify-center bg-gray-50">
         <div className="text-center">
@@ -28,56 +28,13 @@ export function WidgetChat() {
     );
   }
 
-  if (isLoading) {
+  if (pageHref === null) {
     return (
       <div className="flex h-screen items-center justify-center bg-gray-50">
-        <Loader2 className="h-8 w-8 text-brand-green animate-spin" />
+        <Loader2 className="h-8 w-8 animate-spin text-emerald-600" aria-label="Loading chat" />
       </div>
     );
   }
 
-  return (
-    <div className="h-screen w-screen bg-white flex flex-col">
-      <div className="bg-brand-green text-white px-4 py-4">
-        <h1 className="font-semibold">Chat with us</h1>
-        <p className="text-sm opacity-90">We're here to help. Message us anytime!</p>
-      </div>
-
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <div className="flex-1 overflow-y-auto bg-gray-50 p-4 space-y-3">
-          <div className="flex justify-start">
-            <div className="max-w-xs bg-gray-200 text-gray-900 rounded-xl px-4 py-2 text-sm">
-              Hi! How can we help you today?
-            </div>
-          </div>
-        </div>
-        
-        <div className="border-t border-gray-200 p-4 bg-white">
-          <div className="flex gap-2">
-            <input
-              type="text"
-              placeholder="Type your message..."
-              className="flex-1 px-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-green"
-            />
-            <button className="px-4 py-2 bg-brand-green text-white rounded-lg text-sm font-medium hover:bg-brand-green/90">
-              Send
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <script
-        dangerouslySetInnerHTML={{
-          __html: `
-            (function(w,d,s,o,f,js,fjs){
-              w['WhachatWidget']=o;w[o]=w[o]||function(){(w[o].q=w[o].q||[]).push(arguments)};
-              js=d.createElement(s);fjs=d.getElementsByTagName(s)[0];
-              js.id=o;js.src=f;js.async=1;fjs.parentNode.insertBefore(js,fjs);
-            }(window,document,'script','wcw','${window.location.origin}/widget.js'));
-            wcw('init', '${params.widgetId}'${source ? `, {source: '${source}'}` : ''});
-          `
-        }}
-      />
-    </div>
-  );
+  return <WebchatWidget widgetId={widgetId} resolvePageHref={pageHref} />;
 }

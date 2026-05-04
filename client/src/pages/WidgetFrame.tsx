@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState, useCallback } from "react";
-import { useRoute } from "wouter";
-import { Loader2, Send, ChevronDown } from "lucide-react";
+import { useEffect, useRef, useState, useCallback, useMemo } from "react";
+import { useRoute, useSearch } from "wouter";
+import { Loader2, Send } from "lucide-react";
 
 interface ButtonOption {
   label: string;
@@ -22,8 +22,50 @@ interface ChatMessage {
 
 const POLL_INTERVAL = 2500; // ms
 
-export function WidgetFrame() {
-  const [match, params] = useRoute("/widget-frame/:widgetId");
+export type WebchatWidgetProps = {
+  widgetId: string;
+  /**
+   * When set, `/api/webchat/.../settings` matches `pageRules` against this URL (hosted `/chat` page).
+   * If omitted, optional query `parentUrl` on the iframe URL is used the same way (script-based iframe install).
+   */
+  resolvePageHref?: string | null;
+};
+
+/**
+ * Embeddable web chat (used by `/widget-frame/:id` iframe and full-page `/chat/:id` hosted link).
+ */
+export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps) {
+  const searchString = useSearch();
+  const urlGreeting = useMemo(() => {
+    try {
+      return new URLSearchParams(searchString).get("greeting");
+    } catch {
+      return null;
+    }
+  }, [searchString]);
+  const urlPrefill = useMemo(() => {
+    try {
+      return new URLSearchParams(searchString).get("prefill");
+    } catch {
+      return null;
+    }
+  }, [searchString]);
+
+  /** Parent page URL passed by script embed so page rules can match the host site, not the iframe path. */
+  const parentUrlForRules = useMemo(() => {
+    try {
+      const raw = new URLSearchParams(searchString).get("parentUrl");
+      if (!raw?.trim()) return null;
+      return raw.trim().slice(0, 4000);
+    } catch {
+      return null;
+    }
+  }, [searchString]);
+
+  const ruleMatchHref = useMemo(() => {
+    if (resolvePageHref != null && resolvePageHref !== "") return resolvePageHref;
+    return parentUrlForRules;
+  }, [resolvePageHref, parentUrlForRules]);
   const [isLoading, setIsLoading] = useState(true);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState("");
@@ -31,11 +73,15 @@ export function WidgetFrame() {
   const [visitorId, setVisitorId] = useState<string | null>(null);
   const [widgetColor, setWidgetColor] = useState("#25D366");
   const [widgetName, setWidgetName] = useState("Chat with us");
+  const [settingsWelcome, setSettingsWelcome] = useState(
+    "Hi! How can we help you today? 👋"
+  );
+  const [apiPrefill, setApiPrefill] = useState("");
   const [clickedButtons, setClickedButtons] = useState<Set<string>>(new Set());
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const userId = params?.widgetId;
+  const userId = widgetId;
 
   // Init: get/create visitorId from localStorage
   useEffect(() => {
@@ -48,16 +94,35 @@ export function WidgetFrame() {
     }
     setVisitorId(vid);
 
-    // Fetch widget settings (public endpoint)
-    fetch(`/api/webchat/${userId}/settings`)
+    const settingsUrl =
+      ruleMatchHref != null && ruleMatchHref !== ""
+        ? `/api/webchat/${userId}/settings?href=${encodeURIComponent(ruleMatchHref)}`
+        : `/api/webchat/${userId}/settings`;
+
+    fetch(settingsUrl)
       .then(r => r.json())
       .then(data => {
         if (data?.color) setWidgetColor(data.color);
         if (data?.businessName) setWidgetName(`Chat with ${data.businessName}`);
+        const resolved =
+          typeof data?.chatGreeting === "string" && data.chatGreeting.trim()
+            ? data.chatGreeting
+            : typeof data?.welcomeMessage === "string"
+              ? data.welcomeMessage
+              : null;
+        if (resolved) setSettingsWelcome(resolved);
+        if (typeof data?.chatPrefill === "string") setApiPrefill(data.chatPrefill);
         setIsLoading(false);
       })
       .catch(() => setIsLoading(false));
-  }, [userId]);
+  }, [userId, ruleMatchHref]);
+
+  useEffect(() => {
+    const fromUrl = urlPrefill || "";
+    const fromApi = apiPrefill || "";
+    const prefill = fromUrl || fromApi;
+    if (prefill) setInputText(prefill);
+  }, [urlPrefill, apiPrefill]);
 
   const fetchMessages = useCallback(async () => {
     if (!userId || !visitorId) return;
@@ -144,7 +209,7 @@ export function WidgetFrame() {
     }
   };
 
-  if (!match || !userId) {
+  if (!userId) {
     return (
       <div className="flex h-screen items-center justify-center bg-gray-50">
         <p className="text-sm text-gray-500">Widget not found</p>
@@ -182,8 +247,8 @@ export function WidgetFrame() {
         {/* Welcome bubble */}
         {deduped.length === 0 && (
           <div className="flex justify-start">
-            <div className="max-w-[75%] bg-white text-gray-800 rounded-2xl rounded-bl-none px-3 py-2 text-sm shadow-sm border border-gray-100">
-              Hi! How can we help you today? 👋
+            <div className="max-w-[75%] bg-white text-gray-800 rounded-2xl rounded-bl-none px-3 py-2 text-sm shadow-sm border border-gray-100 whitespace-pre-wrap">
+              {urlGreeting || settingsWelcome}
             </div>
           </div>
         )}
@@ -309,4 +374,17 @@ export function WidgetFrame() {
       </div>
     </div>
   );
+}
+
+/** iframe embed route — parent `/widget.js` can pass `greeting` / `prefill` query params. */
+export function WidgetFrame() {
+  const [match, params] = useRoute("/widget-frame/:widgetId");
+  if (!match || !params?.widgetId) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-gray-50">
+        <p className="text-sm text-gray-500">Widget not found</p>
+      </div>
+    );
+  }
+  return <WebchatWidget widgetId={params.widgetId} />;
 }

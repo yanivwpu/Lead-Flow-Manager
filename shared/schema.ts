@@ -132,7 +132,7 @@ export const users = pgTable("users", {
   // Onboarding
   onboardingCompleted: boolean("onboarding_completed").default(false),
   // Website widget settings
-  widgetSettings: jsonb("widget_settings").default(sql`'{"enabled":true,"color":"#25D366","welcomeMessage":"Hi there! How can we help you today?","position":"right","showOnMobile":true}'::jsonb`),
+  widgetSettings: jsonb("widget_settings").default(sql`'{"enabled":true,"color":"#25D366","welcomeMessage":"Hi there! How can we help you today?","position":"right","showOnMobile":true,"showOnDesktop":true,"triggerType":"always","triggerDelaySeconds":5,"triggerScrollPercent":50,"pageRules":[{"urlContains":"/pricing","greeting":"Questions about pricing?","prefilledMessage":"Hi! I have a question about your pricing."},{"urlContains":"/contact","greeting":"Let us get in touch","prefilledMessage":"Hi! I would like to get in touch."},{"urlContains":"/services","greeting":"Tell us what you need","prefilledMessage":"Hi! I am interested in your services."}]}'::jsonb`),
   // Partner referral tracking - locked after first assignment (first-touch wins)
   partnerId: varchar("partner_id"),
   partnerAssignedAt: timestamp("partner_assigned_at"), // when partner was assigned (for commission duration)

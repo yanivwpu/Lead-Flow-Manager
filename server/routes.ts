@@ -742,6 +742,12 @@ export async function registerRoutes(
     let position = "right";
     let welcomeMessage = "Hi there! How can we help you today?";
     let enabled = true;
+    let triggerType: "always" | "delay" | "scroll" | "exit_intent" = "always";
+    let triggerDelaySeconds = 5;
+    let triggerScrollPercent = 50;
+    let showOnDesktop = true;
+    let showOnMobile = true;
+    let pageRules: { urlContains: string; greeting: string; prefilledMessage: string }[] = [];
 
     if (widgetId) {
       try {
@@ -751,6 +757,25 @@ export async function registerRoutes(
         if (ws.color) color = ws.color;
         if (ws.position) position = ws.position;
         if (ws.welcomeMessage) welcomeMessage = ws.welcomeMessage;
+        const tt = ws.triggerType;
+        if (tt === "delay" || tt === "scroll" || tt === "exit_intent" || tt === "always") {
+          triggerType = tt;
+        }
+        if (typeof ws.triggerDelaySeconds === "number" && !Number.isNaN(ws.triggerDelaySeconds)) {
+          triggerDelaySeconds = Math.min(3600, Math.max(0, Math.floor(ws.triggerDelaySeconds)));
+        }
+        if (typeof ws.triggerScrollPercent === "number" && !Number.isNaN(ws.triggerScrollPercent)) {
+          triggerScrollPercent = Math.min(100, Math.max(1, Math.floor(ws.triggerScrollPercent)));
+        }
+        if (ws.showOnDesktop === false) showOnDesktop = false;
+        if (ws.showOnMobile === false) showOnMobile = false;
+        if (Array.isArray(ws.pageRules)) {
+          pageRules = ws.pageRules.map((r: any) => ({
+            urlContains: String(r?.urlContains ?? "").slice(0, 500),
+            greeting: String(r?.greeting ?? "").slice(0, 500),
+            prefilledMessage: String(r?.prefilledMessage ?? "").slice(0, 2000),
+          }));
+        }
       } catch { /* non-fatal */ }
     }
 
@@ -759,17 +784,72 @@ export async function registerRoutes(
   'use strict';
   var COLOR = ${JSON.stringify(color)};
   var POSITION = ${JSON.stringify(position)};
-  var WELCOME = ${JSON.stringify(welcomeMessage)};
+  var DEFAULT_WELCOME = ${JSON.stringify(welcomeMessage)};
   var WIDGET_ID = ${JSON.stringify(widgetId || "")};
   var ORIGIN = ${JSON.stringify(origin)};
+  var TRIGGER = ${JSON.stringify(triggerType)};
+  var DELAY_SEC = ${JSON.stringify(triggerDelaySeconds)};
+  var SCROLL_PCT = ${JSON.stringify(triggerScrollPercent)};
+  var SHOW_DESKTOP = ${JSON.stringify(showOnDesktop)};
+  var SHOW_MOBILE = ${JSON.stringify(showOnMobile)};
+  var PAGE_RULES = ${JSON.stringify(pageRules)};
 
-  // Guard against double-init
   if (window.__wcwInit) return;
   window.__wcwInit = true;
 
-  var btn, bubble, iframe, iframeLoaded = false;
+  var btn, bubble, iframeLoaded = false;
+  var revealed = false;
 
-  function px(n) { return n + 'px'; }
+  function isMobileViewport() {
+    try {
+      return window.matchMedia && window.matchMedia('(max-width: 767px)').matches;
+    } catch (e) {
+      return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent || '');
+    }
+  }
+
+  function allowDevice() {
+    var m = isMobileViewport();
+    if (m && !SHOW_MOBILE) return false;
+    if (!m && !SHOW_DESKTOP) return false;
+    return true;
+  }
+
+  function activeRule() {
+    var rules = PAGE_RULES || [];
+    for (var i = 0; i < rules.length; i++) {
+      var q = (rules[i].urlContains || '').trim();
+      if (q && window.location.href.indexOf(q) !== -1) return rules[i];
+    }
+    return null;
+  }
+
+  function welcomeText() {
+    var r = activeRule();
+    if (r && r.greeting) return r.greeting;
+    return DEFAULT_WELCOME;
+  }
+
+  function prefillText() {
+    var r = activeRule();
+    if (r && r.prefilledMessage) return String(r.prefilledMessage);
+    return '';
+  }
+
+  function iframeSrc() {
+    var base = ORIGIN + '/widget-frame/' + WIDGET_ID;
+    var qs = [];
+    var pr = prefillText();
+    if (pr) qs.push('prefill=' + encodeURIComponent(pr));
+    var gr = welcomeText();
+    if (gr) qs.push('greeting=' + encodeURIComponent(gr));
+    try {
+      if (typeof window !== 'undefined' && window.location && window.location.href) {
+        qs.push('parentUrl=' + encodeURIComponent(window.location.href));
+      }
+    } catch (e) {}
+    return qs.length ? (base + '?' + qs.join('&')) : base;
+  }
 
   function posStyle() {
     return POSITION === 'left'
@@ -808,9 +888,8 @@ export async function registerRoutes(
       'z-index:2147483646;opacity:0;pointer-events:none;',
       'transition:opacity .2s;line-height:1.4;',
     ].join('');
-    bubble.textContent = WELCOME;
+    bubble.textContent = welcomeText();
     document.body.appendChild(bubble);
-    // Show bubble briefly after 2 s
     setTimeout(function() {
       bubble.style.opacity = '1';
       bubble.style.pointerEvents = 'auto';
@@ -841,7 +920,7 @@ export async function registerRoutes(
     container.setAttribute('data-wcw', 'frame-container');
 
     var frame = document.createElement('iframe');
-    frame.src = ORIGIN + '/widget-frame/' + WIDGET_ID;
+    frame.src = iframeSrc();
     frame.style.cssText = 'width:100%;height:100%;border:none;display:block;';
     frame.setAttribute('loading', 'lazy');
     frame.setAttribute('title', 'Chat');
@@ -849,7 +928,6 @@ export async function registerRoutes(
     container.appendChild(frame);
     document.body.appendChild(container);
 
-    // Animate in
     requestAnimationFrame(function() {
       requestAnimationFrame(function() {
         container.style.transform = 'scale(1) translateY(0)';
@@ -873,6 +951,8 @@ export async function registerRoutes(
       if (!frameContainer) {
         frameContainer = loadIframe();
       } else {
+        var fr = frameContainer.querySelector('iframe');
+        if (fr) fr.src = iframeSrc();
         frameContainer.style.display = 'block';
         requestAnimationFrame(function() {
           requestAnimationFrame(function() {
@@ -894,26 +974,94 @@ export async function registerRoutes(
     }
   }
 
-  function init() {
-    if (!document.body) return;
+  function scrollDepthPercent() {
+    var h = document.documentElement;
+    var st = window.pageYOffset != null ? window.pageYOffset : h.scrollTop;
+    var sh = h.scrollHeight - h.clientHeight;
+    if (sh <= 0) return 100;
+    return Math.round((st / sh) * 100);
+  }
+
+  function isTouchDevice() {
+    return ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+  }
+
+  function reveal() {
+    if (revealed) return;
+    if (!allowDevice()) return;
+    revealed = true;
     createButton();
     createBubble();
   }
 
-  // Defer initialisation until browser is idle (mobile perf)
+  function scheduleReveal() {
+    if (!allowDevice()) return;
+    if (TRIGGER === 'always') {
+      if (typeof requestIdleCallback !== 'undefined') {
+        requestIdleCallback(function() { reveal(); }, { timeout: 3000 });
+      } else {
+        setTimeout(reveal, 0);
+      }
+      return;
+    }
+    if (TRIGGER === 'delay') {
+      var sec = Math.max(0, parseInt(String(DELAY_SEC), 10) || 0);
+      setTimeout(reveal, sec * 1000);
+      return;
+    }
+    if (TRIGGER === 'scroll') {
+      function onScroll() {
+        if (scrollDepthPercent() >= (parseInt(String(SCROLL_PCT), 10) || 50)) {
+          window.removeEventListener('scroll', onScroll, true);
+          reveal();
+        }
+      }
+      window.addEventListener('scroll', onScroll, { passive: true, capture: true });
+      setTimeout(onScroll, 0);
+      return;
+    }
+    if (TRIGGER === 'exit_intent') {
+      if (isTouchDevice()) {
+        function onScrollExit() {
+          if (scrollDepthPercent() >= (parseInt(String(SCROLL_PCT), 10) || 50)) {
+            window.removeEventListener('scroll', onScrollExit, true);
+            reveal();
+          }
+        }
+        window.addEventListener('scroll', onScrollExit, { passive: true, capture: true });
+        setTimeout(onScrollExit, 0);
+      } else {
+        function onLeave(e) {
+          if (e.clientY <= 0) {
+            document.documentElement.removeEventListener('mouseleave', onLeave);
+            reveal();
+          }
+        }
+        document.documentElement.addEventListener('mouseleave', onLeave);
+      }
+      return;
+    }
+    reveal();
+  }
+
+  function boot() {
+    if (!document.body) return;
+    scheduleReveal();
+  }
+
   if (typeof requestIdleCallback !== 'undefined') {
     requestIdleCallback(function() {
       if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', init);
+        document.addEventListener('DOMContentLoaded', boot);
       } else {
-        init();
+        boot();
       }
     }, { timeout: 3000 });
   } else {
     if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', init);
+      document.addEventListener('DOMContentLoaded', boot);
     } else {
-      setTimeout(init, 300);
+      setTimeout(boot, 300);
     }
   }
 })();
@@ -927,6 +1075,34 @@ export async function registerRoutes(
 
   // ============= Website Widget Settings Endpoints =============
   
+  const defaultWidgetPageRules = [
+    { urlContains: "/pricing", greeting: "Questions about pricing?", prefilledMessage: "Hi! I have a question about your pricing." },
+    { urlContains: "/contact", greeting: "Let us get in touch", prefilledMessage: "Hi! I would like to get in touch." },
+    { urlContains: "/services", greeting: "Tell us what you need", prefilledMessage: "Hi! I am interested in your services." },
+  ];
+
+  const baseWidgetSettings = {
+    enabled: true,
+    color: "#25D366",
+    welcomeMessage: "Hi there! How can we help you today?",
+    position: "right" as const,
+    showOnMobile: true,
+    showOnDesktop: true,
+    triggerType: "always" as const,
+    triggerDelaySeconds: 5,
+    triggerScrollPercent: 50,
+    pageRules: defaultWidgetPageRules,
+  };
+
+  function mergeWidgetSettingsFromDb(stored: unknown) {
+    const s = stored && typeof stored === "object" ? (stored as Record<string, unknown>) : {};
+    return {
+      ...baseWidgetSettings,
+      ...s,
+      pageRules: Array.isArray(s.pageRules) ? s.pageRules : baseWidgetSettings.pageRules,
+    };
+  }
+
   // Get widget settings
   app.get("/api/widget-settings", async (req, res) => {
     try {
@@ -937,14 +1113,7 @@ export async function registerRoutes(
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }
-      const defaultSettings = {
-        enabled: true,
-        color: "#25D366",
-        welcomeMessage: "Hi there! How can we help you today?",
-        position: "right",
-        showOnMobile: true,
-      };
-      res.json(user.widgetSettings || defaultSettings);
+      res.json(mergeWidgetSettingsFromDb(user.widgetSettings));
     } catch (error) {
       console.error("Error fetching widget settings:", error);
       res.status(500).json({ error: "Failed to fetch widget settings" });
@@ -952,12 +1121,23 @@ export async function registerRoutes(
   });
 
   // Update widget settings
+  const widgetPageRuleSchema = z.object({
+    urlContains: z.string().max(500),
+    greeting: z.string().max(500),
+    prefilledMessage: z.string().max(2000),
+  });
+
   const widgetSettingsSchema = z.object({
     enabled: z.boolean().optional(),
     color: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
     welcomeMessage: z.string().max(500).optional(),
     position: z.enum(["left", "right"]).optional(),
     showOnMobile: z.boolean().optional(),
+    showOnDesktop: z.boolean().optional(),
+    triggerType: z.enum(["always", "delay", "scroll", "exit_intent"]).optional(),
+    triggerDelaySeconds: z.number().int().min(0).max(3600).optional(),
+    triggerScrollPercent: z.number().int().min(1).max(100).optional(),
+    pageRules: z.array(widgetPageRuleSchema).max(30).optional(),
   });
   
   app.patch("/api/widget-settings", async (req, res) => {
@@ -971,19 +1151,14 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Invalid widget settings", details: validation.error.errors });
       }
       
-      const { enabled, color, welcomeMessage, position, showOnMobile } = validation.data;
-      
       const user = await storage.getUser(req.user.id);
-      const currentSettings = (user?.widgetSettings as any) || {};
+      const currentSettings = mergeWidgetSettingsFromDb(user?.widgetSettings);
       
-      const newSettings = {
-        ...currentSettings,
-        ...(enabled !== undefined && { enabled }),
-        ...(color !== undefined && { color }),
-        ...(welcomeMessage !== undefined && { welcomeMessage }),
-        ...(position !== undefined && { position }),
-        ...(showOnMobile !== undefined && { showOnMobile }),
-      };
+      const patch = Object.fromEntries(
+        Object.entries(validation.data).filter(([, v]) => v !== undefined)
+      ) as Record<string, unknown>;
+      
+      const newSettings = { ...currentSettings, ...patch };
 
       await storage.updateUser(req.user.id, { widgetSettings: newSettings });
       res.json(newSettings);

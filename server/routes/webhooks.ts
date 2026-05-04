@@ -1,5 +1,25 @@
 import type { Express } from "express";
 import { storage } from "../storage";
+
+/** Match widget pageRules against a URL (same order / semantics as /widget.js). */
+function resolveWebchatPageCopy(ws: Record<string, unknown>, href: string): { greeting: string; prefill: string } {
+  const defaultGreeting =
+    typeof ws.welcomeMessage === "string" && ws.welcomeMessage.trim()
+      ? String(ws.welcomeMessage)
+      : "Hi! How can we help you today?";
+  const trimmedHref = href.slice(0, 4000);
+  const rules = Array.isArray(ws.pageRules) ? ws.pageRules : [];
+  for (const raw of rules) {
+    const r = raw as Record<string, unknown>;
+    const q = String(r?.urlContains ?? "").trim();
+    if (q && trimmedHref.indexOf(q) !== -1) {
+      const g = typeof r.greeting === "string" && r.greeting.trim() ? String(r.greeting) : defaultGreeting;
+      const prefill = typeof r.prefilledMessage === "string" ? String(r.prefilledMessage) : "";
+      return { greeting: g, prefill };
+    }
+  }
+  return { greeting: defaultGreeting, prefill: "" };
+}
 import { parseIncomingWebhook, findUserByTwilioCredentials } from "../userTwilio";
 import { handleCalendlyWebhook } from "../calendlyWebhook";
 import { scheduleHubSpotAutoSync } from "../hubspotAutoSync";
@@ -168,20 +188,56 @@ export function registerWebhookRoutes(app: Express): void {
   });
 
   // Public widget settings (no auth — returns only appearance fields)
+  // Optional query ?href=… resolves chatGreeting/chatPrefill from pageRules (hosted /chat page).
   app.get("/api/webchat/:userId/settings", async (req, res) => {
     try {
       const { userId } = req.params;
+      const hrefParam =
+        typeof req.query.href === "string" ? req.query.href.slice(0, 4000) : "";
       const user = await storage.getUser(userId);
-      const defaults = { color: "#25D366", welcomeMessage: "Hi! How can we help you today?", businessName: "" };
-      if (!user) return res.json(defaults);
-      const ws = (user.widgetSettings as any) || {};
+      const defaults = {
+        color: "#25D366",
+        welcomeMessage: "Hi! How can we help you today?",
+        businessName: "",
+      };
+      if (!user) {
+        return res.json({
+          ...defaults,
+          chatGreeting: defaults.welcomeMessage,
+          chatPrefill: "",
+        });
+      }
+      const ws = (user.widgetSettings as Record<string, unknown>) || {};
+      const welcomeMessage =
+        typeof ws.welcomeMessage === "string" && ws.welcomeMessage.trim()
+          ? String(ws.welcomeMessage)
+          : defaults.welcomeMessage;
+      let chatGreeting = welcomeMessage;
+      let chatPrefill = "";
+      if (hrefParam) {
+        const resolved = resolveWebchatPageCopy(ws, hrefParam);
+        chatGreeting = resolved.greeting;
+        chatPrefill = resolved.prefill;
+      }
       res.json({
-        color: ws.color || defaults.color,
-        welcomeMessage: ws.welcomeMessage || defaults.welcomeMessage,
-        businessName: (user as any).businessName || (user as any).name || "",
+        color:
+          typeof ws.color === "string" && ws.color.trim()
+            ? String(ws.color)
+            : defaults.color,
+        welcomeMessage,
+        businessName: String((user as { businessName?: string }).businessName || (user as { name?: string }).name || ""),
+        chatGreeting,
+        chatPrefill,
       });
     } catch {
-      res.json({ color: "#25D366", welcomeMessage: "Hi! How can we help you?", businessName: "" });
+      const fallback = "Hi! How can we help you?";
+      res.json({
+        color: "#25D366",
+        welcomeMessage: fallback,
+        businessName: "",
+        chatGreeting: fallback,
+        chatPrefill: "",
+      });
     }
   });
 
