@@ -547,10 +547,10 @@ function AIBrainContent() {
   
   const segmentTabClass = (selected: boolean) =>
     cn(
-      "h-9 px-3.5 rounded-lg border text-sm font-medium transition-all duration-200 ease-out",
+      "h-9 px-3.5 rounded-lg border text-sm font-medium transition-colors duration-200",
       selected
-        ? "bg-slate-800 text-white border-slate-800 shadow-sm shadow-slate-900/10"
-        : "bg-slate-100 text-slate-700 border-slate-200/90 hover:border-slate-300 hover:bg-slate-200/50 hover:text-slate-900",
+        ? "bg-brand-green/10 text-emerald-900 border-brand-green/45 shadow-sm shadow-brand-green/10"
+        : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-white hover:border-slate-300 hover:text-slate-900",
       saveSettingsMutation.isPending && "opacity-60 pointer-events-none",
     );
 
@@ -881,9 +881,9 @@ function AIBrainContent() {
                     </label>
                     <Button
                       type="button"
-                      variant="secondary"
+                      variant="outline"
                       size="sm"
-                      className="h-8 bg-slate-900 text-white hover:bg-slate-800 shadow-sm shadow-slate-900/10 disabled:opacity-50 disabled:shadow-none"
+                      className="h-8 gap-1.5 border-slate-200 bg-white font-medium text-slate-800 shadow-sm shadow-slate-900/[0.04] hover:bg-slate-50 hover:border-slate-300 disabled:opacity-50"
                       disabled={!newQQ.label.trim() || !newQQ.question.trim()}
                       onClick={() => {
                         if (!newQQ.label.trim() || !newQQ.question.trim()) return;
@@ -907,7 +907,7 @@ function AIBrainContent() {
                       }}
                       data-testid="button-add-qualifying-question"
                     >
-                      <Plus className="w-3.5 h-3.5 mr-1" />
+                      <Plus className="w-3.5 h-3.5 shrink-0" />
                       Add question
                     </Button>
                   </div>
