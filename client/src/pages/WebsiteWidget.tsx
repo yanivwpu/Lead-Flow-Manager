@@ -20,6 +20,8 @@ import { apiRequest } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 import { Textarea } from "@/components/ui/textarea";
 
+/** Website → WhatsApp widget settings UI (Appearance / Page Rules layout + stable rule ids). */
+
 export type WidgetTriggerType = "always" | "delay" | "scroll" | "exit_intent";
 
 export interface WidgetPageRule {
