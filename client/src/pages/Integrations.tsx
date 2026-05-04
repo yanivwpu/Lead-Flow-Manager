@@ -162,12 +162,12 @@ const VITE_SHOPIFY_MANUAL_INSTALL_URL =
 const NATIVE_INTEGRATIONS: IntegrationConfig[] = [
   { 
     id: "leadconnector", 
-    name: "LeadConnector", 
+    name: "GoHighLevel", 
     icon: Link2, 
-    description: "Connect WhachatCRM with your LeadConnector account to sync leads and activity", 
+    description: "Connect your GoHighLevel account via LeadConnector API", 
     color: "bg-indigo-600",
     category: "crm",
-    tagline: "Sync leads & activity with LeadConnector",
+    tagline: "Sync leads & activity with GoHighLevel",
     fields: [],
     syncOptions: [
       { id: "sync_contacts", label: "Sync Contacts", description: "Keep leads synced between platforms" },
@@ -493,7 +493,7 @@ export function Integrations() {
       const res = await fetch(`/api/ext/connection-status${params}`, { credentials: "include" });
       if (!res.ok) {
         const snippet = (await res.text().catch(() => "")).slice(0, 200);
-        console.warn("[LeadConnector] /api/ext/connection-status failed:", res.status, snippet);
+        console.warn("[GoHighLevel] /api/ext/connection-status failed:", res.status, snippet);
         return { connected: false, tokenExpired: false };
       }
       return res.json() as Promise<{
@@ -767,11 +767,11 @@ export function Integrations() {
       const result = await refetchLcStatus();
       const data = result.data;
       if (data?.connected) {
-        toast({ title: "Connected", description: "LeadConnector is connected and active." });
+        toast({ title: "Connected", description: "GoHighLevel is connected and active." });
       } else if (data?.tokenExpired) {
-        toast({ title: "Token Expired", description: "Your LeadConnector token has expired. Please reinstall the app.", variant: "destructive" });
+        toast({ title: "Token Expired", description: "Your GoHighLevel token has expired. Please reinstall the app.", variant: "destructive" });
       } else {
-        toast({ title: "Not Connected", description: "No active LeadConnector connection found. Install the app first.", variant: "destructive" });
+        toast({ title: "Not Connected", description: "No active GoHighLevel connection found. Install the app first.", variant: "destructive" });
       }
     } catch {
       toast({ title: "Error", description: "Could not check connection status. Please try again.", variant: "destructive" });
@@ -810,7 +810,7 @@ export function Integrations() {
         </div>
         <h2 className="text-xl font-semibold text-gray-900 mb-2">Integrations are a Paid Feature</h2>
         <p className="text-gray-500 max-w-md mb-6">
-          Connect WhachatCRM with your favorite tools like Shopify, HubSpot, Salesforce, and more. 
+          Connect WhachatCRM with your favorite tools like Shopify, GoHighLevel, HubSpot, Salesforce, and more. 
           Upgrade to Starter or Pro to unlock integrations.
         </p>
         <Link href="/pricing">
@@ -978,7 +978,7 @@ export function Integrations() {
                             {isLeadConnector && lcStatusError && (
                               <p className="text-xs text-amber-800" role="alert">
                                 Could not verify connection with the server. You can still open the marketplace to
-                                install or manage LeadConnector.
+                                install or manage GoHighLevel.
                               </p>
                             )}
                           </div>
@@ -1480,19 +1480,19 @@ export function Integrations() {
           </DialogContent>
         </Dialog>
 
-        {/* LeadConnector — manage (install, check, verify) */}
+        {/* GoHighLevel — manage (install, check, verify) */}
         <Dialog open={leadManageOpen} onOpenChange={setLeadManageOpen}>
           <DialogContent className="max-w-md">
             <DialogHeader>
               <div className="flex items-center gap-3">
                 <IntegrationBrandLogo
-                  name="LeadConnector"
+                  name="GoHighLevel"
                   logoUrl={INTEGRATION_LOGO_BY_ID.leadconnector}
                   integrationId="leadconnector"
                 />
                 <div>
-                  <DialogTitle>LeadConnector</DialogTitle>
-                  <DialogDescription>Install the app and verify your connection</DialogDescription>
+                  <DialogTitle>GoHighLevel</DialogTitle>
+                  <DialogDescription>Install the GoHighLevel app and verify your connection</DialogDescription>
                 </div>
               </div>
             </DialogHeader>
@@ -1504,13 +1504,13 @@ export function Integrations() {
                 onClick={() => window.open(LEADCONNECTOR_INSTALL_URL, "_blank")}
                 data-testid="button-install-leadconnector-dialog"
               >
-                Open install page
+                Open GoHighLevel install page
                 <ExternalLink className="h-3 w-3 ml-2" />
               </Button>
               {!lcStatus?.connected && (
                 <div className="flex items-center gap-2 rounded-lg border border-gray-100 bg-gray-50/80 p-3">
                   <p className="text-xs text-gray-600 flex-1">
-                    Install the app in LeadConnector, then check status here.
+                    Install the app in GoHighLevel, then check status here.
                   </p>
                   <Button
                     variant="outline"
