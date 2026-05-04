@@ -72,6 +72,7 @@ import { settingsChannelsHref } from "@/lib/settingsChannelsNavigation";
 import { analyzeConversation } from "@/lib/conversationIntelligence";
 import type { ContactContext } from "@/components/AIComposer";
 import { isConversationHandoffActive } from "@shared/handoffActivity";
+import { isMetaReplyWindowExpiredError } from "@/lib/metaReplyWindowError";
 
 type Channel = 'whatsapp' | 'instagram' | 'facebook' | 'sms' | 'webchat' | 'telegram' | 'tiktok' | 'gohighlevel' | string;
 type FilterTab = 'all' | 'unread' | 'mine';
@@ -124,6 +125,8 @@ interface Message {
   createdAt: string;
   sentViaFallback?: boolean;
   fallbackChannel?: Channel;
+  /** Set client-side when send fails with Meta reply-window policy */
+  deliveryFailureKind?: "meta_reply_window";
 }
 
 /** Prefer direct <img src> for permanent URLs (R2, app uploads); never use expiring provider CDNs. */
@@ -948,6 +951,39 @@ export function UnifiedInbox() {
       return { previousMessages, previousInbox, conversationId, content: data.content };
     },
     onError: (error: Error, data, context) => {
+      const errMsg = error.message || "";
+      const isReplyWindow = isMetaReplyWindowExpiredError(errMsg);
+
+      if (isReplyWindow && context?.conversationId) {
+        const messagesKey = ["/api/conversations", context.conversationId, "messages"] as const;
+        const before = queryClient.getQueryData<Message[]>(messagesKey);
+        let patchIdx = -1;
+        if (before?.length) {
+          for (let i = before.length - 1; i >= 0; i--) {
+            if (before[i].id.startsWith("optimistic-") && before[i].status === "sending") {
+              patchIdx = i;
+              break;
+            }
+          }
+        }
+        if (patchIdx >= 0 && before) {
+          const next = [...before];
+          next[patchIdx] = {
+            ...next[patchIdx],
+            status: "failed",
+            deliveryFailureKind: "meta_reply_window",
+          };
+          queryClient.setQueryData(messagesKey, next);
+        } else if (context.previousMessages !== undefined) {
+          queryClient.setQueryData(messagesKey, context.previousMessages);
+        }
+        if (context.previousInbox !== undefined) {
+          queryClient.setQueryData(["/api/inbox"], context.previousInbox);
+        }
+        setMessageInput(data.content);
+        return;
+      }
+
       if (context?.conversationId && context.previousMessages !== undefined) {
         queryClient.setQueryData(
           ["/api/conversations", context.conversationId, "messages"],
@@ -960,15 +996,17 @@ export function UnifiedInbox() {
       setMessageInput(data.content);
       toast({ title: "Message not sent", description: error.message, variant: "destructive" });
     },
-    onSettled: (_data, _error, vars, context) => {
+    onSettled: (_data, error, vars, context) => {
       queryClient.invalidateQueries({ queryKey: ["/api/inbox"] });
       queryClient.invalidateQueries({ queryKey: ["/api/activation-status"] });
-      if (context?.conversationId) {
+      const errMsg = error instanceof Error ? error.message : "";
+      const skipMessagesRefresh = isMetaReplyWindowExpiredError(errMsg);
+      if (context?.conversationId && !skipMessagesRefresh) {
         queryClient.invalidateQueries({
           queryKey: ["/api/conversations", context.conversationId, "messages"],
         });
       }
-      if (vars?.contactId) {
+      if (vars?.contactId && !skipMessagesRefresh) {
         queryClient.invalidateQueries({
           queryKey: [`/api/contacts/${vars.contactId}/timeline?limit=60`],
         });
@@ -1862,15 +1900,33 @@ export function UnifiedInbox() {
                               isSending
                                 ? <Loader2 className="w-2.5 h-2.5 text-gray-400 animate-spin" />
                                 : msg.status === 'failed'
-                                  ? <span className="text-[10px] text-red-500 font-medium">Not sent</span>
+                                  ? msg.deliveryFailureKind === 'meta_reply_window'
+                                    ? null
+                                    : <span className="text-[10px] text-red-500 font-medium">Not sent</span>
                                   : <span className="text-[10px] text-gray-400">
                                       {msg.status === 'read' ? '✓✓' : msg.status === 'delivered' ? '✓✓' : '✓'}
                                     </span>
                             )}
                           </div>
                           {isOut && msg.status === 'failed' && (
-                            <div className="text-[10px] text-red-400 text-right mt-0.5">
-                              Delivery failed — check channel settings
+                            <div
+                              className={cn(
+                                "mt-0.5 text-right space-y-0.5",
+                                msg.deliveryFailureKind === "meta_reply_window" ? "max-w-[min(100%,18rem)] ml-auto" : "",
+                              )}
+                            >
+                              {msg.deliveryFailureKind === "meta_reply_window" ? (
+                                <>
+                                  <p className="text-[10px] font-medium text-red-600 leading-snug">
+                                    Message not sent — outside the 24-hour reply window.
+                                  </p>
+                                  <p className="text-[10px] text-muted-foreground leading-snug">
+                                    You can reply after the customer messages you again or use an approved message template.
+                                  </p>
+                                </>
+                              ) : (
+                                <p className="text-[10px] text-red-600/90">Delivery failed — check channel settings</p>
+                              )}
                             </div>
                           )}
                         </div>

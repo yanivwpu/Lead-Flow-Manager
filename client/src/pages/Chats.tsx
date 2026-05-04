@@ -5,6 +5,7 @@ import { TAG_COLORS, PIPELINE_STAGES } from "@/lib/data";
 import { useAuth } from "@/lib/auth-context";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { usePresence } from "@/lib/usePresence";
+import { isMetaReplyWindowExpiredError } from "@/lib/metaReplyWindowError";
 import { 
   Search, 
   MoreVertical, 
@@ -461,11 +462,20 @@ export function Chats() {
         description: "Your file has been sent via WhatsApp",
       });
     } catch (error: any) {
-      toast({
-        title: "Failed to send",
-        description: error.message,
-        variant: "destructive",
-      });
+      const msg = error?.message || "Failed to send media";
+      if (isMetaReplyWindowExpiredError(msg)) {
+        toast({
+          title: "Message not sent",
+          description:
+            "Outside the 24-hour reply window. You can reply after the customer messages you again or use an approved message template where available.",
+        });
+      } else {
+        toast({
+          title: "Failed to send",
+          description: msg,
+          variant: "destructive",
+        });
+      }
     } finally {
       setIsUploadingFile(false);
     }
@@ -578,11 +588,20 @@ export function Chats() {
       queryClient.invalidateQueries({ queryKey: ['/api/subscription'] });
       setNewMessage("");
     } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to send message",
-        variant: "destructive",
-      });
+      const msg = error?.message || "Failed to send message";
+      if (isMetaReplyWindowExpiredError(msg)) {
+        toast({
+          title: "Message not sent",
+          description:
+            "Outside the 24-hour reply window. You can reply after the customer messages you again or use an approved message template where available.",
+        });
+      } else {
+        toast({
+          title: "Error",
+          description: msg,
+          variant: "destructive",
+        });
+      }
     }
   };
 
@@ -677,11 +696,20 @@ export function Chats() {
       queryClient.invalidateQueries({ queryKey: ["/api/subscription"] });
       setNewMessage("");
     } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to send message",
-        variant: "destructive",
-      });
+      const msg = error?.message || "Failed to send message";
+      if (isMetaReplyWindowExpiredError(msg)) {
+        toast({
+          title: "Message not sent",
+          description:
+            "Outside the 24-hour reply window. You can reply after the customer messages you again or use an approved message template where available.",
+        });
+      } else {
+        toast({
+          title: "Error",
+          description: msg,
+          variant: "destructive",
+        });
+      }
     }
   }, [
     selectedChat,
