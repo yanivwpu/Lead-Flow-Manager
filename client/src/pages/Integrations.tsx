@@ -456,7 +456,6 @@ export function Integrations() {
   const [showShopifyInfo, setShowShopifyInfo] = useState(false);
   type ShopifyListingState = "checking" | "live" | "unavailable";
   const [shopifyListingState, setShopifyListingState] = useState<ShopifyListingState>("unavailable");
-  const [shopifyManualInstallInput, setShopifyManualInstallInput] = useState("");
   const [showWooCommerceInfo, setShowWooCommerceInfo] = useState(false);
   const [wooForm, setWooForm] = useState({ storeUrl: "", consumerKey: "", consumerSecret: "" });
   const [wooError, setWooError] = useState<string | null>(null);
@@ -688,8 +687,6 @@ export function Integrations() {
   useEffect(() => {
     if (!showShopifyInfo) return;
 
-    setShopifyManualInstallInput(VITE_SHOPIFY_MANUAL_INSTALL_URL);
-
     if (!VITE_SHOPIFY_APP_STORE_URL) {
       setShopifyListingState("unavailable");
       return;
@@ -716,29 +713,15 @@ export function Integrations() {
     };
   }, [showShopifyInfo]);
 
-  const openShopifyInstallCTA = () => {
-    if (shopifyListingState === "live" && VITE_SHOPIFY_APP_STORE_URL) {
-      window.open(VITE_SHOPIFY_APP_STORE_URL, "_blank", "noopener,noreferrer");
-      return;
-    }
-    const link = shopifyManualInstallInput.trim() || VITE_SHOPIFY_MANUAL_INSTALL_URL;
-    if (!link) {
-      toast({
-        title: "Install link required",
-        description:
-          "Paste the HTTPS install link provided by our team, or set VITE_SHOPIFY_MANUAL_INSTALL_URL for this environment.",
-        variant: "destructive",
-      });
-      return;
-    }
+  const openShopifyUrl = (raw: string) => {
     try {
-      const u = new URL(link);
+      const u = new URL(raw);
       if (u.protocol !== "http:" && u.protocol !== "https:") throw new Error("bad proto");
       window.open(u.href, "_blank", "noopener,noreferrer");
     } catch {
       toast({
         title: "Invalid link",
-        description: "Enter a full URL starting with https://",
+        description: "Configure a full URL starting with https:// in your environment variables.",
         variant: "destructive",
       });
     }
@@ -918,7 +901,6 @@ export function Integrations() {
                         primaryAction = () => setManageIntegrationId(integration.id);
                       } else if (integration.id === "shopify") {
                         primaryAction = () => {
-                          setShopifyManualInstallInput(VITE_SHOPIFY_MANUAL_INSTALL_URL);
                           setShopifyListingState(
                             VITE_SHOPIFY_APP_STORE_URL ? "checking" : "unavailable"
                           );
@@ -1244,10 +1226,9 @@ export function Integrations() {
                 <div>
                   <DialogTitle>Install WhachatCRM on Shopify</DialogTitle>
                   <DialogDescription>
-                    {shopifyListingState === "live"
-                      ? "Connect your Shopify store via the Shopify App Store"
-                      : "Install using a private link while our App Store listing is in review or unavailable"}
-                  </DialogDescription>
+  Shopify apps are installed directly from Shopify.
+  Once installed, your store will automatically connect to WhachatCRM.
+</DialogDescription>
                 </div>
               </div>
             </DialogHeader>
@@ -1267,53 +1248,51 @@ export function Integrations() {
                   </ol>
                 </div>
               ) : (
-                <>
-                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-900 space-y-1">
-                    <p className="font-medium">App Store listing</p>
-                    <p className="text-xs">
-                      This app is currently in review on Shopify. Use the install link provided by our team.
-                    </p>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="shopify-manual-install-url">Install link (optional)</Label>
-                    <Input
-                      id="shopify-manual-install-url"
-                      placeholder="https://… (paste link from our team)"
-                      value={shopifyManualInstallInput}
-                      onChange={(e) => setShopifyManualInstallInput(e.target.value)}
-                      className="font-mono text-xs"
-                      data-testid="input-shopify-manual-install-url"
-                    />
-                    <p className="text-xs text-gray-500">
-                      If your environment sets <span className="font-mono">VITE_SHOPIFY_MANUAL_INSTALL_URL</span>, it
-                      appears here automatically. You can override it before opening the link.
-                    </p>
-                  </div>
-                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 text-sm text-gray-700">
-                    <p className="text-xs">
-                      Private installs use the same secure OAuth flow as the App Store — you only change how you reach
-                      the install page until the listing is live.
-                    </p>
-                  </div>
-                </>
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-900 space-y-1">
+                  <p className="font-medium">App Store listing</p>
+                  <p className="text-xs">
+                    This app may still be in review on Shopify. Use the buttons below when{" "}
+                    <span className="font-mono">VITE_SHOPIFY_APP_STORE_URL</span> or{" "}
+                    <span className="font-mono">VITE_SHOPIFY_MANUAL_INSTALL_URL</span> is configured for this
+                    environment.
+                  </p>
+                </div>
               )}
             </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setShowShopifyInfo(false)}>Close</Button>
-              <Button
-                onClick={openShopifyInstallCTA}
-                disabled={shopifyListingState === "checking"}
-                className="bg-green-600 hover:bg-green-700 text-white"
-                data-testid="button-shopify-app-store"
-              >
-                <ShoppingCart className="h-4 w-4 mr-2" />
-                {shopifyListingState === "checking"
-                  ? "Checking listing…"
-                  : shopifyListingState === "live"
-                    ? "Go to Shopify App Store"
-                    : "Install via Shopify (Private Link)"}
-                <ExternalLink className="h-3 w-3 ml-2" />
+            <DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-end">
+              <Button variant="outline" onClick={() => setShowShopifyInfo(false)}>
+                Close
               </Button>
+              {VITE_SHOPIFY_APP_STORE_URL ? (
+                <Button
+                  type="button"
+                  onClick={() => openShopifyUrl(VITE_SHOPIFY_APP_STORE_URL)}
+                  disabled={shopifyListingState === "checking"}
+                  className="bg-green-600 hover:bg-green-700 text-white"
+                  data-testid="button-shopify-app-store"
+                >
+                  <ShoppingCart className="h-4 w-4 mr-2" />
+                  {shopifyListingState === "checking" ? "Checking listing…" : "Go to Shopify App Store"}
+                  <ExternalLink className="h-3 w-3 ml-2" />
+                </Button>
+              ) : null}
+              {VITE_SHOPIFY_MANUAL_INSTALL_URL ? (
+                <Button
+                  type="button"
+                  variant={VITE_SHOPIFY_APP_STORE_URL ? "outline" : "default"}
+                  onClick={() => openShopifyUrl(VITE_SHOPIFY_MANUAL_INSTALL_URL)}
+                  className={
+                    VITE_SHOPIFY_APP_STORE_URL
+                      ? "border-green-200 text-green-800 hover:bg-green-50"
+                      : "bg-green-600 hover:bg-green-700 text-white"
+                  }
+                  data-testid="button-shopify-manual-install"
+                >
+                  <ShoppingCart className="h-4 w-4 mr-2" />
+                  Open manual install link
+                  <ExternalLink className="h-3 w-3 ml-2" />
+                </Button>
+              ) : null}
             </DialogFooter>
           </DialogContent>
         </Dialog>
