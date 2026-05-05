@@ -517,7 +517,7 @@ export async function completeEmbeddedSignupOAuth(params: {
     return {
       success: false,
       error:
-        "Could not exchange the authorization code with Meta (redirect URI or app settings may not match). Try Continue in browser from Settings, or close the window and start again with Continue with Meta.",
+        "Could not exchange the authorization code with Meta (redirect URI or app settings may not match). Close the window and try again with Continue with Meta.",
     };
   }
 

@@ -27,7 +27,6 @@ interface MetaConfigResponse {
 }
 
 interface MetaStartResponse {
-  authUrl: string;
   state: string;
   sdk: {
     appId: string;
@@ -159,17 +158,7 @@ interface ConnectWhatsAppHubProps {
 const META_CANCELLED_MESSAGE =
   "Meta setup was cancelled. You can try again anytime.";
 
-type HubBanner =
-  | { variant: "error"; message: string }
-  | {
-      variant: "neutral";
-      message: string;
-      /** Show prominent “Continue in browser” when JS SDK omits `code` but session looks connected */
-      promoteBrowserFallback?: boolean;
-    };
-
-const META_CONNECTED_NO_CODE_MESSAGE =
-  "Meta connected, but authorization code was not returned. Try Continue in browser.";
+type HubBanner = { variant: "error"; message: string } | { variant: "neutral"; message: string };
 
 export function ConnectWhatsAppHub({
   onOpenTwilio,
@@ -179,7 +168,6 @@ export function ConnectWhatsAppHub({
   const queryClient = useQueryClient();
   const [confirmDisconnect, setConfirmDisconnect] = useState(false);
   const [hubBanner, setHubBanner] = useState<HubBanner | null>(null);
-  const [browserFallbackUrl, setBrowserFallbackUrl] = useState<string | null>(null);
   const [metaSdkBusy, setMetaSdkBusy] = useState(false);
 
   const { data: cfg, isLoading: cfgLoading } = useQuery<MetaConfigResponse>({
@@ -206,7 +194,6 @@ export function ConnectWhatsAppHub({
     },
     onSuccess: async (data) => {
       setHubBanner(null);
-      setBrowserFallbackUrl(data.authUrl);
       setMetaSdkBusy(true);
 
       const onMsg = (ev: MessageEvent) => {
@@ -256,7 +243,6 @@ export function ConnectWhatsAppHub({
                   }
                   await queryClient.invalidateQueries({ queryKey: ["/api/integrations/whatsapp/status"] });
                   await queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
-                  setBrowserFallbackUrl(null);
                   setHubBanner(null);
                   return;
                 }
@@ -281,7 +267,7 @@ export function ConnectWhatsAppHub({
         const msg = e instanceof Error ? e.message : "Meta signup could not open.";
         setHubBanner({
           variant: "error",
-          message: `${msg} Use “Continue in browser” below if the problem persists.`,
+          message: `${msg} Close the window and try again with Continue with Meta.`,
         });
       }
     },
@@ -360,14 +346,6 @@ export function ConnectWhatsAppHub({
               </>
             ) : (
               <p className="text-sm">{hubBanner.message}</p>
-            )}
-            {hubBanner.variant === "neutral" && hubBanner.promoteBrowserFallback && browserFallbackUrl && (
-              <Button type="button" size="sm" className="mt-2 bg-emerald-600 hover:bg-emerald-700 text-white" asChild>
-                <a href={browserFallbackUrl} target="_blank" rel="noreferrer">
-                  <ExternalLink className="h-3.5 w-3.5 mr-1.5 inline" />
-                  Continue in browser
-                </a>
-              </Button>
             )}
             <Button
               type="button"
@@ -500,21 +478,6 @@ export function ConnectWhatsAppHub({
                   </p>
                 )}
               </button>
-
-              {browserFallbackUrl && (
-                <div className="rounded-lg border-2 border-emerald-200 bg-gradient-to-b from-emerald-50/90 to-white px-3 py-3 shadow-sm">
-                  <p className="text-xs font-semibold text-emerald-900">Continue in browser</p>
-                  <p className="text-[11px] text-emerald-900/80 mt-1">
-                    If the Meta popup does not return a code, full-page OAuth often works. Same signup session — safe to try anytime during setup.
-                  </p>
-                  <Button type="button" size="sm" className="mt-2 w-full bg-emerald-600 hover:bg-emerald-700 text-white" asChild>
-                    <a href={browserFallbackUrl} target="_blank" rel="noreferrer">
-                      <ExternalLink className="h-4 w-4 mr-2 shrink-0" />
-                      Open Meta signup in this browser
-                    </a>
-                  </Button>
-                </div>
-              )}
 
               <button
                 type="button"
