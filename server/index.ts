@@ -20,6 +20,22 @@ import { seedRealtorTemplate } from "./seedRealtorTemplate";
 import { createBullBoard } from "@bull-board/api";
 import { BullMQAdapter } from "@bull-board/api/bullMQAdapter";
 import { ExpressAdapter } from "@bull-board/express";
+import { getAppOrigin } from "./urlOrigins";
+
+/** SaaS routes must run on APP_URL host (e.g. app.whachatcrm.com), not www marketing. */
+function isSaaSPathname(pathname: string): boolean {
+  return (
+    pathname === "/app" ||
+    pathname.startsWith("/app/") ||
+    pathname === "/api" ||
+    pathname.startsWith("/api/")
+  );
+}
+
+function primaryHost(host: string | undefined): string {
+  if (!host) return "";
+  return host.split(":")[0].toLowerCase();
+}
 
 console.log("ENV CHECK:", {
   DATABASE_URL: !!process.env.DATABASE_URL,
@@ -88,12 +104,23 @@ async function runStartupGhlCleanup() {
 const app = express();
 const httpServer = createServer(app);
 
-// Redirect apex domain to www (preserve path + query)
+// Host routing: apex / www must not serve OAuth or API under wrong host
 app.use((req, res, next) => {
-  const host = req.headers.host;
+  const host = primaryHost(req.headers.host);
+  const pathname = req.path || "/";
+  const target = `${getAppOrigin().replace(/\/+$/, "")}${req.originalUrl || req.url}`;
+
   if (host === "whachatcrm.com") {
-    return res.redirect(301, `https://www.whachatcrm.com${req.url}`);
+    if (isSaaSPathname(pathname)) {
+      return res.redirect(301, target);
+    }
+    return res.redirect(301, `https://www.whachatcrm.com${req.originalUrl || req.url}`);
   }
+
+  if (host === "www.whachatcrm.com" && isSaaSPathname(pathname)) {
+    return res.redirect(301, target);
+  }
+
   next();
 });
 
