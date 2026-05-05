@@ -20,7 +20,6 @@ import { storage } from "./storage";
 import { getMetaGraphApiBase, getMetaFacebookOAuthDialogBase } from "./metaGraphVersion";
 import { exchangeCodeForToken, exchangeForLongLivedUserToken } from "./metaOAuth";
 import { connectUserMeta, type MetaCredentials } from "./userMeta";
-import { getAppOrigin } from "./urlOrigins";
 
 const STATE_TTL_MS = 15 * 60 * 1000;
 
@@ -89,9 +88,11 @@ export async function verifyWhatsappEmbeddedSignupMigration(): Promise<boolean> 
 }
 
 export function getWhatsappMetaRedirectUri(): string {
-  const explicit = process.env.META_WHATSAPP_REDIRECT_URI?.trim();
-  if (explicit) return explicit.replace(/\/+$/, "");
-  return `${getAppOrigin().replace(/\/+$/, "")}/api/integrations/whatsapp/meta/callback`;
+  const uri = process.env.META_WHATSAPP_REDIRECT_URI;
+  if (!uri) {
+    throw new Error("META_WHATSAPP_REDIRECT_URI is not configured");
+  }
+  return uri;
 }
 
 export interface WhatsappMetaPublicConfig {
@@ -511,6 +512,9 @@ export async function completeEmbeddedSignupOAuth(params: {
   const redirectUri = getWhatsappMetaRedirectUri();
   let shortToken: string;
   try {
+    console.log("[META EXCHANGE DEBUG]", {
+      redirectUriUsed: process.env.META_WHATSAPP_REDIRECT_URI,
+    });
     shortToken = await exchangeCodeForToken(code, redirectUri);
   } catch (e: any) {
     console.warn("[WhatsApp Embedded Signup] code exchange failed", e?.message || e);
