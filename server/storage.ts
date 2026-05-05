@@ -56,7 +56,7 @@ export interface IStorage {
   // User methods
   getUser(id: string): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
-  /** Match users.email case-insensitively (Postgres ILIKE exact pattern). Pass normalized lowercased email. */
+  /** Match users.email case-insensitively via `lower("email")` (raw SQL; avoids broken Drizzle fragments). */
   getUserByEmailCaseInsensitive(normalizedEmail: string): Promise<User | undefined>;
   getUserByStripeCustomerId(customerId: string): Promise<User | undefined>;
   getUserByShopifyShop(shop: string): Promise<User | undefined>;
@@ -294,14 +294,29 @@ export class DbStorage implements IStorage {
   async getUserByEmailCaseInsensitive(normalizedEmail: string): Promise<User | undefined> {
     const e = normalizedEmail.trim().toLowerCase();
     if (!e) return undefined;
-    // Case-insensitive exact match: ILIKE with no %/_ wildcards in input (emails are unique per user).
-    const result = await db
-      .select()
-      .from(users)
-      .where(ilike(users.email, e))
-      .limit(2);
-    // Defensive: unique constraint should prevent multiples; if not, take first match.
-    return result[0];
+    // Neon `users` table column is `email` (see migrations/0000_common_drax.sql). Use raw SQL so the
+    // query does not depend on Drizzle's ilike/eq+sql lower() generation (was causing 42703 in prod).
+    try {
+      const result = await db.execute(sql`
+        SELECT id
+        FROM public.users
+        WHERE lower("email") = ${e}
+        LIMIT 2
+      `);
+      const rows = (result as { rows: { id: string }[] }).rows;
+      if (rows.length > 1) {
+        console.warn(
+          "[getUserByEmailCaseInsensitive] multiple users matched lower(email); using first id"
+        );
+      }
+      const id = rows[0]?.id;
+      if (!id) return undefined;
+      return this.getUser(id);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.warn("[getUserByEmailCaseInsensitive] query error:", message);
+      throw err;
+    }
   }
 
   async getUserByStripeCustomerId(customerId: string): Promise<User | undefined> {
