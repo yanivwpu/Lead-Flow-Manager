@@ -165,13 +165,15 @@ export function setupAuth(app: Express) {
           }
 
           if (!user || !verifyOk) {
-            console.warn('[LOGIN DEBUG]', {
-              emailNormalized: normalizedEmail,
-              userFound: !!user,
-              passwordFieldPresent,
-              storedLooksLikeBcrypt,
-              verifyOk,
-            });
+            if (process.env.AUTH_LOGIN_DEBUG === 'true' || process.env.AUTH_LOGIN_DEBUG === '1') {
+              console.warn('[LOGIN DEBUG]', {
+                emailAttempted: normalizedEmail,
+                userFound: !!user,
+                passwordHashPresent: passwordFieldPresent,
+                storedLooksLikeBcrypt,
+                passwordCompareOk: verifyOk,
+              });
+            }
             return done(null, false, { message: 'Invalid email or password' });
           }
 

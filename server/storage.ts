@@ -294,10 +294,11 @@ export class DbStorage implements IStorage {
   async getUserByEmailCaseInsensitive(normalizedEmail: string): Promise<User | undefined> {
     const e = normalizedEmail.trim().toLowerCase();
     if (!e) return undefined;
+    // Use eq(sql`lower(...)`, value) — Drizzle binds the scalar reliably (some `sql`... = ${x}` fragments mis-bind).
     const result = await db
       .select()
       .from(users)
-      .where(sql`lower(${users.email}) = ${e}`)
+      .where(eq(sql`lower(${users.email})`, e))
       .limit(2);
     // Defensive: unique constraint should prevent multiples; if not, take first match.
     return result[0];
