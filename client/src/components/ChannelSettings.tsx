@@ -162,6 +162,7 @@ export function ChannelSettings() {
   const searchString = useSearch();
   const queryClient = useQueryClient();
   const [configChannel, setConfigChannel] = useState<Channel | null>(null);
+  const [whatsappEmbeddedInlineError, setWhatsappEmbeddedInlineError] = useState<string | null>(null);
   const [telegramToken, setTelegramToken] = useState("");
   const [telegramStep, setTelegramStep] = useState<1 | 2 | 3>(1);
   const [telegramError, setTelegramError] = useState<string | null>(null);
@@ -251,11 +252,10 @@ export function ChannelSettings() {
       window.history.replaceState({}, "", `${window.location.pathname}${q ? `?${q}` : ""}`);
     } else if (embedded === "error") {
       const reason = params.get("reason") || "Meta signup did not complete.";
-      toast({
-        title: "WhatsApp setup incomplete",
-        description: reason,
-        variant: "destructive",
-      });
+      // Show inline (non-destructive) messaging inside the WhatsApp connect dialog.
+      setWhatsappEmbeddedInlineError(
+        "Couldn’t find a WhatsApp phone number on the selected business. Please select the WABA that has your number or add a phone number in Meta."
+      );
       params.delete("whatsapp_embedded");
       params.delete("reason");
       const q = params.toString();
@@ -862,6 +862,11 @@ export function ChannelSettings() {
               Connect WhatsApp
             </DialogTitle>
           </DialogHeader>
+          {whatsappEmbeddedInlineError && (
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-800">
+              {whatsappEmbeddedInlineError}
+            </div>
+          )}
           <ConnectWhatsAppHub
             onClose={() => setConfigChannel(null)}
             onOpenTwilio={() => {

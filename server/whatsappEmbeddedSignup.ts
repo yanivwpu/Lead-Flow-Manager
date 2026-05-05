@@ -308,21 +308,61 @@ type WabaPhoneChoice = {
 async function fetchUserWabaChoices(accessToken: string): Promise<WabaPhoneChoice[]> {
   const base = getMetaGraphApiBase();
 
-  // 1) Fetch user's WABAs
-  const wabaRes = await fetch(
-    `${base}/me/whatsapp_business_accounts?fields=id,name&limit=50&access_token=${encodeURIComponent(accessToken)}`
+  // The User node does not expose whatsapp_business_accounts; discover via Business edges instead.
+  // A) GET /me/businesses
+  const bizRes = await fetch(
+    `${base}/me/businesses?fields=id,name&limit=50&access_token=${encodeURIComponent(accessToken)}`
   );
-  const wabaJson = (await wabaRes.json().catch(() => ({}))) as any;
-  if (!wabaRes.ok) {
-    const msg = wabaJson?.error?.message || "Failed to fetch WhatsApp Business Accounts.";
+  const bizJson = (await bizRes.json().catch(() => ({}))) as any;
+  if (!bizRes.ok) {
+    const msg = bizJson?.error?.message || "Failed to fetch businesses.";
     throw new Error(msg);
   }
-
-  const wabas: Array<{ id: string; name?: string }> = Array.isArray(wabaJson?.data)
-    ? wabaJson.data
+  const businesses: Array<{ id: string; name?: string }> = Array.isArray(bizJson?.data)
+    ? bizJson.data
         .map((r: any) => ({ id: String(r?.id || ""), name: typeof r?.name === "string" ? r.name : undefined }))
         .filter((r) => !!r.id)
     : [];
+
+  console.log("[WABA DISCOVERY] businesses count", { count: businesses.length });
+
+  // B) For each business: owned_whatsapp_business_accounts and client_whatsapp_business_accounts
+  const wabaById = new Map<string, { id: string; name?: string }>();
+  let ownedCount = 0;
+  let clientCount = 0;
+
+  for (const biz of businesses) {
+    const ownedRes = await fetch(
+      `${base}/${encodeURIComponent(biz.id)}/owned_whatsapp_business_accounts?fields=id,name&limit=50&access_token=${encodeURIComponent(accessToken)}`
+    );
+    const ownedJson = (await ownedRes.json().catch(() => ({}))) as any;
+    if (ownedRes.ok && Array.isArray(ownedJson?.data)) {
+      ownedCount += ownedJson.data.length;
+      for (const r of ownedJson.data) {
+        const id = String(r?.id || "");
+        if (!id) continue;
+        wabaById.set(id, { id, name: typeof r?.name === "string" ? r.name : undefined });
+      }
+    }
+
+    const clientRes = await fetch(
+      `${base}/${encodeURIComponent(biz.id)}/client_whatsapp_business_accounts?fields=id,name&limit=50&access_token=${encodeURIComponent(accessToken)}`
+    );
+    const clientJson = (await clientRes.json().catch(() => ({}))) as any;
+    if (clientRes.ok && Array.isArray(clientJson?.data)) {
+      clientCount += clientJson.data.length;
+      for (const r of clientJson.data) {
+        const id = String(r?.id || "");
+        if (!id) continue;
+        wabaById.set(id, { id, name: typeof r?.name === "string" ? r.name : undefined });
+      }
+    }
+  }
+
+  console.log("[WABA DISCOVERY] owned WABAs count", { count: ownedCount });
+  console.log("[WABA DISCOVERY] client WABAs count", { count: clientCount });
+
+  const wabas = [...wabaById.values()];
 
   // 2) For each WABA, fetch phone numbers
   const choices: WabaPhoneChoice[] = [];
@@ -362,6 +402,7 @@ async function fetchUserWabaChoices(accessToken: string): Promise<WabaPhoneChoic
     });
   }
 
+  console.log("[WABA DISCOVERY] valid WABAs with phone numbers count", { count: choices.length });
   return choices;
 }
 
