@@ -59,6 +59,20 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
 
   /** OAuth redirect target — Meta sends GET with ?code=&state= */
   app.get("/api/integrations/whatsapp/meta/callback", async (req: Request, res: Response) => {
+    const q = req.query;
+    const codeStr = typeof q.code === "string" ? q.code : "";
+    const stateStr = typeof q.state === "string" ? q.state : "";
+    const errStr = typeof q.error === "string" ? q.error : "";
+    const errReason = typeof q.error_reason === "string" ? q.error_reason : "";
+    const errDesc = typeof q.error_description === "string" ? q.error_description : "";
+    console.log("[WHATSAPP META CALLBACK HIT]", {
+      hasCode: codeStr.length > 0,
+      hasState: stateStr.length > 0,
+      error: errStr || undefined,
+      error_reason: errReason || undefined,
+      error_description: errDesc ? `[${errDesc.length} chars]` : undefined,
+    });
+
     const base = getAppOrigin().replace(/\/+$/, "");
     const failRedirect = (msg: string) => {
       const q = new URLSearchParams({
@@ -76,11 +90,10 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
     };
 
     try {
-      const code = typeof req.query.code === "string" ? req.query.code : "";
-      const state = typeof req.query.state === "string" ? req.query.state : "";
-      const error = typeof req.query.error === "string" ? req.query.error : "";
-      const errorDescription =
-        typeof req.query.error_description === "string" ? req.query.error_description : "";
+      const code = codeStr;
+      const state = stateStr;
+      const error = errStr;
+      const errorDescription = errDesc;
 
       if (error) {
         console.warn("[WhatsApp Embedded Signup] OAuth error from Meta", { error, errorDescription });

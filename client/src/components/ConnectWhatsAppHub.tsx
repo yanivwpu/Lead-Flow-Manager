@@ -36,14 +36,51 @@ interface MetaStartResponse {
   };
 }
 
+/** FB.login callback — safe fields only; never log token values. */
+interface FbLoginAuthResponse {
+  code?: string;
+  accessToken?: string;
+  expiresIn?: string;
+  signedRequest?: string;
+  userID?: string;
+  graphDomain?: string;
+  data_access_expiration_time?: number;
+}
+
+interface FbLoginResponse {
+  status?: string;
+  authResponse?: FbLoginAuthResponse;
+  error?: { message?: string; type?: string; code?: number } | string;
+  errorMessage?: string;
+  error_message?: string;
+}
+
+function logFbLoginResponseSafe(response: FbLoginResponse): void {
+  const ar = response.authResponse;
+  const err = response.error;
+  let errorSummary: string | undefined;
+  if (err != null) {
+    if (typeof err === "string") errorSummary = err;
+    else if (typeof err === "object" && err !== null && "message" in err) {
+      errorSummary = String((err as { message?: unknown }).message);
+    }
+  }
+  const looseMsg = response.errorMessage ?? response.error_message;
+  console.debug("[WhatsApp Embedded Signup] FB.login callback", {
+    status: response.status,
+    hasAuthResponse: !!ar,
+    authResponseKeys: ar ? Object.keys(ar) : [],
+    hasCode: !!ar?.code,
+    hasError: err != null && err !== "",
+    message: errorSummary ?? (typeof looseMsg === "string" ? looseMsg : undefined),
+  });
+}
+
 declare global {
   interface Window {
     FB?: {
       init: (opts: Record<string, unknown>) => void;
-      login: (
-        cb: (response: { authResponse?: { code?: string }; status?: string }) => void,
-        opts: Record<string, unknown>
-      ) => void;
+      login: (cb: (response: FbLoginResponse) => void, opts: Record<string, unknown>) => void;
     };
     fbAsyncInit?: () => void;
   }
@@ -124,7 +161,15 @@ const META_CANCELLED_MESSAGE =
 
 type HubBanner =
   | { variant: "error"; message: string }
-  | { variant: "neutral"; message: string };
+  | {
+      variant: "neutral";
+      message: string;
+      /** Show prominent “Continue in browser” when JS SDK omits `code` but session looks connected */
+      promoteBrowserFallback?: boolean;
+    };
+
+const META_CONNECTED_NO_CODE_MESSAGE =
+  "Meta connected, but authorization code was not returned. Try Continue in browser.";
 
 export function ConnectWhatsAppHub({
   onOpenTwilio,
@@ -316,6 +361,14 @@ export function ConnectWhatsAppHub({
             ) : (
               <p className="text-sm">{hubBanner.message}</p>
             )}
+            {hubBanner.variant === "neutral" && hubBanner.promoteBrowserFallback && browserFallbackUrl && (
+              <Button type="button" size="sm" className="mt-2 bg-emerald-600 hover:bg-emerald-700 text-white" asChild>
+                <a href={browserFallbackUrl} target="_blank" rel="noreferrer">
+                  <ExternalLink className="h-3.5 w-3.5 mr-1.5 inline" />
+                  Continue in browser
+                </a>
+              </Button>
+            )}
             <Button
               type="button"
               variant="outline"
@@ -347,7 +400,7 @@ export function ConnectWhatsAppHub({
               <p className="font-semibold text-emerald-900">Connected — Meta Cloud API</p>
               {meta?.legacyManualConnection && (
                 <p className="text-xs text-emerald-800 mt-1">
-                  <span className="font-semibold">Legacy Meta connection</span> — credentials were entered manually. You can upgrade to Embedded Signup anytime: disconnect first, then use Continue with Meta.
+                  <span className="font-semibold">Legacy Meta connection</span> — credentials were entered manually. You can upgrade to Embedded Signup anytime: disconnect first, then use &quot;Continue with Meta&quot;.
                 </p>
               )}
               <dl className="mt-2 space-y-1 text-xs text-gray-700">
@@ -448,6 +501,21 @@ export function ConnectWhatsAppHub({
                 )}
               </button>
 
+              {browserFallbackUrl && (
+                <div className="rounded-lg border-2 border-emerald-200 bg-gradient-to-b from-emerald-50/90 to-white px-3 py-3 shadow-sm">
+                  <p className="text-xs font-semibold text-emerald-900">Continue in browser</p>
+                  <p className="text-[11px] text-emerald-900/80 mt-1">
+                    If the Meta popup does not return a code, full-page OAuth often works. Same signup session — safe to try anytime during setup.
+                  </p>
+                  <Button type="button" size="sm" className="mt-2 w-full bg-emerald-600 hover:bg-emerald-700 text-white" asChild>
+                    <a href={browserFallbackUrl} target="_blank" rel="noreferrer">
+                      <ExternalLink className="h-4 w-4 mr-2 shrink-0" />
+                      Open Meta signup in this browser
+                    </a>
+                  </Button>
+                </div>
+              )}
+
               <button
                 type="button"
                 disabled={!cfg?.coexistenceEnabled || startMeta.isPending || metaSdkBusy}
@@ -516,23 +584,6 @@ export function ConnectWhatsAppHub({
             <div className="flex items-center gap-2 text-sm text-gray-600">
               <Loader2 className="h-4 w-4 animate-spin" />
               {startMeta.isPending ? "Starting Meta…" : "Complete login in the Meta window…"}
-            </div>
-          )}
-
-          {browserFallbackUrl && (
-            <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-[11px] text-gray-700">
-              <p className="font-medium text-gray-900">Continue in browser</p>
-              <p className="mt-1">
-                If the Meta dialog did not appear or signup failed to finish, open the standard OAuth flow:{" "}
-                <a
-                  href={browserFallbackUrl}
-                  className="text-emerald-700 font-medium underline break-all"
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  Open Meta signup in this browser
-                </a>
-              </p>
             </div>
           )}
         </>

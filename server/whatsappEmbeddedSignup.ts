@@ -516,7 +516,8 @@ export async function completeEmbeddedSignupOAuth(params: {
     console.warn("[WhatsApp Embedded Signup] code exchange failed", e?.message || e);
     return {
       success: false,
-      error: "Meta did not return a valid authorization code. Close the window and try **Continue with Meta** again.",
+      error:
+        "Could not exchange the authorization code with Meta (redirect URI or app settings may not match). Try Continue in browser from Settings, or close the window and start again with Continue with Meta.",
     };
   }
 
