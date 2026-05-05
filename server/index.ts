@@ -191,6 +191,15 @@ app.use(oidcRouter);
 // Setup authentication
 setupAuth(app);
 
+const authDeployMarker =
+  process.env.RAILWAY_GIT_COMMIT_SHA ||
+  process.env.RAILWAY_GIT_COMMIT ||
+  process.env.VERCEL_GIT_COMMIT_SHA ||
+  process.env.GITHUB_SHA ||
+  process.env.COMMIT_SHA ||
+  "(no CI commit SHA — local or unset)";
+console.log("[AUTH FIX DEPLOYED] raw email lookup active", { gitSha: authDeployMarker });
+
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
     hour: "numeric",

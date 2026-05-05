@@ -13,13 +13,8 @@ const resetTokens = new Map<string, { email: string; expires: Date }>();
 const PgStore = connectPgSimple(session);
 
 async function resolveUserForLogin(rawEmail: string): Promise<User | undefined> {
-  const trimmed = typeof rawEmail === 'string' ? rawEmail.trim() : '';
-  const lower = trimmed.toLowerCase();
-  return (
-    (trimmed ? await storage.getUserByEmail(trimmed) : undefined) ||
-    (lower ? await storage.getUserByEmail(lower) : undefined) ||
-    (lower ? await storage.getUserByEmailCaseInsensitive(lower) : undefined)
-  );
+  // Single code path: storage.getUserByEmail uses raw SQL only (no Drizzle eq/ilike on users.email).
+  return storage.getUserByEmail(typeof rawEmail === 'string' ? rawEmail : '');
 }
 
 /** Supports bcrypt hashes and legacy plaintext (re-hashed after successful login). */

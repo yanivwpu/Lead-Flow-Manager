@@ -13,7 +13,7 @@
  * include message + status fields (and `account_update` if your integration relies on it).
  */
 import crypto from "crypto";
-import { eq, lt } from "drizzle-orm";
+import { eq, lt, sql } from "drizzle-orm";
 import { db } from "../drizzle/db";
 import { whatsappOauthStates } from "@shared/schema";
 import { storage } from "./storage";
@@ -23,6 +23,70 @@ import { connectUserMeta, type MetaCredentials } from "./userMeta";
 import { getAppOrigin } from "./urlOrigins";
 
 const STATE_TTL_MS = 15 * 60 * 1000;
+
+/**
+ * Exact SQL from `migrations/0006_whatsapp_embedded_signup.sql` — run in Neon SQL Editor
+ * if `whatsapp_oauth_states` is missing (Embedded Signup fails on DELETE/INSERT to that table).
+ * Safe to re-run: uses IF NOT EXISTS / ADD COLUMN IF NOT EXISTS.
+ */
+export const WHATSAPP_EMBEDDED_SIGNUP_0006_SQL = `-- WhatsApp Embedded Signup / coexistence metadata + OAuth state CSRF table (Neon-safe).
+ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "meta_connection_type" text;
+ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "meta_token_expires_at" timestamp;
+ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "meta_webhook_subscribed" boolean DEFAULT false;
+ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "meta_webhook_last_checked_at" timestamp;
+ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "meta_integration_status" text;
+ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "meta_last_error_code" text;
+ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "meta_last_error_message" text;
+ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "meta_display_phone_number" text;
+ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "meta_verified_name" text;
+
+UPDATE "users"
+SET "meta_connection_type" = 'manual_legacy'
+WHERE "meta_connected" = true AND "meta_connection_type" IS NULL;
+
+CREATE TABLE IF NOT EXISTS "whatsapp_oauth_states" (
+  "id" varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+  "user_id" varchar NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+  "state_token" text NOT NULL UNIQUE,
+  "flow" text NOT NULL,
+  "created_at" timestamp DEFAULT now(),
+  "expires_at" timestamp NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS "whatsapp_oauth_states_expires_idx" ON "whatsapp_oauth_states" ("expires_at");
+`;
+
+function isMissingWhatsappOauthRelationError(err: unknown): boolean {
+  const any = err as { code?: string; message?: string };
+  const code = any?.code;
+  const msg = (any?.message || "").toLowerCase();
+  if (code === "42P01" || code === "42703") return true;
+  if (msg.includes("whatsapp_oauth_states")) return true;
+  return false;
+}
+
+export function formatMissingWhatsappOauthStatesMessage(): string {
+  return (
+    "WhatsApp Embedded Signup requires table public.whatsapp_oauth_states (migration 0006). " +
+    "In Neon: open SQL Editor, paste migrations/0006_whatsapp_embedded_signup.sql (or WHATSAPP_EMBEDDED_SIGNUP_0006_SQL in server/whatsappEmbeddedSignup.ts), run, then redeploy."
+  );
+}
+
+/** Call once at server startup; logs clearly if migration 0006 was never applied. */
+export async function verifyWhatsappEmbeddedSignupMigration(): Promise<boolean> {
+  try {
+    await db.execute(sql`SELECT 1 FROM public.whatsapp_oauth_states LIMIT 1`);
+    return true;
+  } catch (err: unknown) {
+    if (!isMissingWhatsappOauthRelationError(err)) throw err;
+    console.error(
+      "[WhatsApp Embedded Signup] Database: public.whatsapp_oauth_states is missing or incompatible. " +
+        "Apply migration 0006 in Neon (see WHATSAPP_EMBEDDED_SIGNUP_0006_SQL or migrations/0006_whatsapp_embedded_signup.sql)."
+    );
+    console.error("[WhatsApp Embedded Signup] Postgres error:", (err as Error)?.message || err);
+    return false;
+  }
+}
 
 export function getWhatsappMetaRedirectUri(): string {
   const explicit = process.env.META_WHATSAPP_REDIRECT_URI?.trim();
@@ -112,7 +176,14 @@ function generateStateToken(): string {
 }
 
 async function cleanupExpiredStates(): Promise<void> {
-  await db.delete(whatsappOauthStates).where(lt(whatsappOauthStates.expiresAt, new Date()));
+  try {
+    await db.delete(whatsappOauthStates).where(lt(whatsappOauthStates.expiresAt, new Date()));
+  } catch (err: unknown) {
+    if (!isMissingWhatsappOauthRelationError(err)) throw err;
+    const hint = formatMissingWhatsappOauthStatesMessage();
+    console.error("[WhatsApp Embedded Signup] cleanupExpiredStates failed:", (err as Error)?.message || err);
+    throw new Error(hint);
+  }
 }
 
 /** Resolve Embedded Signup configuration ID — coexistence never falls back to the main config. */

@@ -11,7 +11,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Loader2, MessageCircle, Smartphone, CheckCircle2, AlertTriangle, RefreshCw, ExternalLink } from "lucide-react";
+import { Loader2, MessageCircle, Smartphone, CheckCircle2, AlertTriangle, RefreshCw, ExternalLink, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface MetaConfigResponse {
@@ -119,6 +119,13 @@ interface ConnectWhatsAppHubProps {
   onClose: () => void;
 }
 
+const META_CANCELLED_MESSAGE =
+  "Meta setup was cancelled. You can try again anytime.";
+
+type HubBanner =
+  | { variant: "error"; message: string }
+  | { variant: "neutral"; message: string };
+
 export function ConnectWhatsAppHub({
   onOpenTwilio,
   onOpenManualMeta,
@@ -126,7 +133,7 @@ export function ConnectWhatsAppHub({
 }: ConnectWhatsAppHubProps) {
   const queryClient = useQueryClient();
   const [confirmDisconnect, setConfirmDisconnect] = useState(false);
-  const [inlineError, setInlineError] = useState<string | null>(null);
+  const [hubBanner, setHubBanner] = useState<HubBanner | null>(null);
   const [browserFallbackUrl, setBrowserFallbackUrl] = useState<string | null>(null);
   const [metaSdkBusy, setMetaSdkBusy] = useState(false);
 
@@ -153,7 +160,7 @@ export function ConnectWhatsAppHub({
       return data as MetaStartResponse;
     },
     onSuccess: async (data) => {
-      setInlineError(null);
+      setHubBanner(null);
       setBrowserFallbackUrl(data.authUrl);
       setMetaSdkBusy(true);
 
@@ -196,21 +203,20 @@ export function ConnectWhatsAppHub({
                   });
                   const j = (await res.json()) as { success?: boolean; error?: string };
                   if (!res.ok || !j.success) {
-                    setInlineError(j.error || "Could not complete WhatsApp signup.");
+                    setHubBanner({
+                      variant: "error",
+                      message: j.error || "Could not complete WhatsApp signup.",
+                    });
                     return;
                   }
                   await queryClient.invalidateQueries({ queryKey: ["/api/integrations/whatsapp/status"] });
                   await queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
                   setBrowserFallbackUrl(null);
+                  setHubBanner(null);
                   return;
                 }
-                if (response.status === "not_authorized" || response.status === "unknown") {
-                  setInlineError("Meta login was cancelled or could not complete.");
-                } else if (!code) {
-                  setInlineError(
-                    "Meta did not return a signup authorization code. Try again or use Continue in browser."
-                  );
-                }
+                // Popup closed, Not Now, or OAuth declined — not an application error
+                setHubBanner({ variant: "neutral", message: META_CANCELLED_MESSAGE });
               } finally {
                 window.removeEventListener("message", onMsg);
                 setMetaSdkBusy(false);
@@ -228,11 +234,14 @@ export function ConnectWhatsAppHub({
         window.removeEventListener("message", onMsg);
         setMetaSdkBusy(false);
         const msg = e instanceof Error ? e.message : "Meta signup could not open.";
-        setInlineError(`${msg} Use “Continue in browser” below if the problem persists.`);
+        setHubBanner({
+          variant: "error",
+          message: `${msg} Use “Continue in browser” below if the problem persists.`,
+        });
       }
     },
     onError: (e: Error) => {
-      setInlineError(e.message);
+      setHubBanner({ variant: "error", message: e.message });
     },
   });
 
@@ -249,9 +258,9 @@ export function ConnectWhatsAppHub({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/integrations/whatsapp/status"] });
       queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
-      setInlineError(null);
+      setHubBanner(null);
     },
-    onError: (e: Error) => setInlineError(e.message),
+    onError: (e: Error) => setHubBanner({ variant: "error", message: e.message }),
   });
 
   const disconnectMutation = useMutation({
@@ -273,9 +282,9 @@ export function ConnectWhatsAppHub({
       queryClient.invalidateQueries({ queryKey: ["/api/integrations/whatsapp/status"] });
       queryClient.invalidateQueries({ queryKey: ["/api/channels"] });
       setConfirmDisconnect(false);
-      setInlineError(null);
+      setHubBanner(null);
     },
-    onError: (e: Error) => setInlineError(e.message),
+    onError: (e: Error) => setHubBanner({ variant: "error", message: e.message }),
   });
 
   const loading = cfgLoading || statusLoading;
@@ -284,18 +293,35 @@ export function ConnectWhatsAppHub({
 
   return (
     <div className="space-y-4 mt-2">
-      {inlineError && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 flex gap-2 items-start">
-          <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
-          <div className="min-w-0">
-            <p className="font-medium">Something went wrong</p>
-            <p className="text-xs mt-0.5">{inlineError}</p>
+      {hubBanner && (
+        <div
+          className={cn(
+            "rounded-lg border px-3 py-2 text-sm flex gap-2 items-start",
+            hubBanner.variant === "error"
+              ? "border-amber-200 bg-amber-50 text-amber-900"
+              : "border-slate-200 bg-slate-50 text-slate-700"
+          )}
+        >
+          {hubBanner.variant === "error" ? (
+            <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-amber-700" aria-hidden />
+          ) : (
+            <Info className="h-4 w-4 shrink-0 mt-0.5 text-slate-500" aria-hidden />
+          )}
+          <div className="min-w-0 flex-1">
+            {hubBanner.variant === "error" ? (
+              <>
+                <p className="font-medium">Couldn&apos;t complete setup</p>
+                <p className="text-xs mt-0.5">{hubBanner.message}</p>
+              </>
+            ) : (
+              <p className="text-sm">{hubBanner.message}</p>
+            )}
             <Button
               type="button"
               variant="outline"
               size="sm"
-              className="mt-2"
-              onClick={() => setInlineError(null)}
+              className={cn("mt-2", hubBanner.variant === "neutral" && "border-slate-300")}
+              onClick={() => setHubBanner(null)}
             >
               Dismiss
             </Button>

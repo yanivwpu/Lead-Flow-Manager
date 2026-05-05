@@ -12,6 +12,7 @@ import {
   logWhatsappEmbeddedSignupStartupWarnings,
   applyMetaTokenExpiryAttention,
   getWhatsappConnectionDebug,
+  verifyWhatsappEmbeddedSignupMigration,
 } from "../whatsappEmbeddedSignup";
 import { getAppOrigin } from "../urlOrigins";
 import { storage } from "../storage";
@@ -20,6 +21,11 @@ import { getMetaAccessToken } from "../userMeta";
 
 export function registerWhatsappIntegrationRoutes(app: Express): void {
   logWhatsappEmbeddedSignupStartupWarnings();
+  void verifyWhatsappEmbeddedSignupMigration().then((ok) => {
+    if (ok) {
+      console.log("[WhatsApp Embedded Signup] Migration check: whatsapp_oauth_states table is reachable.");
+    }
+  });
 
   app.get("/api/integrations/whatsapp/meta/config", (_req: Request, res: Response) => {
     try {
