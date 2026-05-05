@@ -235,6 +235,8 @@ export interface EmbeddedSignupSdkPayload {
 export interface EmbeddedSignupStartResult {
   state: string;
   authUrl: string;
+  /** Same string as META_WHATSAPP_REDIRECT_URI — must match FB.login and Graph code exchange. */
+  redirectUri: string;
   sdk: EmbeddedSignupSdkPayload;
 }
 
@@ -270,9 +272,11 @@ export async function startEmbeddedSignupSession(
   const graphApiVersion = graphRaw.startsWith("v") ? graphRaw : `v${graphRaw}`;
 
   const authUrl = buildEmbeddedSignupAuthUrl(stateToken, flow);
+  const redirectUri = getWhatsappMetaRedirectUri();
   return {
     state: stateToken,
     authUrl,
+    redirectUri,
     sdk: {
       appId,
       graphApiVersion,
@@ -516,7 +520,7 @@ export async function completeEmbeddedSignupOAuth(params: {
   try {
     console.log("[META EXCHANGE DEBUG]", {
       flow: tokenExchange,
-      redirectUriUsed: process.env.META_WHATSAPP_REDIRECT_URI,
+      redirectUriUsed: redirectUri,
     });
     shortToken = await exchangeCodeForToken(code, redirectUri);
   } catch (e: any) {

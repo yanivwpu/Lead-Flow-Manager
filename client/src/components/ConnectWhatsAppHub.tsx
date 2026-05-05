@@ -28,6 +28,8 @@ interface MetaConfigResponse {
 
 interface MetaStartResponse {
   state: string;
+  /** From server META_WHATSAPP_REDIRECT_URI — must match Graph token exchange. */
+  redirectUri: string;
   sdk: {
     appId: string;
     graphApiVersion: string;
@@ -221,6 +223,20 @@ export function ConnectWhatsAppHub({
           version: data.sdk.graphApiVersion,
         });
 
+        const loginOpts = {
+          config_id: data.sdk.configId,
+          response_type: "code" as const,
+          override_default_response_type: true,
+          extras: { setup: {} },
+          redirect_uri: data.redirectUri,
+        };
+        console.debug("[WHATSAPP FB LOGIN OPTS]", {
+          hasConfigId: !!loginOpts.config_id,
+          response_type: loginOpts.response_type,
+          override_default_response_type: loginOpts.override_default_response_type,
+          redirect_uri: loginOpts.redirect_uri,
+        });
+
         FB.login(
           (response) => {
             void (async () => {
@@ -254,12 +270,7 @@ export function ConnectWhatsAppHub({
               }
             })();
           },
-          {
-            config_id: data.sdk.configId,
-            response_type: "code",
-            override_default_response_type: true,
-            extras: { setup: {} },
-          }
+          loginOpts
         );
       } catch (e: unknown) {
         window.removeEventListener("message", onMsg);
