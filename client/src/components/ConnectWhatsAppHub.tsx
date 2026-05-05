@@ -291,6 +291,9 @@ export function ConnectWhatsAppHub({
                     <p className="text-[11px] text-gray-600 mt-0.5">
                       Embedded Signup — create or select Business, WABA, and phone in Meta&apos;s flow (recommended).
                     </p>
+                    <p className="text-[11px] text-emerald-700 mt-0.5 font-medium">
+                      Using redirect flow v2
+                    </p>
                   </div>
                 </div>
                 {!cfg?.embeddedSignupEnabled && (

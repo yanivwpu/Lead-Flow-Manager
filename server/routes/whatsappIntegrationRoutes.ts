@@ -44,7 +44,16 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
     flow: z.enum(["embedded", "coexistence"]),
   });
 
+  // OLD SDK START (TEMP BLOCK): legacy clients used POST /meta/start then JS SDK.
+  // We now use full redirect only: GET /meta/start-redirect.
   app.post("/api/integrations/whatsapp/meta/start", async (req: Request, res: Response) => {
+    console.warn("[OLD WHATSAPP SDK FLOW BLOCKED]", { endpoint: "POST /api/integrations/whatsapp/meta/start" });
+    return res.status(410).json({
+      error: "Old WhatsApp SDK flow disabled. Refresh and use full redirect.",
+    });
+  });
+
+  app.post("/api/integrations/whatsapp/meta/start__disabled", async (req: Request, res: Response) => {
     try {
       if (!req.user) return res.status(401).json({ error: "Unauthorized" });
       const parsed = startBody.safeParse(req.body);
@@ -134,6 +143,13 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
    * Same server logic as the redirect callback; ties completion to the logged-in user.
    */
   app.post("/api/integrations/whatsapp/meta/complete-sdk", async (req: Request, res: Response) => {
+    console.warn("[OLD WHATSAPP SDK FLOW BLOCKED]", { endpoint: "POST /api/integrations/whatsapp/meta/complete-sdk" });
+    return res.status(410).json({
+      error: "Old WhatsApp SDK flow disabled. Refresh and use full redirect.",
+    });
+  });
+
+  app.post("/api/integrations/whatsapp/meta/complete-sdk__disabled", async (req: Request, res: Response) => {
     try {
       if (!req.user) return res.status(401).json({ error: "Unauthorized" });
       const parsed = completeSdkBody.safeParse(req.body);
