@@ -197,23 +197,30 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
   });
 
   /**
-   * Temporary diagnostic endpoint: force full redirect OAuth (no JS SDK) to isolate redirect_uri mismatch.
-   * This redirects the user-agent to the exact Meta dialog URL we would use for redirect flow.
+   * Full redirect OAuth entrypoint (production).
+   * Creates oauth state, stores redirect_uri, builds Meta dialog URL, and redirects.
    */
-  app.get("/api/integrations/whatsapp/meta/test-full-redirect", async (req: Request, res: Response) => {
+  app.get("/api/integrations/whatsapp/meta/start-redirect", async (req: Request, res: Response) => {
     try {
       if (!req.user) return res.status(401).send("Unauthorized");
       const flow = (req.query.flow === "coexistence" ? "coexistence" : "embedded") as "embedded" | "coexistence";
       const session = await startEmbeddedSignupSession(req.user.id, flow);
-      console.log("[WhatsApp Embedded Signup] test-full-redirect", {
+      console.log("[WHATSAPP FULL REDIRECT START]", {
         flow,
         redirectUriUsed: session.redirectUri,
         graphApiVersion: session.sdk.graphApiVersion,
       });
       res.redirect(302, session.authUrl);
     } catch (e: any) {
-      res.status(400).send(e?.message || "Could not start full redirect test");
+      res.status(400).send(e?.message || "Could not start Meta redirect");
     }
+  });
+
+  // Backwards-compatible alias during rollout (safe to remove later).
+  app.get("/api/integrations/whatsapp/meta/test-full-redirect", async (req: Request, res: Response) => {
+    const qs = new URLSearchParams();
+    if (typeof req.query.flow === "string") qs.set("flow", req.query.flow);
+    res.redirect(302, `/api/integrations/whatsapp/meta/start-redirect?${qs.toString()}`);
   });
 
   /** Safe diagnostics for support — no secrets or tokens. */

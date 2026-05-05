@@ -26,109 +26,11 @@ interface MetaConfigResponse {
   missingEnvHints: string[];
 }
 
-interface MetaStartResponse {
-  state: string;
-  /** From server META_WHATSAPP_REDIRECT_URI — must match Graph token exchange. */
-  redirectUri: string;
-  sdk: {
-    appId: string;
-    graphApiVersion: string;
-    configId: string;
-  };
-}
-
 type WabaChoice = {
   wabaId: string;
   wabaName?: string;
   phoneNumbers: Array<{ id: string; displayPhoneNumber?: string; verifiedName?: string }>;
 };
-
-/** FB.login callback — safe fields only; never log token values. */
-interface FbLoginAuthResponse {
-  code?: string;
-  accessToken?: string;
-  expiresIn?: string;
-  signedRequest?: string;
-  userID?: string;
-  graphDomain?: string;
-  data_access_expiration_time?: number;
-}
-
-interface FbLoginResponse {
-  status?: string;
-  authResponse?: FbLoginAuthResponse;
-  error?: { message?: string; type?: string; code?: number } | string;
-  errorMessage?: string;
-  error_message?: string;
-}
-
-function logFbLoginResponseSafe(response: FbLoginResponse): void {
-  const ar = response.authResponse;
-  const err = response.error;
-  let errorSummary: string | undefined;
-  if (err != null) {
-    if (typeof err === "string") errorSummary = err;
-    else if (typeof err === "object" && err !== null && "message" in err) {
-      errorSummary = String((err as { message?: unknown }).message);
-    }
-  }
-  const looseMsg = response.errorMessage ?? response.error_message;
-  console.debug("[WhatsApp Embedded Signup] FB.login callback", {
-    status: response.status,
-    hasAuthResponse: !!ar,
-    authResponseKeys: ar ? Object.keys(ar) : [],
-    hasCode: !!ar?.code,
-    hasError: err != null && err !== "",
-    message: errorSummary ?? (typeof looseMsg === "string" ? looseMsg : undefined),
-  });
-}
-
-declare global {
-  interface Window {
-    FB?: {
-      init: (opts: Record<string, unknown>) => void;
-      login: (cb: (response: FbLoginResponse) => void, opts: Record<string, unknown>) => void;
-    };
-    fbAsyncInit?: () => void;
-  }
-}
-
-/** Embedded Signup v4: load SDK, then FB.login with config_id (same params as redirect dialog). */
-function loadFacebookSdk(): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if (typeof window === "undefined") {
-      reject(new Error("Window unavailable"));
-      return;
-    }
-    if (window.FB) {
-      resolve();
-      return;
-    }
-
-    window.fbAsyncInit = () => resolve();
-
-    if (!document.getElementById("facebook-jssdk")) {
-      const f = document.getElementsByTagName("script")[0];
-      const js = document.createElement("script");
-      js.id = "facebook-jssdk";
-      js.src = "https://connect.facebook.net/en_US/sdk.js";
-      js.async = true;
-      js.crossOrigin = "anonymous";
-      f?.parentNode?.insertBefore(js, f);
-    }
-
-    const start = Date.now();
-    const iv = window.setInterval(() => {
-      if (window.FB) {
-        window.clearInterval(iv);
-        resolve();
-      } else if (Date.now() - start > 25000) {
-        window.clearInterval(iv);
-        reject(new Error("Facebook SDK did not load in time."));
-      }
-    }, 50);
-  });
-}
 
 interface WhatsappStatusResponse {
   activeProvider: string;
@@ -176,7 +78,6 @@ export function ConnectWhatsAppHub({
   const queryClient = useQueryClient();
   const [confirmDisconnect, setConfirmDisconnect] = useState(false);
   const [hubBanner, setHubBanner] = useState<HubBanner | null>(null);
-  const [metaSdkBusy, setMetaSdkBusy] = useState(false);
   const [wabaPickerOpen, setWabaPickerOpen] = useState(false);
   const [wabaChoices, setWabaChoices] = useState<WabaChoice[] | null>(null);
   const [wabaPickerState, setWabaPickerState] = useState<string | null>(null);
@@ -191,126 +92,6 @@ export function ConnectWhatsAppHub({
   const { data: status, isLoading: statusLoading } = useQuery<WhatsappStatusResponse>({
     queryKey: ["/api/integrations/whatsapp/status"],
     staleTime: 15_000,
-  });
-
-  const startMeta = useMutation({
-    mutationFn: async (flow: "embedded" | "coexistence") => {
-      const res = await fetch("/api/integrations/whatsapp/meta/start", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ flow }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Could not start Meta signup");
-      return data as MetaStartResponse;
-    },
-    onSuccess: async (data) => {
-      setHubBanner(null);
-      setMetaSdkBusy(true);
-
-      const onMsg = (ev: MessageEvent) => {
-        if (typeof ev.data !== "string" || !ev.origin.includes("facebook.com")) return;
-        try {
-          const parsed = JSON.parse(ev.data) as { type?: string; event?: string };
-          if (parsed?.type === "WA_EMBEDDED_SIGNUP") {
-            /* Embedded Signup progress events — code still comes from FB.login callback */
-          }
-        } catch {
-          /* ignore */
-        }
-      };
-      window.addEventListener("message", onMsg);
-
-      try {
-        await loadFacebookSdk();
-        const FB = window.FB;
-        if (!FB) throw new Error("Facebook SDK unavailable.");
-
-        FB.init({
-          appId: data.sdk.appId,
-          cookie: true,
-          xfbml: true,
-          version: data.sdk.graphApiVersion,
-        });
-
-        const loginOpts = {
-          config_id: data.sdk.configId,
-          response_type: "code" as const,
-          override_default_response_type: true,
-          extras: { setup: {} },
-          redirect_uri: data.redirectUri,
-        };
-        // Meta Embedded Signup docs (JS SDK) do not list redirect_uri as a supported FB.login option.
-        // We still log and pass it here to verify whether it is honored or ignored in practice.
-        console.debug("[WhatsApp Embedded Signup] FB.login options (safe)", {
-          config_id: loginOpts.config_id,
-          response_type: loginOpts.response_type,
-          override_default_response_type: loginOpts.override_default_response_type,
-          redirect_uri: loginOpts.redirect_uri,
-          extras: loginOpts.extras,
-        });
-
-        FB.login(
-          (response) => {
-            void (async () => {
-              try {
-                logFbLoginResponseSafe(response);
-                const code = response.authResponse?.code;
-                if (code) {
-                  const res = await fetch("/api/integrations/whatsapp/meta/complete-sdk", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    credentials: "include",
-                    body: JSON.stringify({ code, state: data.state }),
-                  });
-                  const j = (await res.json()) as
-                    | { success: true }
-                    | { success?: false; error?: string }
-                    | { success?: false; requiresWabaSelection: true; choices: WabaChoice[] };
-                  if (!res.ok || !("success" in j) || !j.success) {
-                    if ("requiresWabaSelection" in j && j.requiresWabaSelection) {
-                      setWabaChoices(j.choices);
-                      setWabaPickerState(data.state);
-                      setSelectedWabaId(j.choices[0]?.wabaId ?? null);
-                      setSelectedPhoneNumberId(j.choices[0]?.phoneNumbers?.[0]?.id ?? null);
-                      setWabaPickerOpen(true);
-                      return;
-                    }
-                    setHubBanner({
-                      variant: "error",
-                      message: j.error || "Could not complete WhatsApp signup.",
-                    });
-                    return;
-                  }
-                  await queryClient.invalidateQueries({ queryKey: ["/api/integrations/whatsapp/status"] });
-                  await queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
-                  setHubBanner(null);
-                  return;
-                }
-                // Popup closed, Not Now, or OAuth declined — not an application error
-                setHubBanner({ variant: "neutral", message: META_CANCELLED_MESSAGE });
-              } finally {
-                window.removeEventListener("message", onMsg);
-                setMetaSdkBusy(false);
-              }
-            })();
-          },
-          loginOpts
-        );
-      } catch (e: unknown) {
-        window.removeEventListener("message", onMsg);
-        setMetaSdkBusy(false);
-        const msg = e instanceof Error ? e.message : "Meta signup could not open.";
-        setHubBanner({
-          variant: "error",
-          message: `${msg} Close the window and try again with Continue with Meta.`,
-        });
-      }
-    },
-    onError: (e: Error) => {
-      setHubBanner({ variant: "error", message: e.message });
-    },
   });
 
   const subscribeMutation = useMutation({
@@ -491,8 +272,11 @@ export function ConnectWhatsAppHub({
             <div className="p-3 space-y-3">
               <button
                 type="button"
-                disabled={!cfg?.embeddedSignupEnabled || startMeta.isPending || metaSdkBusy}
-                onClick={() => startMeta.mutate("embedded")}
+                disabled={!cfg?.embeddedSignupEnabled}
+                onClick={() => {
+                  console.log("[WHATSAPP CONNECT] full redirect start");
+                  window.location.href = "/api/integrations/whatsapp/meta/start-redirect?flow=embedded";
+                }}
                 className={cn(
                   "w-full text-left rounded-lg border p-3 transition-colors",
                   cfg?.embeddedSignupEnabled
@@ -518,8 +302,11 @@ export function ConnectWhatsAppHub({
 
               <button
                 type="button"
-                disabled={!cfg?.coexistenceEnabled || startMeta.isPending || metaSdkBusy}
-                onClick={() => startMeta.mutate("coexistence")}
+                disabled={!cfg?.coexistenceEnabled}
+                onClick={() => {
+                  console.log("[WHATSAPP CONNECT] full redirect start");
+                  window.location.href = "/api/integrations/whatsapp/meta/start-redirect?flow=coexistence";
+                }}
                 className={cn(
                   "w-full text-left rounded-lg border p-3 transition-colors",
                   cfg?.coexistenceEnabled
@@ -580,12 +367,7 @@ export function ConnectWhatsAppHub({
             </p>
           </div>
 
-          {(startMeta.isPending || metaSdkBusy) && (
-            <div className="flex items-center gap-2 text-sm text-gray-600">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              {startMeta.isPending ? "Starting Meta…" : "Complete login in the Meta window…"}
-            </div>
-          )}
+          {/* Full redirect flow leaves this page immediately. */}
         </>
       )}
 
