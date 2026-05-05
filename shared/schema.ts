@@ -171,6 +171,13 @@ export const whatsappOauthStates = pgTable("whatsapp_oauth_states", {
    * This must be re-used byte-for-byte for the token exchange.
    */
   redirectUri: text("redirect_uri"),
+  /**
+   * When multiple valid WABAs exist, we pause completion and store an encrypted
+   * user token here until the user explicitly picks a WABA+phone number.
+   */
+  pendingAccessToken: text("pending_access_token"),
+  /** Serialized list of valid WABA choices with phone numbers (safe metadata only). */
+  pendingWabaChoices: jsonb("pending_waba_choices"),
   createdAt: timestamp("created_at").defaultNow(),
   expiresAt: timestamp("expires_at").notNull(),
 });

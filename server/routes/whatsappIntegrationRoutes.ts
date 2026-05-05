@@ -7,6 +7,7 @@ import {
   getWhatsappMetaPublicConfig,
   startEmbeddedSignupSession,
   completeEmbeddedSignupOAuth,
+  finalizeEmbeddedSignupWabaSelection,
   subscribeAppToWaba,
   getWhatsappMetaRedirectUri,
   logWhatsappEmbeddedSignupStartupWarnings,
@@ -157,12 +158,41 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
         tokenExchange: "sdk",
       });
       if (!result.success) {
-        return res.status(400).json({ success: false, error: result.error });
+        if ("requiresWabaSelection" in result && result.requiresWabaSelection) {
+          return res.json({ success: false, requiresWabaSelection: true, choices: result.choices });
+        }
+        return res.status(400).json({ success: false, error: (result as any).error });
       }
       res.json({ success: true });
     } catch (e: any) {
       console.warn("[WhatsApp Integration] complete-sdk failed", e?.message || e);
       res.status(500).json({ error: "Complete signup failed" });
+    }
+  });
+
+  const chooseWabaBody = z.object({
+    state: z.string().min(1),
+    wabaId: z.string().min(1),
+    phoneNumberId: z.string().min(1),
+  });
+
+  app.post("/api/integrations/whatsapp/meta/choose-waba", async (req: Request, res: Response) => {
+    try {
+      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+      const parsed = chooseWabaBody.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid body", details: parsed.error.flatten() });
+      }
+      const result = await finalizeEmbeddedSignupWabaSelection({
+        ...parsed.data,
+        initiatingUserId: req.user.id,
+      });
+      if (!result.success) {
+        return res.status(400).json({ success: false, error: result.error });
+      }
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e?.message || "Could not finalize selection" });
     }
   });
 

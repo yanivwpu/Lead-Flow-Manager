@@ -20,6 +20,7 @@ import { storage } from "./storage";
 import { getMetaGraphApiBase, getMetaFacebookOAuthDialogBase, getMetaGraphVersionSegment } from "./metaGraphVersion";
 import { exchangeCodeForToken, exchangeForLongLivedUserToken, MetaOAuthExchangeError } from "./metaOAuth";
 import { connectUserMeta, type MetaCredentials } from "./userMeta";
+import { encryptCredential, decryptCredential, isEncrypted } from "./userMeta";
 
 const STATE_TTL_MS = 15 * 60 * 1000;
 
@@ -294,6 +295,76 @@ interface ResolvedWabaPhone {
   verifiedName?: string;
 }
 
+type WabaPhoneChoice = {
+  wabaId: string;
+  wabaName?: string;
+  phoneNumbers: Array<{
+    id: string;
+    displayPhoneNumber?: string;
+    verifiedName?: string;
+  }>;
+};
+
+async function fetchUserWabaChoices(accessToken: string): Promise<WabaPhoneChoice[]> {
+  const base = getMetaGraphApiBase();
+
+  // 1) Fetch user's WABAs
+  const wabaRes = await fetch(
+    `${base}/me/whatsapp_business_accounts?fields=id,name&limit=50&access_token=${encodeURIComponent(accessToken)}`
+  );
+  const wabaJson = (await wabaRes.json().catch(() => ({}))) as any;
+  if (!wabaRes.ok) {
+    const msg = wabaJson?.error?.message || "Failed to fetch WhatsApp Business Accounts.";
+    throw new Error(msg);
+  }
+
+  const wabas: Array<{ id: string; name?: string }> = Array.isArray(wabaJson?.data)
+    ? wabaJson.data
+        .map((r: any) => ({ id: String(r?.id || ""), name: typeof r?.name === "string" ? r.name : undefined }))
+        .filter((r) => !!r.id)
+    : [];
+
+  // 2) For each WABA, fetch phone numbers
+  const choices: WabaPhoneChoice[] = [];
+  for (const w of wabas) {
+    const pnRes = await fetch(
+      `${base}/${encodeURIComponent(w.id)}/phone_numbers?fields=id,display_phone_number,verified_name&limit=50&access_token=${encodeURIComponent(accessToken)}`
+    );
+    const pnJson = (await pnRes.json().catch(() => ({}))) as any;
+    if (!pnRes.ok) {
+      // Non-fatal for this WABA; treat as empty.
+      console.warn("[WhatsApp Embedded Signup] phone_numbers fetch failed", {
+        wabaId: w.id,
+        http_status: pnRes.status,
+        meta_code: pnJson?.error?.code,
+        meta_type: pnJson?.error?.type,
+        meta_subcode: pnJson?.error?.error_subcode,
+        meta_message: pnJson?.error?.message,
+      });
+      continue;
+    }
+    const phones: any[] = Array.isArray(pnJson?.data) ? pnJson.data : [];
+    const phoneNumbers = phones
+      .map((p: any) => ({
+        id: String(p?.id || ""),
+        displayPhoneNumber: typeof p?.display_phone_number === "string" ? p.display_phone_number : undefined,
+        verifiedName: typeof p?.verified_name === "string" ? p.verified_name : undefined,
+      }))
+      .filter((p) => !!p.id);
+
+    // 3) Filter: only allow WABAs that have at least 1 phone number.
+    if (phoneNumbers.length === 0) continue;
+
+    choices.push({
+      wabaId: w.id,
+      wabaName: w.name,
+      phoneNumbers,
+    });
+  }
+
+  return choices;
+}
+
 /**
  * Resolve WABA ID + phone_number_id from the user access token returned by Embedded Signup.
  * Uses debug_token granular_scopes first, then /{waba-id}/phone_numbers.
@@ -322,65 +393,21 @@ export async function getAccessTokenExpiryFromDebug(accessToken: string): Promis
 }
 
 async function resolveWabaAndPhone(accessToken: string): Promise<ResolvedWabaPhone> {
-  const base = getMetaGraphApiBase();
-  const appId = process.env.META_APP_ID!;
-  const appSecret = process.env.META_APP_SECRET!;
-  const appAccessToken = `${appId}|${appSecret}`;
-
-  const debugUrl = `${base}/debug_token?input_token=${encodeURIComponent(accessToken)}&access_token=${encodeURIComponent(appAccessToken)}`;
-  const debugRes = await fetch(debugUrl);
-  const debugJson = (await debugRes.json()) as any;
-  if (!debugRes.ok) {
-    console.warn("[WhatsApp Embedded Signup] debug_token failed", debugJson?.error?.message || debugRes.status);
+  const choices = await fetchUserWabaChoices(accessToken);
+  if (choices.length === 0) {
+    throw new Error("No WhatsApp phone number found. Please add a phone number in Meta Business Manager.");
   }
-
-  const granular = debugJson?.data?.granular_scopes || [];
-  const wabaSet = new Set<string>();
-  for (const g of granular) {
-    if (
-      (g.scope === "whatsapp_business_management" || g.scope === "whatsapp_business_messaging") &&
-      Array.isArray(g.target_ids)
-    ) {
-      for (const id of g.target_ids) {
-        if (typeof id === "string") wabaSet.add(id);
-      }
-    }
+  if (choices.length > 1) {
+    // Caller must handle the explicit selection case.
+    throw new Error("MULTIPLE_VALID_WABAS");
   }
-
-  let wabaId = [...wabaSet][0];
-
-  if (!wabaId) {
-    const sharedUrl = `${base}/me?fields=shared_wa_business_accounts{id}&access_token=${encodeURIComponent(accessToken)}`;
-    const sharedRes = await fetch(sharedUrl);
-    const sharedJson = (await sharedRes.json()) as any;
-    const first = sharedJson?.shared_wa_business_accounts?.data?.[0];
-    if (first?.id) wabaId = first.id;
-  }
-
-  if (!wabaId) {
-    throw new Error(
-      "Could not read a WhatsApp Business Account from Meta. Finish Embedded Signup in the Meta window, or confirm your Meta app has WhatsApp products and Embedded Signup configuration."
-    );
-  }
-
-  const pnUrl = `${base}/${wabaId}/phone_numbers?access_token=${encodeURIComponent(accessToken)}`;
-  const pnRes = await fetch(pnUrl);
-  const pnJson = (await pnRes.json()) as any;
-  if (!pnRes.ok) {
-    throw new Error(pnJson?.error?.message || "Failed to load phone numbers for your WhatsApp Business Account.");
-  }
-  const phones = pnJson?.data || [];
-  if (!phones.length) {
-    throw new Error("No WhatsApp phone numbers were found on this Business Account yet.");
-  }
-  const phone =
-    phones.find((p: any) => p.is_official_business_account || p.verified_name) || phones[0];
-
+  const only = choices[0];
+  const phone = only.phoneNumbers[0];
   return {
-    wabaId,
+    wabaId: only.wabaId,
     phoneNumberId: phone.id,
-    displayPhoneNumber: phone.display_phone_number,
-    verifiedName: phone.verified_name,
+    displayPhoneNumber: phone.displayPhoneNumber,
+    verifiedName: phone.verifiedName,
   };
 }
 
@@ -492,7 +519,11 @@ export async function completeEmbeddedSignupOAuth(params: {
   initiatingUserId?: string;
   /** `sdk` = POST complete-sdk; `redirect` = GET meta/callback — same redirect_uri / exchange for both. */
   tokenExchange: "sdk" | "redirect";
-}): Promise<{ success: true; userId: string } | { success: false; error: string }> {
+}): Promise<
+  | { success: true; userId: string }
+  | { success: false; error: string }
+  | { success: false; requiresWabaSelection: true; choices: WabaPhoneChoice[] }
+> {
   const { code, state, initiatingUserId, tokenExchange } = params;
 
   await cleanupExpiredStates();
@@ -514,8 +545,6 @@ export async function completeEmbeddedSignupOAuth(params: {
       error: "This signup does not match your session. Start again from Settings.",
     };
   }
-
-  await db.delete(whatsappOauthStates).where(eq(whatsappOauthStates.stateToken, state));
 
   // IMPORTANT: exchange MUST use byte-for-byte redirect URI from the start of this OAuth state.
   // (If row.redirectUri is null due to older rows, fall back to env but log that mismatch risk.)
@@ -568,7 +597,40 @@ export async function completeEmbeddedSignupOAuth(params: {
 
   let resolved: ResolvedWabaPhone;
   try {
-    resolved = await resolveWabaAndPhone(longToken);
+    // NEW: never proceed with an empty WABA — filter to only WABAs with >= 1 phone number.
+    const choices = await fetchUserWabaChoices(longToken);
+    if (choices.length === 0) {
+      const msg = "No WhatsApp phone number found. Please add a phone number in Meta Business Manager.";
+      await storage.updateUser(row.userId, {
+        metaIntegrationStatus: "failed",
+        metaLastErrorMessage: msg.slice(0, 500),
+      });
+      return { success: false, error: msg };
+    }
+    if (choices.length > 1) {
+      // Store pending token + choices on the state row so the user can explicitly select.
+      const encrypted = isEncrypted(longToken) ? longToken : encryptCredential(longToken);
+      await db
+        .update(whatsappOauthStates)
+        .set({
+          pendingAccessToken: encrypted,
+          pendingWabaChoices: choices as any,
+        })
+        .where(eq(whatsappOauthStates.stateToken, state));
+      await storage.updateUser(row.userId, {
+        metaIntegrationStatus: "pending",
+        metaLastErrorMessage: "Multiple WhatsApp Business Accounts found. Please select which one to connect.",
+      });
+      return { success: false, requiresWabaSelection: true, choices };
+    }
+    const only = choices[0];
+    const phone = only.phoneNumbers[0];
+    resolved = {
+      wabaId: only.wabaId,
+      phoneNumberId: phone.id,
+      displayPhoneNumber: phone.displayPhoneNumber,
+      verifiedName: phone.verifiedName,
+    };
   } catch (e: any) {
     const msg = e?.message || "Could not read WhatsApp account details from Meta.";
     await storage.updateUser(row.userId, {
@@ -616,5 +678,75 @@ export async function completeEmbeddedSignupOAuth(params: {
     });
   }
 
+  // Success path: state is no longer needed.
+  await db.delete(whatsappOauthStates).where(eq(whatsappOauthStates.stateToken, state));
+
   return { success: true, userId: row.userId };
+}
+
+export async function finalizeEmbeddedSignupWabaSelection(params: {
+  state: string;
+  initiatingUserId: string;
+  wabaId: string;
+  phoneNumberId: string;
+}): Promise<{ success: true } | { success: false; error: string }> {
+  const { state, initiatingUserId, wabaId, phoneNumberId } = params;
+  await cleanupExpiredStates();
+
+  const rows = await db
+    .select()
+    .from(whatsappOauthStates)
+    .where(eq(whatsappOauthStates.stateToken, state))
+    .limit(1);
+  const row = rows[0];
+  if (!row || row.expiresAt < new Date()) {
+    return { success: false, error: "This signup selection expired. Please start again from Settings." };
+  }
+  if (row.userId !== initiatingUserId) {
+    return { success: false, error: "This signup does not match your session. Start again from Settings." };
+  }
+  if (!row.pendingAccessToken) {
+    return { success: false, error: "No pending WhatsApp token found. Please start again from Settings." };
+  }
+  const token = isEncrypted(row.pendingAccessToken) ? decryptCredential(row.pendingAccessToken) : row.pendingAccessToken;
+
+  const choices = (row.pendingWabaChoices as any) as WabaPhoneChoice[] | null;
+  const allowed = Array.isArray(choices) ? choices : [];
+  const matchWaba = allowed.find((c) => c.wabaId === wabaId);
+  const matchPhone = matchWaba?.phoneNumbers?.find((p) => p.id === phoneNumberId);
+  if (!matchWaba || !matchPhone) {
+    return { success: false, error: "Invalid WhatsApp Business Account selection. Please start again." };
+  }
+
+  // Guardrail: NEVER proceed with a WABA that has zero phone numbers.
+  if (!matchWaba.phoneNumbers || matchWaba.phoneNumbers.length === 0) {
+    return { success: false, error: "No WhatsApp phone number found. Please add a phone number in Meta Business Manager." };
+  }
+
+  const subscribed = await subscribeAppToWaba(matchWaba.wabaId, token).catch(() => false);
+
+  const credentials: MetaCredentials = {
+    accessToken: token,
+    phoneNumberId: matchPhone.id,
+    businessAccountId: matchWaba.wabaId,
+    appSecret: undefined,
+    webhookVerifyToken: process.env.META_WEBHOOK_VERIFY_TOKEN || undefined,
+  };
+
+  const connectionType = row.flow === "coexistence" ? "coexistence" : "embedded_signup";
+  const result = await connectUserMeta(row.userId, credentials, {
+    connectionType,
+    displayPhoneNumber: matchPhone.displayPhoneNumber ?? null,
+    verifiedName: matchPhone.verifiedName ?? null,
+    webhookSubscribed: subscribed,
+    tokenExpiresAt: null,
+    metaIntegrationStatus: subscribed ? "connected" : "needs_attention",
+  });
+
+  if (!result.success) {
+    return { success: false, error: result.error || "Could not save WhatsApp connection." };
+  }
+
+  await db.delete(whatsappOauthStates).where(eq(whatsappOauthStates.stateToken, state));
+  return { success: true };
 }

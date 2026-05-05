@@ -37,6 +37,12 @@ interface MetaStartResponse {
   };
 }
 
+type WabaChoice = {
+  wabaId: string;
+  wabaName?: string;
+  phoneNumbers: Array<{ id: string; displayPhoneNumber?: string; verifiedName?: string }>;
+};
+
 /** FB.login callback — safe fields only; never log token values. */
 interface FbLoginAuthResponse {
   code?: string;
@@ -171,6 +177,11 @@ export function ConnectWhatsAppHub({
   const [confirmDisconnect, setConfirmDisconnect] = useState(false);
   const [hubBanner, setHubBanner] = useState<HubBanner | null>(null);
   const [metaSdkBusy, setMetaSdkBusy] = useState(false);
+  const [wabaPickerOpen, setWabaPickerOpen] = useState(false);
+  const [wabaChoices, setWabaChoices] = useState<WabaChoice[] | null>(null);
+  const [wabaPickerState, setWabaPickerState] = useState<string | null>(null);
+  const [selectedWabaId, setSelectedWabaId] = useState<string | null>(null);
+  const [selectedPhoneNumberId, setSelectedPhoneNumberId] = useState<string | null>(null);
 
   const { data: cfg, isLoading: cfgLoading } = useQuery<MetaConfigResponse>({
     queryKey: ["/api/integrations/whatsapp/meta/config"],
@@ -253,8 +264,19 @@ export function ConnectWhatsAppHub({
                     credentials: "include",
                     body: JSON.stringify({ code, state: data.state }),
                   });
-                  const j = (await res.json()) as { success?: boolean; error?: string };
-                  if (!res.ok || !j.success) {
+                  const j = (await res.json()) as
+                    | { success: true }
+                    | { success?: false; error?: string }
+                    | { success?: false; requiresWabaSelection: true; choices: WabaChoice[] };
+                  if (!res.ok || !("success" in j) || !j.success) {
+                    if ("requiresWabaSelection" in j && j.requiresWabaSelection) {
+                      setWabaChoices(j.choices);
+                      setWabaPickerState(data.state);
+                      setSelectedWabaId(j.choices[0]?.wabaId ?? null);
+                      setSelectedPhoneNumberId(j.choices[0]?.phoneNumbers?.[0]?.id ?? null);
+                      setWabaPickerOpen(true);
+                      return;
+                    }
                     setHubBanner({
                       variant: "error",
                       message: j.error || "Could not complete WhatsApp signup.",
@@ -583,6 +605,92 @@ export function ConnectWhatsAppHub({
               disabled={disconnectMutation.isPending}
             >
               {disconnectMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Disconnect"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={wabaPickerOpen}
+        onOpenChange={(open) => {
+          // keep state if closing via escape; user can restart if needed
+          setWabaPickerOpen(open);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Select WhatsApp Business Account</AlertDialogTitle>
+            <AlertDialogDescription>
+              Multiple WhatsApp Business Accounts with phone numbers were found. Choose which one to connect.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-3 text-sm">
+            {(wabaChoices ?? []).map((c) => {
+              const isSelected = selectedWabaId === c.wabaId;
+              return (
+                <button
+                  key={c.wabaId}
+                  type="button"
+                  className={cn(
+                    "w-full text-left rounded-md border px-3 py-2",
+                    isSelected ? "border-emerald-400 bg-emerald-50" : "border-slate-200 hover:bg-slate-50"
+                  )}
+                  onClick={() => {
+                    setSelectedWabaId(c.wabaId);
+                    setSelectedPhoneNumberId(c.phoneNumbers?.[0]?.id ?? null);
+                  }}
+                >
+                  <div className="font-medium text-slate-900">{c.wabaName || `WABA ${c.wabaId}`}</div>
+                  <div className="text-xs text-slate-600 mt-0.5">
+                    {c.phoneNumbers
+                      .map((p) => p.displayPhoneNumber || p.verifiedName || p.id)
+                      .slice(0, 3)
+                      .join(" • ")}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              onClick={() => {
+                setWabaPickerOpen(false);
+                setHubBanner({ variant: "neutral", message: "Selection cancelled. You can try connecting again anytime." });
+              }}
+            >
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              disabled={!wabaPickerState || !selectedWabaId || !selectedPhoneNumberId}
+              onClick={() => {
+                void (async () => {
+                  try {
+                    const res = await fetch("/api/integrations/whatsapp/meta/choose-waba", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      credentials: "include",
+                      body: JSON.stringify({
+                        state: wabaPickerState,
+                        wabaId: selectedWabaId,
+                        phoneNumberId: selectedPhoneNumberId,
+                      }),
+                    });
+                    const j = (await res.json()) as { success?: boolean; error?: string };
+                    if (!res.ok || !j.success) {
+                      setHubBanner({ variant: "error", message: j.error || "Could not finalize selection." });
+                      return;
+                    }
+                    setWabaPickerOpen(false);
+                    setHubBanner(null);
+                    await queryClient.invalidateQueries({ queryKey: ["/api/integrations/whatsapp/status"] });
+                    await queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+                  } catch (e: any) {
+                    setHubBanner({ variant: "error", message: e?.message || "Could not finalize selection." });
+                  }
+                })();
+              }}
+            >
+              Connect selected account
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
