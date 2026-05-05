@@ -52,11 +52,38 @@ import { db } from "../drizzle/db";
 import { users, chats, registeredPhones, messageUsage, conversationWindows, teamMembers, workflows, workflowExecutions, recurringReminders, webhooks, webhookDeliveries, integrations, messageTemplates, templateSends, dripCampaigns, dripSteps, dripEnrollments, dripSends, chatbotFlows, chatbotSessions, salespeople, demoBookings, salesConversions, adminSettings, contacts, conversations, messages, activityEvents, channelSettings, supportTickets, partners, commissions, agreementAcceptances, contactNotes, appointments, flowJobs, type InsertConversationWindow, type ConversationWindow } from "@shared/schema";
 import { eq, and, lte, sql, isNotNull, isNull, asc, desc, gte, sum, gt, or, like, ilike, ne } from "drizzle-orm";
 
+/** Columns always present on legacy Neon `public.users`; avoids Drizzle hydrating rows when DB lacks newer schema columns (42703). */
+type UsersAuthCoreRow = {
+  id: string;
+  name: string;
+  email: string;
+  password: string;
+};
+
+function parseUsersAuthCoreRow(raw: Record<string, unknown>): UsersAuthCoreRow | null {
+  const { id, name, email, password } = raw;
+  if (
+    typeof id !== "string" ||
+    typeof name !== "string" ||
+    typeof email !== "string" ||
+    typeof password !== "string"
+  ) {
+    return null;
+  }
+  return { id, name, email, password };
+}
+
+/** Minimal `User` for Passport auth — only id/name/email/password are loaded; other fields read as undefined until full migrate. */
+function userFromAuthCoreRow(row: UsersAuthCoreRow): User {
+  return row as unknown as User;
+}
+
 export interface IStorage {
   // User methods
   getUser(id: string): Promise<User | undefined>;
+  /** Resolve user by email using **only** raw SQL `lower(email) = $1` + `getUser(id)` (auth/login safe path). */
   getUserByEmail(email: string): Promise<User | undefined>;
-  /** Match users.email case-insensitively via `lower("email")` (raw SQL; avoids broken Drizzle fragments). */
+  /** Alias for `getUserByEmail` — same raw lookup (kept for call-site clarity). */
   getUserByEmailCaseInsensitive(normalizedEmail: string): Promise<User | undefined>;
   getUserByStripeCustomerId(customerId: string): Promise<User | undefined>;
   getUserByShopifyShop(shop: string): Promise<User | undefined>;
@@ -282,41 +309,46 @@ export interface IStorage {
 
 export class DbStorage implements IStorage {
   async getUser(id: string): Promise<User | undefined> {
-    const result = await db.select().from(users).where(eq(users.id, id));
-    return result[0];
+    // Same minimal projection as login — session/deserialize must not Drizzle-select missing columns on older Neon DBs.
+    try {
+      const result = await db.execute(sql`
+        SELECT id, name, email, password
+        FROM public.users
+        WHERE id = ${id}
+        LIMIT 1
+      `);
+      const rows = (result as { rows: Record<string, unknown>[] }).rows;
+      const parsed = rows[0] ? parseUsersAuthCoreRow(rows[0]) : null;
+      return parsed ? userFromAuthCoreRow(parsed) : undefined;
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.warn("[getUser] raw auth-core lookup error:", message);
+      throw err;
+    }
   }
 
   async getUserByEmail(email: string): Promise<User | undefined> {
-    const result = await db.select().from(users).where(eq(users.email, email));
-    return result[0];
+    const e = (typeof email === "string" ? email : "").trim().toLowerCase();
+    if (!e) return undefined;
+    try {
+      const result = await db.execute(sql`
+        SELECT id, name, email, password
+        FROM public.users
+        WHERE lower(email) = ${e}
+        LIMIT 1
+      `);
+      const rows = (result as { rows: Record<string, unknown>[] }).rows;
+      const parsed = rows[0] ? parseUsersAuthCoreRow(rows[0]) : null;
+      return parsed ? userFromAuthCoreRow(parsed) : undefined;
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.warn("[getUserByEmail] raw lookup error:", message);
+      throw err;
+    }
   }
 
   async getUserByEmailCaseInsensitive(normalizedEmail: string): Promise<User | undefined> {
-    const e = normalizedEmail.trim().toLowerCase();
-    if (!e) return undefined;
-    // Neon `users` table column is `email` (see migrations/0000_common_drax.sql). Use raw SQL so the
-    // query does not depend on Drizzle's ilike/eq+sql lower() generation (was causing 42703 in prod).
-    try {
-      const result = await db.execute(sql`
-        SELECT id
-        FROM public.users
-        WHERE lower("email") = ${e}
-        LIMIT 2
-      `);
-      const rows = (result as { rows: { id: string }[] }).rows;
-      if (rows.length > 1) {
-        console.warn(
-          "[getUserByEmailCaseInsensitive] multiple users matched lower(email); using first id"
-        );
-      }
-      const id = rows[0]?.id;
-      if (!id) return undefined;
-      return this.getUser(id);
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
-      console.warn("[getUserByEmailCaseInsensitive] query error:", message);
-      throw err;
-    }
+    return this.getUserByEmail(normalizedEmail);
   }
 
   async getUserByStripeCustomerId(customerId: string): Promise<User | undefined> {
