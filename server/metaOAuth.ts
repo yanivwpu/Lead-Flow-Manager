@@ -83,6 +83,28 @@ export async function exchangeCodeForToken(code: string, redirectUri: string): P
   return data.access_token as string;
 }
 
+/**
+ * WhatsApp Embedded Signup: JS SDK (`FB.login` + `response_type: code`) code exchange.
+ * Meta expects `redirect_uri` to match the OAuth dialog — for the SDK popup that is empty,
+ * not `META_WHATSAPP_REDIRECT_URI` used by the full-page redirect callback.
+ */
+export async function exchangeWhatsappEmbeddedSdkCodeForToken(code: string): Promise<string> {
+  const appId = process.env.META_APP_ID!;
+  const appSecret = process.env.META_APP_SECRET!;
+  const url =
+    `${GRAPH()}/oauth/access_token` +
+    `?client_id=${encodeURIComponent(appId)}` +
+    `&client_secret=${encodeURIComponent(appSecret)}` +
+    `&redirect_uri=${encodeURIComponent("")}` +
+    `&code=${encodeURIComponent(code)}`;
+  const resp = await fetch(url);
+  const data = (await resp.json()) as any;
+  if (!resp.ok || !data.access_token) {
+    throw new Error(data.error?.message || "Failed to exchange code for access token");
+  }
+  return data.access_token as string;
+}
+
 export async function exchangeForLongLivedToken(shortToken: string): Promise<string> {
   const r = await exchangeForLongLivedUserToken(shortToken);
   return r.accessToken;

@@ -18,7 +18,11 @@ import { db } from "../drizzle/db";
 import { whatsappOauthStates } from "@shared/schema";
 import { storage } from "./storage";
 import { getMetaGraphApiBase, getMetaFacebookOAuthDialogBase } from "./metaGraphVersion";
-import { exchangeCodeForToken, exchangeForLongLivedUserToken } from "./metaOAuth";
+import {
+  exchangeCodeForToken,
+  exchangeForLongLivedUserToken,
+  exchangeWhatsappEmbeddedSdkCodeForToken,
+} from "./metaOAuth";
 import { connectUserMeta, type MetaCredentials } from "./userMeta";
 
 const STATE_TTL_MS = 15 * 60 * 1000;
@@ -484,8 +488,13 @@ export async function completeEmbeddedSignupOAuth(params: {
   state: string;
   /** When set (e.g. JS SDK completion), must match the user who started the session. */
   initiatingUserId?: string;
+  /**
+   * `sdk` = POST complete-sdk (FB.login popup): exchange with empty redirect_uri per Meta JS SDK.
+   * `redirect` = GET meta/callback: exchange with META_WHATSAPP_REDIRECT_URI.
+   */
+  tokenExchange: "sdk" | "redirect";
 }): Promise<{ success: true; userId: string } | { success: false; error: string }> {
-  const { code, state, initiatingUserId } = params;
+  const { code, state, initiatingUserId, tokenExchange } = params;
 
   await cleanupExpiredStates();
 
@@ -509,13 +518,19 @@ export async function completeEmbeddedSignupOAuth(params: {
 
   await db.delete(whatsappOauthStates).where(eq(whatsappOauthStates.stateToken, state));
 
-  const redirectUri = getWhatsappMetaRedirectUri();
   let shortToken: string;
   try {
-    console.log("[META EXCHANGE DEBUG]", {
-      redirectUriUsed: process.env.META_WHATSAPP_REDIRECT_URI,
-    });
-    shortToken = await exchangeCodeForToken(code, redirectUri);
+    if (tokenExchange === "sdk") {
+      console.log("[META EXCHANGE DEBUG]", { flow: "sdk", redirectUriMode: "empty" });
+      shortToken = await exchangeWhatsappEmbeddedSdkCodeForToken(code);
+    } else {
+      const redirectUri = getWhatsappMetaRedirectUri();
+      console.log("[META EXCHANGE DEBUG]", {
+        flow: "redirect",
+        redirectUriUsed: process.env.META_WHATSAPP_REDIRECT_URI,
+      });
+      shortToken = await exchangeCodeForToken(code, redirectUri);
+    }
   } catch (e: any) {
     console.warn("[WhatsApp Embedded Signup] code exchange failed", e?.message || e);
     return {

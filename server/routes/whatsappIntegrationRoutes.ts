@@ -104,7 +104,12 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
       }
 
       const initiatingUserId = (req as any).user?.id as string | undefined;
-      const result = await completeEmbeddedSignupOAuth({ code, state, initiatingUserId });
+      const result = await completeEmbeddedSignupOAuth({
+        code,
+        state,
+        initiatingUserId,
+        tokenExchange: "redirect",
+      });
       if (!result.success) {
         return failRedirect(result.error);
       }
@@ -134,6 +139,7 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
       const result = await completeEmbeddedSignupOAuth({
         ...parsed.data,
         initiatingUserId: req.user.id,
+        tokenExchange: "sdk",
       });
       if (!result.success) {
         return res.status(400).json({ success: false, error: result.error });
