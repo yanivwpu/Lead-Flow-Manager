@@ -274,7 +274,7 @@ export function ConnectWhatsAppHub({
                 type="button"
                 disabled={!cfg?.embeddedSignupEnabled}
                 onClick={() => {
-                  console.log("[WHATSAPP CONNECT] full redirect start");
+                  console.log("[WHATSAPP CONNECT ACTIVE HANDLER] full redirect only");
                   window.location.href = "/api/integrations/whatsapp/meta/start-redirect?flow=embedded";
                 }}
                 className={cn(
@@ -304,7 +304,7 @@ export function ConnectWhatsAppHub({
                 type="button"
                 disabled={!cfg?.coexistenceEnabled}
                 onClick={() => {
-                  console.log("[WHATSAPP CONNECT] full redirect start");
+                  console.log("[WHATSAPP CONNECT ACTIVE HANDLER] full redirect only");
                   window.location.href = "/api/integrations/whatsapp/meta/start-redirect?flow=coexistence";
                 }}
                 className={cn(

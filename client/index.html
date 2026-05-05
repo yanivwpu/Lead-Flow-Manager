@@ -243,13 +243,23 @@
     </div>
     <div id="root"></div>
 
-    <!-- Service Worker -->
+    <!-- Service Worker (TEMP DISABLED): was caching old JS bundles in production.
+         Keep disabled until WhatsApp onboarding rollout is stable. -->
     <script>
       if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js')
-            .then(registration => console.log('SW registered: ', registration))
-            .catch(error => console.log('SW registration failed: ', error));
+        window.addEventListener('load', async () => {
+          try {
+            const regs = await navigator.serviceWorker.getRegistrations();
+            await Promise.all(regs.map(r => r.unregister()));
+            // Best-effort: also clear caches so old bundles can't be served.
+            if (window.caches && typeof window.caches.keys === 'function') {
+              const keys = await window.caches.keys();
+              await Promise.all(keys.map(k => window.caches.delete(k)));
+            }
+            console.log('[SW] unregistered (temp)');
+          } catch (e) {
+            // ignore
+          }
         });
       }
     </script>
