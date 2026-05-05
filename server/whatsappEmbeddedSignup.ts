@@ -17,8 +17,8 @@ import { eq, lt, sql } from "drizzle-orm";
 import { db } from "../drizzle/db";
 import { whatsappOauthStates } from "@shared/schema";
 import { storage } from "./storage";
-import { getMetaGraphApiBase, getMetaFacebookOAuthDialogBase } from "./metaGraphVersion";
-import { exchangeCodeForToken, exchangeForLongLivedUserToken } from "./metaOAuth";
+import { getMetaGraphApiBase, getMetaFacebookOAuthDialogBase, getMetaGraphVersionSegment } from "./metaGraphVersion";
+import { exchangeCodeForToken, exchangeForLongLivedUserToken, MetaOAuthExchangeError } from "./metaOAuth";
 import { connectUserMeta, type MetaCredentials } from "./userMeta";
 
 const STATE_TTL_MS = 15 * 60 * 1000;
@@ -48,6 +48,7 @@ CREATE TABLE IF NOT EXISTS "whatsapp_oauth_states" (
   "user_id" varchar NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
   "state_token" text NOT NULL UNIQUE,
   "flow" text NOT NULL,
+  "redirect_uri" text,
   "created_at" timestamp DEFAULT now(),
   "expires_at" timestamp NOT NULL
 );
@@ -258,11 +259,13 @@ export async function startEmbeddedSignupSession(
 
   const stateToken = generateStateToken();
   const expiresAt = new Date(Date.now() + STATE_TTL_MS);
+  const redirectUri = getWhatsappMetaRedirectUri();
 
   await db.insert(whatsappOauthStates).values({
     userId,
     stateToken,
     flow,
+    redirectUri,
     expiresAt,
   });
 
@@ -272,7 +275,6 @@ export async function startEmbeddedSignupSession(
   const graphApiVersion = graphRaw.startsWith("v") ? graphRaw : `v${graphRaw}`;
 
   const authUrl = buildEmbeddedSignupAuthUrl(stateToken, flow);
-  const redirectUri = getWhatsappMetaRedirectUri();
   return {
     state: stateToken,
     authUrl,
@@ -515,16 +517,31 @@ export async function completeEmbeddedSignupOAuth(params: {
 
   await db.delete(whatsappOauthStates).where(eq(whatsappOauthStates.stateToken, state));
 
-  const redirectUri = getWhatsappMetaRedirectUri();
+  // IMPORTANT: exchange MUST use byte-for-byte redirect URI from the start of this OAuth state.
+  // (If row.redirectUri is null due to older rows, fall back to env but log that mismatch risk.)
+  const redirectUri = row.redirectUri || getWhatsappMetaRedirectUri();
   let shortToken: string;
   try {
     console.log("[META EXCHANGE DEBUG]", {
       flow: tokenExchange,
       redirectUriUsed: redirectUri,
+      redirectUriSource: row.redirectUri ? "state_row" : "env_fallback",
+      graphApiVersion: getMetaGraphVersionSegment(),
+      graphApiBase: getMetaGraphApiBase(),
     });
     shortToken = await exchangeCodeForToken(code, redirectUri);
   } catch (e: any) {
-    console.warn("[WhatsApp Embedded Signup] code exchange failed", e?.message || e);
+    const ex = e as MetaOAuthExchangeError;
+    console.warn("[WhatsApp Embedded Signup] code exchange failed", {
+      message: (ex as any)?.message || String(e),
+      meta_code: ex?.meta?.code,
+      meta_type: ex?.meta?.type,
+      meta_subcode: ex?.meta?.subcode,
+      meta_message: ex?.meta?.message,
+      http_status: (ex as any)?.httpStatus,
+      tokenExchange,
+      redirectUriUsed: redirectUri,
+    });
     return {
       success: false,
       error:

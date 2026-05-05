@@ -2,6 +2,23 @@ import { getMetaGraphApiBase, getMetaFacebookOAuthDialogBase } from "./metaGraph
 
 const GRAPH = () => getMetaGraphApiBase();
 
+export class MetaOAuthExchangeError extends Error {
+  public readonly meta?: {
+    code?: number;
+    type?: string;
+    subcode?: number;
+    message?: string;
+  };
+  public readonly httpStatus?: number;
+
+  constructor(message: string, opts?: { meta?: MetaOAuthExchangeError["meta"]; httpStatus?: number }) {
+    super(message);
+    this.name = "MetaOAuthExchangeError";
+    this.meta = opts?.meta;
+    this.httpStatus = opts?.httpStatus;
+  }
+}
+
 // ── Facebook Messenger / Pages flow ──────────────────────────────────────────
 // Only the three permissions needed for Messenger webhooks + messaging.
 const FACEBOOK_SCOPES = [
@@ -78,7 +95,17 @@ export async function exchangeCodeForToken(code: string, redirectUri: string): P
   const resp = await fetch(url);
   const data = (await resp.json()) as any;
   if (!resp.ok || !data.access_token) {
-    throw new Error(data.error?.message || "Failed to exchange code for access token");
+    const err = data?.error ?? {};
+    const meta = {
+      code: typeof err?.code === "number" ? (err.code as number) : undefined,
+      type: typeof err?.type === "string" ? (err.type as string) : undefined,
+      subcode: typeof err?.error_subcode === "number" ? (err.error_subcode as number) : undefined,
+      message: typeof err?.message === "string" ? (err.message as string) : undefined,
+    };
+    throw new MetaOAuthExchangeError(meta.message || "Failed to exchange code for access token", {
+      meta,
+      httpStatus: resp.status,
+    });
   }
   return data.access_token as string;
 }

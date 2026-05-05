@@ -166,6 +166,11 @@ export const whatsappOauthStates = pgTable("whatsapp_oauth_states", {
   stateToken: text("state_token").notNull().unique(),
   /** embedded | coexistence */
   flow: text("flow").notNull(),
+  /**
+   * The exact redirect URI string that was used when starting the OAuth dialog.
+   * This must be re-used byte-for-byte for the token exchange.
+   */
+  redirectUri: text("redirect_uri"),
   createdAt: timestamp("created_at").defaultNow(),
   expiresAt: timestamp("expires_at").notNull(),
 });

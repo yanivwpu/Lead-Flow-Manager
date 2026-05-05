@@ -18,6 +18,9 @@ import { getAppOrigin } from "../urlOrigins";
 import { storage } from "../storage";
 import { disconnectWhatsAppProvider, getProviderStatus } from "../whatsappService";
 import { getMetaAccessToken } from "../userMeta";
+import { db } from "../../drizzle/db";
+import { whatsappOauthStates } from "@shared/schema";
+import { eq } from "drizzle-orm";
 
 export function registerWhatsappIntegrationRoutes(app: Express): void {
   logWhatsappEmbeddedSignupStartupWarnings();
@@ -136,6 +139,18 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
       if (!parsed.success) {
         return res.status(400).json({ error: "Invalid body", details: parsed.error.flatten() });
       }
+      // Log the exact redirect URI we intend to use (must match the one used to mint the code).
+      // Do NOT log the code, token, or any secrets.
+      const stateRow = await db
+        .select({ redirectUri: whatsappOauthStates.redirectUri })
+        .from(whatsappOauthStates)
+        .where(eq(whatsappOauthStates.stateToken, parsed.data.state))
+        .limit(1);
+      console.log("[WhatsApp Embedded Signup] complete-sdk request", {
+        tokenExchange: "sdk",
+        graphApiVersion: process.env.META_GRAPH_API_VERSION || "v21.0",
+        redirectUriUsed: stateRow[0]?.redirectUri || "(missing_on_state_row)",
+      });
       const result = await completeEmbeddedSignupOAuth({
         ...parsed.data,
         initiatingUserId: req.user.id,
@@ -148,6 +163,26 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
     } catch (e: any) {
       console.warn("[WhatsApp Integration] complete-sdk failed", e?.message || e);
       res.status(500).json({ error: "Complete signup failed" });
+    }
+  });
+
+  /**
+   * Temporary diagnostic endpoint: force full redirect OAuth (no JS SDK) to isolate redirect_uri mismatch.
+   * This redirects the user-agent to the exact Meta dialog URL we would use for redirect flow.
+   */
+  app.get("/api/integrations/whatsapp/meta/test-full-redirect", async (req: Request, res: Response) => {
+    try {
+      if (!req.user) return res.status(401).send("Unauthorized");
+      const flow = (req.query.flow === "coexistence" ? "coexistence" : "embedded") as "embedded" | "coexistence";
+      const session = await startEmbeddedSignupSession(req.user.id, flow);
+      console.log("[WhatsApp Embedded Signup] test-full-redirect", {
+        flow,
+        redirectUriUsed: session.redirectUri,
+        graphApiVersion: session.sdk.graphApiVersion,
+      });
+      res.redirect(302, session.authUrl);
+    } catch (e: any) {
+      res.status(400).send(e?.message || "Could not start full redirect test");
     }
   });
 

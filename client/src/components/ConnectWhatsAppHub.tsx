@@ -230,17 +230,21 @@ export function ConnectWhatsAppHub({
           extras: { setup: {} },
           redirect_uri: data.redirectUri,
         };
-        console.debug("[WHATSAPP FB LOGIN OPTS]", {
-          hasConfigId: !!loginOpts.config_id,
+        // Meta Embedded Signup docs (JS SDK) do not list redirect_uri as a supported FB.login option.
+        // We still log and pass it here to verify whether it is honored or ignored in practice.
+        console.debug("[WhatsApp Embedded Signup] FB.login options (safe)", {
+          config_id: loginOpts.config_id,
           response_type: loginOpts.response_type,
           override_default_response_type: loginOpts.override_default_response_type,
           redirect_uri: loginOpts.redirect_uri,
+          extras: loginOpts.extras,
         });
 
         FB.login(
           (response) => {
             void (async () => {
               try {
+                logFbLoginResponseSafe(response);
                 const code = response.authResponse?.code;
                 if (code) {
                   const res = await fetch("/api/integrations/whatsapp/meta/complete-sdk", {

@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS "whatsapp_oauth_states" (
   "user_id" varchar NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
   "state_token" text NOT NULL UNIQUE,
   "flow" text NOT NULL,
+  "redirect_uri" text,
   "created_at" timestamp DEFAULT now(),
   "expires_at" timestamp NOT NULL
 );
