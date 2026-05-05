@@ -56,7 +56,7 @@ export interface IStorage {
   // User methods
   getUser(id: string): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
-  /** Match users.email case-insensitively (Postgres lower()). Pass normalized lowercased email. */
+  /** Match users.email case-insensitively (Postgres ILIKE exact pattern). Pass normalized lowercased email. */
   getUserByEmailCaseInsensitive(normalizedEmail: string): Promise<User | undefined>;
   getUserByStripeCustomerId(customerId: string): Promise<User | undefined>;
   getUserByShopifyShop(shop: string): Promise<User | undefined>;
@@ -294,11 +294,11 @@ export class DbStorage implements IStorage {
   async getUserByEmailCaseInsensitive(normalizedEmail: string): Promise<User | undefined> {
     const e = normalizedEmail.trim().toLowerCase();
     if (!e) return undefined;
-    // Use eq(sql`lower(...)`, value) — Drizzle binds the scalar reliably (some `sql`... = ${x}` fragments mis-bind).
+    // Case-insensitive exact match: ILIKE with no %/_ wildcards in input (emails are unique per user).
     const result = await db
       .select()
       .from(users)
-      .where(eq(sql`lower(${users.email})`, e))
+      .where(ilike(users.email, e))
       .limit(2);
     // Defensive: unique constraint should prevent multiples; if not, take first match.
     return result[0];
