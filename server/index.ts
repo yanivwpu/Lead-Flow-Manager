@@ -21,6 +21,7 @@ import { createBullBoard } from "@bull-board/api";
 import { BullMQAdapter } from "@bull-board/api/bullMQAdapter";
 import { ExpressAdapter } from "@bull-board/express";
 import { getAppOrigin } from "./urlOrigins";
+import { corsMiddleware } from "./corsMiddleware";
 
 /** SaaS routes must run on APP_URL host (e.g. app.whachatcrm.com), not www marketing. */
 function isSaaSPathname(pathname: string): boolean {
@@ -104,8 +105,14 @@ async function runStartupGhlCleanup() {
 const app = express();
 const httpServer = createServer(app);
 
+// CORS first: credentialed SPA fetches (www ↔ app) + localhost dev; OPTIONS must not be redirected.
+app.use(corsMiddleware);
+
 // Host routing: apex / www must not serve OAuth or API under wrong host
 app.use((req, res, next) => {
+  if (req.method === "OPTIONS") {
+    return next();
+  }
   const host = primaryHost(req.headers.host);
   const pathname = req.path || "/";
   const target = `${getAppOrigin().replace(/\/+$/, "")}${req.originalUrl || req.url}`;
