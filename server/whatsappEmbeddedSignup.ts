@@ -686,21 +686,144 @@ async function postWabaSubscribedAppsDetailed(
   return { httpOk: true, graphSuccess, error: graphSuccess ? undefined : { message: "Graph returned success=false" } };
 }
 
+function normalizeMetaId(v: unknown): string | null {
+  if (v === null || v === undefined) return null;
+  if (typeof v === "boolean") return null;
+  if (typeof v === "number" && Number.isFinite(v)) return String(Math.trunc(v));
+  if (typeof v === "string") {
+    const t = v.trim();
+    return t.length ? t : null;
+  }
+  return null;
+}
+
+/** Compare Meta app IDs allowing string/number/BigInt equivalence (FB ids are large integers). */
+function metaAppIdsEqual(configured: string, candidate: string): boolean {
+  const a = String(configured).trim();
+  const b = String(candidate).trim();
+  if (a === b) return true;
+  if (a == b) return true;
+  try {
+    return BigInt(a) === BigInt(b);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Collect candidate app ids from Graph `GET /{waba-id}/subscribed_apps` payload.
+ * Handles id vs number, nested application/app objects, and extra keys Graph may add.
+ */
+function extractReturnedAppIdsFromSubscribedAppsJson(json: any): {
+  ids: string[];
+  rowSnapshots: Array<{ keys: string[]; idFields: Record<string, unknown> }>;
+} {
+  const ids = new Set<string>();
+  const rowSnapshots: Array<{ keys: string[]; idFields: Record<string, unknown> }> = [];
+  const rows = Array.isArray(json?.data) ? json.data : [];
+
+  function walk(obj: unknown, depth: number): void {
+    if (depth > 6 || obj == null) return;
+    if (typeof obj !== "object") return;
+    const o = obj as Record<string, unknown>;
+    for (const key of ["id", "app_id", "application_id"]) {
+      const n = normalizeMetaId(o[key]);
+      if (n) ids.add(n);
+    }
+    const app = (o.application ?? o.app) as Record<string, unknown> | undefined;
+    if (app && typeof app === "object") {
+      for (const key of ["id", "app_id"]) {
+        const n = normalizeMetaId(app[key]);
+        if (n) ids.add(n);
+      }
+    }
+    for (const v of Object.values(o)) {
+      if (v && typeof v === "object" && !Array.isArray(v)) walk(v, depth + 1);
+    }
+  }
+
+  for (const row of rows) {
+    if (row && typeof row === "object") {
+      const r = row as Record<string, unknown>;
+      rowSnapshots.push({
+        keys: Object.keys(r),
+        idFields: {
+          id: r.id,
+          app_id: r.app_id,
+          application: r.application,
+          app: r.app,
+        },
+      });
+      walk(row, 0);
+    }
+  }
+
+  return { ids: [...ids], rowSnapshots };
+}
+
 async function verifyWabaAppSubscriptionDetailed(
   wabaId: string,
-  userAccessToken: string
-): Promise<{ verified: boolean; error?: MetaGraphErrorShape }> {
+  userAccessToken: string,
+  attemptLabel = "attempt"
+): Promise<{ verified: boolean; error?: MetaGraphErrorShape; matchedId?: string }> {
+  const configuredAppId = (process.env.META_APP_ID ?? "").trim();
   const base = getMetaGraphApiBase();
-  const appId = process.env.META_APP_ID!;
   const url = `${base}/${wabaId}/subscribed_apps?access_token=${encodeURIComponent(userAccessToken)}`;
   const res = await fetch(url);
-  const json = (await res.json().catch(() => ({}))) as any;
-  if (!res.ok) {
+  const rawText = await res.text();
+  let json: any = {};
+  try {
+    json = rawText ? JSON.parse(rawText) : {};
+  } catch {
+    json = { _parseError: true as const, rawSnippet: rawText.slice(0, 800) };
+  }
+
+  const httpOk = res.ok;
+  const { ids: returnedAppIds, rowSnapshots } = extractReturnedAppIdsFromSubscribedAppsJson(json);
+
+  let verified = false;
+  let matchedId: string | undefined;
+  const equalityChecks = returnedAppIds.map((rid) => ({
+    returnedId: rid,
+    strictEq: configuredAppId === rid,
+    looseEq: configuredAppId == rid,
+    bigintEq: metaAppIdsEqual(configuredAppId, rid),
+    matched: metaAppIdsEqual(configuredAppId, rid),
+  }));
+
+  for (const row of equalityChecks) {
+    if (row.matched) {
+      verified = true;
+      matchedId = row.returnedId;
+      break;
+    }
+  }
+
+  console.log(
+    `[SubscribedAppsGET] ${JSON.stringify({
+      phase: "verify_raw",
+      attemptLabel,
+      wabaId,
+      metaAppIdConfigured: configuredAppId,
+      metaAppIdConfiguredType: typeof configuredAppId,
+      httpStatus: res.status,
+      httpOk,
+      returnedAppIds,
+      returnedCount: returnedAppIds.length,
+      equalityChecks,
+      verified,
+      matchedId: matchedId ?? null,
+      dataArrayLength: Array.isArray(json?.data) ? json.data.length : null,
+      rowSnapshots: rowSnapshots.slice(0, 5),
+      rawResponseTruncated: typeof rawText === "string" ? rawText.slice(0, 8000) : null,
+      graphError: json?.error ?? null,
+    })}`
+  );
+
+  if (!httpOk) {
     return { verified: false, error: json?.error };
   }
-  const rows = json?.data ?? [];
-  const verified = rows.some((row: any) => String(row?.id ?? "") === appId);
-  return { verified };
+  return { verified, matchedId };
 }
 
 export async function verifyWabaAppSubscription(wabaId: string, userAccessToken: string): Promise<boolean> {
@@ -785,10 +908,22 @@ export async function repairMetaWabaWebhookSubscription(userId: string): Promise
   let errorCode: number | string | null = post.error?.code ?? null;
   let errorMessage: string | null = post.error?.message ?? null;
 
-  let verifyResult = await verifyWabaAppSubscriptionDetailed(wabaId, token);
-  if (!verifyResult.verified && post.httpOk && post.graphSuccess) {
-    await new Promise((r) => setTimeout(r, 2000));
-    verifyResult = await verifyWabaAppSubscriptionDetailed(wabaId, token);
+  const backoffMs = [2000, 4000, 8000, 12000, 16000];
+  let verifyResult = await verifyWabaAppSubscriptionDetailed(wabaId, token, "repair_attempt_0");
+  let verifyAttempt = 0;
+  while (
+    !verifyResult.verified &&
+    post.httpOk &&
+    post.graphSuccess &&
+    verifyAttempt < backoffMs.length
+  ) {
+    await new Promise((r) => setTimeout(r, backoffMs[verifyAttempt]));
+    verifyAttempt++;
+    verifyResult = await verifyWabaAppSubscriptionDetailed(
+      wabaId,
+      token,
+      `repair_attempt_${verifyAttempt}`
+    );
   }
 
   const verifyStatus = verifyResult.verified ? "ok" : "failed";
