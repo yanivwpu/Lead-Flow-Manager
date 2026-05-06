@@ -8,19 +8,18 @@ import {
   startEmbeddedSignupSession,
   completeEmbeddedSignupOAuth,
   finalizeEmbeddedSignupWabaSelection,
-  subscribeAppToWaba,
   getWhatsappMetaRedirectUri,
   logWhatsappEmbeddedSignupStartupWarnings,
   applyMetaTokenExpiryAttention,
   getWhatsappConnectionDebug,
   verifyWhatsappEmbeddedSignupMigration,
   recordWhatsappMetaRedirectCallbackDebug,
+  repairMetaWabaWebhookSubscription,
 } from "../whatsappEmbeddedSignup";
 import { getAppOrigin } from "../urlOrigins";
 import { storage } from "../storage";
 import { classifyMetaWhatsAppPhone } from "../metaWhatsAppPhoneKind";
 import { disconnectWhatsAppProvider, getProviderStatus } from "../whatsappService";
-import { getMetaAccessToken } from "../userMeta";
 import { db } from "../../drizzle/db";
 import { whatsappOauthStates } from "@shared/schema";
 import { eq } from "drizzle-orm";
@@ -409,27 +408,45 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
     }
   });
 
+  /** @deprecated Prefer POST /api/integrations/whatsapp/repair-webhook-subscription */
   app.post("/api/integrations/whatsapp/meta/subscribe-webhooks", async (req: Request, res: Response) => {
     try {
       if (!req.user) return res.status(401).json({ error: "Unauthorized" });
-      const user = await storage.getUserForSession(req.user.id);
-      if (!user?.metaConnected || !user.metaBusinessAccountId) {
-        return res.status(400).json({ error: "Meta WhatsApp is not connected" });
+      const result = await repairMetaWabaWebhookSubscription(req.user.id);
+      if (!result.success && result.errorMessage?.includes("not the active")) {
+        return res.status(400).json({ error: result.errorMessage });
       }
-      const token = await getMetaAccessToken(req.user.id);
-      if (!token) return res.status(400).json({ error: "No Meta access token" });
-
-      const ok = await subscribeAppToWaba(user.metaBusinessAccountId, token);
-      const now = new Date();
-      await storage.updateUser(req.user.id, {
-        metaWebhookSubscribed: ok,
-        metaWebhookLastCheckedAt: now,
-        metaIntegrationStatus: ok ? "connected" : "needs_attention",
+      res.json({
+        success: result.verified,
+        subscribed: result.verified,
+        verified: result.verified,
+        error: result.errorMessage,
       });
-
-      res.json({ success: ok, subscribed: ok });
     } catch (e: any) {
       res.status(500).json({ error: e?.message || "Subscription failed" });
+    }
+  });
+
+  app.post("/api/integrations/whatsapp/repair-webhook-subscription", async (req: Request, res: Response) => {
+    try {
+      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+      const result = await repairMetaWabaWebhookSubscription(req.user.id);
+      if (!result.success && result.errorMessage?.includes("not the active")) {
+        return res.status(400).json({
+          success: false,
+          subscribed: false,
+          verified: false,
+          error: result.errorMessage,
+        });
+      }
+      res.json({
+        success: result.verified,
+        subscribed: result.verified,
+        verified: result.verified,
+        error: result.errorMessage ?? null,
+      });
+    } catch (e: any) {
+      res.status(500).json({ error: e?.message || "Repair failed" });
     }
   });
 

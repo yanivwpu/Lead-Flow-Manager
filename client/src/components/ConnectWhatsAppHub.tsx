@@ -148,12 +148,13 @@ export function ConnectWhatsAppHub({
 
   const subscribeMutation = useMutation({
     mutationFn: async () => {
-      const res = await fetch("/api/integrations/whatsapp/meta/subscribe-webhooks", {
+      const res = await fetch("/api/integrations/whatsapp/repair-webhook-subscription", {
         method: "POST",
         credentials: "include",
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Could not subscribe webhooks");
+      if (!res.ok) throw new Error(data.error || "Repair failed");
+      if (!data.verified && data.error) throw new Error(data.error);
       return data;
     },
     onSuccess: () => {
@@ -394,7 +395,7 @@ export function ConnectWhatsAppHub({
                 ) : (
                   <RefreshCw className="h-4 w-4 mr-1" />
                 )}
-                Confirm WABA subscription
+                Retry webhook subscription
               </Button>
             )}
             <Button type="button" variant="outline" size="sm" onClick={() => setConfirmDisconnect(true)}>

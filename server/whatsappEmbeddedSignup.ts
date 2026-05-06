@@ -25,6 +25,7 @@ import {
   encryptCredential,
   decryptCredential,
   isEncrypted,
+  getMetaAccessToken,
 } from "./userMeta";
 import { classifyMetaWhatsAppPhone, type MetaWhatsAppPhoneKind } from "./metaWhatsAppPhoneKind";
 import {
@@ -644,18 +645,70 @@ export async function getAccessTokenExpiryFromDebug(accessToken: string): Promis
  * Note: WhatsApp **message** and **status** delivery still requires webhook fields
  * configured on the app (WhatsApp product → Configuration).
  */
-export async function verifyWabaAppSubscription(wabaId: string, userAccessToken: string): Promise<boolean> {
+type MetaGraphErrorShape = { code?: number; message?: string; type?: string };
+
+function logWhatsAppWebhookSubscribe(params: {
+  wabaId: string;
+  phoneNumberId: string | null;
+  userId: string;
+  graphVersion: string;
+  subscribeStatus: string;
+  verifyStatus: string;
+  errorCode: number | string | null;
+  errorMessage: string | null;
+}): void {
+  console.log(
+    `[WhatsAppWebhookSubscribe] ${JSON.stringify({
+      wabaId: params.wabaId,
+      phoneNumberId: params.phoneNumberId,
+      userId: params.userId,
+      graphVersion: params.graphVersion,
+      subscribeStatus: params.subscribeStatus,
+      verifyStatus: params.verifyStatus,
+      errorCode: params.errorCode,
+      errorMessage: params.errorMessage,
+    })}`
+  );
+}
+
+async function postWabaSubscribedAppsDetailed(
+  wabaId: string,
+  userAccessToken: string
+): Promise<{ httpOk: boolean; graphSuccess: boolean; error?: MetaGraphErrorShape }> {
+  const base = getMetaGraphApiBase();
+  const url = `${base}/${wabaId}/subscribed_apps?access_token=${encodeURIComponent(userAccessToken)}`;
+  const res = await fetch(url, { method: "POST" });
+  const json = (await res.json().catch(() => ({}))) as any;
+  if (!res.ok) {
+    return { httpOk: false, graphSuccess: false, error: json?.error };
+  }
+  const graphSuccess = json?.success === true || json?.success === undefined;
+  return { httpOk: true, graphSuccess, error: graphSuccess ? undefined : { message: "Graph returned success=false" } };
+}
+
+async function verifyWabaAppSubscriptionDetailed(
+  wabaId: string,
+  userAccessToken: string
+): Promise<{ verified: boolean; error?: MetaGraphErrorShape }> {
   const base = getMetaGraphApiBase();
   const appId = process.env.META_APP_ID!;
   const url = `${base}/${wabaId}/subscribed_apps?access_token=${encodeURIComponent(userAccessToken)}`;
   const res = await fetch(url);
   const json = (await res.json().catch(() => ({}))) as any;
   if (!res.ok) {
-    console.warn("[WhatsApp Embedded Signup] subscribed_apps GET failed", json?.error?.message || res.status);
-    return false;
+    return { verified: false, error: json?.error };
   }
   const rows = json?.data ?? [];
-  return rows.some((row: any) => String(row?.id ?? "") === appId);
+  const verified = rows.some((row: any) => String(row?.id ?? "") === appId);
+  return { verified };
+}
+
+export async function verifyWabaAppSubscription(wabaId: string, userAccessToken: string): Promise<boolean> {
+  const r = await verifyWabaAppSubscriptionDetailed(wabaId, userAccessToken);
+  if (!r.verified && r.error) {
+    console.warn("[WhatsApp Embedded Signup] subscribed_apps GET failed", r.error?.message || wabaId);
+  }
+  return r.verified;
 }
 
 /**
@@ -664,22 +717,127 @@ export async function verifyWabaAppSubscription(wabaId: string, userAccessToken:
  * @see https://developers.facebook.com/docs/graph-api/reference/whats-app-business-account/subscribed_apps/
  */
 export async function subscribeAppToWaba(wabaId: string, userAccessToken: string): Promise<boolean> {
-  const base = getMetaGraphApiBase();
-  const url = `${base}/${wabaId}/subscribed_apps?access_token=${encodeURIComponent(userAccessToken)}`;
-  const res = await fetch(url, { method: "POST" });
-  const json = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    console.warn("[WhatsApp Embedded Signup] subscribed_apps POST failed", { wabaId, err: (json as any)?.error?.message });
+  const post = await postWabaSubscribedAppsDetailed(wabaId, userAccessToken);
+  if (!post.httpOk || !post.graphSuccess) {
+    console.warn("[WhatsApp Embedded Signup] subscribed_apps POST failed", {
+      wabaId,
+      err: post.error?.message,
+    });
     return false;
   }
-  const postOk = (json as any)?.success === true || (json as any)?.success === undefined;
-  if (!postOk) return false;
-
   const verified = await verifyWabaAppSubscription(wabaId, userAccessToken);
   if (!verified) {
     console.warn("[WhatsApp Embedded Signup] subscribed_apps POST ok but GET did not list this app yet", { wabaId });
   }
   return verified;
+}
+
+/**
+ * Production repair: `POST /{waba-id}/subscribed_apps` using the **saved** user token, then
+ * `GET /{waba-id}/subscribed_apps` to confirm this app id is listed. Updates DB webhook flags.
+ * Uses `meta_business_account_id` from the user row (current production WABA).
+ */
+export async function repairMetaWabaWebhookSubscription(userId: string): Promise<{
+  success: boolean;
+  verified: boolean;
+  errorMessage?: string;
+}> {
+  const graphVersion = getMetaGraphVersionSegment();
+  const user = await storage.getUserForSession(userId);
+  const wabaId = user?.metaBusinessAccountId ?? "";
+  const phoneNumberId = user?.metaPhoneNumberId ?? null;
+
+  const failLog = (
+    subscribeStatus: string,
+    verifyStatus: string,
+    errorCode: number | string | null,
+    errorMessage: string | null
+  ) => {
+    logWhatsAppWebhookSubscribe({
+      wabaId: wabaId || "(none)",
+      phoneNumberId,
+      userId,
+      graphVersion,
+      subscribeStatus,
+      verifyStatus,
+      errorCode,
+      errorMessage,
+    });
+  };
+
+  if (!user?.metaConnected || !wabaId || user.whatsappProvider !== "meta") {
+    failLog("skipped", "skipped", null, "meta_not_active_or_missing_waba");
+    return {
+      success: false,
+      verified: false,
+      errorMessage: "Meta Cloud API is not the active WhatsApp provider or WABA is missing.",
+    };
+  }
+
+  const token = await getMetaAccessToken(userId);
+  if (!token) {
+    failLog("failed", "skipped", null, "no_meta_access_token");
+    return { success: false, verified: false, errorMessage: "No Meta access token." };
+  }
+
+  const post = await postWabaSubscribedAppsDetailed(wabaId, token);
+  let subscribeStatus = post.httpOk && post.graphSuccess ? "ok" : "failed";
+  let errorCode: number | string | null = post.error?.code ?? null;
+  let errorMessage: string | null = post.error?.message ?? null;
+
+  let verifyResult = await verifyWabaAppSubscriptionDetailed(wabaId, token);
+  if (!verifyResult.verified && post.httpOk && post.graphSuccess) {
+    await new Promise((r) => setTimeout(r, 2000));
+    verifyResult = await verifyWabaAppSubscriptionDetailed(wabaId, token);
+  }
+
+  const verifyStatus = verifyResult.verified ? "ok" : "failed";
+  if (!verifyResult.verified && verifyResult.error) {
+    errorCode = verifyResult.error.code ?? errorCode;
+    errorMessage = verifyResult.error.message ?? errorMessage;
+  }
+
+  logWhatsAppWebhookSubscribe({
+    wabaId,
+    phoneNumberId,
+    userId,
+    graphVersion,
+    subscribeStatus,
+    verifyStatus,
+    errorCode,
+    errorMessage,
+  });
+
+  const now = new Date();
+  const fullyOk = post.httpOk && post.graphSuccess && verifyResult.verified;
+
+  if (fullyOk) {
+    await storage.updateUser(userId, {
+      metaWebhookSubscribed: true,
+      metaWebhookLastCheckedAt: now,
+      metaIntegrationStatus: "connected",
+      metaLastErrorCode: null,
+      metaLastErrorMessage: null,
+    });
+    return { success: true, verified: true };
+  }
+
+  await storage.updateUser(userId, {
+    metaWebhookSubscribed: verifyResult.verified,
+    metaWebhookLastCheckedAt: now,
+    metaIntegrationStatus: verifyResult.verified ? "connected" : "needs_attention",
+    metaLastErrorCode: errorCode != null ? String(errorCode) : null,
+    metaLastErrorMessage:
+      (errorMessage?.slice(0, 500) ||
+        (!verifyResult.verified ? "Could not confirm this app on GET subscribed_apps." : null)) ??
+      null,
+  });
+
+  return {
+    success: verifyResult.verified,
+    verified: verifyResult.verified,
+    errorMessage: errorMessage ?? undefined,
+  };
 }
 
 const TOKEN_ATTENTION_BEFORE_MS = 7 * 24 * 60 * 60 * 1000;
@@ -1052,13 +1210,7 @@ export async function completeEmbeddedSignupOAuth(params: {
     metaConnected: true,
   });
 
-  if (!subscribed) {
-    await storage.updateUser(row.userId, {
-      metaIntegrationStatus: "needs_attention",
-      metaLastErrorMessage:
-        "Connected, but webhook subscription could not be confirmed. In Meta Developer Console, ensure this app is subscribed to your WABA and the callback URL matches our server.",
-    });
-  }
+  await repairMetaWabaWebhookSubscription(row.userId);
 
   // Success path: state is no longer needed.
   await db.delete(whatsappOauthStates).where(eq(whatsappOauthStates.stateToken, state));
@@ -1142,6 +1294,8 @@ export async function finalizeEmbeddedSignupWabaSelection(params: {
   if (!result.success) {
     return { success: false, error: result.error || "Could not save WhatsApp connection." };
   }
+
+  await repairMetaWabaWebhookSubscription(row.userId);
 
   await db.delete(whatsappOauthStates).where(eq(whatsappOauthStates.stateToken, state));
   return { success: true };
