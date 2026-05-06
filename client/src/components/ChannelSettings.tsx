@@ -239,9 +239,14 @@ export function ChannelSettings() {
     const params = new URLSearchParams(searchString);
     const embedded = params.get("whatsapp_embedded");
     if (embedded === "success") {
-      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/integrations/whatsapp/status"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/channels"] });
+      void (async () => {
+        await queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+        await queryClient.invalidateQueries({ queryKey: ["/api/integrations/whatsapp/status"] });
+        await queryClient.invalidateQueries({ queryKey: ["/api/channels"] });
+        await queryClient.invalidateQueries({ queryKey: ["/api/integrations"] });
+        await queryClient.refetchQueries({ queryKey: ["/api/integrations/whatsapp/status"] });
+        await queryClient.refetchQueries({ queryKey: ["/api/channels"] });
+      })();
       toast({
         title: "WhatsApp connected",
         description: "Your Meta WhatsApp setup finished. You can send and receive messages from the inbox.",

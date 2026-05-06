@@ -64,7 +64,8 @@ export interface MetaCredentials {
 
 /** Extra columns when connecting via Embedded Signup vs manual paste. */
 export interface MetaConnectExtras {
-  connectionType?: "embedded_signup" | "coexistence" | "manual_legacy";
+  /** OAuth Embedded Signup completion + legacy manual paste path */
+  connectionType?: "embedded_signup" | "embedded" | "coexistence" | "manual_legacy";
   displayPhoneNumber?: string | null;
   verifiedName?: string | null;
   tokenExpiresAt?: Date | null;
@@ -153,9 +154,12 @@ export async function validateMetaCredentials(credentials: MetaCredentials): Pro
 export async function connectUserMeta(
   userId: string,
   credentials: MetaCredentials,
-  extras?: MetaConnectExtras
+  extras?: MetaConnectExtras & { skipCredentialValidation?: boolean }
 ): Promise<{ success: boolean; error?: string; phoneNumber?: string }> {
-  const validation = await validateMetaCredentials(credentials);
+  const validation =
+    extras?.skipCredentialValidation === true
+      ? { valid: true as const, phoneNumber: undefined as string | undefined }
+      : await validateMetaCredentials(credentials);
   if (!validation.valid) {
     return { success: false, error: validation.error };
   }
@@ -165,11 +169,20 @@ export async function connectUserMeta(
   const globalVerify = process.env.META_WEBHOOK_VERIFY_TOKEN;
   const webhookVerifyToken =
     credentials.webhookVerifyToken ||
-    (extras?.connectionType === "embedded_signup" || extras?.connectionType === "coexistence"
+    (extras?.connectionType === "embedded_signup" ||
+    extras?.connectionType === "embedded" ||
+    extras?.connectionType === "coexistence"
       ? globalVerify || crypto.randomBytes(32).toString("hex")
       : crypto.randomBytes(32).toString("hex"));
 
   const now = new Date();
+  console.log("[WHATSAPP SAVE] Saving integration", {
+    userId,
+    wabaId: credentials.businessAccountId,
+    phoneNumberId: credentials.phoneNumberId,
+    connectionType: extras?.connectionType ?? "manual_legacy",
+    skipCredentialValidation: !!extras?.skipCredentialValidation,
+  });
   await storage.updateUser(userId, {
     metaAccessToken: encryptedAccessToken,
     metaPhoneNumberId: credentials.phoneNumberId,
@@ -187,6 +200,12 @@ export async function connectUserMeta(
     metaIntegrationStatus: extras?.metaIntegrationStatus ?? "connected",
     metaLastErrorCode: null,
     metaLastErrorMessage: null,
+  });
+  console.log("[WHATSAPP SAVE] Saved integration", {
+    userId,
+    wabaId: credentials.businessAccountId,
+    phoneNumberId: credentials.phoneNumberId,
+    metaConnected: true,
   });
 
   return { success: true, phoneNumber: validation.phoneNumber };

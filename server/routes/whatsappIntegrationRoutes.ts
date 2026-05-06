@@ -14,6 +14,7 @@ import {
   applyMetaTokenExpiryAttention,
   getWhatsappConnectionDebug,
   verifyWhatsappEmbeddedSignupMigration,
+  recordWhatsappMetaRedirectCallbackDebug,
 } from "../whatsappEmbeddedSignup";
 import { getAppOrigin } from "../urlOrigins";
 import { storage } from "../storage";
@@ -101,20 +102,24 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
         `${base}/app/settings?section=channels&whatsapp_embedded=success`
       );
     };
-    const pickRedirect = (state: string) => {
-      const q = new URLSearchParams({
-        section: "channels",
-        whatsapp_embedded: "pick",
-        state,
-      });
-      res.redirect(302, `${base}/app/settings?${q.toString()}`);
-    };
 
     try {
       const code = codeStr;
       const state = stateStr;
       const error = errStr;
       const errorDescription = errDesc;
+
+      const flatQuery: Record<string, string | undefined> = {};
+      for (const [k, raw] of Object.entries(req.query)) {
+        if (Array.isArray(raw)) {
+          flatQuery[k] = typeof raw[0] === "string" ? raw[0] : undefined;
+        } else if (typeof raw === "string") {
+          flatQuery[k] = raw;
+        } else {
+          flatQuery[k] = undefined;
+        }
+      }
+      void recordWhatsappMetaRedirectCallbackDebug({ state, query: flatQuery });
 
       if (error) {
         console.warn("[WhatsApp Embedded Signup] OAuth error from Meta", { error, errorDescription });
@@ -132,9 +137,6 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
         tokenExchange: "redirect",
       });
       if (!result.success) {
-        if ("requiresWabaSelection" in result && result.requiresWabaSelection) {
-          return pickRedirect(state);
-        }
         return failRedirect((result as any).error);
       }
       okRedirect();
@@ -185,9 +187,6 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
         tokenExchange: "sdk",
       });
       if (!result.success) {
-        if ("requiresWabaSelection" in result && result.requiresWabaSelection) {
-          return res.json({ success: false, requiresWabaSelection: true, choices: result.choices });
-        }
         return res.status(400).json({ success: false, error: (result as any).error });
       }
       res.json({ success: true });
@@ -312,6 +311,10 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
         webhookLastCheckedAt: user.metaWebhookLastCheckedAt ?? null,
         lastErrorCode: user.metaLastErrorCode ?? null,
         lastErrorMessage: user.metaLastErrorMessage ?? null,
+        lastOAuthDebug:
+          user.metaLastOAuthDebug && typeof user.metaLastOAuthDebug === "object"
+            ? user.metaLastOAuthDebug
+            : null,
       });
     } catch (e: any) {
       res.status(500).json({ error: e?.message || "Failed to load saved Meta WhatsApp fields" });

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import {
@@ -148,7 +148,12 @@ export function ConnectWhatsAppHub({
   const metaActive = status?.activeProvider === "meta" && meta?.connected;
 
   // Load pending WABA choices (redirect flow) if present.
-  useQuery({
+  const {
+    data: pendingWabaPayload,
+    isSuccess: pendingLoaded,
+    isError: pendingError,
+    error: pendingErr,
+  } = useQuery({
     queryKey: ["/api/integrations/whatsapp/meta/pending-waba", pendingStateFromUrl],
     enabled: !!pendingStateFromUrl && pendingStateFromUrl.length > 0,
     queryFn: async () => {
@@ -159,18 +164,22 @@ export function ConnectWhatsAppHub({
       if (!res.ok) throw new Error(data.error || "Could not load WhatsApp business choices");
       return data as { state: string; choices: WabaChoice[] };
     },
-    onSuccess: (data) => {
-      if (!data?.choices?.length) return;
-      setWabaChoices(data.choices);
-      setWabaPickerState(data.state);
-      setSelectedWabaId(data.choices[0]?.wabaId ?? null);
-      setSelectedPhoneNumberId(data.choices[0]?.phoneNumbers?.[0]?.id ?? null);
-      setWabaPickerOpen(true);
-    },
-    onError: (e: any) => {
-      setHubBanner({ variant: "error", message: e?.message || "Could not load WhatsApp business choices." });
-    },
   });
+
+  useEffect(() => {
+    if (!pendingLoaded || !pendingWabaPayload?.choices?.length) return;
+    setWabaChoices(pendingWabaPayload.choices);
+    setWabaPickerState(pendingWabaPayload.state);
+    setSelectedWabaId(pendingWabaPayload.choices[0]?.wabaId ?? null);
+    setSelectedPhoneNumberId(pendingWabaPayload.choices[0]?.phoneNumbers?.[0]?.id ?? null);
+    setWabaPickerOpen(true);
+  }, [pendingLoaded, pendingWabaPayload]);
+
+  useEffect(() => {
+    if (!pendingError || !pendingErr) return;
+    const msg = pendingErr instanceof Error ? pendingErr.message : "Could not load WhatsApp business choices.";
+    setHubBanner({ variant: "error", message: msg });
+  }, [pendingError, pendingErr]);
 
   return (
     <div className="space-y-4 mt-2">

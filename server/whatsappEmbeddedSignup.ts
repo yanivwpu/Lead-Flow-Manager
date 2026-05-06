@@ -39,6 +39,7 @@ ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "meta_last_error_code" text;
 ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "meta_last_error_message" text;
 ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "meta_display_phone_number" text;
 ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "meta_verified_name" text;
+ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "meta_last_oauth_debug" jsonb;
 
 UPDATE "users"
 SET "meta_connection_type" = 'manual_legacy'
@@ -321,7 +322,7 @@ async function fetchUserWabaChoices(accessToken: string): Promise<WabaPhoneChoic
   const businesses: Array<{ id: string; name?: string }> = Array.isArray(bizJson?.data)
     ? bizJson.data
         .map((r: any) => ({ id: String(r?.id || ""), name: typeof r?.name === "string" ? r.name : undefined }))
-        .filter((r) => !!r.id)
+        .filter((r: { id: string }) => !!r.id)
     : [];
 
   console.log("[WABA DISCOVERY] businesses count", { count: businesses.length });
@@ -362,7 +363,7 @@ async function fetchUserWabaChoices(accessToken: string): Promise<WabaPhoneChoic
   console.log("[WABA DISCOVERY] owned WABAs count", { count: ownedCount });
   console.log("[WABA DISCOVERY] client WABAs count", { count: clientCount });
 
-  const wabas = [...wabaById.values()];
+  const wabas = Array.from(wabaById.values());
 
   // 2) For each WABA, fetch phone numbers
   const choices: WabaPhoneChoice[] = [];
@@ -414,6 +415,77 @@ function earliestExpiry(a: Date | null | undefined, b: Date | null | undefined):
   const dates = [a, b].filter((d): d is Date => !!d && !Number.isNaN(d.getTime()));
   if (!dates.length) return null;
   return new Date(Math.min(...dates.map((d) => d.getTime())));
+}
+
+function sortIds(ids: string[]): string[] {
+  return [...ids].sort((a, b) => a.localeCompare(b));
+}
+
+/** Deterministic pick: first WABA (by id), first phone (by id) — includes Meta Test WABA when valid. */
+export function pickFirstValidWabaSelection(choices: WabaPhoneChoice[]): ResolvedWabaPhone | null {
+  if (!choices.length) return null;
+  const sortedWabas = [...choices].sort((a, b) => a.wabaId.localeCompare(b.wabaId));
+  for (const w of sortedWabas) {
+    const phones = Array.isArray(w.phoneNumbers) ? w.phoneNumbers : [];
+    if (!phones.length) continue;
+    const sortedPhones = [...phones].sort((a, b) => a.id.localeCompare(b.id));
+    const phone = sortedPhones[0];
+    if (!phone?.id) continue;
+    return {
+      wabaId: w.wabaId,
+      phoneNumberId: phone.id,
+      displayPhoneNumber: phone.displayPhoneNumber,
+      verifiedName: phone.verifiedName,
+    };
+  }
+  return null;
+}
+
+export async function mergeUserMetaOAuthDebug(
+  userId: string,
+  patch: Record<string, unknown>
+): Promise<void> {
+  try {
+    const prevRow = await storage.getUser(userId);
+    const prev =
+      prevRow && prevRow.metaLastOAuthDebug && typeof prevRow.metaLastOAuthDebug === "object"
+        ? (prevRow.metaLastOAuthDebug as Record<string, unknown>)
+        : {};
+    const next = {
+      ...prev,
+      ...patch,
+      updatedAt: new Date().toISOString(),
+    };
+    await storage.updateUser(userId, { metaLastOAuthDebug: next as any });
+  } catch (e: any) {
+    console.warn("[WhatsApp Embedded Signup] could not persist metaLastOAuthDebug", e?.message || e);
+  }
+}
+
+/** Persist Meta redirect callback query params (errors only — never tokens). */
+export async function recordWhatsappMetaRedirectCallbackDebug(params: {
+  state?: string;
+  query: Record<string, string | undefined>;
+}): Promise<void> {
+  const state = params.state?.trim();
+  if (!state) return;
+  try {
+    const rows = await db
+      .select({ userId: whatsappOauthStates.userId, expiresAt: whatsappOauthStates.expiresAt })
+      .from(whatsappOauthStates)
+      .where(eq(whatsappOauthStates.stateToken, state))
+      .limit(1);
+    const row = rows[0];
+    if (!row || row.expiresAt < new Date()) return;
+
+    await mergeUserMetaOAuthDebug(row.userId, {
+      phase: "meta_redirect_callback",
+      oauthState: state,
+      query: params.query,
+    });
+  } catch {
+    /* ignore */
+  }
 }
 
 /** Expiry from Graph debug_token (`data.expires_at` unix seconds). */
@@ -534,6 +606,8 @@ export interface WhatsappConnectionDebugInfo {
   connectionType: string | null;
   status: string;
   lastErrorMessage: string | null;
+  /** Structured diagnostics from last OAuth attempt(s); excludes secrets/tokens. */
+  lastOAuthDebug: Record<string, unknown> | null;
 }
 
 /** Safe diagnostics — no tokens or secrets. */
@@ -549,6 +623,10 @@ export async function getWhatsappConnectionDebug(userId: string): Promise<Whatsa
     status:
       user.metaIntegrationStatus ?? (user.metaConnected ? "connected" : "disconnected"),
     lastErrorMessage: user.metaLastErrorMessage ?? null,
+    lastOAuthDebug:
+      user.metaLastOAuthDebug && typeof user.metaLastOAuthDebug === "object"
+        ? (user.metaLastOAuthDebug as Record<string, unknown>)
+        : null,
   };
 }
 
@@ -560,11 +638,7 @@ export async function completeEmbeddedSignupOAuth(params: {
   initiatingUserId?: string;
   /** `sdk` = POST complete-sdk; `redirect` = GET meta/callback — same redirect_uri / exchange for both. */
   tokenExchange: "sdk" | "redirect";
-}): Promise<
-  | { success: true; userId: string }
-  | { success: false; error: string }
-  | { success: false; requiresWabaSelection: true; choices: WabaPhoneChoice[] }
-> {
+}): Promise<{ success: true; userId: string } | { success: false; error: string }> {
   const { code, state, initiatingUserId, tokenExchange } = params;
 
   await cleanupExpiredStates();
@@ -587,6 +661,13 @@ export async function completeEmbeddedSignupOAuth(params: {
     };
   }
 
+  await mergeUserMetaOAuthDebug(row.userId, {
+    flow: row.flow,
+    tokenExchange,
+    phase: "started",
+    oauthState: state,
+  });
+
   // IMPORTANT: exchange MUST use byte-for-byte redirect URI from the start of this OAuth state.
   // (If row.redirectUri is null due to older rows, fall back to env but log that mismatch risk.)
   const redirectUri = row.redirectUri || getWhatsappMetaRedirectUri();
@@ -600,6 +681,12 @@ export async function completeEmbeddedSignupOAuth(params: {
       graphApiBase: getMetaGraphApiBase(),
     });
     shortToken = await exchangeCodeForToken(code, redirectUri);
+    await mergeUserMetaOAuthDebug(row.userId, {
+      phase: "code_exchange",
+      ok: true,
+      redirectUriUsed: redirectUri,
+      redirectUriSource: row.redirectUri ? "state_row" : "env_fallback",
+    });
   } catch (e: any) {
     const ex = e as MetaOAuthExchangeError;
     console.warn("[WhatsApp Embedded Signup] code exchange failed", {
@@ -612,6 +699,15 @@ export async function completeEmbeddedSignupOAuth(params: {
       tokenExchange,
       redirectUriUsed: redirectUri,
     });
+    await mergeUserMetaOAuthDebug(row.userId, {
+      phase: "code_exchange",
+      ok: false,
+      error: "code_exchange_failed",
+      meta: ex?.meta,
+      httpStatus: (ex as any)?.httpStatus,
+      redirectUriUsed: redirectUri,
+      redirectUriSource: row.redirectUri ? "state_row" : "env_fallback",
+    });
     return {
       success: false,
       error:
@@ -621,12 +717,26 @@ export async function completeEmbeddedSignupOAuth(params: {
 
   let longToken: string;
   let tokenExpiresAt: Date | null = null;
+  let longLivedOk = false;
   try {
     const exchanged = await exchangeForLongLivedUserToken(shortToken);
     longToken = exchanged.accessToken;
     tokenExpiresAt = exchanged.expiresAt;
+    longLivedOk = true;
   } catch {
     longToken = shortToken;
+    await mergeUserMetaOAuthDebug(row.userId, {
+      phase: "long_lived_token",
+      ok: false,
+      note: "exchange_failed_using_short_lived_token",
+    });
+  }
+  if (longLivedOk) {
+    await mergeUserMetaOAuthDebug(row.userId, {
+      phase: "long_lived_token",
+      ok: true,
+      tokenExpiresAt: tokenExpiresAt ? tokenExpiresAt.toISOString() : null,
+    });
   }
 
   try {
@@ -638,40 +748,27 @@ export async function completeEmbeddedSignupOAuth(params: {
 
   let resolved: ResolvedWabaPhone;
   try {
-    // NEW: never proceed with an empty WABA — filter to only WABAs with >= 1 phone number.
     const choices = await fetchUserWabaChoices(longToken);
-    if (choices.length === 0) {
+    const picked = pickFirstValidWabaSelection(choices);
+    await mergeUserMetaOAuthDebug(row.userId, {
+      phase: "waba_discovery",
+      ok: true,
+      validWabaCount: choices.length,
+      wabaIdsSample: sortIds(choices.map((c) => c.wabaId)).slice(0, 25),
+      selectedWabaId: picked?.wabaId ?? null,
+      selectedPhoneNumberId: picked?.phoneNumberId ?? null,
+      selectionPolicy: "first_valid_by_waba_id_then_phone_id",
+    });
+    if (!picked) {
       const msg = "No WhatsApp phone number found. Please add a phone number in Meta Business Manager.";
       await storage.updateUser(row.userId, {
         metaIntegrationStatus: "failed",
         metaLastErrorMessage: msg.slice(0, 500),
       });
+      await mergeUserMetaOAuthDebug(row.userId, { phase: "complete", ok: false, error: "no_valid_waba_or_phone" });
       return { success: false, error: msg };
     }
-    if (choices.length > 1) {
-      // Store pending token + choices on the state row so the user can explicitly select.
-      const encrypted = isEncrypted(longToken) ? longToken : encryptCredential(longToken);
-      await db
-        .update(whatsappOauthStates)
-        .set({
-          pendingAccessToken: encrypted,
-          pendingWabaChoices: choices as any,
-        })
-        .where(eq(whatsappOauthStates.stateToken, state));
-      await storage.updateUser(row.userId, {
-        metaIntegrationStatus: "pending",
-        metaLastErrorMessage: "Multiple WhatsApp Business Accounts found. Please select which one to connect.",
-      });
-      return { success: false, requiresWabaSelection: true, choices };
-    }
-    const only = choices[0];
-    const phone = only.phoneNumbers[0];
-    resolved = {
-      wabaId: only.wabaId,
-      phoneNumberId: phone.id,
-      displayPhoneNumber: phone.displayPhoneNumber,
-      verifiedName: phone.verifiedName,
-    };
+    resolved = picked;
     console.log("[WABA SELECTED] auto", {
       wabaId: resolved.wabaId,
       phoneNumberId: resolved.phoneNumberId,
@@ -682,6 +779,11 @@ export async function completeEmbeddedSignupOAuth(params: {
       metaIntegrationStatus: "failed",
       metaLastErrorMessage: msg.slice(0, 500),
     });
+    await mergeUserMetaOAuthDebug(row.userId, {
+      phase: "waba_discovery",
+      ok: false,
+      error: msg.slice(0, 500),
+    });
     return { success: false, error: msg };
   }
 
@@ -691,6 +793,11 @@ export async function completeEmbeddedSignupOAuth(params: {
   } catch (e: any) {
     console.warn("[WhatsApp Embedded Signup] subscribe warning", e?.message || e);
   }
+  await mergeUserMetaOAuthDebug(row.userId, {
+    phase: "waba_subscribe",
+    ok: subscribed,
+    subscribed,
+  });
 
   const credentials: MetaCredentials = {
     accessToken: longToken,
@@ -700,9 +807,9 @@ export async function completeEmbeddedSignupOAuth(params: {
     webhookVerifyToken: process.env.META_WEBHOOK_VERIFY_TOKEN || undefined,
   };
 
-  const connectionType = row.flow === "coexistence" ? "coexistence" : "embedded_signup";
+  const connectionType = row.flow === "coexistence" ? "coexistence" : "embedded";
 
-  const result = await connectUserMeta(row.userId, credentials, {
+  let result = await connectUserMeta(row.userId, credentials, {
     connectionType,
     displayPhoneNumber: resolved.displayPhoneNumber || null,
     verifiedName: resolved.verifiedName || null,
@@ -712,8 +819,48 @@ export async function completeEmbeddedSignupOAuth(params: {
   });
 
   if (!result.success) {
+    console.warn("[WHATSAPP SAVE] connectUserMeta failed; forcing save without Graph validation", {
+      userId: row.userId,
+      wabaId: resolved.wabaId,
+      phoneNumberId: resolved.phoneNumberId,
+      error: result.error,
+    });
+    await mergeUserMetaOAuthDebug(row.userId, {
+      phase: "persist_integration",
+      ok: false,
+      connectUserMetaError: result.error || "unknown",
+      forcedSave: true,
+    });
+    result = await connectUserMeta(row.userId, credentials, {
+      connectionType,
+      displayPhoneNumber: resolved.displayPhoneNumber || null,
+      verifiedName: resolved.verifiedName || null,
+      webhookSubscribed: subscribed,
+      tokenExpiresAt,
+      metaIntegrationStatus: subscribed ? "connected" : "needs_attention",
+      skipCredentialValidation: true,
+    });
+  }
+
+  if (!result.success) {
+    await mergeUserMetaOAuthDebug(row.userId, {
+      phase: "persist_integration",
+      ok: false,
+      error: result.error || "Could not save WhatsApp connection.",
+      forcedSave: false,
+    });
     return { success: false, error: result.error || "Could not save WhatsApp connection." };
   }
+
+  await mergeUserMetaOAuthDebug(row.userId, {
+    phase: "persist_integration",
+    ok: true,
+    forcedSave: false,
+    wabaId: resolved.wabaId,
+    phoneNumberId: resolved.phoneNumberId,
+    connectionType,
+    metaConnected: true,
+  });
 
   if (!subscribed) {
     await storage.updateUser(row.userId, {
@@ -780,8 +927,8 @@ export async function finalizeEmbeddedSignupWabaSelection(params: {
     webhookVerifyToken: process.env.META_WEBHOOK_VERIFY_TOKEN || undefined,
   };
 
-  const connectionType = row.flow === "coexistence" ? "coexistence" : "embedded_signup";
-  const result = await connectUserMeta(row.userId, credentials, {
+  const connectionType = row.flow === "coexistence" ? "coexistence" : "embedded";
+  let result = await connectUserMeta(row.userId, credentials, {
     connectionType,
     displayPhoneNumber: matchPhone.displayPhoneNumber ?? null,
     verifiedName: matchPhone.verifiedName ?? null,
@@ -789,6 +936,18 @@ export async function finalizeEmbeddedSignupWabaSelection(params: {
     tokenExpiresAt: null,
     metaIntegrationStatus: subscribed ? "connected" : "needs_attention",
   });
+
+  if (!result.success) {
+    result = await connectUserMeta(row.userId, credentials, {
+      connectionType,
+      displayPhoneNumber: matchPhone.displayPhoneNumber ?? null,
+      verifiedName: matchPhone.verifiedName ?? null,
+      webhookSubscribed: subscribed,
+      tokenExpiresAt: null,
+      metaIntegrationStatus: subscribed ? "connected" : "needs_attention",
+      skipCredentialValidation: true,
+    });
+  }
 
   if (!result.success) {
     return { success: false, error: result.error || "Could not save WhatsApp connection." };

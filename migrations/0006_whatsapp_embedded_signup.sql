@@ -8,6 +8,7 @@ ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "meta_last_error_code" text;
 ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "meta_last_error_message" text;
 ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "meta_display_phone_number" text;
 ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "meta_verified_name" text;
+ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "meta_last_oauth_debug" jsonb;
 
 -- Existing Meta Cloud API users (manual paste flow): label as legacy when column was null on migration.
 UPDATE "users"

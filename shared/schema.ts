@@ -102,6 +102,8 @@ export const users = pgTable("users", {
   metaIntegrationStatus: text("meta_integration_status"),
   metaLastErrorCode: text("meta_last_error_code"),
   metaLastErrorMessage: text("meta_last_error_message"),
+  /** Safe structured diagnostics from last Embedded Signup OAuth completion attempt (no secrets/tokens). */
+  metaLastOAuthDebug: jsonb("meta_last_oauth_debug"),
   metaDisplayPhoneNumber: text("meta_display_phone_number"),
   metaVerifiedName: text("meta_verified_name"),
   // Active provider selection
