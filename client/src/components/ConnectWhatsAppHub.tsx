@@ -84,6 +84,13 @@ export function ConnectWhatsAppHub({
   const [selectedWabaId, setSelectedWabaId] = useState<string | null>(null);
   const [selectedPhoneNumberId, setSelectedPhoneNumberId] = useState<string | null>(null);
 
+  // Redirect flow multi-WABA picker: Settings redirects back with ?state=<oauth_state>.
+  // If present, fetch pending choices from the server and open the picker.
+  const pendingStateFromUrl =
+    typeof window !== "undefined"
+      ? new URLSearchParams(window.location.search).get("state")
+      : null;
+
   const { data: cfg, isLoading: cfgLoading } = useQuery<MetaConfigResponse>({
     queryKey: ["/api/integrations/whatsapp/meta/config"],
     staleTime: 60_000,
@@ -139,6 +146,31 @@ export function ConnectWhatsAppHub({
   const loading = cfgLoading || statusLoading;
   const meta = status?.meta;
   const metaActive = status?.activeProvider === "meta" && meta?.connected;
+
+  // Load pending WABA choices (redirect flow) if present.
+  useQuery({
+    queryKey: ["/api/integrations/whatsapp/meta/pending-waba", pendingStateFromUrl],
+    enabled: !!pendingStateFromUrl && pendingStateFromUrl.length > 0,
+    queryFn: async () => {
+      const res = await fetch(`/api/integrations/whatsapp/meta/pending-waba?state=${encodeURIComponent(pendingStateFromUrl!)}`, {
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Could not load WhatsApp business choices");
+      return data as { state: string; choices: WabaChoice[] };
+    },
+    onSuccess: (data) => {
+      if (!data?.choices?.length) return;
+      setWabaChoices(data.choices);
+      setWabaPickerState(data.state);
+      setSelectedWabaId(data.choices[0]?.wabaId ?? null);
+      setSelectedPhoneNumberId(data.choices[0]?.phoneNumbers?.[0]?.id ?? null);
+      setWabaPickerOpen(true);
+    },
+    onError: (e: any) => {
+      setHubBanner({ variant: "error", message: e?.message || "Could not load WhatsApp business choices." });
+    },
+  });
 
   return (
     <div className="space-y-4 mt-2">

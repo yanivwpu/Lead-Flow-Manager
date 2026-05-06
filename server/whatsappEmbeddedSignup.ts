@@ -672,6 +672,10 @@ export async function completeEmbeddedSignupOAuth(params: {
       displayPhoneNumber: phone.displayPhoneNumber,
       verifiedName: phone.verifiedName,
     };
+    console.log("[WABA SELECTED] auto", {
+      wabaId: resolved.wabaId,
+      phoneNumberId: resolved.phoneNumberId,
+    });
   } catch (e: any) {
     const msg = e?.message || "Could not read WhatsApp account details from Meta.";
     await storage.updateUser(row.userId, {
@@ -765,6 +769,8 @@ export async function finalizeEmbeddedSignupWabaSelection(params: {
   }
 
   const subscribed = await subscribeAppToWaba(matchWaba.wabaId, token).catch(() => false);
+
+  console.log("[WABA SELECTED] user_choice", { wabaId: matchWaba.wabaId, phoneNumberId: matchPhone.id });
 
   const credentials: MetaCredentials = {
     accessToken: token,

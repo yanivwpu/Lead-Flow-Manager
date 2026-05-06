@@ -256,8 +256,15 @@ export function ChannelSettings() {
       setWhatsappEmbeddedInlineError(
         "Couldn’t find a WhatsApp phone number on the selected business. Please select the WABA that has your number or add a phone number in Meta."
       );
+      setConfigChannel("whatsapp");
       params.delete("whatsapp_embedded");
       params.delete("reason");
+      const q = params.toString();
+      window.history.replaceState({}, "", `${window.location.pathname}${q ? `?${q}` : ""}`);
+    } else if (embedded === "pick") {
+      // Multiple valid WABAs detected server-side; open the connect dialog so user can choose.
+      setConfigChannel("whatsapp");
+      params.delete("whatsapp_embedded");
       const q = params.toString();
       window.history.replaceState({}, "", `${window.location.pathname}${q ? `?${q}` : ""}`);
     }

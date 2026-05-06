@@ -101,6 +101,14 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
         `${base}/app/settings?section=channels&whatsapp_embedded=success`
       );
     };
+    const pickRedirect = (state: string) => {
+      const q = new URLSearchParams({
+        section: "channels",
+        whatsapp_embedded: "pick",
+        state,
+      });
+      res.redirect(302, `${base}/app/settings?${q.toString()}`);
+    };
 
     try {
       const code = codeStr;
@@ -124,7 +132,10 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
         tokenExchange: "redirect",
       });
       if (!result.success) {
-        return failRedirect(result.error);
+        if ("requiresWabaSelection" in result && result.requiresWabaSelection) {
+          return pickRedirect(state);
+        }
+        return failRedirect((result as any).error);
       }
       okRedirect();
     } catch (e: any) {
@@ -213,6 +224,38 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
   });
 
   /**
+   * Redirect flow: when multiple valid WABAs exist, callback redirects to Settings with whatsapp_embedded=pick&state=...
+   * This endpoint returns the pending choices for the given state (no tokens).
+   */
+  app.get("/api/integrations/whatsapp/meta/pending-waba", async (req: Request, res: Response) => {
+    try {
+      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+      const state = typeof req.query.state === "string" ? req.query.state : "";
+      if (!state) return res.status(400).json({ error: "Missing state" });
+      const rows = await db
+        .select({
+          userId: whatsappOauthStates.userId,
+          expiresAt: whatsappOauthStates.expiresAt,
+          choices: whatsappOauthStates.pendingWabaChoices,
+        })
+        .from(whatsappOauthStates)
+        .where(eq(whatsappOauthStates.stateToken, state))
+        .limit(1);
+      const row = rows[0];
+      if (!row || row.expiresAt < new Date()) {
+        return res.status(404).json({ error: "No pending selection found. Start again." });
+      }
+      if (row.userId !== req.user.id) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+      const choices = Array.isArray(row.choices) ? row.choices : [];
+      res.json({ state, choices });
+    } catch (e: any) {
+      res.status(500).json({ error: e?.message || "Failed to load pending choices" });
+    }
+  });
+
+  /**
    * Full redirect OAuth entrypoint (production).
    * Creates oauth state, stores redirect_uri, builds Meta dialog URL, and redirects.
    */
@@ -248,6 +291,30 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
       res.json(row);
     } catch (e: any) {
       res.status(500).json({ error: "Failed to load debug info" });
+    }
+  });
+
+  /** Temporary: show saved WhatsApp Meta fields (no tokens). */
+  app.get("/api/integrations/whatsapp/meta/debug-saved", async (req: Request, res: Response) => {
+    try {
+      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+      const user = await storage.getUser(req.user.id);
+      if (!user) return res.status(404).json({ error: "User not found" });
+      res.json({
+        metaConnected: !!user.metaConnected,
+        whatsappProvider: user.whatsappProvider,
+        wabaId: user.metaBusinessAccountId ?? null,
+        phoneNumberId: user.metaPhoneNumberId ?? null,
+        connectionType: user.metaConnectionType ?? null,
+        integrationStatus: user.metaIntegrationStatus ?? null,
+        tokenExpiresAt: user.metaTokenExpiresAt ?? null,
+        webhookSubscribed: user.metaWebhookSubscribed ?? false,
+        webhookLastCheckedAt: user.metaWebhookLastCheckedAt ?? null,
+        lastErrorCode: user.metaLastErrorCode ?? null,
+        lastErrorMessage: user.metaLastErrorMessage ?? null,
+      });
+    } catch (e: any) {
+      res.status(500).json({ error: e?.message || "Failed to load saved Meta WhatsApp fields" });
     }
   });
 
