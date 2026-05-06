@@ -297,7 +297,7 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
   app.get("/api/integrations/whatsapp/meta/debug-saved", async (req: Request, res: Response) => {
     try {
       if (!req.user) return res.status(401).json({ error: "Unauthorized" });
-      const user = await storage.getUser(req.user.id);
+      const user = await storage.getUserForSession(req.user.id);
       if (!user) return res.status(404).json({ error: "User not found" });
       res.json({
         metaConnected: !!user.metaConnected,

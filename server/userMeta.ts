@@ -74,7 +74,7 @@ export interface MetaConnectExtras {
 }
 
 export async function getMetaAccessToken(userId: string): Promise<string | null> {
-  const user = await storage.getUser(userId);
+  const user = await storage.getUserForSession(userId);
   if (!user || !user.metaAccessToken || !user.metaConnected) {
     return null;
   }
@@ -84,7 +84,7 @@ export async function getMetaAccessToken(userId: string): Promise<string | null>
 }
 
 export async function getMetaPhoneNumberId(userId: string): Promise<string | null> {
-  const user = await storage.getUser(userId);
+  const user = await storage.getUserForSession(userId);
   if (!user || !user.metaPhoneNumberId || !user.metaConnected) {
     return null;
   }
@@ -212,7 +212,7 @@ export async function connectUserMeta(
 }
 
 export async function disconnectUserMeta(userId: string): Promise<void> {
-  const user = await storage.getUser(userId);
+  const user = await storage.getUserForSession(userId);
   
   // Determine the provider after disconnect:
   // - If Twilio is connected, switch to it
@@ -250,7 +250,7 @@ export async function disconnectUserMeta(userId: string): Promise<void> {
 }
 
 export async function switchProvider(userId: string, provider: "twilio" | "meta"): Promise<{ success: boolean; error?: string }> {
-  const user = await storage.getUser(userId);
+  const user = await storage.getUserForSession(userId);
   if (!user) {
     return { success: false, error: "User not found" };
   }
@@ -528,7 +528,7 @@ export async function getMetaMessageTemplates(
   userId: string
 ): Promise<any[]> {
   const accessToken = await getMetaAccessToken(userId);
-  const user = await storage.getUser(userId);
+  const user = await storage.getUserForSession(userId);
 
   if (!accessToken || !user?.metaBusinessAccountId) {
     throw new Error("Meta WhatsApp Business API not connected.");

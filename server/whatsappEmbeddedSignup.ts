@@ -571,7 +571,7 @@ const TOKEN_ATTENTION_BEFORE_MS = 7 * 24 * 60 * 60 * 1000;
 
 /** Sets metaIntegrationStatus to needs_attention when the long-lived token is expired or within 7 days. */
 export async function applyMetaTokenExpiryAttention(userId: string): Promise<void> {
-  const user = await storage.getUser(userId);
+  const user = await storage.getUserForSession(userId);
   if (!user?.metaConnected || user.whatsappProvider !== "meta") return;
 
   const exp = user.metaTokenExpiresAt;
@@ -612,7 +612,7 @@ export interface WhatsappConnectionDebugInfo {
 
 /** Safe diagnostics — no tokens or secrets. */
 export async function getWhatsappConnectionDebug(userId: string): Promise<WhatsappConnectionDebugInfo | null> {
-  const user = await storage.getUser(userId);
+  const user = await storage.getUserForSession(userId);
   if (!user) return null;
   return {
     wabaId: user.metaBusinessAccountId ?? null,
