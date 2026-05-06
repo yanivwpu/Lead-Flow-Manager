@@ -15,6 +15,10 @@ import {
   sendWhatsAppMedia,
   disconnectWhatsAppProvider,
   getProviderStatus,
+  syncWhatsAppChannelRowFromCanonicalMeta,
+  isCanonicalWhatsAppFullyConnected,
+  logWhatsAppChannelState,
+  type WhatsAppProvider,
 } from "./whatsappService";
 import { storage } from "./storage";
 import { devLog } from "./devLog";
@@ -4992,7 +4996,31 @@ export async function registerRoutes(
     try {
       if (!req.user) return res.status(401).json({ error: "Unauthorized" });
 
+      const userSession = await storage.getUserForSession(req.user.id);
+      const legacyWaRow = await storage.getChannelSetting(req.user.id, "whatsapp");
+      const legacyChannelConnected = !!legacyWaRow?.isConnected;
+      await syncWhatsAppChannelRowFromCanonicalMeta(req.user.id);
       const settings = await storage.getChannelSettings(req.user.id);
+      const waCanon = userSession ? isCanonicalWhatsAppFullyConnected(userSession) : false;
+
+      let rows = [...settings];
+      if (!rows.some((r) => r.channel === "whatsapp")) {
+        rows.push({
+          id: "__synthetic_whatsapp__",
+          userId: req.user.id,
+          channel: "whatsapp",
+          isEnabled: waCanon,
+          isConnected: waCanon,
+          config: {},
+          fallbackEnabled: false,
+          fallbackPriority: 0,
+          dailyLimit: null,
+          messagesSentToday: 0,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        } as any);
+      }
+
       const GRAPH_LOCAL = "https://graph.facebook.com/v19.0";
       const appId     = process.env.META_APP_ID;
       const appSecret = process.env.META_APP_SECRET;
@@ -5004,13 +5032,26 @@ export async function registerRoutes(
 
       const result: any[] = [];
 
-      for (const s of settings) {
+      for (const s of rows) {
         const cfg = s.config as any;
+        const legacyRowConnected = !!(s.isConnected ?? false);
+        const effectiveConnected =
+          s.channel === "whatsapp"
+            ? legacyRowConnected || waCanon
+            : legacyRowConnected;
+
         const entry: any = {
           channel:     s.channel,
-          isConnected: s.isConnected ?? false,
+          isConnected: effectiveConnected,
           isEnabled:   s.isEnabled   ?? false,
-          pageName:    cfg?.pageName ?? cfg?.phoneNumberId ?? null,
+          pageName:
+            s.channel === "whatsapp"
+              ? cfg?.pageName ??
+                cfg?.displayPhoneNumber ??
+                cfg?.phoneNumberId ??
+                userSession?.metaDisplayPhoneNumber ??
+                null
+              : cfg?.pageName ?? cfg?.phoneNumberId ?? null,
           healthy:     null as boolean | null, // null = could not determine
           issues:      [] as string[],
           checks: {
@@ -5023,7 +5064,7 @@ export async function registerRoutes(
           },
         };
 
-        if (!s.isConnected) {
+        if (!effectiveConnected) {
           result.push(entry);
           continue;
         }
@@ -5114,20 +5155,20 @@ export async function registerRoutes(
           }
 
         // ── WhatsApp ──────────────────────────────────────────────────────────
-        } else if (s.channel === 'whatsapp' && s.isConnected) {
-          const user = await storage.getUser(req.user.id);
-          const provider: string = (user as any)?.whatsappProvider ?? 'twilio';
+        } else if (s.channel === 'whatsapp') {
+          const provider: string = (userSession as any)?.whatsappProvider ?? 'twilio';
 
           if (provider === 'meta') {
-            const metaOk = !!(user as any)?.metaConnected;
-            entry.checks.tokenValid = metaOk;
-            if (!metaOk) entry.issues.push('Meta WhatsApp is not connected — reconnect in Settings');
-            entry.healthy = metaOk ? true : false;
+            const metaFullyOk = waCanon;
+            entry.checks.tokenValid = metaFullyOk;
+            entry.checks.subscriptionOk = !!(userSession as any)?.metaWebhookSubscribed;
+            if (!metaFullyOk) entry.issues.push('Meta WhatsApp is not fully connected — check Settings');
+            entry.healthy = metaFullyOk ? true : false;
 
           } else {
             // Twilio — validate credentials against Twilio API
-            const accountSid: string | undefined = (user as any)?.twilioAccountSid;
-            const authToken:  string | undefined = (user as any)?.twilioAuthToken;
+            const accountSid: string | undefined = (userSession as any)?.twilioAccountSid;
+            const authToken:  string | undefined = (userSession as any)?.twilioAuthToken;
 
             if (accountSid && authToken) {
               try {
@@ -5246,6 +5287,20 @@ export async function registerRoutes(
         const bi = MAIN_CHANNELS.indexOf(b.channel);
         return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
       });
+
+      if (userSession) {
+        const row = settings.find((x) => x.channel === "whatsapp");
+        const finalConnected =
+          waCanon || !!row?.isConnected;
+        logWhatsAppChannelState({
+          userId: req.user.id,
+          activeProvider: (userSession.whatsappProvider as WhatsAppProvider) || "twilio",
+          metaConnected: !!userSession.metaConnected,
+          webhookSubscribed: !!userSession.metaWebhookSubscribed,
+          legacyChannelConnected,
+          finalConnected,
+        });
+      }
 
       res.json(result);
     } catch (err: any) {

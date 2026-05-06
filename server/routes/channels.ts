@@ -1,6 +1,12 @@
 import type { Express } from "express";
 import { storage } from "../storage";
-import { getWhatsAppAvailability } from "../whatsappService";
+import {
+  getWhatsAppAvailability,
+  syncWhatsAppChannelRowFromCanonicalMeta,
+  isCanonicalWhatsAppFullyConnected,
+  logWhatsAppChannelState,
+  type WhatsAppProvider,
+} from "../whatsappService";
 import { db } from "../../drizzle/db";
 import { messages as messagesTable } from "@shared/schema";
 import { and, eq } from "drizzle-orm";
@@ -12,8 +18,25 @@ export function registerChannelRoutes(app: Express): void {
       if (!req.user) {
         return res.status(401).json({ error: "Unauthorized" });
       }
+      const user = await storage.getUserForSession(req.user.id);
+      const legacyRowBefore = await storage.getChannelSetting(req.user.id, "whatsapp");
+      const legacyChannelConnected = !!legacyRowBefore?.isConnected;
+      await syncWhatsAppChannelRowFromCanonicalMeta(req.user.id);
       const settings = await storage.getChannelSettings(req.user.id);
-      const whatsappConnected = settings.some((s) => s.channel === "whatsapp" && !!s.isConnected);
+      const legacyAfterSync = settings.some((s) => s.channel === "whatsapp" && !!s.isConnected);
+      const canonicalWa = user ? isCanonicalWhatsAppFullyConnected(user) : false;
+      const whatsappConnected = canonicalWa || legacyAfterSync;
+      if (user) {
+        const activeProvider = (user.whatsappProvider as WhatsAppProvider) || "twilio";
+        logWhatsAppChannelState({
+          userId: req.user.id,
+          activeProvider,
+          metaConnected: !!user.metaConnected,
+          webhookSubscribed: !!user.metaWebhookSubscribed,
+          legacyChannelConnected,
+          finalConnected: whatsappConnected,
+        });
+      }
       const instagramConnected = settings.some((s) => s.channel === "instagram" && !!s.isConnected);
       const facebookConnected = settings.some((s) => s.channel === "facebook" && !!s.isConnected);
       const metaConnected = instagramConnected || facebookConnected;
@@ -51,7 +74,25 @@ export function registerChannelRoutes(app: Express): void {
       if (!req.user) {
         return res.status(401).json({ error: "Unauthorized" });
       }
+      const user = await storage.getUserForSession(req.user.id);
+      const legacyRowBefore = await storage.getChannelSetting(req.user.id, "whatsapp");
+      const legacyChannelConnected = !!legacyRowBefore?.isConnected;
+      await syncWhatsAppChannelRowFromCanonicalMeta(req.user.id);
       const settings = await storage.getChannelSettings(req.user.id);
+      const legacyAfterSync = settings.some((s) => s.channel === "whatsapp" && !!s.isConnected);
+      const canonicalWa = user ? isCanonicalWhatsAppFullyConnected(user) : false;
+      const finalConnected = canonicalWa || legacyAfterSync;
+      if (user) {
+        const activeProvider = (user.whatsappProvider as WhatsAppProvider) || "twilio";
+        logWhatsAppChannelState({
+          userId: req.user.id,
+          activeProvider,
+          metaConnected: !!user.metaConnected,
+          webhookSubscribed: !!user.metaWebhookSubscribed,
+          legacyChannelConnected,
+          finalConnected,
+        });
+      }
       res.json(settings);
     } catch (error) {
       console.error("Error fetching channel settings:", error);

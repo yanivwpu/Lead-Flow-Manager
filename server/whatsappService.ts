@@ -70,6 +70,95 @@ export function deriveWhatsappConnectedReason(
   return "none";
 }
 
+/** Fields needed to align inbox / channel-health with `/api/integrations/whatsapp/status`. */
+export type CanonicalWhatsAppUser = Pick<
+  User,
+  | "whatsappProvider"
+  | "metaConnected"
+  | "metaWebhookSubscribed"
+  | "metaIntegrationStatus"
+  | "twilioConnected"
+  | "metaPhoneNumberId"
+  | "metaBusinessAccountId"
+  | "metaDisplayPhoneNumber"
+>;
+
+/**
+ * Canonical WhatsApp “connected” for UI (Meta Cloud vs Twilio), independent of `channel_settings` rows.
+ * Meta: active provider meta + connected + WABA webhook subscribed + integration status connected (same fallback as status API).
+ * Twilio: active provider twilio + Twilio connected flag.
+ */
+export function isCanonicalWhatsAppFullyConnected(user: CanonicalWhatsAppUser): boolean {
+  const activeProvider: WhatsAppProvider = (user.whatsappProvider as WhatsAppProvider) || "twilio";
+  if (activeProvider === "meta") {
+    const integrationStatus =
+      user.metaIntegrationStatus ||
+      (user.metaConnected ? "connected" : "disconnected");
+    return (
+      !!user.metaConnected &&
+      !!user.metaWebhookSubscribed &&
+      integrationStatus === "connected"
+    );
+  }
+  if (activeProvider === "twilio") {
+    return !!user.twilioConnected;
+  }
+  return false;
+}
+
+export function logWhatsAppChannelState(payload: {
+  userId: string;
+  activeProvider: WhatsAppProvider;
+  metaConnected: boolean;
+  webhookSubscribed: boolean;
+  legacyChannelConnected: boolean;
+  finalConnected: boolean;
+}): void {
+  console.log(`[WhatsAppChannelState] ${JSON.stringify(payload)}`);
+}
+
+/**
+ * Keeps `channel_settings` WhatsApp row in sync when Meta Cloud is canonically connected (fixes stale is_connected).
+ */
+export async function syncWhatsAppChannelRowFromCanonicalMeta(userId: string): Promise<void> {
+  const user = await storage.getUserForSession(userId);
+  if (!user) return;
+
+  const activeProvider: WhatsAppProvider = (user.whatsappProvider as WhatsAppProvider) || "twilio";
+  if (activeProvider !== "meta") return;
+  if (!isCanonicalWhatsAppFullyConnected(user)) return;
+
+  const existing = await storage.getChannelSetting(userId, "whatsapp");
+  const prev =
+    existing?.config && typeof existing.config === "object" && !Array.isArray(existing.config)
+      ? (existing.config as Record<string, unknown>)
+      : {};
+  const nextConfig = {
+    ...prev,
+    provider: "meta",
+    phoneNumberId: user.metaPhoneNumberId ?? null,
+    businessAccountId: user.metaBusinessAccountId ?? null,
+    displayPhoneNumber: user.metaDisplayPhoneNumber ?? null,
+  };
+
+  const cfg = existing?.config as Record<string, unknown> | undefined;
+  const configMatches =
+    cfg?.provider === "meta" &&
+    String(cfg?.phoneNumberId ?? "") === String(nextConfig.phoneNumberId ?? "") &&
+    String(cfg?.businessAccountId ?? "") === String(nextConfig.businessAccountId ?? "") &&
+    String(cfg?.displayPhoneNumber ?? "") === String(nextConfig.displayPhoneNumber ?? "");
+
+  if (existing?.isConnected && existing?.isEnabled && configMatches) {
+    return;
+  }
+
+  await storage.upsertChannelSetting(userId, "whatsapp", {
+    isConnected: true,
+    isEnabled: true,
+    config: nextConfig as any,
+  });
+}
+
 // ─── Service functions ────────────────────────────────────────────────────────
 
 /**
@@ -90,12 +179,12 @@ export async function getWhatsAppAvailability(userId: string): Promise<Availabil
   const provider: WhatsAppProvider = (user.whatsappProvider as WhatsAppProvider) || "twilio";
 
   if (provider === "meta") {
-    const isConnected = user.metaConnected || false;
+    const ok = isCanonicalWhatsAppFullyConnected(user);
     return {
-      available: isConnected,
+      available: ok,
       provider: "meta",
-      reason: isConnected ? undefined : "Meta WhatsApp Business API not connected",
-      message: isConnected ? undefined : "Connect Meta WhatsApp in Settings to send messages",
+      reason: ok ? undefined : "Meta WhatsApp Business API not connected or not ready",
+      message: ok ? undefined : "Connect Meta WhatsApp in Settings to send messages",
     };
   }
 
