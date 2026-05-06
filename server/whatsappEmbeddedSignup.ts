@@ -19,8 +19,17 @@ import { whatsappOauthStates } from "@shared/schema";
 import { storage } from "./storage";
 import { getMetaGraphApiBase, getMetaFacebookOAuthDialogBase, getMetaGraphVersionSegment } from "./metaGraphVersion";
 import { exchangeCodeForToken, exchangeForLongLivedUserToken, MetaOAuthExchangeError } from "./metaOAuth";
-import { connectUserMeta, type MetaCredentials } from "./userMeta";
-import { encryptCredential, decryptCredential, isEncrypted } from "./userMeta";
+import {
+  connectUserMeta,
+  type MetaCredentials,
+  encryptCredential,
+  decryptCredential,
+  isEncrypted,
+} from "./userMeta";
+import {
+  deriveWhatsappConnectedReason,
+  type WhatsappConnectedReason,
+} from "./whatsappService";
 
 const STATE_TTL_MS = 15 * 60 * 1000;
 
@@ -602,6 +611,13 @@ export interface WhatsappConnectionDebugInfo {
   wabaId: string | null;
   phoneNumberId: string | null;
   provider: string;
+  /** Effective routing for WhatsApp (follows `whatsapp_provider` + connection flags). */
+  whatsappConnectedReason: WhatsappConnectedReason;
+  /**
+   * True when Meta credentials exist but `whatsapp_provider` is still `twilio`.
+   * Inbox + sends follow `whatsapp_provider` — switch to Meta in Settings for Cloud API.
+   */
+  metaPersistedButTwilioSelected: boolean;
   webhookSubscribed: boolean;
   connectionType: string | null;
   status: string;
@@ -618,6 +634,8 @@ export async function getWhatsappConnectionDebug(userId: string): Promise<Whatsa
     wabaId: user.metaBusinessAccountId ?? null,
     phoneNumberId: user.metaPhoneNumberId ?? null,
     provider: (user.whatsappProvider as string) || "twilio",
+    whatsappConnectedReason: deriveWhatsappConnectedReason(user),
+    metaPersistedButTwilioSelected: !!(user.metaConnected && user.whatsappProvider !== "meta"),
     webhookSubscribed: user.metaWebhookSubscribed ?? false,
     connectionType: user.metaConnectionType ?? null,
     status:

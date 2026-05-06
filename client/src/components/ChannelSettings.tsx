@@ -244,13 +244,38 @@ export function ChannelSettings() {
         await queryClient.invalidateQueries({ queryKey: ["/api/integrations/whatsapp/status"] });
         await queryClient.invalidateQueries({ queryKey: ["/api/channels"] });
         await queryClient.invalidateQueries({ queryKey: ["/api/integrations"] });
+        let metaReady = false;
+        for (let attempt = 0; attempt < 14; attempt++) {
+          const res = await fetch("/api/integrations/whatsapp/status", { credentials: "include" });
+          if (res.ok) {
+            const s = await res.json();
+            if (
+              s.activeProvider === "meta" &&
+              s.meta?.connected &&
+              (s.meta?.businessAccountId || s.meta?.phoneNumberId)
+            ) {
+              metaReady = true;
+              break;
+            }
+          }
+          await new Promise((r) => setTimeout(r, 450));
+        }
         await queryClient.refetchQueries({ queryKey: ["/api/integrations/whatsapp/status"] });
         await queryClient.refetchQueries({ queryKey: ["/api/channels"] });
+        if (metaReady) {
+          toast({
+            title: "WhatsApp connected",
+            description: "Meta Cloud API is active and saved. You can send and receive from the inbox.",
+          });
+        } else {
+          toast({
+            title: "Could not confirm Meta Cloud API yet",
+            description:
+              "OAuth finished, but the server did not report Meta as the active provider with saved IDs. Open WhatsApp settings and check diagnostics, or refresh and try again.",
+            variant: "destructive",
+          });
+        }
       })();
-      toast({
-        title: "WhatsApp connected",
-        description: "Your Meta WhatsApp setup finished. You can send and receive messages from the inbox.",
-      });
       params.delete("whatsapp_embedded");
       params.delete("reason");
       const q = params.toString();
@@ -306,6 +331,21 @@ export function ChannelSettings() {
     whatsappProvider?: string;
   }>({
     queryKey: ["/api/auth/me"],
+  });
+
+  const { data: waIntegrationStatus } = useQuery<{
+    activeProvider: string;
+    whatsappConnectedReason: "twilio" | "meta" | "none";
+    metaPersistedButTwilioSelected?: boolean;
+    meta: {
+      connected: boolean;
+      phoneNumberId: string | null;
+      businessAccountId: string | null;
+      integrationStatus?: string;
+    };
+  }>({
+    queryKey: ["/api/integrations/whatsapp/status"],
+    staleTime: 15_000,
   });
 
   const { data: integrations = [] } = useQuery<Integration[]>({
@@ -626,7 +666,26 @@ export function ChannelSettings() {
                       )}
                     </div>
                     {/* Description line — varies by state */}
-                    {status === 'connected' && isFbIg ? (
+                    {channel === "whatsapp" ? (
+                      <div className="mt-0.5 space-y-0.5">
+                        {waIntegrationStatus?.metaPersistedButTwilioSelected ? (
+                          <p className="text-[11px] text-amber-900 bg-amber-50 border border-amber-200 rounded px-2 py-1 leading-snug">
+                            Meta credentials are saved, but Twilio is still the active WhatsApp provider.
+                            Open WhatsApp settings and switch to Meta Cloud API for production routing.
+                          </p>
+                        ) : null}
+                        <p className="text-xs text-gray-600">
+                          {waIntegrationStatus === undefined
+                            ? "Loading connection…"
+                            : waIntegrationStatus.whatsappConnectedReason === "meta"
+                              ? "Connected via Meta Cloud API"
+                              : waIntegrationStatus.whatsappConnectedReason === "twilio"
+                                ? "Connected via Twilio"
+                                : "Not connected"}
+                        </p>
+                        <p className="text-[10px] text-gray-400">{config.description}</p>
+                      </div>
+                    ) : status === 'connected' && isFbIg ? (
                       <div className="mt-0.5 space-y-0.5">
                         {savedPageName ? (
                           <p className="text-xs text-gray-600 truncate">

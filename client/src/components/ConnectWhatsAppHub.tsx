@@ -34,6 +34,9 @@ type WabaChoice = {
 
 interface WhatsappStatusResponse {
   activeProvider: string;
+  whatsappConnectedReason: "twilio" | "meta" | "none";
+  /** Server: Meta rows exist but `whatsapp_provider` is still twilio */
+  metaPersistedButTwilioSelected?: boolean;
   meta: {
     connected: boolean;
     phoneNumberId: string | null;

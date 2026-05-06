@@ -129,6 +129,7 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
         return failRedirect("Missing authorization code. Please try connecting again.");
       }
 
+      /** When absent (browser session not restored on redirect), completion still keys off `whatsapp_oauth_states.userId`. */
       const initiatingUserId = (req as any).user?.id as string | undefined;
       const result = await completeEmbeddedSignupOAuth({
         code,
@@ -325,7 +326,7 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
     try {
       if (!req.user) return res.status(401).json({ error: "Unauthorized" });
       await applyMetaTokenExpiryAttention(req.user.id);
-      const userAfter = await storage.getUser(req.user.id);
+      const userAfter = await storage.getUserForSession(req.user.id);
       if (!userAfter) return res.status(404).json({ error: "User not found" });
 
       const base = await getProviderStatus(req.user.id);
@@ -339,6 +340,8 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
 
       res.json({
         activeProvider: base.activeProvider,
+        whatsappConnectedReason: base.whatsappConnectedReason,
+        metaPersistedButTwilioSelected: !!(userAfter.metaConnected && userAfter.whatsappProvider !== "meta"),
         twilio: {
           ...base.twilio,
           providerLabel: "Twilio WhatsApp",
@@ -387,7 +390,7 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
   app.post("/api/integrations/whatsapp/meta/subscribe-webhooks", async (req: Request, res: Response) => {
     try {
       if (!req.user) return res.status(401).json({ error: "Unauthorized" });
-      const user = await storage.getUser(req.user.id);
+      const user = await storage.getUserForSession(req.user.id);
       if (!user?.metaConnected || !user.metaBusinessAccountId) {
         return res.status(400).json({ error: "Meta WhatsApp is not connected" });
       }

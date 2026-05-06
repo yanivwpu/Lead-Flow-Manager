@@ -1,3 +1,4 @@
+import type { User } from "@shared/schema";
 import { storage } from "./storage";
 import {
   sendUserWhatsAppMessage,
@@ -35,8 +36,12 @@ export interface SendMediaResult {
   error?: string;
 }
 
+/** Which backend currently satisfies WhatsApp for Settings + diagnostics (follows `whatsappProvider` + connection flags). */
+export type WhatsappConnectedReason = "twilio" | "meta" | "none";
+
 export interface ProviderStatus {
   activeProvider: WhatsAppProvider;
+  whatsappConnectedReason: WhatsappConnectedReason;
   twilio: {
     connected: boolean;
     whatsappNumber: string | null;
@@ -52,6 +57,19 @@ export interface ProviderStatus {
   };
 }
 
+/**
+ * Derives the effective WhatsApp backend label for APIs/UI.
+ * Uses saved `whatsapp_provider` plus the corresponding connection flag.
+ */
+export function deriveWhatsappConnectedReason(
+  user: Pick<User, "whatsappProvider" | "metaConnected" | "twilioConnected">
+): WhatsappConnectedReason {
+  const pref: WhatsAppProvider = (user.whatsappProvider as WhatsAppProvider) || "twilio";
+  if (pref === "meta" && !!user.metaConnected) return "meta";
+  if (pref === "twilio" && !!user.twilioConnected) return "twilio";
+  return "none";
+}
+
 // ─── Service functions ────────────────────────────────────────────────────────
 
 /**
@@ -59,7 +77,7 @@ export interface ProviderStatus {
  * Reads whatsappProvider preference and validates the corresponding connection flag.
  */
 export async function getWhatsAppAvailability(userId: string): Promise<AvailabilityResult> {
-  const user = await storage.getUser(userId);
+  const user = await storage.getUserForSession(userId);
   if (!user) {
     return {
       available: false,
@@ -181,9 +199,13 @@ export async function disconnectWhatsAppProvider(
 /**
  * Full provider status for both Twilio and Meta, from one place.
  * Used by /api/twilio/status, /api/meta/status, and /api/whatsapp/providers.
+ *
+ * Must load the full user row via {@link storage.getUserForSession}. Plain {@link storage.getUser}
+ * returns auth-core columns only; using it here incorrectly defaults `activeProvider` to Twilio and
+ * hides Meta (`meta_connected`, WABA IDs), which breaks inbox routing and status APIs.
  */
 export async function getProviderStatus(userId: string): Promise<ProviderStatus> {
-  const user = await storage.getUser(userId);
+  const user = await storage.getUserForSession(userId);
   if (!user) throw new Error("User not found");
 
   const webhookBaseUrl =
@@ -192,6 +214,7 @@ export async function getProviderStatus(userId: string): Promise<ProviderStatus>
 
   return {
     activeProvider: (user.whatsappProvider as WhatsAppProvider) || "twilio",
+    whatsappConnectedReason: deriveWhatsappConnectedReason(user),
     twilio: {
       connected: user.twilioConnected || false,
       whatsappNumber: user.twilioWhatsappNumber || null,
