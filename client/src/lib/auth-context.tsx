@@ -57,8 +57,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
 
       if (response.ok) {
-        const userData = await response.json();
-        setUser(userData);
+        // Prefer `/api/auth/me` so the client gets the full persisted user row (session may hydrate more than login JSON).
+        const me = await fetch("/api/auth/me", { credentials: "include" });
+        if (me.ok) {
+          const userData = await me.json();
+          setUser(userData);
+        } else {
+          const userData = await response.json();
+          setUser(userData);
+        }
         return true;
       }
       return false;
@@ -80,8 +87,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
 
       if (response.ok) {
-        const userData = await response.json();
-        setUser(userData);
+        const me = await fetch("/api/auth/me", { credentials: "include" });
+        if (me.ok) {
+          setUser(await me.json());
+        } else {
+          setUser(await response.json());
+        }
         return { success: true };
       }
       const errorData = await response.json().catch(() => ({ error: 'Signup failed' }));

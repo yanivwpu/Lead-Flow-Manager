@@ -17,6 +17,21 @@ async function resolveUserForLogin(rawEmail: string): Promise<User | undefined> 
   return storage.getUserByEmail(typeof rawEmail === 'string' ? rawEmail : '');
 }
 
+/** Lowercase email for logs without exposing full address (unless AUTH_LOGIN_VERBOSE). */
+function maskEmailForLog(email: string): string {
+  const s = (email || '').trim().toLowerCase();
+  const at = s.indexOf('@');
+  if (at <= 0) return '[no-email]';
+  const local = s.slice(0, at);
+  const domain = s.slice(at + 1);
+  const prefix = local.length <= 2 ? local[0] ?? '?' : local.slice(0, 2);
+  return `${prefix}***@${domain}`;
+}
+
+function authLoginVerbose(): boolean {
+  return process.env.AUTH_LOGIN_VERBOSE === 'true' || process.env.AUTH_LOGIN_VERBOSE === '1';
+}
+
 /** Supports bcrypt hashes and legacy plaintext (re-hashed after successful login). */
 async function verifyLoginPassword(
   plain: string,
@@ -90,7 +105,8 @@ export function setupAuth(app: Express) {
       async (email, password, done) => {
         try {
           const rawEmail = typeof email === 'string' ? email : '';
-          const normalizedEmail = rawEmail.trim().toLowerCase();
+          const trimmedEmail = rawEmail.trim();
+          const normalizedEmail = trimmedEmail.toLowerCase();
 
           // Special handling for demo account - auto-create/fix in any environment
           const DEMO_EMAIL = 'demo@whachat.com';
@@ -144,7 +160,7 @@ export function setupAuth(app: Express) {
           }
           
           // Normal login flow for non-demo accounts (case-insensitive email match)
-          let user = await resolveUserForLogin(rawEmail);
+          let user = await resolveUserForLogin(trimmedEmail);
           const passwordFieldPresent = !!(user?.password && user.password.length > 0);
           const storedLooksLikeBcrypt = user?.password?.startsWith('$2') ?? false;
 
@@ -159,16 +175,26 @@ export function setupAuth(app: Express) {
             }
           }
 
+          const verbose = authLoginVerbose();
+          const emailForLog = verbose ? normalizedEmail : maskEmailForLog(normalizedEmail);
+          console.log('[AUTH LOGIN]', {
+            email: emailForLog,
+            userFound: !!user,
+            userId: user?.id,
+            passwordSubmittedLen: typeof password === 'string' ? password.length : 0,
+            passwordStoredLen: user?.password?.length ?? 0,
+            passwordStoredPresent: passwordFieldPresent,
+            storedLooksLikeBcrypt,
+            passwordCompareOk: verifyOk,
+          });
+
           if (!user || !verifyOk) {
-            if (process.env.AUTH_LOGIN_DEBUG === 'true' || process.env.AUTH_LOGIN_DEBUG === '1') {
-              console.warn('[LOGIN DEBUG]', {
-                emailAttempted: normalizedEmail,
-                userFound: !!user,
-                passwordHashPresent: passwordFieldPresent,
-                storedLooksLikeBcrypt,
-                passwordCompareOk: verifyOk,
-              });
-            }
+            console.warn('[AUTH LOGIN failed]', {
+              email: emailForLog,
+              reason: !user ? 'user_not_found_or_unreadable_row' : !passwordFieldPresent ? 'empty_stored_password' : 'password_mismatch_or_invalid_hash',
+              userFound: !!user,
+              passwordCompareOk: verifyOk,
+            });
             return done(null, false, { message: 'Invalid email or password' });
           }
 
@@ -189,7 +215,7 @@ export function setupAuth(app: Express) {
   // Deserialize user from session
   passport.deserializeUser(async (id: string, done) => {
     try {
-      const user = await storage.getUser(id);
+      const user = await storage.getUserForSession(id);
       if (!user) {
         // User no longer exists in database, clear the session
         return done(null, false);
@@ -330,6 +356,7 @@ export function registerAuthRoutes(app: Express) {
   app.post('/api/auth/login', (req, res, next) => {
     passport.authenticate('local', (err: any, user: User, info: any) => {
       if (err) {
+        console.error('[AUTH LOGIN route] passport error:', err);
         return res.status(500).json({ error: 'Authentication failed' });
       }
       if (!user) {
@@ -455,7 +482,8 @@ export function registerAuthRoutes(app: Express) {
       
       // Only allow specific emails for security (REMOVE THIS ENDPOINT AFTER USE)
       const allowedEmails = ['yanivharamaty@gmail.com', 'yahabegood@gmail.com'];
-      if (!allowedEmails.includes(email?.toLowerCase())) {
+      const normalizedEmail = (typeof email === 'string' ? email : '').trim().toLowerCase();
+      if (!allowedEmails.includes(normalizedEmail)) {
         return res.status(403).json({ error: 'This email is not authorized for emergency reset' });
       }
       
@@ -475,6 +503,41 @@ export function registerAuthRoutes(app: Express) {
     } catch (error: any) {
       console.error('Emergency reset error:', error);
       res.status(500).json({ error: error.message });
+    }
+  });
+
+  /**
+   * Secret-gated emergency reset (set EMERGENCY_AUTH_RESET_SECRET in Railway).
+   * POST { secret, email, newPassword }
+   */
+  app.post('/api/auth/reset-debug', async (req, res) => {
+    try {
+      const expected = process.env.EMERGENCY_AUTH_RESET_SECRET?.trim();
+      if (!expected) {
+        return res.status(501).json({ error: 'Emergency reset is not configured (missing EMERGENCY_AUTH_RESET_SECRET)' });
+      }
+      const { secret, email, newPassword } = req.body || {};
+      if (secret !== expected) {
+        console.warn('[AUTH reset-debug] forbidden: bad secret');
+        return res.status(403).json({ error: 'Forbidden' });
+      }
+      if (!email || !newPassword || typeof newPassword !== 'string') {
+        return res.status(400).json({ error: 'email and newPassword required' });
+      }
+      if (newPassword.length < 8) {
+        return res.status(400).json({ error: 'newPassword must be at least 8 characters' });
+      }
+      const user = await resolveUserForLogin(email);
+      if (!user) {
+        return res.status(404).json({ error: 'User not found with that email' });
+      }
+      const hashedPassword = await bcrypt.hash(newPassword, 10);
+      await storage.updateUser(user.id, { password: hashedPassword });
+      console.log('[AUTH reset-debug] password updated for user id', user.id);
+      res.json({ success: true, message: 'Password reset. You can log in now.' });
+    } catch (error: any) {
+      console.error('[AUTH reset-debug] error:', error);
+      res.status(500).json({ error: error?.message || 'Reset failed' });
     }
   });
 

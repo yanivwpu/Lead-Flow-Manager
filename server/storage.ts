@@ -61,15 +61,13 @@ type UsersAuthCoreRow = {
 };
 
 function parseUsersAuthCoreRow(raw: Record<string, unknown>): UsersAuthCoreRow | null {
-  const { id, name, email, password } = raw;
-  if (
-    typeof id !== "string" ||
-    typeof name !== "string" ||
-    typeof email !== "string" ||
-    typeof password !== "string"
-  ) {
-    return null;
-  }
+  const id = raw.id;
+  if (typeof id !== "string" || !id) return null;
+  // Auth core reads must tolerate NULL/legacy rows (missing name/password) — never drop the row.
+  const name = raw.name == null ? "" : String(raw.name);
+  const email = raw.email == null ? "" : String(raw.email);
+  const password = raw.password == null ? "" : String(raw.password);
+  if (!email) return null;
   return { id, name, email, password };
 }
 
@@ -81,6 +79,11 @@ function userFromAuthCoreRow(row: UsersAuthCoreRow): User {
 export interface IStorage {
   // User methods
   getUser(id: string): Promise<User | undefined>;
+  /**
+   * Prefer full Drizzle row for sessions/API (`/api/auth/me`) when schema matches production DB.
+   * Falls back to raw SQL auth-core (id/name/email/password) if Drizzle fails (legacy DB drift).
+   */
+  getUserForSession(id: string): Promise<User | undefined>;
   /** Resolve user by email using **only** raw SQL `lower(email) = $1` + `getUser(id)` (auth/login safe path). */
   getUserByEmail(email: string): Promise<User | undefined>;
   /** Alias for `getUserByEmail` — same raw lookup (kept for call-site clarity). */
@@ -312,7 +315,11 @@ export class DbStorage implements IStorage {
     // Same minimal projection as login — session/deserialize must not Drizzle-select missing columns on older Neon DBs.
     try {
       const result = await db.execute(sql`
-        SELECT id, name, email, password
+        SELECT
+          id,
+          COALESCE(name, '') AS name,
+          email,
+          COALESCE(password, '') AS password
         FROM public.users
         WHERE id = ${id}
         LIMIT 1
@@ -327,14 +334,29 @@ export class DbStorage implements IStorage {
     }
   }
 
+  async getUserForSession(id: string): Promise<User | undefined> {
+    try {
+      const result = await db.select().from(users).where(eq(users.id, id)).limit(1);
+      if (result[0]) return result[0];
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.warn("[getUserForSession] Drizzle load failed; falling back to auth-core getUser:", message);
+    }
+    return this.getUser(id);
+  }
+
   async getUserByEmail(email: string): Promise<User | undefined> {
     const e = (typeof email === "string" ? email : "").trim().toLowerCase();
     if (!e) return undefined;
     try {
       const result = await db.execute(sql`
-        SELECT id, name, email, password
+        SELECT
+          id,
+          COALESCE(name, '') AS name,
+          email,
+          COALESCE(password, '') AS password
         FROM public.users
-        WHERE lower(email) = ${e}
+        WHERE trim(lower(email)) = ${e}
         LIMIT 1
       `);
       const rows = (result as { rows: Record<string, unknown>[] }).rows;
