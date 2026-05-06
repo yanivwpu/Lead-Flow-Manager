@@ -11,8 +11,22 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Loader2, MessageCircle, Smartphone, CheckCircle2, AlertTriangle, RefreshCw, ExternalLink, Info } from "lucide-react";
+import {
+  Loader2,
+  MessageCircle,
+  Smartphone,
+  CheckCircle2,
+  AlertTriangle,
+  RefreshCw,
+  ExternalLink,
+  Info,
+  ChevronDown,
+} from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
+
+const META_TEST_NUMBER_HELP =
+  "You're connected to a Meta test number. Choose a production WhatsApp number before going live.";
 
 interface MetaConfigResponse {
   embeddedSignupEnabled: boolean;
@@ -29,8 +43,30 @@ interface MetaConfigResponse {
 type WabaChoice = {
   wabaId: string;
   wabaName?: string;
-  phoneNumbers: Array<{ id: string; displayPhoneNumber?: string; verifiedName?: string }>;
+  phoneNumbers: Array<{
+    id: string;
+    displayPhoneNumber?: string;
+    verifiedName?: string;
+    phoneKind?: "production" | "test" | "unknown";
+    phoneKindReasons?: string[];
+  }>;
 };
+
+/** Prefer production lines when opening the pending picker (server sends phoneKind). */
+function defaultWabaPhoneSelection(choices: WabaChoice[]): { wabaId: string; phoneId: string } | null {
+  const flat: Array<{ wabaId: string; p: WabaChoice["phoneNumbers"][number] }> = [];
+  for (const c of choices) {
+    for (const p of c.phoneNumbers) {
+      flat.push({ wabaId: c.wabaId, p });
+    }
+  }
+  const prod = flat.find((x) => x.p.phoneKind === "production");
+  if (prod) return { wabaId: prod.wabaId, phoneId: prod.p.id };
+  const unk = flat.find((x) => x.p.phoneKind === "unknown");
+  if (unk) return { wabaId: unk.wabaId, phoneId: unk.p.id };
+  const first = flat[0];
+  return first ? { wabaId: first.wabaId, phoneId: first.p.id } : null;
+}
 
 interface WhatsappStatusResponse {
   activeProvider: string;
@@ -50,6 +86,11 @@ interface WhatsappStatusResponse {
     webhookLastCheckedAt: string | null;
     lastErrorMessage: string | null;
     legacyManualConnection?: boolean;
+    connectedPhoneKind?: "production" | "test" | "unknown";
+    connectedToMetaTestNumber?: boolean;
+    metaTestNumberWarning?: string | null;
+    /** App secret — verifies signed callbacks (separate from WABA subscribed_apps). */
+    webhookSignatureHealth?: string;
     webhookHealth?: string;
     webhookUrl: string;
     webhookVerifyToken: string | null;
@@ -79,6 +120,7 @@ export function ConnectWhatsAppHub({
   onClose,
 }: ConnectWhatsAppHubProps) {
   const queryClient = useQueryClient();
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const [confirmDisconnect, setConfirmDisconnect] = useState(false);
   const [hubBanner, setHubBanner] = useState<HubBanner | null>(null);
   const [wabaPickerOpen, setWabaPickerOpen] = useState(false);
@@ -173,8 +215,9 @@ export function ConnectWhatsAppHub({
     if (!pendingLoaded || !pendingWabaPayload?.choices?.length) return;
     setWabaChoices(pendingWabaPayload.choices);
     setWabaPickerState(pendingWabaPayload.state);
-    setSelectedWabaId(pendingWabaPayload.choices[0]?.wabaId ?? null);
-    setSelectedPhoneNumberId(pendingWabaPayload.choices[0]?.phoneNumbers?.[0]?.id ?? null);
+    const def = defaultWabaPhoneSelection(pendingWabaPayload.choices);
+    setSelectedWabaId(def?.wabaId ?? pendingWabaPayload.choices[0]?.wabaId ?? null);
+    setSelectedPhoneNumberId(def?.phoneId ?? pendingWabaPayload.choices[0]?.phoneNumbers?.[0]?.id ?? null);
     setWabaPickerOpen(true);
   }, [pendingLoaded, pendingWabaPayload]);
 
@@ -236,46 +279,104 @@ export function ConnectWhatsAppHub({
         <div className="space-y-3">
           <div className="flex items-start gap-2 rounded-xl border border-emerald-200 bg-emerald-50/80 px-3 py-3">
             <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0 mt-0.5" />
-            <div className="min-w-0 text-sm">
+            <div className="min-w-0 text-sm flex-1">
               <p className="font-semibold text-emerald-900">Connected — Meta Cloud API</p>
+              {meta?.connectedToMetaTestNumber && (
+                <p className="text-xs text-amber-900 mt-2 border border-amber-200 rounded-md px-2 py-1.5 bg-amber-50/90">
+                  {META_TEST_NUMBER_HELP}
+                </p>
+              )}
               {meta?.legacyManualConnection && (
                 <p className="text-xs text-emerald-800 mt-1">
                   <span className="font-semibold">Legacy Meta connection</span> — credentials were entered manually. You can upgrade to Embedded Signup anytime: disconnect first, then use &quot;Continue with Meta&quot;.
                 </p>
               )}
-              <dl className="mt-2 space-y-1 text-xs text-gray-700">
+              <dl className="mt-2 space-y-1.5 text-xs text-gray-700">
                 <div className="flex justify-between gap-2">
-                  <dt className="text-gray-500">Display number</dt>
-                  <dd className="font-medium truncate">{meta?.displayPhoneNumber || "—"}</dd>
+                  <dt className="text-gray-500 shrink-0">Display number</dt>
+                  <dd className="font-medium truncate text-right">{meta?.displayPhoneNumber || "—"}</dd>
                 </div>
                 <div className="flex justify-between gap-2">
-                  <dt className="text-gray-500">Verified name</dt>
-                  <dd className="font-medium truncate">{meta?.verifiedName || "—"}</dd>
+                  <dt className="text-gray-500 shrink-0">Verified name</dt>
+                  <dd className="font-medium truncate text-right">{meta?.verifiedName || "—"}</dd>
                 </div>
+              </dl>
+
+              <div className="mt-3 pt-3 border-t border-emerald-200/80 space-y-1.5 text-xs">
                 <div className="flex justify-between gap-2">
-                  <dt className="text-gray-500">WABA ID</dt>
-                  <dd className="font-mono text-[11px] truncate">{meta?.businessAccountId || "—"}</dd>
-                </div>
-                <div className="flex justify-between gap-2">
-                  <dt className="text-gray-500">Phone number ID</dt>
-                  <dd className="font-mono text-[11px] truncate">{meta?.phoneNumberId || "—"}</dd>
-                </div>
-                <div className="flex justify-between gap-2">
-                  <dt className="text-gray-500">Webhook subscription</dt>
-                  <dd className="font-medium">
-                    {meta?.webhookSubscribed ? "Subscribed" : "Needs attention"}
+                  <dt className="text-gray-600">Webhook endpoint</dt>
+                  <dd
+                    className={cn(
+                      "font-medium",
+                      (meta?.webhookSignatureHealth ?? meta?.webhookHealth) === "ok"
+                        ? "text-emerald-800"
+                        : (meta?.webhookSignatureHealth ?? meta?.webhookHealth) === "needs_app_secret"
+                          ? "text-red-700"
+                          : "text-gray-600"
+                    )}
+                  >
+                    {(meta?.webhookSignatureHealth ?? meta?.webhookHealth) === "ok"
+                      ? "Healthy"
+                      : (meta?.webhookSignatureHealth ?? meta?.webhookHealth) === "needs_app_secret"
+                        ? "Error"
+                        : "—"}
                   </dd>
                 </div>
                 <div className="flex justify-between gap-2">
-                  <dt className="text-gray-500">Connection</dt>
-                  <dd className="font-medium capitalize">{meta?.connectionType?.replace(/_/g, " ") || "—"}</dd>
+                  <dt className="text-gray-600">WABA app subscription</dt>
+                  <dd
+                    className={cn(
+                      "font-medium",
+                      meta?.webhookSubscribed ? "text-emerald-800" : "text-amber-800"
+                    )}
+                  >
+                    {meta?.webhookSubscribed ? "Confirmed" : "Needs attention"}
+                  </dd>
                 </div>
-              </dl>
-              {meta?.integrationStatus === "needs_attention" && meta?.lastErrorMessage && (
-                <p className="text-xs text-amber-800 mt-2 border border-amber-100 rounded-md px-2 py-1 bg-white/80">
-                  {meta.lastErrorMessage}
-                </p>
-              )}
+              </div>
+
+              {meta?.integrationStatus === "needs_attention" &&
+                meta?.lastErrorMessage &&
+                !String(meta.lastErrorMessage).toLowerCase().includes("webhook subscription could not be confirmed") && (
+                  <p className="text-xs text-amber-800 mt-2 border border-amber-100 rounded-md px-2 py-1 bg-white/80">
+                    {meta.lastErrorMessage}
+                  </p>
+                )}
+
+              <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen} className="mt-3">
+                <CollapsibleTrigger className="flex items-center gap-1 text-xs font-medium text-slate-600 hover:text-slate-900 py-1">
+                  <ChevronDown
+                    className={cn("h-4 w-4 transition-transform", advancedOpen && "rotate-180")}
+                  />
+                  Advanced details
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <dl className="mt-2 space-y-1 text-xs text-gray-700 border border-slate-200 rounded-lg p-2 bg-white/80">
+                    <div className="flex justify-between gap-2">
+                      <dt className="text-gray-500">Provider</dt>
+                      <dd className="font-medium">{meta?.providerLabel || "Meta Cloud API"}</dd>
+                    </div>
+                    <div className="flex justify-between gap-2">
+                      <dt className="text-gray-500">WABA ID</dt>
+                      <dd className="font-mono text-[11px] truncate">{meta?.businessAccountId || "—"}</dd>
+                    </div>
+                    <div className="flex justify-between gap-2">
+                      <dt className="text-gray-500">Phone number ID</dt>
+                      <dd className="font-mono text-[11px] truncate">{meta?.phoneNumberId || "—"}</dd>
+                    </div>
+                    <div className="flex justify-between gap-2">
+                      <dt className="text-gray-500">Connection</dt>
+                      <dd className="font-medium capitalize">{meta?.connectionType?.replace(/_/g, " ") || "—"}</dd>
+                    </div>
+                    <div className="flex justify-between gap-2">
+                      <dt className="text-gray-500">Callback URL</dt>
+                      <dd className="font-mono text-[10px] truncate max-w-[55%] text-right" title={meta?.webhookUrl}>
+                        {meta?.webhookUrl || "—"}
+                      </dd>
+                    </div>
+                  </dl>
+                </CollapsibleContent>
+              </Collapsible>
             </div>
           </div>
 
@@ -293,7 +394,7 @@ export function ConnectWhatsAppHub({
                 ) : (
                   <RefreshCw className="h-4 w-4 mr-1" />
                 )}
-                Retry webhook subscription
+                Confirm WABA subscription
               </Button>
             )}
             <Button type="button" variant="outline" size="sm" onClick={() => setConfirmDisconnect(true)}>
@@ -448,37 +549,69 @@ export function ConnectWhatsAppHub({
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Select WhatsApp Business Account</AlertDialogTitle>
+            <AlertDialogTitle>Select WhatsApp number</AlertDialogTitle>
             <AlertDialogDescription>
-              Multiple WhatsApp Business Accounts with phone numbers were found. Choose which one to connect.
+              Pick the production WhatsApp Business line for this workspace. Test/sample lines are labeled —
+              avoid them for live customers.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <div className="space-y-3 text-sm">
-            {(wabaChoices ?? []).map((c) => {
-              const isSelected = selectedWabaId === c.wabaId;
-              return (
-                <button
-                  key={c.wabaId}
-                  type="button"
-                  className={cn(
-                    "w-full text-left rounded-md border px-3 py-2",
-                    isSelected ? "border-emerald-400 bg-emerald-50" : "border-slate-200 hover:bg-slate-50"
-                  )}
-                  onClick={() => {
-                    setSelectedWabaId(c.wabaId);
-                    setSelectedPhoneNumberId(c.phoneNumbers?.[0]?.id ?? null);
-                  }}
-                >
-                  <div className="font-medium text-slate-900">{c.wabaName || `WABA ${c.wabaId}`}</div>
-                  <div className="text-xs text-slate-600 mt-0.5">
-                    {c.phoneNumbers
-                      .map((p) => p.displayPhoneNumber || p.verifiedName || p.id)
-                      .slice(0, 3)
-                      .join(" • ")}
-                  </div>
-                </button>
-              );
-            })}
+          <div className="space-y-3 text-sm max-h-[min(60vh,420px)] overflow-y-auto pr-1">
+            {(wabaChoices ?? []).map((c) => (
+              <div
+                key={c.wabaId}
+                className="rounded-md border border-slate-200 overflow-hidden bg-white"
+              >
+                <div className="bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-700 border-b border-slate-100">
+                  {c.wabaName || `WABA ${c.wabaId}`}
+                </div>
+                <div className="divide-y divide-slate-100">
+                  {c.phoneNumbers.map((p) => {
+                    const selected =
+                      selectedWabaId === c.wabaId && selectedPhoneNumberId === p.id;
+                    const kind = p.phoneKind ?? "unknown";
+                    const badge =
+                      kind === "test" ? "Test" : kind === "production" ? "Production" : "Unknown";
+                    const badgeClass =
+                      kind === "test"
+                        ? "bg-amber-100 text-amber-900 border-amber-200"
+                        : kind === "production"
+                          ? "bg-emerald-100 text-emerald-900 border-emerald-200"
+                          : "bg-slate-100 text-slate-700 border-slate-200";
+                    return (
+                      <button
+                        key={p.id}
+                        type="button"
+                        className={cn(
+                          "w-full text-left px-3 py-2 flex items-start justify-between gap-2 hover:bg-slate-50/80",
+                          selected && "bg-emerald-50"
+                        )}
+                        onClick={() => {
+                          setSelectedWabaId(c.wabaId);
+                          setSelectedPhoneNumberId(p.id);
+                        }}
+                      >
+                        <div className="min-w-0">
+                          <div className="text-sm text-slate-900 font-medium truncate">
+                            {p.displayPhoneNumber || p.verifiedName || p.id}
+                          </div>
+                          {p.verifiedName ? (
+                            <div className="text-[11px] text-slate-500 truncate">{p.verifiedName}</div>
+                          ) : null}
+                        </div>
+                        <span
+                          className={cn(
+                            "text-[10px] px-1.5 py-0.5 rounded border shrink-0 font-medium",
+                            badgeClass
+                          )}
+                        >
+                          {badge}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
           </div>
           <AlertDialogFooter>
             <AlertDialogCancel

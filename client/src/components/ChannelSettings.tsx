@@ -10,12 +10,10 @@ import {
   Loader2,
   Copy,
   Check,
-  Settings2,
   AlertCircle,
   Eye,
   EyeOff,
   Trash2,
-  Clock,
   ChevronDown,
   ChevronRight,
   Zap,
@@ -32,7 +30,6 @@ import type { SettingsChannelProvider } from "@/lib/settingsChannelsNavigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import {
   Dialog,
   DialogContent,
@@ -41,6 +38,8 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+
+type UnifiedPillKind = "connected" | "needs_attention" | "not_connected" | "test_number" | "error" | "loading";
 
 type Channel = 'whatsapp' | 'instagram' | 'facebook' | 'sms' | 'webchat' | 'telegram' | 'tiktok';
 
@@ -157,6 +156,48 @@ const CHANNEL_CONFIG: Record<Channel, {
     isMessaging: false,
   },
 };
+
+function ChannelStatusPill({ kind, label }: { kind: UnifiedPillKind; label?: string }) {
+  const text =
+    label ??
+    {
+      connected: "Connected",
+      needs_attention: "Needs attention",
+      not_connected: "Not connected",
+      test_number: "Test number",
+      error: "Error",
+      loading: "Loading…",
+    }[kind];
+
+  const cls =
+    kind === "connected"
+      ? "bg-emerald-100 text-emerald-800 border-emerald-200"
+      : kind === "needs_attention"
+        ? "bg-amber-100 text-amber-900 border-amber-200"
+        : kind === "test_number"
+          ? "bg-amber-100 text-amber-900 border-amber-200"
+          : kind === "error"
+            ? "bg-red-100 text-red-800 border-red-200"
+            : kind === "loading"
+              ? "bg-slate-100 text-slate-600 border-slate-200"
+              : "bg-slate-100 text-slate-600 border-slate-200";
+
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 text-[10px] font-medium border px-2 py-0.5 rounded-full shrink-0",
+        cls
+      )}
+    >
+      {kind === "connected" && <CheckCircle2 className="h-2.5 w-2.5" />}
+      {kind === "loading" && <Loader2 className="h-2.5 w-2.5 animate-spin" />}
+      {(kind === "needs_attention" || kind === "test_number") && <AlertCircle className="h-2.5 w-2.5" />}
+      {kind === "error" && <XCircle className="h-2.5 w-2.5" />}
+      {kind === "not_connected" && <XCircle className="h-2.5 w-2.5 text-slate-400" />}
+      {text}
+    </span>
+  );
+}
 
 export function ChannelSettings() {
   const searchString = useSearch();
@@ -292,8 +333,13 @@ export function ChannelSettings() {
       const q = params.toString();
       window.history.replaceState({}, "", `${window.location.pathname}${q ? `?${q}` : ""}`);
     } else if (embedded === "pick") {
-      // Multiple valid WABAs detected server-side; open the connect dialog so user can choose.
+      // Paused OAuth: user must pick WABA + phone (production vs test) before we save credentials.
       setConfigChannel("whatsapp");
+      toast({
+        title: "Choose your WhatsApp number",
+        description:
+          "Multiple numbers were found (or a test number requires confirmation). Select your production line to finish.",
+      });
       params.delete("whatsapp_embedded");
       const q = params.toString();
       window.history.replaceState({}, "", `${window.location.pathname}${q ? `?${q}` : ""}`);
@@ -337,11 +383,18 @@ export function ChannelSettings() {
     activeProvider: string;
     whatsappConnectedReason: "twilio" | "meta" | "none";
     metaPersistedButTwilioSelected?: boolean;
+    twilio: { connected: boolean };
     meta: {
       connected: boolean;
       phoneNumberId: string | null;
       businessAccountId: string | null;
       integrationStatus?: string;
+      connectedToMetaTestNumber?: boolean;
+      metaTestNumberWarning?: string | null;
+      webhookSignatureHealth?: string;
+      webhookHealth?: string;
+      webhookSubscribed?: boolean;
+      lastErrorMessage?: string | null;
     };
   }>({
     queryKey: ["/api/integrations/whatsapp/status"],
@@ -498,15 +551,6 @@ export function ChannelSettings() {
     return setting?.isConnected ? 'connected' : 'disconnected';
   };
 
-  const isChannelEnabled = (channel: Channel) => {
-    const setting = channels.find(c => c.channel === channel);
-    return setting?.isEnabled ?? false;
-  };
-
-  const toggleChannel = (channel: Channel, enabled: boolean) => {
-    updateChannelMutation.mutate({ channel, data: { isEnabled: enabled } });
-  };
-
   const connectTelegramMutation = useMutation({
     mutationFn: async (token: string) => {
       const res = await fetch("/api/integrations/telegram/connect", {
@@ -591,6 +635,264 @@ export function ChannelSettings() {
     i => i.type === (manageFbIgChannel === 'facebook' ? 'meta_facebook' : 'meta_instagram')
   );
 
+  type CardAction = "connect" | "manage" | "reconnect" | "setup";
+
+  const resolveUnifiedChannelRow = (
+    channel: Channel
+  ): {
+    pill: UnifiedPillKind;
+    pillLabel?: string;
+    subline: string;
+    warning?: string;
+    footerHint?: string;
+    action: CardAction | null;
+    actionLabel: string;
+    onAction: () => void;
+    cardClass: string;
+    showReceiveToggle: boolean;
+  } => {
+    const config = CHANNEL_CONFIG[channel];
+    const baseNeutral = "bg-gray-50/50 border-gray-100";
+    const baseOk = "bg-gray-50 border-gray-200";
+    const baseAmber = "bg-amber-50/60 border-amber-200";
+    const baseErr = "bg-red-50/50 border-red-200";
+
+    if (channel === "whatsapp") {
+      if (waIntegrationStatus === undefined) {
+        return {
+          pill: "loading",
+          subline: config.description,
+          action: "manage",
+          actionLabel: "Manage",
+          onAction: () => setConfigChannel("whatsapp"),
+          cardClass: baseNeutral,
+          showReceiveToggle: false,
+        };
+      }
+      const wa = waIntegrationStatus;
+      const meta = wa.meta;
+      const sigHealth = meta?.webhookSignatureHealth ?? meta?.webhookHealth;
+      const metaRoute =
+        wa.activeProvider === "meta" && !!meta?.connected;
+      const twilioRoute =
+        wa.activeProvider === "twilio" && !!wa.twilio?.connected;
+
+      if (wa.metaPersistedButTwilioSelected) {
+        return {
+          pill: "needs_attention",
+          subline: "Meta credentials saved — Twilio is still your active WhatsApp sender.",
+          warning:
+            "Open Manage and switch the provider to Meta Cloud API for production Cloud API routing.",
+          action: "manage",
+          actionLabel: "Manage",
+          onAction: () => setConfigChannel("whatsapp"),
+          cardClass: baseAmber,
+          showReceiveToggle: false,
+        };
+      }
+
+      if (metaRoute && meta?.connectedToMetaTestNumber) {
+        return {
+          pill: "test_number",
+          subline: "Connected via Meta Cloud API",
+          warning:
+            "You're connected to a Meta test number. Choose a production WhatsApp number before going live.",
+          action: "manage",
+          actionLabel: "Manage",
+          onAction: () => setConfigChannel("whatsapp"),
+          cardClass: baseAmber,
+          showReceiveToggle: false,
+        };
+      }
+
+      if (metaRoute) {
+        if (meta?.integrationStatus === "failed") {
+          return {
+            pill: "error",
+            subline: "Connected via Meta Cloud API",
+            warning: meta?.lastErrorMessage ?? "WhatsApp connection failed. Try Manage to fix or reconnect.",
+            action: "manage",
+            actionLabel: "Manage",
+            onAction: () => setConfigChannel("whatsapp"),
+            cardClass: baseErr,
+            showReceiveToggle: false,
+          };
+        }
+        const needsAttention =
+          meta?.integrationStatus === "needs_attention" ||
+          sigHealth === "needs_app_secret" ||
+          meta?.webhookSubscribed === false;
+        if (needsAttention) {
+          return {
+            pill: "needs_attention",
+            subline: "Connected via Meta Cloud API",
+            footerHint:
+              "Open Manage to check webhook endpoint health and WABA app subscription.",
+            action: "manage",
+            actionLabel: "Manage",
+            onAction: () => setConfigChannel("whatsapp"),
+            cardClass: baseAmber,
+            showReceiveToggle: false,
+          };
+        }
+        return {
+          pill: "connected",
+          subline: "Connected via Meta Cloud API",
+          action: "manage",
+          actionLabel: "Manage",
+          onAction: () => setConfigChannel("whatsapp"),
+          cardClass: baseOk,
+          showReceiveToggle: false,
+        };
+      }
+
+      if (twilioRoute) {
+        return {
+          pill: "connected",
+          subline: "Connected via Twilio",
+          action: "manage",
+          actionLabel: "Manage",
+          onAction: () => setConfigChannel("whatsapp"),
+          cardClass: baseOk,
+          showReceiveToggle: false,
+        };
+      }
+
+      return {
+        pill: "not_connected",
+        subline: config.description,
+        action: "connect",
+        actionLabel: "Connect",
+        onAction: () => setConfigChannel("whatsapp"),
+        cardClass: baseNeutral,
+        showReceiveToggle: false,
+      };
+    }
+
+    if (channel === "facebook" || channel === "instagram") {
+      const setting = channels.find((c) => c.channel === channel);
+      const st = getChannelStatus(channel);
+      const savedPage = setting?.config?.pageName as string | undefined;
+      if (st === "connected") {
+        return {
+          pill: "connected",
+          subline: savedPage
+            ? `${channel === "facebook" ? "Page" : "Account"}: ${savedPage}`
+            : config.description,
+          footerHint: "New inbound messages only — chat history isn’t imported.",
+          action: "manage",
+          actionLabel: "Manage",
+          onAction: () => handleFbIgSettingsClick(channel),
+          cardClass: baseOk,
+          showReceiveToggle: false,
+        };
+      }
+      if (st === "pending") {
+        return {
+          pill: "needs_attention",
+          subline:
+            channel === "instagram"
+              ? "Credentials or permissions incomplete — finish Instagram setup in Meta."
+              : "Webhook or page access needs attention — complete setup to receive messages.",
+          action: "reconnect",
+          actionLabel: "Reconnect",
+          onAction: () => handleFbIgConnectClick(channel),
+          cardClass: baseAmber,
+          showReceiveToggle: false,
+        };
+      }
+      return {
+        pill: "not_connected",
+        subline: config.description,
+        action: "connect",
+        actionLabel: "Connect",
+        onAction: () => handleFbIgConnectClick(channel),
+        cardClass: baseNeutral,
+        showReceiveToggle: false,
+      };
+    }
+
+    if (channel === "sms") {
+      if (user?.twilioConnected) {
+        return {
+          pill: "connected",
+          subline: "SMS via your Twilio account",
+          action: "manage",
+          actionLabel: "Manage",
+          onAction: () => setConnectTwilioOpen(true),
+          cardClass: baseOk,
+          showReceiveToggle: false,
+        };
+      }
+      return {
+        pill: "not_connected",
+        subline: config.description,
+        action: "setup",
+        actionLabel: "Set up Twilio",
+        onAction: () => setConnectTwilioOpen(true),
+        cardClass: baseNeutral,
+        showReceiveToggle: false,
+      };
+    }
+
+    /* telegram, tiktok — simplified unified row */
+    const st = getChannelStatus(channel);
+    if (channel === "telegram") {
+      if (st === "connected") {
+        return {
+          pill: "connected",
+          subline: config.description,
+          action: "manage",
+          actionLabel: "Manage",
+          onAction: () => setConfigChannel("telegram"),
+          cardClass: baseOk,
+          showReceiveToggle: false,
+        };
+      }
+      return {
+        pill: "not_connected",
+        subline: config.description,
+        action: "connect",
+        actionLabel: "Connect",
+        onAction: () => setConfigChannel("telegram"),
+        cardClass: baseNeutral,
+        showReceiveToggle: false,
+      };
+    }
+    if (channel === "tiktok") {
+      if (st === "connected") {
+        return {
+          pill: "connected",
+          subline: config.description,
+          action: "manage",
+          actionLabel: "Manage",
+          onAction: () => setConfigChannel("tiktok"),
+          cardClass: baseOk,
+          showReceiveToggle: false,
+        };
+      }
+      return {
+        pill: "not_connected",
+        subline: config.description,
+        action: "connect",
+        actionLabel: "Connect",
+        onAction: () => setConfigChannel("tiktok"),
+        cardClass: baseNeutral,
+        showReceiveToggle: false,
+      };
+    }
+
+    return {
+      pill: "not_connected",
+      subline: config.description,
+      action: "connect",
+      actionLabel: "Connect",
+      onAction: () => setConfigChannel(channel),
+      cardClass: baseNeutral,
+      showReceiveToggle: false,
+    };
+  };
+
   if (isLoading) {
     return (
       <div className="flex justify-center py-8">
@@ -613,188 +915,68 @@ export function ChannelSettings() {
 
       <div className="space-y-3">
         {(Object.keys(CHANNEL_CONFIG) as Channel[])
-          .filter(channel => channel !== 'webchat')
+          .filter((channel) => channel !== "webchat")
           .map((channel) => {
             const config = CHANNEL_CONFIG[channel];
-            const status = getChannelStatus(channel);
-            const enabled = isChannelEnabled(channel);
-            const isFbIg = channel === 'facebook' || channel === 'instagram';
-            // Resolved page/account name stored during wizard validation
-            const channelSetting = channels.find(s => s.channel === channel);
-            const savedPageName = channelSetting?.config?.pageName as string | undefined;
-            const savedPageId = channelSetting?.config?.pageId as string | undefined;
+            const row = resolveUnifiedChannelRow(channel);
 
             return (
               <div
                 key={channel}
                 id={`channel-card-${channel}`}
                 className={cn(
-                  "flex items-center justify-between p-3 sm:p-4 rounded-lg border transition-colors",
-                  status === 'connected'
-                    ? "bg-gray-50 border-gray-200"
-                    : status === 'pending'
-                    ? "bg-amber-50/60 border-amber-200"
-                    : "bg-gray-50/50 border-gray-100"
+                  "flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 sm:p-4 rounded-lg border transition-colors",
+                  row.cardClass
                 )}
               >
-                <div className="flex items-center gap-3 min-w-0 flex-1">
-                  <ChannelBrandIcon channel={channel as ChannelWithBrandLogo} />
+                <div className="flex items-start gap-3 min-w-0 flex-1">
+                  <ChannelBrandIcon channel={channel as ChannelWithBrandLogo} className="shrink-0" />
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 flex-wrap">
+                    <div className="flex flex-wrap items-center gap-2 gap-y-1.5">
                       <span className="font-medium text-gray-900">{config.label}</span>
-                      {status === 'connected' ? (
-                        isFbIg ? (
-                          <span className="inline-flex items-center gap-1 text-[10px] bg-emerald-100 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 rounded font-medium">
-                            <CheckCircle2 className="h-2.5 w-2.5" />
-                            Ready to receive messages
-                          </span>
-                        ) : (
-                          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
-                        )
-                      ) : status === 'pending' ? (
-                        <span className="inline-flex items-center gap-1 text-[10px] bg-amber-100 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded font-medium">
-                          <Clock className="h-2.5 w-2.5" />
-                          Webhook pending
-                        </span>
-                      ) : (
-                        <XCircle className="h-3.5 w-3.5 text-gray-300" />
-                      )}
+                      <ChannelStatusPill kind={row.pill} label={row.pillLabel} />
                       {!config.isMessaging && (
-                        <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded">
+                        <span className="text-[10px] bg-amber-100 text-amber-800 border border-amber-200 px-2 py-0.5 rounded-full font-medium">
                           Lead intake
                         </span>
                       )}
                     </div>
-                    {/* Description line — varies by state */}
-                    {channel === "whatsapp" ? (
-                      <div className="mt-0.5 space-y-0.5">
-                        {waIntegrationStatus?.metaPersistedButTwilioSelected ? (
-                          <p className="text-[11px] text-amber-900 bg-amber-50 border border-amber-200 rounded px-2 py-1 leading-snug">
-                            Meta credentials are saved, but Twilio is still the active WhatsApp provider.
-                            Open WhatsApp settings and switch to Meta Cloud API for production routing.
-                          </p>
-                        ) : null}
-                        <p className="text-xs text-gray-600">
-                          {waIntegrationStatus === undefined
-                            ? "Loading connection…"
-                            : waIntegrationStatus.whatsappConnectedReason === "meta"
-                              ? "Connected via Meta Cloud API"
-                              : waIntegrationStatus.whatsappConnectedReason === "twilio"
-                                ? "Connected via Twilio"
-                                : "Not connected"}
-                        </p>
-                        <p className="text-[10px] text-gray-400">{config.description}</p>
-                      </div>
-                    ) : status === 'connected' && isFbIg ? (
-                      <div className="mt-0.5 space-y-0.5">
-                        {savedPageName ? (
-                          <p className="text-xs text-gray-600 truncate">
-                            {channel === 'facebook' ? 'Page' : 'Account'}:{' '}
-                            <span className="font-medium">{savedPageName}</span>
-                          </p>
-                        ) : null}
-                        <p className="text-[10px] text-gray-400">
-                          New inbound messages only — history not imported
-                        </p>
-                      </div>
-                    ) : (
-                      <p className="text-xs text-gray-500 truncate">
-                        {status === 'pending' && isFbIg
-                          ? "Credentials saved — webhook setup required to receive messages"
-                          : config.description}
+                    <p className="text-xs text-gray-600 mt-1.5 leading-snug">{row.subline}</p>
+                    {row.warning ? (
+                      <p className="text-[11px] text-amber-900 bg-amber-50 border border-amber-200 rounded-md px-2 py-1.5 mt-2 leading-snug">
+                        {row.warning}
                       </p>
-                    )}
+                    ) : null}
+                    {row.footerHint ? (
+                      <p className="text-[10px] text-gray-400 mt-1.5 leading-snug">{row.footerHint}</p>
+                    ) : null}
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  {status === 'connected' && config.isMessaging && (
-                    <Switch
-                      checked={enabled}
-                      onCheckedChange={(checked) => toggleChannel(channel, checked)}
-                      disabled={updateChannelMutation.isPending}
-                      data-testid={`switch-channel-${channel}`}
-                    />
-                  )}
-
-                  {status === 'pending' && isFbIg && (
+                <div className="flex items-center justify-end sm:justify-start gap-2 flex-shrink-0 sm:pl-2">
+                  {row.action ? (
                     <Button
+                      type="button"
+                      variant={row.action === "reconnect" ? "default" : "outline"}
                       size="sm"
-                      className="bg-amber-600 hover:bg-amber-700 text-white text-xs"
-                      onClick={() => handleFbIgConnectClick(channel as 'facebook' | 'instagram')}
-                      data-testid={`button-complete-setup-${channel}`}
+                      className={cn(
+                        "text-xs shrink-0 min-w-[7.5rem]",
+                        row.action === "reconnect" && "bg-amber-600 hover:bg-amber-700 text-white border-amber-600"
+                      )}
+                      data-testid={
+                        channel === "whatsapp"
+                          ? "button-setup-whatsapp"
+                          : channel === "sms"
+                            ? "button-setup-sms"
+                            : channel === "facebook" || channel === "instagram"
+                              ? `button-${row.action === "manage" ? "manage" : row.action}-${channel}`
+                              : `button-connect-${channel}`
+                      }
+                      onClick={row.onAction}
                     >
-                      Reconnect
+                      {row.actionLabel}
                     </Button>
-                  )}
-
-                  {status === 'disconnected' && isFbIg && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleFbIgConnectClick(channel as 'facebook' | 'instagram')}
-                      data-testid={`button-connect-${channel}`}
-                    >
-                      Connect
-                    </Button>
-                  )}
-
-                  {status === 'disconnected' && !isFbIg && channel !== 'whatsapp' && channel !== 'sms' && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setConfigChannel(channel)}
-                      data-testid={`button-connect-${channel}`}
-                    >
-                      Connect
-                    </Button>
-                  )}
-
-                  {status === 'disconnected' && channel === 'whatsapp' && (
-                    <Button
-                      variant="outline"
-                      data-testid="button-setup-whatsapp"
-                      size="sm"
-                      onClick={() => setConfigChannel('whatsapp')}
-                    >
-                      Connect
-                    </Button>
-                  )}
-
-                  {status === 'disconnected' && channel === 'sms' && (
-                    <Button
-                      variant="outline"
-                      data-testid="button-setup-sms"
-                      size="sm"
-                      onClick={() => setConnectTwilioOpen(true)}
-                    >
-                      Setup Twilio
-                    </Button>
-                  )}
-
-                  {status === 'connected' && isFbIg && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleFbIgSettingsClick(channel as 'facebook' | 'instagram')}
-                      className="text-gray-500"
-                      data-testid={`button-settings-${channel}`}
-                    >
-                      <Settings2 className="h-4 w-4" />
-                    </Button>
-                  )}
-
-                  {status === 'connected' && !isFbIg && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setConfigChannel(channel)}
-                      className="text-gray-500"
-                      data-testid={`button-settings-${channel}`}
-                    >
-                      <Settings2 className="h-4 w-4" />
-                    </Button>
-                  )}
+                  ) : null}
                 </div>
               </div>
             );
@@ -949,11 +1131,6 @@ export function ChannelSettings() {
               setConnectMetaOpen(true);
             }}
           />
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mt-2">
-            <p className="text-xs text-amber-800">
-              <strong>Note:</strong> SMS uses Twilio. Meta Cloud API is WhatsApp-only. If both Twilio and Meta are connected, pick the active sender under Integrations or switch provider after connecting.
-            </p>
-          </div>
         </DialogContent>
       </Dialog>
 

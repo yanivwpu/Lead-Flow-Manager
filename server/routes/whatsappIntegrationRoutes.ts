@@ -18,6 +18,7 @@ import {
 } from "../whatsappEmbeddedSignup";
 import { getAppOrigin } from "../urlOrigins";
 import { storage } from "../storage";
+import { classifyMetaWhatsAppPhone } from "../metaWhatsAppPhoneKind";
 import { disconnectWhatsAppProvider, getProviderStatus } from "../whatsappService";
 import { getMetaAccessToken } from "../userMeta";
 import { db } from "../../drizzle/db";
@@ -138,7 +139,11 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
         tokenExchange: "redirect",
       });
       if (!result.success) {
-        return failRedirect((result as any).error);
+        return failRedirect(result.error);
+      }
+      if ("needsWabaPick" in result && result.needsWabaPick) {
+        const pickUrl = `${base}/app/settings?section=channels&whatsapp_embedded=pick&state=${encodeURIComponent(state)}`;
+        return res.redirect(302, pickUrl);
       }
       okRedirect();
     } catch (e: any) {
@@ -188,7 +193,10 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
         tokenExchange: "sdk",
       });
       if (!result.success) {
-        return res.status(400).json({ success: false, error: (result as any).error });
+        return res.status(400).json({ success: false, error: result.error });
+      }
+      if ("needsWabaPick" in result && result.needsWabaPick) {
+        return res.json({ success: true, needsWabaPick: true, state: result.state });
       }
       res.json({ success: true });
     } catch (e: any) {
@@ -338,6 +346,11 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
         webhookLikelyOk = !!(process.env.META_APP_SECRET || userAfter.metaAppSecret);
       }
 
+      const connectedPhoneClassification = classifyMetaWhatsAppPhone({
+        displayPhoneNumber: userAfter.metaDisplayPhoneNumber,
+        verifiedName: userAfter.metaVerifiedName,
+      });
+
       res.json({
         activeProvider: base.activeProvider,
         whatsappConnectedReason: base.whatsappConnectedReason,
@@ -352,6 +365,12 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
           connectionType: userAfter.metaConnectionType || null,
           displayPhoneNumber: userAfter.metaDisplayPhoneNumber || null,
           verifiedName: userAfter.metaVerifiedName || null,
+          connectedPhoneKind: connectedPhoneClassification.kind,
+          connectedToMetaTestNumber: connectedPhoneClassification.kind === "test",
+          metaTestNumberWarning:
+            connectedPhoneClassification.kind === "test"
+              ? "Connected to Meta test number — choose a production WhatsApp number."
+              : null,
           integrationStatus:
             userAfter.metaIntegrationStatus ||
             (userAfter.metaConnected ? "connected" : "disconnected"),
@@ -363,6 +382,9 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
           legacyManualConnection:
             userAfter.metaConnectionType === "manual_legacy" ||
             (!userAfter.metaConnectionType && userAfter.metaConnected),
+          /** Meta app secret present — required to verify signed webhook callbacks (separate from WABA app subscription). */
+          webhookSignatureHealth: userAfter.metaConnected ? (webhookLikelyOk ? "ok" : "needs_app_secret") : "n/a",
+          /** @deprecated Use webhookSignatureHealth — kept for older clients; same value. */
           webhookHealth: userAfter.metaConnected ? (webhookLikelyOk ? "ok" : "needs_app_secret") : "n/a",
         },
         webhookCallbackUrl: `${String(webhookBaseUrl).replace(/\/+$/, "")}/api/webhook/meta`,

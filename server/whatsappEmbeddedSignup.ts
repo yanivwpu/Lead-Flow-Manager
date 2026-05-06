@@ -26,6 +26,7 @@ import {
   decryptCredential,
   isEncrypted,
 } from "./userMeta";
+import { classifyMetaWhatsAppPhone, type MetaWhatsAppPhoneKind } from "./metaWhatsAppPhoneKind";
 import {
   deriveWhatsappConnectedReason,
   type WhatsappConnectedReason,
@@ -312,8 +313,134 @@ type WabaPhoneChoice = {
     id: string;
     displayPhoneNumber?: string;
     verifiedName?: string;
+    qualityRating?: string;
   }>;
 };
+
+/** Exported for pending-WABA JSON + client picker (test vs prod badges). */
+export type EnrichedWabaPhone = {
+  id: string;
+  displayPhoneNumber?: string;
+  verifiedName?: string;
+  qualityRating?: string;
+  phoneKind: MetaWhatsAppPhoneKind;
+  phoneKindReasons: string[];
+};
+
+export type EnrichedWabaPhoneChoice = {
+  wabaId: string;
+  wabaName?: string;
+  phoneNumbers: EnrichedWabaPhone[];
+};
+
+function enrichWabaPhoneChoices(choices: WabaPhoneChoice[]): EnrichedWabaPhoneChoice[] {
+  return choices.map((w) => ({
+    wabaId: w.wabaId,
+    wabaName: w.wabaName,
+    phoneNumbers: w.phoneNumbers.map((p) => {
+      const c = classifyMetaWhatsAppPhone({
+        displayPhoneNumber: p.displayPhoneNumber,
+        verifiedName: p.verifiedName,
+        qualityRating: p.qualityRating,
+      });
+      return {
+        id: p.id,
+        displayPhoneNumber: p.displayPhoneNumber,
+        verifiedName: p.verifiedName,
+        qualityRating: p.qualityRating,
+        phoneKind: c.kind,
+        phoneKindReasons: c.reasons,
+      };
+    }),
+  }));
+}
+
+type FlatEnrichedPhone = EnrichedWabaPhone & { wabaId: string; wabaName?: string };
+
+function flattenEnrichedWabaChoices(choices: EnrichedWabaPhoneChoice[]): FlatEnrichedPhone[] {
+  const out: FlatEnrichedPhone[] = [];
+  for (const w of choices) {
+    for (const p of w.phoneNumbers) {
+      out.push({ ...p, wabaId: w.wabaId, wabaName: w.wabaName });
+    }
+  }
+  return out;
+}
+
+/**
+ * Auto-select only when there is exactly one unambiguous production line, or exactly one “unknown” line
+ * and no test lines. Never auto-select Meta test lines when any other candidate exists; otherwise require explicit UI pick.
+ */
+export function decideEmbeddedSignupPhoneSelection(choices: EnrichedWabaPhoneChoice[]):
+  | { mode: "auto"; pick: ResolvedWabaPhone & { phoneKind: MetaWhatsAppPhoneKind } }
+  | { mode: "pending_pick"; pendingReason: string } {
+  const flat = flattenEnrichedWabaChoices(choices);
+  if (flat.length === 0) {
+    return { mode: "pending_pick", pendingReason: "no_phone_numbers" };
+  }
+
+  const prod = flat.filter((p) => p.phoneKind === "production");
+  const unk = flat.filter((p) => p.phoneKind === "unknown");
+  const test = flat.filter((p) => p.phoneKind === "test");
+
+  if (prod.length >= 2) {
+    return { mode: "pending_pick", pendingReason: "multiple_production_numbers" };
+  }
+  if (prod.length === 1) {
+    const p = prod[0];
+    return {
+      mode: "auto",
+      pick: {
+        wabaId: p.wabaId,
+        phoneNumberId: p.id,
+        displayPhoneNumber: p.displayPhoneNumber,
+        verifiedName: p.verifiedName,
+        phoneKind: "production",
+      },
+    };
+  }
+
+  if (unk.length >= 2) {
+    return { mode: "pending_pick", pendingReason: "multiple_unknown_numbers" };
+  }
+  if (unk.length === 1 && test.length === 0) {
+    const p = unk[0];
+    return {
+      mode: "auto",
+      pick: {
+        wabaId: p.wabaId,
+        phoneNumberId: p.id,
+        displayPhoneNumber: p.displayPhoneNumber,
+        verifiedName: p.verifiedName,
+        phoneKind: "unknown",
+      },
+    };
+  }
+
+  return {
+    mode: "pending_pick",
+    pendingReason:
+      test.length >= 1 ? "test_or_mixed_candidates_require_explicit_pick" : "ambiguous_phone_choice",
+  };
+}
+
+function buildWabaDiscoveryDetailPayload(choices: EnrichedWabaPhoneChoice[]) {
+  return {
+    at: new Date().toISOString(),
+    wabas: choices.map((w) => ({
+      wabaId: w.wabaId,
+      wabaName: w.wabaName ?? null,
+      phones: w.phoneNumbers.map((p) => ({
+        phoneNumberId: p.id,
+        displayPhoneNumber: p.displayPhoneNumber ?? null,
+        verifiedName: p.verifiedName ?? null,
+        qualityRating: p.qualityRating ?? null,
+        phoneKind: p.phoneKind,
+        phoneKindReasons: p.phoneKindReasons,
+      })),
+    })),
+  };
+}
 
 async function fetchUserWabaChoices(accessToken: string): Promise<WabaPhoneChoice[]> {
   const base = getMetaGraphApiBase();
@@ -378,7 +505,7 @@ async function fetchUserWabaChoices(accessToken: string): Promise<WabaPhoneChoic
   const choices: WabaPhoneChoice[] = [];
   for (const w of wabas) {
     const pnRes = await fetch(
-      `${base}/${encodeURIComponent(w.id)}/phone_numbers?fields=id,display_phone_number,verified_name&limit=50&access_token=${encodeURIComponent(accessToken)}`
+      `${base}/${encodeURIComponent(w.id)}/phone_numbers?fields=id,display_phone_number,verified_name,quality_rating&limit=50&access_token=${encodeURIComponent(accessToken)}`
     );
     const pnJson = (await pnRes.json().catch(() => ({}))) as any;
     if (!pnRes.ok) {
@@ -399,6 +526,7 @@ async function fetchUserWabaChoices(accessToken: string): Promise<WabaPhoneChoic
         id: String(p?.id || ""),
         displayPhoneNumber: typeof p?.display_phone_number === "string" ? p.display_phone_number : undefined,
         verifiedName: typeof p?.verified_name === "string" ? p.verified_name : undefined,
+        qualityRating: typeof p?.quality_rating === "string" ? p.quality_rating : undefined,
       }))
       .filter((p) => !!p.id);
 
@@ -430,24 +558,21 @@ function sortIds(ids: string[]): string[] {
   return [...ids].sort((a, b) => a.localeCompare(b));
 }
 
-/** Deterministic pick: first WABA (by id), first phone (by id) — includes Meta Test WABA when valid. */
+/**
+ * Legacy helper: returns a single selection only when {@link decideEmbeddedSignupPhoneSelection}
+ * would auto-pick (no test-vs-prod ambiguity). Otherwise returns null.
+ */
 export function pickFirstValidWabaSelection(choices: WabaPhoneChoice[]): ResolvedWabaPhone | null {
   if (!choices.length) return null;
-  const sortedWabas = [...choices].sort((a, b) => a.wabaId.localeCompare(b.wabaId));
-  for (const w of sortedWabas) {
-    const phones = Array.isArray(w.phoneNumbers) ? w.phoneNumbers : [];
-    if (!phones.length) continue;
-    const sortedPhones = [...phones].sort((a, b) => a.id.localeCompare(b.id));
-    const phone = sortedPhones[0];
-    if (!phone?.id) continue;
-    return {
-      wabaId: w.wabaId,
-      phoneNumberId: phone.id,
-      displayPhoneNumber: phone.displayPhoneNumber,
-      verifiedName: phone.verifiedName,
-    };
-  }
-  return null;
+  const enriched = enrichWabaPhoneChoices(choices);
+  const d = decideEmbeddedSignupPhoneSelection(enriched);
+  if (d.mode !== "auto") return null;
+  return {
+    wabaId: d.pick.wabaId,
+    phoneNumberId: d.pick.phoneNumberId,
+    displayPhoneNumber: d.pick.displayPhoneNumber,
+    verifiedName: d.pick.verifiedName,
+  };
 }
 
 export async function mergeUserMetaOAuthDebug(
@@ -455,7 +580,7 @@ export async function mergeUserMetaOAuthDebug(
   patch: Record<string, unknown>
 ): Promise<void> {
   try {
-    const prevRow = await storage.getUser(userId);
+    const prevRow = await storage.getUserForSession(userId);
     const prev =
       prevRow && prevRow.metaLastOAuthDebug && typeof prevRow.metaLastOAuthDebug === "object"
         ? (prevRow.metaLastOAuthDebug as Record<string, unknown>)
@@ -512,25 +637,6 @@ export async function getAccessTokenExpiryFromDebug(accessToken: string): Promis
     return new Date(exp * 1000);
   }
   return null;
-}
-
-async function resolveWabaAndPhone(accessToken: string): Promise<ResolvedWabaPhone> {
-  const choices = await fetchUserWabaChoices(accessToken);
-  if (choices.length === 0) {
-    throw new Error("No WhatsApp phone number found. Please add a phone number in Meta Business Manager.");
-  }
-  if (choices.length > 1) {
-    // Caller must handle the explicit selection case.
-    throw new Error("MULTIPLE_VALID_WABAS");
-  }
-  const only = choices[0];
-  const phone = only.phoneNumbers[0];
-  return {
-    wabaId: only.wabaId,
-    phoneNumberId: phone.id,
-    displayPhoneNumber: phone.displayPhoneNumber,
-    verifiedName: phone.verifiedName,
-  };
 }
 
 /**
@@ -607,6 +713,33 @@ export async function applyMetaTokenExpiryAttention(userId: string): Promise<voi
   }
 }
 
+export type WabaDiscoverySnapshot = {
+  at?: string;
+  wabas: Array<{
+    wabaId: string;
+    wabaName: string | null;
+    phones: Array<{
+      phoneNumberId: string;
+      displayPhoneNumber: string | null;
+      verifiedName: string | null;
+      qualityRating: string | null;
+      phoneKind: MetaWhatsAppPhoneKind;
+      phoneKindReasons: string[];
+    }>;
+  }>;
+};
+
+function extractWabaDiscoverySnapshotFromDebug(debug: unknown): WabaDiscoverySnapshot | null {
+  if (!debug || typeof debug !== "object") return null;
+  const d = debug as Record<string, unknown>;
+  const detail = d.wabaDiscoveryDetail;
+  if (!detail || typeof detail !== "object") return null;
+  const det = detail as Record<string, unknown>;
+  const wabas = det.wabas;
+  if (!Array.isArray(wabas)) return null;
+  return detail as WabaDiscoverySnapshot;
+}
+
 export interface WhatsappConnectionDebugInfo {
   wabaId: string | null;
   phoneNumberId: string | null;
@@ -618,6 +751,8 @@ export interface WhatsappConnectionDebugInfo {
    * Inbox + sends follow `whatsapp_provider` — switch to Meta in Settings for Cloud API.
    */
   metaPersistedButTwilioSelected: boolean;
+  /** Latest Embedded Signup discovery tree (from `meta_last_oauth_debug`), when present. */
+  wabaDiscoverySnapshot: WabaDiscoverySnapshot | null;
   webhookSubscribed: boolean;
   connectionType: string | null;
   status: string;
@@ -630,12 +765,17 @@ export interface WhatsappConnectionDebugInfo {
 export async function getWhatsappConnectionDebug(userId: string): Promise<WhatsappConnectionDebugInfo | null> {
   const user = await storage.getUserForSession(userId);
   if (!user) return null;
+  const oauthDbg =
+    user.metaLastOAuthDebug && typeof user.metaLastOAuthDebug === "object"
+      ? (user.metaLastOAuthDebug as Record<string, unknown>)
+      : null;
   return {
     wabaId: user.metaBusinessAccountId ?? null,
     phoneNumberId: user.metaPhoneNumberId ?? null,
     provider: (user.whatsappProvider as string) || "twilio",
     whatsappConnectedReason: deriveWhatsappConnectedReason(user),
     metaPersistedButTwilioSelected: !!(user.metaConnected && user.whatsappProvider !== "meta"),
+    wabaDiscoverySnapshot: extractWabaDiscoverySnapshotFromDebug(oauthDbg),
     webhookSubscribed: user.metaWebhookSubscribed ?? false,
     connectionType: user.metaConnectionType ?? null,
     status:
@@ -648,6 +788,11 @@ export async function getWhatsappConnectionDebug(userId: string): Promise<Whatsa
   };
 }
 
+export type EmbeddedSignupOAuthResult =
+  | { success: true; userId: string }
+  | { success: true; needsWabaPick: true; state: string }
+  | { success: false; error: string };
+
 /** Complete OAuth: validate state, exchange code, store credentials, subscribe webhooks. */
 export async function completeEmbeddedSignupOAuth(params: {
   code: string;
@@ -656,7 +801,7 @@ export async function completeEmbeddedSignupOAuth(params: {
   initiatingUserId?: string;
   /** `sdk` = POST complete-sdk; `redirect` = GET meta/callback — same redirect_uri / exchange for both. */
   tokenExchange: "sdk" | "redirect";
-}): Promise<{ success: true; userId: string } | { success: false; error: string }> {
+}): Promise<EmbeddedSignupOAuthResult> {
   const { code, state, initiatingUserId, tokenExchange } = params;
 
   await cleanupExpiredStates();
@@ -766,18 +911,8 @@ export async function completeEmbeddedSignupOAuth(params: {
 
   let resolved: ResolvedWabaPhone;
   try {
-    const choices = await fetchUserWabaChoices(longToken);
-    const picked = pickFirstValidWabaSelection(choices);
-    await mergeUserMetaOAuthDebug(row.userId, {
-      phase: "waba_discovery",
-      ok: true,
-      validWabaCount: choices.length,
-      wabaIdsSample: sortIds(choices.map((c) => c.wabaId)).slice(0, 25),
-      selectedWabaId: picked?.wabaId ?? null,
-      selectedPhoneNumberId: picked?.phoneNumberId ?? null,
-      selectionPolicy: "first_valid_by_waba_id_then_phone_id",
-    });
-    if (!picked) {
+    const rawChoices = await fetchUserWabaChoices(longToken);
+    if (rawChoices.length === 0) {
       const msg = "No WhatsApp phone number found. Please add a phone number in Meta Business Manager.";
       await storage.updateUser(row.userId, {
         metaIntegrationStatus: "failed",
@@ -786,10 +921,47 @@ export async function completeEmbeddedSignupOAuth(params: {
       await mergeUserMetaOAuthDebug(row.userId, { phase: "complete", ok: false, error: "no_valid_waba_or_phone" });
       return { success: false, error: msg };
     }
-    resolved = picked;
+
+    const enrichedChoices = enrichWabaPhoneChoices(rawChoices);
+    await mergeUserMetaOAuthDebug(row.userId, {
+      phase: "waba_discovery",
+      ok: true,
+      validWabaCount: rawChoices.length,
+      wabaIdsSample: sortIds(rawChoices.map((c) => c.wabaId)).slice(0, 25),
+      wabaDiscoveryDetail: buildWabaDiscoveryDetailPayload(enrichedChoices),
+      selectionPolicy: "prefer_production_avoid_auto_test",
+    });
+
+    const decision = decideEmbeddedSignupPhoneSelection(enrichedChoices);
+
+    if (decision.mode === "pending_pick") {
+      await db
+        .update(whatsappOauthStates)
+        .set({
+          pendingAccessToken: encryptCredential(longToken),
+          pendingWabaChoices: enrichedChoices as any,
+        })
+        .where(eq(whatsappOauthStates.stateToken, state));
+
+      await mergeUserMetaOAuthDebug(row.userId, {
+        phase: "waba_selection",
+        pendingUserSelection: true,
+        pendingReason: decision.pendingReason,
+      });
+
+      return { success: true, needsWabaPick: true, state };
+    }
+
+    resolved = {
+      wabaId: decision.pick.wabaId,
+      phoneNumberId: decision.pick.phoneNumberId,
+      displayPhoneNumber: decision.pick.displayPhoneNumber,
+      verifiedName: decision.pick.verifiedName,
+    };
     console.log("[WABA SELECTED] auto", {
       wabaId: resolved.wabaId,
       phoneNumberId: resolved.phoneNumberId,
+      phoneKind: decision.pick.phoneKind,
     });
   } catch (e: any) {
     const msg = e?.message || "Could not read WhatsApp account details from Meta.";
@@ -920,7 +1092,7 @@ export async function finalizeEmbeddedSignupWabaSelection(params: {
   }
   const token = isEncrypted(row.pendingAccessToken) ? decryptCredential(row.pendingAccessToken) : row.pendingAccessToken;
 
-  const choices = (row.pendingWabaChoices as any) as WabaPhoneChoice[] | null;
+  const choices = (row.pendingWabaChoices as any) as EnrichedWabaPhoneChoice[] | null;
   const allowed = Array.isArray(choices) ? choices : [];
   const matchWaba = allowed.find((c) => c.wabaId === wabaId);
   const matchPhone = matchWaba?.phoneNumbers?.find((p) => p.id === phoneNumberId);
