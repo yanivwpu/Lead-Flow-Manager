@@ -18,6 +18,7 @@ import {
   refreshWhatsappPhoneGraphDebugIfStale,
   buildWhatsAppInboundRoutingDiagnostics,
   fetchMetaUserTokenDebugSummary,
+  extractAppIdsFromWabaSubscribedAppsPayload,
 } from "../whatsappEmbeddedSignup";
 import { getAppOrigin } from "../urlOrigins";
 import { storage } from "../storage";
@@ -145,10 +146,7 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
                 : rawText,
           })}`
         );
-        const rows = Array.isArray(body?.data) ? body.data : [];
-        const appIds = rows
-          .map((x: any) => String(x?.id ?? x?.app_id ?? "").trim())
-          .filter((s: string) => s.length > 0);
+        const appIds = extractAppIdsFromWabaSubscribedAppsPayload(body);
         const hasConfiguredAppId = appId ? appIds.some((rid) => metaAppIdsEqualLocal(appId, rid)) : false;
         subscribedApps = { httpOk: r.ok, status: r.status, body, appIds, hasConfiguredAppId };
       }
@@ -238,6 +236,15 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
       } else if (!debugToken.ok || debugToken.is_valid === false) {
         blockerReason =
           "B) User access token failed debug_token validation or is_valid=false — reconnect OAuth / check scopes.";
+      } else if (
+        subscribedApps.httpOk &&
+        subscribedApps.hasConfiguredAppId &&
+        phoneGraph.ok &&
+        String(graphPhoneStatus || "").toUpperCase() === "DISCONNECTED" &&
+        String(graphCodeVerificationStatus || "").toUpperCase() === "NOT_VERIFIED"
+      ) {
+        blockerReason =
+          "C) Phone Cloud API status is DISCONNECTED / NOT_VERIFIED. WABA subscription is OK, but Meta has not activated Cloud API routing for this phone.";
       } else if (
         phoneGraph.ok &&
         (String(graphPhoneStatus || "").toUpperCase() === "DISCONNECTED" ||

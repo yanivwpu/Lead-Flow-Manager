@@ -1168,7 +1168,7 @@ function metaAppIdsEqual(configured: string, candidate: string): boolean {
 
 /**
  * Collect candidate app ids from Graph `GET /{waba-id}/subscribed_apps` payload.
- * Handles id vs number, nested application/app objects, and extra keys Graph may add.
+ * Handles id vs number, nested application/app objects, `whatsapp_business_api_data.id`, and extra keys Graph may add.
  */
 function extractReturnedAppIdsFromSubscribedAppsJson(json: any): {
   ids: string[];
@@ -1177,6 +1177,28 @@ function extractReturnedAppIdsFromSubscribedAppsJson(json: any): {
   const ids = new Set<string>();
   const rowSnapshots: Array<{ keys: string[]; idFields: Record<string, unknown> }> = [];
   const rows = Array.isArray(json?.data) ? json.data : [];
+
+  function collectRowTopLevelAppIds(r: Record<string, unknown>): void {
+    for (const key of ["id", "app_id"]) {
+      const n = normalizeMetaId(r[key]);
+      if (n) ids.add(n);
+    }
+    const wb = r.whatsapp_business_api_data;
+    if (wb && typeof wb === "object") {
+      const w = wb as Record<string, unknown>;
+      for (const key of ["id", "app_id"]) {
+        const n = normalizeMetaId(w[key]);
+        if (n) ids.add(n);
+      }
+    }
+    const app = (r.application ?? r.app) as Record<string, unknown> | undefined;
+    if (app && typeof app === "object") {
+      for (const key of ["id", "app_id"]) {
+        const n = normalizeMetaId(app[key]);
+        if (n) ids.add(n);
+      }
+    }
+  }
 
   function walk(obj: unknown, depth: number): void {
     if (depth > 6 || obj == null) return;
@@ -1201,11 +1223,13 @@ function extractReturnedAppIdsFromSubscribedAppsJson(json: any): {
   for (const row of rows) {
     if (row && typeof row === "object") {
       const r = row as Record<string, unknown>;
+      collectRowTopLevelAppIds(r);
       rowSnapshots.push({
         keys: Object.keys(r),
         idFields: {
           id: r.id,
           app_id: r.app_id,
+          whatsapp_business_api_data: r.whatsapp_business_api_data,
           application: r.application,
           app: r.app,
         },
@@ -1215,6 +1239,12 @@ function extractReturnedAppIdsFromSubscribedAppsJson(json: any): {
   }
 
   return { ids: [...ids], rowSnapshots };
+}
+
+/** Deduped app ids from GET `/{waba-id}/subscribed_apps` for diagnostics + parity with subscription verify. */
+export function extractAppIdsFromWabaSubscribedAppsPayload(json: unknown): string[] {
+  const { ids } = extractReturnedAppIdsFromSubscribedAppsJson(json as any);
+  return [...new Set(ids.map((s) => String(s).trim()).filter(Boolean))];
 }
 
 async function verifyWabaAppSubscriptionDetailed(
