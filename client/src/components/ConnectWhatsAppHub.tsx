@@ -115,6 +115,45 @@ interface WhatsappStatusResponse {
   webhookCallbackUrl: string;
 }
 
+type CoexistenceDiagnosticsResponse = {
+  connectionSavedAsCoexistence: boolean;
+  activeProvider: string;
+  meta: {
+    connected: boolean;
+    integrationStatus: string | null;
+    webhookSubscribedFlag: boolean;
+    connectionType: string | null;
+    wabaId: string | null;
+    phoneNumberId: string | null;
+    displayPhoneNumber: string | null;
+  };
+  graphPhone: {
+    ok: boolean;
+    httpStatus: number | null;
+    fieldsRequested: string;
+    data: Record<string, unknown> | null;
+    error: { message?: string; code?: number } | null;
+  };
+  graphPhoneStatus: unknown;
+  graphCodeVerificationStatus: unknown;
+  wabaSubscribedApps: {
+    httpOk: boolean;
+    httpStatus: number;
+    configuredAppIdPresent: boolean;
+    appIds: string[];
+    error: unknown;
+  };
+  phoneUnderWaba: boolean;
+  wabaPhoneNumbers: {
+    httpOk: boolean;
+    httpStatus: number;
+    phoneIds: string[];
+    error: unknown;
+  };
+  inboundWebhookExpectedByGraph: "yes" | "no" | "unknown";
+  reasons: string[];
+};
+
 interface ConnectWhatsAppHubProps {
   onOpenTwilio: () => void;
   onOpenManualMeta: () => void;
@@ -204,6 +243,23 @@ export function ConnectWhatsAppHub({
   const loading = cfgLoading || statusLoading;
   const meta = status?.meta;
   const metaActive = status?.activeProvider === "meta" && meta?.connected;
+
+  const {
+    data: coexistenceDiag,
+    isFetching: diagFetching,
+    refetch: refetchDiag,
+  } = useQuery<CoexistenceDiagnosticsResponse>({
+    queryKey: ["/api/integrations/whatsapp/coexistence-diagnostics"],
+    enabled: !!metaActive,
+    staleTime: 20_000,
+    refetchOnWindowFocus: true,
+  });
+
+  const graphPhoneStatus = String(coexistenceDiag?.graphPhoneStatus ?? "").toUpperCase();
+  const graphCodeStatus = String(coexistenceDiag?.graphCodeVerificationStatus ?? "").toUpperCase();
+  const graphPhoneDisconnected =
+    graphPhoneStatus === "DISCONNECTED" || graphCodeStatus === "NOT_VERIFIED";
+  const graphSubscriptionConfirmed = coexistenceDiag?.wabaSubscribedApps?.configuredAppIdPresent === true;
 
   // Load pending WABA choices (redirect flow) if present.
   const {
@@ -350,13 +406,40 @@ export function ConnectWhatsAppHub({
                   <dd
                     className={cn(
                       "font-medium",
-                      meta?.webhookSubscribed ? "text-emerald-800" : "text-amber-800"
+                      graphSubscriptionConfirmed
+                        ? "text-emerald-800"
+                        : "text-amber-800"
                     )}
                   >
-                    {meta?.webhookSubscribed ? "Confirmed" : "Needs attention"}
+                    {graphSubscriptionConfirmed ? "Confirmed (Graph)" : "Needs attention (Graph)"}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <dt className="text-gray-600">Phone Cloud API status</dt>
+                  <dd
+                    className={cn(
+                      "font-medium text-right",
+                      graphPhoneDisconnected ? "text-amber-800" : "text-emerald-800"
+                    )}
+                    title={coexistenceDiag?.graphPhone?.fieldsRequested || undefined}
+                  >
+                    {coexistenceDiag?.graphPhone?.ok
+                      ? `${graphPhoneStatus || "UNKNOWN"} / ${graphCodeStatus || "UNKNOWN"}`
+                      : diagFetching
+                        ? "Checking…"
+                        : "Unknown"}
                   </dd>
                 </div>
               </div>
+
+              {coexistenceDiag?.graphPhone?.ok && graphPhoneDisconnected && (
+                <p className="text-xs text-amber-900 mt-2 border border-amber-200 rounded-md px-2 py-1.5 bg-amber-50/90">
+                  <span className="font-semibold">Routing warning:</span>{" "}
+                  Meta shows this phone as{" "}
+                  <span className="font-semibold">{graphPhoneStatus || "DISCONNECTED"}</span> /{" "}
+                  <span className="font-semibold">{graphCodeStatus || "NOT_VERIFIED"}</span>. Messages may stay in the WhatsApp Business App and not reach Cloud API webhooks.
+                </p>
+              )}
 
               {meta?.integrationStatus === "needs_attention" &&
                 meta?.lastErrorMessage &&
@@ -421,20 +504,39 @@ export function ConnectWhatsAppHub({
           </div>
 
           <div className="flex flex-wrap gap-2">
-            {!meta?.webhookSubscribed && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={diagFetching}
+              onClick={() => refetchDiag()}
+            >
+              {diagFetching ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-1" />
+              ) : (
+                <RefreshCw className="h-4 w-4 mr-1" />
+              )}
+              Refresh Graph diagnostics
+            </Button>
+
+            {!graphSubscriptionConfirmed && (
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
                 disabled={subscribeMutation.isPending}
-                onClick={() => subscribeMutation.mutate()}
+                onClick={async () => {
+                  await subscribeMutation.mutateAsync();
+                  queryClient.invalidateQueries({ queryKey: ["/api/integrations/whatsapp/status"] });
+                  await refetchDiag();
+                }}
               >
                 {subscribeMutation.isPending ? (
                   <Loader2 className="h-4 w-4 animate-spin mr-1" />
                 ) : (
                   <RefreshCw className="h-4 w-4 mr-1" />
                 )}
-                Retry webhook subscription
+                Repair WABA subscription
               </Button>
             )}
             <Button type="button" variant="outline" size="sm" onClick={() => setConfirmDisconnect(true)}>
