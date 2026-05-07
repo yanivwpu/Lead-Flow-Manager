@@ -5,7 +5,18 @@ import { storage } from "./storage";
 export type TrialStatus = "none" | "active" | "expired";
 
 /** True when the user has an active paid subscription (Stripe or Shopify) that defines billing plan. */
-export function hasActivePaidPlan(user: User, now: Date = new Date()): boolean {
+export function hasActivePaidPlan(
+  user: Pick<
+    User,
+    | "planOverrideEnabled"
+    | "planOverride"
+    | "billingPlan"
+    | "subscriptionStatus"
+    | "shopifyShop"
+    | "shopifySubscriptionStatus"
+  >,
+  now: Date = new Date(),
+): boolean {
   if (user.planOverrideEnabled && user.planOverride && user.planOverride !== "free") {
     return true;
   }
@@ -33,7 +44,21 @@ export function computeTrialStatus(user: User, now: Date): TrialStatus {
 }
 
 /** Pro + AI Brain bundle trial (trial_plan pro_ai), only while unpaid. */
-export function isProAiTrialActive(user: User, now: Date = new Date()): boolean {
+export function isProAiTrialActive(
+  user: Pick<
+    User,
+    | "trialEndsAt"
+    | "trialStatus"
+    | "trialPlan"
+    | "planOverrideEnabled"
+    | "planOverride"
+    | "billingPlan"
+    | "subscriptionStatus"
+    | "shopifyShop"
+    | "shopifySubscriptionStatus"
+  >,
+  now: Date = new Date(),
+): boolean {
   if (hasActivePaidPlan(user, now)) return false;
   if (!user.trialEndsAt || new Date(user.trialEndsAt) <= now) return false;
   if (user.trialStatus === "expired") return false;

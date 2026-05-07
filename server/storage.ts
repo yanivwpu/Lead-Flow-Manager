@@ -396,8 +396,65 @@ export class DbStorage implements IStorage {
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {
-    const result = await db.insert(users).values(insertUser).returning();
-    return result[0];
+    const now = new Date();
+
+    const email =
+      typeof (insertUser as any).email === "string"
+        ? ((insertUser as any).email as string).trim().toLowerCase()
+        : "";
+    const isDemoUser = email === "demo@whachat.com";
+
+    const billingPlan = (((insertUser as any).billingPlan || "free") as string).toLowerCase();
+    const overrideEnabled = !!(insertUser as any).planOverrideEnabled;
+
+    const providedTrialEndsAt = (insertUser as any).trialEndsAt as Date | null | undefined;
+    const providedTrialStatus = (insertUser as any).trialStatus as string | null | undefined;
+    const providedTrialPlan = (insertUser as any).trialPlan as string | null | undefined;
+
+    const shouldDefaultTrial =
+      !isDemoUser &&
+      !overrideEnabled &&
+      (billingPlan === "free" || billingPlan === "") &&
+      !providedTrialEndsAt &&
+      providedTrialStatus !== "expired";
+
+    const values = shouldDefaultTrial
+      ? (() => {
+          const trialStartedAt = now;
+          const trialEndsAt = new Date(now);
+          trialEndsAt.setDate(trialEndsAt.getDate() + 14);
+          return {
+            ...(insertUser as any),
+            trialStartedAt,
+            trialEndsAt,
+            trialStatus: "active",
+            trialPlan: "pro_ai",
+          } as InsertUser;
+        })()
+      : insertUser;
+
+    const result = await db.insert(users).values(values).returning();
+    const created = result[0];
+
+    const trialPlan = created?.trialPlan ?? providedTrialPlan ?? null;
+    const trialEndsAt = created?.trialEndsAt ?? providedTrialEndsAt ?? null;
+    const aiEnabled =
+      !!trialEndsAt &&
+      new Date(trialEndsAt) > now &&
+      (created?.trialStatus ?? providedTrialStatus) !== "expired" &&
+      (trialPlan || "pro_ai") === "pro_ai";
+
+    console.log(
+      `[TrialInit] ${JSON.stringify({
+        userId: created?.id ?? null,
+        trialCreated: shouldDefaultTrial || !!providedTrialEndsAt,
+        trialPlan,
+        aiEnabled,
+        trialEndsAt,
+      })}`,
+    );
+
+    return created;
   }
 
   async updateUser(id: string, updates: Partial<User>): Promise<User | undefined> {
