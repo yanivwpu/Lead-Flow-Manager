@@ -449,8 +449,21 @@ export function ChannelSettings() {
   });
 
   const disconnectFbIgMutation = useMutation({
-    mutationFn: async (integrationId: string) => {
-      const res = await fetch(`/api/integrations/${integrationId}`, {
+    mutationFn: async (
+      payload: { channel: "facebook" } | { channel: "instagram"; integrationId: string },
+    ) => {
+      if (payload.channel === "facebook") {
+        const res = await fetch("/api/integrations/facebook/disconnect", {
+          method: "POST",
+          credentials: "include",
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(typeof data.error === "string" ? data.error : "Failed to disconnect");
+        }
+        return data;
+      }
+      const res = await fetch(`/api/integrations/${payload.integrationId}`, {
         method: "DELETE",
         credentials: "include",
       });
@@ -1088,11 +1101,20 @@ export function ChannelSettings() {
                 size="sm"
                 className="w-full text-red-600 border-red-200 hover:bg-red-50"
                 onClick={() => {
-                  if (manageIntegration) {
-                    disconnectFbIgMutation.mutate(manageIntegration.id);
+                  if (!manageFbIgChannel) return;
+                  if (manageFbIgChannel === "facebook") {
+                    disconnectFbIgMutation.mutate({ channel: "facebook" });
+                  } else if (manageIntegration) {
+                    disconnectFbIgMutation.mutate({
+                      channel: "instagram",
+                      integrationId: manageIntegration.id,
+                    });
                   }
                 }}
-                disabled={disconnectFbIgMutation.isPending || !manageIntegration}
+                disabled={
+                  disconnectFbIgMutation.isPending ||
+                  (manageFbIgChannel === "instagram" && !manageIntegration)
+                }
                 data-testid={`button-disconnect-${manageFbIgChannel}`}
               >
                 {disconnectFbIgMutation.isPending
@@ -1101,7 +1123,7 @@ export function ChannelSettings() {
                 }
                 Disconnect {manageFbIgChannel === 'facebook' ? 'Facebook Messenger' : 'Instagram'}
               </Button>
-              {!manageIntegration && (
+              {!manageIntegration && manageFbIgChannel === "instagram" && (
                 <p className="text-[11px] text-gray-500 text-center">
                   Disconnect is temporarily unavailable because the integration record is missing in <code className="text-[10px] bg-gray-100 px-1 rounded">/api/integrations</code>.
                   Refresh the page and try again. If it persists, this workspace may be missing the stored Meta integration row.

@@ -5944,6 +5944,52 @@ export async function registerRoutes(
     }
   });
 
+  /**
+   * Facebook Messenger disconnect by user/channel — does not require an integration UUID.
+   * Clears facebook channel_settings only; does not touch WhatsApp/WABA, Instagram, or SMS.
+   */
+  app.post("/api/integrations/facebook/disconnect", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const userId = req.user.id;
+      const allIntegrations = await storage.getIntegrations(userId);
+      const facebookIntegrations = allIntegrations.filter((i) => i.type === "meta_facebook");
+      const hadIntegrationRow = facebookIntegrations.length > 0;
+      const clearedFields: string[] = [];
+
+      for (const fb of facebookIntegrations) {
+        await storage.deleteIntegration(fb.id);
+        clearedFields.push(`integration:${fb.id}`);
+      }
+
+      await storage.upsertChannelSetting(userId, "facebook", {
+        isConnected: false,
+        isEnabled: false,
+        config: {},
+      });
+
+      clearedFields.push("channel_settings:facebook(pageId,pageAccessToken,pageName,...)");
+      const channelSettingsUpdated = true;
+
+      console.log(
+        `[FacebookDisconnect] ${JSON.stringify({
+          userId,
+          hadIntegrationRow,
+          clearedFields,
+          channelSettingsUpdated,
+        })}`,
+      );
+
+      return res.json({ success: true, hadIntegrationRow, clearedFields });
+    } catch (error) {
+      console.error("Error disconnecting Facebook Messenger:", error);
+      return res.status(500).json({ error: "Failed to disconnect Facebook Messenger" });
+    }
+  });
+
   // Delete an integration
   app.delete("/api/integrations/:id", async (req, res) => {
     try {
