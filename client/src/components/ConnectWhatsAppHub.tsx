@@ -519,26 +519,25 @@ export function ConnectWhatsAppHub({
               Refresh Graph diagnostics
             </Button>
 
-            {!graphSubscriptionConfirmed && (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={subscribeMutation.isPending}
-                onClick={async () => {
-                  await subscribeMutation.mutateAsync();
-                  queryClient.invalidateQueries({ queryKey: ["/api/integrations/whatsapp/status"] });
-                  await refetchDiag();
-                }}
-              >
-                {subscribeMutation.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin mr-1" />
-                ) : (
-                  <RefreshCw className="h-4 w-4 mr-1" />
-                )}
-                Repair WABA subscription
-              </Button>
-            )}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={subscribeMutation.isPending}
+              onClick={async () => {
+                await subscribeMutation.mutateAsync();
+                queryClient.invalidateQueries({ queryKey: ["/api/integrations/whatsapp/status"] });
+                await refetchDiag();
+              }}
+              title="POST /{waba-id}/subscribed_apps — re-subscribe this Meta app to your WABA"
+            >
+              {subscribeMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-1" />
+              ) : (
+                <RefreshCw className="h-4 w-4 mr-1" />
+              )}
+              Repair WABA subscription
+            </Button>
             <Button type="button" variant="outline" size="sm" onClick={() => setConfirmDisconnect(true)}>
               Disconnect Meta
             </Button>

@@ -1063,6 +1063,53 @@ function logWhatsAppWebhookSubscribe(params: {
   );
 }
 
+/** Safe summary from Graph `debug_token` for the **user** access token — never logs the token. */
+export type MetaUserTokenDebugSummary = {
+  ok: boolean;
+  httpStatus?: number;
+  app_id?: string | null;
+  type?: string | null;
+  is_valid?: boolean | null;
+  expires_at?: number | null;
+  scopes?: string[] | null;
+  granular_scopes_summary?: Array<{ scope: string; target_ids_count: number }>;
+  error?: { message?: string; code?: number };
+};
+
+export async function fetchMetaUserTokenDebugSummary(userAccessToken: string): Promise<MetaUserTokenDebugSummary> {
+  const base = getMetaGraphApiBase();
+  const appId = process.env.META_APP_ID?.trim();
+  const appSecret = process.env.META_APP_SECRET?.trim();
+  if (!appId || !appSecret) {
+    return { ok: false, error: { message: "META_APP_ID or META_APP_SECRET unset", code: 0 } };
+  }
+  const url = `${base}/debug_token?input_token=${encodeURIComponent(userAccessToken)}&access_token=${encodeURIComponent(`${appId}|${appSecret}`)}`;
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(12_000) });
+    const json = (await res.json().catch(() => ({}))) as any;
+    const d = json?.data;
+    const granular = Array.isArray(d?.granular_scopes) ? d.granular_scopes : [];
+    const granular_scopes_summary = granular.map((g: any) => ({
+      scope: String(g?.scope || ""),
+      target_ids_count: Array.isArray(g?.target_ids) ? g.target_ids.length : 0,
+    }));
+    return {
+      ok: res.ok && !json?.error && d?.is_valid !== false,
+      httpStatus: res.status,
+      app_id: d?.app_id != null ? String(d.app_id) : null,
+      type: d?.type ?? null,
+      is_valid: typeof d?.is_valid === "boolean" ? d.is_valid : null,
+      expires_at: typeof d?.expires_at === "number" ? d.expires_at : null,
+      scopes: Array.isArray(d?.scopes) ? d.scopes.map(String) : null,
+      granular_scopes_summary,
+      error: json?.error ? { message: json.error.message, code: json.error.code } : undefined,
+    };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { ok: false, error: { message: msg, code: 0 } };
+  }
+}
+
 async function postWabaSubscribedAppsDetailed(
   wabaId: string,
   userAccessToken: string
@@ -1070,7 +1117,24 @@ async function postWabaSubscribedAppsDetailed(
   const base = getMetaGraphApiBase();
   const url = `${base}/${wabaId}/subscribed_apps?access_token=${encodeURIComponent(userAccessToken)}`;
   const res = await fetch(url, { method: "POST" });
-  const json = (await res.json().catch(() => ({}))) as any;
+  const rawText = await res.text();
+  let json: any = {};
+  try {
+    json = rawText ? JSON.parse(rawText) : {};
+  } catch {
+    json = { _parseError: true as const, rawSnippet: rawText.slice(0, 2000) };
+  }
+  const truncated =
+    typeof rawText === "string" && rawText.length > 14_000 ? `${rawText.slice(0, 14_000)}…[truncated]` : rawText;
+  console.log(
+    `[WABA SubscribedApps POST] ${JSON.stringify({
+      wabaId,
+      httpStatus: res.status,
+      httpOk: res.ok,
+      rawResponse: truncated,
+      graphError: json?.error ?? null,
+    })}`
+  );
   if (!res.ok) {
     return { httpOk: false, graphSuccess: false, error: json?.error };
   }
@@ -1294,6 +1358,23 @@ export async function repairMetaWabaWebhookSubscription(userId: string): Promise
     failLog("failed", "skipped", null, "no_meta_access_token");
     return { success: false, verified: false, errorMessage: "No Meta access token." };
   }
+
+  const debugBefore = await fetchMetaUserTokenDebugSummary(token);
+  console.log(
+    `[WABA Repair] debug_token ${JSON.stringify({
+      phase: "before_subscribed_apps_post",
+      userId,
+      wabaId,
+      tokenType: debugBefore.type ?? null,
+      tokenScopes: debugBefore.scopes ?? null,
+      granular_scopes_summary: debugBefore.granular_scopes_summary ?? null,
+      app_id_from_token: debugBefore.app_id ?? null,
+      is_valid: debugBefore.is_valid ?? null,
+      expires_at: debugBefore.expires_at ?? null,
+      debug_ok: debugBefore.ok,
+      debug_error: debugBefore.error ?? null,
+    })}`
+  );
 
   const post = await postWabaSubscribedAppsDetailed(wabaId, token);
   let subscribeStatus = post.httpOk && post.graphSuccess ? "ok" : "failed";

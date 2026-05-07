@@ -17,6 +17,7 @@ import {
   repairMetaWabaWebhookSubscription,
   refreshWhatsappPhoneGraphDebugIfStale,
   buildWhatsAppInboundRoutingDiagnostics,
+  fetchMetaUserTokenDebugSummary,
 } from "../whatsappEmbeddedSignup";
 import { getAppOrigin } from "../urlOrigins";
 import { storage } from "../storage";
@@ -45,6 +46,18 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
     }
   });
 
+  function metaAppIdsEqualLocal(configured: string, candidate: string): boolean {
+    const a = configured.trim();
+    const b = candidate.trim();
+    if (!a || !b) return false;
+    if (a === b) return true;
+    try {
+      return BigInt(a) === BigInt(b);
+    } catch {
+      return false;
+    }
+  }
+
   function truncateJson(v: unknown, max = 12_000): string {
     try {
       const s = JSON.stringify(v);
@@ -56,6 +69,30 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
 
   function logCoexistenceDiagnostics(payload: Record<string, unknown>): void {
     console.log(`[CoexistenceDiagnostics] ${JSON.stringify(payload)}`);
+  }
+
+  async function probeWebhookMetaReachable(): Promise<{
+    webhookEndpointHealthy: boolean;
+    webhookProbeHttpStatus: number | null;
+    webhookProbeError?: string;
+  }> {
+    const origin = String(getAppOrigin() || "").replace(/\/+$/, "");
+    if (!origin) {
+      return {
+        webhookEndpointHealthy: false,
+        webhookProbeHttpStatus: null,
+        webhookProbeError: "APP_URL unset — cannot probe /api/webhook/meta",
+      };
+    }
+    try {
+      const url = `${origin}/api/webhook/meta?hub.mode=subscribe&hub.verify_token=__coexistence_probe__&hub.challenge=x`;
+      const r = await fetch(url, { method: "GET", redirect: "manual", signal: AbortSignal.timeout(10_000) });
+      const ok = r.status === 403 || r.status === 200;
+      return { webhookEndpointHealthy: ok, webhookProbeHttpStatus: r.status };
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      return { webhookEndpointHealthy: false, webhookProbeHttpStatus: null, webhookProbeError: msg };
+    }
   }
 
   app.get("/api/integrations/whatsapp/coexistence-diagnostics", async (req: Request, res: Response) => {
@@ -90,12 +127,29 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
       if (wabaId) {
         const url = `${graphBase}/${encodeURIComponent(wabaId)}/subscribed_apps?access_token=${encodeURIComponent(token)}`;
         const r = await fetch(url, { signal: AbortSignal.timeout(10_000) });
-        const body = (await r.json().catch(() => ({}))) as any;
+        const rawText = await r.text();
+        let body: any = {};
+        try {
+          body = rawText ? JSON.parse(rawText) : {};
+        } catch {
+          body = { _parseError: true as const, rawSnippet: rawText.slice(0, 2000) };
+        }
+        console.log(
+          `[WABA SubscribedApps GET] raw ${JSON.stringify({
+            wabaId,
+            httpStatus: r.status,
+            httpOk: r.ok,
+            rawResponse:
+              typeof rawText === "string" && rawText.length > 16_000
+                ? `${rawText.slice(0, 16_000)}…[truncated]`
+                : rawText,
+          })}`
+        );
         const rows = Array.isArray(body?.data) ? body.data : [];
         const appIds = rows
           .map((x: any) => String(x?.id ?? x?.app_id ?? "").trim())
           .filter((s: string) => s.length > 0);
-        const hasConfiguredAppId = appId ? appIds.includes(appId) : false;
+        const hasConfiguredAppId = appId ? appIds.some((rid) => metaAppIdsEqualLocal(appId, rid)) : false;
         subscribedApps = { httpOk: r.ok, status: r.status, body, appIds, hasConfiguredAppId };
       }
 
@@ -121,6 +175,28 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
       const graphPhoneStatus =
         (phoneGraph.ok ? (phoneGraph.data?.status as unknown) : null) ?? null;
 
+      const debugToken = await fetchMetaUserTokenDebugSummary(token);
+      const webhookProbe = await probeWebhookMetaReachable();
+
+      const phoneStatusStr =
+        phoneGraph.ok && phoneGraph.data?.status != null ? String(phoneGraph.data.status) : null;
+      const codeVerificationStr =
+        phoneGraph.ok && phoneGraph.data?.code_verification_status != null
+          ? String(phoneGraph.data.code_verification_status)
+          : null;
+      const platformTypeStr =
+        phoneGraph.ok && phoneGraph.data?.platform_type != null ? String(phoneGraph.data.platform_type) : null;
+      const qualityRatingStr =
+        phoneGraph.ok && phoneGraph.data?.quality_rating != null ? String(phoneGraph.data.quality_rating) : null;
+      const nameStatusStr =
+        phoneGraph.ok && phoneGraph.data?.name_status != null ? String(phoneGraph.data.name_status) : null;
+      const displayPhoneStr =
+        phoneGraph.ok && phoneGraph.data?.display_phone_number != null
+          ? String(phoneGraph.data.display_phone_number)
+          : null;
+      const verifiedNameStr =
+        phoneGraph.ok && phoneGraph.data?.verified_name != null ? String(phoneGraph.data.verified_name) : null;
+
       // We cannot guarantee Graph exposes “routing” explicitly; provide best-effort inference.
       let inboundWebhookExpectedByGraph: "yes" | "no" | "unknown" = "unknown";
       const reasons: string[] = [];
@@ -143,7 +219,72 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
         inboundWebhookExpectedByGraph = "unknown";
       }
 
+      let blockerReason = "";
+      if (wabaId && !subscribedApps.httpOk) {
+        blockerReason =
+          "GET /{waba-id}/subscribed_apps failed — token may lack whatsapp_business_management or WABA id wrong. See wabaSubscribedApps.error.";
+      } else if (!webhookProbe.webhookEndpointHealthy) {
+        blockerReason =
+          webhookProbe.webhookProbeError ||
+          `Railway/app URL not reachable for GET /api/webhook/meta (probe HTTP ${webhookProbe.webhookProbeHttpStatus ?? "n/a"})`;
+      } else if (appId && debugToken.app_id && !metaAppIdsEqualLocal(appId, debugToken.app_id)) {
+        blockerReason =
+          `B) Access token is for app_id ${debugToken.app_id} but META_APP_ID is ${appId} — OAuth/wrong app or env mismatch.`;
+      } else if (appId && subscribedApps.httpOk && !subscribedApps.hasConfiguredAppId) {
+        blockerReason =
+          "A) Meta App ID " +
+          appId +
+          " is not listed on GET /{waba-id}/subscribed_apps — subscribe the app to this WABA (Repair button POST).";
+      } else if (!debugToken.ok || debugToken.is_valid === false) {
+        blockerReason =
+          "B) User access token failed debug_token validation or is_valid=false — reconnect OAuth / check scopes.";
+      } else if (
+        phoneGraph.ok &&
+        (String(graphPhoneStatus || "").toUpperCase() === "DISCONNECTED" ||
+          String(graphCodeVerificationStatus || "").toUpperCase() === "NOT_VERIFIED")
+      ) {
+        blockerReason =
+          "C) Phone Cloud API shows DISCONNECTED or code_verification_status NOT_VERIFIED — customer messages may stay in WhatsApp Business app.";
+      } else if (!connectionSavedAsCoexistence && reasons.some((r) => r.includes("coexistence"))) {
+        blockerReason = "D) Connection not saved as coexistence — provisioning route may differ.";
+      } else if (!reasons.length && webhookProbe.webhookEndpointHealthy && subscribedApps.hasConfiguredAppId) {
+        blockerReason =
+          "No definitive Graph blocker. If Railway still sees zero POST /api/webhook/meta for WhatsApp, check Meta App Dashboard WhatsApp product webhook fields (messages), phone registration, or coexistence onboarding delay.";
+      } else {
+        blockerReason = reasons[0] || "Review reasons[] and Meta Business Manager.";
+      }
+
+      const routingLikelyActive =
+        webhookProbe.webhookEndpointHealthy &&
+        !!(appId && subscribedApps.hasConfiguredAppId) &&
+        debugToken.ok !== false &&
+        debugToken.is_valid !== false &&
+        (!phoneGraph.ok ||
+          (String(graphPhoneStatus || "").toUpperCase() !== "DISCONNECTED" &&
+            String(graphCodeVerificationStatus || "").toUpperCase() !== "NOT_VERIFIED")) &&
+        wabaPhones.phoneUnderWaba;
+
       const payload = {
+        /** Flat summary for operators */
+        wabaId: wabaId || null,
+        phoneNumberId: phoneNumberId || null,
+        appIdExpected: appId || null,
+        subscribedApps: subscribedApps.httpOk ? subscribedApps.body : null,
+        configuredAppIdPresent: subscribedApps.hasConfiguredAppId,
+        phoneStatus: phoneStatusStr,
+        codeVerificationStatus: codeVerificationStr,
+        platformType: platformTypeStr,
+        qualityRating: qualityRatingStr,
+        nameStatus: nameStatusStr,
+        displayPhoneNumber: displayPhoneStr,
+        verifiedName: verifiedNameStr,
+        webhookEndpointHealthy: webhookProbe.webhookEndpointHealthy,
+        webhookProbeHttpStatus: webhookProbe.webhookProbeHttpStatus,
+        webhookProbeError: webhookProbe.webhookProbeError ?? null,
+        routingLikelyActive,
+        blockerReason,
+        debugToken,
+        tokenAppIdFromDebug: debugToken.app_id ?? null,
         connectionSavedAsCoexistence,
         activeProvider: base.activeProvider,
         meta: {
@@ -617,6 +758,14 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
     try {
       if (!req.user) return res.status(401).json({ error: "Unauthorized" });
       const result = await repairMetaWabaWebhookSubscription(req.user.id);
+      console.log(
+        `[WABA Repair] endpoint_response ${JSON.stringify({
+          userId: req.user.id,
+          verified: result.verified,
+          success: result.success,
+          errorMessage: result.errorMessage ?? null,
+        })}`
+      );
       if (!result.success && result.errorMessage?.includes("not the active")) {
         return res.status(400).json({
           success: false,

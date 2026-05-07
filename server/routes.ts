@@ -172,6 +172,55 @@ export const AGREEMENT_VERSIONS = {
   salesperson_commission: "2026-01-26",
 } as const;
 
+/** Safe webhook payload summary for Railway logs — no secrets. */
+function summarizeMetaWebhookInbound(body: unknown): {
+  object: string | null;
+  entryIds: string[];
+  changesFields: string[];
+  phoneNumberIdFromPayload: string | null;
+} {
+  const b = body as Record<string, unknown> | null | undefined;
+  const object =
+    typeof b?.object === "string"
+      ? b.object
+      : b?.object != null && (typeof b.object === "number" || typeof b.object === "bigint")
+        ? String(b.object)
+        : null;
+  const entries = Array.isArray(b?.entry) ? (b!.entry as unknown[]) : [];
+  const entryIds = entries
+    .map((e) => {
+      const ent = e as Record<string, unknown> | undefined;
+      return ent?.id != null ? String(ent.id) : "";
+    })
+    .filter((s) => s.length > 0);
+  const changesFields: string[] = [];
+  let phoneNumberIdFromPayload: string | null = null;
+  for (const e of entries) {
+    const ent = e as Record<string, unknown>;
+    const changes = Array.isArray(ent?.changes) ? (ent.changes as unknown[]) : [];
+    for (const ch of changes) {
+      const c = ch as Record<string, unknown>;
+      if (c?.field) changesFields.push(String(c.field));
+      const value = c?.value as Record<string, unknown> | undefined;
+      const meta = value?.metadata as Record<string, unknown> | undefined;
+      const fromMeta = meta?.phone_number_id;
+      const fromMsgs =
+        Array.isArray(value?.messages) && (value!.messages as unknown[]).length > 0
+          ? (((value!.messages as unknown[])[0] as Record<string, unknown>)?.metadata as Record<string, unknown>)
+              ?.phone_number_id
+          : undefined;
+      const pid = fromMeta ?? fromMsgs ?? null;
+      if (pid != null && !phoneNumberIdFromPayload) phoneNumberIdFromPayload = String(pid);
+    }
+  }
+  return {
+    object,
+    entryIds,
+    changesFields: [...new Set(changesFields)],
+    phoneNumberIdFromPayload,
+  };
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
@@ -2299,6 +2348,30 @@ export async function registerRoutes(
       devLog(`[Meta Webhook] ===== INBOUND WEBHOOK RECEIVED at ${webhookTimestamp} =====`);
       devLog(`[Meta Webhook] Headers: x-hub-signature-256=${req.headers["x-hub-signature-256"] ? "present" : "MISSING"}, content-type=${req.headers["content-type"]}`);
       devLog(`[Meta Webhook] Raw payload preview: ${JSON.stringify(req.body).substring(0, 800)}`);
+
+      const inboundPreview = summarizeMetaWebhookInbound(req.body);
+      let resolvedUserId: string | null = null;
+      if (inboundPreview.phoneNumberIdFromPayload) {
+        try {
+          const u = await findUserByMetaPhoneNumberId(inboundPreview.phoneNumberIdFromPayload);
+          resolvedUserId = u?.id ?? null;
+        } catch {
+          resolvedUserId = null;
+        }
+      }
+      console.log(
+        `[Meta Webhook Inbound] ${JSON.stringify({
+          ts: webhookTimestamp,
+          object: inboundPreview.object,
+          entryIds: inboundPreview.entryIds,
+          changesFields: inboundPreview.changesFields,
+          phoneNumberIdFromPayload: inboundPreview.phoneNumberIdFromPayload,
+          resolvedUserId,
+          signatureHeaderPresent: !!req.headers["x-hub-signature-256"],
+          messagingEventCount: messagingEventTotal,
+          entryCount: entryList.length,
+        })}`
+      );
 
       // Environment mode — drives strict vs. permissive behaviour throughout this handler
       const isProduction = process.env.NODE_ENV === "production";
