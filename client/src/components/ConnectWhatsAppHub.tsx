@@ -31,6 +31,7 @@ const META_TEST_NUMBER_HELP =
 interface MetaConfigResponse {
   embeddedSignupEnabled: boolean;
   coexistenceEnabled: boolean;
+  coexistenceFeatureFlagSet?: boolean;
   metaConfigured: boolean;
   appId: string | null;
   graphApiVersion: string;
@@ -73,6 +74,16 @@ interface WhatsappStatusResponse {
   whatsappConnectedReason: "twilio" | "meta" | "none";
   /** Server: Meta rows exist but `whatsapp_provider` is still twilio */
   metaPersistedButTwilioSelected?: boolean;
+  coexistenceEnabled?: boolean;
+  coexistenceConfigId?: string | null;
+  coexistenceFeatureFlagSet?: boolean;
+  inboundRouting?: {
+    summary: string;
+    customerMessageDelivery: string;
+    detail: string;
+    coexistenceReconnectRecommended: boolean;
+  };
+  phoneGraphSnapshot?: Record<string, unknown> | null;
   meta: {
     connected: boolean;
     phoneNumberId: string | null;
@@ -94,6 +105,7 @@ interface WhatsappStatusResponse {
     webhookHealth?: string;
     webhookUrl: string;
     webhookVerifyToken: string | null;
+    connectionUsedCoexistenceFlow?: boolean;
   };
   twilio: {
     connected: boolean;
@@ -292,6 +304,16 @@ export function ConnectWhatsAppHub({
                   <span className="font-semibold">Legacy Meta connection</span> — credentials were entered manually. You can upgrade to Embedded Signup anytime: disconnect first, then use &quot;Continue with Meta&quot;.
                 </p>
               )}
+              {status?.inboundRouting?.coexistenceReconnectRecommended && !meta?.connectionUsedCoexistenceFlow && (
+                <p className="text-xs text-amber-900 mt-2 border border-amber-200 rounded-md px-2 py-1.5 bg-amber-50/90">
+                  <span className="font-semibold">Business App vs inbox:</span>{" "}
+                  If customer messages open only in the WhatsApp Business app and never reach WhachatCRM, Meta is likely routing those chats to the phone only.
+                  Add{" "}
+                  <code className="text-[10px] bg-amber-100/80 px-1 rounded">META_WHATSAPP_COEXISTENCE_CONFIG_ID</code>{" "}
+                  in Railway (coexistence Embedded Signup config from Meta), redeploy, disconnect Meta here, then reconnect using{" "}
+                  <span className="font-medium">&quot;existing WhatsApp Business App number&quot;</span> so inbound webhooks receive conversations.
+                </p>
+              )}
               <dl className="mt-2 space-y-1.5 text-xs text-gray-700">
                 <div className="flex justify-between gap-2">
                   <dt className="text-gray-500 shrink-0">Display number</dt>
@@ -370,6 +392,23 @@ export function ConnectWhatsAppHub({
                       <dd className="font-medium capitalize">{meta?.connectionType?.replace(/_/g, " ") || "—"}</dd>
                     </div>
                     <div className="flex justify-between gap-2">
+                      <dt className="text-gray-500">Coexistence onboarding</dt>
+                      <dd className="font-medium">
+                        {meta?.connectionUsedCoexistenceFlow ? "Yes (Business App + Cloud API)" : "No (standard embedded / manual)"}
+                      </dd>
+                    </div>
+                    {status?.inboundRouting && (
+                      <div className="pt-1 mt-1 border-t border-slate-100 space-y-1">
+                        <div className="flex justify-between gap-2">
+                          <dt className="text-gray-500">Inbound routing (diag.)</dt>
+                          <dd className="font-medium text-right text-[10px] max-w-[58%]">
+                            {status.inboundRouting.customerMessageDelivery.replace(/_/g, " ")}
+                          </dd>
+                        </div>
+                        <p className="text-[10px] text-gray-600 leading-snug">{status.inboundRouting.detail}</p>
+                      </div>
+                    )}
+                    <div className="flex justify-between gap-2">
                       <dt className="text-gray-500">Callback URL</dt>
                       <dd className="font-mono text-[10px] truncate max-w-[55%] text-right" title={meta?.webhookUrl}>
                         {meta?.webhookUrl || "—"}
@@ -414,6 +453,12 @@ export function ConnectWhatsAppHub({
               <p className="text-[11px] text-gray-500 mt-0.5">
                 Choose how you want to connect. Twilio stays available as an alternate provider.
               </p>
+              {cfg?.coexistenceEnabled && (
+                <p className="text-[11px] text-blue-800 mt-2 rounded-md border border-blue-100 bg-blue-50/80 px-2 py-1.5">
+                  Already chatting with customers in the <span className="font-medium">WhatsApp Business</span> app? Use{" "}
+                  <span className="font-semibold">option B</span> so Meta can route messages to WhachatCRM and your phone together (coexistence).
+                </p>
+              )}
             </div>
             <div className="p-3 space-y-3">
               <button
@@ -468,7 +513,9 @@ export function ConnectWhatsAppHub({
                   <div>
                     <p className="text-sm font-semibold text-gray-900">B) Use existing WhatsApp Business App number</p>
                     <p className="text-[11px] text-gray-600 mt-0.5">
-                      Coexistence path where Meta supports it — keep the Business app and add Cloud API.
+                      Keep using your WhatsApp Business App while WhachatCRM connects to Cloud API. Requires a separate coexistence Embedded Signup configuration in Meta (
+                      <code className="text-[10px] bg-gray-100 px-1 rounded">META_WHATSAPP_COEXISTENCE_CONFIG_ID</code>
+                      ).
                     </p>
                   </div>
                 </div>

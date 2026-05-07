@@ -124,6 +124,56 @@ export async function verifyMetaConnection(userId: string): Promise<boolean> {
   }
 }
 
+/** Best-effort Graph snapshot for diagnostics (coexistence / routing). Retries with fewer fields if Meta rejects unknown fields. */
+export async function fetchMetaWhatsAppPhoneNumberGraphSnapshot(
+  accessToken: string,
+  phoneNumberId: string
+): Promise<{
+  ok: boolean;
+  fieldsRequested: string;
+  data?: Record<string, unknown>;
+  httpStatus?: number;
+  error?: { message?: string; code?: number };
+}> {
+  const base = getMetaGraphApiBase();
+  const fieldSets = [
+    "id,display_phone_number,verified_name,quality_rating,code_verification_status,messaging_limit_tier,name_status,throughput",
+    "id,display_phone_number,verified_name,quality_rating,code_verification_status",
+    "id,display_phone_number,verified_name,quality_rating",
+  ];
+  for (const fields of fieldSets) {
+    try {
+      const url = `${base}/${encodeURIComponent(phoneNumberId)}?fields=${encodeURIComponent(fields)}&access_token=${encodeURIComponent(accessToken)}`;
+      const response = await fetch(url, { signal: AbortSignal.timeout(8000) });
+      const json = (await response.json().catch(() => ({}))) as {
+        error?: { message?: string; code?: number };
+      } & Record<string, unknown>;
+      if (response.ok && json && !json.error) {
+        const { error: _e, ...rest } = json;
+        return { ok: true, fieldsRequested: fields, data: rest as Record<string, unknown>, httpStatus: response.status };
+      }
+      const errObj = json?.error;
+      if (errObj && fieldSets.indexOf(fields) < fieldSets.length - 1) {
+        continue;
+      }
+      return {
+        ok: false,
+        fieldsRequested: fields,
+        httpStatus: response.status,
+        error: errObj ? { message: errObj.message, code: errObj.code } : { message: "Unknown Graph error" },
+      };
+    } catch (e: any) {
+      if (fieldSets.indexOf(fields) < fieldSets.length - 1) continue;
+      return {
+        ok: false,
+        fieldsRequested: fields,
+        error: { message: e?.message || "fetch_failed" },
+      };
+    }
+  }
+  return { ok: false, fieldsRequested: fieldSets[0]!, error: { message: "exhausted_field_retries" } };
+}
+
 export async function validateMetaCredentials(credentials: MetaCredentials): Promise<{ valid: boolean; error?: string; phoneNumber?: string }> {
   try {
     const response = await fetch(

@@ -15,6 +15,8 @@ import {
   verifyWhatsappEmbeddedSignupMigration,
   recordWhatsappMetaRedirectCallbackDebug,
   repairMetaWabaWebhookSubscription,
+  refreshWhatsappPhoneGraphDebugIfStale,
+  buildWhatsAppInboundRoutingDiagnostics,
 } from "../whatsappEmbeddedSignup";
 import { getAppOrigin } from "../urlOrigins";
 import { storage } from "../storage";
@@ -333,10 +335,21 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
     try {
       if (!req.user) return res.status(401).json({ error: "Unauthorized" });
       await applyMetaTokenExpiryAttention(req.user.id);
+      await refreshWhatsappPhoneGraphDebugIfStale(req.user.id);
       const userAfter = await storage.getUserForSession(req.user.id);
       if (!userAfter) return res.status(404).json({ error: "User not found" });
 
       const base = await getProviderStatus(req.user.id);
+      const coexistenceCfg = getWhatsappMetaPublicConfig();
+      const oauthDbg =
+        userAfter.metaLastOAuthDebug && typeof userAfter.metaLastOAuthDebug === "object"
+          ? (userAfter.metaLastOAuthDebug as Record<string, unknown>)
+          : null;
+      const phoneGraphSnapshot =
+        oauthDbg?.phoneGraphSnapshot && typeof oauthDbg.phoneGraphSnapshot === "object"
+          ? (oauthDbg.phoneGraphSnapshot as Record<string, unknown>)
+          : null;
+
       const webhookBaseUrl =
         process.env.APP_URL || `https://${process.env.REPLIT_DOMAINS?.split(",")[0]}`;
 
@@ -350,10 +363,23 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
         verifiedName: userAfter.metaVerifiedName,
       });
 
+      const inboundRouting = buildWhatsAppInboundRoutingDiagnostics({
+        metaConnected: !!userAfter.metaConnected,
+        activeProvider: base.activeProvider,
+        metaConnectionType: userAfter.metaConnectionType ?? null,
+        coexistenceServerConfigured: coexistenceCfg.coexistenceEnabled,
+        webhookSubscribed: !!userAfter.metaWebhookSubscribed,
+      });
+
       res.json({
         activeProvider: base.activeProvider,
         whatsappConnectedReason: base.whatsappConnectedReason,
         metaPersistedButTwilioSelected: !!(userAfter.metaConnected && userAfter.whatsappProvider !== "meta"),
+        coexistenceEnabled: coexistenceCfg.coexistenceEnabled,
+        coexistenceConfigId: coexistenceCfg.coexistenceConfigId,
+        coexistenceFeatureFlagSet: coexistenceCfg.coexistenceFeatureFlagSet,
+        inboundRouting,
+        phoneGraphSnapshot,
         twilio: {
           ...base.twilio,
           providerLabel: "Twilio WhatsApp",
@@ -385,6 +411,7 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
           webhookSignatureHealth: userAfter.metaConnected ? (webhookLikelyOk ? "ok" : "needs_app_secret") : "n/a",
           /** @deprecated Use webhookSignatureHealth — kept for older clients; same value. */
           webhookHealth: userAfter.metaConnected ? (webhookLikelyOk ? "ok" : "needs_app_secret") : "n/a",
+          connectionUsedCoexistenceFlow: userAfter.metaConnectionType === "coexistence",
         },
         webhookCallbackUrl: `${String(webhookBaseUrl).replace(/\/+$/, "")}/api/webhook/meta`,
       });

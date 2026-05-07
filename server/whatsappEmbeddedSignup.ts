@@ -26,6 +26,7 @@ import {
   decryptCredential,
   isEncrypted,
   getMetaAccessToken,
+  fetchMetaWhatsAppPhoneNumberGraphSnapshot,
 } from "./userMeta";
 import { classifyMetaWhatsAppPhone, type MetaWhatsAppPhoneKind } from "./metaWhatsAppPhoneKind";
 import {
@@ -111,13 +112,20 @@ export function getWhatsappMetaRedirectUri(): string {
 
 export interface WhatsappMetaPublicConfig {
   embeddedSignupEnabled: boolean;
+  /**
+   * True when coexistence onboarding can start: Embedded Signup is enabled and
+   * `META_WHATSAPP_COEXISTENCE_CONFIG_ID` is set (separate Meta Embedded Signup configuration for Business App coexistence).
+   */
   coexistenceEnabled: boolean;
+  /** Optional legacy flag — coexistence no longer requires this when coexistence config ID is set. */
+  coexistenceFeatureFlagSet: boolean;
   metaConfigured: boolean;
   /** Safe client-only fields */
   appId: string | null;
   graphApiVersion: string;
   redirectUri: string;
   embeddedSignupConfigId: string | null;
+  /** Raw env value when present — same ID must exist as a dedicated coexistence Embedded Signup config in Meta. */
   coexistenceConfigId: string | null;
   missingEnvHints: string[];
 }
@@ -147,6 +155,12 @@ export function logWhatsappEmbeddedSignupStartupWarnings(): void {
       "[WhatsApp Embedded Signup] WHATSAPP_COEXISTENCE_ENABLED is on but META_WHATSAPP_COEXISTENCE_CONFIG_ID is unset — coexistence onboarding stays disabled (do not fall back to the main Embedded Signup config)."
     );
   }
+  const coexistenceId = process.env.META_WHATSAPP_COEXISTENCE_CONFIG_ID?.trim();
+  if (coexistenceId && !embedded) {
+    console.warn(
+      "[WhatsApp Embedded Signup] META_WHATSAPP_COEXISTENCE_CONFIG_ID is set but WHATSAPP_EMBEDDED_SIGNUP_ENABLED is off — enable Embedded Signup base env vars so coexistence can run."
+    );
+  }
 }
 
 export function getWhatsappMetaPublicConfig(): WhatsappMetaPublicConfig {
@@ -168,20 +182,21 @@ export function getWhatsappMetaPublicConfig(): WhatsappMetaPublicConfig {
     embeddedFlag && !!process.env.META_APP_ID && !!process.env.META_APP_SECRET && hasConfigId;
 
   const coexistenceConfigOnly = process.env.META_WHATSAPP_COEXISTENCE_CONFIG_ID?.trim() || null;
-  const coexistenceEnabled =
-    coexistenceFlag && embeddedSignupEnabled && !!coexistenceConfigOnly;
+  /** Coexistence onboarding is available whenever the dedicated coexistence config ID exists and base Embedded Signup is enabled. */
+  const coexistenceEnabled = embeddedSignupEnabled && !!coexistenceConfigOnly;
 
   const graphRaw = process.env.META_GRAPH_API_VERSION || "v21.0";
 
   return {
     embeddedSignupEnabled,
     coexistenceEnabled,
+    coexistenceFeatureFlagSet: coexistenceFlag,
     metaConfigured: !!(process.env.META_APP_ID && process.env.META_APP_SECRET),
     appId: process.env.META_APP_ID || null,
     graphApiVersion: graphRaw.startsWith("v") ? graphRaw : `v${graphRaw}`,
     redirectUri: getWhatsappMetaRedirectUri(),
     embeddedSignupConfigId: process.env.META_WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID?.trim() || null,
-    coexistenceConfigId: coexistenceEnabled ? coexistenceConfigOnly : null,
+    coexistenceConfigId: coexistenceConfigOnly,
     missingEnvHints,
   };
 }
@@ -264,7 +279,7 @@ export async function startEmbeddedSignupSession(
   }
   if (flow === "coexistence" && !cfg.coexistenceEnabled) {
     throw new Error(
-      "WhatsApp coexistence onboarding is not enabled — set WHATSAPP_COEXISTENCE_ENABLED and META_WHATSAPP_COEXISTENCE_CONFIG_ID."
+      "WhatsApp coexistence onboarding is not enabled — set META_WHATSAPP_COEXISTENCE_CONFIG_ID (dedicated coexistence Embedded Signup configuration in Meta) and ensure WHATSAPP_EMBEDDED_SIGNUP_ENABLED + META_WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID are configured."
     );
   }
 
@@ -594,6 +609,98 @@ export async function mergeUserMetaOAuthDebug(
     await storage.updateUser(userId, { metaLastOAuthDebug: next as any });
   } catch (e: any) {
     console.warn("[WhatsApp Embedded Signup] could not persist metaLastOAuthDebug", e?.message || e);
+  }
+}
+
+const PHONE_GRAPH_DEBUG_TTL_MS = 15 * 60 * 1000;
+
+export type WhatsAppInboundRoutingSummary =
+  | "coexistence_flow"
+  | "standard_embedded_or_manual"
+  | "not_connected";
+
+/**
+ * Explains whether customer-originated messages are expected on POST /api/webhook/meta vs staying in the WhatsApp Business App.
+ * Coexistence Embedded Signup is required for “same number” Business App + Cloud API routing per Meta.
+ */
+export function buildWhatsAppInboundRoutingDiagnostics(input: {
+  metaConnected: boolean;
+  activeProvider: string;
+  metaConnectionType: string | null;
+  coexistenceServerConfigured: boolean;
+  webhookSubscribed: boolean;
+}): {
+  summary: WhatsAppInboundRoutingSummary;
+  customerMessageDelivery: "cloud_api_webhook_expected" | "whatsapp_business_app_may_be_primary" | "n_a";
+  detail: string;
+  coexistenceReconnectRecommended: boolean;
+} {
+  if (!input.metaConnected || input.activeProvider !== "meta") {
+    return {
+      summary: "not_connected",
+      customerMessageDelivery: "n_a",
+      detail: "Meta Cloud API is not the active WhatsApp provider.",
+      coexistenceReconnectRecommended: false,
+    };
+  }
+
+  const usedCoexistence = input.metaConnectionType === "coexistence";
+
+  if (usedCoexistence) {
+    return {
+      summary: "coexistence_flow",
+      customerMessageDelivery: "cloud_api_webhook_expected",
+      detail:
+        "Coexistence Embedded Signup was used for this connection. Meta should route compatible customer messages to your Cloud API webhook while you keep using the WhatsApp Business App.",
+      coexistenceReconnectRecommended: false,
+    };
+  }
+
+  const reconnect = input.webhookSubscribed && !usedCoexistence;
+
+  const envHint = input.coexistenceServerConfigured
+    ? "Disconnect Meta in Settings, then reconnect using the coexistence option (existing WhatsApp Business App number)."
+    : "Set META_WHATSAPP_COEXISTENCE_CONFIG_ID to a coexistence Embedded Signup configuration in Meta, redeploy, then disconnect and reconnect using the coexistence option.";
+
+  return {
+    summary: "standard_embedded_or_manual",
+    customerMessageDelivery: "whatsapp_business_app_may_be_primary",
+    detail:
+      "This workspace connected Cloud API without the coexistence Embedded Signup flow. If customers message you in the WhatsApp Business App and nothing POSTs to WhachatCRM, Meta is likely delivering those chats only to the mobile app until coexistence is completed. " +
+      envHint,
+    coexistenceReconnectRecommended: reconnect,
+  };
+}
+
+/** Periodically refreshes Graph fields for the saved phone number into meta_last_oauth_debug.phoneGraphSnapshot (no secrets). */
+export async function refreshWhatsappPhoneGraphDebugIfStale(userId: string): Promise<void> {
+  try {
+    const user = await storage.getUserForSession(userId);
+    if (!user?.metaConnected || !user.metaPhoneNumberId) return;
+
+    const oauthDbg =
+      user.metaLastOAuthDebug && typeof user.metaLastOAuthDebug === "object"
+        ? (user.metaLastOAuthDebug as Record<string, unknown>)
+        : {};
+    const prevSnap = oauthDbg.phoneGraphSnapshot as { fetchedAt?: string } | undefined;
+    if (prevSnap?.fetchedAt) {
+      const t = new Date(prevSnap.fetchedAt).getTime();
+      if (!Number.isNaN(t) && Date.now() - t < PHONE_GRAPH_DEBUG_TTL_MS) return;
+    }
+
+    const token = await getMetaAccessToken(userId);
+    if (!token) return;
+
+    const snap = await fetchMetaWhatsAppPhoneNumberGraphSnapshot(token, user.metaPhoneNumberId);
+    await mergeUserMetaOAuthDebug(userId, {
+      phoneGraphSnapshot: {
+        fetchedAt: new Date().toISOString(),
+        phoneNumberId: user.metaPhoneNumberId,
+        ...snap,
+      },
+    });
+  } catch (e: any) {
+    console.warn("[WhatsApp Embedded Signup] phoneGraphSnapshot refresh skipped:", e?.message || e);
   }
 }
 
@@ -1052,6 +1159,11 @@ export interface WhatsappConnectionDebugInfo {
   lastErrorMessage: string | null;
   /** Structured diagnostics from last OAuth attempt(s); excludes secrets/tokens. */
   lastOAuthDebug: Record<string, unknown> | null;
+  coexistenceServerConfigured: boolean;
+  coexistenceConfigId: string | null;
+  inboundRouting: ReturnType<typeof buildWhatsAppInboundRoutingDiagnostics>;
+  /** Last Graph snapshot for the saved phone number id (from meta_last_oauth_debug.phoneGraphSnapshot). */
+  phoneGraphSnapshot: Record<string, unknown> | null;
 }
 
 /** Safe diagnostics — no tokens or secrets. */
@@ -1061,6 +1173,11 @@ export async function getWhatsappConnectionDebug(userId: string): Promise<Whatsa
   const oauthDbg =
     user.metaLastOAuthDebug && typeof user.metaLastOAuthDebug === "object"
       ? (user.metaLastOAuthDebug as Record<string, unknown>)
+      : null;
+  const coexistenceCfg = getWhatsappMetaPublicConfig();
+  const phoneGraphSnapshot =
+    oauthDbg?.phoneGraphSnapshot && typeof oauthDbg.phoneGraphSnapshot === "object"
+      ? (oauthDbg.phoneGraphSnapshot as Record<string, unknown>)
       : null;
   return {
     wabaId: user.metaBusinessAccountId ?? null,
@@ -1078,6 +1195,16 @@ export async function getWhatsappConnectionDebug(userId: string): Promise<Whatsa
       user.metaLastOAuthDebug && typeof user.metaLastOAuthDebug === "object"
         ? (user.metaLastOAuthDebug as Record<string, unknown>)
         : null,
+    coexistenceServerConfigured: coexistenceCfg.coexistenceEnabled,
+    coexistenceConfigId: coexistenceCfg.coexistenceConfigId,
+    inboundRouting: buildWhatsAppInboundRoutingDiagnostics({
+      metaConnected: !!user.metaConnected,
+      activeProvider: (user.whatsappProvider as string) || "twilio",
+      metaConnectionType: user.metaConnectionType ?? null,
+      coexistenceServerConfigured: coexistenceCfg.coexistenceEnabled,
+      webhookSubscribed: !!user.metaWebhookSubscribed,
+    }),
+    phoneGraphSnapshot,
   };
 }
 
