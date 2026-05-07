@@ -66,7 +66,9 @@ export interface UserLimits {
 
 class SubscriptionService {
   async getUserLimits(userId: string): Promise<UserLimits | null> {
-    let user = await storage.getUser(userId);
+    // IMPORTANT: use full user row so trials/entitlements resolve correctly.
+    // storage.getUser() is an auth-core minimal projection (no trial fields).
+    let user = await storage.getUserForSession(userId);
     if (!user) return null;
 
     user = await syncTrialExpiryIfNeeded(user);
@@ -292,7 +294,7 @@ class SubscriptionService {
       };
     }
 
-    const user = await storage.getUser(userId);
+    const user = await storage.getUserForSession(userId);
     if (!user) return { allowed: false, remaining: 0, limit: 0, used: 0, planName: "free" };
     
     await storage.updateUser(userId, { 
@@ -315,7 +317,7 @@ class SubscriptionService {
     billingInterval: "monthly" | "yearly" = "monthly",
     redirect?: StripeCheckoutRedirectOpts,
   ): Promise<{ url: string }> {
-    const user = await storage.getUser(userId);
+    const user = await storage.getUserForSession(userId);
     if (!user) throw new Error("User not found");
 
     const stripe = await getUncachableStripeClient();
@@ -383,7 +385,7 @@ class SubscriptionService {
     baseUrl: string,
     redirect?: StripeCheckoutRedirectOpts,
   ): Promise<{ url: string }> {
-    const user = await storage.getUser(userId);
+    const user = await storage.getUserForSession(userId);
     if (!user) throw new Error("User not found");
 
     const stripe = await getUncachableStripeClient();
@@ -444,7 +446,7 @@ class SubscriptionService {
     baseUrl: string,
     redirect?: StripeCheckoutRedirectOpts,
   ): Promise<{ url: string }> {
-    const user = await storage.getUser(userId);
+    const user = await storage.getUserForSession(userId);
     if (!user) throw new Error("User not found");
 
     if (getEffectivePlanForUser(user) !== "free") {
@@ -513,7 +515,7 @@ class SubscriptionService {
     baseUrl: string,
     redirect?: StripeCheckoutRedirectOpts,
   ): Promise<{ url: string }> {
-    const user = await storage.getUser(userId);
+    const user = await storage.getUserForSession(userId);
     if (!user) throw new Error("User not found");
 
     const limits = await this.getUserLimits(userId);
@@ -572,7 +574,7 @@ class SubscriptionService {
   }
 
   async createPortalSession(userId: string, returnUrl: string): Promise<{ url: string }> {
-    const user = await storage.getUser(userId);
+    const user = await storage.getUserForSession(userId);
     if (!user) throw new Error("User not found");
 
     const stripe = await getUncachableStripeClient();
@@ -633,7 +635,7 @@ class SubscriptionService {
   }
 
   async incrementConversationUsage(userId: string): Promise<void> {
-    const user = await storage.getUser(userId);
+    const user = await storage.getUserForSession(userId);
     if (!user) return;
 
     await storage.updateUser(userId, {

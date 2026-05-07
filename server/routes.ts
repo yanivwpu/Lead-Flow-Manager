@@ -2899,7 +2899,8 @@ export async function registerRoutes(
       }
 
       const limits = await subscriptionService.getUserLimits(req.user.id);
-      const user = await storage.getUser(req.user.id);
+      // IMPORTANT: use full user row for accurate trial/AI entitlement state.
+      const user = await storage.getUserForSession(req.user.id);
       const usersCount = await storage.getTeamMemberCount(req.user.id);
       const now = new Date();
 
@@ -2910,7 +2911,7 @@ export async function registerRoutes(
       const showTrialUrgency =
         !!limits?.isInTrial && !paidProOrAi && (user?.trialPlan || "pro_ai") === "pro_ai";
 
-      res.json({
+      const response = {
         limits: limits
           ? {
               ...limits,
@@ -2949,7 +2950,21 @@ export async function registerRoutes(
               showTrialUrgency,
             }
           : null,
-      });
+      } as const;
+
+      console.log(
+        `[SubscriptionResponse] ${JSON.stringify({
+          userId: req.user.id,
+          plan: response?.limits?.plan ?? "free",
+          effectivePlan: response?.subscription?.effectivePlan ?? response?.limits?.plan ?? "free",
+          trialActive: !!response?.limits?.isInTrial,
+          trialEndsAt: response?.subscription?.trialEndsAt ?? null,
+          hasAIBrainAddon: !!response?.limits?.hasAIBrainAddon,
+          aiEnabled: !!response?.limits?.effectiveHasAIBrain,
+        })}`,
+      );
+
+      res.json(response);
     } catch (error) {
       console.error("Error fetching subscription:", error);
       res.status(500).json({ error: "Failed to fetch subscription" });
@@ -7861,30 +7876,24 @@ export async function registerRoutes(
     userId: string,
     mode?: 'suggest' | 'auto'
   ): Promise<{ hasAccess: boolean; reason?: string; plan: string; monthlyLimit: number; hasAIBrain: boolean }> => {
-    const user = await storage.getUser(userId);
-    if (!user) return { hasAccess: false, reason: "User not found", plan: 'free', monthlyLimit: 0, hasAIBrain: false };
-
-    const now = new Date();
-    const isInTrial  = user.trialEndsAt ? new Date(user.trialEndsAt) > now : false;
-    const isDemoUser = user.email === 'demo@whachat.com';
-    const storedPlan = user.subscriptionPlan || 'free';
-    const effectivePlan = (isInTrial || isDemoUser) ? 'pro' : storedPlan;
-
-    // Check AI Brain add-on (trial and demo always have it)
-    let hasAIBrain = false;
-    if (isInTrial || isDemoUser) {
-      hasAIBrain = true;
-    } else if (user.stripeCustomerId) {
-      try {
-        const limits = await subscriptionService.getUserLimits(userId);
-        hasAIBrain = limits?.hasAIBrainAddon ?? false;
-      } catch { hasAIBrain = false; }
+    // Source of truth: subscriptionService.getUserLimits() (paid + override + trial).
+    const limits = await subscriptionService.getUserLimits(userId);
+    if (!limits) {
+      return {
+        hasAccess: false,
+        reason: "User not found",
+        plan: "free",
+        monthlyLimit: 0,
+        hasAIBrain: false,
+      };
     }
 
-    const baseLimit  = AI_MONTHLY_CREDITS[effectivePlan] ?? 0;
-    const monthlyLimit = hasAIBrain && effectivePlan === 'pro'
-      ? baseLimit + AI_BRAIN_ADDON_BONUS
-      : baseLimit;
+    const effectivePlan = limits.plan || "free";
+    const hasAIBrain = !!limits.effectiveHasAIBrain;
+
+    const baseLimit = AI_MONTHLY_CREDITS[effectivePlan] ?? 0;
+    const monthlyLimit =
+      hasAIBrain && effectivePlan === "pro" ? baseLimit + AI_BRAIN_ADDON_BONUS : baseLimit;
 
     // Free users: no AI access
     if (effectivePlan === 'free') {

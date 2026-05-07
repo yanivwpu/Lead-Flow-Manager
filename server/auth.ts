@@ -319,6 +319,16 @@ export function registerAuthRoutes(app: Express) {
       const trialEndsAt = new Date(trialStartedAt);
       trialEndsAt.setDate(trialEndsAt.getDate() + 14);
 
+      console.log(
+        `[SignupCreateUser] ${JSON.stringify({
+          phase: "before_create",
+          email: normalizeEmailForAuth(email),
+          trialEndsAt,
+          subscriptionPlan: "free",
+          trialPlan: "pro_ai",
+        })}`,
+      );
+
       const user = await storage.createUser({
         name,
         email: normalizeEmailForAuth(email),
@@ -328,6 +338,17 @@ export function registerAuthRoutes(app: Express) {
         trialStatus: "active",
         trialPlan: "pro_ai",
       });
+
+      console.log(
+        `[SignupCreateUser] ${JSON.stringify({
+          phase: "after_create",
+          userId: user?.id ?? null,
+          email: user?.email ?? normalizeEmailForAuth(email),
+          trialEndsAt: user?.trialEndsAt ?? null,
+          subscriptionPlan: user?.subscriptionPlan ?? null,
+          trialPlan: user?.trialPlan ?? null,
+        })}`,
+      );
 
       // Check for referral attribution (from session or 90-day cookie)
       let referralPartnerId = (req.session as any)?.referralPartnerId;
