@@ -1101,6 +1101,12 @@ export function ChannelSettings() {
                 }
                 Disconnect {manageFbIgChannel === 'facebook' ? 'Facebook Messenger' : 'Instagram'}
               </Button>
+              {!manageIntegration && (
+                <p className="text-[11px] text-gray-500 text-center">
+                  Disconnect is temporarily unavailable because the integration record is missing in <code className="text-[10px] bg-gray-100 px-1 rounded">/api/integrations</code>.
+                  Refresh the page and try again. If it persists, this workspace may be missing the stored Meta integration row.
+                </p>
+              )}
             </div>
           </div>
         </DialogContent>

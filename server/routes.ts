@@ -4186,10 +4186,20 @@ export async function registerRoutes(
         return res.status(400).json({ error: "channel must be facebook or instagram" });
       }
       const { buildMetaOAuthUrl } = await import("./metaOAuth");
-      const appUrl = process.env.APP_URL || `https://${(process.env.REPLIT_DOMAINS || "").split(",")[0]}`;
-      const redirectUri = `${appUrl}/api/integrations/meta/callback`;
+      const appUrl = getAppOrigin().replace(/\/+$/, "");
+      // Dedicated stable callbacks per channel (must be in Meta “Valid OAuth Redirect URIs”)
+      const redirectUri =
+        channel === "facebook"
+          ? `${appUrl}/api/integrations/facebook/callback`
+          : `${appUrl}/api/integrations/instagram/callback`;
       const stateToken = crypto.randomBytes(16).toString("hex");
-      (req.session as any).metaOAuthState = { stateToken, channel, userId: req.user.id };
+      (req.session as any).metaOAuthState = { stateToken, channel, userId: req.user.id, redirectUri };
+      console.log("[Meta OAuth] auth-url", {
+        channel,
+        redirectUri,
+        host: req.get("host"),
+        origin: req.get("origin") || req.get("referer") || null,
+      });
       const url = buildMetaOAuthUrl(`${stateToken}:${channel}`, redirectUri, channel as "facebook" | "instagram");
       res.json({ url, redirectUri });
     } catch (err: any) {
@@ -4198,10 +4208,7 @@ export async function registerRoutes(
     }
   });
 
-  // GET /api/integrations/meta/callback?code=...&state=...
-  // Handles the OAuth redirect from Meta. Exchanges code, fetches pages,
-  // enriches with IG data, stores result in session, redirects to app.
-  app.get("/api/integrations/meta/callback", async (req, res) => {
+  async function handleMetaOAuthCallback(req: any, res: any, callbackHint: "facebook" | "instagram" | "legacy_meta") {
     try {
       const { code, state, error: oauthError } = req.query as Record<string, string>;
 
@@ -4213,18 +4220,31 @@ export async function registerRoutes(
       }
 
       const sessionState = (req.session as any).metaOAuthState as
-        | { stateToken: string; channel: string; userId: string }
+        | { stateToken: string; channel: string; userId: string; redirectUri?: string }
         | undefined;
       const [stateToken, channel] = state.split(":");
       if (!sessionState || sessionState.stateToken !== stateToken) {
         return res.redirect(`/app/settings?meta_oauth=error&reason=invalid_state`);
       }
+      if (channel !== "facebook" && channel !== "instagram") {
+        return res.redirect(`/app/settings?meta_oauth=error&reason=invalid_channel`);
+      }
 
       const { exchangeCodeForToken, exchangeForLongLivedToken, fetchUserPages, enrichWithInstagramData } =
         await import("./metaOAuth");
 
-      const appUrl = process.env.APP_URL || `https://${(process.env.REPLIT_DOMAINS || "").split(",")[0]}`;
-      const redirectUri = `${appUrl}/api/integrations/meta/callback`;
+      const redirectUri =
+        typeof sessionState.redirectUri === "string" && sessionState.redirectUri.length > 0
+          ? sessionState.redirectUri
+          : `${getAppOrigin().replace(/\/+$/, "")}/api/integrations/${channel}/callback`;
+
+      console.log("[Meta OAuth] callback", {
+        callbackHint,
+        channel,
+        redirectUriUsed: redirectUri,
+        host: req.get("host"),
+        origin: req.get("origin") || req.get("referer") || null,
+      });
 
       const shortToken = await exchangeCodeForToken(code, redirectUri);
       const userAccessToken = await exchangeForLongLivedToken(shortToken);
@@ -4241,12 +4261,19 @@ export async function registerRoutes(
       delete (req.session as any).metaOAuthState;
 
       console.log(`[Meta OAuth] callback success for user ${sessionState.userId} — ${pages.length} page(s) fetched`);
-      res.redirect(`/app/settings?meta_oauth=ready&channel=${encodeURIComponent(channel)}`);
+      return res.redirect(`/app/settings?meta_oauth=ready&channel=${encodeURIComponent(channel)}`);
     } catch (err: any) {
       console.error("[Meta OAuth] callback error:", err);
-      res.redirect(`/app/settings?meta_oauth=error&reason=${encodeURIComponent(err.message || "unknown")}`);
+      return res.redirect(`/app/settings?meta_oauth=error&reason=${encodeURIComponent(err.message || "unknown")}`);
     }
-  });
+  }
+
+  // Dedicated stable callbacks (preferred)
+  app.get("/api/integrations/facebook/callback", (req, res) => handleMetaOAuthCallback(req, res, "facebook"));
+  app.get("/api/integrations/instagram/callback", (req, res) => handleMetaOAuthCallback(req, res, "instagram"));
+
+  // Legacy callback path (keep for older clients / old Meta app settings)
+  app.get("/api/integrations/meta/callback", (req, res) => handleMetaOAuthCallback(req, res, "legacy_meta"));
 
   // GET /api/integrations/meta/oauth-pages
   // Returns the pages stored in session after OAuth callback.
