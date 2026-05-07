@@ -38,6 +38,15 @@ function primaryHost(host: string | undefined): string {
   return host.split(":")[0].toLowerCase();
 }
 
+/**
+ * 301/302 cross-host redirects cause browsers to repeat the request as GET, dropping POST bodies
+ * (e.g. login). API routes must use 307 so method and body are preserved to APP_URL.
+ * @see https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/301
+ */
+function hostRedirectStatusForPathname(pathname: string): number {
+  return pathname.startsWith("/api") ? 307 : 301;
+}
+
 console.log("ENV CHECK:", {
   DATABASE_URL: !!process.env.DATABASE_URL,
   STRIPE_KEY: !!process.env.STRIPE_SECRET_KEY,
@@ -119,13 +128,13 @@ app.use((req, res, next) => {
 
   if (host === "whachatcrm.com") {
     if (isSaaSPathname(pathname)) {
-      return res.redirect(301, target);
+      return res.redirect(hostRedirectStatusForPathname(pathname), target);
     }
-    return res.redirect(301, `https://www.whachatcrm.com${req.originalUrl || req.url}`);
+    return res.redirect(hostRedirectStatusForPathname(pathname), `https://www.whachatcrm.com${req.originalUrl || req.url}`);
   }
 
   if (host === "www.whachatcrm.com" && isSaaSPathname(pathname)) {
-    return res.redirect(301, target);
+    return res.redirect(hostRedirectStatusForPathname(pathname), target);
   }
 
   next();
@@ -149,7 +158,8 @@ app.use((req, res, next) => {
   const proto = req.headers['x-forwarded-proto'];
   if (proto === 'http' && process.env.NODE_ENV === 'production') {
     const host = req.headers.host || '';
-    return res.redirect(301, `https://${host}${req.url}`);
+    const pathname = req.path || "/";
+    return res.redirect(hostRedirectStatusForPathname(pathname), `https://${host}${req.url}`);
   }
   next();
 });
