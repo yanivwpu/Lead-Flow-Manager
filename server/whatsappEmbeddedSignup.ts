@@ -27,6 +27,7 @@ import {
   isEncrypted,
   getMetaAccessToken,
   fetchMetaWhatsAppPhoneNumberGraphSnapshot,
+  fetchWhatsAppPhoneNumberParentWabaId,
 } from "./userMeta";
 import { classifyMetaWhatsAppPhone, type MetaWhatsAppPhoneKind } from "./metaWhatsAppPhoneKind";
 import {
@@ -298,6 +299,15 @@ export async function startEmbeddedSignupSession(
   });
 
   const configId = resolveEmbeddedSignupConfigId(flow);
+  if (flow === "coexistence") {
+    logCoexistenceDiagnostic({
+      phase: "session_start_redirect",
+      userId,
+      flow,
+      coexistenceUsesEnv: "META_WHATSAPP_COEXISTENCE_CONFIG_ID",
+      configId,
+    });
+  }
   const appId = process.env.META_APP_ID!;
   const graphRaw = process.env.META_GRAPH_API_VERSION || "v21.0";
   const graphApiVersion = graphRaw.startsWith("v") ? graphRaw : `v${graphRaw}`;
@@ -458,7 +468,232 @@ function buildWabaDiscoveryDetailPayload(choices: EnrichedWabaPhoneChoice[]) {
   };
 }
 
-async function fetchUserWabaChoices(accessToken: string): Promise<WabaPhoneChoice[]> {
+function logCoexistenceDiagnostic(payload: Record<string, unknown>): void {
+  console.log(`[CoexistenceOAuth] ${JSON.stringify(payload)}`);
+}
+
+function jsonTruncate(v: unknown, max = 12_000): string {
+  try {
+    const s = JSON.stringify(v);
+    return s.length > max ? `${s.slice(0, max)}…[truncated]` : s;
+  } catch {
+    return "[unserializable]";
+  }
+}
+
+/** Full Meta row subset so Option B failures can restore the prior working integration (no decrypted secrets in logs). */
+type PersistedMetaIntegrationSnapshot = {
+  hadMetaConnection: boolean;
+  whatsappProvider: string | null;
+  metaAccessToken: string | null;
+  metaPhoneNumberId: string | null;
+  metaBusinessAccountId: string | null;
+  metaAppSecret: string | null;
+  metaWebhookVerifyToken: string | null;
+  metaConnected: boolean;
+  metaConnectionType: string | null;
+  metaDisplayPhoneNumber: string | null;
+  metaVerifiedName: string | null;
+  metaWebhookSubscribed: boolean;
+  metaWebhookLastCheckedAt: Date | null;
+  metaIntegrationStatus: string | null;
+  metaTokenExpiresAt: Date | null;
+  metaLastErrorCode: string | null;
+  metaLastErrorMessage: string | null;
+};
+
+async function capturePersistedMetaSnapshot(userId: string): Promise<PersistedMetaIntegrationSnapshot | null> {
+  const u = await storage.getUserForSession(userId);
+  if (!u) return null;
+  return {
+    hadMetaConnection: !!u.metaConnected,
+    whatsappProvider: u.whatsappProvider ?? null,
+    metaAccessToken: u.metaAccessToken ?? null,
+    metaPhoneNumberId: u.metaPhoneNumberId ?? null,
+    metaBusinessAccountId: u.metaBusinessAccountId ?? null,
+    metaAppSecret: u.metaAppSecret ?? null,
+    metaWebhookVerifyToken: u.metaWebhookVerifyToken ?? null,
+    metaConnected: !!u.metaConnected,
+    metaConnectionType: u.metaConnectionType ?? null,
+    metaDisplayPhoneNumber: u.metaDisplayPhoneNumber ?? null,
+    metaVerifiedName: u.metaVerifiedName ?? null,
+    metaWebhookSubscribed: !!u.metaWebhookSubscribed,
+    metaWebhookLastCheckedAt: u.metaWebhookLastCheckedAt ?? null,
+    metaIntegrationStatus: u.metaIntegrationStatus ?? null,
+    metaTokenExpiresAt: u.metaTokenExpiresAt ?? null,
+    metaLastErrorCode: u.metaLastErrorCode ?? null,
+    metaLastErrorMessage: u.metaLastErrorMessage ?? null,
+  };
+}
+
+async function restorePersistedMetaSnapshot(userId: string, snap: PersistedMetaIntegrationSnapshot): Promise<void> {
+  if (!snap.hadMetaConnection) return;
+  await storage.updateUser(userId, {
+    metaAccessToken: snap.metaAccessToken,
+    metaPhoneNumberId: snap.metaPhoneNumberId,
+    metaBusinessAccountId: snap.metaBusinessAccountId,
+    metaAppSecret: snap.metaAppSecret,
+    metaWebhookVerifyToken: snap.metaWebhookVerifyToken,
+    metaConnected: snap.metaConnected,
+    whatsappProvider: (snap.whatsappProvider as any) || "twilio",
+    metaConnectionType: snap.metaConnectionType,
+    metaDisplayPhoneNumber: snap.metaDisplayPhoneNumber,
+    metaVerifiedName: snap.metaVerifiedName,
+    metaWebhookSubscribed: snap.metaWebhookSubscribed,
+    metaWebhookLastCheckedAt: snap.metaWebhookLastCheckedAt,
+    metaIntegrationStatus: snap.metaIntegrationStatus,
+    metaTokenExpiresAt: snap.metaTokenExpiresAt,
+    metaLastErrorCode: snap.metaLastErrorCode,
+    metaLastErrorMessage: snap.metaLastErrorMessage,
+  });
+}
+
+async function fetchWabaIdsFromUserTokenDebug(accessToken: string): Promise<{
+  wabaIds: string[];
+  rawTruncated: string;
+  httpOk: boolean;
+}> {
+  const base = getMetaGraphApiBase();
+  const appId = process.env.META_APP_ID;
+  const appSecret = process.env.META_APP_SECRET;
+  if (!appId || !appSecret) {
+    return { wabaIds: [], rawTruncated: "META_APP_ID/META_APP_SECRET unset", httpOk: false };
+  }
+  const url = `${base}/debug_token?input_token=${encodeURIComponent(accessToken)}&access_token=${encodeURIComponent(`${appId}|${appSecret}`)}`;
+  const res = await fetch(url, { signal: AbortSignal.timeout(10_000) });
+  const json = (await res.json().catch(() => ({}))) as any;
+  const rawTruncated = jsonTruncate(json, 14_000);
+  const wabaIds = new Set<string>();
+  const granular = json?.data?.granular_scopes;
+  if (Array.isArray(granular)) {
+    for (const g of granular) {
+      const scope = String(g?.scope || "");
+      const targets = g?.target_ids;
+      if (!Array.isArray(targets)) continue;
+      if (/whatsapp|business_management|waba/i.test(scope)) {
+        for (const t of targets) {
+          const id = normalizeMetaGraphIdLoose(t);
+          if (id) wabaIds.add(id);
+        }
+      }
+    }
+  }
+  return { wabaIds: [...wabaIds], rawTruncated, httpOk: res.ok && !json?.error };
+}
+
+function normalizeMetaGraphIdLoose(v: unknown): string {
+  if (v == null || v === "") return "";
+  const s = String(v).trim();
+  return /^\d+$/.test(s) ? s : "";
+}
+
+type WabaDiscoveryRunDiagnostics = {
+  businessesCount: number;
+  distinctWabaCount: number;
+  wabasWithPhonesListed: number;
+  totalPhonesListed: number;
+  debugTokenWabaIdsMerged: number;
+  businessesRawTruncated: string;
+  debugTokenOk: boolean;
+};
+
+/**
+ * If Graph discovery returns no usable phones for coexistence, rebuild a synthetic WABA choice
+ * from persisted phone IDs / phoneGraphSnapshot and validate the new user token against that phone.
+ */
+async function buildCoexistenceFallbackWabaChoices(params: {
+  userId: string;
+  accessToken: string;
+  previousSnap: PersistedMetaIntegrationSnapshot | null;
+}): Promise<WabaPhoneChoice[] | null> {
+  const { userId, accessToken, previousSnap } = params;
+  const user = await storage.getUserForSession(userId);
+  const oauthDbg =
+    user?.metaLastOAuthDebug && typeof user.metaLastOAuthDebug === "object"
+      ? (user.metaLastOAuthDebug as Record<string, unknown>)
+      : {};
+  const phoneSnap = oauthDbg.phoneGraphSnapshot as Record<string, unknown> | undefined;
+  const innerData =
+    phoneSnap?.data && typeof phoneSnap.data === "object"
+      ? (phoneSnap.data as Record<string, unknown>)
+      : undefined;
+  let phoneNumberId =
+    (innerData?.id != null ? String(innerData.id).trim() : "") ||
+    (phoneSnap?.phoneNumberId != null ? String(phoneSnap.phoneNumberId).trim() : "") ||
+    (user?.metaPhoneNumberId || "").trim() ||
+    (previousSnap?.metaPhoneNumberId || "").trim();
+  if (!phoneNumberId) {
+    logCoexistenceDiagnostic({ phase: "coexistence_fallback", ok: false, reason: "no_phone_id_in_snapshot_or_user" });
+    return null;
+  }
+
+  const base = getMetaGraphApiBase();
+  const probe = await fetch(
+    `${base}/${encodeURIComponent(phoneNumberId)}?fields=id&access_token=${encodeURIComponent(accessToken)}`,
+    { signal: AbortSignal.timeout(8000) }
+  );
+  if (!probe.ok) {
+    const errBody = await probe.json().catch(() => ({}));
+    logCoexistenceDiagnostic({
+      phase: "coexistence_fallback_phone_probe",
+      ok: false,
+      phoneNumberId,
+      httpStatus: probe.status,
+      error: (errBody as any)?.error ?? null,
+    });
+    return null;
+  }
+
+  let wabaId = (user?.metaBusinessAccountId || previousSnap?.metaBusinessAccountId || "").trim();
+  const parent = await fetchWhatsAppPhoneNumberParentWabaId(accessToken, phoneNumberId);
+  if (parent.ok) {
+    wabaId = parent.wabaId;
+  }
+  if (!wabaId) {
+    logCoexistenceDiagnostic({
+      phase: "coexistence_fallback",
+      ok: false,
+      reason: "no_waba_id_and_graph_parent_missing",
+      phoneNumberId,
+    });
+    return null;
+  }
+
+  const displayPhone =
+    typeof innerData?.display_phone_number === "string"
+      ? innerData.display_phone_number
+      : user?.metaDisplayPhoneNumber || previousSnap?.metaDisplayPhoneNumber || undefined;
+  const verifiedName =
+    typeof innerData?.verified_name === "string"
+      ? innerData.verified_name
+      : user?.metaVerifiedName || previousSnap?.metaVerifiedName || undefined;
+
+  logCoexistenceDiagnostic({
+    phase: "coexistence_fallback_synthetic_choice",
+    ok: true,
+    wabaId,
+    phoneNumberId,
+    wabaFromGraphParent: parent.ok,
+  });
+
+  return [
+    {
+      wabaId,
+      wabaName: "fallback_from_persisted_phone",
+      phoneNumbers: [
+        {
+          id: phoneNumberId,
+          displayPhoneNumber: displayPhone,
+          verifiedName,
+        },
+      ],
+    },
+  ];
+}
+
+async function fetchUserWabaChoices(
+  accessToken: string
+): Promise<{ choices: WabaPhoneChoice[]; diagnostics: WabaDiscoveryRunDiagnostics }> {
   const base = getMetaGraphApiBase();
 
   // The User node does not expose whatsapp_business_accounts; discover via Business edges instead.
@@ -467,6 +702,11 @@ async function fetchUserWabaChoices(accessToken: string): Promise<WabaPhoneChoic
     `${base}/me/businesses?fields=id,name&limit=50&access_token=${encodeURIComponent(accessToken)}`
   );
   const bizJson = (await bizRes.json().catch(() => ({}))) as any;
+  logCoexistenceDiagnostic({
+    phase: "waba_discovery_me_businesses",
+    httpOk: bizRes.ok,
+    rawTruncated: jsonTruncate({ status: bizRes.status, body: bizJson }),
+  });
   if (!bizRes.ok) {
     const msg = bizJson?.error?.message || "Failed to fetch businesses.";
     throw new Error(msg);
@@ -515,28 +755,55 @@ async function fetchUserWabaChoices(accessToken: string): Promise<WabaPhoneChoic
   console.log("[WABA DISCOVERY] owned WABAs count", { count: ownedCount });
   console.log("[WABA DISCOVERY] client WABAs count", { count: clientCount });
 
+  const beforeDebugMerge = wabaById.size;
+  const debugPkg = await fetchWabaIdsFromUserTokenDebug(accessToken);
+  for (const wid of debugPkg.wabaIds) {
+    if (!wabaById.has(wid)) {
+      wabaById.set(wid, { id: wid, name: undefined });
+    }
+  }
+  const debugTokenWabaIdsMerged = wabaById.size - beforeDebugMerge;
+  logCoexistenceDiagnostic({
+    phase: "waba_discovery_debug_token_granular",
+    httpOk: debugPkg.httpOk,
+    granularWabaCount: debugPkg.wabaIds.length,
+    wabaIdsSample: debugPkg.wabaIds.slice(0, 30),
+    rawTruncated: debugPkg.rawTruncated.slice(0, 6000),
+  });
+
   const wabas = Array.from(wabaById.values());
 
-  // 2) For each WABA, fetch phone numbers
+  // 2) For each WABA, fetch phone numbers (keep WABAs even when Meta returns zero rows — distinguishes “listing gap” vs “no WABA”.)
   const choices: WabaPhoneChoice[] = [];
+  let wabasWithPhonesListed = 0;
+  let totalPhonesListed = 0;
   for (const w of wabas) {
     const pnRes = await fetch(
       `${base}/${encodeURIComponent(w.id)}/phone_numbers?fields=id,display_phone_number,verified_name,quality_rating&limit=50&access_token=${encodeURIComponent(accessToken)}`
     );
     const pnJson = (await pnRes.json().catch(() => ({}))) as any;
     if (!pnRes.ok) {
-      // Non-fatal for this WABA; treat as empty.
-      console.warn("[WhatsApp Embedded Signup] phone_numbers fetch failed", {
+      logCoexistenceDiagnostic({
+        phase: "waba_discovery_phone_numbers_error",
         wabaId: w.id,
-        http_status: pnRes.status,
-        meta_code: pnJson?.error?.code,
-        meta_type: pnJson?.error?.type,
-        meta_subcode: pnJson?.error?.error_subcode,
-        meta_message: pnJson?.error?.message,
+        httpOk: pnRes.ok,
+        rawTruncated: jsonTruncate({ status: pnRes.status, body: pnJson }, 6000),
+      });
+      choices.push({
+        wabaId: w.id,
+        wabaName: w.name,
+        phoneNumbers: [],
       });
       continue;
     }
     const phones: any[] = Array.isArray(pnJson?.data) ? pnJson.data : [];
+    logCoexistenceDiagnostic({
+      phase: "waba_discovery_phone_numbers_ok",
+      wabaId: w.id,
+      phoneRowCount: phones.length,
+      rawTruncated: jsonTruncate({ data: pnJson?.data }),
+    });
+
     const phoneNumbers = phones
       .map((p: any) => ({
         id: String(p?.id || ""),
@@ -546,8 +813,10 @@ async function fetchUserWabaChoices(accessToken: string): Promise<WabaPhoneChoic
       }))
       .filter((p) => !!p.id);
 
-    // 3) Filter: only allow WABAs that have at least 1 phone number.
-    if (phoneNumbers.length === 0) continue;
+    if (phoneNumbers.length > 0) {
+      wabasWithPhonesListed += 1;
+      totalPhonesListed += phoneNumbers.length;
+    }
 
     choices.push({
       wabaId: w.id,
@@ -556,8 +825,24 @@ async function fetchUserWabaChoices(accessToken: string): Promise<WabaPhoneChoic
     });
   }
 
-  console.log("[WABA DISCOVERY] valid WABAs with phone numbers count", { count: choices.length });
-  return choices;
+  console.log("[WABA DISCOVERY] WABA rows fetched (including zero-phone)", {
+    choices: choices.length,
+    totalPhonesListed,
+    wabasWithPhonesListed,
+  });
+
+  return {
+    choices,
+    diagnostics: {
+      businessesCount: businesses.length,
+      distinctWabaCount: wabaById.size,
+      wabasWithPhonesListed,
+      totalPhonesListed,
+      debugTokenWabaIdsMerged,
+      businessesRawTruncated: jsonTruncate({ ok: bizRes.ok, businesses }, 8000),
+      debugTokenOk: debugPkg.httpOk,
+    },
+  };
 }
 
 /**
@@ -1329,17 +1614,120 @@ export async function completeEmbeddedSignupOAuth(params: {
     /* non-fatal */
   }
 
-  let resolved: ResolvedWabaPhone;
-  try {
-    const rawChoices = await fetchUserWabaChoices(longToken);
-    if (rawChoices.length === 0) {
-      const msg = "No WhatsApp phone number found. Please add a phone number in Meta Business Manager.";
-      await storage.updateUser(row.userId, {
-        metaIntegrationStatus: "failed",
-        metaLastErrorMessage: msg.slice(0, 500),
+  const coexistenceRestoreSnap =
+    row.flow === "coexistence" ? await capturePersistedMetaSnapshot(row.userId) : null;
+  if (row.flow === "coexistence") {
+    try {
+      const cfgIdResolved = resolveEmbeddedSignupConfigId("coexistence");
+      logCoexistenceDiagnostic({
+        phase: "coexistence_oauth_post_token",
+        userId: row.userId,
+        flow: row.flow,
+        coexistenceEmbeddedConfigIdResolved: cfgIdResolved,
       });
-      await mergeUserMetaOAuthDebug(row.userId, { phase: "complete", ok: false, error: "no_valid_waba_or_phone" });
-      return { success: false, error: msg };
+      await mergeUserMetaOAuthDebug(row.userId, {
+        coexistenceConfigIdUsed: cfgIdResolved,
+        coexistencePreviousConnection: coexistenceRestoreSnap
+          ? {
+              hadMetaConnection: coexistenceRestoreSnap.hadMetaConnection,
+              previousWabaId: coexistenceRestoreSnap.metaBusinessAccountId,
+              previousPhoneNumberId: coexistenceRestoreSnap.metaPhoneNumberId,
+              previousWhatsAppProvider: coexistenceRestoreSnap.whatsappProvider,
+              previousMetaConnectionType: coexistenceRestoreSnap.metaConnectionType,
+            }
+          : null,
+      });
+    } catch (e: any) {
+      logCoexistenceDiagnostic({
+        phase: "coexistence_config_id_resolve_error",
+        message: e?.message || String(e),
+      });
+    }
+  }
+
+  let resolved: ResolvedWabaPhone;
+  let discoveryDiagnostics: WabaDiscoveryRunDiagnostics | null = null;
+  try {
+    const fetched = await fetchUserWabaChoices(longToken);
+    discoveryDiagnostics = fetched.diagnostics;
+    let rawChoices = fetched.choices;
+
+    await mergeUserMetaOAuthDebug(row.userId, {
+      phase: "waba_discovery_summary",
+      ok: true,
+      diagnostics: discoveryDiagnostics,
+    });
+
+    let usedSyntheticFallback = false;
+    const totalListedPhones = rawChoices.reduce((n, w) => n + w.phoneNumbers.length, 0);
+
+    if (row.flow === "coexistence" && totalListedPhones === 0) {
+      const fb = await buildCoexistenceFallbackWabaChoices({
+        userId: row.userId,
+        accessToken: longToken,
+        previousSnap: coexistenceRestoreSnap,
+      });
+      if (fb?.length) {
+        rawChoices = fb;
+        usedSyntheticFallback = true;
+      }
+    }
+
+    const totalPhones = rawChoices.reduce((n, w) => n + w.phoneNumbers.length, 0);
+    await mergeUserMetaOAuthDebug(row.userId, {
+      phase: "coexistence_discovery_merge",
+      flow: row.flow,
+      phonesListedFromEdges: totalListedPhones,
+      phonesAfterSyntheticFallback: totalPhones,
+      usedSyntheticFallback,
+    });
+
+    if (totalPhones === 0) {
+      let msg: string;
+      if (
+        discoveryDiagnostics &&
+        discoveryDiagnostics.distinctWabaCount === 0 &&
+        discoveryDiagnostics.businessesCount === 0
+      ) {
+        msg =
+          "Coexistence: Meta returned no Businesses linked to this login. Confirm you used the coexistence Embedded Signup configuration and granted WhatsApp / Business scopes.";
+      } else if (
+        discoveryDiagnostics &&
+        discoveryDiagnostics.distinctWabaCount > 0 &&
+        discoveryDiagnostics.totalPhonesListed === 0
+      ) {
+        msg =
+          "Coexistence: Meta lists your WhatsApp Business Account but returned no phone numbers from Graph (GET …/phone_numbers empty). This is often a discovery or permission gap; your number may still exist in Meta. Try again or use Option A.";
+      } else {
+        msg =
+          "Coexistence: WhatsApp discovery did not yield a selectable phone line. Confirm the number appears under your WABA in Meta Business Manager.";
+      }
+
+      const recoverableMsg =
+        row.flow === "coexistence" && coexistenceRestoreSnap?.hadMetaConnection
+          ? `${msg} Your previous WhatsApp connection was preserved; see Settings → WhatsApp for details.`
+          : msg;
+
+      if (row.flow === "coexistence" && coexistenceRestoreSnap?.hadMetaConnection) {
+        await restorePersistedMetaSnapshot(row.userId, coexistenceRestoreSnap);
+        await storage.updateUser(row.userId, {
+          metaIntegrationStatus: "needs_attention",
+          metaLastErrorMessage: recoverableMsg.slice(0, 500),
+        });
+      } else {
+        await storage.updateUser(row.userId, {
+          metaIntegrationStatus: "failed",
+          metaLastErrorMessage: msg.slice(0, 500),
+        });
+      }
+      await mergeUserMetaOAuthDebug(row.userId, {
+        phase: "complete",
+        ok: false,
+        error: usedSyntheticFallback ? "no_phone_after_fallback" : "no_valid_waba_or_phone",
+        discoveryDiagnostics,
+        connectivityRestored: row.flow === "coexistence" && !!coexistenceRestoreSnap?.hadMetaConnection,
+      });
+      return { success: false, error: recoverableMsg.slice(0, 400) };
     }
 
     const enrichedChoices = enrichWabaPhoneChoices(rawChoices);
@@ -1350,6 +1738,7 @@ export async function completeEmbeddedSignupOAuth(params: {
       wabaIdsSample: sortIds(rawChoices.map((c) => c.wabaId)).slice(0, 25),
       wabaDiscoveryDetail: buildWabaDiscoveryDetailPayload(enrichedChoices),
       selectionPolicy: "prefer_production_avoid_auto_test",
+      coexistenceSyntheticFallback: usedSyntheticFallback,
     });
 
     const decision = decideEmbeddedSignupPhoneSelection(enrichedChoices);
@@ -1385,14 +1774,24 @@ export async function completeEmbeddedSignupOAuth(params: {
     });
   } catch (e: any) {
     const msg = e?.message || "Could not read WhatsApp account details from Meta.";
-    await storage.updateUser(row.userId, {
-      metaIntegrationStatus: "failed",
-      metaLastErrorMessage: msg.slice(0, 500),
-    });
+    if (row.flow === "coexistence" && coexistenceRestoreSnap?.hadMetaConnection) {
+      await restorePersistedMetaSnapshot(row.userId, coexistenceRestoreSnap);
+      await storage.updateUser(row.userId, {
+        metaIntegrationStatus: "needs_attention",
+        metaLastErrorMessage: `${msg} Your previous WhatsApp connection was preserved.`.slice(0, 500),
+      });
+    } else {
+      await storage.updateUser(row.userId, {
+        metaIntegrationStatus: "failed",
+        metaLastErrorMessage: msg.slice(0, 500),
+      });
+    }
     await mergeUserMetaOAuthDebug(row.userId, {
       phase: "waba_discovery",
       ok: false,
       error: msg.slice(0, 500),
+      discoveryDiagnosticsSnapshot: discoveryDiagnostics,
+      coexistenceConnectivityRestored: row.flow === "coexistence" && !!coexistenceRestoreSnap?.hadMetaConnection,
     });
     return { success: false, error: msg };
   }

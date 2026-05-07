@@ -174,6 +174,106 @@ export async function fetchMetaWhatsAppPhoneNumberGraphSnapshot(
   return { ok: false, fieldsRequested: fieldSets[0]!, error: { message: "exhausted_field_retries" } };
 }
 
+/**
+ * Verbose WhatsApp phone Graph snapshot for coexistence diagnostics.
+ * Requests a broad set of safe fields and progressively falls back if Graph rejects unknown fields.
+ * Never logs or returns tokens.
+ */
+export async function fetchMetaWhatsAppPhoneNumberGraphSnapshotVerbose(
+  accessToken: string,
+  phoneNumberId: string
+): Promise<{
+  ok: boolean;
+  fieldsRequested: string;
+  data?: Record<string, unknown>;
+  httpStatus?: number;
+  error?: { message?: string; code?: number };
+}> {
+  const base = getMetaGraphApiBase();
+  const fieldSets = [
+    // “Try everything” set (some may be rejected depending on Graph version / permissions)
+    "id,display_phone_number,verified_name,quality_rating,code_verification_status,name_status,throughput,messaging_limit_tier,status,platform_type,account_mode,certificate,webhook_configuration,whatsapp_business_account{id}",
+    // Remove most exotic fields
+    "id,display_phone_number,verified_name,quality_rating,code_verification_status,name_status,throughput,messaging_limit_tier,status,platform_type,account_mode,whatsapp_business_account{id}",
+    // Minimal extended
+    "id,display_phone_number,verified_name,quality_rating,code_verification_status,name_status,throughput,messaging_limit_tier,status",
+    // Fall back to the existing stable set
+    "id,display_phone_number,verified_name,quality_rating,code_verification_status,messaging_limit_tier,name_status,throughput",
+    "id,display_phone_number,verified_name,quality_rating,code_verification_status",
+    "id,display_phone_number,verified_name,quality_rating",
+  ];
+
+  for (const fields of fieldSets) {
+    try {
+      const url = `${base}/${encodeURIComponent(phoneNumberId)}?fields=${encodeURIComponent(fields)}&access_token=${encodeURIComponent(accessToken)}`;
+      const response = await fetch(url, { signal: AbortSignal.timeout(8000) });
+      const json = (await response.json().catch(() => ({}))) as {
+        error?: { message?: string; code?: number };
+      } & Record<string, unknown>;
+
+      if (response.ok && json && !json.error) {
+        const { error: _e, ...rest } = json;
+        return {
+          ok: true,
+          fieldsRequested: fields,
+          data: rest as Record<string, unknown>,
+          httpStatus: response.status,
+        };
+      }
+
+      const errObj = json?.error;
+      // When Graph rejects a field set, try the next smaller set.
+      if (errObj && fieldSets.indexOf(fields) < fieldSets.length - 1) {
+        continue;
+      }
+
+      return {
+        ok: false,
+        fieldsRequested: fields,
+        httpStatus: response.status,
+        error: errObj ? { message: errObj.message, code: errObj.code } : { message: "Unknown Graph error" },
+      };
+    } catch (e: any) {
+      if (fieldSets.indexOf(fields) < fieldSets.length - 1) continue;
+      return {
+        ok: false,
+        fieldsRequested: fields,
+        error: { message: e?.message || "fetch_failed" },
+      };
+    }
+  }
+
+  return { ok: false, fieldsRequested: fieldSets[0]!, error: { message: "exhausted_field_retries" } };
+}
+
+/**
+ * Best-effort: read parent WABA id for a WhatsApp Cloud API phone number id (coexistence / fallback).
+ */
+export async function fetchWhatsAppPhoneNumberParentWabaId(
+  accessToken: string,
+  phoneNumberId: string
+): Promise<{ ok: true; wabaId: string } | { ok: false; reason: string }> {
+  const base = getMetaGraphApiBase();
+  const fieldAttempts = ["id,whatsapp_business_account{id}", "whatsapp_business_account{id}"];
+  for (const fields of fieldAttempts) {
+    try {
+      const url = `${base}/${encodeURIComponent(phoneNumberId)}?fields=${encodeURIComponent(fields)}&access_token=${encodeURIComponent(accessToken)}`;
+      const response = await fetch(url, { signal: AbortSignal.timeout(8000) });
+      const json = (await response.json().catch(() => ({}))) as {
+        error?: { message?: string };
+        whatsapp_business_account?: { id?: string };
+      };
+      if (!response.ok || json.error) continue;
+      const waba = json.whatsapp_business_account;
+      const id = waba && typeof waba === "object" && waba.id != null ? String(waba.id).trim() : "";
+      if (id) return { ok: true, wabaId: id };
+    } catch {
+      /* try next */
+    }
+  }
+  return { ok: false, reason: "parent_waba_not_in_graph_response" };
+}
+
 export async function validateMetaCredentials(credentials: MetaCredentials): Promise<{ valid: boolean; error?: string; phoneNumber?: string }> {
   try {
     const response = await fetch(

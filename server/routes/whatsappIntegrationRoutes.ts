@@ -22,6 +22,8 @@ import { getAppOrigin } from "../urlOrigins";
 import { storage } from "../storage";
 import { classifyMetaWhatsAppPhone } from "../metaWhatsAppPhoneKind";
 import { disconnectWhatsAppProvider, getProviderStatus } from "../whatsappService";
+import { getMetaGraphApiBase } from "../metaGraphVersion";
+import { getMetaAccessToken, fetchMetaWhatsAppPhoneNumberGraphSnapshotVerbose } from "../userMeta";
 import { db } from "../../drizzle/db";
 import { whatsappOauthStates } from "@shared/schema";
 import { eq } from "drizzle-orm";
@@ -40,6 +42,163 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
       res.json(cfg);
     } catch (e: any) {
       res.status(500).json({ error: "Failed to load Meta configuration" });
+    }
+  });
+
+  function truncateJson(v: unknown, max = 12_000): string {
+    try {
+      const s = JSON.stringify(v);
+      return s.length > max ? `${s.slice(0, max)}…[truncated]` : s;
+    } catch {
+      return "[unserializable]";
+    }
+  }
+
+  function logCoexistenceDiagnostics(payload: Record<string, unknown>): void {
+    console.log(`[CoexistenceDiagnostics] ${JSON.stringify(payload)}`);
+  }
+
+  app.get("/api/integrations/whatsapp/coexistence-diagnostics", async (req: Request, res: Response) => {
+    try {
+      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+      const user = await storage.getUserForSession(req.user.id);
+      if (!user) return res.status(404).json({ error: "User not found" });
+
+      const base = await getProviderStatus(req.user.id);
+      const wabaId = (user.metaBusinessAccountId || "").trim();
+      const phoneNumberId = (user.metaPhoneNumberId || "").trim();
+      const connectionSavedAsCoexistence = user.metaConnectionType === "coexistence";
+
+      const token = await getMetaAccessToken(req.user.id);
+      if (!token) {
+        return res.status(400).json({
+          error: "No Meta access token found. Reconnect WhatsApp with Meta to run diagnostics.",
+        });
+      }
+
+      const graphBase = getMetaGraphApiBase();
+      const appId = (process.env.META_APP_ID || "").trim();
+
+      const phoneGraph =
+        phoneNumberId.length > 0
+          ? await fetchMetaWhatsAppPhoneNumberGraphSnapshotVerbose(token, phoneNumberId)
+          : { ok: false as const, fieldsRequested: "", error: { message: "missing_phoneNumberId" } };
+
+      // WABA subscribed apps — confirm our app id is listed.
+      let subscribedApps: { httpOk: boolean; status: number; body: any; appIds: string[]; hasConfiguredAppId: boolean } =
+        { httpOk: false, status: 0, body: null, appIds: [], hasConfiguredAppId: false };
+      if (wabaId) {
+        const url = `${graphBase}/${encodeURIComponent(wabaId)}/subscribed_apps?access_token=${encodeURIComponent(token)}`;
+        const r = await fetch(url, { signal: AbortSignal.timeout(10_000) });
+        const body = (await r.json().catch(() => ({}))) as any;
+        const rows = Array.isArray(body?.data) ? body.data : [];
+        const appIds = rows
+          .map((x: any) => String(x?.id ?? x?.app_id ?? "").trim())
+          .filter((s: string) => s.length > 0);
+        const hasConfiguredAppId = appId ? appIds.includes(appId) : false;
+        subscribedApps = { httpOk: r.ok, status: r.status, body, appIds, hasConfiguredAppId };
+      }
+
+      // WABA phone_numbers listing — does the saved phone appear under this WABA?
+      let wabaPhones: { httpOk: boolean; status: number; body: any; phoneIds: string[]; phoneUnderWaba: boolean } =
+        { httpOk: false, status: 0, body: null, phoneIds: [], phoneUnderWaba: false };
+      if (wabaId) {
+        const fields =
+          "id,display_phone_number,verified_name,quality_rating,code_verification_status,name_status,throughput,messaging_limit_tier,status,platform_type,account_mode";
+        const url =
+          `${graphBase}/${encodeURIComponent(wabaId)}/phone_numbers?fields=${encodeURIComponent(fields)}` +
+          `&limit=100&access_token=${encodeURIComponent(token)}`;
+        const r = await fetch(url, { signal: AbortSignal.timeout(10_000) });
+        const body = (await r.json().catch(() => ({}))) as any;
+        const rows = Array.isArray(body?.data) ? body.data : [];
+        const phoneIds = rows.map((x: any) => String(x?.id ?? "").trim()).filter((s: string) => s.length > 0);
+        const phoneUnderWaba = !!(phoneNumberId && phoneIds.includes(phoneNumberId));
+        wabaPhones = { httpOk: r.ok, status: r.status, body, phoneIds, phoneUnderWaba };
+      }
+
+      const graphCodeVerificationStatus =
+        (phoneGraph.ok ? (phoneGraph.data?.code_verification_status as unknown) : null) ?? null;
+      const graphPhoneStatus =
+        (phoneGraph.ok ? (phoneGraph.data?.status as unknown) : null) ?? null;
+
+      // We cannot guarantee Graph exposes “routing” explicitly; provide best-effort inference.
+      let inboundWebhookExpectedByGraph: "yes" | "no" | "unknown" = "unknown";
+      const reasons: string[] = [];
+      if (base.activeProvider !== "meta") reasons.push("activeProvider is not meta (provider selection mismatch)");
+      if (!user.metaConnected) reasons.push("metaConnected=false (saved connection not active)");
+      if (!(user.metaWebhookSubscribed ?? false)) reasons.push("metaWebhookSubscribed=false (WABA subscribed_apps may be ok but workspace flag false)");
+      if (!wabaId) reasons.push("missing saved wabaId");
+      if (!phoneNumberId) reasons.push("missing saved phoneNumberId");
+      if (!connectionSavedAsCoexistence) reasons.push("meta_connection_type is not coexistence");
+      if (phoneGraph.ok && String(graphCodeVerificationStatus || "").toUpperCase() !== "VERIFIED") {
+        reasons.push(`code_verification_status=${String(graphCodeVerificationStatus) || "null"} (may block Cloud API delivery in some setups)`);
+      }
+      if (wabaPhones.httpOk && phoneNumberId && !wabaPhones.phoneUnderWaba) {
+        reasons.push("saved phoneNumberId is not present in GET /{waba}/phone_numbers listing (permissions or discovery gap)");
+      }
+      if (subscribedApps.httpOk && appId && !subscribedApps.hasConfiguredAppId) {
+        reasons.push("configured META_APP_ID not present in GET /{waba}/subscribed_apps");
+      }
+      if (base.activeProvider === "meta" && user.metaConnected && (user.metaWebhookSubscribed ?? false) && user.metaIntegrationStatus === "connected") {
+        inboundWebhookExpectedByGraph = "unknown";
+      }
+
+      const payload = {
+        connectionSavedAsCoexistence,
+        activeProvider: base.activeProvider,
+        meta: {
+          connected: !!user.metaConnected,
+          integrationStatus: user.metaIntegrationStatus ?? null,
+          webhookSubscribedFlag: user.metaWebhookSubscribed ?? false,
+          connectionType: user.metaConnectionType ?? null,
+          wabaId: wabaId || null,
+          phoneNumberId: phoneNumberId || null,
+          displayPhoneNumber: user.metaDisplayPhoneNumber ?? null,
+        },
+        graphPhone: {
+          ok: phoneGraph.ok,
+          httpStatus: phoneGraph.httpStatus ?? null,
+          fieldsRequested: phoneGraph.fieldsRequested,
+          data: phoneGraph.ok ? phoneGraph.data : null,
+          error: phoneGraph.ok ? null : phoneGraph.error ?? null,
+        },
+        graphPhoneStatus,
+        graphCodeVerificationStatus,
+        wabaSubscribedApps: {
+          httpOk: subscribedApps.httpOk,
+          httpStatus: subscribedApps.status,
+          configuredAppIdPresent: subscribedApps.hasConfiguredAppId,
+          appIds: subscribedApps.appIds.slice(0, 200),
+          error: subscribedApps.httpOk ? null : (subscribedApps.body?.error ?? null),
+        },
+        phoneUnderWaba: wabaPhones.phoneUnderWaba,
+        wabaPhoneNumbers: {
+          httpOk: wabaPhones.httpOk,
+          httpStatus: wabaPhones.status,
+          phoneIds: wabaPhones.phoneIds.slice(0, 200),
+          error: wabaPhones.httpOk ? null : (wabaPhones.body?.error ?? null),
+        },
+        inboundWebhookExpectedByGraph,
+        reasons,
+      };
+
+      logCoexistenceDiagnostics({
+        userId: req.user.id,
+        connectionSavedAsCoexistence,
+        wabaId: wabaId || null,
+        phoneNumberId: phoneNumberId || null,
+        phoneGraphOk: phoneGraph.ok,
+        subscribedAppsOk: subscribedApps.httpOk,
+        phoneUnderWaba: wabaPhones.phoneUnderWaba,
+        graphPhoneTruncated: truncateJson(phoneGraph.ok ? phoneGraph.data : phoneGraph.error, 7000),
+        subscribedAppsTruncated: truncateJson({ appIds: subscribedApps.appIds, error: subscribedApps.body?.error ?? null }, 7000),
+        wabaPhonesTruncated: truncateJson({ phoneIds: wabaPhones.phoneIds, error: wabaPhones.body?.error ?? null }, 7000),
+      });
+
+      return res.json(payload);
+    } catch (e: any) {
+      console.error("[CoexistenceDiagnostics] error:", e?.message || e);
+      return res.status(500).json({ error: e?.message || "Diagnostics failed" });
     }
   });
 
