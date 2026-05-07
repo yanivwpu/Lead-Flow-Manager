@@ -346,22 +346,34 @@ export class DbStorage implements IStorage {
   }
 
   async getUserByEmail(email: string): Promise<User | undefined> {
-    const e = (typeof email === "string" ? email : "").trim().toLowerCase();
-    if (!e) return undefined;
+    const raw = typeof email === "string" ? email : "";
+    const trimmedLower = raw.trim().toLowerCase();
+    let nfkc = trimmedLower;
     try {
-      const result = await db.execute(sql`
-        SELECT
-          id,
-          COALESCE(name, '') AS name,
-          email,
-          COALESCE(password, '') AS password
-        FROM public.users
-        WHERE trim(lower(email)) = ${e}
-        LIMIT 1
-      `);
-      const rows = (result as { rows: Record<string, unknown>[] }).rows;
-      const parsed = rows[0] ? parseUsersAuthCoreRow(rows[0]) : null;
-      return parsed ? userFromAuthCoreRow(parsed) : undefined;
+      nfkc = trimmedLower.normalize("NFKC");
+    } catch {
+      nfkc = trimmedLower;
+    }
+    const variants = [...new Set([nfkc, trimmedLower].filter((v) => v.length > 0))];
+    if (variants.length === 0) return undefined;
+
+    try {
+      for (const e of variants) {
+        const result = await db.execute(sql`
+          SELECT
+            id,
+            COALESCE(name, '') AS name,
+            email,
+            COALESCE(password, '') AS password
+          FROM public.users
+          WHERE trim(lower(email)) = ${e}
+          LIMIT 1
+        `);
+        const rows = (result as { rows: Record<string, unknown>[] }).rows;
+        const parsed = rows[0] ? parseUsersAuthCoreRow(rows[0]) : null;
+        if (parsed) return userFromAuthCoreRow(parsed);
+      }
+      return undefined;
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       console.warn("[getUserByEmail] raw lookup error:", message);

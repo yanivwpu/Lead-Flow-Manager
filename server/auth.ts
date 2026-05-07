@@ -2,7 +2,7 @@ import passport from 'passport';
 import { Strategy as LocalStrategy } from 'passport-local';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
-import type { Express } from 'express';
+import type { Express, Request } from 'express';
 import session from 'express-session';
 import connectPgSimple from 'connect-pg-simple';
 import { storage } from './storage';
@@ -30,6 +30,40 @@ function maskEmailForLog(email: string): string {
 
 function authLoginVerbose(): boolean {
   return process.env.AUTH_LOGIN_VERBOSE === 'true' || process.env.AUTH_LOGIN_VERBOSE === '1';
+}
+
+/** Trim + lowercase + NFKC so login matches stored emails regardless of unicode compatibility forms. */
+export function normalizeEmailForAuth(raw: string): string {
+  const t = (typeof raw === 'string' ? raw : '').trim().toLowerCase();
+  try {
+    return t.normalize('NFKC');
+  } catch {
+    return t;
+  }
+}
+
+function classifyStoredPassword(stored: string | null | undefined): 'bcrypt' | 'plaintext' | 'empty' | 'unknown' {
+  if (stored == null || stored === '') return 'empty';
+  if (/^\$2[aby]\$\d{2}\$/.test(stored)) return 'bcrypt';
+  return 'plaintext';
+}
+
+function emitLoginAttempt(req: Request, patch: Record<string, unknown>): void {
+  const base = (req as unknown as { __loginAttempt?: Record<string, unknown> }).__loginAttempt ?? {};
+  (req as unknown as { __loginAttempt?: Record<string, unknown> }).__loginAttempt = { ...base, ...patch };
+}
+
+function logLoginAttemptLine(req: Request, extras: Record<string, unknown>): void {
+  const ctx = (req as unknown as { __loginAttempt?: Record<string, unknown> }).__loginAttempt ?? {};
+  const payload = {
+    ...ctx,
+    ...extras,
+    host: req.get('host') ?? null,
+    origin: req.get('origin') ?? req.get('referer') ?? null,
+    cookieDomain: process.env.SESSION_COOKIE_DOMAIN?.trim() || '(unset — host-only cookie)',
+    secureCookie: process.env.NODE_ENV === 'production',
+  };
+  console.log(`[LoginAttempt] ${JSON.stringify(payload)}`);
 }
 
 /** Supports bcrypt hashes and legacy plaintext (re-hashed after successful login). */
@@ -101,12 +135,13 @@ export function setupAuth(app: Express) {
       {
         usernameField: 'email',
         passwordField: 'password',
+        passReqToCallback: true,
       },
-      async (email, password, done) => {
+      async (req, email, password, done) => {
         try {
           const rawEmail = typeof email === 'string' ? email : '';
           const trimmedEmail = rawEmail.trim();
-          const normalizedEmail = trimmedEmail.toLowerCase();
+          const normalizedEmail = normalizeEmailForAuth(trimmedEmail);
 
           // Special handling for demo account - auto-create/fix in any environment
           const DEMO_EMAIL = 'demo@whachat.com';
@@ -155,14 +190,26 @@ export function setupAuth(app: Express) {
               await setupDemoSampleData(user.id);
               console.log('[AUTH] Demo sample data created for Unified Inbox');
             }
-            
+
+            emitLoginAttempt(req, {
+              emailNormalized: maskEmailForLog(normalizedEmail),
+              emailRawLen: trimmedEmail.length,
+              userFound: true,
+              userId: user.id,
+              passwordMatch: true,
+              passwordStoredPresent: true,
+              storedHashKind: 'bcrypt',
+              failureReason: null,
+              path: 'demo_bypass',
+            });
+
             return done(null, user);
           }
           
-          // Normal login flow for non-demo accounts (case-insensitive email match)
-          let user = await resolveUserForLogin(trimmedEmail);
+          // Normal login flow for non-demo accounts (case-insensitive email match + NFKC via storage.getUserByEmail)
+          let user = await resolveUserForLogin(normalizedEmail);
           const passwordFieldPresent = !!(user?.password && user.password.length > 0);
-          const storedLooksLikeBcrypt = user?.password?.startsWith('$2') ?? false;
+          const storedHashKind = classifyStoredPassword(user?.password);
 
           let verifyOk = false;
           if (user && passwordFieldPresent) {
@@ -177,24 +224,34 @@ export function setupAuth(app: Express) {
 
           const verbose = authLoginVerbose();
           const emailForLog = verbose ? normalizedEmail : maskEmailForLog(normalizedEmail);
-          console.log('[AUTH LOGIN]', {
-            email: emailForLog,
+
+          emitLoginAttempt(req, {
+            emailNormalized: emailForLog,
+            emailRawLen: trimmedEmail.length,
             userFound: !!user,
-            userId: user?.id,
-            passwordSubmittedLen: typeof password === 'string' ? password.length : 0,
-            passwordStoredLen: user?.password?.length ?? 0,
+            userId: user?.id ?? null,
+            passwordMatch: verifyOk,
             passwordStoredPresent: passwordFieldPresent,
-            storedLooksLikeBcrypt,
-            passwordCompareOk: verifyOk,
+            storedHashKind,
+            failureReason: !user
+              ? 'user_not_found'
+              : !passwordFieldPresent
+                ? 'empty_stored_password'
+                : verifyOk
+                  ? null
+                  : 'password_mismatch_or_invalid_hash',
+            path: 'local_strategy',
           });
 
-          if (!user || !verifyOk) {
-            console.warn('[AUTH LOGIN failed]', {
+          if (authLoginVerbose()) {
+            console.log('[AUTH LOGIN verbose]', {
               email: emailForLog,
-              reason: !user ? 'user_not_found_or_unreadable_row' : !passwordFieldPresent ? 'empty_stored_password' : 'password_mismatch_or_invalid_hash',
-              userFound: !!user,
-              passwordCompareOk: verifyOk,
+              passwordSubmittedLen: typeof password === 'string' ? password.length : 0,
+              passwordStoredLen: user?.password?.length ?? 0,
             });
+          }
+
+          if (!user || !verifyOk) {
             return done(null, false, { message: 'Invalid email or password' });
           }
 
@@ -248,8 +305,8 @@ export function registerAuthRoutes(app: Express) {
         return res.status(400).json({ error: 'Missing required fields' });
       }
 
-      // Check if user already exists (case-insensitive)
-      const existingUser = await resolveUserForLogin(email);
+      // Check if user already exists (case-insensitive + NFKC)
+      const existingUser = await resolveUserForLogin(normalizeEmailForAuth(email));
       if (existingUser) {
         return res.status(400).json({ error: 'User already exists with that email' });
       }
@@ -264,7 +321,7 @@ export function registerAuthRoutes(app: Express) {
 
       const user = await storage.createUser({
         name,
-        email,
+        email: normalizeEmailForAuth(email),
         password: hashedPassword,
         trialStartedAt,
         trialEndsAt,
@@ -357,25 +414,40 @@ export function registerAuthRoutes(app: Express) {
     passport.authenticate('local', (err: any, user: User, info: any) => {
       if (err) {
         console.error('[AUTH LOGIN route] passport error:', err);
+        logLoginAttemptLine(req, {
+          sessionCreated: false,
+          phase: 'passport_exception',
+          passportError: String((err as Error)?.message || err),
+        });
         return res.status(500).json({ error: 'Authentication failed' });
       }
       if (!user) {
+        logLoginAttemptLine(req, {
+          sessionCreated: false,
+          phase: 'reject_credentials',
+        });
         return res.status(401).json({ error: info?.message || 'Invalid email or password' });
       }
-      
+
       // Set session duration based on rememberMe flag
       const rememberMe = req.body.rememberMe || false;
-      
+
       req.login(user, (loginErr: any) => {
+        logLoginAttemptLine(req, {
+          sessionCreated: !loginErr,
+          phase: loginErr ? 'req_login_failed' : 'success',
+          rememberMe: !!rememberMe,
+          reqLoginError: loginErr ? String(loginErr?.message || loginErr) : null,
+        });
         if (loginErr) {
           return res.status(500).json({ error: 'Failed to log in' });
         }
-        
+
         // Extend session if remember me is checked (30 days vs 7 days default)
         if (rememberMe && req.session.cookie) {
           req.session.cookie.maxAge = 30 * 24 * 60 * 60 * 1000; // 30 days
         }
-        
+
         const { password: _, ...safeUser } = user;
         res.json(safeUser);
       });
