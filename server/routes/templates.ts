@@ -1,8 +1,52 @@
 import type { Express } from "express";
+import type { Channel } from "@shared/schema";
 import { storage } from "../storage";
 import { getMetaMessageTemplates, sendMetaWhatsAppTemplate } from "../userMeta";
 import { getUserTwilioClient } from "../userTwilio";
 import { subscriptionService } from "../subscriptionService";
+
+function substituteTemplateVariables(
+  bodyText: string | null | undefined,
+  variableValues: Record<string, string>
+): string {
+  if (!bodyText) return "";
+  let out = bodyText;
+  for (const [key, val] of Object.entries(variableValues)) {
+    if (!key) continue;
+    out = out.split(key).join(val ?? "");
+  }
+  return out.trim();
+}
+
+/** Stored in `messages.content` — line 1 label + blank line + rendered body when available */
+function buildOutboundTemplateDisplayContent(
+  templateName: string,
+  bodyText: string | null | undefined,
+  variableValues: Record<string, string>
+): string {
+  const rendered = substituteTemplateVariables(bodyText, variableValues);
+  const header = `Template: ${templateName}`;
+  return rendered ? `${header}\n\n${rendered}` : header;
+}
+
+async function ensureWhatsAppConversationForContact(
+  userId: string,
+  contactId: string
+): Promise<{ conversationId: string; created: boolean }> {
+  const wa: Channel = "whatsapp";
+  const existing = await storage.getConversationByContactAndChannel(contactId, wa);
+  if (existing) {
+    return { conversationId: existing.id, created: false };
+  }
+  await subscriptionService.incrementConversationUsage(userId);
+  const created = await storage.createConversation({
+    userId,
+    contactId,
+    channel: "whatsapp",
+    status: "open",
+  });
+  return { conversationId: created.id, created: true };
+}
 
 export function registerTemplateRoutes(app: Express): void {
   // ============= Meta Templates =============
@@ -641,6 +685,8 @@ export function registerTemplateRoutes(app: Express): void {
       let recipientPhone: string;
       let recipientName: string;
       let legacyChatId: string | null = chatId || null;
+      /** Unified inbox / CRM contact for persisting into `messages` + `conversations` */
+      let crmContactId: string | null = null;
 
       if (contactId) {
         const contact = await storage.getContact(contactId);
@@ -653,6 +699,7 @@ export function registerTemplateRoutes(app: Express): void {
         }
         recipientPhone = phone;
         recipientName = contact.name;
+        crmContactId = contact.id;
       } else {
         const chat = await storage.getChat(chatId);
         if (!chat || chat.userId !== req.user.id) {
@@ -663,6 +710,12 @@ export function registerTemplateRoutes(app: Express): void {
         }
         recipientPhone = chat.whatsappPhone;
         recipientName = chat.name;
+        const channelKey =
+          chat.whatsappPhone.replace(/\D/g, "") || chat.whatsappPhone || "";
+        const matched = channelKey
+          ? await storage.getContactByChannelId(req.user.id, "whatsapp", channelKey)
+          : undefined;
+        crmContactId = matched?.id ?? null;
       }
 
       // Full session row — auth-core `getUser` omits whatsappProvider / Meta fields (defaults wrongly to Twilio).
@@ -886,6 +939,93 @@ export function registerTemplateRoutes(app: Express): void {
         }
       }
 
+      let persistedMessageId: string | undefined;
+      let persistedConversationId: string | undefined;
+
+      if (crmContactId) {
+        try {
+          const { conversationId } = await ensureWhatsAppConversationForContact(
+            req.user.id,
+            crmContactId
+          );
+          persistedConversationId = conversationId;
+
+          const displayContent = buildOutboundTemplateDisplayContent(
+            template.name,
+            template.bodyText,
+            variableValues
+          );
+          const preview = displayContent.substring(0, 100);
+
+          const templateVariablesPayload = {
+            ...variableValues,
+            templateLanguage: templateLang,
+            templateName: template.name,
+            channel: "whatsapp",
+            provider: resolvedProvider,
+          };
+
+          const normalizedStatus = (sendStatus || "").toLowerCase();
+          const outboundMsgStatus =
+            normalizedStatus === "failed" || normalizedStatus === "undelivered"
+              ? "failed"
+              : normalizedStatus === "queued" ||
+                  normalizedStatus === "accepted" ||
+                  normalizedStatus === "scheduled"
+                ? "pending"
+                : "sent";
+
+          const persisted = await storage.createMessage({
+            conversationId,
+            contactId: crmContactId,
+            userId: req.user.id,
+            direction: "outbound",
+            content: displayContent,
+            contentType: "template",
+            templateId: template.id,
+            templateVariables: templateVariablesPayload as any,
+            status: outboundMsgStatus,
+            externalMessageId: messageId || null,
+            sentAt: new Date(),
+          });
+          persistedMessageId = persisted.id;
+
+          await storage.updateConversation(conversationId, {
+            lastMessageAt: new Date(),
+            lastMessagePreview: preview,
+            lastMessageDirection: "outbound",
+          });
+
+          console.log(
+            `[WA_TEMPLATE_SEND_PERSIST] ${JSON.stringify({
+              conversationId,
+              contactId: crmContactId,
+              templateName: template.name,
+              providerMessageId: messageId || null,
+              persistedMessageId: persisted.id,
+            })}`
+          );
+        } catch (persistErr: any) {
+          console.error(
+            `[WA_TEMPLATE_SEND_PERSIST] ${JSON.stringify({
+              phase: "error",
+              contactId: crmContactId,
+              templateName: template.name,
+              error: persistErr?.message || "persist_failed",
+            })}`,
+            persistErr
+          );
+        }
+      } else {
+        console.warn(
+          `[WA_TEMPLATE_SEND_PERSIST] ${JSON.stringify({
+            phase: "skipped",
+            reason: "no_crm_contact",
+            templateName: template.name,
+          })}`
+        );
+      }
+
       let sendId: string | undefined;
       if (legacyChatId) {
         const templateSend = await storage.createTemplateSend({
@@ -908,6 +1048,8 @@ export function registerTemplateRoutes(app: Express): void {
         sendId,
         messageId,
         provider: resolvedProvider,
+        persistedMessageId,
+        conversationId: persistedConversationId,
       });
     } catch (error: any) {
       console.error(

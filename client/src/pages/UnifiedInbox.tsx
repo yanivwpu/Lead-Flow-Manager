@@ -123,6 +123,8 @@ interface Message {
   direction: 'inbound' | 'outbound';
   content: string;
   contentType: string;
+  /** WhatsApp template sends — mirrors `messages.template_variables` JSON */
+  templateVariables?: Record<string, unknown> | null;
   mediaUrl?: string;
   mediaType?: string;
   mediaFilename?: string;
@@ -1314,7 +1316,12 @@ export function UnifiedInbox() {
       setShowTemplatePicker(false);
       setSelectedInboxTemplate(null);
       setVarValues({});
-      queryClient.invalidateQueries({ queryKey: ["/api/conversations", primaryConversation?.id, "messages"] });
+      const convId =
+        (data as { conversationId?: string })?.conversationId || primaryConversation?.id;
+      if (convId) {
+        queryClient.invalidateQueries({ queryKey: ["/api/conversations", convId, "messages"] });
+      }
+      queryClient.invalidateQueries({ queryKey: ["/api/inbox"] });
     },
     onError: (error: Error) => {
       toast({ title: "Failed to send template", description: error.message, variant: "destructive" });
@@ -1933,6 +1940,35 @@ export function UnifiedInbox() {
                             const imageSrc = useDirectMedia ? msg.mediaUrl! : proxyUrl;
                             const mediaDisplayUrl = useDirectMedia ? msg.mediaUrl! : proxyUrl;
                             const ct = msg.contentType;
+                            if (ct === "template") {
+                              const raw = msg.content || "";
+                              const sep = raw.indexOf("\n\n");
+                              const headerLine =
+                                sep >= 0 ? raw.slice(0, sep).trim() : raw.trim();
+                              const bodyPart = sep >= 0 ? raw.slice(sep + 2).trim() : "";
+                              const tv = msg.templateVariables;
+                              const lang =
+                                tv && typeof tv.templateLanguage === "string"
+                                  ? tv.templateLanguage
+                                  : null;
+                              return (
+                                <div className="leading-snug space-y-1">
+                                  <p className="text-xs font-semibold text-emerald-900">
+                                    {headerLine || "Template message"}
+                                  </p>
+                                  {lang ? (
+                                    <p className="text-[10px] text-gray-600">
+                                      Language: {lang}
+                                    </p>
+                                  ) : null}
+                                  {bodyPart ? (
+                                    <p className="text-sm whitespace-pre-wrap text-gray-900">
+                                      {bodyPart}
+                                    </p>
+                                  ) : null}
+                                </div>
+                              );
+                            }
                             const isImage = ct === 'image' || ct === 'sticker' || msg.mediaType?.startsWith('image');
                             const isVideo = ct === 'video' || msg.mediaType?.startsWith('video');
                             const isAudio = ct === 'audio' || msg.mediaType?.startsWith('audio');
