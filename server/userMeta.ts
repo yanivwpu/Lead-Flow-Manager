@@ -720,6 +720,7 @@ export interface MetaWebhookEntry {
         video?: { id: string; mime_type: string; sha256: string; caption?: string };
         audio?: { id: string; mime_type: string; sha256: string };
         document?: { id: string; mime_type: string; sha256: string; filename?: string; caption?: string };
+        sticker?: { id: string; mime_type?: string; sha256?: string };
         location?: { latitude: number; longitude: number; name?: string; address?: string };
         contacts?: any[];
         interactive?: { type: string; button_reply?: { id: string; title: string }; list_reply?: { id: string; title: string; description?: string } };
@@ -784,6 +785,9 @@ export function parseMetaIncomingWebhook(body: any): {
       case "document":
         mediaId = message.document?.id;
         caption = message.document?.caption;
+        break;
+      case "sticker":
+        mediaId = message.sticker?.id;
         break;
       case "interactive":
         if (message.interactive?.button_reply) {

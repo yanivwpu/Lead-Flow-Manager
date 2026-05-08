@@ -26,8 +26,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 
-const META_TEST_NUMBER_HELP =
-  "You're connected to a test number. Choose a production WhatsApp number before going live.";
+const META_TEST_NUMBER_HELP = "Connected to Meta test number. Ready for testing.";
 
 interface MetaConfigResponse {
   embeddedSignupEnabled: boolean;
@@ -372,6 +371,7 @@ export function ConnectWhatsAppHub({
   const graphSubscriptionConfirmed = coexistenceDiag?.wabaSubscribedApps?.configuredAppIdPresent === true;
   const setupIncomplete =
     metaActive &&
+    !meta?.connectedToMetaTestNumber &&
     (!meta?.phoneNumberId || graphPhoneDisconnected);
   const incompleteMessage =
     "WhatsApp setup is not finished yet. Please complete your phone verification in Meta.";

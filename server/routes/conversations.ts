@@ -240,6 +240,7 @@ export function registerConversationRoutes(app: Express): void {
       function mimeFromContentType(ct: string | null): string {
         switch (ct) {
           case 'image':    return 'image/jpeg';
+          case 'sticker':  return 'image/webp';
           case 'video':    return 'video/mp4';
           case 'audio':    return 'audio/ogg';
           case 'document': return 'application/pdf';

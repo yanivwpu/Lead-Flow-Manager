@@ -2573,7 +2573,13 @@ export async function registerRoutes(
               channel: 'whatsapp',
               channelContactId: incomingMessage.from,
               contactName: incomingMessage.profileName || incomingMessage.from,
-              content: incomingMessage.text || incomingMessage.caption || '',
+              content:
+                (incomingMessage.text || incomingMessage.caption || '').trim() ||
+                (incomingMessage.type === 'sticker'
+                  ? 'Sticker received'
+                  : incomingMessage.type !== 'text' && incomingMessage.mediaId
+                    ? 'Media received'
+                    : ''),
               contentType: incomingMessage.type === 'text' ? 'text' : incomingMessage.type,
               // Store Meta media ID in platform_media_id so the proxy can fetch it on demand
               platformMediaId: incomingMessage.mediaId,

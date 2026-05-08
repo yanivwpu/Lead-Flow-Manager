@@ -126,6 +126,7 @@ interface Message {
   mediaUrl?: string;
   mediaType?: string;
   mediaFilename?: string;
+  platformMediaId?: string;
   status: string;
   createdAt: string;
   sentViaFallback?: boolean;
@@ -1917,7 +1918,7 @@ export function UnifiedInbox() {
                                 </p>
                               );
                             }
-                            const hasMedia = !!(msg.mediaUrl || msg.mediaFilename);
+                            const hasMedia = !!(msg.mediaUrl || msg.mediaFilename || msg.platformMediaId);
                             const isOptimistic = msg.id.startsWith('optimistic-');
                             const proxyUrl = `/api/media/proxy?messageId=${encodeURIComponent(msg.id)}`;
                             const useDirectMedia = !!(
@@ -1930,7 +1931,7 @@ export function UnifiedInbox() {
                             const imageSrc = useDirectMedia ? msg.mediaUrl! : proxyUrl;
                             const mediaDisplayUrl = useDirectMedia ? msg.mediaUrl! : proxyUrl;
                             const ct = msg.contentType;
-                            const isImage = ct === 'image' || msg.mediaType?.startsWith('image');
+                            const isImage = ct === 'image' || ct === 'sticker' || msg.mediaType?.startsWith('image');
                             const isVideo = ct === 'video' || msg.mediaType?.startsWith('video');
                             const isAudio = ct === 'audio' || msg.mediaType?.startsWith('audio');
                             const isDoc = ct === 'document' || msg.mediaType === 'document';
@@ -1982,7 +1983,7 @@ export function UnifiedInbox() {
                                 <span>{msg.mediaFilename || msg.content || 'Document'}</span>
                               </a>
                             );
-                            return <p className="leading-snug">{msg.content}</p>;
+                            return <p className="leading-snug">{msg.content || (ct === 'sticker' ? 'Sticker received' : '')}</p>;
                           })()}
                           <div className="flex items-center justify-end gap-1 mt-0.5">
                             {msg.sentViaFallback && (

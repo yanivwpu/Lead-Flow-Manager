@@ -1618,6 +1618,17 @@ function isPhoneRoutingReadyFromGraphSnapshot(data: any): boolean {
   return true;
 }
 
+function isMetaTestPhoneFromSavedFields(input: { displayPhoneNumber?: string | null; verifiedName?: string | null }): boolean {
+  try {
+    return classifyMetaWhatsAppPhone({
+      displayPhoneNumber: input.displayPhoneNumber ?? null,
+      verifiedName: input.verifiedName ?? null,
+    }).kind === "test";
+  } catch {
+    return false;
+  }
+}
+
 /** Complete OAuth: validate state, exchange code, store credentials, subscribe webhooks. */
 export async function completeEmbeddedSignupOAuth(params: {
   code: string;
@@ -1995,17 +2006,24 @@ export async function completeEmbeddedSignupOAuth(params: {
   // “connected but routing inactive” vs “ready for Cloud API”.
   try {
     const snap = await fetchMetaWhatsAppPhoneNumberGraphSnapshot(longToken, resolved.phoneNumberId);
-    const ready = snap.ok ? isPhoneRoutingReadyFromGraphSnapshot(snap.data) : false;
+    const isTest = isMetaTestPhoneFromSavedFields({
+      displayPhoneNumber: resolved.displayPhoneNumber ?? null,
+      verifiedName: resolved.verifiedName ?? null,
+    });
+    const routingReady = snap.ok ? isPhoneRoutingReadyFromGraphSnapshot(snap.data) : false;
+    const ready = isTest || routingReady;
     await mergeUserMetaOAuthDebug(row.userId, {
       phase: "phone_graph_post_connect",
       ok: snap.ok,
       routingReady: ready,
+      isMetaTestNumber: isTest,
       httpStatus: snap.httpStatus ?? null,
       error: snap.ok ? null : snap.error ?? null,
     });
     await storage.updateUser(row.userId, {
       metaIntegrationStatus: ready ? "connected" : "needs_attention",
-      metaLastErrorMessage: ready ? null : "WhatsApp setup is incomplete. Finish phone verification in Meta.",
+      metaLastErrorMessage:
+        ready ? null : "WhatsApp setup is incomplete. Finish phone verification in Meta.",
       metaWebhookLastCheckedAt: new Date(),
     });
   } catch (e: any) {
@@ -2110,11 +2128,17 @@ export async function finalizeEmbeddedSignupWabaSelection(params: {
   // Immediately verify the phone node for routing readiness (same logic as auto flow).
   try {
     const snap = await fetchMetaWhatsAppPhoneNumberGraphSnapshot(token, matchPhone.id);
-    const ready = snap.ok ? isPhoneRoutingReadyFromGraphSnapshot(snap.data) : false;
+    const isTest = isMetaTestPhoneFromSavedFields({
+      displayPhoneNumber: matchPhone.displayPhoneNumber ?? null,
+      verifiedName: matchPhone.verifiedName ?? null,
+    });
+    const routingReady = snap.ok ? isPhoneRoutingReadyFromGraphSnapshot(snap.data) : false;
+    const ready = isTest || routingReady;
     await mergeUserMetaOAuthDebug(row.userId, {
       phase: "phone_graph_post_connect",
       ok: snap.ok,
       routingReady: ready,
+      isMetaTestNumber: isTest,
       httpStatus: snap.httpStatus ?? null,
       error: snap.ok ? null : snap.error ?? null,
     });
