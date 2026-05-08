@@ -1,4 +1,6 @@
 import { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback } from "react";
+import { apiRequest } from "@/lib/queryClient";
+import { getInboxTemplateSendBlockReason } from "@shared/metaTemplateSend";
 import { Link, useRoute, useLocation } from "wouter";
 import { useAuth } from "@/lib/auth-context";
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
@@ -211,6 +213,9 @@ interface MessageTemplate {
   headerContent?: string | null;
   footerText?: string | null;
   variables: string[];
+  templateType?: string | null;
+  carouselCards?: unknown[] | null;
+  buttons?: unknown[] | null;
 }
 
 const CHANNEL_CONFIG: Record<string, { icon: any; color: string; label: string }> = {
@@ -1299,16 +1304,22 @@ export function UnifiedInbox() {
   // --- Template from inbox ---
 
   const sendTemplateFromInboxMutation = useMutation({
-    mutationFn: async (data: { templateId: string; contactId: string; variables: Record<string, string> }) => {
-      const res = await fetch("/api/templates/send", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify(data),
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || "Failed to send template");
-      return json;
+    mutationFn: async (
+      data: { templateId: string; contactId: string; variables: Record<string, string>; templateName?: string }
+    ) => {
+      const { templateName, ...sendPayload } = data;
+      const payload = { ...sendPayload, sendSource: "inbox_picker" as const };
+      console.log(
+        `[WA_TEMPLATE_SEND_CLIENT] ${JSON.stringify({
+          source: "inbox_picker",
+          templateId: payload.templateId,
+          templateName: templateName ?? null,
+          variables: payload.variables,
+          components: "(built server-side from template row + variables)",
+        })}`
+      );
+      const res = await apiRequest("POST", "/api/templates/send", payload);
+      return res.json();
     },
     onSuccess: (data) => {
       toast({ title: "Template sent", description: data.message });
@@ -1350,6 +1361,7 @@ export function UnifiedInbox() {
       templateId: selectedInboxTemplate.id,
       contactId: selectedContactId,
       variables: varValues,
+      templateName: selectedInboxTemplate.name,
     });
   };
 
@@ -2371,20 +2383,47 @@ export function UnifiedInbox() {
                     (t.name.toLowerCase().includes(templateSearch.toLowerCase()) ||
                       t.bodyText?.toLowerCase().includes(templateSearch.toLowerCase()))
                   )
-                  .map((t) => (
-                    <button
-                      key={t.id}
-                      onClick={() => handleSelectTemplate(t)}
-                      className="text-left p-3 border border-gray-200 rounded-lg hover:border-gray-300 hover:bg-gray-50 transition-colors"
-                      data-testid={`template-item-${t.id}`}
-                    >
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-sm font-medium text-gray-900">{t.name}</span>
-                        <span className="text-[10px] text-gray-400 uppercase">{t.language}</span>
-                      </div>
-                      <p className="text-xs text-gray-500 line-clamp-2">{t.bodyText}</p>
-                    </button>
-                  ))}
+                  .map((t) => {
+                    const blockReason = getInboxTemplateSendBlockReason({
+                      bodyText: t.bodyText,
+                      headerType: t.headerType,
+                      headerContent: t.headerContent,
+                      buttons: t.buttons,
+                      templateType: t.templateType,
+                      carouselCards: t.carouselCards,
+                      category: t.category,
+                    });
+                    const blocked = !!blockReason;
+                    return (
+                      <button
+                        key={t.id}
+                        type="button"
+                        disabled={blocked}
+                        onClick={() => {
+                          if (!blocked) handleSelectTemplate(t);
+                        }}
+                        title={blocked ? blockReason ?? undefined : undefined}
+                        className={cn(
+                          "text-left p-3 border rounded-lg transition-colors",
+                          blocked
+                            ? "border-gray-100 bg-gray-50/80 opacity-70 cursor-not-allowed"
+                            : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
+                        )}
+                        data-testid={`template-item-${t.id}`}
+                      >
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-sm font-medium text-gray-900">{t.name}</span>
+                          <span className="text-[10px] text-gray-400 uppercase">{t.language}</span>
+                        </div>
+                        <p className="text-xs text-gray-500 line-clamp-2">{t.bodyText}</p>
+                        {blocked ? (
+                          <p className="text-[11px] text-amber-800 mt-2 leading-snug">
+                            {blockReason}
+                          </p>
+                        ) : null}
+                      </button>
+                    );
+                  })}
                 {inboxTemplates.filter((t) =>
                   t.status === "approved" &&
                   (t.name.toLowerCase().includes(templateSearch.toLowerCase()) ||
