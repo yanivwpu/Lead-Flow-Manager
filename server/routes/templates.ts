@@ -665,23 +665,74 @@ export function registerTemplateRoutes(app: Express): void {
         recipientName = chat.name;
       }
 
-      const user = await storage.getUser(req.user.id);
+      // Full session row — auth-core `getUser` omits whatsappProvider / Meta fields (defaults wrongly to Twilio).
+      const user = await storage.getUserForSession(req.user.id);
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }
 
-      const provider = user.whatsappProvider || "twilio";
-      const variableValues: Record<string, string> = variables || {};
+      const providerPref = (user.whatsappProvider || "").toString().trim().toLowerCase();
+      const isMetaConnected = !!user.metaConnected;
+      const isTwilioConnected = !!user.twilioConnected;
+      const resolvedProvider =
+        providerPref === "meta" || providerPref === "twilio"
+          ? providerPref
+          : isMetaConnected
+            ? "meta"
+            : isTwilioConnected
+              ? "twilio"
+              : "none";
 
-      console.log(`[TemplateSend] template=${template.name} recipient=${recipientName} phone=${recipientPhone} provider=${provider}`);
-      console.log(`[TemplateSend] variables=${JSON.stringify(variableValues)}`);
+      const phoneNumberId = user.metaPhoneNumberId ? String(user.metaPhoneNumberId) : null;
+      const wabaId = user.metaBusinessAccountId ? String(user.metaBusinessAccountId) : null;
+      const templateLang = (template.language && String(template.language).trim()) || "en";
+      const recipientDigits = recipientPhone.replace(/[^\d]/g, "");
+      const recipientLog =
+        recipientDigits.length > 4
+          ? `***${recipientDigits.slice(-4)}`
+          : recipientDigits
+            ? "(short)"
+            : "(none)";
+
+      const variableValues: Record<string, string> = variables || {};
 
       let messageId = "";
       let sendStatus = "sent";
 
-      if (provider === "meta") {
-        // Build components array from variable values
-        // Variables are stored as ["{{1}}", "{{2}}"] — sort by number and build params
+      if (resolvedProvider === "none") {
+        console.warn(
+          `[WA_TEMPLATE_SEND] ${JSON.stringify({
+            phase: "error",
+            provider: resolvedProvider,
+            templateName: template.name,
+            language: templateLang,
+            phoneNumberId,
+            recipient: recipientLog,
+            responseStatus: 400,
+            metaError: "no_provider_connected",
+          })}`
+        );
+        return res.status(400).json({ error: "No WhatsApp provider connected" });
+      }
+
+      if (resolvedProvider === "meta") {
+        if (!user.metaConnected || !phoneNumberId) {
+          console.warn(
+            `[WA_TEMPLATE_SEND] ${JSON.stringify({
+              phase: "error",
+              provider: resolvedProvider,
+              templateName: template.name,
+              language: templateLang,
+              phoneNumberId,
+              recipient: recipientLog,
+              responseStatus: 400,
+              metaError: "meta_not_connected",
+            })}`
+          );
+          return res.status(400).json({ error: "Meta WhatsApp account not connected" });
+        }
+
+        // Build components from DB variable placeholders ["{{1}}", ...]; Meta expects ordered body params.
         const sortedVars = (template.variables as string[] || [])
           .slice()
           .sort((a, b) => {
@@ -699,25 +750,91 @@ export function registerTemplateRoutes(app: Express): void {
           components.push({ type: "body", parameters: bodyParams });
         }
 
-        console.log(`[TemplateSend] Meta components: ${JSON.stringify(components)}`);
-
-        const result = await sendMetaWhatsAppTemplate(
-          req.user.id,
-          recipientPhone,
-          template.name,
-          template.language || "en",
-          components.length > 0 ? components : undefined
+        console.log(
+          `[WA_TEMPLATE_SEND] ${JSON.stringify({
+            phase: "request",
+            provider: resolvedProvider,
+            templateName: template.name,
+            language: templateLang,
+            phoneNumberId,
+            wabaId,
+            recipient: recipientLog,
+          })}`
         );
-        messageId = result.messageId;
-        sendStatus = result.status;
-        console.log(`[TemplateSend] Meta API success — messageId=${messageId}`);
 
-      } else {
-        // Twilio: use the Content API template SID
+        try {
+          const result = await sendMetaWhatsAppTemplate(
+            req.user.id,
+            recipientPhone,
+            template.name,
+            templateLang,
+            components.length > 0 ? components : undefined
+          );
+          messageId = result.messageId;
+          sendStatus = result.status;
+          console.log(
+            `[WA_TEMPLATE_SEND] ${JSON.stringify({
+              phase: "success",
+              provider: resolvedProvider,
+              templateName: template.name,
+              language: templateLang,
+              phoneNumberId,
+              recipient: recipientLog,
+              responseStatus: result.httpStatus,
+              messageId,
+            })}`
+          );
+        } catch (metaErr: any) {
+          const responseStatus =
+            typeof metaErr?.httpStatus === "number" ? metaErr.httpStatus : 500;
+          const metaError =
+            metaErr?.message || "Failed to send template via Meta WhatsApp API";
+          console.error(
+            `[WA_TEMPLATE_SEND] ${JSON.stringify({
+              phase: "error",
+              provider: resolvedProvider,
+              templateName: template.name,
+              language: templateLang,
+              phoneNumberId,
+              recipient: recipientLog,
+              responseStatus,
+              metaError,
+              metaErrorCode: metaErr?.metaErrorCode,
+              metaErrorType: metaErr?.metaErrorType,
+            })}`,
+            metaErr
+          );
+          return res.status(responseStatus >= 400 && responseStatus < 600 ? responseStatus : 500).json({
+            error: metaError,
+          });
+        }
+      } else if (resolvedProvider === "twilio") {
         const twilioClient = await getUserTwilioClient(req.user.id);
         if (!twilioClient) {
-          return res.status(400).json({ error: "Twilio is not connected." });
+          console.warn(
+            `[WA_TEMPLATE_SEND] ${JSON.stringify({
+              phase: "error",
+              provider: resolvedProvider,
+              templateName: template.name,
+              language: templateLang,
+              phoneNumberId: null,
+              recipient: recipientLog,
+              responseStatus: 400,
+              metaError: "twilio_not_connected",
+            })}`
+          );
+          return res.status(400).json({ error: "Twilio is not connected" });
         }
+
+        console.log(
+          `[WA_TEMPLATE_SEND] ${JSON.stringify({
+            phase: "request",
+            provider: resolvedProvider,
+            templateName: template.name,
+            language: templateLang,
+            recipient: recipientLog,
+          })}`
+        );
 
         const toNumber = recipientPhone.startsWith("whatsapp:")
           ? recipientPhone
@@ -735,10 +852,38 @@ export function registerTemplateRoutes(app: Express): void {
           msgOptions.contentVariables = JSON.stringify(variableValues);
         }
 
-        const msg = await (twilioClient as any).messages.create(msgOptions);
-        messageId = msg.sid;
-        sendStatus = msg.status;
-        console.log(`[TemplateSend] Twilio success — sid=${messageId} status=${sendStatus}`);
+        try {
+          const msg = await (twilioClient as any).messages.create(msgOptions);
+          messageId = msg.sid;
+          sendStatus = msg.status;
+          console.log(
+            `[WA_TEMPLATE_SEND] ${JSON.stringify({
+              phase: "success",
+              provider: resolvedProvider,
+              templateName: template.name,
+              language: templateLang,
+              recipient: recipientLog,
+              responseStatus: 200,
+              messageId,
+            })}`
+          );
+        } catch (twilioErr: any) {
+          console.error(
+            `[WA_TEMPLATE_SEND] ${JSON.stringify({
+              phase: "error",
+              provider: resolvedProvider,
+              templateName: template.name,
+              language: templateLang,
+              recipient: recipientLog,
+              responseStatus: twilioErr?.status || 500,
+              metaError: twilioErr?.message || "twilio_send_failed",
+            })}`,
+            twilioErr
+          );
+          return res.status(500).json({
+            error: twilioErr?.message || "Failed to send template via Twilio",
+          });
+        }
       }
 
       let sendId: string | undefined;
@@ -762,10 +907,16 @@ export function registerTemplateRoutes(app: Express): void {
         message: `Template "${template.name}" sent to ${recipientName}`,
         sendId,
         messageId,
-        provider,
+        provider: resolvedProvider,
       });
     } catch (error: any) {
-      console.error("[TemplateSend] Error:", error);
+      console.error(
+        `[WA_TEMPLATE_SEND] ${JSON.stringify({
+          phase: "unexpected_error",
+          metaError: error?.message || "unknown",
+        })}`,
+        error
+      );
       res.status(500).json({ error: error.message || "Failed to send template" });
     }
   });

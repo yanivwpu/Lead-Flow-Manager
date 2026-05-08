@@ -541,12 +541,16 @@ export async function sendMetaWhatsAppTemplate(
   templateName: string,
   languageCode: string = "en",
   components?: any[]
-): Promise<{ messageId: string; status: string }> {
+): Promise<{ messageId: string; status: string; httpStatus: number }> {
   const accessToken = await getMetaAccessToken(userId);
   const phoneNumberId = await getMetaPhoneNumberId(userId);
 
   if (!accessToken || !phoneNumberId) {
-    throw new Error("Meta WhatsApp Business API not connected. Please connect your Meta account first.");
+    const err = new Error(
+      "Meta WhatsApp Business API not connected. Please connect your Meta account first."
+    ) as Error & { httpStatus?: number; metaErrorCode?: number; metaErrorType?: string };
+    err.httpStatus = 0;
+    throw err;
   }
 
   const normalizedPhone = toPhone.replace(/[^\d]/g, "");
@@ -580,15 +584,32 @@ export async function sendMetaWhatsAppTemplate(
     }
   );
 
+  const httpStatus = response.status;
+
   if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error?.message || "Failed to send template via Meta WhatsApp API");
+    let body: { error?: { message?: string; code?: number; type?: string } } = {};
+    try {
+      body = (await response.json()) as typeof body;
+    } catch {
+      /* ignore */
+    }
+    const msg = body.error?.message || "Failed to send template via Meta WhatsApp API";
+    const err = new Error(msg) as Error & {
+      httpStatus?: number;
+      metaErrorCode?: number;
+      metaErrorType?: string;
+    };
+    err.httpStatus = httpStatus;
+    err.metaErrorCode = body.error?.code;
+    err.metaErrorType = body.error?.type;
+    throw err;
   }
 
   const result = await response.json();
-  return { 
-    messageId: result.messages?.[0]?.id || "", 
-    status: "sent" 
+  return {
+    messageId: result.messages?.[0]?.id || "",
+    status: "sent",
+    httpStatus,
   };
 }
 

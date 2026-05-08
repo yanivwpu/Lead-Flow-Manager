@@ -508,7 +508,7 @@ async function sendFlowTemplate(
   templateVariables: Record<string, string>
 ): Promise<void> {
   const [user, template, contact] = await Promise.all([
-    storage.getUser(ctx.userId),
+    storage.getUserForSession(ctx.userId),
     storage.getMessageTemplate(templateId),
     storage.getContact(ctx.contactId),
   ]);
@@ -528,10 +528,29 @@ async function sendFlowTemplate(
     throw new Error(`Contact ${ctx.contactId} has no phone number — cannot send template`);
   }
 
-  const provider = (user as any).whatsappProvider || "twilio";
+  const providerPref = (user as any).whatsappProvider?.toString().trim().toLowerCase() || "";
+  const isMetaConnected = !!(user as any).metaConnected;
+  const isTwilioConnected = !!(user as any).twilioConnected;
+  const provider =
+    providerPref === "meta" || providerPref === "twilio"
+      ? providerPref
+      : isMetaConnected
+        ? "meta"
+        : isTwilioConnected
+          ? "twilio"
+          : "none";
+
+  if (provider === "none") {
+    throw new Error("No WhatsApp provider connected — cannot send template");
+  }
+
+  const templateLang =
+    template.language && String(template.language).trim()
+      ? String(template.language).trim()
+      : "en";
 
   console.log(
-    `[Chatbot] 📨 Template send — template="${template.name}" lang="${template.language}" provider="${provider}" to="${recipientPhone}"`
+    `[Chatbot] 📨 Template send — template="${template.name}" lang="${templateLang}" provider="${provider}" to="${recipientPhone}"`
   );
 
   if (provider === "meta") {
@@ -557,7 +576,7 @@ async function sendFlowTemplate(
       ctx.userId,
       recipientPhone,
       template.name,
-      template.language || "en",
+      templateLang,
       components.length > 0 ? components : undefined
     );
 
