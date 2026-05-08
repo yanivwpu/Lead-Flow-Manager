@@ -3,6 +3,8 @@
  */
 
 export type TemplateRowForMetaSend = {
+  /** WhatsApp template name from Meta (e.g. `hello_world`, `jaspers_market_media_carousel_v1`) */
+  name?: string | null;
   bodyText: string | null | undefined;
   headerType: string | null | undefined;
   headerContent: string | null | undefined;
@@ -117,62 +119,164 @@ export function buildMetaCloudTemplateSendComponents(
 /** Input shape matches `UnifiedInbox.tsx` template picker (`bodyText`, `headerType`, …). */
 export type InboxTemplateSendBlockInput = TemplateRowForMetaSend;
 
-function buttonsHaveDynamicUrlPlaceholder(buttons: unknown): boolean {
-  if (!Array.isArray(buttons)) return false;
-  return buttons.some((b) => /\{\{\d+\}\}/.test(String((b as { url?: string })?.url || "")));
+const CAROUSEL_NAME_RE = /carousel|media_carousel|_carousel_|jaspers_market_media/i;
+
+function logInboxGuardBlocked(template: InboxTemplateSendBlockInput, reason: string): void {
+  try {
+    console.warn(
+      `[WA_INBOX_TEMPLATE_GUARD] ${JSON.stringify({ blocked: true, reason, template })}`
+    );
+  } catch {
+    /* ignore */
+  }
 }
 
 /**
- * Inbox picker: block templates we cannot send reliably from the compact UI
- * (avoids Meta #132012 / cryptic parameter errors). Simple text templates like `hello_world` stay allowed.
+ * Parse Meta Graph `message_templates` payload into DB fields (carousel detection, templateType).
+ * Handles case-insensitive component `type` and CAROUSEL / nested `cards`.
+ */
+export function parseMetaGraphTemplateForLibrary(t: {
+  name?: string;
+  components?: Array<Record<string, unknown>>;
+}): {
+  templateType: "text" | "media" | "carousel";
+  carouselCards: unknown[];
+  bodyText: string;
+  headerType: string | null;
+  headerContent: string | null;
+  footerText: string | null;
+  buttons: unknown[];
+  variables: string[];
+  componentTypesUpper: string[];
+} {
+  let bodyText = "";
+  let headerType: string | null = null;
+  let headerContent: string | null = null;
+  let footerText: string | null = null;
+  let buttons: unknown[] = [];
+  const variables: string[] = [];
+  let carouselCards: unknown[] = [];
+  let templateType: "text" | "media" | "carousel" = "text";
+  const componentTypesUpper: string[] = [];
+
+  for (const comp of t.components || []) {
+    const ctype = String(comp.type ?? "").toUpperCase();
+    componentTypesUpper.push(ctype);
+
+    if (ctype === "CAROUSEL" || (Array.isArray(comp.cards) && (comp.cards as unknown[]).length > 0)) {
+      templateType = "carousel";
+      if (Array.isArray(comp.cards)) carouselCards = comp.cards;
+    }
+
+    if (ctype === "BODY") {
+      bodyText = String(comp.text ?? "");
+      const vars = bodyText.match(/\{\{\d+\}\}/g) || [];
+      vars.forEach((v: string) => {
+        if (!variables.includes(v)) variables.push(v);
+      });
+    } else if (ctype === "HEADER") {
+      headerType = String(comp.format ?? "").toLowerCase() || null;
+      if (String(comp.format ?? "").toUpperCase() === "TEXT") {
+        headerContent = comp.text != null ? String(comp.text) : null;
+        const hv = (headerContent || "").match(/\{\{\d+\}\}/g) || [];
+        hv.forEach((v: string) => {
+          if (!variables.includes(v)) variables.push(v);
+        });
+      } else if (
+        (comp as { example?: { header_handle?: string[] } }).example?.header_handle?.[0]
+      ) {
+        headerContent = (comp as { example: { header_handle: string[] } }).example.header_handle[0];
+      }
+    } else if (ctype === "FOOTER") {
+      footerText = comp.text != null ? String(comp.text) : null;
+    } else if (ctype === "BUTTONS") {
+      buttons = Array.isArray(comp.buttons) ? comp.buttons : [];
+      for (const b of buttons as Array<{ url?: string }>) {
+        const url = String(b?.url || "");
+        const bv = url.match(/\{\{\d+\}\}/g) || [];
+        bv.forEach((v: string) => {
+          if (!variables.includes(v)) variables.push(v);
+        });
+      }
+    }
+  }
+
+  if (templateType !== "carousel") {
+    const hf = (headerType || "").toLowerCase();
+    if (["image", "video", "document"].includes(hf)) {
+      templateType = "media";
+    }
+  }
+
+  const nm = String(t.name ?? "").toLowerCase();
+  if (templateType === "text" && CAROUSEL_NAME_RE.test(nm)) {
+    templateType = "carousel";
+  }
+
+  variables.sort((a, b) => {
+    const na = parseInt(a.replace(/\D/g, ""), 10) || 0;
+    const nb = parseInt(b.replace(/\D/g, ""), 10) || 0;
+    return na - nb;
+  });
+
+  return {
+    templateType,
+    carouselCards,
+    bodyText,
+    headerType,
+    headerContent,
+    footerText,
+    buttons,
+    variables,
+    componentTypesUpper,
+  };
+}
+
+/**
+ * Inbox picker: only **body-only** templates (like `hello_world`): no header/media row, no buttons,
+ * not carousel/media/auth. Prevents Meta `#132012` from unsupported component payloads.
  */
 export function getInboxTemplateSendBlockReason(
   template: InboxTemplateSendBlockInput
 ): { blocked: boolean; reason?: string } {
+  const genericCarousel =
+    "This template uses carousel/media components and can't be sent from inbox yet.";
+
+  const nm = String(template.name ?? "").toLowerCase();
+  if (CAROUSEL_NAME_RE.test(nm)) {
+    logInboxGuardBlocked(template, genericCarousel);
+    return { blocked: true, reason: genericCarousel };
+  }
+
   const tt = (template.templateType || "").toLowerCase();
-  if (tt === "carousel") {
-    return {
-      blocked: true,
-      reason:
-        "This template is a carousel and can’t be sent from the inbox yet. Use Templates → Send Template.",
-    };
+  if (tt === "carousel" || tt === "media") {
+    logInboxGuardBlocked(template, genericCarousel);
+    return { blocked: true, reason: genericCarousel };
   }
+
   if (Array.isArray(template.carouselCards) && template.carouselCards.length > 0) {
-    return {
-      blocked: true,
-      reason:
-        "This template uses carousel cards and can’t be sent from the inbox yet. Use Templates → Send Template.",
-    };
+    logInboxGuardBlocked(template, genericCarousel);
+    return { blocked: true, reason: genericCarousel };
   }
+
   const cat = (template.category || "").toLowerCase();
   if (cat === "authentication") {
-    return {
-      blocked: true,
-      reason:
-        "Authentication (OTP) templates can’t be sent from the inbox yet. Use the Templates page.",
-    };
+    const reason =
+      "Authentication (OTP) templates can't be sent from the inbox yet. Use the Templates page.";
+    logInboxGuardBlocked(template, reason);
+    return { blocked: true, reason };
   }
-  if (headerNeedsUnsupportedDynamicMedia(template.headerType, template.headerContent)) {
-    return {
-      blocked: true,
-      reason:
-        "This template needs a dynamic image, video, or document header and can’t be sent from the inbox yet. Use the Templates page.",
-    };
+
+  const hasHeader = !!(template.headerType && String(template.headerType).trim());
+  if (hasHeader || headerNeedsUnsupportedDynamicMedia(template.headerType, template.headerContent)) {
+    logInboxGuardBlocked(template, genericCarousel);
+    return { blocked: true, reason: genericCarousel };
   }
-  const ht = (template.headerType || "").toLowerCase();
-  if (ht === "text" && extractSortedPlaceholders(template.headerContent).length > 0) {
-    return {
-      blocked: true,
-      reason:
-        "This template has header text variables and can’t be sent from the inbox yet. Use the Templates page.",
-    };
+
+  if (Array.isArray(template.buttons) && template.buttons.length > 0) {
+    logInboxGuardBlocked(template, genericCarousel);
+    return { blocked: true, reason: genericCarousel };
   }
-  if (buttonsHaveDynamicUrlPlaceholder(template.buttons)) {
-    return {
-      blocked: true,
-      reason:
-        "This template has URL button variables and can’t be sent from the inbox yet. Use the Templates page.",
-    };
-  }
+
   return { blocked: false };
 }
