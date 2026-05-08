@@ -1,5 +1,10 @@
 import type { Express } from "express";
 import type { Channel } from "@shared/schema";
+import {
+  buildMetaCloudTemplateSendComponents,
+  getInboxTemplateSendBlockReason,
+  normalizeTemplateVariableMap,
+} from "@shared/metaTemplateSend";
 import { storage } from "../storage";
 import { getMetaMessageTemplates, sendMetaWhatsAppTemplate } from "../userMeta";
 import { getUserTwilioClient } from "../userTwilio";
@@ -419,6 +424,10 @@ export function registerTemplateRoutes(app: Express): void {
                 headerType = (comp.format || "").toLowerCase() || null;
                 if (comp.format === "TEXT") {
                   headerContent = comp.text || null;
+                  const hv = (comp.text || "").match(/\{\{\d+\}\}/g) || [];
+                  hv.forEach((v: string) => {
+                    if (!variables.includes(v)) variables.push(v);
+                  });
                 } else if (comp.example?.header_handle?.[0]) {
                   headerContent = comp.example.header_handle[0];
                 }
@@ -426,8 +435,21 @@ export function registerTemplateRoutes(app: Express): void {
                 footerText = comp.text || null;
               } else if (comp.type === "BUTTONS") {
                 buttons = comp.buttons || [];
+                for (const b of buttons as any[]) {
+                  const url = String(b?.url || "");
+                  const bv = url.match(/\{\{\d+\}\}/g) || [];
+                  bv.forEach((v: string) => {
+                    if (!variables.includes(v)) variables.push(v);
+                  });
+                }
               }
             }
+
+            variables.sort((a, b) => {
+              const na = parseInt(a.replace(/\D/g, ""), 10) || 0;
+              const nb = parseInt(b.replace(/\D/g, ""), 10) || 0;
+              return na - nb;
+            });
 
             const existing = await storage.getMessageTemplateByTwilioSid(req.user.id, metaId);
 
@@ -671,7 +693,17 @@ export function registerTemplateRoutes(app: Express): void {
         return res.status(403).json({ error: "Template messaging is a Pro feature" });
       }
 
-      const { templateId, chatId, contactId, variables } = req.body;
+      const { templateId, chatId, contactId, variables, sendSource } = req.body as {
+        templateId?: string;
+        chatId?: string;
+        contactId?: string;
+        variables?: Record<string, string>;
+        sendSource?: string;
+      };
+      const sendSourceTag =
+        typeof sendSource === "string" && sendSource.trim()
+          ? sendSource.trim()
+          : "unknown";
       if (!templateId || (!chatId && !contactId)) {
         return res.status(400).json({ error: "Template ID and either Chat ID or Contact ID are required" });
       }
@@ -747,7 +779,7 @@ export function registerTemplateRoutes(app: Express): void {
             ? "(short)"
             : "(none)";
 
-      const variableValues: Record<string, string> = variables || {};
+      const variableValues = normalizeTemplateVariableMap(variables || {});
 
       let messageId = "";
       let sendStatus = "sent";
@@ -785,33 +817,49 @@ export function registerTemplateRoutes(app: Express): void {
           return res.status(400).json({ error: "Meta WhatsApp account not connected" });
         }
 
-        // Build components from DB variable placeholders ["{{1}}", ...]; Meta expects ordered body params.
-        const sortedVars = (template.variables as string[] || [])
-          .slice()
-          .sort((a, b) => {
-            const na = parseInt(a.replace(/\D/g, ""), 10) || 0;
-            const nb = parseInt(b.replace(/\D/g, ""), 10) || 0;
-            return na - nb;
-          });
-
-        const components: any[] = [];
-        if (sortedVars.length > 0) {
-          const bodyParams = sortedVars.map((v) => ({
-            type: "text",
-            text: variableValues[v] || "",
-          }));
-          components.push({ type: "body", parameters: bodyParams });
+        if (sendSourceTag === "inbox_picker") {
+          const inboxBlock = getInboxTemplateSendBlockReason(template);
+          if (inboxBlock.blocked) {
+            console.warn(
+              `[WA_TEMPLATE_SEND] ${JSON.stringify({
+                phase: "blocked_inbox",
+                sendSource: sendSourceTag,
+                templateName: template.name,
+                metaError: inboxBlock.reason,
+              })}`
+            );
+            return res.status(400).json({
+              error: inboxBlock.reason || "This template can’t be sent from the inbox.",
+            });
+          }
         }
+
+        const built = buildMetaCloudTemplateSendComponents(template, variableValues);
+        if (built.error) {
+          console.warn(
+            `[WA_TEMPLATE_SEND] ${JSON.stringify({
+              phase: "build_error",
+              sendSource: sendSourceTag,
+              templateName: template.name,
+              metaError: built.error,
+            })}`
+          );
+          return res.status(400).json({ error: built.error });
+        }
+
+        const components = built.components as any[] | undefined;
 
         console.log(
           `[WA_TEMPLATE_SEND] ${JSON.stringify({
             phase: "request",
+            sendSource: sendSourceTag,
             provider: resolvedProvider,
             templateName: template.name,
             language: templateLang,
             phoneNumberId,
             wabaId,
             recipient: recipientLog,
+            components,
           })}`
         );
 
@@ -821,13 +869,14 @@ export function registerTemplateRoutes(app: Express): void {
             recipientPhone,
             template.name,
             templateLang,
-            components.length > 0 ? components : undefined
+            components && components.length > 0 ? components : undefined
           );
           messageId = result.messageId;
           sendStatus = result.status;
           console.log(
             `[WA_TEMPLATE_SEND] ${JSON.stringify({
               phase: "success",
+              sendSource: sendSourceTag,
               provider: resolvedProvider,
               templateName: template.name,
               language: templateLang,
@@ -835,6 +884,7 @@ export function registerTemplateRoutes(app: Express): void {
               recipient: recipientLog,
               responseStatus: result.httpStatus,
               messageId,
+              components,
             })}`
           );
         } catch (metaErr: any) {
@@ -845,6 +895,7 @@ export function registerTemplateRoutes(app: Express): void {
           console.error(
             `[WA_TEMPLATE_SEND] ${JSON.stringify({
               phase: "error",
+              sendSource: sendSourceTag,
               provider: resolvedProvider,
               templateName: template.name,
               language: templateLang,
@@ -854,6 +905,7 @@ export function registerTemplateRoutes(app: Express): void {
               metaError,
               metaErrorCode: metaErr?.metaErrorCode,
               metaErrorType: metaErr?.metaErrorType,
+              components,
             })}`,
             metaErr
           );

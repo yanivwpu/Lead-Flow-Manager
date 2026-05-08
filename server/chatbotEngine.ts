@@ -1,5 +1,6 @@
 import { storage } from "./storage";
 import { type ChatbotFlow } from "@shared/schema";
+import { buildMetaCloudTemplateSendComponents, normalizeTemplateVariableMap } from "@shared/metaTemplateSend";
 import { sendMetaWhatsAppTemplate } from "./userMeta";
 import { getUserTwilioClient } from "./userTwilio";
 import { scheduleHubSpotAutoSync } from "./hubspotAutoSync";
@@ -554,30 +555,19 @@ async function sendFlowTemplate(
   );
 
   if (provider === "meta") {
-    // Build Meta components array from positional variable list ({{1}}, {{2}}, …)
-    const sortedVars = ((template.variables as string[]) || [])
-      .slice()
-      .sort((a, b) => {
-        const na = parseInt(a.replace(/\D/g, ""), 10) || 0;
-        const nb = parseInt(b.replace(/\D/g, ""), 10) || 0;
-        return na - nb;
-      });
-
-    const components: any[] = [];
-    if (sortedVars.length > 0) {
-      const bodyParams = sortedVars.map((v) => ({
-        type: "text",
-        text: templateVariables[v] || "",
-      }));
-      components.push({ type: "body", parameters: bodyParams });
+    const vv = normalizeTemplateVariableMap(templateVariables);
+    const built = buildMetaCloudTemplateSendComponents(template, vv);
+    if (built.error) {
+      throw new Error(built.error);
     }
+    const components = built.components as any[] | undefined;
 
     const result = await sendMetaWhatsAppTemplate(
       ctx.userId,
       recipientPhone,
       template.name,
       templateLang,
-      components.length > 0 ? components : undefined
+      components && components.length > 0 ? components : undefined
     );
 
     console.log(`[Chatbot] ✅ Meta template sent — messageId=${result.messageId} status=${result.status}`);

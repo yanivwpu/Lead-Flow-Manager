@@ -2384,7 +2384,7 @@ export function UnifiedInbox() {
                       t.bodyText?.toLowerCase().includes(templateSearch.toLowerCase()))
                   )
                   .map((t) => {
-                    const blockReason = getInboxTemplateSendBlockReason({
+                    const { blocked, reason: blockReason } = getInboxTemplateSendBlockReason({
                       bodyText: t.bodyText,
                       headerType: t.headerType,
                       headerContent: t.headerContent,
@@ -2393,7 +2393,6 @@ export function UnifiedInbox() {
                       carouselCards: t.carouselCards,
                       category: t.category,
                     });
-                    const blocked = !!blockReason;
                     return (
                       <button
                         key={t.id}

@@ -219,7 +219,17 @@ export function Templates() {
 
   const sendTemplateMutation = useMutation({
     mutationFn: async (data: { templateId: string; chatId: string; variables: Record<string, string> }) => {
-      const res = await apiRequest("POST", "/api/templates/send", data);
+      const payload = { ...data, sendSource: "templates_page" as const };
+      console.log(
+        `[WA_TEMPLATE_SEND_CLIENT] ${JSON.stringify({
+          source: "templates_page",
+          templateId: payload.templateId,
+          chatId: payload.chatId,
+          variables: payload.variables,
+          components: "(built server-side from template row + variables)",
+        })}`
+      );
+      const res = await apiRequest("POST", "/api/templates/send", payload);
       return res.json();
     },
     onSuccess: (data: any) => {
