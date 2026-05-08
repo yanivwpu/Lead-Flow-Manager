@@ -27,7 +27,7 @@ import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 
 const META_TEST_NUMBER_HELP =
-  "You're connected to a Meta test number. Choose a production WhatsApp number before going live.";
+  "You're connected to a test number. Choose a production WhatsApp number before going live.";
 
 interface MetaConfigResponse {
   embeddedSignupEnabled: boolean;
@@ -373,6 +373,8 @@ export function ConnectWhatsAppHub({
   const setupIncomplete =
     metaActive &&
     (!meta?.phoneNumberId || graphPhoneDisconnected);
+  const incompleteMessage =
+    "WhatsApp setup is not finished yet. Please complete your phone verification in Meta.";
 
   // Load pending WABA choices (redirect flow) if present.
   const {
@@ -462,27 +464,10 @@ export function ConnectWhatsAppHub({
           <div className="flex items-start gap-2 rounded-xl border border-emerald-200 bg-emerald-50/80 px-3 py-3">
             <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0 mt-0.5" />
             <div className="min-w-0 text-sm flex-1">
-              <p className="font-semibold text-emerald-900">
-                {setupIncomplete ? "Connected — setup incomplete" : "Connected — Meta Cloud API"}
-              </p>
+              <p className="font-semibold text-emerald-900">Connected</p>
               {meta?.connectedToMetaTestNumber && (
                 <p className="text-xs text-amber-900 mt-2 border border-amber-200 rounded-md px-2 py-1.5 bg-amber-50/90">
                   {META_TEST_NUMBER_HELP}
-                </p>
-              )}
-              {meta?.legacyManualConnection && (
-                <p className="text-xs text-emerald-800 mt-1">
-                  <span className="font-semibold">Legacy Meta connection</span> — credentials were entered manually. You can upgrade to Embedded Signup anytime: disconnect first, then use &quot;Continue with Meta&quot;.
-                </p>
-              )}
-              {status?.inboundRouting?.coexistenceReconnectRecommended && !meta?.connectionUsedCoexistenceFlow && (
-                <p className="text-xs text-amber-900 mt-2 border border-amber-200 rounded-md px-2 py-1.5 bg-amber-50/90">
-                  <span className="font-semibold">Business App vs inbox:</span>{" "}
-                  If customer messages open only in the WhatsApp Business app and never reach WhachatCRM, Meta is likely routing those chats to the phone only.
-                  Add{" "}
-                  <code className="text-[10px] bg-amber-100/80 px-1 rounded">META_WHATSAPP_COEXISTENCE_CONFIG_ID</code>{" "}
-                  in Railway (coexistence Embedded Signup config from Meta), redeploy, disconnect Meta here, then reconnect using{" "}
-                  <span className="font-medium">&quot;existing WhatsApp Business App number&quot;</span> so inbound webhooks receive conversations.
                 </p>
               )}
               <dl className="mt-2 space-y-1.5 text-xs text-gray-700">
@@ -496,64 +481,67 @@ export function ConnectWhatsAppHub({
                 </div>
               </dl>
 
-              <div className="mt-3 pt-3 border-t border-emerald-200/80 space-y-1.5 text-xs">
-                <div className="flex justify-between gap-2">
-                  <dt className="text-gray-600">Webhook endpoint</dt>
-                  <dd
-                    className={cn(
-                      "font-medium",
-                      (meta?.webhookSignatureHealth ?? meta?.webhookHealth) === "ok"
-                        ? "text-emerald-800"
+              {supportMode && (
+                <div className="mt-3 pt-3 border-t border-emerald-200/80 space-y-1.5 text-xs">
+                  <div className="flex justify-between gap-2">
+                    <dt className="text-gray-600">Webhook endpoint</dt>
+                    <dd
+                      className={cn(
+                        "font-medium",
+                        (meta?.webhookSignatureHealth ?? meta?.webhookHealth) === "ok"
+                          ? "text-emerald-800"
+                          : (meta?.webhookSignatureHealth ?? meta?.webhookHealth) === "needs_app_secret"
+                            ? "text-red-700"
+                            : "text-gray-600"
+                      )}
+                    >
+                      {(meta?.webhookSignatureHealth ?? meta?.webhookHealth) === "ok"
+                        ? "Healthy"
                         : (meta?.webhookSignatureHealth ?? meta?.webhookHealth) === "needs_app_secret"
-                          ? "text-red-700"
-                          : "text-gray-600"
-                    )}
-                  >
-                    {(meta?.webhookSignatureHealth ?? meta?.webhookHealth) === "ok"
-                      ? "Healthy"
-                      : (meta?.webhookSignatureHealth ?? meta?.webhookHealth) === "needs_app_secret"
-                        ? "Error"
-                        : "—"}
-                  </dd>
+                          ? "Error"
+                          : "—"}
+                    </dd>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <dt className="text-gray-600">WABA app subscription</dt>
+                    <dd
+                      className={cn(
+                        "font-medium",
+                        graphSubscriptionConfirmed
+                          ? "text-emerald-800"
+                          : "text-amber-800"
+                      )}
+                    >
+                      {graphSubscriptionConfirmed ? "Confirmed (Graph)" : "Needs attention (Graph)"}
+                    </dd>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <dt className="text-gray-600">Phone Cloud API status</dt>
+                    <dd
+                      className={cn(
+                        "font-medium text-right",
+                        graphPhoneDisconnected ? "text-amber-800" : "text-emerald-800"
+                      )}
+                      title={coexistenceDiag?.graphPhone?.fieldsRequested || undefined}
+                    >
+                      {coexistenceDiag?.graphPhone?.ok
+                        ? `${graphPhoneStatus || "UNKNOWN"} / ${graphCodeStatus || "UNKNOWN"}`
+                        : diagFetching
+                          ? "Checking…"
+                          : "Unknown"}
+                    </dd>
+                  </div>
                 </div>
-                <div className="flex justify-between gap-2">
-                  <dt className="text-gray-600">WABA app subscription</dt>
-                  <dd
-                    className={cn(
-                      "font-medium",
-                      graphSubscriptionConfirmed
-                        ? "text-emerald-800"
-                        : "text-amber-800"
-                    )}
-                  >
-                    {graphSubscriptionConfirmed ? "Confirmed (Graph)" : "Needs attention (Graph)"}
-                  </dd>
-                </div>
-                <div className="flex justify-between gap-2">
-                  <dt className="text-gray-600">Phone Cloud API status</dt>
-                  <dd
-                    className={cn(
-                      "font-medium text-right",
-                      graphPhoneDisconnected ? "text-amber-800" : "text-emerald-800"
-                    )}
-                    title={coexistenceDiag?.graphPhone?.fieldsRequested || undefined}
-                  >
-                    {coexistenceDiag?.graphPhone?.ok
-                      ? `${graphPhoneStatus || "UNKNOWN"} / ${graphCodeStatus || "UNKNOWN"}`
-                      : diagFetching
-                        ? "Checking…"
-                        : "Unknown"}
-                  </dd>
-                </div>
-              </div>
+              )}
 
               {setupIncomplete && (
                 <p className="text-xs text-amber-900 mt-2 border border-amber-200 rounded-md px-2 py-1.5 bg-amber-50/90">
-                  WhatsApp setup is incomplete. Finish phone verification in Meta.
+                  {incompleteMessage}
                 </p>
               )}
 
-              {meta?.integrationStatus === "needs_attention" &&
+              {supportMode &&
+                meta?.integrationStatus === "needs_attention" &&
                 meta?.lastErrorMessage &&
                 !String(meta.lastErrorMessage).toLowerCase().includes("webhook subscription could not be confirmed") && (
                   <p className="text-xs text-amber-800 mt-2 border border-amber-100 rounded-md px-2 py-1 bg-white/80">
@@ -573,7 +561,7 @@ export function ConnectWhatsAppHub({
                     <dl className="mt-2 space-y-1 text-xs text-gray-700 border border-slate-200 rounded-lg p-2 bg-white/80">
                       <div className="flex justify-between gap-2">
                         <dt className="text-gray-500">Provider</dt>
-                        <dd className="font-medium">{meta?.providerLabel || "Meta Cloud API"}</dd>
+                        <dd className="font-medium">{meta?.providerLabel || "Meta"}</dd>
                       </div>
                       <div className="flex justify-between gap-2">
                         <dt className="text-gray-500">WABA ID</dt>
@@ -612,42 +600,46 @@ export function ConnectWhatsAppHub({
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={diagFetching}
-              onClick={() => refetchDiag()}
-            >
-              {diagFetching ? (
-                <Loader2 className="h-4 w-4 animate-spin mr-1" />
-              ) : (
-                <RefreshCw className="h-4 w-4 mr-1" />
-              )}
-              Refresh Graph diagnostics
-            </Button>
+            {supportMode && (
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={diagFetching}
+                  onClick={() => refetchDiag()}
+                >
+                  {diagFetching ? (
+                    <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                  ) : (
+                    <RefreshCw className="h-4 w-4 mr-1" />
+                  )}
+                  Refresh Graph diagnostics
+                </Button>
 
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={subscribeMutation.isPending}
-              onClick={async () => {
-                await subscribeMutation.mutateAsync();
-                queryClient.invalidateQueries({ queryKey: ["/api/integrations/whatsapp/status"] });
-                await refetchDiag();
-              }}
-              title="POST /{waba-id}/subscribed_apps — re-subscribe this Meta app to your WABA"
-            >
-              {subscribeMutation.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin mr-1" />
-              ) : (
-                <RefreshCw className="h-4 w-4 mr-1" />
-              )}
-              Repair WABA subscription
-            </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={subscribeMutation.isPending}
+                  onClick={async () => {
+                    await subscribeMutation.mutateAsync();
+                    queryClient.invalidateQueries({ queryKey: ["/api/integrations/whatsapp/status"] });
+                    await refetchDiag();
+                  }}
+                  title="POST /{waba-id}/subscribed_apps — re-subscribe this Meta app to your WABA"
+                >
+                  {subscribeMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                  ) : (
+                    <RefreshCw className="h-4 w-4 mr-1" />
+                  )}
+                  Repair WABA subscription
+                </Button>
+              </>
+            )}
             <Button type="button" variant="outline" size="sm" onClick={() => setConfirmDisconnect(true)}>
-              Disconnect Meta
+              Disconnect
             </Button>
             <Button type="button" variant="ghost" size="sm" onClick={onClose}>
               Close
@@ -662,12 +654,6 @@ export function ConnectWhatsAppHub({
               <p className="text-[11px] text-gray-500 mt-0.5">
                 Choose how you want to connect. Twilio stays available as an alternate provider.
               </p>
-              {cfg?.coexistenceEnabled && (
-                <p className="text-[11px] text-blue-800 mt-2 rounded-md border border-blue-100 bg-blue-50/80 px-2 py-1.5">
-                  Already chatting with customers in the <span className="font-medium">WhatsApp Business</span> app? Use{" "}
-                  <span className="font-semibold">option B</span> so Meta can route messages to WhachatCRM and your phone together (coexistence).
-                </p>
-              )}
             </div>
             <div className="p-3 space-y-3">
               <button
@@ -686,16 +672,13 @@ export function ConnectWhatsAppHub({
                   <div>
                     <p className="text-sm font-semibold text-gray-900">A) Continue with Meta</p>
                     <p className="text-[11px] text-gray-600 mt-0.5">
-                      Embedded Signup — create or select Business, WABA, and phone in Meta&apos;s flow (recommended).
-                    </p>
-                    <p className="text-[11px] text-emerald-700 mt-0.5 font-medium">
-                      Using Embedded Signup JS SDK
+                      Recommended — set up WhatsApp in Meta and connect it to WhachatCRM.
                     </p>
                   </div>
                 </div>
                 {!cfg?.embeddedSignupEnabled && (
                   <p className="text-[10px] text-amber-700 mt-2">
-                    Meta setup is not enabled yet (missing env or config ID). Your admin should configure Embedded Signup.
+                    WhatsApp setup isn&apos;t available yet. Please contact support.
                   </p>
                 )}
               </button>
@@ -713,13 +696,11 @@ export function ConnectWhatsAppHub({
                   <div>
                     <p className="text-sm font-semibold text-gray-900">B) Use existing WhatsApp Business App number</p>
                     <p className="text-[11px] text-gray-600 mt-0.5">
-                      Coming soon — Coexistence Embedded Signup (keep the same number on phone + Cloud API).
+                      Coming soon
                     </p>
                   </div>
                 </div>
-                <p className="text-[10px] text-gray-500 mt-2">
-                  Not available yet. Use option A to provision Cloud API.
-                </p>
+                <p className="text-[10px] text-gray-500 mt-2">Use the same WhatsApp Business App number on both your phone and WhachatCRM.</p>
               </button>
 
               <button
@@ -795,8 +776,7 @@ export function ConnectWhatsAppHub({
           <AlertDialogHeader>
             <AlertDialogTitle>Select WhatsApp number</AlertDialogTitle>
             <AlertDialogDescription>
-              Pick the production WhatsApp Business line for this workspace. Test/sample lines are labeled —
-              avoid them for live customers.
+              Pick the WhatsApp number you want to connect to this workspace. Test lines are labeled — avoid them for live customers.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="space-y-3 text-sm max-h-[min(60vh,420px)] overflow-y-auto pr-1">
@@ -806,7 +786,7 @@ export function ConnectWhatsAppHub({
                 className="rounded-md border border-slate-200 overflow-hidden bg-white"
               >
                 <div className="bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-700 border-b border-slate-100">
-                  {c.wabaName || `WABA ${c.wabaId}`}
+                  {c.wabaName || "Business account"}
                 </div>
                 <div className="divide-y divide-slate-100">
                   {c.phoneNumbers.map((p) => {
