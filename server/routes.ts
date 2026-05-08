@@ -178,6 +178,8 @@ function summarizeMetaWebhookInbound(body: unknown): {
   entryIds: string[];
   changesFields: string[];
   phoneNumberIdFromPayload: string | null;
+  messagingEventKinds: string[];
+  messagingRecipientIds: string[];
 } {
   const b = body as Record<string, unknown> | null | undefined;
   const object =
@@ -195,6 +197,8 @@ function summarizeMetaWebhookInbound(body: unknown): {
     .filter((s) => s.length > 0);
   const changesFields: string[] = [];
   let phoneNumberIdFromPayload: string | null = null;
+  const messagingEventKinds: string[] = [];
+  const messagingRecipientIds: string[] = [];
   for (const e of entries) {
     const ent = e as Record<string, unknown>;
     const changes = Array.isArray(ent?.changes) ? (ent.changes as unknown[]) : [];
@@ -212,12 +216,35 @@ function summarizeMetaWebhookInbound(body: unknown): {
       const pid = fromMeta ?? fromMsgs ?? null;
       if (pid != null && !phoneNumberIdFromPayload) phoneNumberIdFromPayload = String(pid);
     }
+
+    // Facebook/Instagram "messaging" webhook payloads
+    const messaging = Array.isArray(ent?.messaging) ? (ent.messaging as unknown[]) : [];
+    for (const m of messaging) {
+      const msg = m as Record<string, unknown>;
+      const kind =
+        msg?.message
+          ? "message"
+          : msg?.postback
+            ? "postback"
+            : msg?.delivery
+              ? "delivery"
+              : msg?.read
+                ? "read"
+                : msg?.reaction
+                  ? "reaction"
+                  : "unknown";
+      messagingEventKinds.push(kind);
+      const recipient = msg?.recipient as Record<string, unknown> | undefined;
+      if (recipient?.id != null) messagingRecipientIds.push(String(recipient.id));
+    }
   }
   return {
     object,
     entryIds,
     changesFields: [...new Set(changesFields)],
     phoneNumberIdFromPayload,
+    messagingEventKinds: [...new Set(messagingEventKinds)],
+    messagingRecipientIds: [...new Set(messagingRecipientIds)],
   };
 }
 
@@ -2366,7 +2393,17 @@ export async function registerRoutes(
           entryIds: inboundPreview.entryIds,
           changesFields: inboundPreview.changesFields,
           phoneNumberIdFromPayload: inboundPreview.phoneNumberIdFromPayload,
+          messagingEventKinds: inboundPreview.messagingEventKinds,
+          messagingRecipientIds: inboundPreview.messagingRecipientIds,
           resolvedUserId,
+          resolvedChannel:
+            inboundPreview.object === "instagram"
+              ? "instagram"
+              : inboundPreview.object === "page"
+                ? "facebook"
+                : inboundPreview.object === "whatsapp_business_account"
+                  ? "whatsapp"
+                  : "unknown",
           signatureHeaderPresent: !!req.headers["x-hub-signature-256"],
           messagingEventCount: messagingEventTotal,
           entryCount: entryList.length,
