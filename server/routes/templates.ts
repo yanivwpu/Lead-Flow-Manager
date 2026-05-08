@@ -4,6 +4,7 @@ import {
   buildMetaCloudTemplateSendComponents,
   getInboxTemplateSendBlockReason,
   normalizeTemplateVariableMap,
+  parseMetaGraphTemplateForLibrary,
 } from "@shared/metaTemplateSend";
 import { storage } from "../storage";
 import { getMetaMessageTemplates, sendMetaWhatsAppTemplate } from "../userMeta";
@@ -405,51 +406,14 @@ export function registerTemplateRoutes(app: Express): void {
             const language = t.language || "en";
             const metaId = `meta_${t.id || t.name}_${language}`;
 
-            // Extract components
-            let bodyText = "";
-            let headerType: string | null = null;
-            let headerContent: string | null = null;
-            let footerText: string | null = null;
-            let buttons: any[] = [];
-            const variables: string[] = [];
-
-            for (const comp of t.components || []) {
-              if (comp.type === "BODY") {
-                bodyText = comp.text || "";
-                const vars = bodyText.match(/\{\{\d+\}\}/g) || [];
-                vars.forEach((v: string) => {
-                  if (!variables.includes(v)) variables.push(v);
-                });
-              } else if (comp.type === "HEADER") {
-                headerType = (comp.format || "").toLowerCase() || null;
-                if (comp.format === "TEXT") {
-                  headerContent = comp.text || null;
-                  const hv = (comp.text || "").match(/\{\{\d+\}\}/g) || [];
-                  hv.forEach((v: string) => {
-                    if (!variables.includes(v)) variables.push(v);
-                  });
-                } else if (comp.example?.header_handle?.[0]) {
-                  headerContent = comp.example.header_handle[0];
-                }
-              } else if (comp.type === "FOOTER") {
-                footerText = comp.text || null;
-              } else if (comp.type === "BUTTONS") {
-                buttons = comp.buttons || [];
-                for (const b of buttons as any[]) {
-                  const url = String(b?.url || "");
-                  const bv = url.match(/\{\{\d+\}\}/g) || [];
-                  bv.forEach((v: string) => {
-                    if (!variables.includes(v)) variables.push(v);
-                  });
-                }
-              }
-            }
-
-            variables.sort((a, b) => {
-              const na = parseInt(a.replace(/\D/g, ""), 10) || 0;
-              const nb = parseInt(b.replace(/\D/g, ""), 10) || 0;
-              return na - nb;
+            const parsed = parseMetaGraphTemplateForLibrary({
+              name: t.name,
+              components: t.components as Record<string, unknown>[],
             });
+
+            console.log(
+              `[WA_TEMPLATE_SYNC] classified name=${String(t.name)} templateType=${parsed.templateType} components=${parsed.componentTypesUpper.join(",")} carouselCards=${Array.isArray(parsed.carouselCards) ? parsed.carouselCards.length : 0}`
+            );
 
             const existing = await storage.getMessageTemplateByTwilioSid(req.user.id, metaId);
 
@@ -458,12 +422,14 @@ export function registerTemplateRoutes(app: Express): void {
                 name: t.name,
                 status,
                 category,
-                bodyText,
-                headerType,
-                headerContent,
-                footerText,
-                buttons,
-                variables,
+                templateType: parsed.templateType,
+                carouselCards: parsed.carouselCards as any,
+                bodyText: parsed.bodyText,
+                headerType: parsed.headerType,
+                headerContent: parsed.headerContent,
+                footerText: parsed.footerText,
+                buttons: parsed.buttons as any,
+                variables: parsed.variables as any,
                 lastSyncedAt: new Date(),
               });
               updated++;
@@ -476,14 +442,14 @@ export function registerTemplateRoutes(app: Express): void {
                 language,
                 category,
                 status,
-                templateType: "text",
-                bodyText,
-                headerType,
-                headerContent,
-                footerText,
-                buttons,
-                carouselCards: [],
-                variables,
+                templateType: parsed.templateType,
+                bodyText: parsed.bodyText,
+                headerType: parsed.headerType,
+                headerContent: parsed.headerContent,
+                footerText: parsed.footerText,
+                buttons: parsed.buttons as any,
+                carouselCards: parsed.carouselCards as any,
+                variables: parsed.variables as any,
               });
               inserted++;
               console.log(`[WA_TEMPLATE_SYNC] Inserted: ${t.name} [${status}]`);
@@ -818,7 +784,16 @@ export function registerTemplateRoutes(app: Express): void {
         }
 
         if (sendSourceTag === "inbox_picker") {
-          const inboxBlock = getInboxTemplateSendBlockReason(template);
+          const inboxBlock = getInboxTemplateSendBlockReason({
+            name: template.name,
+            bodyText: template.bodyText,
+            headerType: template.headerType,
+            headerContent: template.headerContent,
+            buttons: template.buttons,
+            templateType: template.templateType,
+            carouselCards: template.carouselCards,
+            category: template.category,
+          });
           if (inboxBlock.blocked) {
             console.warn(
               `[WA_TEMPLATE_SEND] ${JSON.stringify({
@@ -829,7 +804,7 @@ export function registerTemplateRoutes(app: Express): void {
               })}`
             );
             return res.status(400).json({
-              error: inboxBlock.reason || "This template can’t be sent from the inbox.",
+              error: inboxBlock.reason || "This template can't be sent from the inbox.",
             });
           }
         }

@@ -2385,6 +2385,7 @@ export function UnifiedInbox() {
                   )
                   .map((t) => {
                     const { blocked, reason: blockReason } = getInboxTemplateSendBlockReason({
+                      name: t.name,
                       bodyText: t.bodyText,
                       headerType: t.headerType,
                       headerContent: t.headerContent,
