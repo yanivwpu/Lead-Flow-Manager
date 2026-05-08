@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/lib/auth-context";
 
 const META_TEST_NUMBER_HELP =
   "You're connected to a Meta test number. Choose a production WhatsApp number before going live.";
@@ -170,6 +171,7 @@ export function ConnectWhatsAppHub({
   onOpenManualMeta,
   onClose,
 }: ConnectWhatsAppHubProps) {
+  const { user: authedUser } = useAuth();
   const queryClient = useQueryClient();
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [confirmDisconnect, setConfirmDisconnect] = useState(false);
@@ -243,6 +245,114 @@ export function ConnectWhatsAppHub({
   const loading = cfgLoading || statusLoading;
   const meta = status?.meta;
   const metaActive = status?.activeProvider === "meta" && meta?.connected;
+  const supportMode = authedUser?.role === "owner" || authedUser?.role === "admin";
+
+  async function loadFacebookSdk(appId: string, version: string): Promise<void> {
+    const w = window as any;
+    if (w.FB && typeof w.FB.init === "function") {
+      try {
+        w.FB.init({ appId, autoLogAppEvents: true, xfbml: true, version });
+      } catch {
+        // ignore re-init errors
+      }
+      return;
+    }
+    if (w.__fbSdkPromise) return w.__fbSdkPromise as Promise<void>;
+    w.__fbSdkPromise = new Promise<void>((resolve, reject) => {
+      w.fbAsyncInit = function () {
+        try {
+          w.FB.init({ appId, autoLogAppEvents: true, xfbml: true, version });
+          resolve();
+        } catch (e) {
+          reject(e);
+        }
+      };
+      const existing = document.getElementById("facebook-jssdk");
+      if (existing) return;
+      const s = document.createElement("script");
+      s.id = "facebook-jssdk";
+      s.async = true;
+      s.defer = true;
+      s.crossOrigin = "anonymous";
+      s.src = "https://connect.facebook.net/en_US/sdk.js";
+      s.onerror = () => reject(new Error("Failed to load Facebook SDK"));
+      document.body.appendChild(s);
+    });
+    return w.__fbSdkPromise as Promise<void>;
+  }
+
+  async function startEmbeddedSignupViaSdk(): Promise<void> {
+    try {
+      setHubBanner(null);
+      const start = await fetch("/api/integrations/whatsapp/meta/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ flow: "embedded" }),
+      });
+      const startJson = await start.json().catch(() => ({}));
+      if (!start.ok) throw new Error(startJson?.error || "Could not start Meta signup");
+
+      const session = startJson as {
+        state: string;
+        redirectUri: string;
+        sdk: { appId: string; graphApiVersion: string; configId: string };
+      };
+
+      await loadFacebookSdk(session.sdk.appId, session.sdk.graphApiVersion);
+      const w = window as any;
+
+      await new Promise<void>((resolve, reject) => {
+        const loginCb = async (response: any) => {
+          try {
+            const code = response?.authResponse?.code as string | undefined;
+            if (!code) {
+              reject(new Error(META_CANCELLED_MESSAGE));
+              return;
+            }
+            const r = await fetch("/api/integrations/whatsapp/meta/complete-sdk", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              credentials: "include",
+              body: JSON.stringify({ code, state: session.state }),
+            });
+            const j = await r.json().catch(() => ({}));
+            if (!r.ok) throw new Error(j?.error || "Could not complete Meta signup");
+            if (j?.needsWabaPick && j?.state) {
+              window.location.href = `/app/settings?section=channels&whatsapp_embedded=pick&state=${encodeURIComponent(j.state)}`;
+              return;
+            }
+            await queryClient.invalidateQueries({ queryKey: ["/api/integrations/whatsapp/status"] });
+            await queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+            resolve();
+          } catch (e: any) {
+            reject(e);
+          }
+        };
+
+        try {
+          w.FB.login(loginCb, {
+            config_id: session.sdk.configId,
+            response_type: "code",
+            override_default_response_type: true,
+            // Scopes are required for Graph access to WABA + phone assets.
+            scope: "whatsapp_business_management,whatsapp_business_messaging,business_management",
+            extras: {
+              setup: {},
+              feature: "whatsapp_embedded_signup",
+              sessionInfoVersion: "2",
+            },
+          });
+        } catch (e) {
+          reject(e);
+        }
+      });
+    } catch (e: any) {
+      // Fallback: redirect-based flow (kept for environments where SDK is blocked).
+      console.warn("[WhatsApp Embedded Signup] SDK flow failed; falling back to redirect.", e?.message || e);
+      window.location.href = "/api/integrations/whatsapp/meta/start-redirect?flow=embedded";
+    }
+  }
 
   const {
     data: coexistenceDiag,
@@ -260,6 +370,9 @@ export function ConnectWhatsAppHub({
   const graphPhoneDisconnected =
     graphPhoneStatus === "DISCONNECTED" || graphCodeStatus === "NOT_VERIFIED";
   const graphSubscriptionConfirmed = coexistenceDiag?.wabaSubscribedApps?.configuredAppIdPresent === true;
+  const setupIncomplete =
+    metaActive &&
+    (!meta?.phoneNumberId || graphPhoneDisconnected);
 
   // Load pending WABA choices (redirect flow) if present.
   const {
@@ -349,7 +462,9 @@ export function ConnectWhatsAppHub({
           <div className="flex items-start gap-2 rounded-xl border border-emerald-200 bg-emerald-50/80 px-3 py-3">
             <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0 mt-0.5" />
             <div className="min-w-0 text-sm flex-1">
-              <p className="font-semibold text-emerald-900">Connected — Meta Cloud API</p>
+              <p className="font-semibold text-emerald-900">
+                {setupIncomplete ? "Connected — setup incomplete" : "Connected — Meta Cloud API"}
+              </p>
               {meta?.connectedToMetaTestNumber && (
                 <p className="text-xs text-amber-900 mt-2 border border-amber-200 rounded-md px-2 py-1.5 bg-amber-50/90">
                   {META_TEST_NUMBER_HELP}
@@ -432,12 +547,9 @@ export function ConnectWhatsAppHub({
                 </div>
               </div>
 
-              {coexistenceDiag?.graphPhone?.ok && graphPhoneDisconnected && (
+              {setupIncomplete && (
                 <p className="text-xs text-amber-900 mt-2 border border-amber-200 rounded-md px-2 py-1.5 bg-amber-50/90">
-                  <span className="font-semibold">Routing warning:</span>{" "}
-                  Meta shows this phone as{" "}
-                  <span className="font-semibold">{graphPhoneStatus || "DISCONNECTED"}</span> /{" "}
-                  <span className="font-semibold">{graphCodeStatus || "NOT_VERIFIED"}</span>. Messages may stay in the WhatsApp Business App and not reach Cloud API webhooks.
+                  WhatsApp setup is incomplete. Finish phone verification in Meta.
                 </p>
               )}
 
@@ -449,57 +561,53 @@ export function ConnectWhatsAppHub({
                   </p>
                 )}
 
-              <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen} className="mt-3">
-                <CollapsibleTrigger className="flex items-center gap-1 text-xs font-medium text-slate-600 hover:text-slate-900 py-1">
-                  <ChevronDown
-                    className={cn("h-4 w-4 transition-transform", advancedOpen && "rotate-180")}
-                  />
-                  Advanced details
-                </CollapsibleTrigger>
-                <CollapsibleContent>
-                  <dl className="mt-2 space-y-1 text-xs text-gray-700 border border-slate-200 rounded-lg p-2 bg-white/80">
-                    <div className="flex justify-between gap-2">
-                      <dt className="text-gray-500">Provider</dt>
-                      <dd className="font-medium">{meta?.providerLabel || "Meta Cloud API"}</dd>
-                    </div>
-                    <div className="flex justify-between gap-2">
-                      <dt className="text-gray-500">WABA ID</dt>
-                      <dd className="font-mono text-[11px] truncate">{meta?.businessAccountId || "—"}</dd>
-                    </div>
-                    <div className="flex justify-between gap-2">
-                      <dt className="text-gray-500">Phone number ID</dt>
-                      <dd className="font-mono text-[11px] truncate">{meta?.phoneNumberId || "—"}</dd>
-                    </div>
-                    <div className="flex justify-between gap-2">
-                      <dt className="text-gray-500">Connection</dt>
-                      <dd className="font-medium capitalize">{meta?.connectionType?.replace(/_/g, " ") || "—"}</dd>
-                    </div>
-                    <div className="flex justify-between gap-2">
-                      <dt className="text-gray-500">Coexistence onboarding</dt>
-                      <dd className="font-medium">
-                        {meta?.connectionUsedCoexistenceFlow ? "Yes (Business App + Cloud API)" : "No (standard embedded / manual)"}
-                      </dd>
-                    </div>
-                    {status?.inboundRouting && (
-                      <div className="pt-1 mt-1 border-t border-slate-100 space-y-1">
-                        <div className="flex justify-between gap-2">
-                          <dt className="text-gray-500">Inbound routing (diag.)</dt>
-                          <dd className="font-medium text-right text-[10px] max-w-[58%]">
-                            {status.inboundRouting.customerMessageDelivery.replace(/_/g, " ")}
-                          </dd>
-                        </div>
-                        <p className="text-[10px] text-gray-600 leading-snug">{status.inboundRouting.detail}</p>
+              {supportMode && (
+                <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen} className="mt-3">
+                  <CollapsibleTrigger className="flex items-center gap-1 text-xs font-medium text-slate-600 hover:text-slate-900 py-1">
+                    <ChevronDown
+                      className={cn("h-4 w-4 transition-transform", advancedOpen && "rotate-180")}
+                    />
+                    Advanced details
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <dl className="mt-2 space-y-1 text-xs text-gray-700 border border-slate-200 rounded-lg p-2 bg-white/80">
+                      <div className="flex justify-between gap-2">
+                        <dt className="text-gray-500">Provider</dt>
+                        <dd className="font-medium">{meta?.providerLabel || "Meta Cloud API"}</dd>
                       </div>
-                    )}
-                    <div className="flex justify-between gap-2">
-                      <dt className="text-gray-500">Callback URL</dt>
-                      <dd className="font-mono text-[10px] truncate max-w-[55%] text-right" title={meta?.webhookUrl}>
-                        {meta?.webhookUrl || "—"}
-                      </dd>
-                    </div>
-                  </dl>
-                </CollapsibleContent>
-              </Collapsible>
+                      <div className="flex justify-between gap-2">
+                        <dt className="text-gray-500">WABA ID</dt>
+                        <dd className="font-mono text-[11px] truncate">{meta?.businessAccountId || "—"}</dd>
+                      </div>
+                      <div className="flex justify-between gap-2">
+                        <dt className="text-gray-500">Phone number ID</dt>
+                        <dd className="font-mono text-[11px] truncate">{meta?.phoneNumberId || "—"}</dd>
+                      </div>
+                      <div className="flex justify-between gap-2">
+                        <dt className="text-gray-500">Connection</dt>
+                        <dd className="font-medium capitalize">{meta?.connectionType?.replace(/_/g, " ") || "—"}</dd>
+                      </div>
+                      {status?.inboundRouting && (
+                        <div className="pt-1 mt-1 border-t border-slate-100 space-y-1">
+                          <div className="flex justify-between gap-2">
+                            <dt className="text-gray-500">Inbound routing (diag.)</dt>
+                            <dd className="font-medium text-right text-[10px] max-w-[58%]">
+                              {status.inboundRouting.customerMessageDelivery.replace(/_/g, " ")}
+                            </dd>
+                          </div>
+                          <p className="text-[10px] text-gray-600 leading-snug">{status.inboundRouting.detail}</p>
+                        </div>
+                      )}
+                      <div className="flex justify-between gap-2">
+                        <dt className="text-gray-500">Callback URL</dt>
+                        <dd className="font-mono text-[10px] truncate max-w-[55%] text-right" title={meta?.webhookUrl}>
+                          {meta?.webhookUrl || "—"}
+                        </dd>
+                      </div>
+                    </dl>
+                  </CollapsibleContent>
+                </Collapsible>
+              )}
             </div>
           </div>
 
@@ -565,10 +673,7 @@ export function ConnectWhatsAppHub({
               <button
                 type="button"
                 disabled={!cfg?.embeddedSignupEnabled}
-                onClick={() => {
-                  console.log("[WHATSAPP CONNECT ACTIVE HANDLER] full redirect only");
-                  window.location.href = "/api/integrations/whatsapp/meta/start-redirect?flow=embedded";
-                }}
+                onClick={() => void startEmbeddedSignupViaSdk()}
                 className={cn(
                   "w-full text-left rounded-lg border p-3 transition-colors",
                   cfg?.embeddedSignupEnabled
@@ -584,7 +689,7 @@ export function ConnectWhatsAppHub({
                       Embedded Signup — create or select Business, WABA, and phone in Meta&apos;s flow (recommended).
                     </p>
                     <p className="text-[11px] text-emerald-700 mt-0.5 font-medium">
-                      Using redirect flow v2
+                      Using Embedded Signup JS SDK
                     </p>
                   </div>
                 </div>
@@ -597,16 +702,10 @@ export function ConnectWhatsAppHub({
 
               <button
                 type="button"
-                disabled={!cfg?.coexistenceEnabled}
-                onClick={() => {
-                  console.log("[WHATSAPP CONNECT ACTIVE HANDLER] full redirect only");
-                  window.location.href = "/api/integrations/whatsapp/meta/start-redirect?flow=coexistence";
-                }}
+                disabled={true}
                 className={cn(
                   "w-full text-left rounded-lg border p-3 transition-colors",
-                  cfg?.coexistenceEnabled
-                    ? "border-blue-200 hover:bg-blue-50/40"
-                    : "border-gray-100 opacity-60 cursor-not-allowed"
+                  "border-gray-100 opacity-60 cursor-not-allowed"
                 )}
               >
                 <div className="flex items-center gap-2">
@@ -614,17 +713,13 @@ export function ConnectWhatsAppHub({
                   <div>
                     <p className="text-sm font-semibold text-gray-900">B) Use existing WhatsApp Business App number</p>
                     <p className="text-[11px] text-gray-600 mt-0.5">
-                      Keep using your WhatsApp Business App while WhachatCRM connects to Cloud API. Requires a separate coexistence Embedded Signup configuration in Meta (
-                      <code className="text-[10px] bg-gray-100 px-1 rounded">META_WHATSAPP_COEXISTENCE_CONFIG_ID</code>
-                      ).
+                      Coming soon — Coexistence Embedded Signup (keep the same number on phone + Cloud API).
                     </p>
                   </div>
                 </div>
-                {!cfg?.coexistenceEnabled && (
-                  <p className="text-[10px] text-gray-500 mt-2">
-                    Not available until <code className="text-[10px] bg-gray-100 px-1 rounded">META_WHATSAPP_COEXISTENCE_CONFIG_ID</code> is set in your server env (separate from the main Embedded Signup config). If Meta says your number isn&apos;t eligible, use option A or Twilio.
-                  </p>
-                )}
+                <p className="text-[10px] text-gray-500 mt-2">
+                  Not available yet. Use option A to provision Cloud API.
+                </p>
               </button>
 
               <button

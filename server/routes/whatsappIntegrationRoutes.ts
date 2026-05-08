@@ -354,13 +354,29 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
     flow: z.enum(["embedded", "coexistence"]),
   });
 
-  // OLD SDK START (TEMP BLOCK): legacy clients used POST /meta/start then JS SDK.
-  // We now use full redirect only: GET /meta/start-redirect.
+  /**
+   * Embedded Signup JS SDK (Option A).
+   * Returns state + SDK config so the client can call FB.login() and immediately POST the auth code.
+   * Coexistence (Option B) is intentionally disabled for now.
+   */
   app.post("/api/integrations/whatsapp/meta/start", async (req: Request, res: Response) => {
-    console.warn("[OLD WHATSAPP SDK FLOW BLOCKED]", { endpoint: "POST /api/integrations/whatsapp/meta/start" });
-    return res.status(410).json({
-      error: "Old WhatsApp SDK flow disabled. Refresh and use full redirect.",
-    });
+    try {
+      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+      const parsed = startBody.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid body", details: parsed.error.flatten() });
+      }
+      if (parsed.data.flow !== "embedded") {
+        return res.status(400).json({ error: "Coexistence onboarding is coming soon." });
+      }
+      const session = await startEmbeddedSignupSession(req.user.id, "embedded");
+      res.json(session);
+    } catch (e: any) {
+      console.warn("[WhatsApp Integration] start failed", e?.message || e);
+      res.status(400).json({
+        error: e?.message || "Could not start Meta signup",
+      });
+    }
   });
 
   app.post("/api/integrations/whatsapp/meta/start__disabled", async (req: Request, res: Response) => {
@@ -470,10 +486,40 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
    * Same server logic as the redirect callback; ties completion to the logged-in user.
    */
   app.post("/api/integrations/whatsapp/meta/complete-sdk", async (req: Request, res: Response) => {
-    console.warn("[OLD WHATSAPP SDK FLOW BLOCKED]", { endpoint: "POST /api/integrations/whatsapp/meta/complete-sdk" });
-    return res.status(410).json({
-      error: "Old WhatsApp SDK flow disabled. Refresh and use full redirect.",
-    });
+    try {
+      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+      const parsed = completeSdkBody.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid body", details: parsed.error.flatten() });
+      }
+      // Log the exact redirect URI we intend to use (must match the one used to mint the code).
+      // Do NOT log the code, token, or any secrets.
+      const stateRow = await db
+        .select({ redirectUri: whatsappOauthStates.redirectUri })
+        .from(whatsappOauthStates)
+        .where(eq(whatsappOauthStates.stateToken, parsed.data.state))
+        .limit(1);
+      console.log("[WhatsApp Embedded Signup] complete-sdk request", {
+        tokenExchange: "sdk",
+        graphApiVersion: process.env.META_GRAPH_API_VERSION || "v21.0",
+        redirectUriUsed: stateRow[0]?.redirectUri || "(missing_on_state_row)",
+      });
+      const result = await completeEmbeddedSignupOAuth({
+        ...parsed.data,
+        initiatingUserId: req.user.id,
+        tokenExchange: "sdk",
+      });
+      if (!result.success) {
+        return res.status(400).json({ success: false, error: result.error });
+      }
+      if ("needsWabaPick" in result && result.needsWabaPick) {
+        return res.json({ success: true, needsWabaPick: true, state: result.state });
+      }
+      res.json({ success: true });
+    } catch (e: any) {
+      console.warn("[WhatsApp Integration] complete-sdk failed", e?.message || e);
+      res.status(500).json({ error: "Complete signup failed" });
+    }
   });
 
   app.post("/api/integrations/whatsapp/meta/complete-sdk__disabled", async (req: Request, res: Response) => {

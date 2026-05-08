@@ -1609,6 +1609,15 @@ export type EmbeddedSignupOAuthResult =
   | { success: true; needsWabaPick: true; state: string }
   | { success: false; error: string };
 
+function isPhoneRoutingReadyFromGraphSnapshot(data: any): boolean {
+  const status = String(data?.status ?? "").toUpperCase();
+  const code = String(data?.code_verification_status ?? "").toUpperCase();
+  // Conservative: require neither of the known “not ready” states.
+  if (status === "DISCONNECTED") return false;
+  if (code === "NOT_VERIFIED") return false;
+  return true;
+}
+
 /** Complete OAuth: validate state, exchange code, store credentials, subscribe webhooks. */
 export async function completeEmbeddedSignupOAuth(params: {
   code: string;
@@ -1982,6 +1991,37 @@ export async function completeEmbeddedSignupOAuth(params: {
     metaConnected: true,
   });
 
+  // Immediately fetch the phone node after connection so UI can distinguish
+  // “connected but routing inactive” vs “ready for Cloud API”.
+  try {
+    const snap = await fetchMetaWhatsAppPhoneNumberGraphSnapshot(longToken, resolved.phoneNumberId);
+    const ready = snap.ok ? isPhoneRoutingReadyFromGraphSnapshot(snap.data) : false;
+    await mergeUserMetaOAuthDebug(row.userId, {
+      phase: "phone_graph_post_connect",
+      ok: snap.ok,
+      routingReady: ready,
+      httpStatus: snap.httpStatus ?? null,
+      error: snap.ok ? null : snap.error ?? null,
+    });
+    await storage.updateUser(row.userId, {
+      metaIntegrationStatus: ready ? "connected" : "needs_attention",
+      metaLastErrorMessage: ready ? null : "WhatsApp setup is incomplete. Finish phone verification in Meta.",
+      metaWebhookLastCheckedAt: new Date(),
+    });
+  } catch (e: any) {
+    await mergeUserMetaOAuthDebug(row.userId, {
+      phase: "phone_graph_post_connect",
+      ok: false,
+      error: e?.message || String(e),
+    });
+    // Keep connection but mark needs_attention until we can verify the phone status.
+    await storage.updateUser(row.userId, {
+      metaIntegrationStatus: "needs_attention",
+      metaLastErrorMessage: "WhatsApp setup is incomplete. Finish phone verification in Meta.",
+      metaWebhookLastCheckedAt: new Date(),
+    });
+  }
+
   await repairMetaWabaWebhookSubscription(row.userId);
 
   // Success path: state is no longer needed.
@@ -2065,6 +2105,35 @@ export async function finalizeEmbeddedSignupWabaSelection(params: {
 
   if (!result.success) {
     return { success: false, error: result.error || "Could not save WhatsApp connection." };
+  }
+
+  // Immediately verify the phone node for routing readiness (same logic as auto flow).
+  try {
+    const snap = await fetchMetaWhatsAppPhoneNumberGraphSnapshot(token, matchPhone.id);
+    const ready = snap.ok ? isPhoneRoutingReadyFromGraphSnapshot(snap.data) : false;
+    await mergeUserMetaOAuthDebug(row.userId, {
+      phase: "phone_graph_post_connect",
+      ok: snap.ok,
+      routingReady: ready,
+      httpStatus: snap.httpStatus ?? null,
+      error: snap.ok ? null : snap.error ?? null,
+    });
+    await storage.updateUser(row.userId, {
+      metaIntegrationStatus: ready ? "connected" : "needs_attention",
+      metaLastErrorMessage: ready ? null : "WhatsApp setup is incomplete. Finish phone verification in Meta.",
+      metaWebhookLastCheckedAt: new Date(),
+    });
+  } catch (e: any) {
+    await mergeUserMetaOAuthDebug(row.userId, {
+      phase: "phone_graph_post_connect",
+      ok: false,
+      error: e?.message || String(e),
+    });
+    await storage.updateUser(row.userId, {
+      metaIntegrationStatus: "needs_attention",
+      metaLastErrorMessage: "WhatsApp setup is incomplete. Finish phone verification in Meta.",
+      metaWebhookLastCheckedAt: new Date(),
+    });
   }
 
   await repairMetaWabaWebhookSubscription(row.userId);
