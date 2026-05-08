@@ -8527,12 +8527,21 @@ export async function registerRoutes(
         autoSendAllowed = gate.allowed;
         autoSendReason = gate.reason;
         console.info("[AI-AUTO]", {
+          userId,
+          chatId: chatId ?? null,
           contactId: contactIdForLog ?? "unknown",
+          requestedMode,
+          businessMode,
           autoTriggered: autoSendAllowed,
           reason: autoSendReason,
           confidence: suggestion.confidence,
           strongIntent: autoSendStrongIntent,
           forceBypass: forceAutoBypass,
+          inboundCount: gate.inboundCount,
+          missingRequiredLen: gate.missingRequiredLen,
+          suggestionLen: (suggestion.suggestion || "").trim().length,
+          hasBusinessKnowledge: !!knowledgeRaw,
+          fairUseStatus: fairUse.status,
         });
         console.info("[AI-AUTO] triggered", autoSendAllowed);
         console.info("[AI-AUTO] blocked", autoSendAllowed ? "(none)" : autoSendReason);

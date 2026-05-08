@@ -100,6 +100,10 @@ function autoSkipNoticeForReason(
   return null;
 }
 
+function autoModeHelperText(): string {
+  return "Auto sends when it’s safe. Otherwise, it drafts a reply for you to review.";
+}
+
 // Canned demo replies for when demoMode=true (no real API call)
 const DEMO_SUGGESTIONS = [
   "Got it — I'll pull up the best matches for your criteria. Are you flexible on location or is it a hard requirement?",
@@ -658,6 +662,10 @@ export function AIComposer({
             size="sm"
             className="mt-0.5"
           />
+        )}
+
+        {aiMode === "auto" && !autoOverride && (
+          <p className="text-[11px] text-slate-500 mt-1">{autoModeHelperText()}</p>
         )}
 
         {/* Suggest mode: primary draft lives in the composer */}

@@ -868,6 +868,7 @@ export function UnifiedInbox() {
       mediaType?: string;
       mediaFilename?: string;
       contentType?: string;
+      source?: string;
     }) => {
       const channel = clampOutboundChannel(
         displayedOutboundChannelRef.current,
@@ -887,6 +888,7 @@ export function UnifiedInbox() {
           mediaType: data.mediaType ? `${data.mediaType}` : undefined,
           mediaFilename: data.mediaFilename,
           channel,
+          source: data.source,
         }),
       });
       const json = await res.json();
@@ -1200,7 +1202,7 @@ export function UnifiedInbox() {
       });
     }
     sendMessageMutation.mutate(
-      { contactId: selectedContactId, content: message },
+      { contactId: selectedContactId, content: message, source: "ai_auto" as any },
       {
         onSuccess: () => {
           if (import.meta.env.DEV) console.info("[AI-AUTO-SEND]", "sent");

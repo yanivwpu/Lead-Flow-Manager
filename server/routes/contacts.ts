@@ -416,7 +416,7 @@ export function registerContactRoutes(app: Express): void {
       if (!req.user) {
         return res.status(401).json({ error: "Unauthorized" });
       }
-      const { content, contentType, mediaUrl, mediaType, mediaFilename, channel } = req.body;
+      const { content, contentType, mediaUrl, mediaType, mediaFilename, channel, source } = req.body;
       if (!content?.trim() && !mediaUrl) {
         return res.status(400).json({ error: "Message must have content or a media attachment" });
       }
@@ -433,6 +433,7 @@ export function registerContactRoutes(app: Express): void {
         const payloadPreview = typeof content === "string" ? content.slice(0, 200) : "";
         console.log("[api/contacts/send] start", {
           contactId: req.params.id,
+          source: typeof source === "string" ? source : null,
           requestedChannel: requested ?? null,
           contentType: contentType || null,
           payloadPreview,

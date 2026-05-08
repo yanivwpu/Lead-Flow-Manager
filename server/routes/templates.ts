@@ -283,13 +283,35 @@ export function registerTemplateRoutes(app: Express): void {
         return res.status(403).json({ error: "Template messaging is a Pro feature" });
       }
 
-      const user = await storage.getUser(req.user.id);
+      // IMPORTANT: use full session user row (auth-core `getUser` omits WhatsApp provider + Meta fields)
+      const user = await storage.getUserForSession(req.user.id);
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }
 
-      const provider = user.whatsappProvider || "twilio";
-      console.log(`[TemplateSync] Started — userId=${req.user.id} provider=${provider}`);
+      // Provider detection (supports Meta, Twilio, and future providers)
+      const providerPref = (user.whatsappProvider || "").toString().trim().toLowerCase();
+      const isMetaConnected = !!user.metaConnected;
+      const isTwilioConnected = !!user.twilioConnected;
+      const resolvedProvider =
+        providerPref === "meta" || providerPref === "twilio"
+          ? providerPref
+          : isMetaConnected
+            ? "meta"
+            : isTwilioConnected
+              ? "twilio"
+              : "none";
+
+      const wabaId = user.metaBusinessAccountId ? String(user.metaBusinessAccountId) : null;
+
+      console.log(
+        `[WA_TEMPLATE_SYNC] ${JSON.stringify({
+          phase: "start",
+          userId: req.user.id,
+          provider: resolvedProvider,
+          wabaId,
+        })}`
+      );
 
       let fetched = 0;
       let inserted = 0;
@@ -297,25 +319,37 @@ export function registerTemplateRoutes(app: Express): void {
       let skipped = 0;
 
       // ===== META SYNC =====
-      if (provider === "meta") {
+      if (resolvedProvider === "meta") {
         if (!user.metaConnected || !user.metaBusinessAccountId) {
+          console.warn(
+            `[WA_TEMPLATE_SYNC] ${JSON.stringify({
+              phase: "error",
+              provider: resolvedProvider,
+              wabaId,
+              error: "meta_not_connected",
+            })}`
+          );
           return res.status(400).json({
-            error: "Meta WhatsApp is not connected. Connect Meta in Settings first.",
+            error: "Meta WhatsApp account not connected",
           });
         }
 
-        console.log(`[TemplateSync] Meta Business Account ID: ${user.metaBusinessAccountId}`);
-
         const rawTemplates = await getMetaMessageTemplates(req.user.id);
-        fetched = rawTemplates.length;
+        const approvedTemplates = (rawTemplates || []).filter(
+          (t: any) => String(t?.status || "").toLowerCase() === "approved"
+        );
+        fetched = approvedTemplates.length;
 
         console.log(
-          `[TemplateSync] Meta returned ${fetched} template(s): ${rawTemplates
-            .map((t: any) => `${t.name}[${t.status}/${t.language}]`)
-            .join(", ")}`
+          `[WA_TEMPLATE_SYNC] ${JSON.stringify({
+            phase: "fetched",
+            provider: resolvedProvider,
+            wabaId,
+            templateCount: fetched,
+          })}`
         );
 
-        for (const t of rawTemplates) {
+        for (const t of approvedTemplates) {
           try {
             const status = (t.status || "pending").toLowerCase();
             const category = (t.category || "utility").toLowerCase();
@@ -386,23 +420,28 @@ export function registerTemplateRoutes(app: Express): void {
                 variables,
               });
               inserted++;
-              console.log(`[TemplateSync] Inserted: ${t.name} [${status}]`);
+              console.log(`[WA_TEMPLATE_SYNC] Inserted: ${t.name} [${status}]`);
             }
           } catch (err) {
             skipped++;
-            console.error(`[TemplateSync] Skipped template "${t.name}":`, err);
+            console.error(`[WA_TEMPLATE_SYNC] Skipped template "${t.name}":`, err);
           }
         }
 
       // ===== TWILIO SYNC =====
-      } else {
+      } else if (resolvedProvider === "twilio") {
         if (!user.twilioConnected || !user.twilioAccountSid || !user.twilioAuthToken) {
+          console.warn(
+            `[WA_TEMPLATE_SYNC] ${JSON.stringify({
+              phase: "error",
+              provider: resolvedProvider,
+              error: "twilio_not_connected",
+            })}`
+          );
           return res.status(400).json({
-            error: "Twilio is not connected. Connect Twilio in Settings first.",
+            error: "Twilio WhatsApp account not connected",
           });
         }
-
-        console.log(`[TemplateSync] Twilio Account SID: ${user.twilioAccountSid}`);
 
         const client = await getUserTwilioClient(req.user.id);
         if (!client) {
@@ -413,14 +452,27 @@ export function registerTemplateRoutes(app: Express): void {
         try {
           contents = await (client as any).contentV1.contentAndApprovals.list({ limit: 100 });
         } catch (err: any) {
-          console.error(`[TemplateSync] Twilio Content API error:`, err);
+          console.error(
+            `[WA_TEMPLATE_SYNC] ${JSON.stringify({
+              phase: "api_error",
+              provider: resolvedProvider,
+              error: err?.message || "twilio_content_api_error",
+            })}`,
+            err
+          );
           return res.status(500).json({
             error: `Failed to fetch Twilio templates: ${err.message}`,
           });
         }
 
         fetched = contents.length;
-        console.log(`[TemplateSync] Twilio returned ${fetched} template(s)`);
+        console.log(
+          `[WA_TEMPLATE_SYNC] ${JSON.stringify({
+            phase: "fetched",
+            provider: resolvedProvider,
+            templateCount: fetched,
+          })}`
+        );
 
         for (const t of contents) {
           try {
@@ -431,7 +483,7 @@ export function registerTemplateRoutes(app: Express): void {
             const language = whatsapp.language || "en";
             const name = whatsapp.name || t.friendlyName || t.sid;
 
-            console.log(`[TemplateSync] Twilio template: ${name} sid=${t.sid} status=${status}`);
+            console.log(`[WA_TEMPLATE_SYNC] Twilio template: ${name} sid=${t.sid} status=${status}`);
 
             // Extract body text from types object
             let bodyText = "";
@@ -482,26 +534,49 @@ export function registerTemplateRoutes(app: Express): void {
             }
           } catch (err) {
             skipped++;
-            console.error(`[TemplateSync] Skipped Twilio template ${t.sid}:`, err);
+            console.error(`[WA_TEMPLATE_SYNC] Skipped Twilio template ${t.sid}:`, err);
           }
         }
+      } else {
+        // No provider connected (or unsupported provider saved)
+        console.warn(
+          `[WA_TEMPLATE_SYNC] ${JSON.stringify({
+            phase: "error",
+            provider: resolvedProvider,
+            wabaId,
+            error: "no_provider_connected",
+          })}`
+        );
+        return res.status(400).json({ error: "No WhatsApp provider connected" });
       }
 
       console.log(
-        `[TemplateSync] Done — fetched=${fetched} inserted=${inserted} updated=${updated} skipped=${skipped}`
+        `[WA_TEMPLATE_SYNC] ${JSON.stringify({
+          phase: "done",
+          provider: resolvedProvider,
+          wabaId,
+          templateCount: fetched,
+          syncResult: { inserted, updated, skipped },
+        })}`
       );
 
       res.json({
         success: true,
         message: `Sync complete: ${inserted + updated} template(s) synced (${inserted} new, ${updated} updated${skipped > 0 ? `, ${skipped} skipped` : ""}).`,
-        provider,
+        provider: resolvedProvider,
         templatesFound: fetched,
         inserted,
         updated,
         skipped,
       });
     } catch (error: any) {
-      console.error("[TemplateSync] Unexpected error:", error);
+      console.error(
+        `[WA_TEMPLATE_SYNC] ${JSON.stringify({
+          phase: "unexpected_error",
+          error: error?.message || "unknown",
+        })}`,
+        error
+      );
       res.status(500).json({ error: error.message || "Failed to sync templates" });
     }
   });
