@@ -49,6 +49,7 @@ import {
   templateInstalls, templateAssets, userTemplateData, ghlEventDedup
 } from "@shared/schema";
 import { computeConversationReplyWindowStatus } from "@shared/conversationReplyWindow";
+import type { RetargetEligibleContactRow } from "@shared/retargetEligibleContact";
 import { db } from "../drizzle/db";
 import { users, chats, registeredPhones, messageUsage, conversationWindows, teamMembers, workflows, workflowExecutions, recurringReminders, webhooks, webhookDeliveries, integrations, messageTemplates, templateSends, dripCampaigns, dripSteps, dripEnrollments, dripSends, chatbotFlows, chatbotSessions, salespeople, demoBookings, salesConversions, adminSettings, contacts, conversations, messages, activityEvents, channelSettings, supportTickets, partners, commissions, agreementAcceptances, contactNotes, appointments, flowJobs, type InsertConversationWindow, type ConversationWindow } from "@shared/schema";
 import { eq, and, lte, sql, isNotNull, isNull, asc, desc, gte, sum, gt, or, like, ilike, ne } from "drizzle-orm";
@@ -200,7 +201,7 @@ export interface IStorage {
   updateTemplateSendStatus(id: string, status: string, deliveredAt?: Date, readAt?: Date, failureReason?: string): Promise<void>;
   
   // Retargetable chats (outside 24-hour window)
-  getRetargetableChats(userId: string, limit?: number): Promise<Chat[]>;
+  getRetargetableChats(userId: string, limit?: number): Promise<RetargetEligibleContactRow[]>;
   
   // Chatbot Flow methods
   getChatbotFlows(userId: string): Promise<ChatbotFlow[]>;
@@ -997,10 +998,11 @@ export class DbStorage implements IStorage {
   }
 
   /**
-   * Legacy chat rows for WhatsApp contacts whose **unified conversation** reply window matches
-   * inbox “Reply window expired” / approved-template reopen (same rules as `computeConversationReplyWindowStatus`).
+   * WhatsApp contacts whose **unified `conversations` row** matches inbox “Reply window expired”
+   * / approved-template reopen (same `computeConversationReplyWindowStatus` as window-status API).
+   * Does not require a legacy `chats` row.
    */
-  async getRetargetableChats(userId: string, limit: number = 5000): Promise<Chat[]> {
+  async getRetargetableChats(userId: string, limit: number = 5000): Promise<RetargetEligibleContactRow[]> {
     const now = new Date();
 
     const convRows = await db
@@ -1008,17 +1010,10 @@ export class DbStorage implements IStorage {
       .from(conversations)
       .innerJoin(contacts, eq(conversations.contactId, contacts.id))
       .where(and(eq(conversations.userId, userId), eq(conversations.channel, "whatsapp")))
-      .limit(Math.min(10000, Math.max(1, limit * 4)));
+      .limit(10000);
 
-    const allLegacyChats = await this.getChats(userId, 10000);
-    const legacyByDigits = new Map<string, Chat>();
-    for (const c of allLegacyChats) {
-      const d = (c.whatsappPhone || "").replace(/\D/g, "");
-      if (d && !legacyByDigits.has(d)) legacyByDigits.set(d, c);
-    }
-
-    const eligibleChats: Chat[] = [];
-    const seenChatIds = new Set<string>();
+    const out: RetargetEligibleContactRow[] = [];
+    const seenConversation = new Set<string>();
 
     for (const { conv, contact } of convRows) {
       const st = computeConversationReplyWindowStatus({
@@ -1051,8 +1046,8 @@ export class DbStorage implements IStorage {
 
       if (!st.templateReopenEligible) continue;
 
-      const phoneKey = (contact.whatsappId || contact.phone || "").replace(/\D/g, "");
-      if (!phoneKey) {
+      const displayPhone = (contact.whatsappId || contact.phone || "").trim();
+      if (!displayPhone) {
         console.log(
           `[RETARGET_ELIGIBILITY] ${JSON.stringify({
             phase: "skip",
@@ -1063,31 +1058,35 @@ export class DbStorage implements IStorage {
         continue;
       }
 
-      const legacy = legacyByDigits.get(phoneKey);
-      if (!legacy) {
-        console.log(
-          `[RETARGET_ELIGIBILITY] ${JSON.stringify({
-            phase: "skip",
-            reason: "no_legacy_chat_row",
-            conversationId: conv.id,
-            phoneTail: phoneKey.length > 4 ? phoneKey.slice(-4) : phoneKey,
-          })}`
-        );
-        continue;
-      }
+      if (seenConversation.has(conv.id)) continue;
+      seenConversation.add(conv.id);
 
-      if (seenChatIds.has(legacy.id)) continue;
-      seenChatIds.add(legacy.id);
-      eligibleChats.push(legacy);
+      const lastAt = conv.lastMessageAt ? new Date(conv.lastMessageAt) : null;
+      const daysSince = lastAt
+        ? Math.floor((now.getTime() - lastAt.getTime()) / (24 * 60 * 60 * 1000))
+        : 0;
+
+      out.push({
+        conversationId: conv.id,
+        contactId: contact.id,
+        name: contact.name || "Unknown",
+        avatar: contact.avatar ?? null,
+        whatsappPhone: displayPhone,
+        channel: conv.channel,
+        windowExpiresAt: conv.windowExpiresAt ? new Date(conv.windowExpiresAt).toISOString() : null,
+        lastMessagePreview: conv.lastMessagePreview ?? null,
+        lastMessageAt: conv.lastMessageAt ? new Date(conv.lastMessageAt).toISOString() : null,
+        daysSinceLastMessage: daysSince,
+      });
     }
 
-    eligibleChats.sort((a, b) => {
-      const ta = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
-      const tb = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
+    out.sort((a, b) => {
+      const ta = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0;
+      const tb = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0;
       return tb - ta;
     });
 
-    return eligibleChats.slice(0, limit);
+    return out.slice(0, limit);
   }
 
   // Drip Campaign methods

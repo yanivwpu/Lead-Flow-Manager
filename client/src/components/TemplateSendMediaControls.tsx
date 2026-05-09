@@ -69,7 +69,10 @@ type RecentMediaItem = {
  */
 export function TemplateSendMediaControls(props: {
   template: TemplateSendMediaControlsTemplate;
-  chatId: string;
+  /** Legacy inbox chat row — mutually exclusive with `contactId` for API resolution. */
+  chatId?: string;
+  /** Unified CRM contact (e.g. Campaigns / retargeting without a legacy chat). */
+  contactId?: string;
   variableValues: Record<string, string>;
   onVariableValuesChange: Dispatch<SetStateAction<Record<string, string>>>;
   optionalHeaderMediaUrl: string | null;
@@ -80,6 +83,7 @@ export function TemplateSendMediaControls(props: {
   const {
     template,
     chatId,
+    contactId,
     variableValues,
     onVariableValuesChange,
     optionalHeaderMediaUrl,
@@ -100,16 +104,21 @@ export function TemplateSendMediaControls(props: {
   const placeholderKeys = headerMediaPlaceholderKeys(template.headerContent);
   const staticHttpsHeader = hc && /^https?:\/\//i.test(hc) && placeholderKeys.length === 0;
 
+  const recentMediaKey = contactId ? `contact:${contactId}` : chatId ? `chat:${chatId}` : "";
+
   const { data: recentData } = useQuery<{ items: RecentMediaItem[] }>({
-    queryKey: ["/api/templates/recent-media", chatId],
+    queryKey: ["/api/templates/recent-media", recentMediaKey],
     queryFn: async () => {
-      const res = await fetch(`/api/templates/recent-media?chatId=${encodeURIComponent(chatId)}`, {
+      const q = contactId
+        ? `contactId=${encodeURIComponent(contactId)}`
+        : `chatId=${encodeURIComponent(chatId!)}`;
+      const res = await fetch(`/api/templates/recent-media?${q}`, {
         credentials: "include",
       });
       if (!res.ok) throw new Error("Failed to load recent media");
       return res.json();
     },
-    enabled: !!chatId,
+    enabled: !!(contactId || chatId),
     staleTime: 30_000,
   });
 

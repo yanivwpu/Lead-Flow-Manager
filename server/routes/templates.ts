@@ -657,27 +657,28 @@ export function registerTemplateRoutes(app: Express): void {
         return res.status(403).json({ error: "Template messaging is a Pro feature" });
       }
 
-      const chats = await storage.getRetargetableChats(req.user.id);
+      const rows = await storage.getRetargetableChats(req.user.id);
 
       console.log(
         `[RETARGET_ELIGIBILITY] ${JSON.stringify({
           phase: "response_summary",
           userId: req.user.id,
-          eligibleLegacyChatCount: chats.length,
+          eligibleConversationCount: rows.length,
         })}`
       );
 
-      const now = Date.now();
-      const retargetableChats = chats.map((chat) => ({
-        id: chat.id,
-        name: chat.name,
-        avatar: chat.avatar,
-        whatsappPhone: chat.whatsappPhone,
-        lastMessage: chat.lastMessage,
-        lastMessageAt: chat.updatedAt?.toISOString(),
-        daysSinceLastMessage: chat.updatedAt
-          ? Math.floor((now - new Date(chat.updatedAt).getTime()) / (24 * 60 * 60 * 1000))
-          : 0,
+      const retargetableChats = rows.map((r) => ({
+        id: r.conversationId,
+        conversationId: r.conversationId,
+        contactId: r.contactId,
+        name: r.name,
+        avatar: r.avatar,
+        whatsappPhone: r.whatsappPhone,
+        channel: r.channel,
+        windowExpiresAt: r.windowExpiresAt,
+        lastMessagePreview: r.lastMessagePreview,
+        lastMessageAt: r.lastMessageAt,
+        daysSinceLastMessage: r.daysSinceLastMessage,
       }));
 
       res.json(retargetableChats);
@@ -689,7 +690,7 @@ export function registerTemplateRoutes(app: Express): void {
 
   /**
    * CRM field suggestions for template variable autofill (library / templates-page send review).
-   * Resolves legacy chat row → unified contact by WhatsApp channel id.
+   * Accepts legacy `chatId` or unified CRM `contactId` (e.g. Campaigns / retargeting without a chats row).
    */
   app.get("/api/templates/variable-autofill", async (req, res) => {
     try {
@@ -703,20 +704,31 @@ export function registerTemplateRoutes(app: Express): void {
       }
 
       const chatId = typeof req.query.chatId === "string" ? req.query.chatId.trim() : "";
-      if (!chatId) {
-        return res.status(400).json({ error: "chatId is required" });
-      }
+      const contactIdParam =
+        typeof req.query.contactId === "string" ? req.query.contactId.trim() : "";
 
-      const chat = await storage.getChat(chatId);
-      if (!chat || chat.userId !== req.user.id) {
-        return res.status(404).json({ error: "Chat not found" });
-      }
+      let contact: Awaited<ReturnType<typeof storage.getContact>> | undefined;
 
-      const channelKey =
-        (chat.whatsappPhone || "").replace(/\D/g, "") || (chat.whatsappPhone || "");
-      const contact = channelKey
-        ? await storage.getContactByChannelId(req.user.id, "whatsapp", channelKey)
-        : undefined;
+      if (contactIdParam) {
+        const c = await storage.getContact(contactIdParam);
+        if (!c || c.userId !== req.user.id) {
+          return res.status(404).json({ error: "Contact not found" });
+        }
+        contact = c;
+      } else if (chatId) {
+        const chat = await storage.getChat(chatId);
+        if (!chat || chat.userId !== req.user.id) {
+          return res.status(404).json({ error: "Chat not found" });
+        }
+
+        const channelKey =
+          (chat.whatsappPhone || "").replace(/\D/g, "") || (chat.whatsappPhone || "");
+        contact = channelKey
+          ? await storage.getContactByChannelId(req.user.id, "whatsapp", channelKey)
+          : undefined;
+      } else {
+        return res.status(400).json({ error: "chatId or contactId is required" });
+      }
 
       if (!contact) {
         return res.json({
@@ -742,11 +754,14 @@ export function registerTemplateRoutes(app: Express): void {
         customFlat[k] = typeof v === "string" ? v : String(v);
       }
 
+      const phoneFallback =
+        contact.phone || contact.whatsappId || "";
+
       res.json({
         contactId: contact.id,
         suggestions: {
           name: contact.name || "",
-          phone: contact.phone || contact.whatsappId || chat.whatsappPhone || "",
+          phone: phoneFallback,
           email: contact.email || "",
           stage: contact.pipelineStage || "",
           tag: rawTag,
@@ -761,7 +776,8 @@ export function registerTemplateRoutes(app: Express): void {
   });
 
   /**
-   * Recent outbound/inbound media URLs for a legacy chat (CRM conversation), for picking header assets when sending templates.
+   * Recent outbound/inbound media URLs for a CRM conversation, for picking header assets when sending templates.
+   * `chatId` (legacy) or `contactId` (unified CRM, e.g. retargeting).
    */
   app.get("/api/templates/recent-media", async (req, res) => {
     try {
@@ -775,20 +791,32 @@ export function registerTemplateRoutes(app: Express): void {
       }
 
       const chatId = typeof req.query.chatId === "string" ? req.query.chatId.trim() : "";
-      if (!chatId) {
-        return res.status(400).json({ error: "chatId is required" });
+      const contactIdParam =
+        typeof req.query.contactId === "string" ? req.query.contactId.trim() : "";
+      if (!chatId && !contactIdParam) {
+        return res.status(400).json({ error: "chatId or contactId is required" });
       }
 
-      const chat = await storage.getChat(chatId);
-      if (!chat || chat.userId !== req.user.id) {
-        return res.status(404).json({ error: "Chat not found" });
-      }
+      let contact: Awaited<ReturnType<typeof storage.getContact>> | undefined;
 
-      const channelKey =
-        (chat.whatsappPhone || "").replace(/\D/g, "") || (chat.whatsappPhone || "");
-      const contact = channelKey
-        ? await storage.getContactByChannelId(req.user.id, "whatsapp", channelKey)
-        : undefined;
+      if (contactIdParam) {
+        const c = await storage.getContact(contactIdParam);
+        if (!c || c.userId !== req.user.id) {
+          return res.status(404).json({ error: "Contact not found" });
+        }
+        contact = c;
+      } else {
+        const chat = await storage.getChat(chatId);
+        if (!chat || chat.userId !== req.user.id) {
+          return res.status(404).json({ error: "Chat not found" });
+        }
+
+        const channelKey =
+          (chat.whatsappPhone || "").replace(/\D/g, "") || (chat.whatsappPhone || "");
+        contact = channelKey
+          ? await storage.getContactByChannelId(req.user.id, "whatsapp", channelKey)
+          : undefined;
+      }
 
       if (!contact) {
         return res.json({ items: [] });
@@ -831,7 +859,8 @@ export function registerTemplateRoutes(app: Express): void {
   });
 
   /**
-   * Last header media URL used when sending a given library template to a legacy chat’s contact (prefill send modal).
+   * Last header media URL used when sending a given library template to a contact (prefill send modal).
+   * `chatId` (legacy) or `contactId` (unified CRM).
    */
   app.get("/api/templates/template-send-defaults", async (req, res) => {
     try {
@@ -845,21 +874,33 @@ export function registerTemplateRoutes(app: Express): void {
       }
 
       const chatId = typeof req.query.chatId === "string" ? req.query.chatId.trim() : "";
+      const contactIdParam =
+        typeof req.query.contactId === "string" ? req.query.contactId.trim() : "";
       const templateId = typeof req.query.templateId === "string" ? req.query.templateId.trim() : "";
-      if (!chatId || !templateId) {
-        return res.status(400).json({ error: "chatId and templateId are required" });
+      if (!templateId || (!chatId && !contactIdParam)) {
+        return res.status(400).json({ error: "templateId and either chatId or contactId are required" });
       }
 
-      const chat = await storage.getChat(chatId);
-      if (!chat || chat.userId !== req.user.id) {
-        return res.status(404).json({ error: "Chat not found" });
-      }
+      let contact: Awaited<ReturnType<typeof storage.getContact>> | undefined;
 
-      const channelKey =
-        (chat.whatsappPhone || "").replace(/\D/g, "") || (chat.whatsappPhone || "");
-      const contact = channelKey
-        ? await storage.getContactByChannelId(req.user.id, "whatsapp", channelKey)
-        : undefined;
+      if (contactIdParam) {
+        const c = await storage.getContact(contactIdParam);
+        if (!c || c.userId !== req.user.id) {
+          return res.status(404).json({ error: "Contact not found" });
+        }
+        contact = c;
+      } else {
+        const chat = await storage.getChat(chatId);
+        if (!chat || chat.userId !== req.user.id) {
+          return res.status(404).json({ error: "Chat not found" });
+        }
+
+        const channelKey =
+          (chat.whatsappPhone || "").replace(/\D/g, "") || (chat.whatsappPhone || "");
+        contact = channelKey
+          ? await storage.getContactByChannelId(req.user.id, "whatsapp", channelKey)
+          : undefined;
+      }
 
       if (!contact) {
         return res.json({ optionalHeaderMediaUrl: null });

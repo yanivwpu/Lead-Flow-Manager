@@ -65,11 +65,15 @@ interface MessageTemplate {
 
 interface RetargetableChat {
   id: string;
+  conversationId: string;
+  contactId: string;
   name: string;
-  avatar: string;
+  avatar: string | null;
   whatsappPhone: string;
-  lastMessage: string;
-  lastMessageAt: string;
+  channel: string;
+  windowExpiresAt: string | null;
+  lastMessagePreview: string | null;
+  lastMessageAt: string | null;
   daysSinceLastMessage: number;
 }
 
@@ -242,7 +246,7 @@ export function Templates() {
   const { toast } = useToast();
   const [selectedTemplate, setSelectedTemplate] = useState<MessageTemplate | null>(null);
   const [sendDialogOpen, setSendDialogOpen] = useState(false);
-  const [selectedChat, setSelectedChat] = useState<Chat | null>(null);
+  const [selectedChat, setSelectedChat] = useState<Chat | RetargetableChat | null>(null);
   const [variableValues, setVariableValues] = useState<Record<string, string>>({});
   const [libraryModalOpen, setLibraryModalOpen] = useState(false);
   const [libraryModalTemplate, setLibraryModalTemplate] = useState<MessageTemplate | null>(null);
@@ -276,14 +280,22 @@ export function Templates() {
     enabled: !!templatesEnabled,
   });
 
+  const templateAuxRecipientKey =
+    selectedChat && "contactId" in selectedChat && selectedChat.contactId
+      ? `contact:${selectedChat.contactId}`
+      : selectedChat?.id
+        ? `chat:${selectedChat.id}`
+        : undefined;
+
   const { data: variableAutofill } = useQuery<VariableAutofillResponse>({
-    queryKey: ["/api/templates/variable-autofill", selectedChat?.id],
-    enabled: !!templatesEnabled && sendDialogOpen && !!selectedChat?.id,
+    queryKey: ["/api/templates/variable-autofill", templateAuxRecipientKey],
+    enabled: !!templatesEnabled && sendDialogOpen && !!templateAuxRecipientKey,
     queryFn: async () => {
-      const res = await fetch(
-        `/api/templates/variable-autofill?chatId=${encodeURIComponent(selectedChat!.id)}`,
-        { credentials: "include" }
-      );
+      const q =
+        selectedChat && "contactId" in selectedChat && selectedChat.contactId
+          ? `contactId=${encodeURIComponent(selectedChat.contactId)}`
+          : `chatId=${encodeURIComponent(selectedChat!.id)}`;
+      const res = await fetch(`/api/templates/variable-autofill?${q}`, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to load suggestions");
       return res.json();
     },
@@ -292,12 +304,23 @@ export function Templates() {
   const { data: templateSendDefaults, isLoading: templateSendDefaultsLoading } = useQuery<{
     optionalHeaderMediaUrl: string | null;
   }>({
-    queryKey: ["/api/templates/template-send-defaults", selectedChat?.id, selectedTemplate?.id],
+    queryKey: [
+      "/api/templates/template-send-defaults",
+      templateAuxRecipientKey,
+      selectedTemplate?.id,
+    ],
     enabled:
-      !!templatesEnabled && sendDialogOpen && !!selectedChat?.id && !!selectedTemplate?.id,
+      !!templatesEnabled &&
+      sendDialogOpen &&
+      !!templateAuxRecipientKey &&
+      !!selectedTemplate?.id,
     queryFn: async () => {
+      const base =
+        selectedChat && "contactId" in selectedChat && selectedChat.contactId
+          ? `contactId=${encodeURIComponent(selectedChat.contactId)}`
+          : `chatId=${encodeURIComponent(selectedChat!.id)}`;
       const res = await fetch(
-        `/api/templates/template-send-defaults?chatId=${encodeURIComponent(selectedChat!.id)}&templateId=${encodeURIComponent(selectedTemplate!.id)}`,
+        `/api/templates/template-send-defaults?${base}&templateId=${encodeURIComponent(selectedTemplate!.id)}`,
         { credentials: "include" }
       );
       if (!res.ok) throw new Error("Failed to load template defaults");
@@ -421,7 +444,8 @@ export function Templates() {
   const sendTemplateMutation = useMutation({
     mutationFn: async (data: {
       templateId: string;
-      chatId: string;
+      chatId?: string;
+      contactId?: string;
       variables: Record<string, string>;
       sendSource: "templates_library" | "templates_campaign";
       optionalHeaderMediaUrl?: string | null;
@@ -429,16 +453,19 @@ export function Templates() {
       const trimmedOpt = data.optionalHeaderMediaUrl?.trim();
       const payload = {
         templateId: data.templateId,
-        chatId: data.chatId,
         variables: data.variables,
         sendSource: data.sendSource,
+        ...(data.contactId
+          ? { contactId: data.contactId }
+          : { chatId: data.chatId as string }),
         ...(trimmedOpt ? { optionalHeaderMediaUrl: trimmedOpt } : {}),
       };
       console.log(
         `[WA_TEMPLATE_SEND_CLIENT] ${JSON.stringify({
           source: data.sendSource,
           templateId: data.templateId,
-          chatId: data.chatId,
+          chatId: data.chatId ?? null,
+          contactId: data.contactId ?? null,
           variables: data.variables,
           optionalHeaderMediaUrl: trimmedOpt ?? null,
           components: "(built server-side from template row + variables)",
@@ -487,7 +514,7 @@ export function Templates() {
     console.log(`[UseTemplate] Template selected: ${template.name} (id=${template.id}, status=${template.status})`);
     console.log(`[UseTemplate] Contact selected: ${chat.name} (id=${chat.id}, phone=${chat.whatsappPhone})`);
     setSelectedTemplate(template);
-    setSelectedChat(chat as Chat);
+    setSelectedChat(chat);
     setVariableValues({});
     setOptionalHeaderMediaUrl(null);
     setHeaderMediaBroken(false);
@@ -1004,10 +1031,19 @@ export function Templates() {
                     ) : null}
                   </div>
 
-                  {selectedChat?.id ? (
+                  {templateAuxRecipientKey ? (
                     <TemplateSendMediaControls
                       template={selectedTemplate}
-                      chatId={selectedChat.id}
+                      chatId={
+                        selectedChat && !("contactId" in selectedChat && selectedChat.contactId)
+                          ? selectedChat.id
+                          : undefined
+                      }
+                      contactId={
+                        selectedChat && "contactId" in selectedChat && selectedChat.contactId
+                          ? selectedChat.contactId
+                          : undefined
+                      }
                       variableValues={variableValues}
                       onVariableValuesChange={setVariableValues}
                       optionalHeaderMediaUrl={optionalHeaderMediaUrl}
@@ -1171,18 +1207,24 @@ export function Templates() {
                 <DialogFooter>
                   <Button variant="outline" onClick={() => setSendDialogOpen(false)}>Cancel</Button>
                   <Button 
-                    onClick={() =>
+                    onClick={() => {
+                      const isRetarget =
+                        "contactId" in selectedChat &&
+                        !!selectedChat.contactId &&
+                        templateSendOriginRef.current === "campaign";
                       sendTemplateMutation.mutate({
                         templateId: selectedTemplate.id,
-                        chatId: selectedChat.id,
+                        ...(isRetarget
+                          ? { contactId: selectedChat.contactId }
+                          : { chatId: selectedChat.id }),
                         variables: variableValues,
                         sendSource:
                           templateSendOriginRef.current === "campaign"
                             ? "templates_campaign"
                             : "templates_library",
                         optionalHeaderMediaUrl,
-                      })
-                    }
+                      });
+                    }}
                     disabled={
                       sendTemplateMutation.isPending ||
                       missingPlaceholders.length > 0 ||
