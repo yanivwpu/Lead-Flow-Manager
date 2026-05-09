@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
 function RealtorMark() {
   return (
@@ -28,7 +28,12 @@ import {
   TemplateShapeIndicator,
 } from "@/components/WhatsAppTemplateRichPreview";
 import { LocalizedTemplateSelector } from "@/components/LocalizedTemplateSelector";
-import { getInboxTemplateSendBlockReason } from "@shared/metaTemplateSend";
+import {
+  collectRequiredLibraryTemplatePlaceholders,
+  getInboxTemplateSendBlockReason,
+  normalizeTemplateVariableMap,
+  substituteTemplateVariablesForDisplay,
+} from "@shared/metaTemplateSend";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
@@ -69,6 +74,27 @@ interface Chat {
   avatar: string;
   whatsappPhone: string | null;
   lastMessage: string;
+}
+
+type VariableAutofillSuggestion = {
+  name: string;
+  phone: string;
+  email: string;
+  stage: string;
+  tag: string;
+  tags: string[];
+  customFields: Record<string, string>;
+};
+
+type VariableAutofillResponse = {
+  contactId: string | null;
+  suggestions: VariableAutofillSuggestion | null;
+};
+
+/** Tokens still showing as literal `{{n}}` after substitution — preview still unresolved. */
+function remainingPlaceholderTokens(text: string): string[] {
+  const m = text.match(/\{\{\d+\}\}/g);
+  return m ? Array.from(new Set(m)) : [];
 }
 
 const CATEGORY_BADGE_CLASS: Record<string, string> = {
@@ -237,6 +263,61 @@ export function Templates() {
     queryKey: ["/api/chats"],
     enabled: !!templatesEnabled,
   });
+
+  const { data: variableAutofill } = useQuery<VariableAutofillResponse>({
+    queryKey: ["/api/templates/variable-autofill", selectedChat?.id],
+    enabled: !!templatesEnabled && sendDialogOpen && !!selectedChat?.id,
+    queryFn: async () => {
+      const res = await fetch(
+        `/api/templates/variable-autofill?chatId=${encodeURIComponent(selectedChat!.id)}`,
+        { credentials: "include" }
+      );
+      if (!res.ok) throw new Error("Failed to load suggestions");
+      return res.json();
+    },
+  });
+
+  const requiredPlaceholders = useMemo(() => {
+    if (!selectedTemplate) return [] as string[];
+    return collectRequiredLibraryTemplatePlaceholders(selectedTemplate);
+  }, [selectedTemplate]);
+
+  const normalizedVariableValues = useMemo(
+    () => normalizeTemplateVariableMap(variableValues),
+    [variableValues]
+  );
+
+  const missingPlaceholders = useMemo(() => {
+    return requiredPlaceholders.filter((ph) => !String(normalizedVariableValues[ph] ?? "").trim());
+  }, [requiredPlaceholders, normalizedVariableValues]);
+
+  const resolvedBodyPreview = selectedTemplate
+    ? substituteTemplateVariablesForDisplay(selectedTemplate.bodyText, variableValues)
+    : "";
+
+  const resolvedHeaderPreview =
+    selectedTemplate &&
+    (selectedTemplate.headerType || "").toLowerCase() === "text" &&
+    (selectedTemplate.headerContent || "").trim()
+      ? substituteTemplateVariablesForDisplay(selectedTemplate.headerContent, variableValues)
+      : "";
+
+  const previewUnresolvedTokens = useMemo(() => {
+    if (!selectedTemplate) return [] as string[];
+    const out = new Set<string>();
+    if ((selectedTemplate.headerType || "").toLowerCase() === "text") {
+      remainingPlaceholderTokens(
+        substituteTemplateVariablesForDisplay(selectedTemplate.headerContent, variableValues)
+      ).forEach((t) => out.add(t));
+    }
+    remainingPlaceholderTokens(
+      substituteTemplateVariablesForDisplay(selectedTemplate.bodyText, variableValues)
+    ).forEach((t) => out.add(t));
+    return Array.from(out).sort(
+      (a, b) =>
+        (parseInt(a.replace(/\D/g, ""), 10) || 0) - (parseInt(b.replace(/\D/g, ""), 10) || 0)
+    );
+  }, [selectedTemplate, variableValues]);
 
   const syncTemplatesMutation = useMutation({
     mutationFn: async () => {
@@ -785,43 +866,181 @@ export function Templates() {
             if (!open) setSendInlineError(null);
           }}
         >
-          <DialogContent className="max-w-lg">
+          <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
             {selectedTemplate && selectedChat && (
               <>
                 <DialogHeader>
                   <DialogTitle>Send Template to {selectedChat.name}</DialogTitle>
                   <DialogDescription>
-                    Fill in the template variables and send
+                    Review the preview, fill every variable WhatsApp expects, then send.
                   </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4 py-4">
-                  <div className="min-w-0">
+                  <div className="min-w-0 rounded-lg border border-gray-100 bg-gray-50/50 p-2">
+                    <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-gray-500">
+                      Approved layout
+                    </p>
                     <WhatsAppTemplateRichPreview
                       key={selectedTemplate.id}
                       template={selectedTemplate}
                       density="comfortable"
                     />
                   </div>
-                  
-                  {selectedTemplate.variables && selectedTemplate.variables.length > 0 && (
+
+                  <div className="rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
+                    <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-gray-500">
+                      Message preview
+                    </p>
+                    {(selectedTemplate.headerType || "").toLowerCase() === "text" &&
+                    (selectedTemplate.headerContent || "").trim() ? (
+                      <p className="text-sm font-semibold text-gray-900 border-b border-gray-100 pb-2 mb-2">
+                        {resolvedHeaderPreview || (
+                          <span className="font-normal text-gray-400">Header</span>
+                        )}
+                      </p>
+                    ) : null}
+                    <p className="text-sm text-gray-800 whitespace-pre-wrap break-words">
+                      {resolvedBodyPreview || (
+                        <span className="text-gray-400">—</span>
+                      )}
+                    </p>
+                    {previewUnresolvedTokens.length > 0 ? (
+                      <div className="mt-3 flex flex-wrap gap-1.5 items-center">
+                        <span className="text-[11px] text-gray-500">Unresolved in text:</span>
+                        {previewUnresolvedTokens.map((t) => (
+                          <Badge key={t} variant="outline" className="text-[10px] font-mono text-amber-900 border-amber-200 bg-amber-50">
+                            {t}
+                          </Badge>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+
+                  {requiredPlaceholders.length > 0 ? (
                     <div className="space-y-3">
-                      <Label>Template Variables</Label>
-                      {selectedTemplate.variables.map((variable: string, i: number) => (
-                        <div key={i} className="space-y-1">
-                          <Label htmlFor={`var-${variable}`} className="text-sm text-gray-600">
-                            {variable.startsWith("{{") ? variable : `{{${variable}}}`}
-                          </Label>
-                          <Input
-                            id={`var-${variable}`}
-                            placeholder={`Enter value for ${variable.replace(/^\{\{|\}\}$/g, "")}`}
-                            value={variableValues[variable] || ""}
-                            onChange={(e) => setVariableValues(prev => ({ ...prev, [variable]: e.target.value }))}
-                            data-testid={`input-variable-${variable}`}
-                          />
-                        </div>
-                      ))}
+                      <div className="flex flex-col gap-0.5">
+                        <Label>Variables</Label>
+                        <p className="text-xs text-gray-500">
+                          Required placeholders from your synced Meta template (body, header, buttons, carousel).
+                        </p>
+                      </div>
+                      {requiredPlaceholders.map((ph) => {
+                        const sug = variableAutofill?.suggestions;
+                        const idSafe = ph.replace(/\W/g, "");
+                        const customEntries = sug?.customFields ? Object.entries(sug.customFields) : [];
+                        return (
+                          <div key={ph} className="space-y-1.5 rounded-lg border border-gray-100 bg-gray-50/80 p-3">
+                            <Label htmlFor={`var-${idSafe}`} className="text-sm font-medium text-gray-800">
+                              {ph}
+                            </Label>
+                            <Input
+                              id={`var-${idSafe}`}
+                              placeholder={`Value for ${ph}`}
+                              value={variableValues[ph] ?? ""}
+                              onChange={(e) =>
+                                setVariableValues((prev) => ({ ...prev, [ph]: e.target.value }))
+                              }
+                              data-testid={`input-variable-${idSafe}`}
+                            />
+                            {sug ? (
+                              <div className="flex flex-wrap gap-1 pt-1">
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-7 px-2 text-[11px] text-gray-700"
+                                  onClick={() =>
+                                    setVariableValues((prev) => ({ ...prev, [ph]: sug.name }))
+                                  }
+                                >
+                                  Name
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-7 px-2 text-[11px] text-gray-700"
+                                  onClick={() =>
+                                    setVariableValues((prev) => ({ ...prev, [ph]: sug.phone }))
+                                  }
+                                >
+                                  Phone
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-7 px-2 text-[11px] text-gray-700"
+                                  onClick={() =>
+                                    setVariableValues((prev) => ({ ...prev, [ph]: sug.email }))
+                                  }
+                                >
+                                  Email
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-7 px-2 text-[11px] text-gray-700"
+                                  onClick={() =>
+                                    setVariableValues((prev) => ({ ...prev, [ph]: sug.stage }))
+                                  }
+                                >
+                                  Stage
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-7 px-2 text-[11px] text-gray-700"
+                                  onClick={() =>
+                                    setVariableValues((prev) => ({
+                                      ...prev,
+                                      [ph]: sug.tags?.length ? sug.tags.join(", ") : sug.tag,
+                                    }))
+                                  }
+                                >
+                                  Tags
+                                </Button>
+                                {customEntries.slice(0, 8).map(([key, val]) => (
+                                  <Button
+                                    key={`${ph}-${key}`}
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7 max-w-[140px] truncate px-2 text-[11px] text-gray-700"
+                                    title={`${key}: ${val}`}
+                                    onClick={() =>
+                                      setVariableValues((prev) => ({ ...prev, [ph]: val }))
+                                    }
+                                  >
+                                    {key}
+                                  </Button>
+                                ))}
+                              </div>
+                            ) : variableAutofill?.contactId === null ? (
+                              <p className="text-[11px] text-gray-400 pt-1">
+                                No CRM contact linked to this chat — enter values manually.
+                              </p>
+                            ) : null}
+                          </div>
+                        );
+                      })}
                     </div>
+                  ) : (
+                    <p className="text-sm text-gray-500">
+                      This template has no dynamic variables — you can send as-is.
+                    </p>
                   )}
+
+                  {missingPlaceholders.length > 0 ? (
+                    <Alert className="border-amber-200 bg-amber-50 text-amber-950">
+                      <AlertDescription className="text-sm">
+                        Fill every required variable before sending:{" "}
+                        <span className="font-mono">{missingPlaceholders.join(", ")}</span>
+                      </AlertDescription>
+                    </Alert>
+                  ) : null}
                 </div>
                 {sendInlineError ? (
                   <Alert variant="destructive" className="border-amber-200 bg-amber-50 text-amber-950 [&>svg]:text-amber-700">
@@ -842,7 +1061,7 @@ export function Templates() {
                             : "templates_library",
                       })
                     }
-                    disabled={sendTemplateMutation.isPending}
+                    disabled={sendTemplateMutation.isPending || missingPlaceholders.length > 0}
                     className="bg-brand-green hover:bg-brand-green/90"
                     data-testid="button-send-template"
                   >

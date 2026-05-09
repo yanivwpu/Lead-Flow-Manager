@@ -42,6 +42,87 @@ export function extractSortedPlaceholders(text: string | null | undefined): stri
   return uniq;
 }
 
+function mergeSortedUniquePlaceholders(lists: string[][]): string[] {
+  const set = new Set<string>();
+  for (const list of lists) {
+    for (const p of list) set.add(p);
+  }
+  return Array.from(set).sort((a, b) => {
+    const na = parseInt(a.replace(/\D/g, ""), 10) || 0;
+    const nb = parseInt(b.replace(/\D/g, ""), 10) || 0;
+    return na - nb;
+  });
+}
+
+/**
+ * Replace `{{n}}` placeholders using the same normalization rules as Meta send (`normalizeTemplateVariableMap`).
+ * Used for CRM display copy and client-side preview.
+ */
+export function substituteTemplateVariablesForDisplay(
+  text: string | null | undefined,
+  variableValues: Record<string, string>
+): string {
+  const vv = normalizeTemplateVariableMap(variableValues);
+  if (!text) return "";
+  let out = text;
+  for (const [key, val] of Object.entries(vv)) {
+    if (!key) continue;
+    out = out.split(key).join(val ?? "");
+  }
+  return out.trim();
+}
+
+/**
+ * Every `{{n}}` referenced from synced template components (body, text/media header, URL buttons, carousel cards).
+ * Matches server-side `buildMetaLibraryTemplateSendComponents` requirements.
+ */
+export function collectRequiredLibraryTemplatePlaceholders(template: TemplateRowForMetaSend): string[] {
+  const parts: string[][] = [];
+
+  parts.push(extractSortedPlaceholders(template.bodyText));
+
+  const ht = (template.headerType || "").toLowerCase();
+  const hc = template.headerContent;
+  if (ht === "text" || ["image", "video", "document"].includes(ht)) {
+    parts.push(extractSortedPlaceholders(hc));
+  }
+
+  const buttons = template.buttons;
+  if (Array.isArray(buttons)) {
+    for (const btn of buttons as Array<{ url?: string }>) {
+      parts.push(extractSortedPlaceholders(String(btn?.url || "")));
+    }
+  }
+
+  const tt = (template.templateType || "").toLowerCase();
+  const cardsRaw = template.carouselCards;
+  const hasCarousel =
+    tt === "carousel" || (Array.isArray(cardsRaw) && cardsRaw.length > 0);
+  if (hasCarousel && Array.isArray(cardsRaw)) {
+    for (const card of cardsRaw) {
+      const c = card as { components?: unknown[] };
+      const comps = Array.isArray(c.components) ? c.components : [];
+      for (const comp of comps as Record<string, unknown>[]) {
+        const ctype = String(comp.type || "").toUpperCase();
+        if (ctype === "BODY") {
+          parts.push(extractSortedPlaceholders(String(comp.text || "")));
+        }
+        if (ctype === "BUTTONS" && Array.isArray(comp.buttons)) {
+          for (const b of comp.buttons as Array<{ url?: string }>) {
+            parts.push(extractSortedPlaceholders(String(b?.url || "")));
+          }
+        }
+        if (ctype === "HEADER") {
+          const txt = comp.text != null ? String(comp.text) : "";
+          parts.push(extractSortedPlaceholders(txt));
+        }
+      }
+    }
+  }
+
+  return mergeSortedUniquePlaceholders(parts);
+}
+
 function headerNeedsUnsupportedDynamicMedia(headerType: string | null | undefined, headerContent: string | null | undefined): boolean {
   const ht = (headerType || "").toLowerCase();
   if (!["image", "video", "document"].includes(ht)) return false;
@@ -62,7 +143,7 @@ export function buildMetaCloudTemplateSendComponents(
   if (headerNeedsUnsupportedDynamicMedia(template.headerType, template.headerContent)) {
     return {
       error:
-        "This template uses a dynamic media header (image/video/document variables). Sending it requires the full Templates flow with media URLs.",
+        "This template includes image, video, or document content in the header. Open Message Templates, add the media link in your variables, and send from there.",
     };
   }
 
@@ -338,18 +419,28 @@ function resolveStaticOrVariableMediaUrl(
   vv: Record<string, string>
 ): { url?: string; error?: string } {
   const hc = (headerContent || "").trim();
-  if (!hc) return { error: "Media header is empty in template data." };
+  if (!hc)
+    return {
+      error:
+        "This template requires a media header before it can be sent. If variables appear below, add your image, video, or file link there.",
+    };
   const ph = extractSortedPlaceholders(hc);
   if (ph.length) {
     const u = (vv[ph[0]] ?? "").trim();
-    if (!u) return { error: `Provide variable ${ph[0]} as a valid https URL for the header media.` };
-    if (!/^https?:\/\//i.test(u)) return { error: `Header media for ${ph[0]} must start with https://` };
+    if (!u)
+      return {
+        error: `This WhatsApp template includes header media. Enter a valid https link for ${ph[0]} before sending.`,
+      };
+    if (!/^https?:\/\//i.test(u))
+      return {
+        error: `Header media must use a secure https link. Update ${ph[0]} so it starts with https://`,
+      };
     return { url: u };
   }
   if (/^https?:\/\//i.test(hc)) return { url: hc };
   return {
     error:
-      "This template needs a media URL for the header. Enter it using the template variables (or resync the template).",
+      "This WhatsApp template includes image, video, or document content. Add the required https media link in your variables before sending.",
   };
 }
 
@@ -386,7 +477,7 @@ function mapCarouselCardComponents(
         if (!link || !/^https?:\/\//i.test(link)) {
           return {
             components: [],
-            error: `Carousel card ${cardIndex + 1}: provide a valid https image URL (variable or synced example).`,
+            error: `Carousel slide ${cardIndex + 1}: add a valid https image URL for this card's header—fill the matching variable or choose media, then try again.`,
           };
         }
         out.push({
@@ -427,7 +518,7 @@ function mapCarouselCardComponents(
   if (!out.length) {
     return {
       components: [],
-      error: `Carousel card ${cardIndex + 1}: could not build components from synced data. Try syncing templates again.`,
+      error: `Carousel slide ${cardIndex + 1}: media couldn't be prepared. Refresh your templates from WhatsApp Manager, check your variables, and try again.`,
     };
   }
 
@@ -441,7 +532,11 @@ function buildCarouselLibraryPayload(
 ): { components?: Record<string, unknown>[]; error?: string; shape: MetaTemplateSendShape } {
   const cardsRaw = Array.isArray(template.carouselCards) ? template.carouselCards : [];
   if (!cardsRaw.length) {
-    return { error: "Carousel template has no card data. Sync templates from Meta and try again.", shape };
+    return {
+      error:
+        "This carousel template isn't ready to send yet. Refresh your templates from WhatsApp Manager and try again.",
+      shape,
+    };
   }
 
   const components: Record<string, unknown>[] = [];

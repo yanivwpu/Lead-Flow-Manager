@@ -7,34 +7,45 @@ import {
   inferMetaTemplateShape,
   normalizeTemplateVariableMap,
   parseMetaGraphTemplateForLibrary,
+  substituteTemplateVariablesForDisplay,
 } from "@shared/metaTemplateSend";
 import { storage } from "../storage";
 import { getMetaMessageTemplates, sendMetaWhatsAppTemplate } from "../userMeta";
 import { getUserTwilioClient } from "../userTwilio";
 import { subscriptionService } from "../subscriptionService";
 
-function substituteTemplateVariables(
-  bodyText: string | null | undefined,
-  variableValues: Record<string, string>
-): string {
-  if (!bodyText) return "";
-  let out = bodyText;
-  for (const [key, val] of Object.entries(variableValues)) {
-    if (!key) continue;
-    out = out.split(key).join(val ?? "");
-  }
-  return out.trim();
-}
-
-/** Stored in `messages.content` — line 1 label + blank line + rendered body when available */
+/** Stored in `messages.content` — template label + optional resolved header/body (CRM bubble). */
 function buildOutboundTemplateDisplayContent(
-  templateName: string,
-  bodyText: string | null | undefined,
+  template: {
+    name: string;
+    bodyText: string | null | undefined;
+    headerType: string | null | undefined;
+    headerContent: string | null | undefined;
+  },
   variableValues: Record<string, string>
 ): string {
-  const rendered = substituteTemplateVariables(bodyText, variableValues);
-  const header = `Template: ${templateName}`;
-  return rendered ? `${header}\n\n${rendered}` : header;
+  const lines: string[] = [`Template: ${template.name}`];
+  const ht = (template.headerType || "").toLowerCase();
+  const hc = template.headerContent;
+  if (ht === "text" && (hc || "").trim()) {
+    const renderedHeader = substituteTemplateVariablesForDisplay(hc, variableValues);
+    if (renderedHeader) {
+      lines.push("");
+      lines.push(renderedHeader);
+    }
+  } else if (["image", "video", "document"].includes(ht) && (hc || "").trim()) {
+    const renderedMedia = substituteTemplateVariablesForDisplay(hc, variableValues);
+    if (renderedMedia) {
+      lines.push("");
+      lines.push(renderedMedia);
+    }
+  }
+  const bodyRendered = substituteTemplateVariablesForDisplay(template.bodyText, variableValues);
+  if (bodyRendered) {
+    lines.push("");
+    lines.push(bodyRendered);
+  }
+  return lines.join("\n").trim();
 }
 
 /** User-facing message — no tokens; Meta codes OK for support. */
@@ -661,6 +672,79 @@ export function registerTemplateRoutes(app: Express): void {
     }
   });
 
+  /**
+   * CRM field suggestions for template variable autofill (library / templates-page send review).
+   * Resolves legacy chat row → unified contact by WhatsApp channel id.
+   */
+  app.get("/api/templates/variable-autofill", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const limits = await subscriptionService.getUserLimits(req.user.id);
+      if (!(limits as any)?.templatesEnabled) {
+        return res.status(403).json({ error: "Template messaging is a Pro feature" });
+      }
+
+      const chatId = typeof req.query.chatId === "string" ? req.query.chatId.trim() : "";
+      if (!chatId) {
+        return res.status(400).json({ error: "chatId is required" });
+      }
+
+      const chat = await storage.getChat(chatId);
+      if (!chat || chat.userId !== req.user.id) {
+        return res.status(404).json({ error: "Chat not found" });
+      }
+
+      const channelKey =
+        (chat.whatsappPhone || "").replace(/\D/g, "") || (chat.whatsappPhone || "");
+      const contact = channelKey
+        ? await storage.getContactByChannelId(req.user.id, "whatsapp", channelKey)
+        : undefined;
+
+      if (!contact) {
+        return res.json({
+          contactId: null,
+          suggestions: null,
+        });
+      }
+
+      const rawTag = (contact.tag || "").trim();
+      const tagsList = rawTag.includes(",")
+        ? rawTag.split(",").map((t) => t.trim()).filter(Boolean)
+        : rawTag
+          ? [rawTag]
+          : [];
+
+      const customRaw =
+        contact.customFields && typeof contact.customFields === "object"
+          ? (contact.customFields as Record<string, unknown>)
+          : {};
+      const customFlat: Record<string, string> = {};
+      for (const [k, v] of Object.entries(customRaw)) {
+        if (v == null || v === "") continue;
+        customFlat[k] = typeof v === "string" ? v : String(v);
+      }
+
+      res.json({
+        contactId: contact.id,
+        suggestions: {
+          name: contact.name || "",
+          phone: contact.phone || contact.whatsappId || chat.whatsappPhone || "",
+          email: contact.email || "",
+          stage: contact.pipelineStage || "",
+          tag: rawTag,
+          tags: tagsList,
+          customFields: customFlat,
+        },
+      });
+    } catch (error: unknown) {
+      console.error("variable-autofill:", error);
+      res.status(500).json({ error: "Failed to load contact suggestions" });
+    }
+  });
+
   // Send a template message via the active WhatsApp provider
   app.post("/api/templates/send", async (req, res) => {
     try {
@@ -1038,18 +1122,22 @@ export function registerTemplateRoutes(app: Express): void {
           persistedConversationId = conversationId;
 
           const displayContent = buildOutboundTemplateDisplayContent(
-            template.name,
-            template.bodyText,
+            {
+              name: template.name,
+              bodyText: template.bodyText,
+              headerType: template.headerType,
+              headerContent: template.headerContent,
+            },
             variableValues
           );
           const preview = displayContent.substring(0, 100);
 
           const templateVariablesPayload = {
-            ...variableValues,
+            ...normalizeTemplateVariableMap(variableValues),
             templateLanguage: templateLang,
             templateName: template.name,
             channel: "whatsapp",
-            provider: resolvedProvider,
+            provider: resolvedProvider === "meta" ? "meta" : resolvedProvider,
           };
 
           const normalizedStatus = (sendStatus || "").toLowerCase();
