@@ -2,7 +2,9 @@ import type { Express } from "express";
 import type { Channel } from "@shared/schema";
 import {
   buildMetaCloudTemplateSendComponents,
+  buildMetaLibraryTemplateSendComponents,
   getInboxTemplateSendBlockReason,
+  inferMetaTemplateShape,
   normalizeTemplateVariableMap,
   parseMetaGraphTemplateForLibrary,
 } from "@shared/metaTemplateSend";
@@ -33,6 +35,18 @@ function buildOutboundTemplateDisplayContent(
   const rendered = substituteTemplateVariables(bodyText, variableValues);
   const header = `Template: ${templateName}`;
   return rendered ? `${header}\n\n${rendered}` : header;
+}
+
+/** User-facing message — no tokens; Meta codes OK for support. */
+function formatFriendlyMetaTemplateUserMessage(metaErr: unknown): string {
+  const e = metaErr as { message?: string; metaErrorCode?: number };
+  const msg = String(e?.message || "");
+  const code = e?.metaErrorCode;
+  if (code === 132012 || msg.includes("132012")) {
+    return "WhatsApp couldn’t send this template. Check variables, media URLs, and that the template still matches your approved structure in Meta.";
+  }
+  if (!msg) return "WhatsApp couldn’t send this template. Try again or verify the template in WhatsApp Manager.";
+  return msg;
 }
 
 async function ensureWhatsAppConversationForContact(
@@ -670,6 +684,14 @@ export function registerTemplateRoutes(app: Express): void {
         typeof sendSource === "string" && sendSource.trim()
           ? sendSource.trim()
           : "unknown";
+
+      /** Inbox + Campaign: quick-send only. Library flows: full Meta template shapes. */
+      let metaSendPath: "library_full" | "quick_send" =
+        sendSourceTag === "templates_library" || sendSourceTag === "templates_page"
+          ? "library_full"
+          : sendSourceTag === "inbox_picker" || sendSourceTag === "templates_campaign"
+            ? "quick_send"
+            : "quick_send";
       if (!templateId || (!chatId && !contactId)) {
         return res.status(400).json({ error: "Template ID and either Chat ID or Contact ID are required" });
       }
@@ -783,7 +805,20 @@ export function registerTemplateRoutes(app: Express): void {
           return res.status(400).json({ error: "Meta WhatsApp account not connected" });
         }
 
-        if (sendSourceTag === "inbox_picker") {
+        const templateShape = inferMetaTemplateShape({
+          name: template.name,
+          bodyText: template.bodyText,
+          headerType: template.headerType,
+          headerContent: template.headerContent,
+          buttons: template.buttons,
+          templateType: template.templateType,
+          carouselCards: template.carouselCards,
+          category: template.category,
+        });
+
+        let components: any[] | undefined;
+
+        if (metaSendPath === "quick_send") {
           const inboxBlock = getInboxTemplateSendBlockReason({
             name: template.name,
             bodyText: template.bodyText,
@@ -797,40 +832,56 @@ export function registerTemplateRoutes(app: Express): void {
           if (inboxBlock.blocked) {
             console.warn(
               `[WA_TEMPLATE_SEND] ${JSON.stringify({
-                phase: "blocked_inbox",
+                phase: "blocked_quick_send",
                 sendSource: sendSourceTag,
                 templateName: template.name,
+                language: templateLang,
+                shape: templateShape,
+                provider: resolvedProvider,
                 metaError: inboxBlock.reason,
               })}`
             );
             return res.status(400).json({
-              error: inboxBlock.reason || "This template can't be sent from the inbox.",
+              error: inboxBlock.reason || "This template can't be sent from this shortcut.",
             });
           }
         }
 
-        const built = buildMetaCloudTemplateSendComponents(template, variableValues);
+        const built =
+          metaSendPath === "quick_send"
+            ? buildMetaCloudTemplateSendComponents(template, variableValues)
+            : buildMetaLibraryTemplateSendComponents(template, variableValues);
+
+        const resolvedShape =
+          "shape" in built && built.shape ? built.shape : templateShape;
+
         if (built.error) {
           console.warn(
             `[WA_TEMPLATE_SEND] ${JSON.stringify({
               phase: "build_error",
               sendSource: sendSourceTag,
+              metaSendPath,
               templateName: template.name,
+              language: templateLang,
+              shape: resolvedShape,
+              provider: resolvedProvider,
               metaError: built.error,
             })}`
           );
           return res.status(400).json({ error: built.error });
         }
 
-        const components = built.components as any[] | undefined;
+        components = built.components as any[] | undefined;
 
         console.log(
           `[WA_TEMPLATE_SEND] ${JSON.stringify({
             phase: "request",
             sendSource: sendSourceTag,
+            metaSendPath,
             provider: resolvedProvider,
             templateName: template.name,
             language: templateLang,
+            shape: resolvedShape,
             phoneNumberId,
             wabaId,
             recipient: recipientLog,
@@ -852,9 +903,11 @@ export function registerTemplateRoutes(app: Express): void {
             `[WA_TEMPLATE_SEND] ${JSON.stringify({
               phase: "success",
               sendSource: sendSourceTag,
+              metaSendPath,
               provider: resolvedProvider,
               templateName: template.name,
               language: templateLang,
+              shape: resolvedShape,
               phoneNumberId,
               recipient: recipientLog,
               responseStatus: result.httpStatus,
@@ -865,19 +918,25 @@ export function registerTemplateRoutes(app: Express): void {
         } catch (metaErr: any) {
           const responseStatus =
             typeof metaErr?.httpStatus === "number" ? metaErr.httpStatus : 500;
-          const metaError =
+          const metaErrorRaw =
             metaErr?.message || "Failed to send template via Meta WhatsApp API";
+          const metaErrorOut =
+            metaSendPath === "library_full"
+              ? formatFriendlyMetaTemplateUserMessage(metaErr)
+              : metaErrorRaw;
           console.error(
             `[WA_TEMPLATE_SEND] ${JSON.stringify({
               phase: "error",
               sendSource: sendSourceTag,
+              metaSendPath,
               provider: resolvedProvider,
               templateName: template.name,
               language: templateLang,
+              shape: resolvedShape,
               phoneNumberId,
               recipient: recipientLog,
               responseStatus,
-              metaError,
+              metaError: metaErrorRaw,
               metaErrorCode: metaErr?.metaErrorCode,
               metaErrorType: metaErr?.metaErrorType,
               components,
@@ -885,7 +944,8 @@ export function registerTemplateRoutes(app: Express): void {
             metaErr
           );
           return res.status(responseStatus >= 400 && responseStatus < 600 ? responseStatus : 500).json({
-            error: metaError,
+            error: metaErrorOut,
+            metaCode: metaErr?.metaErrorCode,
           });
         }
       } else if (resolvedProvider === "twilio") {

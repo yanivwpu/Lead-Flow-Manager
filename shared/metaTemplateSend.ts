@@ -280,3 +280,288 @@ export function getInboxTemplateSendBlockReason(
 
   return { blocked: false };
 }
+
+/** Meta library send — shapes used for logging only (UI-free). */
+export type MetaTemplateSendShape =
+  | "simple_text"
+  | "text_header"
+  | "media_header"
+  | "buttons"
+  | "carousel"
+  | "mixed";
+
+export function inferMetaTemplateShape(template: TemplateRowForMetaSend): MetaTemplateSendShape {
+  const tt = (template.templateType || "").toLowerCase();
+  if (tt === "carousel" || (Array.isArray(template.carouselCards) && template.carouselCards.length > 0)) {
+    return "carousel";
+  }
+  const ht = (template.headerType || "").toLowerCase();
+  if (["image", "video", "document"].includes(ht)) return "media_header";
+  if (ht === "text" && (template.headerContent || "").trim()) return "text_header";
+  if (Array.isArray(template.buttons) && template.buttons.length > 0) return "buttons";
+  return "simple_text";
+}
+
+function pushUrlButtonComponents(
+  buttons: unknown[],
+  vv: Record<string, string>,
+  components: Record<string, unknown>[]
+): { error?: string } {
+  for (let index = 0; index < buttons.length; index++) {
+    const btn = buttons[index] as Record<string, unknown>;
+    const btnType = String(btn?.type || "").toUpperCase();
+    if (btnType !== "URL") continue;
+    const url = String(btn?.url || "");
+    const urlPh = extractSortedPlaceholders(url);
+    for (const ph of urlPh) {
+      if (!(vv[ph] ?? "").trim()) {
+        return { error: `Missing URL button variable ${ph}` };
+      }
+    }
+    if (urlPh.length) {
+      components.push({
+        type: "button",
+        sub_type: "url",
+        index: String(index),
+        parameters: urlPh.map((ph) => ({
+          type: "text",
+          text: vv[ph] ?? "",
+        })),
+      });
+    }
+  }
+  return {};
+}
+
+function resolveStaticOrVariableMediaUrl(
+  headerContent: string | null | undefined,
+  vv: Record<string, string>
+): { url?: string; error?: string } {
+  const hc = (headerContent || "").trim();
+  if (!hc) return { error: "Media header is empty in template data." };
+  const ph = extractSortedPlaceholders(hc);
+  if (ph.length) {
+    const u = (vv[ph[0]] ?? "").trim();
+    if (!u) return { error: `Provide variable ${ph[0]} as a valid https URL for the header media.` };
+    if (!/^https?:\/\//i.test(u)) return { error: `Header media for ${ph[0]} must start with https://` };
+    return { url: u };
+  }
+  if (/^https?:\/\//i.test(hc)) return { url: hc };
+  return {
+    error:
+      "This template needs a media URL for the header. Enter it using the template variables (or resync the template).",
+  };
+}
+
+function mapCarouselCardComponents(
+  cardRaw: unknown,
+  cardIndex: number,
+  vvStr: Record<string, string>
+): { components: Record<string, unknown>[]; error?: string } {
+  const card = cardRaw as Record<string, unknown>;
+  const rawList = Array.isArray(card.components)
+    ? (card.components as Record<string, unknown>[])
+    : [];
+  const out: Record<string, unknown>[] = [];
+
+  /** Preview enrichment from UI / sync */
+  const previewUrl =
+    typeof card.headerUrl === "string" && /^https?:\/\//i.test(card.headerUrl) ? card.headerUrl : null;
+
+  for (let ci = 0; ci < rawList.length; ci++) {
+    const c = rawList[ci];
+    const ctype = String(c.type || "").toUpperCase();
+
+    if (ctype === "HEADER") {
+      const fmt = String(c.format || "").toLowerCase();
+      if (fmt === "image" || fmt === "IMAGE") {
+        let link = previewUrl;
+        const ex = (c as { example?: { header_handle?: string[] } }).example?.header_handle?.[0];
+        if (!link && ex && /^https?:\/\//i.test(ex)) link = ex;
+        const txt = c.text != null ? String(c.text) : "";
+        if (!link && txt) {
+          const tph = extractSortedPlaceholders(txt);
+          if (tph.length && vvStr[tph[0]]) link = vvStr[tph[0]].trim();
+        }
+        if (!link || !/^https?:\/\//i.test(link)) {
+          return {
+            components: [],
+            error: `Carousel card ${cardIndex + 1}: provide a valid https image URL (variable or synced example).`,
+          };
+        }
+        out.push({
+          type: "header",
+          parameters: [{ type: "image", image: { link } }],
+        });
+      }
+    }
+
+    if (ctype === "BODY") {
+      const text = String((c as { text?: string }).text || "");
+      const bph = extractSortedPlaceholders(text);
+      for (const ph of bph) {
+        if (!(vvStr[ph] ?? "").trim()) {
+          return {
+            components: [],
+            error: `Carousel card ${cardIndex + 1}: missing body variable ${ph}`,
+          };
+        }
+      }
+      if (bph.length) {
+        out.push({
+          type: "body",
+          parameters: bph.map((ph) => ({ type: "text", text: vvStr[ph] ?? "" })),
+        });
+      }
+    }
+
+    if (ctype === "BUTTONS") {
+      const btnArr = Array.isArray((c as { buttons?: unknown }).buttons)
+        ? ((c as { buttons: unknown[] }).buttons as unknown[])
+        : [];
+      const err = pushUrlButtonComponents(btnArr, vvStr, out);
+      if (err.error) return { components: [], error: `Carousel card ${cardIndex + 1}: ${err.error}` };
+    }
+  }
+
+  if (!out.length) {
+    return {
+      components: [],
+      error: `Carousel card ${cardIndex + 1}: could not build components from synced data. Try syncing templates again.`,
+    };
+  }
+
+  return { components: out };
+}
+
+function buildCarouselLibraryPayload(
+  template: TemplateRowForMetaSend,
+  vv: Record<string, string>,
+  shape: MetaTemplateSendShape
+): { components?: Record<string, unknown>[]; error?: string; shape: MetaTemplateSendShape } {
+  const cardsRaw = Array.isArray(template.carouselCards) ? template.carouselCards : [];
+  if (!cardsRaw.length) {
+    return { error: "Carousel template has no card data. Sync templates from Meta and try again.", shape };
+  }
+
+  const components: Record<string, unknown>[] = [];
+
+  const bodyPh = extractSortedPlaceholders(template.bodyText);
+  for (const ph of bodyPh) {
+    if (!(vv[ph] ?? "").trim()) {
+      return { error: `Missing body variable ${ph}`, shape };
+    }
+  }
+  if (bodyPh.length) {
+    components.push({
+      type: "body",
+      parameters: bodyPh.map((ph) => ({ type: "text", text: vv[ph] ?? "" })),
+    });
+  }
+
+  const cardsOut: Record<string, unknown>[] = [];
+  for (let i = 0; i < cardsRaw.length; i++) {
+    const mapped = mapCarouselCardComponents(cardsRaw[i], i, vv);
+    if (mapped.error) return { error: mapped.error, shape };
+    cardsOut.push({
+      card_index: i,
+      components: mapped.components,
+    });
+  }
+
+  components.push({
+    type: "carousel",
+    cards: cardsOut,
+  });
+
+  return { components, shape };
+}
+
+/**
+ * Template Library (Meta) — full template shapes: media headers, URL buttons, carousel.
+ * Uses synced template fields + normalized variable map only (no guessed UI copy).
+ */
+export function buildMetaLibraryTemplateSendComponents(
+  template: TemplateRowForMetaSend,
+  variableValues: Record<string, string>
+): { components?: Record<string, unknown>[]; error?: string; shape: MetaTemplateSendShape } {
+  const vv = normalizeTemplateVariableMap(variableValues);
+  const shape = inferMetaTemplateShape(template);
+
+  if ((template.category || "").toLowerCase() === "authentication") {
+    return {
+      error: "Authentication templates cannot be sent from this flow.",
+      shape,
+    };
+  }
+
+  const tt = (template.templateType || "").toLowerCase();
+  if (tt === "carousel" || (Array.isArray(template.carouselCards) && template.carouselCards.length > 0)) {
+    return buildCarouselLibraryPayload(template, vv, shape);
+  }
+
+  const components: Record<string, unknown>[] = [];
+  const ht = (template.headerType || "").toLowerCase();
+  const hc = template.headerContent;
+
+  if (ht === "text" && (hc || "").trim()) {
+    const headerPh = extractSortedPlaceholders(hc);
+    for (const ph of headerPh) {
+      if (!(vv[ph] ?? "").trim()) {
+        return { error: `Missing header variable ${ph}`, shape };
+      }
+    }
+    if (headerPh.length) {
+      components.push({
+        type: "header",
+        parameters: headerPh.map((ph) => ({ type: "text", text: vv[ph] ?? "" })),
+      });
+    }
+  } else if (["image", "video", "document"].includes(ht)) {
+    const resolved = resolveStaticOrVariableMediaUrl(hc, vv);
+    if (resolved.error) return { error: resolved.error, shape };
+    const url = resolved.url!;
+    if (ht === "image") {
+      components.push({
+        type: "header",
+        parameters: [{ type: "image", image: { link: url } }],
+      });
+    } else if (ht === "video") {
+      components.push({
+        type: "header",
+        parameters: [{ type: "video", video: { link: url } }],
+      });
+    } else {
+      components.push({
+        type: "header",
+        parameters: [
+          {
+            type: "document",
+            document: { link: url, filename: "document.pdf" },
+          },
+        ],
+      });
+    }
+  }
+
+  const bodyPh = extractSortedPlaceholders(template.bodyText);
+  for (const ph of bodyPh) {
+    if (!(vv[ph] ?? "").trim()) {
+      return { error: `Missing body variable ${ph}`, shape };
+    }
+  }
+  if (bodyPh.length) {
+    components.push({
+      type: "body",
+      parameters: bodyPh.map((ph) => ({ type: "text", text: vv[ph] ?? "" })),
+    });
+  }
+
+  const buttons = template.buttons;
+  if (Array.isArray(buttons) && buttons.length > 0) {
+    const err = pushUrlButtonComponents(buttons as unknown[], vv, components);
+    if (err.error) return { error: err.error, shape };
+  }
+
+  return { components: components.length ? components : undefined, shape };
+}

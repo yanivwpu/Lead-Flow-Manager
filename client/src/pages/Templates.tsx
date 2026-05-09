@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 function RealtorMark() {
   return (
@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -102,7 +103,7 @@ function libraryQuickSendMeta(template: MessageTemplate) {
 }
 
 const ADVANCED_QUICK_SEND_NOTE =
-  "This template includes media, buttons, or carousel content. Quick-send support is coming soon.";
+  "This template includes media, buttons, or a carousel. It can't be sent from Inbox quick-send or campaign shortcuts — use Continue to send and fill any required variables.";
 
 const STATUS_ICONS: Record<string, any> = {
   approved: { icon: CheckCircle2, color: "text-green-500" },
@@ -207,9 +208,11 @@ export function Templates() {
   const [variableValues, setVariableValues] = useState<Record<string, string>>({});
   const [libraryModalOpen, setLibraryModalOpen] = useState(false);
   const [libraryModalTemplate, setLibraryModalTemplate] = useState<MessageTemplate | null>(null);
-  const [libraryModalEntry, setLibraryModalEntry] = useState<"preview-details" | "use-advanced">("preview-details");
   const [contactPickerOpen, setContactPickerOpen] = useState(false);
   const [contactSearch, setContactSearch] = useState("");
+  /** Where the send dialog was opened from — Campaign vs Library contact picker (sync with mutate). */
+  const templateSendOriginRef = useRef<"library" | "campaign">("library");
+  const [sendInlineError, setSendInlineError] = useState<string | null>(null);
 
   const templatesEnabled = (subscription?.limits as any)?.templatesEnabled;
 
@@ -253,22 +256,27 @@ export function Templates() {
   });
 
   const sendTemplateMutation = useMutation({
-    mutationFn: async (data: { templateId: string; chatId: string; variables: Record<string, string> }) => {
-      const payload = { ...data, sendSource: "templates_page" as const };
+    mutationFn: async (data: {
+      templateId: string;
+      chatId: string;
+      variables: Record<string, string>;
+      sendSource: "templates_library" | "templates_campaign";
+    }) => {
       console.log(
         `[WA_TEMPLATE_SEND_CLIENT] ${JSON.stringify({
-          source: "templates_page",
-          templateId: payload.templateId,
-          chatId: payload.chatId,
-          variables: payload.variables,
+          source: data.sendSource,
+          templateId: data.templateId,
+          chatId: data.chatId,
+          variables: data.variables,
           components: "(built server-side from template row + variables)",
         })}`
       );
-      const res = await apiRequest("POST", "/api/templates/send", payload);
+      const res = await apiRequest("POST", "/api/templates/send", data);
       return res.json();
     },
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/templates/retargetable-chats"] });
+      setSendInlineError(null);
       setSendDialogOpen(false);
       setSelectedTemplate(null);
       setSelectedChat(null);
@@ -279,22 +287,33 @@ export function Templates() {
       });
     },
     onError: (error: any) => {
-      const msg = error?.message || "";
-      const clean = msg.replace(/^\d+:\s*/, "").replace(/^\{"error":"/, "").replace(/"\}$/, "");
-      toast({
-        title: "Send failed",
-        description: clean || "Failed to send template message.",
-        variant: "destructive",
-      });
+      const msg = String(error?.message || "");
+      const afterStatus = msg.replace(/^\d+:\s*/, "");
+      let clean = afterStatus;
+      try {
+        const parsed = JSON.parse(afterStatus) as { error?: string };
+        if (typeof parsed?.error === "string" && parsed.error.trim()) {
+          clean = parsed.error.trim();
+        }
+      } catch {
+        clean = afterStatus.replace(/^\{"error":"/, "").replace(/"\}$/, "");
+      }
+      setSendInlineError(clean || "Could not send this template.");
     },
   });
 
-  const handleSendTemplate = (template: MessageTemplate, chat: Chat | RetargetableChat) => {
+  const handleSendTemplate = (
+    template: MessageTemplate,
+    chat: Chat | RetargetableChat,
+    origin: "library" | "campaign" = "library"
+  ) => {
+    templateSendOriginRef.current = origin;
     console.log(`[UseTemplate] Template selected: ${template.name} (id=${template.id}, status=${template.status})`);
     console.log(`[UseTemplate] Contact selected: ${chat.name} (id=${chat.id}, phone=${chat.whatsappPhone})`);
     setSelectedTemplate(template);
     setSelectedChat(chat as Chat);
     setVariableValues({});
+    setSendInlineError(null);
     setContactPickerOpen(false);
     setSendDialogOpen(true);
     console.log(`[UseTemplate] Send dialog opened — variables required: ${template.variables?.length ?? 0}`);
@@ -302,27 +321,20 @@ export function Templates() {
 
   const handleUseTemplate = (template: MessageTemplate) => {
     console.log(`[UseTemplate] Button clicked for template: ${template.name}`);
-    const qs = libraryQuickSendMeta(template);
-    if (qs.blocked) {
-      setLibraryModalTemplate(template);
-      setLibraryModalEntry("use-advanced");
-      setLibraryModalOpen(true);
-      return;
-    }
     setSelectedTemplate(template);
+    templateSendOriginRef.current = "library";
     setContactSearch("");
     setContactPickerOpen(true);
   };
 
   const openPreviewDetails = (template: MessageTemplate) => {
     setLibraryModalTemplate(template);
-    setLibraryModalEntry("preview-details");
     setLibraryModalOpen(true);
   };
 
   const continuePreviewToSend = () => {
-    if (!libraryModalTemplate) return;
-    if (libraryQuickSendMeta(libraryModalTemplate).blocked) return;
+    if (!libraryModalTemplate || libraryModalTemplate.status !== "approved") return;
+    templateSendOriginRef.current = "library";
     setLibraryModalOpen(false);
     setSelectedTemplate(libraryModalTemplate);
     setContactSearch("");
@@ -670,7 +682,7 @@ export function Templates() {
                           onValueChange={(templateId) => {
                             const template = templates.find(t => t.id === templateId);
                             if (template && !libraryQuickSendMeta(template).blocked) {
-                              handleSendTemplate(template, chat);
+                              handleSendTemplate(template, chat, "campaign");
                             }
                           }}
                         >
@@ -738,7 +750,7 @@ export function Templates() {
                     <button
                       key={chat.id}
                       className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 text-left border border-transparent hover:border-gray-200 transition-colors"
-                      onClick={() => selectedTemplate && handleSendTemplate(selectedTemplate, chat)}
+                      onClick={() => selectedTemplate && handleSendTemplate(selectedTemplate, chat, "library")}
                       data-testid={`contact-picker-chat-${chat.id}`}
                     >
                       <div className="h-9 w-9 rounded-full bg-gray-200 flex items-center justify-center shrink-0 text-gray-600 font-medium text-sm">
@@ -763,7 +775,13 @@ export function Templates() {
         </Dialog>
 
         {/* Send Template Dialog */}
-        <Dialog open={sendDialogOpen} onOpenChange={setSendDialogOpen}>
+        <Dialog
+          open={sendDialogOpen}
+          onOpenChange={(open) => {
+            setSendDialogOpen(open);
+            if (!open) setSendInlineError(null);
+          }}
+        >
           <DialogContent className="max-w-lg">
             {selectedTemplate && selectedChat && (
               <>
@@ -788,11 +806,11 @@ export function Templates() {
                       {selectedTemplate.variables.map((variable: string, i: number) => (
                         <div key={i} className="space-y-1">
                           <Label htmlFor={`var-${variable}`} className="text-sm text-gray-600">
-                            {`{{${variable}}}`}
+                            {variable.startsWith("{{") ? variable : `{{${variable}}}`}
                           </Label>
                           <Input
                             id={`var-${variable}`}
-                            placeholder={`Enter value for ${variable}`}
+                            placeholder={`Enter value for ${variable.replace(/^\{\{|\}\}$/g, "")}`}
                             value={variableValues[variable] || ""}
                             onChange={(e) => setVariableValues(prev => ({ ...prev, [variable]: e.target.value }))}
                             data-testid={`input-variable-${variable}`}
@@ -802,14 +820,25 @@ export function Templates() {
                     </div>
                   )}
                 </div>
+                {sendInlineError ? (
+                  <Alert variant="destructive" className="border-amber-200 bg-amber-50 text-amber-950 [&>svg]:text-amber-700">
+                    <AlertDescription className="text-sm leading-snug">{sendInlineError}</AlertDescription>
+                  </Alert>
+                ) : null}
                 <DialogFooter>
                   <Button variant="outline" onClick={() => setSendDialogOpen(false)}>Cancel</Button>
                   <Button 
-                    onClick={() => sendTemplateMutation.mutate({
-                      templateId: selectedTemplate.id,
-                      chatId: selectedChat.id,
-                      variables: variableValues,
-                    })}
+                    onClick={() =>
+                      sendTemplateMutation.mutate({
+                        templateId: selectedTemplate.id,
+                        chatId: selectedChat.id,
+                        variables: variableValues,
+                        sendSource:
+                          templateSendOriginRef.current === "campaign"
+                            ? "templates_campaign"
+                            : "templates_library",
+                      })
+                    }
                     disabled={sendTemplateMutation.isPending}
                     className="bg-brand-green hover:bg-brand-green/90"
                     data-testid="button-send-template"
@@ -822,7 +851,7 @@ export function Templates() {
           </DialogContent>
         </Dialog>
 
-        {/* Rich preview (all templates) / advanced-only when Use Template on unsupported */}
+        {/* Rich preview (all templates) */}
         <Dialog
           open={libraryModalOpen}
           onOpenChange={(open) => {
@@ -896,14 +925,7 @@ export function Templates() {
                   <Button type="button" variant="outline" onClick={() => setLibraryModalOpen(false)}>
                     Close
                   </Button>
-                  {libraryModalEntry === "use-advanced" ? (
-                    <Button type="button" variant="secondary" disabled className="min-w-[12rem]">
-                      Not available in quick-send
-                    </Button>
-                  ) : null}
-                  {libraryModalEntry === "preview-details" &&
-                  libraryModalTemplate.status === "approved" &&
-                  !libraryQuickSendMeta(libraryModalTemplate).blocked ? (
+                  {libraryModalTemplate.status === "approved" ? (
                     <Button
                       type="button"
                       className="bg-brand-green hover:bg-brand-green/90 text-white"
