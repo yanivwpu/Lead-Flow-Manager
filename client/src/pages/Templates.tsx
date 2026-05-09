@@ -105,6 +105,17 @@ function libraryQuickSendMeta(template: MessageTemplate) {
 const ADVANCED_QUICK_SEND_NOTE =
   "This template includes media, buttons, or a carousel. It can't be sent from Inbox quick-send or campaign shortcuts — use Continue to send and fill any required variables.";
 
+/** Softer than default dialog overlay (`bg-black/80`) — Message Templates modals only. */
+const WHATSAPP_TEMPLATE_DIALOG_OVERLAY =
+  "bg-slate-950/40 backdrop-blur-[2px]";
+
+/** Media / rich template chip — calm indigo tint (not warning orange). */
+const MEDIA_TEMPLATE_KIND_BADGE_CLASS =
+  "text-[9px] leading-tight px-1.5 py-0.5 font-normal border border-indigo-100/90 bg-indigo-50/45 text-indigo-900/65 shadow-none";
+
+const QUICK_SEND_READY_BADGE_CLASS =
+  "text-[10px] font-normal border border-emerald-100/35 bg-emerald-50/25 text-emerald-900/65 shadow-none";
+
 const STATUS_ICONS: Record<string, any> = {
   approved: { icon: CheckCircle2, color: "text-green-500" },
   pending: { icon: Clock, color: "text-amber-500" },
@@ -508,7 +519,7 @@ export function Templates() {
                           <div className="flex items-center gap-0.5 shrink-0 pt-0.5">
                             {approved ? (
                               <>
-                                <CheckCircle2 className="h-3 w-3 shrink-0 text-emerald-600/75" aria-hidden />
+                                <CheckCircle2 className="h-3 w-3 shrink-0 text-slate-500" aria-hidden />
                                 <span className="text-[10px] font-normal tracking-tight text-gray-600 whitespace-nowrap">
                                   Approved
                                 </span>
@@ -536,11 +547,7 @@ export function Templates() {
                           </Badge>
                           <Badge
                             variant="outline"
-                            className={
-                              qs.blocked
-                                ? "text-[10px] font-normal border-slate-200/90 bg-slate-50 text-slate-600 shadow-none"
-                                : "text-[10px] font-normal border-emerald-100 bg-emerald-50/50 text-emerald-900/90"
-                            }
+                            className={qs.blocked ? MEDIA_TEMPLATE_KIND_BADGE_CLASS : QUICK_SEND_READY_BADGE_CLASS}
                           >
                             {qs.blocked ? "Media template" : "Quick-send ready"}
                           </Badge>
@@ -721,7 +728,11 @@ export function Templates() {
 
         {/* Contact Picker Dialog */}
         <Dialog open={contactPickerOpen} onOpenChange={setContactPickerOpen}>
-          <DialogContent className="max-w-md" data-testid="dialog-contact-picker">
+          <DialogContent
+            className="max-w-md"
+            overlayClassName={WHATSAPP_TEMPLATE_DIALOG_OVERLAY}
+            data-testid="dialog-contact-picker"
+          >
             <DialogHeader>
               <DialogTitle>Select a Contact</DialogTitle>
               <DialogDescription>
@@ -782,7 +793,7 @@ export function Templates() {
             if (!open) setSendInlineError(null);
           }}
         >
-          <DialogContent className="max-w-lg">
+          <DialogContent className="max-w-lg" overlayClassName={WHATSAPP_TEMPLATE_DIALOG_OVERLAY}>
             {selectedTemplate && selectedChat && (
               <>
                 <DialogHeader>
@@ -861,6 +872,7 @@ export function Templates() {
         >
           <DialogContent
             className="max-w-lg max-h-[92vh] overflow-y-auto gap-0 sm:max-w-lg"
+            overlayClassName={WHATSAPP_TEMPLATE_DIALOG_OVERLAY}
             data-testid="dialog-library-template-preview"
           >
             {libraryModalTemplate ? (
@@ -870,13 +882,10 @@ export function Templates() {
                 </DialogHeader>
                 <div className="flex flex-wrap gap-1.5 pb-3">
                   {libraryModalTemplate.status === "approved" ? (
-                    <Badge
-                      variant="outline"
-                      className="border-gray-200 bg-gray-50/90 text-[10px] font-medium text-gray-700"
-                    >
-                      <CheckCircle2 className="mr-1 inline h-3 w-3 text-emerald-600/75" aria-hidden />
+                    <span className="inline-flex items-center gap-1 text-[10px] font-normal text-gray-600">
+                      <CheckCircle2 className="h-3 w-3 shrink-0 text-slate-500" aria-hidden />
                       Approved
-                    </Badge>
+                    </span>
                   ) : (
                     <Badge variant="outline" className="text-[10px] capitalize">
                       {libraryModalTemplate.status}
@@ -901,8 +910,8 @@ export function Templates() {
                     variant="outline"
                     className={
                       libraryQuickSendMeta(libraryModalTemplate).blocked
-                        ? "text-[10px] font-normal border-slate-200/90 bg-slate-50 text-slate-600 shadow-none"
-                        : "text-[10px] font-normal border-emerald-100 bg-emerald-50/50 text-emerald-900/90"
+                        ? MEDIA_TEMPLATE_KIND_BADGE_CLASS
+                        : QUICK_SEND_READY_BADGE_CLASS
                     }
                   >
                     {libraryQuickSendMeta(libraryModalTemplate).blocked ? "Media template" : "Quick-send ready"}
