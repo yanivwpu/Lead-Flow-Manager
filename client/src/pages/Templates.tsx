@@ -493,16 +493,20 @@ export function Templates() {
                             </div>
                             <CardTitle className="text-base leading-snug break-words pt-0.5">{template.name}</CardTitle>
                           </div>
-                          <div className="flex items-center gap-1 shrink-0 pt-0.5">
+                          <div className="flex items-center gap-0.5 shrink-0 pt-0.5">
                             {approved ? (
                               <>
-                                <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0" aria-hidden />
-                                <span className="text-xs font-medium text-green-700 whitespace-nowrap">Approved</span>
+                                <CheckCircle2 className="h-3 w-3 shrink-0 text-emerald-600/75" aria-hidden />
+                                <span className="text-[10px] font-normal tracking-tight text-gray-600 whitespace-nowrap">
+                                  Approved
+                                </span>
                               </>
                             ) : (
                               <>
                                 <StatusIcon className={`h-3.5 w-3.5 shrink-0 ${statusColor}`} aria-hidden />
-                                <span className={`text-xs capitalize whitespace-nowrap ${statusColor}`}>{template.status}</span>
+                                <span className={`text-[10px] capitalize whitespace-nowrap ${statusColor}`}>
+                                  {template.status}
+                                </span>
                               </>
                             )}
                           </div>
@@ -522,11 +526,11 @@ export function Templates() {
                             variant="outline"
                             className={
                               qs.blocked
-                                ? "text-[10px] font-normal border-orange-200 bg-orange-50 text-orange-900"
-                                : "text-[10px] font-normal border-emerald-200 bg-emerald-50/80 text-emerald-900"
+                                ? "text-[10px] font-normal border-slate-200/90 bg-slate-50 text-slate-600 shadow-none"
+                                : "text-[10px] font-normal border-emerald-100 bg-emerald-50/50 text-emerald-900/90"
                             }
                           >
-                            {qs.blocked ? "Advanced template" : "Quick-send ready"}
+                            {qs.blocked ? "Media template" : "Quick-send ready"}
                           </Badge>
                           {(template.variables?.length ?? 0) > 0 ? (
                             <Badge variant="outline" className="text-[10px] font-normal border-gray-200 bg-white text-gray-700">
@@ -837,8 +841,11 @@ export function Templates() {
                 </DialogHeader>
                 <div className="flex flex-wrap gap-1.5 pb-3">
                   {libraryModalTemplate.status === "approved" ? (
-                    <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-[10px] font-medium text-emerald-900">
-                      <CheckCircle2 className="mr-1 inline h-3 w-3" aria-hidden />
+                    <Badge
+                      variant="outline"
+                      className="border-gray-200 bg-gray-50/90 text-[10px] font-medium text-gray-700"
+                    >
+                      <CheckCircle2 className="mr-1 inline h-3 w-3 text-emerald-600/75" aria-hidden />
                       Approved
                     </Badge>
                   ) : (
@@ -865,11 +872,11 @@ export function Templates() {
                     variant="outline"
                     className={
                       libraryQuickSendMeta(libraryModalTemplate).blocked
-                        ? "text-[10px] font-normal border-orange-200 bg-orange-50 text-orange-900"
-                        : "text-[10px] font-normal border-emerald-200 bg-emerald-50/80 text-emerald-900"
+                        ? "text-[10px] font-normal border-slate-200/90 bg-slate-50 text-slate-600 shadow-none"
+                        : "text-[10px] font-normal border-emerald-100 bg-emerald-50/50 text-emerald-900/90"
                     }
                   >
-                    {libraryQuickSendMeta(libraryModalTemplate).blocked ? "Advanced template" : "Quick-send ready"}
+                    {libraryQuickSendMeta(libraryModalTemplate).blocked ? "Media template" : "Quick-send ready"}
                   </Badge>
                   <TemplateShapeIndicator template={libraryModalTemplate} />
                 </div>
