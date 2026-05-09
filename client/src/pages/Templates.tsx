@@ -21,7 +21,7 @@ import {
   FileText, RefreshCw, Lock, Zap, Send, Clock, CheckCircle2, XCircle, Eye,
   AlertCircle, Image, LayoutGrid,
   Users, Target, Sparkles, Rocket, Crown, Bot, MessageSquare, CalendarCheck, ArrowRight,
-  Search
+  Search, MessageCircle, Facebook, Instagram,
 } from "lucide-react";
 import {
   WhatsAppTemplateRichPreview,
@@ -43,6 +43,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
 import { useTranslation } from "react-i18next";
+import { formatDistanceToNow } from "date-fns";
 
 interface MessageTemplate {
   id: string;
@@ -69,6 +70,7 @@ interface RetargetableChat {
   contactId: string;
   name: string;
   avatar: string | null;
+  displayHandle: string;
   whatsappPhone: string;
   channel: string;
   windowExpiresAt: string | null;
@@ -76,6 +78,27 @@ interface RetargetableChat {
   lastMessageAt: string | null;
   daysSinceLastMessage: number;
 }
+
+const RE_ENGAGEMENT_CHANNEL_BADGE: Record<
+  string,
+  { icon: typeof MessageCircle; label: string; className: string }
+> = {
+  whatsapp: {
+    icon: MessageCircle,
+    label: "WhatsApp",
+    className: "border-emerald-200/90 bg-emerald-50/80 text-emerald-900",
+  },
+  facebook: {
+    icon: Facebook,
+    label: "Messenger",
+    className: "border-blue-200/90 bg-blue-50/80 text-blue-900",
+  },
+  instagram: {
+    icon: Instagram,
+    label: "Instagram",
+    className: "border-pink-200/90 bg-pink-50/80 text-pink-900",
+  },
+};
 
 interface Chat {
   id: string;
@@ -241,6 +264,7 @@ function GrowthEnginesTab() {
 }
 
 export function Templates() {
+  const [, setLocation] = useLocation();
   const { data: subscription, isLoading: subLoading } = useSubscription();
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -623,9 +647,9 @@ export function Templates() {
                 <span className="min-[420px]:hidden">WA Lib. ({templates.length})</span>
               </span>
             </TabsTrigger>
-            <TabsTrigger value="retargeting" data-testid="tab-retargeting" className="text-[11px] sm:text-sm py-1.5 px-1 sm:px-2 md:px-3 flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1 rounded-md leading-tight">
+            <TabsTrigger value="re-engagement" data-testid="tab-re-engagement" className="text-[11px] sm:text-sm py-1.5 px-1 sm:px-2 md:px-3 flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1 rounded-md leading-tight">
               <Target className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0 sm:mr-0" />
-              <span>Campaigns ({retargetableChats.length})</span>
+              <span>Re-engagement ({retargetableChats.length})</span>
             </TabsTrigger>
             <TabsTrigger value="growth-engines" data-testid="tab-growth-engines" className="text-[11px] sm:text-sm py-1.5 px-1 sm:px-2 md:px-3 flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1 rounded-md leading-tight relative">
               <Rocket className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0 sm:mr-0" />
@@ -828,21 +852,21 @@ export function Templates() {
             </Card>
           </TabsContent>
 
-          <TabsContent value="retargeting" className="space-y-3 md:space-y-4 mt-0">
+          <TabsContent value="re-engagement" className="space-y-3 md:space-y-4 mt-0">
             <div className="space-y-0.5 px-0.5">
-              <h2 className="text-base md:text-lg font-semibold text-gray-900">Retargeting Campaigns</h2>
+              <h2 className="text-base md:text-lg font-semibold text-gray-900">Re-engagement</h2>
               <p className="text-sm text-gray-500">
-                Re-engage leads using approved WhatsApp templates and smart timing.
+                Expired conversations across WhatsApp, Facebook, and Instagram.
               </p>
             </div>
             <Card className="overflow-hidden border-gray-200/80">
               <CardHeader className="pb-3 px-4 pt-4">
                 <CardTitle className="text-base md:text-lg flex items-center gap-2">
                   <Target className="h-5 w-5 text-brand-green shrink-0" />
-                  Contacts ready to message
+                  Outside the reply window
                 </CardTitle>
                 <CardDescription className="text-sm">
-                  Contacts whose WhatsApp free-form reply window has expired — same rules as the inbox reply-window status. Send an approved template to re-engage.
+                  Same rules as Inbox reply-window status. WhatsApp: send an approved template. Messenger &amp; Instagram: continue in Inbox — Meta may still block sends outside policy.
                 </CardDescription>
               </CardHeader>
               <CardContent className="px-4 pb-4">
@@ -853,67 +877,140 @@ export function Templates() {
                 ) : retargetableChats.length === 0 ? (
                   <div className="text-center py-8 text-gray-500">
                     <Users className="h-10 w-10 mx-auto mb-3 text-gray-300" />
-                    <p className="font-medium">No contacts ready for retargeting</p>
+                    <p className="font-medium">No expired conversations</p>
                     <p className="text-sm">
-                      No contacts currently match retarget criteria, or everyone reachable is still inside the free-form window.
+                      Everyone reachable is still inside the free-form reply window, or there are no WhatsApp, Messenger, or Instagram threads yet.
                     </p>
                   </div>
                 ) : (
-                  <div className="space-y-2 md:space-y-3 max-h-[280px] md:max-h-[320px] overflow-y-auto pr-1 md:pr-2 overscroll-contain" style={{ scrollbarWidth: 'thin' }}>
-                    {retargetableChats.map((chat) => (
-                      <div 
-                        key={chat.id} 
-                        className="flex flex-col sm:flex-row sm:items-center gap-2 sm:justify-between p-3 border border-gray-200 rounded-xl hover:bg-gray-50/80 min-w-0"
-                        data-testid={`retarget-chat-${chat.id}`}
-                      >
-                        <div className="flex items-center gap-3 min-w-0 flex-1">
-                          <div 
-                            className="h-10 w-10 rounded-full bg-cover bg-center bg-gray-200"
-                            style={{ backgroundImage: chat.avatar ? `url(${chat.avatar})` : undefined }}
-                          >
-                            {!chat.avatar && (
-                              <div className="h-full w-full flex items-center justify-center text-gray-500 font-medium">
-                                {chat.name.charAt(0).toUpperCase()}
+                  <div className="space-y-2 md:space-y-3 max-h-[min(420px,55vh)] md:max-h-[480px] overflow-y-auto pr-1 md:pr-2 overscroll-contain" style={{ scrollbarWidth: 'thin' }}>
+                    {retargetableChats.map((chat) => {
+                      const ch = (chat.channel || "").toLowerCase();
+                      const badge = RE_ENGAGEMENT_CHANNEL_BADGE[ch] ?? RE_ENGAGEMENT_CHANNEL_BADGE.whatsapp;
+                      const BadgeIcon = badge.icon;
+                      const isWhatsApp = ch === "whatsapp";
+                      const lastAtLabel = chat.lastMessageAt
+                        ? formatDistanceToNow(new Date(chat.lastMessageAt), { addSuffix: true })
+                        : null;
+
+                      return (
+                        <div
+                          key={`${chat.conversationId}-${ch}`}
+                          className="flex flex-col gap-3 p-3 border border-gray-200 rounded-xl hover:bg-gray-50/80 min-w-0"
+                          data-testid={`re-engagement-row-${chat.conversationId}`}
+                        >
+                          <div className="flex items-start gap-3 min-w-0">
+                            <div
+                              className="h-10 w-10 rounded-full bg-cover bg-center bg-gray-200 shrink-0"
+                              style={{ backgroundImage: chat.avatar ? `url(${chat.avatar})` : undefined }}
+                            >
+                              {!chat.avatar && (
+                                <div className="h-full w-full flex items-center justify-center text-gray-500 font-medium text-sm">
+                                  {chat.name.charAt(0).toUpperCase()}
+                                </div>
+                              )}
+                            </div>
+                            <div className="min-w-0 flex-1 space-y-1">
+                              <div className="flex flex-wrap items-center gap-2 gap-y-1">
+                                <p className="font-medium text-gray-900 truncate">{chat.name}</p>
+                                <Badge
+                                  variant="outline"
+                                  className={`text-[10px] font-normal shrink-0 gap-1 pl-1 pr-1.5 py-0 ${badge.className}`}
+                                >
+                                  <BadgeIcon className="h-3 w-3" aria-hidden />
+                                  {badge.label}
+                                </Badge>
                               </div>
-                            )}
+                              <p className="text-xs text-gray-500 truncate" title={chat.displayHandle}>
+                                {chat.displayHandle}
+                              </p>
+                              {chat.lastMessagePreview ? (
+                                <p className="text-sm text-gray-600 line-clamp-2 break-words">
+                                  {chat.lastMessagePreview}
+                                </p>
+                              ) : (
+                                <p className="text-sm text-gray-400 italic">No message preview</p>
+                              )}
+                              <p className="text-[11px] text-gray-400">
+                                {lastAtLabel
+                                  ? `Last activity ${lastAtLabel}`
+                                  : `Last activity ~${chat.daysSinceLastMessage} day${chat.daysSinceLastMessage !== 1 ? "s" : ""} ago`}
+                              </p>
+                            </div>
                           </div>
-                          <div>
-                            <p className="font-medium text-gray-900">{chat.name}</p>
-                            <p className="text-xs text-gray-500">
-                              Last active {chat.daysSinceLastMessage} day{chat.daysSinceLastMessage !== 1 ? 's' : ''} ago
-                            </p>
+
+                          <div className="flex flex-col sm:flex-row sm:justify-end gap-2 pt-0.5 border-t border-gray-100">
+                            {isWhatsApp ? (
+                              <Select
+                                onValueChange={(templateId) => {
+                                  const template = templates.find((t) => t.id === templateId);
+                                  if (template && !libraryQuickSendMeta(template).blocked) {
+                                    handleSendTemplate(template, chat, "campaign");
+                                  }
+                                }}
+                              >
+                                <SelectTrigger
+                                  className="w-full sm:w-[200px] min-h-[40px] shrink-0"
+                                  data-testid={`select-template-${chat.id}`}
+                                >
+                                  <SelectValue placeholder="Send WhatsApp template" />
+                                </SelectTrigger>
+                                <SelectContent
+                                  position="popper"
+                                  side="bottom"
+                                  align="end"
+                                  className="z-[100] w-[240px] max-h-[300px] overflow-y-auto bg-white border border-gray-200 shadow-lg"
+                                >
+                                  {templates.filter((t) => t.status === "approved" && !libraryQuickSendMeta(t).blocked).length > 0 ? (
+                                    templates
+                                      .filter((t) => t.status === "approved" && !libraryQuickSendMeta(t).blocked)
+                                      .map((template) => (
+                                        <SelectItem key={template.id} value={template.id} className="cursor-pointer hover:bg-gray-100">
+                                          {template.name}
+                                        </SelectItem>
+                                      ))
+                                  ) : (
+                                    <div className="p-2 text-xs text-gray-500 text-center">
+                                      No quick-send templates available.
+                                      <br />
+                                      Sync approved body-only templates or use the library tab.
+                                    </div>
+                                  )}
+                                </SelectContent>
+                              </Select>
+                            ) : ch === "facebook" ? (
+                              <Button
+                                type="button"
+                                variant="default"
+                                className="w-full sm:w-auto bg-[#1877F2] hover:bg-[#166FE5] text-white"
+                                data-testid={`open-inbox-messenger-${chat.contactId}`}
+                                onClick={() =>
+                                  setLocation(
+                                    `/app/inbox/${chat.contactId}?channel=facebook&focusComposer=1`
+                                  )
+                                }
+                              >
+                                Open in Inbox (Messenger)
+                              </Button>
+                            ) : ch === "instagram" ? (
+                              <Button
+                                type="button"
+                                variant="default"
+                                className="w-full sm:w-auto bg-gradient-to-r from-[#f09433] via-[#dc2743] to-[#bc1888] hover:opacity-95 text-white border-0"
+                                data-testid={`open-inbox-instagram-${chat.contactId}`}
+                                onClick={() =>
+                                  setLocation(
+                                    `/app/inbox/${chat.contactId}?channel=instagram&focusComposer=1`
+                                  )
+                                }
+                              >
+                                Open in Inbox (Instagram)
+                              </Button>
+                            ) : null}
                           </div>
                         </div>
-                        <Select 
-                          onValueChange={(templateId) => {
-                            const template = templates.find(t => t.id === templateId);
-                            if (template && !libraryQuickSendMeta(template).blocked) {
-                              handleSendTemplate(template, chat, "campaign");
-                            }
-                          }}
-                        >
-                          <SelectTrigger className="w-full sm:w-[160px] min-h-[40px] shrink-0" data-testid={`select-template-${chat.id}`}>
-                            <SelectValue placeholder="Send template" />
-                          </SelectTrigger>
-                          <SelectContent position="popper" side="bottom" align="end" className="z-[100] w-[200px] max-h-[300px] overflow-y-auto bg-white border border-gray-200 shadow-lg">
-                            {templates.filter((t) => t.status === "approved" && !libraryQuickSendMeta(t).blocked).length > 0 ? (
-                              templates
-                                .filter((t) => t.status === "approved" && !libraryQuickSendMeta(t).blocked)
-                                .map((template) => (
-                                  <SelectItem key={template.id} value={template.id} className="cursor-pointer hover:bg-gray-100">
-                                    {template.name}
-                                  </SelectItem>
-                                ))
-                            ) : (
-                              <div className="p-2 text-xs text-gray-500 text-center">
-                                No quick-send templates available.<br/>
-                                Use body-only templates or send from the Templates page.
-                              </div>
-                            )}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </CardContent>

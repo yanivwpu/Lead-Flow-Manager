@@ -673,6 +673,7 @@ export function registerTemplateRoutes(app: Express): void {
         contactId: r.contactId,
         name: r.name,
         avatar: r.avatar,
+        displayHandle: r.displayHandle,
         whatsappPhone: r.whatsappPhone,
         channel: r.channel,
         windowExpiresAt: r.windowExpiresAt,

@@ -520,6 +520,57 @@ export function UnifiedInbox() {
     [contactData?.contact, contactData?.conversations]
   );
 
+  /** Deep link from Re-engagement (Templates): `/app/inbox/:contactId?channel=facebook|instagram|whatsapp&focusComposer=1` */
+  useEffect(() => {
+    if (!selectedContactId) return;
+    const params = new URLSearchParams(window.location.search);
+    const rawChannel = params.get("channel");
+    const focusComposer =
+      params.get("focusComposer") === "1" || params.get("focusComposer") === "true";
+
+    if (!rawChannel && !focusComposer) return;
+
+    const validChannel =
+      rawChannel === "whatsapp" || rawChannel === "facebook" || rawChannel === "instagram"
+        ? rawChannel
+        : null;
+
+    const stripQuery = () => {
+      if (window.location.search) {
+        setLocation(`/app/inbox/${selectedContactId}`, { replace: true });
+      }
+    };
+
+    const focusComposerInput = () => {
+      window.setTimeout(() => {
+        document.querySelector<HTMLTextAreaElement>('[data-testid="input-message"]')?.focus();
+      }, 160);
+    };
+
+    if (!validChannel && !focusComposer) {
+      stripQuery();
+      return;
+    }
+
+    if (contactReachableChannels.length === 0) return;
+
+    if (validChannel) {
+      if (contactReachableChannels.includes(validChannel as Channel)) {
+        setSendChannelUi(validChannel as Channel);
+        stripQuery();
+        if (focusComposer) focusComposerInput();
+      } else {
+        stripQuery();
+      }
+      return;
+    }
+
+    if (focusComposer) {
+      stripQuery();
+      focusComposerInput();
+    }
+  }, [selectedContactId, contactReachableChannels, setLocation]);
+
   // Mirror backend getPrimaryChannel, then clamp to channels this contact can actually use.
   const effectiveChannel = useMemo(() => {
     const c = contactData?.contact as Contact | undefined;

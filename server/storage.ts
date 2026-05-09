@@ -52,7 +52,7 @@ import { computeConversationReplyWindowStatus } from "@shared/conversationReplyW
 import type { RetargetEligibleContactRow } from "@shared/retargetEligibleContact";
 import { db } from "../drizzle/db";
 import { users, chats, registeredPhones, messageUsage, conversationWindows, teamMembers, workflows, workflowExecutions, recurringReminders, webhooks, webhookDeliveries, integrations, messageTemplates, templateSends, dripCampaigns, dripSteps, dripEnrollments, dripSends, chatbotFlows, chatbotSessions, salespeople, demoBookings, salesConversions, adminSettings, contacts, conversations, messages, activityEvents, channelSettings, supportTickets, partners, commissions, agreementAcceptances, contactNotes, appointments, flowJobs, type InsertConversationWindow, type ConversationWindow } from "@shared/schema";
-import { eq, and, lte, sql, isNotNull, isNull, asc, desc, gte, sum, gt, or, like, ilike, ne } from "drizzle-orm";
+import { eq, and, lte, sql, isNotNull, isNull, asc, desc, gte, sum, gt, or, like, ilike, ne, inArray } from "drizzle-orm";
 
 /** Columns always present on legacy Neon `public.users`; avoids Drizzle hydrating rows when DB lacks newer schema columns (42703). */
 type UsersAuthCoreRow = {
@@ -998,18 +998,20 @@ export class DbStorage implements IStorage {
   }
 
   /**
-   * WhatsApp contacts whose **unified `conversations` row** matches inbox “Reply window expired”
-   * / approved-template reopen (same `computeConversationReplyWindowStatus` as window-status API).
+   * Meta reply-window channels whose **unified `conversations` row** matches inbox “Reply window expired”
+   * (same `computeConversationReplyWindowStatus` as window-status API). WhatsApp + Messenger + Instagram DM.
    * Does not require a legacy `chats` row.
    */
   async getRetargetableChats(userId: string, limit: number = 5000): Promise<RetargetEligibleContactRow[]> {
     const now = new Date();
 
+    const metaChannels = ["whatsapp", "facebook", "instagram"] as const;
+
     const convRows = await db
       .select({ conv: conversations, contact: contacts })
       .from(conversations)
       .innerJoin(contacts, eq(conversations.contactId, contacts.id))
-      .where(and(eq(conversations.userId, userId), eq(conversations.channel, "whatsapp")))
+      .where(and(eq(conversations.userId, userId), inArray(conversations.channel, [...metaChannels])))
       .limit(10000);
 
     const out: RetargetEligibleContactRow[] = [];
@@ -1046,15 +1048,48 @@ export class DbStorage implements IStorage {
 
       if (!st.templateReopenEligible) continue;
 
-      const displayPhone = (contact.whatsappId || contact.phone || "").trim();
-      if (!displayPhone) {
-        console.log(
-          `[RETARGET_ELIGIBILITY] ${JSON.stringify({
-            phase: "skip",
-            reason: "no_whatsapp_phone_on_contact",
-            conversationId: conv.id,
-          })}`
-        );
+      const ch = (conv.channel || "").toLowerCase();
+      let displayHandle = "";
+      let whatsappPhone = "";
+
+      if (ch === "whatsapp") {
+        displayHandle = (contact.whatsappId || contact.phone || "").trim();
+        whatsappPhone = displayHandle;
+        if (!displayHandle) {
+          console.log(
+            `[RETARGET_ELIGIBILITY] ${JSON.stringify({
+              phase: "skip",
+              reason: "no_whatsapp_phone_on_contact",
+              conversationId: conv.id,
+            })}`
+          );
+          continue;
+        }
+      } else if (ch === "facebook") {
+        displayHandle = (contact.facebookId || "").trim();
+        if (!displayHandle) {
+          console.log(
+            `[RETARGET_ELIGIBILITY] ${JSON.stringify({
+              phase: "skip",
+              reason: "no_facebook_id_on_contact",
+              conversationId: conv.id,
+            })}`
+          );
+          continue;
+        }
+      } else if (ch === "instagram") {
+        displayHandle = (contact.instagramId || "").trim();
+        if (!displayHandle) {
+          console.log(
+            `[RETARGET_ELIGIBILITY] ${JSON.stringify({
+              phase: "skip",
+              reason: "no_instagram_id_on_contact",
+              conversationId: conv.id,
+            })}`
+          );
+          continue;
+        }
+      } else {
         continue;
       }
 
@@ -1071,8 +1106,9 @@ export class DbStorage implements IStorage {
         contactId: contact.id,
         name: contact.name || "Unknown",
         avatar: contact.avatar ?? null,
-        whatsappPhone: displayPhone,
         channel: conv.channel,
+        displayHandle,
+        whatsappPhone,
         windowExpiresAt: conv.windowExpiresAt ? new Date(conv.windowExpiresAt).toISOString() : null,
         lastMessagePreview: conv.lastMessagePreview ?? null,
         lastMessageAt: conv.lastMessageAt ? new Date(conv.lastMessageAt).toISOString() : null,
