@@ -292,6 +292,10 @@ const SOURCE_OPTIONS = [
   { value: 'api', label: 'API' },
 ];
 
+/** Shown when inbox quick-send blocks non–body-only templates (UI copy only; guard logic is in `@shared/metaTemplateSend`). */
+const INBOX_QUICK_SEND_ADVANCED_COPY =
+  "This approved WhatsApp template uses media, buttons, or carousel content. Quick-send supports text templates for now.";
+
 function getFollowUpStatus(followUpDate: string | null | undefined): 'overdue' | 'today' | 'upcoming' | null {
   if (!followUpDate) return null;
   const due = new Date(followUpDate);
@@ -2384,7 +2388,7 @@ export function UnifiedInbox() {
                       t.bodyText?.toLowerCase().includes(templateSearch.toLowerCase()))
                   )
                   .map((t) => {
-                    const { blocked, reason: blockReason } = getInboxTemplateSendBlockReason({
+                    const { blocked } = getInboxTemplateSendBlockReason({
                       name: t.name,
                       bodyText: t.bodyText,
                       headerType: t.headerType,
@@ -2402,23 +2406,23 @@ export function UnifiedInbox() {
                         onClick={() => {
                           if (!blocked) handleSelectTemplate(t);
                         }}
-                        title={blocked ? blockReason ?? undefined : undefined}
+                        title={blocked ? INBOX_QUICK_SEND_ADVANCED_COPY : undefined}
                         className={cn(
-                          "text-left p-3 border rounded-lg transition-colors",
+                          "text-left p-3 border rounded-lg transition-colors min-w-0",
                           blocked
-                            ? "border-gray-100 bg-gray-50/80 opacity-70 cursor-not-allowed"
+                            ? "border-gray-200 bg-gray-50/90 cursor-not-allowed"
                             : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
                         )}
                         data-testid={`template-item-${t.id}`}
                       >
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="text-sm font-medium text-gray-900">{t.name}</span>
-                          <span className="text-[10px] text-gray-400 uppercase">{t.language}</span>
+                        <div className="flex items-center justify-between mb-1 gap-2 min-w-0">
+                          <span className="text-sm font-medium text-gray-900 truncate">{t.name}</span>
+                          <span className="text-[10px] text-gray-400 uppercase shrink-0">{t.language}</span>
                         </div>
-                        <p className="text-xs text-gray-500 line-clamp-2">{t.bodyText}</p>
+                        <p className="text-xs text-gray-500 line-clamp-2 break-words">{t.bodyText}</p>
                         {blocked ? (
-                          <p className="text-[11px] text-amber-800 mt-2 leading-snug">
-                            {blockReason}
+                          <p className="text-[11px] text-gray-600 mt-2 leading-snug rounded-md border border-gray-200 bg-white/80 px-2.5 py-2">
+                            {INBOX_QUICK_SEND_ADVANCED_COPY}
                           </p>
                         ) : null}
                       </button>

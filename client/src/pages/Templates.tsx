@@ -23,6 +23,7 @@ import {
   Search
 } from "lucide-react";
 import { LocalizedTemplateSelector } from "@/components/LocalizedTemplateSelector";
+import { getInboxTemplateSendBlockReason } from "@shared/metaTemplateSend";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
@@ -65,11 +66,36 @@ interface Chat {
   lastMessage: string;
 }
 
-const CATEGORY_COLORS: Record<string, string> = {
-  marketing: "bg-purple-100 text-purple-700",
-  utility: "bg-blue-100 text-blue-700",
-  authentication: "bg-amber-100 text-amber-700",
+const CATEGORY_BADGE_CLASS: Record<string, string> = {
+  marketing: "bg-gray-50 text-gray-700 border-gray-200",
+  utility: "bg-gray-50 text-gray-700 border-gray-200",
+  authentication: "bg-amber-50/80 text-amber-900 border-amber-100",
 };
+
+function formatCategoryBadgeLabel(category: string): string {
+  const c = (category || "").toLowerCase();
+  if (c === "marketing") return "Marketing";
+  if (c === "utility") return "Utility";
+  if (c === "authentication") return "Authentication";
+  return (category || "Unknown").replace(/\b\w/g, (ch) => ch.toUpperCase());
+}
+
+function formatLanguageCode(lang: string): string {
+  return (lang || "").replace(/-/g, "_").toUpperCase() || "—";
+}
+
+function libraryQuickSendMeta(template: MessageTemplate) {
+  return getInboxTemplateSendBlockReason({
+    name: template.name,
+    bodyText: template.bodyText,
+    headerType: template.headerType,
+    headerContent: template.headerContent,
+    buttons: template.buttons,
+    templateType: template.templateType,
+    carouselCards: template.carouselCards,
+    category: template.category,
+  });
+}
 
 const STATUS_ICONS: Record<string, any> = {
   approved: { icon: CheckCircle2, color: "text-green-500" },
@@ -90,26 +116,26 @@ function GrowthEnginesTab() {
   ];
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h2 className="text-lg font-semibold text-gray-900">Growth Engines</h2>
-        <p className="text-sm text-gray-500 mt-0.5">
-          Pre-built industry systems designed to capture, qualify, and convert leads automatically on WhatsApp.
+    <div className="space-y-3 md:space-y-4">
+      <div className="space-y-0.5">
+        <h2 className="text-base md:text-lg font-semibold text-gray-900">Growth Engines</h2>
+        <p className="text-sm text-gray-500">
+          Install full industry playbooks powered by templates, automations, and AI.
         </p>
       </div>
 
-      <Card className="overflow-hidden border-emerald-200/60 shadow-sm" data-testid="card-realtor-growth-engine">
+      <Card className="overflow-hidden border-purple-200/50 shadow-sm" data-testid="card-realtor-growth-engine">
         <div className="flex flex-col lg:flex-row">
-          <div className="flex-1 p-5 lg:p-6">
-            <div className="flex items-start justify-between mb-3">
-              <div>
+          <div className="flex-1 p-5 lg:p-6 min-w-0">
+            <div className="flex items-start justify-between mb-3 gap-2">
+              <div className="min-w-0">
                 <div className="flex items-center gap-2 mb-1">
-                  <Badge className="bg-gradient-to-r from-emerald-500 to-teal-500 text-white border-0 text-[10px] px-2 py-0">Premium</Badge>
+                  <Badge className="bg-gradient-to-r from-violet-600 to-purple-600 text-white border-0 text-[10px] px-2 py-0">Premium</Badge>
                 </div>
                 <h3 className="text-lg font-bold text-gray-900" data-testid="text-engine-title"><RealtorMark /> Growth Engine</h3>
               </div>
-              <div className="hidden sm:flex items-center justify-center w-10 h-10 rounded-lg bg-emerald-50">
-                <Rocket className="h-5 w-5 text-emerald-600" />
+              <div className="hidden sm:flex items-center justify-center w-10 h-10 rounded-lg bg-purple-50 shrink-0">
+                <Rocket className="h-5 w-5 text-purple-600" />
               </div>
             </div>
 
@@ -120,8 +146,8 @@ function GrowthEnginesTab() {
             <div className="space-y-2 mb-2">
               {features.map((f, i) => (
                 <div key={i} className="flex items-center gap-2.5 text-sm text-gray-700">
-                  <div className="flex items-center justify-center w-5 h-5 rounded-full bg-emerald-50 shrink-0">
-                    <f.icon className="h-3 w-3 text-emerald-600" />
+                  <div className="flex items-center justify-center w-5 h-5 rounded-full bg-purple-50 shrink-0">
+                    <f.icon className="h-3 w-3 text-purple-600" />
                   </div>
                   <span>{f.text}</span>
                 </div>
@@ -130,7 +156,7 @@ function GrowthEnginesTab() {
             <p className="text-[11px] text-gray-400 mb-4">Includes onboarding + live setup call + system configuration</p>
 
             <Button
-              className="bg-emerald-600 hover:bg-emerald-700 text-white w-full sm:w-auto"
+              className="bg-purple-600 hover:bg-purple-700 text-white w-full sm:w-auto"
               onClick={() => setLocation("/app/templates/realtor-growth-engine")}
               data-testid="button-view-activate-engine"
             >
@@ -383,11 +409,13 @@ export function Templates() {
 
   return (
     <div className="flex-1 h-full bg-white flex flex-col overflow-hidden">
-      <div className="px-4 md:px-6 py-3 md:py-4 border-b border-gray-100 flex-shrink-0">
-        <div className="flex items-center justify-between max-w-5xl mx-auto">
-          <div>
-            <h1 className="text-xl md:text-2xl font-bold text-gray-900">Message Templates</h1>
-            <p className="text-gray-500 text-sm mt-0.5">Send pre-approved templates for smart retargeting</p>
+      <div className="px-4 md:px-6 py-2 md:py-4 border-b border-gray-100 flex-shrink-0">
+        <div className="flex items-center justify-between gap-3 max-w-5xl mx-auto">
+          <div className="min-w-0 space-y-0.5">
+            <h1 className="text-lg md:text-2xl font-bold text-gray-900 leading-tight">Message Templates</h1>
+            <p className="text-gray-500 text-xs md:text-sm leading-snug">
+              Manage WhatsApp-approved templates, campaigns, and automation sequences.
+            </p>
           </div>
           <Button 
             variant="outline"
@@ -402,42 +430,44 @@ export function Templates() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 md:px-6 py-3 pb-24 md:pb-6">
+      <div className="flex-1 overflow-y-auto px-4 md:px-6 py-2 md:py-3 pb-24 md:pb-6">
         <div className="max-w-5xl mx-auto">
-          <Tabs defaultValue="presets" className="space-y-4">
-          <TabsList className="grid w-full grid-cols-4 h-auto p-1 sticky top-0 z-10 bg-muted">
-            <TabsTrigger value="presets" data-testid="tab-presets" className="text-xs sm:text-sm py-2 px-1 sm:px-3 flex flex-col sm:flex-row items-center gap-1">
-              <Sparkles className="h-4 w-4 sm:mr-1" />
-              <span className="hidden sm:inline">Preset Templates</span>
-              <span className="sm:hidden">Presets</span>
+          <Tabs defaultValue="presets" className="space-y-2 md:space-y-4">
+          <TabsList className="grid w-full grid-cols-4 h-auto gap-0.5 p-0.5 sticky top-0 z-10 bg-muted/95 backdrop-blur-sm rounded-lg border border-gray-100/80 shadow-sm">
+            <TabsTrigger value="presets" data-testid="tab-presets" className="text-[11px] sm:text-sm py-1.5 px-1 sm:px-2 md:px-3 flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1 rounded-md leading-tight">
+              <Sparkles className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0 sm:mr-0" />
+              <span>Presets</span>
             </TabsTrigger>
-            <TabsTrigger value="templates" data-testid="tab-templates" className="text-xs sm:text-sm py-2 px-1 sm:px-3 flex flex-col sm:flex-row items-center gap-1">
-              <FileText className="h-4 w-4 sm:mr-1" />
-              <span className="hidden sm:inline">Template Library ({templates.length})</span>
-              <span className="sm:hidden">Library ({templates.length})</span>
+            <TabsTrigger value="templates" data-testid="tab-templates" className="text-[11px] sm:text-sm py-1.5 px-1 sm:px-2 md:px-3 flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1 rounded-md leading-tight">
+              <FileText className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0 sm:mr-0" />
+              <span className="text-center whitespace-normal break-words px-0.5">
+                <span className="hidden min-[420px]:inline">WhatsApp Library ({templates.length})</span>
+                <span className="min-[420px]:hidden">WA Lib. ({templates.length})</span>
+              </span>
             </TabsTrigger>
-            <TabsTrigger value="retargeting" data-testid="tab-retargeting" className="text-xs sm:text-sm py-2 px-1 sm:px-3 flex flex-col sm:flex-row items-center gap-1">
-              <Target className="h-4 w-4 sm:mr-1" />
-              <span className="hidden sm:inline">Retargeting ({retargetableChats.length})</span>
-              <span className="sm:hidden">Retarget ({retargetableChats.length})</span>
+            <TabsTrigger value="retargeting" data-testid="tab-retargeting" className="text-[11px] sm:text-sm py-1.5 px-1 sm:px-2 md:px-3 flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1 rounded-md leading-tight">
+              <Target className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0 sm:mr-0" />
+              <span>Campaigns ({retargetableChats.length})</span>
             </TabsTrigger>
-            <TabsTrigger value="growth-engines" data-testid="tab-growth-engines" className="text-xs sm:text-sm py-2 px-1 sm:px-3 flex flex-col sm:flex-row items-center gap-1 relative">
-              <Rocket className="h-4 w-4 sm:mr-1" />
-              <span className="hidden sm:inline">Growth Engines</span>
-              <span className="sm:hidden">Engines</span>
-              <Badge variant="secondary" className="absolute -top-1 -right-1 text-[9px] px-1 py-0 h-4 bg-emerald-100 text-emerald-700 border-0 hidden sm:flex">NEW</Badge>
+            <TabsTrigger value="growth-engines" data-testid="tab-growth-engines" className="text-[11px] sm:text-sm py-1.5 px-1 sm:px-2 md:px-3 flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1 rounded-md leading-tight relative">
+              <Rocket className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0 sm:mr-0" />
+              <span className="text-center leading-tight">
+                <span className="hidden sm:inline">Growth Engines</span>
+                <span className="sm:hidden">Growth</span>
+              </span>
+              <Badge variant="secondary" className="absolute -top-0.5 -right-0.5 text-[9px] px-1 py-0 h-4 bg-purple-100 text-purple-700 border-0 hidden sm:flex">NEW</Badge>
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="presets" className="space-y-4 mt-0">
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="flex items-center gap-2 text-lg">
-                  <Sparkles className="h-5 w-5 text-purple-500" />
+          <TabsContent value="presets" className="space-y-3 md:space-y-4 mt-0">
+            <Card className="overflow-hidden">
+              <CardHeader className="pb-2 pt-4 md:pt-6 px-4 md:px-6">
+                <CardTitle className="flex items-center gap-2 text-base md:text-lg">
+                  <Sparkles className="h-5 w-5 text-purple-500 shrink-0" />
                   Preset Automation Templates
                 </CardTitle>
                 <CardDescription className="text-sm">
-                  Pre-built Revenue Automation sequences for different industries. Available in English, Spanish, and Hebrew.
+                  Start with ready-made WhatsApp sequences in English, Spanish, and Hebrew.
                 </CardDescription>
               </CardHeader>
               <CardContent className="px-3 md:px-6">
@@ -451,17 +481,24 @@ export function Templates() {
             </Card>
           </TabsContent>
 
-          <TabsContent value="templates" className="space-y-4 mt-0">
+          <TabsContent value="templates" className="space-y-3 md:space-y-4 mt-0">
+            <div className="space-y-0.5 px-0.5">
+              <h2 className="text-base md:text-lg font-semibold text-gray-900">WhatsApp Approved Library</h2>
+              <p className="text-sm text-gray-500">
+                Templates synced from Meta WhatsApp Manager and ready for compliant sending.
+              </p>
+            </div>
+
             {templatesLoading ? (
-              <div className="flex items-center justify-center py-12">
+              <div className="flex items-center justify-center py-10 md:py-12">
                 <RefreshCw className="h-6 w-6 animate-spin text-gray-400" />
               </div>
             ) : templates.length === 0 ? (
-              <Card>
-                <CardContent className="py-12 text-center">
-                  <FileText className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+              <Card className="overflow-hidden">
+                <CardContent className="py-10 md:py-12 text-center px-4">
+                  <FileText className="h-12 w-12 mx-auto mb-3 text-gray-300" />
                   <h3 className="font-semibold text-gray-900 mb-2">No Templates Found</h3>
-                  <p className="text-gray-500 text-sm mb-4">
+                  <p className="text-gray-500 text-sm mb-4 max-w-md mx-auto">
                     Sync your approved templates from your WhatsApp provider to start sending messages.
                   </p>
                   <Button 
@@ -475,46 +512,78 @@ export function Templates() {
                 </CardContent>
               </Card>
             ) : (
-              <div className="grid gap-4 md:grid-cols-2">
+              <div className="grid gap-3 md:gap-4 md:grid-cols-2">
                 {templates.map((template) => {
                   const StatusIcon = STATUS_ICONS[template.status]?.icon || AlertCircle;
                   const statusColor = STATUS_ICONS[template.status]?.color || "text-gray-500";
                   const TypeIcon = getTemplateIcon(template.templateType);
-                  
+                  const qs = libraryQuickSendMeta(template);
+                  const syncMeta = template.twilioSid?.startsWith("meta_");
+                  const approved = template.status === "approved";
+                  const catClass =
+                    CATEGORY_BADGE_CLASS[(template.category || "").toLowerCase()] ||
+                    "bg-gray-50 text-gray-700 border-gray-200";
+
                   return (
-                    <Card key={template.id} className="overflow-hidden" data-testid={`template-card-${template.id}`}>
-                      <CardHeader className="pb-3">
-                        <div className="flex items-start justify-between">
-                          <div className="flex items-center gap-2">
-                            <div className="h-8 w-8 rounded-lg bg-gray-100 flex items-center justify-center">
+                    <Card key={template.id} className="overflow-hidden border-gray-200/80 shadow-sm min-w-0" data-testid={`template-card-${template.id}`}>
+                      <CardHeader className="pb-2 pt-4 px-4 space-y-3">
+                        <div className="flex items-start justify-between gap-2 min-w-0">
+                          <div className="flex items-start gap-2 min-w-0">
+                            <div className="h-8 w-8 rounded-lg bg-gray-100 flex items-center justify-center shrink-0">
                               <TypeIcon className="h-4 w-4 text-gray-600" />
                             </div>
-                            <div>
-                              <CardTitle className="text-base">{template.name}</CardTitle>
-                              <div className="flex items-center gap-2 mt-1">
-                                <Badge className={CATEGORY_COLORS[template.category] || "bg-gray-100 text-gray-700"}>
-                                  {template.category}
-                                </Badge>
-                                <span className="text-xs text-gray-500">{template.language.toUpperCase()}</span>
+                            <div className="min-w-0">
+                              <CardTitle className="text-base leading-snug break-words">{template.name}</CardTitle>
+                              <div className="flex items-center gap-1.5 mt-1">
+                                <StatusIcon className={`h-3.5 w-3.5 shrink-0 ${statusColor}`} />
+                                <span className={`text-xs capitalize ${statusColor}`}>{template.status}</span>
                               </div>
                             </div>
                           </div>
-                          <div className="flex items-center gap-1">
-                            <StatusIcon className={`h-4 w-4 ${statusColor}`} />
-                            <span className={`text-xs ${statusColor}`}>{template.status}</span>
-                          </div>
+                        </div>
+
+                        <div className="flex flex-wrap gap-1.5">
+                          {approved ? (
+                            <Badge variant="outline" className="text-[10px] font-medium border-emerald-200 bg-emerald-50/90 text-emerald-800">
+                              WhatsApp approved
+                            </Badge>
+                          ) : null}
+                          <Badge variant="outline" className="text-[10px] font-normal border-gray-200 bg-white text-gray-600">
+                            {syncMeta ? "Synced from Meta" : "Synced from Twilio"}
+                          </Badge>
+                          <Badge variant="outline" className={`text-[10px] font-medium border ${catClass}`}>
+                            {formatCategoryBadgeLabel(template.category)}
+                          </Badge>
+                          <Badge variant="outline" className="text-[10px] font-mono font-normal border-gray-200 bg-gray-50 text-gray-700">
+                            {formatLanguageCode(template.language)}
+                          </Badge>
+                          <Badge
+                            variant="outline"
+                            className={
+                              qs.blocked
+                                ? "text-[10px] font-normal border-gray-200 bg-gray-50 text-gray-700"
+                                : "text-[10px] font-normal border-emerald-200 bg-emerald-50/80 text-emerald-900"
+                            }
+                          >
+                            {qs.blocked ? "Advanced template" : "Quick-send ready"}
+                          </Badge>
+                          {(template.variables?.length ?? 0) > 0 ? (
+                            <Badge variant="outline" className="text-[10px] font-normal border-gray-200 bg-white text-gray-700">
+                              Variables required
+                            </Badge>
+                          ) : null}
                         </div>
                       </CardHeader>
-                      <CardContent>
-                        <div className="bg-gray-50 rounded-lg p-3 mb-3 max-h-32 overflow-y-auto">
-                          <p className="text-sm text-gray-700 whitespace-pre-wrap line-clamp-4">
+                      <CardContent className="px-4 pb-4 pt-0">
+                        <div className="bg-gray-50 rounded-lg p-3 mb-3 max-h-28 md:max-h-32 overflow-y-auto overscroll-contain">
+                          <p className="text-sm text-gray-700 whitespace-pre-wrap line-clamp-4 break-words">
                             {template.bodyText || "No body text"}
                           </p>
                         </div>
                         {template.variables && template.variables.length > 0 && (
-                          <div className="flex flex-wrap gap-1 mb-3">
+                          <div className="flex flex-wrap gap-1 mb-3 min-w-0">
                             {template.variables.map((v: string, i: number) => (
-                              <Badge key={i} variant="outline" className="text-xs">
+                              <Badge key={i} variant="outline" className="text-[10px] max-w-full truncate">
                                 {`{{${v}}}`}
                               </Badge>
                             ))}
@@ -537,32 +606,40 @@ export function Templates() {
               </div>
             )}
 
-            <Card className="bg-blue-50 border-blue-200">
-              <CardContent className="py-4">
+            <Card className="border-gray-200 bg-gray-50/80 shadow-none">
+              <CardContent className="py-3 md:py-4 px-4">
                 <div className="flex items-start gap-3">
-                  <AlertCircle className="h-5 w-5 text-blue-600 shrink-0 mt-0.5" />
-                  <div className="text-sm text-blue-800">
-                    <p className="font-medium mb-1">About WhatsApp Templates</p>
-                    <p>Templates must be created and approved in your WhatsApp Business (Meta) or Twilio console before they appear here. 
-                    Use the "Sync Templates" button to fetch your latest approved templates from your active provider.</p>
+                  <AlertCircle className="h-5 w-5 text-gray-500 shrink-0 mt-0.5" />
+                  <div className="text-sm text-gray-700">
+                    <p className="font-medium mb-1 text-gray-900">About WhatsApp Templates</p>
+                    <p className="leading-relaxed">
+                      Templates must be created and approved in your WhatsApp Business (Meta) or Twilio console before they appear here.
+                      Use &quot;Sync Templates&quot; to fetch your latest approved templates from your active provider.
+                    </p>
                   </div>
                 </div>
               </CardContent>
             </Card>
           </TabsContent>
 
-          <TabsContent value="retargeting" className="space-y-4 mt-0">
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <Target className="h-5 w-5 text-brand-green" />
-                  Contacts Ready for Retargeting
+          <TabsContent value="retargeting" className="space-y-3 md:space-y-4 mt-0">
+            <div className="space-y-0.5 px-0.5">
+              <h2 className="text-base md:text-lg font-semibold text-gray-900">Retargeting Campaigns</h2>
+              <p className="text-sm text-gray-500">
+                Re-engage leads using approved WhatsApp templates and smart timing.
+              </p>
+            </div>
+            <Card className="overflow-hidden border-gray-200/80">
+              <CardHeader className="pb-3 px-4 pt-4">
+                <CardTitle className="text-base md:text-lg flex items-center gap-2">
+                  <Target className="h-5 w-5 text-brand-green shrink-0" />
+                  Contacts ready to message
                 </CardTitle>
-                <CardDescription>
-                  These contacts haven't messaged in over 24 hours. Send them a template to re-engage.
+                <CardDescription className="text-sm">
+                  These contacts haven&apos;t messaged in over 24 hours. Send them an approved template to re-engage.
                 </CardDescription>
               </CardHeader>
-              <CardContent>
+              <CardContent className="px-4 pb-4">
                 {chatsLoading ? (
                   <div className="flex items-center justify-center py-8">
                     <RefreshCw className="h-5 w-5 animate-spin text-gray-400" />
@@ -574,14 +651,14 @@ export function Templates() {
                     <p className="text-sm">All your contacts are within the 24-hour messaging window</p>
                   </div>
                 ) : (
-                  <div className="space-y-3 max-h-[320px] overflow-y-auto pr-2" style={{ scrollbarWidth: 'thin' }}>
+                  <div className="space-y-2 md:space-y-3 max-h-[280px] md:max-h-[320px] overflow-y-auto pr-1 md:pr-2 overscroll-contain" style={{ scrollbarWidth: 'thin' }}>
                     {retargetableChats.map((chat) => (
                       <div 
                         key={chat.id} 
-                        className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50"
+                        className="flex flex-col sm:flex-row sm:items-center gap-2 sm:justify-between p-3 border border-gray-200 rounded-xl hover:bg-gray-50/80 min-w-0"
                         data-testid={`retarget-chat-${chat.id}`}
                       >
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
                           <div 
                             className="h-10 w-10 rounded-full bg-cover bg-center bg-gray-200"
                             style={{ backgroundImage: chat.avatar ? `url(${chat.avatar})` : undefined }}
@@ -605,7 +682,7 @@ export function Templates() {
                             if (template) handleSendTemplate(template, chat);
                           }}
                         >
-                          <SelectTrigger className="w-[160px] min-h-[40px]" data-testid={`select-template-${chat.id}`}>
+                          <SelectTrigger className="w-full sm:w-[160px] min-h-[40px] shrink-0" data-testid={`select-template-${chat.id}`}>
                             <SelectValue placeholder="Send template" />
                           </SelectTrigger>
                           <SelectContent position="popper" side="bottom" align="end" className="z-[100] w-[200px] max-h-[300px] overflow-y-auto bg-white border border-gray-200 shadow-lg">
@@ -631,7 +708,7 @@ export function Templates() {
             </Card>
           </TabsContent>
 
-          <TabsContent value="growth-engines" className="mt-0">
+          <TabsContent value="growth-engines" className="mt-0 space-y-2 md:space-y-4">
             <GrowthEnginesTab />
           </TabsContent>
         </Tabs>
