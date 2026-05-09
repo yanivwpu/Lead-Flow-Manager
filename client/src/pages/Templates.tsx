@@ -1,4 +1,4 @@
-import { useState, type ReactElement } from "react";
+import { useState } from "react";
 
 function RealtorMark() {
   return (
@@ -17,11 +17,15 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Link } from "wouter";
 import { 
-  FileText, RefreshCw, Lock, Zap, Send, Clock, CheckCircle2, XCircle, 
-  AlertCircle, Image, Video, FileIcon, LayoutGrid, ChevronLeft, ChevronRight,
+  FileText, RefreshCw, Lock, Zap, Send, Clock, CheckCircle2, XCircle, Eye,
+  AlertCircle, Image, LayoutGrid,
   Users, Target, Sparkles, Rocket, Crown, Bot, MessageSquare, CalendarCheck, ArrowRight,
   Search
 } from "lucide-react";
+import {
+  WhatsAppTemplateRichPreview,
+  TemplateShapeIndicator,
+} from "@/components/WhatsAppTemplateRichPreview";
 import { LocalizedTemplateSelector } from "@/components/LocalizedTemplateSelector";
 import { getInboxTemplateSendBlockReason } from "@shared/metaTemplateSend";
 import { apiRequest } from "@/lib/queryClient";
@@ -97,77 +101,8 @@ function libraryQuickSendMeta(template: MessageTemplate) {
   });
 }
 
-/** Extra preview row for advanced (non–quick-send) templates in the library list. */
-function TemplateLibraryAdvancedPreview({ template }: { template: MessageTemplate }) {
-  const ht = (template.headerType || "").toLowerCase();
-  const hc = (template.headerContent || "").trim();
-  const tt = (template.templateType || "").toLowerCase();
-  const chunks: ReactElement[] = [];
-
-  if (tt === "carousel" && Array.isArray(template.carouselCards) && template.carouselCards.length > 0) {
-    const card = template.carouselCards[0] as { headerUrl?: string };
-    if (card?.headerUrl) {
-      chunks.push(
-        <div key="carousel" className="rounded-lg overflow-hidden border border-gray-200 bg-gray-50">
-          <img src={card.headerUrl} alt="" className="w-full h-24 object-cover" />
-        </div>
-      );
-    }
-  }
-
-  if (ht === "image" && /^https?:\/\//i.test(hc)) {
-    chunks.push(
-      <div key="hdr-img" className="rounded-lg overflow-hidden border border-gray-200">
-        <img src={hc} alt="" className="w-full h-24 object-cover" />
-      </div>
-    );
-  } else if (ht === "video") {
-    chunks.push(
-      <div
-        key="hdr-vid"
-        className="rounded-lg border border-gray-200 bg-gray-100 flex items-center justify-center h-20 gap-2 text-xs text-gray-600"
-      >
-        <Video className="h-5 w-5 shrink-0" />
-        <span>{/^https?:\/\//i.test(hc) ? "Video header" : "Video header (approved template)"}</span>
-      </div>
-    );
-  } else if (ht === "document") {
-    chunks.push(
-      <div
-        key="hdr-doc"
-        className="rounded-lg border border-dashed border-gray-300 bg-gray-50 flex items-center gap-2 px-3 py-2 text-xs text-gray-600"
-      >
-        <FileIcon className="h-4 w-4 shrink-0" />
-        <span>Document header</span>
-      </div>
-    );
-  } else if (ht === "text" && hc && tt !== "carousel") {
-    chunks.push(
-      <p key="hdr-txt" className="text-xs font-semibold text-gray-900 border border-gray-200 rounded-md px-2 py-1.5 bg-white">
-        {hc}
-      </p>
-    );
-  }
-
-  if (Array.isArray(template.buttons) && template.buttons.length > 0) {
-    chunks.push(
-      <div key="btns" className="flex flex-wrap gap-1.5">
-        {template.buttons.map((btn: Record<string, unknown>, i: number) => (
-          <Badge
-            key={i}
-            variant="outline"
-            className="text-[10px] border-orange-200/90 bg-orange-50/90 text-orange-900 font-normal max-w-full truncate"
-          >
-            {String(btn.text ?? btn.title ?? `Button ${i + 1}`)}
-          </Badge>
-        ))}
-      </div>
-    );
-  }
-
-  if (chunks.length === 0) return null;
-  return <div className="space-y-2">{chunks}</div>;
-}
+const ADVANCED_QUICK_SEND_NOTE =
+  "This template includes media, buttons, or carousel content. Quick-send support is coming soon.";
 
 const STATUS_ICONS: Record<string, any> = {
   approved: { icon: CheckCircle2, color: "text-green-500" },
@@ -270,7 +205,9 @@ export function Templates() {
   const [sendDialogOpen, setSendDialogOpen] = useState(false);
   const [selectedChat, setSelectedChat] = useState<Chat | null>(null);
   const [variableValues, setVariableValues] = useState<Record<string, string>>({});
-  const [carouselIndex, setCarouselIndex] = useState(0);
+  const [libraryModalOpen, setLibraryModalOpen] = useState(false);
+  const [libraryModalTemplate, setLibraryModalTemplate] = useState<MessageTemplate | null>(null);
+  const [libraryModalEntry, setLibraryModalEntry] = useState<"preview-details" | "use-advanced">("preview-details");
   const [contactPickerOpen, setContactPickerOpen] = useState(false);
   const [contactSearch, setContactSearch] = useState("");
 
@@ -365,7 +302,29 @@ export function Templates() {
 
   const handleUseTemplate = (template: MessageTemplate) => {
     console.log(`[UseTemplate] Button clicked for template: ${template.name}`);
+    const qs = libraryQuickSendMeta(template);
+    if (qs.blocked) {
+      setLibraryModalTemplate(template);
+      setLibraryModalEntry("use-advanced");
+      setLibraryModalOpen(true);
+      return;
+    }
     setSelectedTemplate(template);
+    setContactSearch("");
+    setContactPickerOpen(true);
+  };
+
+  const openPreviewDetails = (template: MessageTemplate) => {
+    setLibraryModalTemplate(template);
+    setLibraryModalEntry("preview-details");
+    setLibraryModalOpen(true);
+  };
+
+  const continuePreviewToSend = () => {
+    if (!libraryModalTemplate) return;
+    if (libraryQuickSendMeta(libraryModalTemplate).blocked) return;
+    setLibraryModalOpen(false);
+    setSelectedTemplate(libraryModalTemplate);
     setContactSearch("");
     setContactPickerOpen(true);
   };
@@ -376,78 +335,6 @@ export function Templates() {
       case "media": return Image;
       default: return FileText;
     }
-  };
-
-  const renderTemplatePreview = (template: MessageTemplate) => {
-    if (template.templateType === "carousel" && template.carouselCards.length > 0) {
-      const card = template.carouselCards[carouselIndex];
-      return (
-        <div className="space-y-3">
-          <div className="relative bg-gray-100 rounded-lg overflow-hidden">
-            {card?.headerUrl && (
-              <img src={card.headerUrl} alt="Card header" className="w-full h-32 object-cover" />
-            )}
-            {!card?.headerUrl && (
-              <div className="w-full h-32 bg-gray-200 flex items-center justify-center">
-                <Image className="h-8 w-8 text-gray-400" />
-              </div>
-            )}
-            <div className="absolute bottom-2 right-2 flex gap-1">
-              <Button 
-                size="icon" 
-                variant="secondary" 
-                className="h-6 w-6"
-                disabled={carouselIndex === 0}
-                onClick={() => setCarouselIndex(i => i - 1)}
-              >
-                <ChevronLeft className="h-3 w-3" />
-              </Button>
-              <Button 
-                size="icon" 
-                variant="secondary" 
-                className="h-6 w-6"
-                disabled={carouselIndex === template.carouselCards.length - 1}
-                onClick={() => setCarouselIndex(i => i + 1)}
-              >
-                <ChevronRight className="h-3 w-3" />
-              </Button>
-            </div>
-          </div>
-          <p className="text-sm text-gray-700">{card?.bodyText || "Card body text"}</p>
-          <p className="text-xs text-gray-500">Card {carouselIndex + 1} of {template.carouselCards.length}</p>
-        </div>
-      );
-    }
-
-    return (
-      <div className="space-y-3">
-        {template.headerType && template.headerType !== "text" && (
-          <div className="bg-gray-100 rounded-lg p-4 flex items-center justify-center">
-            {template.headerType === "image" && <Image className="h-8 w-8 text-gray-400" />}
-            {template.headerType === "video" && <Video className="h-8 w-8 text-gray-400" />}
-            {template.headerType === "document" && <FileIcon className="h-8 w-8 text-gray-400" />}
-          </div>
-        )}
-        {template.headerType === "text" && template.headerContent && (
-          <p className="font-semibold text-gray-900">{template.headerContent}</p>
-        )}
-        <p className="text-sm text-gray-700 whitespace-pre-wrap">
-          {template.bodyText || "Template body text"}
-        </p>
-        {template.footerText && (
-          <p className="text-xs text-gray-500">{template.footerText}</p>
-        )}
-        {template.buttons && template.buttons.length > 0 && (
-          <div className="flex flex-wrap gap-2 pt-2">
-            {template.buttons.map((btn: any, i: number) => (
-              <Badge key={i} variant="outline" className="text-blue-600 border-blue-300">
-                {btn.text || btn.title || `Button ${i + 1}`}
-              </Badge>
-            ))}
-          </div>
-        )}
-      </div>
-    );
   };
 
   if (subLoading) {
@@ -646,19 +533,25 @@ export function Templates() {
                               Variables required
                             </Badge>
                           ) : null}
+                          <TemplateShapeIndicator template={template} />
                         </div>
                       </CardHeader>
                       <CardContent className="px-4 pb-4 pt-0">
                         {qs.blocked ? (
-                          <div className="mb-3 min-w-0">
-                            <TemplateLibraryAdvancedPreview template={template} />
+                          <div className="mb-3 min-w-0 max-h-[min(320px,55vh)] overflow-y-auto overscroll-contain pr-0.5">
+                            <WhatsAppTemplateRichPreview
+                              key={template.id}
+                              template={template}
+                              density="compact"
+                            />
                           </div>
-                        ) : null}
-                        <div className="bg-gray-50 rounded-lg p-3 mb-3 max-h-28 md:max-h-32 overflow-y-auto overscroll-contain">
-                          <p className="text-sm text-gray-700 whitespace-pre-wrap line-clamp-4 break-words">
-                            {template.bodyText || "No body text"}
-                          </p>
-                        </div>
+                        ) : (
+                          <div className="bg-gray-50 rounded-lg p-3 mb-3 max-h-28 md:max-h-32 overflow-y-auto overscroll-contain">
+                            <p className="text-sm text-gray-700 whitespace-pre-wrap line-clamp-4 break-words">
+                              {template.bodyText || "No body text"}
+                            </p>
+                          </div>
+                        )}
                         {template.variables && template.variables.length > 0 && (
                           <div className="flex flex-wrap gap-1 mb-3 min-w-0">
                             {template.variables.map((v: string, i: number) => (
@@ -668,16 +561,30 @@ export function Templates() {
                             ))}
                           </div>
                         )}
-                        <Button 
-                          size="sm" 
-                          className="w-full bg-brand-green hover:bg-brand-green/90"
-                          disabled={template.status !== "approved"}
-                          onClick={() => handleUseTemplate(template)}
-                          data-testid={`button-use-template-${template.id}`}
-                        >
-                          <Send className="h-3 w-3 mr-2" />
-                          Use Template
-                        </Button>
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="w-full sm:flex-1 border-gray-200"
+                            onClick={() => openPreviewDetails(template)}
+                            data-testid={`button-preview-details-${template.id}`}
+                          >
+                            <Eye className="h-3.5 w-3.5 mr-2 shrink-0" />
+                            Preview Details
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            className="w-full sm:flex-1 bg-brand-green hover:bg-brand-green/90"
+                            disabled={template.status !== "approved"}
+                            onClick={() => handleUseTemplate(template)}
+                            data-testid={`button-use-template-${template.id}`}
+                          >
+                            <Send className="h-3 w-3 mr-2 shrink-0" />
+                            Use Template
+                          </Button>
+                        </div>
                       </CardContent>
                     </Card>
                   );
@@ -758,23 +665,27 @@ export function Templates() {
                         <Select 
                           onValueChange={(templateId) => {
                             const template = templates.find(t => t.id === templateId);
-                            if (template) handleSendTemplate(template, chat);
+                            if (template && !libraryQuickSendMeta(template).blocked) {
+                              handleSendTemplate(template, chat);
+                            }
                           }}
                         >
                           <SelectTrigger className="w-full sm:w-[160px] min-h-[40px] shrink-0" data-testid={`select-template-${chat.id}`}>
                             <SelectValue placeholder="Send template" />
                           </SelectTrigger>
                           <SelectContent position="popper" side="bottom" align="end" className="z-[100] w-[200px] max-h-[300px] overflow-y-auto bg-white border border-gray-200 shadow-lg">
-                            {templates.filter(t => t.status === "approved").length > 0 ? (
-                              templates.filter(t => t.status === "approved").map((template) => (
-                                <SelectItem key={template.id} value={template.id} className="cursor-pointer hover:bg-gray-100">
-                                  {template.name}
-                                </SelectItem>
-                              ))
+                            {templates.filter((t) => t.status === "approved" && !libraryQuickSendMeta(t).blocked).length > 0 ? (
+                              templates
+                                .filter((t) => t.status === "approved" && !libraryQuickSendMeta(t).blocked)
+                                .map((template) => (
+                                  <SelectItem key={template.id} value={template.id} className="cursor-pointer hover:bg-gray-100">
+                                    {template.name}
+                                  </SelectItem>
+                                ))
                             ) : (
                               <div className="p-2 text-xs text-gray-500 text-center">
-                                No approved templates found.<br/>
-                                Please sync or approve templates first.
+                                No quick-send templates available.<br/>
+                                Use body-only templates or send from the Templates page.
                               </div>
                             )}
                           </SelectContent>
@@ -859,8 +770,12 @@ export function Templates() {
                   </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4 py-4">
-                  <div className="bg-gray-50 rounded-lg p-4">
-                    {renderTemplatePreview(selectedTemplate)}
+                  <div className="min-w-0">
+                    <WhatsAppTemplateRichPreview
+                      key={selectedTemplate.id}
+                      template={selectedTemplate}
+                      density="comfortable"
+                    />
                   </div>
                   
                   {selectedTemplate.variables && selectedTemplate.variables.length > 0 && (
@@ -900,6 +815,100 @@ export function Templates() {
                 </DialogFooter>
               </>
             )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Rich preview (all templates) / advanced-only when Use Template on unsupported */}
+        <Dialog
+          open={libraryModalOpen}
+          onOpenChange={(open) => {
+            setLibraryModalOpen(open);
+            if (!open) setLibraryModalTemplate(null);
+          }}
+        >
+          <DialogContent
+            className="max-w-lg max-h-[92vh] overflow-y-auto gap-0 sm:max-w-lg"
+            data-testid="dialog-library-template-preview"
+          >
+            {libraryModalTemplate ? (
+              <>
+                <DialogHeader className="pb-3">
+                  <DialogTitle className="pr-8 text-left leading-snug">{libraryModalTemplate.name}</DialogTitle>
+                </DialogHeader>
+                <div className="flex flex-wrap gap-1.5 pb-3">
+                  {libraryModalTemplate.status === "approved" ? (
+                    <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-[10px] font-medium text-emerald-900">
+                      <CheckCircle2 className="mr-1 inline h-3 w-3" aria-hidden />
+                      Approved
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="text-[10px] capitalize">
+                      {libraryModalTemplate.status}
+                    </Badge>
+                  )}
+                  <Badge variant="outline" className="text-[10px] font-normal border-gray-200 bg-white text-gray-600">
+                    {libraryModalTemplate.twilioSid?.startsWith("meta_") ? "Synced from Meta" : "Synced from Twilio"}
+                  </Badge>
+                  <Badge
+                    variant="outline"
+                    className={`text-[10px] font-medium border ${
+                      CATEGORY_BADGE_CLASS[(libraryModalTemplate.category || "").toLowerCase()] ||
+                      "bg-gray-50 text-gray-700 border-gray-200"
+                    }`}
+                  >
+                    {formatCategoryBadgeLabel(libraryModalTemplate.category)}
+                  </Badge>
+                  <Badge variant="outline" className="text-[10px] font-mono font-normal border-gray-200 bg-gray-50 text-gray-700">
+                    {formatLanguageCode(libraryModalTemplate.language)}
+                  </Badge>
+                  <Badge
+                    variant="outline"
+                    className={
+                      libraryQuickSendMeta(libraryModalTemplate).blocked
+                        ? "text-[10px] font-normal border-orange-200 bg-orange-50 text-orange-900"
+                        : "text-[10px] font-normal border-emerald-200 bg-emerald-50/80 text-emerald-900"
+                    }
+                  >
+                    {libraryQuickSendMeta(libraryModalTemplate).blocked ? "Advanced template" : "Quick-send ready"}
+                  </Badge>
+                  <TemplateShapeIndicator template={libraryModalTemplate} />
+                </div>
+                <div className="min-w-0 pb-4">
+                  <WhatsAppTemplateRichPreview
+                    key={libraryModalTemplate.id}
+                    template={libraryModalTemplate}
+                    density="comfortable"
+                  />
+                </div>
+                {libraryQuickSendMeta(libraryModalTemplate).blocked ? (
+                  <p className="mb-4 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-xs leading-relaxed text-gray-600">
+                    {ADVANCED_QUICK_SEND_NOTE}
+                  </p>
+                ) : null}
+                <DialogFooter className="gap-2 sm:justify-end">
+                  <Button type="button" variant="outline" onClick={() => setLibraryModalOpen(false)}>
+                    Close
+                  </Button>
+                  {libraryModalEntry === "use-advanced" ? (
+                    <Button type="button" variant="secondary" disabled className="min-w-[12rem]">
+                      Not available in quick-send
+                    </Button>
+                  ) : null}
+                  {libraryModalEntry === "preview-details" &&
+                  libraryModalTemplate.status === "approved" &&
+                  !libraryQuickSendMeta(libraryModalTemplate).blocked ? (
+                    <Button
+                      type="button"
+                      className="bg-brand-green hover:bg-brand-green/90 text-white"
+                      onClick={continuePreviewToSend}
+                      data-testid="button-continue-to-send"
+                    >
+                      Continue to send
+                    </Button>
+                  ) : null}
+                </DialogFooter>
+              </>
+            ) : null}
           </DialogContent>
         </Dialog>
         </div>

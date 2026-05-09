@@ -6,6 +6,7 @@ import { useAuth } from "@/lib/auth-context";
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { useSubscription } from "@/lib/subscription-context";
 import { AIComposer } from "@/components/AIComposer";
+import { WhatsAppTemplateRichPreview } from "@/components/WhatsAppTemplateRichPreview";
 import {
   Search,
   Send,
@@ -216,6 +217,7 @@ interface MessageTemplate {
   templateType?: string | null;
   carouselCards?: unknown[] | null;
   buttons?: unknown[] | null;
+  twilioSid?: string | null;
 }
 
 const CHANNEL_CONFIG: Record<string, { icon: any; color: string; label: string }> = {
@@ -295,6 +297,10 @@ const SOURCE_OPTIONS = [
 /** Shown when inbox quick-send blocks non–body-only templates (UI copy only; guard logic is in `@shared/metaTemplateSend`). */
 const INBOX_QUICK_SEND_ADVANCED_COPY =
   "This approved WhatsApp template uses media, buttons, or carousel content. Quick-send supports text templates for now.";
+
+/** Preview modal for blocked templates — aligns with Templates library messaging (UI only). */
+const INBOX_ADVANCED_PREVIEW_MODAL_NOTE =
+  "This template includes media, buttons, or carousel content. Quick-send support is coming soon.";
 
 function getFollowUpStatus(followUpDate: string | null | undefined): 'overdue' | 'today' | 'upcoming' | null {
   if (!followUpDate) return null;
@@ -459,6 +465,8 @@ export function UnifiedInbox() {
   const [selectedInboxTemplate, setSelectedInboxTemplate] = useState<MessageTemplate | null>(null);
   const [showVarDialog, setShowVarDialog] = useState(false);
   const [varValues, setVarValues] = useState<Record<string, string>>({});
+  const [inboxTemplatePreviewOpen, setInboxTemplatePreviewOpen] = useState(false);
+  const [inboxPreviewTemplate, setInboxPreviewTemplate] = useState<MessageTemplate | null>(null);
 
   const selectedContactId =
     match && params?.contactId != null && String(params.contactId).length > 0
@@ -1992,20 +2000,35 @@ export function UnifiedInbox() {
                                 tv && typeof tv.templateLanguage === "string"
                                   ? tv.templateLanguage
                                   : null;
+                              const tmplName =
+                                tv && typeof tv.templateName === "string"
+                                  ? tv.templateName
+                                  : headerLine.startsWith("Template:")
+                                    ? headerLine.slice("Template:".length).trim()
+                                    : headerLine;
+                              const provider =
+                                tv && typeof tv.provider === "string" ? tv.provider : null;
+                              const langBadge = lang
+                                ? lang.replace(/-/g, "_").toUpperCase()
+                                : null;
                               return (
-                                <div className="leading-snug space-y-1">
-                                  <p className="text-xs font-semibold text-emerald-900">
-                                    {headerLine || "Template message"}
-                                  </p>
-                                  {lang ? (
-                                    <p className="text-[10px] text-gray-600">
-                                      Language: {lang}
-                                    </p>
+                                <div className="space-y-1.5 rounded-xl border border-emerald-100/90 bg-emerald-50/40 px-3 py-2 leading-snug">
+                                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                                    <span className="text-[10px] font-semibold uppercase tracking-wide text-emerald-900/85">
+                                      WhatsApp template
+                                    </span>
+                                    {provider === "meta" ? (
+                                      <span className="rounded-full border border-emerald-200/70 bg-white/70 px-1.5 py-px text-[9px] font-medium text-emerald-900/80">
+                                        Meta
+                                      </span>
+                                    ) : null}
+                                  </div>
+                                  <p className="text-sm font-semibold text-gray-900">{tmplName || "Template"}</p>
+                                  {langBadge ? (
+                                    <p className="text-[10px] text-gray-500">{langBadge}</p>
                                   ) : null}
                                   {bodyPart ? (
-                                    <p className="text-sm whitespace-pre-wrap text-gray-900">
-                                      {bodyPart}
-                                    </p>
+                                    <p className="text-sm whitespace-pre-wrap text-gray-800">{bodyPart}</p>
                                   ) : null}
                                 </div>
                               );
@@ -2424,32 +2447,52 @@ export function UnifiedInbox() {
                       category: t.category,
                     });
                     return (
-                      <button
+                      <div
                         key={t.id}
-                        type="button"
-                        disabled={blocked}
-                        onClick={() => {
-                          if (!blocked) handleSelectTemplate(t);
-                        }}
                         className={cn(
-                          "text-left p-3 border rounded-lg transition-colors min-w-0",
+                          "flex gap-2 rounded-lg border p-2.5 transition-colors min-w-0",
                           blocked
-                            ? "border-gray-200 bg-gray-50/90 cursor-not-allowed"
+                            ? "border-gray-200 bg-gray-50/90"
                             : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
                         )}
                         data-testid={`template-item-${t.id}`}
                       >
-                        <div className="flex items-center justify-between mb-1 gap-2 min-w-0">
-                          <span className="text-sm font-medium text-gray-900 truncate">{t.name}</span>
-                          <span className="text-[10px] text-gray-400 uppercase shrink-0">{t.language}</span>
-                        </div>
-                        <p className="text-xs text-gray-500 line-clamp-2 break-words">{t.bodyText}</p>
+                        <button
+                          type="button"
+                          disabled={blocked}
+                          onClick={() => {
+                            if (!blocked) handleSelectTemplate(t);
+                          }}
+                          className={cn(
+                            "min-w-0 flex-1 text-left rounded-md px-1 py-0.5 transition-colors",
+                            blocked ? "cursor-not-allowed opacity-90" : "hover:bg-white/60"
+                          )}
+                        >
+                          <div className="flex items-center justify-between mb-1 gap-2 min-w-0">
+                            <span className="text-sm font-medium text-gray-900 truncate">{t.name}</span>
+                            <span className="text-[10px] text-gray-400 uppercase shrink-0">{t.language}</span>
+                          </div>
+                          <p className="text-xs text-gray-500 line-clamp-2 break-words">{t.bodyText}</p>
+                          {blocked ? (
+                            <p className="text-[11px] text-gray-600 mt-2 leading-snug rounded-md border border-gray-200 bg-white/90 px-2.5 py-2">
+                              {INBOX_QUICK_SEND_ADVANCED_COPY}
+                            </p>
+                          ) : null}
+                        </button>
                         {blocked ? (
-                          <p className="text-[11px] text-gray-600 mt-2 leading-snug rounded-md border border-gray-200 bg-white/80 px-2.5 py-2">
-                            {INBOX_QUICK_SEND_ADVANCED_COPY}
-                          </p>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setInboxPreviewTemplate(t);
+                              setInboxTemplatePreviewOpen(true);
+                            }}
+                            className="shrink-0 self-start rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-[11px] font-medium text-gray-700 shadow-sm hover:bg-gray-50"
+                            data-testid={`button-template-preview-${t.id}`}
+                          >
+                            Preview
+                          </button>
                         ) : null}
-                      </button>
+                      </div>
                     );
                   })}
                 {inboxTemplates.filter((t) =>
@@ -2462,6 +2505,38 @@ export function UnifiedInbox() {
               </div>
             )}
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Advanced template: read-only preview from inbox picker */}
+      <Dialog
+        open={inboxTemplatePreviewOpen}
+        onOpenChange={(open) => {
+          setInboxTemplatePreviewOpen(open);
+          if (!open) setInboxPreviewTemplate(null);
+        }}
+      >
+        <DialogContent className="max-w-lg max-h-[92vh] overflow-y-auto" data-testid="dialog-inbox-template-preview">
+          <DialogHeader>
+            <DialogTitle className="pr-8 text-left leading-snug">{inboxPreviewTemplate?.name}</DialogTitle>
+          </DialogHeader>
+          {inboxPreviewTemplate ? (
+            <>
+              <WhatsAppTemplateRichPreview
+                key={inboxPreviewTemplate.id}
+                template={inboxPreviewTemplate}
+                density="comfortable"
+              />
+              <p className="mt-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-xs leading-relaxed text-gray-600">
+                {INBOX_ADVANCED_PREVIEW_MODAL_NOTE}
+              </p>
+              <div className="flex justify-end pt-2">
+                <Button type="button" variant="outline" onClick={() => setInboxTemplatePreviewOpen(false)}>
+                  Close
+                </Button>
+              </div>
+            </>
+          ) : null}
         </DialogContent>
       </Dialog>
 
