@@ -54,7 +54,7 @@ function formatFriendlyMetaTemplateUserMessage(metaErr: unknown): string {
   const msg = String(e?.message || "");
   const code = e?.metaErrorCode;
   if (code === 132012 || msg.includes("132012")) {
-    return "WhatsApp couldn’t send this template. Check variables, media URLs, and that the template still matches your approved structure in Meta.";
+    return "WhatsApp couldn’t send this template. Confirm it still matches your approved version in WhatsApp Manager, then try again.";
   }
   if (!msg) return "WhatsApp couldn’t send this template. Try again or verify the template in WhatsApp Manager.";
   return msg;

@@ -31,6 +31,9 @@ import { LocalizedTemplateSelector } from "@/components/LocalizedTemplateSelecto
 import {
   collectRequiredLibraryTemplatePlaceholders,
   getInboxTemplateSendBlockReason,
+  getLibraryTemplateSendStructureBlockReason,
+  isLibraryPlainTextOnlyTemplate,
+  isLibraryRichTemplateWithNoTextVariables,
   normalizeTemplateVariableMap,
   substituteTemplateVariablesForDisplay,
 } from "@shared/metaTemplateSend";
@@ -318,6 +321,15 @@ export function Templates() {
         (parseInt(a.replace(/\D/g, ""), 10) || 0) - (parseInt(b.replace(/\D/g, ""), 10) || 0)
     );
   }, [selectedTemplate, variableValues]);
+
+  const sendStructureBlockReason = useMemo(() => {
+    if (!selectedTemplate) return null as string | null;
+    return getLibraryTemplateSendStructureBlockReason(
+      selectedTemplate,
+      variableValues,
+      missingPlaceholders
+    );
+  }, [selectedTemplate, variableValues, missingPlaceholders]);
 
   const syncTemplatesMutation = useMutation({
     mutationFn: async () => {
@@ -1027,11 +1039,16 @@ export function Templates() {
                         );
                       })}
                     </div>
-                  ) : (
-                    <p className="text-sm text-gray-500">
-                      This template has no dynamic variables — you can send as-is.
+                  ) : selectedTemplate && isLibraryPlainTextOnlyTemplate(selectedTemplate) ? (
+                    <p className="text-sm text-gray-600">
+                      This template has no text variables to fill. You can send it as-is when you’re ready.
                     </p>
-                  )}
+                  ) : selectedTemplate && isLibraryRichTemplateWithNoTextVariables(selectedTemplate) ? (
+                    <p className="text-sm text-gray-600">
+                      This template has no text variables. Review the approved layout and required media or button
+                      details before sending.
+                    </p>
+                  ) : null}
 
                   {missingPlaceholders.length > 0 ? (
                     <Alert className="border-amber-200 bg-amber-50 text-amber-950">
@@ -1039,6 +1056,12 @@ export function Templates() {
                         Fill every required variable before sending:{" "}
                         <span className="font-mono">{missingPlaceholders.join(", ")}</span>
                       </AlertDescription>
+                    </Alert>
+                  ) : null}
+
+                  {sendStructureBlockReason ? (
+                    <Alert className="border-amber-200 bg-amber-50 text-amber-950">
+                      <AlertDescription className="text-sm">{sendStructureBlockReason}</AlertDescription>
                     </Alert>
                   ) : null}
                 </div>
@@ -1061,7 +1084,11 @@ export function Templates() {
                             : "templates_library",
                       })
                     }
-                    disabled={sendTemplateMutation.isPending || missingPlaceholders.length > 0}
+                    disabled={
+                      sendTemplateMutation.isPending ||
+                      missingPlaceholders.length > 0 ||
+                      !!sendStructureBlockReason
+                    }
                     className="bg-brand-green hover:bg-brand-green/90"
                     data-testid="button-send-template"
                   >

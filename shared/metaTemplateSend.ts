@@ -660,3 +660,64 @@ export function buildMetaLibraryTemplateSendComponents(
 
   return { components: components.length ? components : undefined, shape };
 }
+
+/** Shown in send-review when media (or carousel media) can’t be resolved — keep in sync with UI + precheck. */
+export const LIBRARY_MEDIA_REQUIRED_BEFORE_SEND_MESSAGE =
+  "This template requires media before it can be sent. Please upload or select the required image, video, or document.";
+
+/**
+ * True when the template is plain text (and optional static text header only): no media header,
+ * no carousel, no buttons, and no `{{n}}` placeholders in synced components.
+ */
+export function isLibraryPlainTextOnlyTemplate(template: TemplateRowForMetaSend): boolean {
+  if (collectRequiredLibraryTemplatePlaceholders(template).length > 0) return false;
+  const tt = (template.templateType || "").toLowerCase();
+  if (tt === "carousel") return false;
+  if (Array.isArray(template.carouselCards) && template.carouselCards.length > 0) return false;
+  const ht = (template.headerType || "").toLowerCase();
+  if (["image", "video", "document"].includes(ht)) return false;
+  const buttons = template.buttons;
+  if (Array.isArray(buttons) && buttons.length > 0) return false;
+  return true;
+}
+
+/**
+ * Media, button, or carousel template with no `{{n}}` text variables — user should review layout/payload.
+ */
+export function isLibraryRichTemplateWithNoTextVariables(template: TemplateRowForMetaSend): boolean {
+  if (collectRequiredLibraryTemplatePlaceholders(template).length > 0) return false;
+  return !isLibraryPlainTextOnlyTemplate(template);
+}
+
+function shouldUnifyLibraryErrorToMediaRequiredMessage(
+  template: TemplateRowForMetaSend,
+  buildError: string
+): boolean {
+  if (/\bmissing .+ variable\b/i.test(buildError)) return false;
+  if (buildError.includes("Authentication templates")) return false;
+  const ht = (template.headerType || "").toLowerCase();
+  if (["image", "video", "document"].includes(ht)) return true;
+  const tt = (template.templateType || "").toLowerCase();
+  if (tt === "carousel" || (Array.isArray(template.carouselCards) && template.carouselCards.length > 0)) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * After all required `{{n}}` fields are filled, returns a blocking reason if the Meta payload still cannot be built
+ * (same checks as the send route). Media/carousel media failures map to {@link LIBRARY_MEDIA_REQUIRED_BEFORE_SEND_MESSAGE}.
+ */
+export function getLibraryTemplateSendStructureBlockReason(
+  template: TemplateRowForMetaSend,
+  variableValues: Record<string, string>,
+  missingPlaceholderKeys: string[]
+): string | null {
+  if (missingPlaceholderKeys.length > 0) return null;
+  const built = buildMetaLibraryTemplateSendComponents(template, variableValues);
+  if (!built.error) return null;
+  if (shouldUnifyLibraryErrorToMediaRequiredMessage(template, built.error)) {
+    return LIBRARY_MEDIA_REQUIRED_BEFORE_SEND_MESSAGE;
+  }
+  return built.error;
+}
