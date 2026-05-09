@@ -670,6 +670,7 @@ export const LIBRARY_MEDIA_REQUIRED_BEFORE_SEND_MESSAGE =
  * no carousel, no buttons, and no `{{n}}` placeholders in synced components.
  */
 export function isLibraryPlainTextOnlyTemplate(template: TemplateRowForMetaSend): boolean {
+  if ((template.category || "").toLowerCase() === "authentication") return false;
   if (collectRequiredLibraryTemplatePlaceholders(template).length > 0) return false;
   const tt = (template.templateType || "").toLowerCase();
   if (tt === "carousel") return false;
@@ -685,6 +686,7 @@ export function isLibraryPlainTextOnlyTemplate(template: TemplateRowForMetaSend)
  * Media, button, or carousel template with no `{{n}}` text variables — user should review layout/payload.
  */
 export function isLibraryRichTemplateWithNoTextVariables(template: TemplateRowForMetaSend): boolean {
+  if ((template.category || "").toLowerCase() === "authentication") return false;
   if (collectRequiredLibraryTemplatePlaceholders(template).length > 0) return false;
   return !isLibraryPlainTextOnlyTemplate(template);
 }
@@ -711,13 +713,53 @@ function shouldUnifyLibraryErrorToMediaRequiredMessage(
 export function getLibraryTemplateSendStructureBlockReason(
   template: TemplateRowForMetaSend,
   variableValues: Record<string, string>,
-  missingPlaceholderKeys: string[]
+  missingPlaceholderKeys: string[],
+  optionalHeaderMediaUrl?: string | null
 ): string | null {
   if (missingPlaceholderKeys.length > 0) return null;
-  const built = buildMetaLibraryTemplateSendComponents(template, variableValues);
+  const effective = effectiveTemplateRowForLibrarySend(template, optionalHeaderMediaUrl);
+  const built = buildMetaLibraryTemplateSendComponents(effective, variableValues);
   if (!built.error) return null;
   if (shouldUnifyLibraryErrorToMediaRequiredMessage(template, built.error)) {
     return LIBRARY_MEDIA_REQUIRED_BEFORE_SEND_MESSAGE;
   }
   return built.error;
+}
+
+/**
+ * When the synced template row has an empty or non-URL media header, the send UI may supply
+ * a direct https URL (upload or library pick). Does not override variable-driven `{{n}}` headers.
+ */
+export function effectiveTemplateRowForLibrarySend(
+  template: TemplateRowForMetaSend,
+  optionalHeaderMediaUrl?: string | null
+): TemplateRowForMetaSend {
+  const opt = typeof optionalHeaderMediaUrl === "string" ? optionalHeaderMediaUrl.trim() : "";
+  if (!opt || !/^https?:\/\//i.test(opt)) return template;
+  const ht = (template.headerType || "").toLowerCase();
+  if (!["image", "video", "document"].includes(ht)) return template;
+  const hc = (template.headerContent || "").trim();
+  if (extractSortedPlaceholders(hc).length > 0) return template;
+  if (hc && /^https?:\/\//i.test(hc)) return template;
+  return { ...template, headerContent: opt };
+}
+
+/** Resolved https URL for image/video/document header preview and validation (after optional merge). */
+export function resolveLibraryHeaderMediaDisplayUrl(
+  template: TemplateRowForMetaSend,
+  variableValues: Record<string, string>,
+  optionalHeaderMediaUrl?: string | null
+): string | null {
+  const eff = effectiveTemplateRowForLibrarySend(template, optionalHeaderMediaUrl);
+  const ht = (eff.headerType || "").toLowerCase();
+  if (!["image", "video", "document"].includes(ht)) return null;
+  const hc = (eff.headerContent || "").trim();
+  const vv = normalizeTemplateVariableMap(variableValues);
+  const ph = extractSortedPlaceholders(hc);
+  if (ph.length) {
+    const u = (vv[ph[0]] ?? "").trim();
+    return u || null;
+  }
+  if (/^https?:\/\//i.test(hc)) return hc;
+  return null;
 }

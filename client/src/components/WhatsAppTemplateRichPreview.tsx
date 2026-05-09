@@ -2,6 +2,7 @@ import { useState, type ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight, Image, Video, FileIcon, LayoutGrid } from "lucide-react";
+import { extractSortedPlaceholders } from "@shared/metaTemplateSend";
 
 /** Minimal shape for UI preview only — mirrors template rows from `/api/templates`. */
 export type WhatsAppRichPreviewTemplate = {
@@ -13,6 +14,13 @@ export type WhatsAppRichPreviewTemplate = {
   footerText?: string | null;
   buttons?: unknown[] | null;
   carouselCards?: unknown[] | null;
+};
+
+/** Resolved copy + media for send-review — mirrors what Meta will deliver when variables and assets are set. */
+export type WhatsAppTemplateLivePreview = {
+  bodyText?: string | null;
+  headerTextResolved?: string | null;
+  headerMediaUrl?: string | null;
 };
 
 export function templateCarouselCardCount(template: WhatsAppRichPreviewTemplate): number {
@@ -49,11 +57,16 @@ export function WhatsAppTemplateRichPreview({
   template,
   className,
   density = "comfortable",
+  livePreview,
+  onHeaderMediaError,
 }: {
   template: WhatsAppRichPreviewTemplate;
   className?: string;
   /** Cards use tighter vertical rhythm; modals use more padding. */
   density?: "compact" | "comfortable";
+  livePreview?: WhatsAppTemplateLivePreview | null;
+  /** Fires when image/video/document URL fails to load (broken link or blocked asset). */
+  onHeaderMediaError?: () => void;
 }) {
   const ht = (template.headerType || "").toLowerCase();
   const hc = (template.headerContent || "").trim();
@@ -62,6 +75,19 @@ export function WhatsAppTemplateRichPreview({
   const [carouselIndex, setCarouselIndex] = useState(0);
   const pad = density === "compact" ? "p-2.5" : "p-4";
   const mediaRounded = "rounded-xl border border-gray-200/80 bg-gradient-to-b from-gray-50 to-white overflow-hidden";
+
+  const liveMedia = (livePreview?.headerMediaUrl || "").trim();
+  const displayMediaUrl =
+    liveMedia && /^https?:\/\//i.test(liveMedia)
+      ? liveMedia
+      : ["image", "video", "document"].includes(ht) &&
+          hc &&
+          /^https?:\/\//i.test(hc) &&
+          extractSortedPlaceholders(hc).length === 0
+        ? hc
+        : null;
+
+  const displayBodyText = (livePreview?.bodyText ?? template.bodyText) || "—";
 
   let mediaBlock: ReactNode = null;
 
@@ -110,36 +136,98 @@ export function WhatsAppTemplateRichPreview({
         </div>
       </div>
     );
-  } else if (ht === "image" && /^https?:\/\//i.test(hc)) {
-    mediaBlock = (
-      <div className={mediaRounded}>
-        <img src={hc} alt="" className="max-h-44 w-full object-cover" />
-      </div>
-    );
+  } else if (ht === "image") {
+    if (displayMediaUrl) {
+      mediaBlock = (
+        <div className={mediaRounded}>
+          <img
+            src={displayMediaUrl}
+            alt=""
+            className="max-h-44 w-full object-cover"
+            onError={() => onHeaderMediaError?.()}
+          />
+        </div>
+      );
+    } else {
+      mediaBlock = (
+        <div
+          className={`${mediaRounded} flex min-h-[88px] items-center justify-center gap-2 ${pad} text-sm text-gray-500`}
+        >
+          <Image className="h-8 w-8 shrink-0 text-gray-400" aria-hidden />
+          <span>Image header</span>
+        </div>
+      );
+    }
   } else if (ht === "video") {
-    mediaBlock = (
-      <div
-        className={`${mediaRounded} flex min-h-[88px] items-center justify-center gap-2 ${pad} text-sm text-gray-600`}
-      >
-        <Video className="h-6 w-6 shrink-0 text-gray-500" aria-hidden />
-        <span>{/^https?:\/\//i.test(hc) ? "Video header (preview)" : "Video header"}</span>
-      </div>
-    );
+    if (displayMediaUrl) {
+      mediaBlock = (
+        <div className={mediaRounded}>
+          <video
+            src={displayMediaUrl}
+            className="max-h-44 w-full bg-black object-contain"
+            controls
+            playsInline
+            preload="metadata"
+            onError={() => onHeaderMediaError?.()}
+          />
+        </div>
+      );
+    } else {
+      mediaBlock = (
+        <div
+          className={`${mediaRounded} flex min-h-[88px] items-center justify-center gap-2 ${pad} text-sm text-gray-500`}
+        >
+          <Video className="h-6 w-6 shrink-0 text-gray-400" aria-hidden />
+          <span>Video header</span>
+        </div>
+      );
+    }
   } else if (ht === "document") {
-    mediaBlock = (
-      <div
-        className={`${mediaRounded} flex items-center gap-2 border-dashed ${pad} text-sm text-gray-600`}
-      >
-        <FileIcon className="h-5 w-5 shrink-0" aria-hidden />
-        <span>Document attachment</span>
-      </div>
-    );
-  } else if (ht === "text" && hc && tt !== "carousel") {
-    mediaBlock = (
-      <div className={`rounded-xl border border-gray-200 bg-white ${pad} text-sm font-semibold text-gray-900`}>
-        {hc}
-      </div>
-    );
+    if (displayMediaUrl) {
+      const tail = (() => {
+        try {
+          const u = new URL(displayMediaUrl);
+          const seg = u.pathname.split("/").filter(Boolean).pop();
+          return seg ? decodeURIComponent(seg) : "Document";
+        } catch {
+          return "Document";
+        }
+      })();
+      mediaBlock = (
+        <div className={`${mediaRounded} flex items-center gap-3 ${pad}`}>
+          <FileIcon className="h-8 w-8 shrink-0 text-gray-600" aria-hidden />
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-medium text-gray-900">{tail}</p>
+            <a
+              href={displayMediaUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs text-emerald-700 underline-offset-2 hover:underline"
+            >
+              Open link
+            </a>
+          </div>
+        </div>
+      );
+    } else {
+      mediaBlock = (
+        <div
+          className={`${mediaRounded} flex items-center gap-2 border-dashed ${pad} text-sm text-gray-500`}
+        >
+          <FileIcon className="h-5 w-5 shrink-0 text-gray-400" aria-hidden />
+          <span>Document attachment</span>
+        </div>
+      );
+    }
+  } else if (ht === "text" && tt !== "carousel") {
+    const headerShow = (livePreview?.headerTextResolved ?? hc).trim();
+    if (headerShow) {
+      mediaBlock = (
+        <div className={`rounded-xl border border-gray-200 bg-white ${pad} text-sm font-semibold text-gray-900`}>
+          {headerShow}
+        </div>
+      );
+    }
   }
 
   const buttons = Array.isArray(template.buttons) ? template.buttons : [];
@@ -163,7 +251,7 @@ export function WhatsAppTemplateRichPreview({
       {mediaBlock ? <div className="mb-3 space-y-2">{mediaBlock}</div> : null}
       <div className={`rounded-xl border border-gray-100 bg-gray-50/90 ${density === "compact" ? "p-3" : "p-4"}`}>
         <p className="whitespace-pre-wrap text-sm leading-relaxed text-gray-800">
-          {template.bodyText || "—"}
+          {displayBodyText}
         </p>
         {template.footerText ? (
           <p className="mt-2 text-xs text-gray-500">{template.footerText}</p>

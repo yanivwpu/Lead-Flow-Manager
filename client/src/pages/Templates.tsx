@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 function RealtorMark() {
   return (
@@ -27,6 +27,7 @@ import {
   WhatsAppTemplateRichPreview,
   TemplateShapeIndicator,
 } from "@/components/WhatsAppTemplateRichPreview";
+import { TemplateSendMediaControls } from "@/components/TemplateSendMediaControls";
 import { LocalizedTemplateSelector } from "@/components/LocalizedTemplateSelector";
 import {
   collectRequiredLibraryTemplatePlaceholders,
@@ -35,6 +36,7 @@ import {
   isLibraryPlainTextOnlyTemplate,
   isLibraryRichTemplateWithNoTextVariables,
   normalizeTemplateVariableMap,
+  resolveLibraryHeaderMediaDisplayUrl,
   substituteTemplateVariablesForDisplay,
 } from "@shared/metaTemplateSend";
 import { apiRequest } from "@/lib/queryClient";
@@ -249,6 +251,9 @@ export function Templates() {
   /** Where the send dialog was opened from — Campaign vs Library contact picker (sync with mutate). */
   const templateSendOriginRef = useRef<"library" | "campaign">("library");
   const [sendInlineError, setSendInlineError] = useState<string | null>(null);
+  /** When synced header media is empty (no {{n}}), sent as direct https link — upload / chat picker. */
+  const [optionalHeaderMediaUrl, setOptionalHeaderMediaUrl] = useState<string | null>(null);
+  const [headerMediaBroken, setHeaderMediaBroken] = useState(false);
 
   const templatesEnabled = (subscription?.limits as any)?.templatesEnabled;
 
@@ -327,9 +332,29 @@ export function Templates() {
     return getLibraryTemplateSendStructureBlockReason(
       selectedTemplate,
       variableValues,
-      missingPlaceholders
+      missingPlaceholders,
+      optionalHeaderMediaUrl
     );
-  }, [selectedTemplate, variableValues, missingPlaceholders]);
+  }, [selectedTemplate, variableValues, missingPlaceholders, optionalHeaderMediaUrl]);
+
+  const resolvedHeaderMediaForPreview = useMemo(() => {
+    if (!selectedTemplate) return null as string | null;
+    return resolveLibraryHeaderMediaDisplayUrl(selectedTemplate, variableValues, optionalHeaderMediaUrl);
+  }, [selectedTemplate, variableValues, optionalHeaderMediaUrl]);
+
+  useEffect(() => {
+    setHeaderMediaBroken(false);
+  }, [resolvedHeaderMediaForPreview]);
+
+  const templateLivePreview = useMemo(() => {
+    if (!selectedTemplate) return undefined;
+    const ht = (selectedTemplate.headerType || "").toLowerCase();
+    return {
+      bodyText: resolvedBodyPreview || undefined,
+      headerTextResolved: ht === "text" ? resolvedHeaderPreview || undefined : undefined,
+      headerMediaUrl: resolvedHeaderMediaForPreview ?? undefined,
+    };
+  }, [selectedTemplate, resolvedBodyPreview, resolvedHeaderPreview, resolvedHeaderMediaForPreview]);
 
   const syncTemplatesMutation = useMutation({
     mutationFn: async () => {
@@ -361,17 +386,27 @@ export function Templates() {
       chatId: string;
       variables: Record<string, string>;
       sendSource: "templates_library" | "templates_campaign";
+      optionalHeaderMediaUrl?: string | null;
     }) => {
+      const trimmedOpt = data.optionalHeaderMediaUrl?.trim();
+      const payload = {
+        templateId: data.templateId,
+        chatId: data.chatId,
+        variables: data.variables,
+        sendSource: data.sendSource,
+        ...(trimmedOpt ? { optionalHeaderMediaUrl: trimmedOpt } : {}),
+      };
       console.log(
         `[WA_TEMPLATE_SEND_CLIENT] ${JSON.stringify({
           source: data.sendSource,
           templateId: data.templateId,
           chatId: data.chatId,
           variables: data.variables,
+          optionalHeaderMediaUrl: trimmedOpt ?? null,
           components: "(built server-side from template row + variables)",
         })}`
       );
-      const res = await apiRequest("POST", "/api/templates/send", data);
+      const res = await apiRequest("POST", "/api/templates/send", payload);
       return res.json();
     },
     onSuccess: (data: any) => {
@@ -381,6 +416,7 @@ export function Templates() {
       setSelectedTemplate(null);
       setSelectedChat(null);
       setVariableValues({});
+      setOptionalHeaderMediaUrl(null);
       toast({
         title: "Template sent",
         description: data?.message || "Template message sent successfully.",
@@ -413,6 +449,8 @@ export function Templates() {
     setSelectedTemplate(template);
     setSelectedChat(chat as Chat);
     setVariableValues({});
+    setOptionalHeaderMediaUrl(null);
+    setHeaderMediaBroken(false);
     setSendInlineError(null);
     setContactPickerOpen(false);
     setSendDialogOpen(true);
@@ -875,7 +913,11 @@ export function Templates() {
           open={sendDialogOpen}
           onOpenChange={(open) => {
             setSendDialogOpen(open);
-            if (!open) setSendInlineError(null);
+            if (!open) {
+              setSendInlineError(null);
+              setOptionalHeaderMediaUrl(null);
+              setHeaderMediaBroken(false);
+            }
           }}
         >
           <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
@@ -884,43 +926,30 @@ export function Templates() {
                 <DialogHeader>
                   <DialogTitle>Send Template to {selectedChat.name}</DialogTitle>
                   <DialogDescription>
-                    Review the preview, fill every variable WhatsApp expects, then send.
+                    This preview shows what your customer will receive on WhatsApp. Add what&apos;s missing, then send.
                   </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4 py-4">
-                  <div className="min-w-0 rounded-lg border border-gray-100 bg-gray-50/50 p-2">
+                  <div className="min-w-0 rounded-lg border border-gray-100 bg-gray-50/50 p-3">
                     <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-gray-500">
-                      Approved layout
+                      What your customer will see
                     </p>
                     <WhatsAppTemplateRichPreview
                       key={selectedTemplate.id}
                       template={selectedTemplate}
                       density="comfortable"
+                      livePreview={templateLivePreview}
+                      onHeaderMediaError={() => setHeaderMediaBroken(true)}
                     />
-                  </div>
-
-                  <div className="rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
-                    <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-gray-500">
-                      Message preview
-                    </p>
-                    {(selectedTemplate.headerType || "").toLowerCase() === "text" &&
-                    (selectedTemplate.headerContent || "").trim() ? (
-                      <p className="text-sm font-semibold text-gray-900 border-b border-gray-100 pb-2 mb-2">
-                        {resolvedHeaderPreview || (
-                          <span className="font-normal text-gray-400">Header</span>
-                        )}
-                      </p>
-                    ) : null}
-                    <p className="text-sm text-gray-800 whitespace-pre-wrap break-words">
-                      {resolvedBodyPreview || (
-                        <span className="text-gray-400">—</span>
-                      )}
-                    </p>
                     {previewUnresolvedTokens.length > 0 ? (
-                      <div className="mt-3 flex flex-wrap gap-1.5 items-center">
-                        <span className="text-[11px] text-gray-500">Unresolved in text:</span>
+                      <div className="mt-3 flex flex-wrap gap-1.5 items-center border-t border-gray-100 pt-3">
+                        <span className="text-[11px] text-gray-500">Still needs values:</span>
                         {previewUnresolvedTokens.map((t) => (
-                          <Badge key={t} variant="outline" className="text-[10px] font-mono text-amber-900 border-amber-200 bg-amber-50">
+                          <Badge
+                            key={t}
+                            variant="outline"
+                            className="text-[10px] font-mono text-amber-900 border-amber-200 bg-amber-50"
+                          >
                             {t}
                           </Badge>
                         ))}
@@ -928,12 +957,23 @@ export function Templates() {
                     ) : null}
                   </div>
 
+                  {selectedChat?.id ? (
+                    <TemplateSendMediaControls
+                      template={selectedTemplate}
+                      chatId={selectedChat.id}
+                      variableValues={variableValues}
+                      onVariableValuesChange={setVariableValues}
+                      optionalHeaderMediaUrl={optionalHeaderMediaUrl}
+                      onOptionalHeaderMediaUrlChange={setOptionalHeaderMediaUrl}
+                    />
+                  ) : null}
+
                   {requiredPlaceholders.length > 0 ? (
                     <div className="space-y-3">
                       <div className="flex flex-col gap-0.5">
                         <Label>Variables</Label>
                         <p className="text-xs text-gray-500">
-                          Required placeholders from your synced Meta template (body, header, buttons, carousel).
+                          Required fields from your approved template (body, header, buttons, or carousel cards).
                         </p>
                       </div>
                       {requiredPlaceholders.map((ph) => {
@@ -1064,6 +1104,14 @@ export function Templates() {
                       <AlertDescription className="text-sm">{sendStructureBlockReason}</AlertDescription>
                     </Alert>
                   ) : null}
+
+                  {headerMediaBroken && resolvedHeaderMediaForPreview ? (
+                    <Alert variant="destructive">
+                      <AlertDescription className="text-sm">
+                        This preview couldn&apos;t load your image or video. Try another file or link.
+                      </AlertDescription>
+                    </Alert>
+                  ) : null}
                 </div>
                 {sendInlineError ? (
                   <Alert variant="destructive" className="border-amber-200 bg-amber-50 text-amber-950 [&>svg]:text-amber-700">
@@ -1082,12 +1130,14 @@ export function Templates() {
                           templateSendOriginRef.current === "campaign"
                             ? "templates_campaign"
                             : "templates_library",
+                        optionalHeaderMediaUrl,
                       })
                     }
                     disabled={
                       sendTemplateMutation.isPending ||
                       missingPlaceholders.length > 0 ||
-                      !!sendStructureBlockReason
+                      !!sendStructureBlockReason ||
+                      headerMediaBroken
                     }
                     className="bg-brand-green hover:bg-brand-green/90"
                     data-testid="button-send-template"
