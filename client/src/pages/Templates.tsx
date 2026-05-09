@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactElement } from "react";
 
 function RealtorMark() {
   return (
@@ -95,6 +95,78 @@ function libraryQuickSendMeta(template: MessageTemplate) {
     carouselCards: template.carouselCards,
     category: template.category,
   });
+}
+
+/** Extra preview row for advanced (non–quick-send) templates in the library list. */
+function TemplateLibraryAdvancedPreview({ template }: { template: MessageTemplate }) {
+  const ht = (template.headerType || "").toLowerCase();
+  const hc = (template.headerContent || "").trim();
+  const tt = (template.templateType || "").toLowerCase();
+  const chunks: ReactElement[] = [];
+
+  if (tt === "carousel" && Array.isArray(template.carouselCards) && template.carouselCards.length > 0) {
+    const card = template.carouselCards[0] as { headerUrl?: string };
+    if (card?.headerUrl) {
+      chunks.push(
+        <div key="carousel" className="rounded-lg overflow-hidden border border-gray-200 bg-gray-50">
+          <img src={card.headerUrl} alt="" className="w-full h-24 object-cover" />
+        </div>
+      );
+    }
+  }
+
+  if (ht === "image" && /^https?:\/\//i.test(hc)) {
+    chunks.push(
+      <div key="hdr-img" className="rounded-lg overflow-hidden border border-gray-200">
+        <img src={hc} alt="" className="w-full h-24 object-cover" />
+      </div>
+    );
+  } else if (ht === "video") {
+    chunks.push(
+      <div
+        key="hdr-vid"
+        className="rounded-lg border border-gray-200 bg-gray-100 flex items-center justify-center h-20 gap-2 text-xs text-gray-600"
+      >
+        <Video className="h-5 w-5 shrink-0" />
+        <span>{/^https?:\/\//i.test(hc) ? "Video header" : "Video header (approved template)"}</span>
+      </div>
+    );
+  } else if (ht === "document") {
+    chunks.push(
+      <div
+        key="hdr-doc"
+        className="rounded-lg border border-dashed border-gray-300 bg-gray-50 flex items-center gap-2 px-3 py-2 text-xs text-gray-600"
+      >
+        <FileIcon className="h-4 w-4 shrink-0" />
+        <span>Document header</span>
+      </div>
+    );
+  } else if (ht === "text" && hc && tt !== "carousel") {
+    chunks.push(
+      <p key="hdr-txt" className="text-xs font-semibold text-gray-900 border border-gray-200 rounded-md px-2 py-1.5 bg-white">
+        {hc}
+      </p>
+    );
+  }
+
+  if (Array.isArray(template.buttons) && template.buttons.length > 0) {
+    chunks.push(
+      <div key="btns" className="flex flex-wrap gap-1.5">
+        {template.buttons.map((btn: Record<string, unknown>, i: number) => (
+          <Badge
+            key={i}
+            variant="outline"
+            className="text-[10px] border-orange-200/90 bg-orange-50/90 text-orange-900 font-normal max-w-full truncate"
+          >
+            {String(btn.text ?? btn.title ?? `Button ${i + 1}`)}
+          </Badge>
+        ))}
+      </div>
+    );
+  }
+
+  if (chunks.length === 0) return null;
+  return <div className="space-y-2">{chunks}</div>;
 }
 
 const STATUS_ICONS: Record<string, any> = {
@@ -527,27 +599,29 @@ export function Templates() {
                   return (
                     <Card key={template.id} className="overflow-hidden border-gray-200/80 shadow-sm min-w-0" data-testid={`template-card-${template.id}`}>
                       <CardHeader className="pb-2 pt-4 px-4 space-y-3">
-                        <div className="flex items-start justify-between gap-2 min-w-0">
-                          <div className="flex items-start gap-2 min-w-0">
+                        <div className="flex items-start justify-between gap-3 min-w-0">
+                          <div className="flex items-start gap-2 min-w-0 flex-1">
                             <div className="h-8 w-8 rounded-lg bg-gray-100 flex items-center justify-center shrink-0">
                               <TypeIcon className="h-4 w-4 text-gray-600" />
                             </div>
-                            <div className="min-w-0">
-                              <CardTitle className="text-base leading-snug break-words">{template.name}</CardTitle>
-                              <div className="flex items-center gap-1.5 mt-1">
-                                <StatusIcon className={`h-3.5 w-3.5 shrink-0 ${statusColor}`} />
-                                <span className={`text-xs capitalize ${statusColor}`}>{template.status}</span>
-                              </div>
-                            </div>
+                            <CardTitle className="text-base leading-snug break-words pt-0.5">{template.name}</CardTitle>
+                          </div>
+                          <div className="flex items-center gap-1 shrink-0 pt-0.5">
+                            {approved ? (
+                              <>
+                                <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0" aria-hidden />
+                                <span className="text-xs font-medium text-green-700 whitespace-nowrap">Approved</span>
+                              </>
+                            ) : (
+                              <>
+                                <StatusIcon className={`h-3.5 w-3.5 shrink-0 ${statusColor}`} aria-hidden />
+                                <span className={`text-xs capitalize whitespace-nowrap ${statusColor}`}>{template.status}</span>
+                              </>
+                            )}
                           </div>
                         </div>
 
                         <div className="flex flex-wrap gap-1.5">
-                          {approved ? (
-                            <Badge variant="outline" className="text-[10px] font-medium border-emerald-200 bg-emerald-50/90 text-emerald-800">
-                              WhatsApp approved
-                            </Badge>
-                          ) : null}
                           <Badge variant="outline" className="text-[10px] font-normal border-gray-200 bg-white text-gray-600">
                             {syncMeta ? "Synced from Meta" : "Synced from Twilio"}
                           </Badge>
@@ -561,7 +635,7 @@ export function Templates() {
                             variant="outline"
                             className={
                               qs.blocked
-                                ? "text-[10px] font-normal border-gray-200 bg-gray-50 text-gray-700"
+                                ? "text-[10px] font-normal border-orange-200 bg-orange-50 text-orange-900"
                                 : "text-[10px] font-normal border-emerald-200 bg-emerald-50/80 text-emerald-900"
                             }
                           >
@@ -575,6 +649,11 @@ export function Templates() {
                         </div>
                       </CardHeader>
                       <CardContent className="px-4 pb-4 pt-0">
+                        {qs.blocked ? (
+                          <div className="mb-3 min-w-0">
+                            <TemplateLibraryAdvancedPreview template={template} />
+                          </div>
+                        ) : null}
                         <div className="bg-gray-50 rounded-lg p-3 mb-3 max-h-28 md:max-h-32 overflow-y-auto overscroll-contain">
                           <p className="text-sm text-gray-700 whitespace-pre-wrap line-clamp-4 break-words">
                             {template.bodyText || "No body text"}

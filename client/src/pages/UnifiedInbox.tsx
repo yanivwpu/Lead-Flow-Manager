@@ -1361,6 +1361,17 @@ export function UnifiedInbox() {
 
   const handleSendTemplateFromInbox = () => {
     if (!selectedInboxTemplate || !selectedContactId) return;
+    const { blocked } = getInboxTemplateSendBlockReason({
+      name: selectedInboxTemplate.name,
+      bodyText: selectedInboxTemplate.bodyText,
+      headerType: selectedInboxTemplate.headerType,
+      headerContent: selectedInboxTemplate.headerContent,
+      buttons: selectedInboxTemplate.buttons,
+      templateType: selectedInboxTemplate.templateType,
+      carouselCards: selectedInboxTemplate.carouselCards,
+      category: selectedInboxTemplate.category,
+    });
+    if (blocked) return;
     sendTemplateFromInboxMutation.mutate({
       templateId: selectedInboxTemplate.id,
       contactId: selectedContactId,
@@ -1368,6 +1379,20 @@ export function UnifiedInbox() {
       templateName: selectedInboxTemplate.name,
     });
   };
+
+  const inboxQuickSendBlocked = useMemo(() => {
+    if (!selectedInboxTemplate) return false;
+    return getInboxTemplateSendBlockReason({
+      name: selectedInboxTemplate.name,
+      bodyText: selectedInboxTemplate.bodyText,
+      headerType: selectedInboxTemplate.headerType,
+      headerContent: selectedInboxTemplate.headerContent,
+      buttons: selectedInboxTemplate.buttons,
+      templateType: selectedInboxTemplate.templateType,
+      carouselCards: selectedInboxTemplate.carouselCards,
+      category: selectedInboxTemplate.category,
+    }).blocked;
+  }, [selectedInboxTemplate]);
 
   // --- Filtering ---
 
@@ -2406,7 +2431,6 @@ export function UnifiedInbox() {
                         onClick={() => {
                           if (!blocked) handleSelectTemplate(t);
                         }}
-                        title={blocked ? INBOX_QUICK_SEND_ADVANCED_COPY : undefined}
                         className={cn(
                           "text-left p-3 border rounded-lg transition-colors min-w-0",
                           blocked
@@ -2458,7 +2482,11 @@ export function UnifiedInbox() {
               <div className="bg-gray-50 rounded-lg p-3 text-sm text-gray-700 whitespace-pre-wrap border border-gray-200">
                 {selectedInboxTemplate.bodyText}
               </div>
-              {(selectedInboxTemplate.variables || []).length > 0 ? (
+              {inboxQuickSendBlocked ? (
+                <p className="text-xs text-gray-600 rounded-md border border-gray-200 bg-gray-50 px-3 py-2 leading-snug">
+                  {INBOX_QUICK_SEND_ADVANCED_COPY}
+                </p>
+              ) : (selectedInboxTemplate.variables || []).length > 0 ? (
                 <div className="flex flex-col gap-3">
                   <p className="text-xs text-gray-500 font-medium">Fill in the variables:</p>
                   {(selectedInboxTemplate.variables || [])
@@ -2493,12 +2521,18 @@ export function UnifiedInbox() {
                 </Button>
                 <Button
                   onClick={handleSendTemplateFromInbox}
-                  disabled={sendTemplateFromInboxMutation.isPending}
-                  className="bg-gray-900 hover:bg-gray-800 text-white"
+                  disabled={sendTemplateFromInboxMutation.isPending || inboxQuickSendBlocked}
+                  className={cn(
+                    !inboxQuickSendBlocked &&
+                      "bg-brand-green hover:bg-brand-green/90 text-white"
+                  )}
+                  variant={inboxQuickSendBlocked ? "secondary" : "default"}
                   data-testid="button-template-send"
                 >
                   {sendTemplateFromInboxMutation.isPending ? (
                     <><Loader2 className="w-4 h-4 animate-spin mr-2" />Sending…</>
+                  ) : inboxQuickSendBlocked ? (
+                    "Not available in quick-send"
                   ) : (
                     <>
                       <Send className="w-4 h-4 mr-2" />
