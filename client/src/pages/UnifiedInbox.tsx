@@ -1,5 +1,6 @@
 import { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback } from "react";
 import { apiRequest } from "@/lib/queryClient";
+import { WHATSAPP_FREE_FORM_BUFFER_MS } from "@shared/conversationReplyWindow";
 import { getInboxTemplateSendBlockReason } from "@shared/metaTemplateSend";
 import { Link, useRoute, useLocation } from "wouter";
 import { useAuth } from "@/lib/auth-context";
@@ -668,7 +669,7 @@ export function UnifiedInbox() {
 
     const windowExpiresAt = windowStatus.windowExpiresAt;
     const windowExpiresAtMs = new Date(windowExpiresAt).getTime();
-    const bufferMs = activeChannel === 'whatsapp' ? 60 * 60 * 1000 : 0;
+    const bufferMs = activeChannel === 'whatsapp' ? WHATSAPP_FREE_FORM_BUFFER_MS : 0;
     const effectiveDeadlineMs = windowExpiresAtMs - bufferMs;
     const remainingMs = effectiveDeadlineMs - replyWindowNow;
 

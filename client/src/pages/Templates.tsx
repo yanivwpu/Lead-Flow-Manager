@@ -815,7 +815,7 @@ export function Templates() {
                   Contacts ready to message
                 </CardTitle>
                 <CardDescription className="text-sm">
-                  These contacts haven&apos;t messaged in over 24 hours. Send them an approved template to re-engage.
+                  Contacts whose WhatsApp free-form reply window has expired — same rules as the inbox reply-window status. Send an approved template to re-engage.
                 </CardDescription>
               </CardHeader>
               <CardContent className="px-4 pb-4">
@@ -827,7 +827,9 @@ export function Templates() {
                   <div className="text-center py-8 text-gray-500">
                     <Users className="h-10 w-10 mx-auto mb-3 text-gray-300" />
                     <p className="font-medium">No contacts ready for retargeting</p>
-                    <p className="text-sm">All your contacts are within the 24-hour messaging window</p>
+                    <p className="text-sm">
+                      No contacts currently match retarget criteria, or everyone reachable is still inside the free-form window.
+                    </p>
                   </div>
                 ) : (
                   <div className="space-y-2 md:space-y-3 max-h-[280px] md:max-h-[320px] overflow-y-auto pr-1 md:pr-2 overscroll-contain" style={{ scrollbarWidth: 'thin' }}>

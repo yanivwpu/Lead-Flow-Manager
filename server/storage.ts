@@ -48,6 +48,7 @@ import {
   templates as templatesTable, templateEntitlements, realtorOnboardingSubmissions,
   templateInstalls, templateAssets, userTemplateData, ghlEventDedup
 } from "@shared/schema";
+import { computeConversationReplyWindowStatus } from "@shared/conversationReplyWindow";
 import { db } from "../drizzle/db";
 import { users, chats, registeredPhones, messageUsage, conversationWindows, teamMembers, workflows, workflowExecutions, recurringReminders, webhooks, webhookDeliveries, integrations, messageTemplates, templateSends, dripCampaigns, dripSteps, dripEnrollments, dripSends, chatbotFlows, chatbotSessions, salespeople, demoBookings, salesConversions, adminSettings, contacts, conversations, messages, activityEvents, channelSettings, supportTickets, partners, commissions, agreementAcceptances, contactNotes, appointments, flowJobs, type InsertConversationWindow, type ConversationWindow } from "@shared/schema";
 import { eq, and, lte, sql, isNotNull, isNull, asc, desc, gte, sum, gt, or, like, ilike, ne } from "drizzle-orm";
@@ -995,17 +996,98 @@ export class DbStorage implements IStorage {
     await db.update(templateSends).set(updates).where(eq(templateSends.id, id));
   }
 
-  // Get chats outside the 24-hour window (eligible for template messaging)
+  /**
+   * Legacy chat rows for WhatsApp contacts whose **unified conversation** reply window matches
+   * inbox “Reply window expired” / approved-template reopen (same rules as `computeConversationReplyWindowStatus`).
+   */
   async getRetargetableChats(userId: string, limit: number = 5000): Promise<Chat[]> {
-    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    return await db.select().from(chats)
-      .where(and(
-        eq(chats.userId, userId),
-        isNotNull(chats.whatsappPhone),
-        lte(chats.updatedAt, twentyFourHoursAgo)
-      ))
-      .orderBy(desc(chats.updatedAt))
-      .limit(limit);
+    const now = new Date();
+
+    const convRows = await db
+      .select({ conv: conversations, contact: contacts })
+      .from(conversations)
+      .innerJoin(contacts, eq(conversations.contactId, contacts.id))
+      .where(and(eq(conversations.userId, userId), eq(conversations.channel, "whatsapp")))
+      .limit(Math.min(10000, Math.max(1, limit * 4)));
+
+    const allLegacyChats = await this.getChats(userId, 10000);
+    const legacyByDigits = new Map<string, Chat>();
+    for (const c of allLegacyChats) {
+      const d = (c.whatsappPhone || "").replace(/\D/g, "");
+      if (d && !legacyByDigits.has(d)) legacyByDigits.set(d, c);
+    }
+
+    const eligibleChats: Chat[] = [];
+    const seenChatIds = new Set<string>();
+
+    for (const { conv, contact } of convRows) {
+      const st = computeConversationReplyWindowStatus({
+        channel: conv.channel,
+        windowExpiresAt: conv.windowExpiresAt,
+        now,
+      });
+
+      const lastInboundTs =
+        conv.lastMessageDirection === "inbound" && conv.lastMessageAt
+          ? new Date(conv.lastMessageAt).toISOString()
+          : null;
+
+      console.log(
+        `[RETARGET_ELIGIBILITY] ${JSON.stringify({
+          phase: "evaluate",
+          conversationId: conv.id,
+          contactId: contact.id,
+          channel: conv.channel,
+          windowExpiresAt: conv.windowExpiresAt ? new Date(conv.windowExpiresAt).toISOString() : null,
+          effectiveFreeFormDeadline: st.effectiveFreeFormDeadline?.toISOString() ?? null,
+          freeFormActive: st.freeFormActive,
+          templateReopenEligible: st.templateReopenEligible,
+          lastInboundTimestamp: lastInboundTs,
+          lastMessageAt: conv.lastMessageAt ? new Date(conv.lastMessageAt).toISOString() : null,
+          lastMessageDirection: conv.lastMessageDirection ?? null,
+          provider: "unified_conversation",
+        })}`
+      );
+
+      if (!st.templateReopenEligible) continue;
+
+      const phoneKey = (contact.whatsappId || contact.phone || "").replace(/\D/g, "");
+      if (!phoneKey) {
+        console.log(
+          `[RETARGET_ELIGIBILITY] ${JSON.stringify({
+            phase: "skip",
+            reason: "no_whatsapp_phone_on_contact",
+            conversationId: conv.id,
+          })}`
+        );
+        continue;
+      }
+
+      const legacy = legacyByDigits.get(phoneKey);
+      if (!legacy) {
+        console.log(
+          `[RETARGET_ELIGIBILITY] ${JSON.stringify({
+            phase: "skip",
+            reason: "no_legacy_chat_row",
+            conversationId: conv.id,
+            phoneTail: phoneKey.length > 4 ? phoneKey.slice(-4) : phoneKey,
+          })}`
+        );
+        continue;
+      }
+
+      if (seenChatIds.has(legacy.id)) continue;
+      seenChatIds.add(legacy.id);
+      eligibleChats.push(legacy);
+    }
+
+    eligibleChats.sort((a, b) => {
+      const ta = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
+      const tb = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
+      return tb - ta;
+    });
+
+    return eligibleChats.slice(0, limit);
   }
 
   // Drip Campaign methods

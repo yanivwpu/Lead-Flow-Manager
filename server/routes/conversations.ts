@@ -1,4 +1,5 @@
 import type { Express } from "express";
+import { computeConversationReplyWindowStatus } from "@shared/conversationReplyWindow";
 import { storage } from "../storage";
 
 /** Include Postgres `code` / `detail` when present (node-postgres / Drizzle). */
@@ -468,23 +469,14 @@ export function registerConversationRoutes(app: Express): void {
       }
 
       const now = new Date();
-      const windowExpiresAt = conversation.windowExpiresAt
-        ? new Date(conversation.windowExpiresAt)
-        : null;
-      const WHATSAPP_CSW_BUFFER_MS = 60 * 60 * 1000;
-      let isActive: boolean;
-      let hoursRemaining: number;
-      if (conversation.channel === 'whatsapp' && windowExpiresAt) {
-        const freeFormDeadline = new Date(windowExpiresAt.getTime() - WHATSAPP_CSW_BUFFER_MS);
-        isActive = freeFormDeadline > now;
-        hoursRemaining = Math.max(0, (freeFormDeadline.getTime() - now.getTime()) / (1000 * 60 * 60));
-      } else if (windowExpiresAt) {
-        isActive = windowExpiresAt > now;
-        hoursRemaining = Math.max(0, (windowExpiresAt.getTime() - now.getTime()) / (1000 * 60 * 60));
-      } else {
-        isActive = false;
-        hoursRemaining = 0;
-      }
+      const st = computeConversationReplyWindowStatus({
+        channel: conversation.channel,
+        windowExpiresAt: conversation.windowExpiresAt,
+        now,
+      });
+      const windowExpiresAt = st.windowExpiresAt;
+      const isActive = st.freeFormActive;
+      const hoursRemaining = st.hoursRemainingFreeForm;
       const isExpiringSoon =
         conversation.channel === 'whatsapp'
           ? hoursRemaining > 0 && hoursRemaining < 2

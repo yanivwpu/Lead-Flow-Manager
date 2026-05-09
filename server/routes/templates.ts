@@ -659,6 +659,14 @@ export function registerTemplateRoutes(app: Express): void {
 
       const chats = await storage.getRetargetableChats(req.user.id);
 
+      console.log(
+        `[RETARGET_ELIGIBILITY] ${JSON.stringify({
+          phase: "response_summary",
+          userId: req.user.id,
+          eligibleLegacyChatCount: chats.length,
+        })}`
+      );
+
       const now = Date.now();
       const retargetableChats = chats.map((chat) => ({
         id: chat.id,
