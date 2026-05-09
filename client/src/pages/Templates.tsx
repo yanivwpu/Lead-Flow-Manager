@@ -105,10 +105,6 @@ function libraryQuickSendMeta(template: MessageTemplate) {
 const ADVANCED_QUICK_SEND_NOTE =
   "This template includes media, buttons, or a carousel. It can't be sent from Inbox quick-send or campaign shortcuts — use Continue to send and fill any required variables.";
 
-/** Softer than default dialog overlay (`bg-black/80`) — Message Templates modals only. */
-const WHATSAPP_TEMPLATE_DIALOG_OVERLAY =
-  "bg-slate-950/40 backdrop-blur-[2px]";
-
 /** Media / rich template chip — calm indigo tint (not warning orange). */
 const MEDIA_TEMPLATE_KIND_BADGE_CLASS =
   "text-[9px] leading-tight px-1.5 py-0.5 font-normal border border-indigo-100/90 bg-indigo-50/45 text-indigo-900/65 shadow-none";
@@ -728,11 +724,7 @@ export function Templates() {
 
         {/* Contact Picker Dialog */}
         <Dialog open={contactPickerOpen} onOpenChange={setContactPickerOpen}>
-          <DialogContent
-            className="max-w-md"
-            overlayClassName={WHATSAPP_TEMPLATE_DIALOG_OVERLAY}
-            data-testid="dialog-contact-picker"
-          >
+          <DialogContent className="max-w-md" data-testid="dialog-contact-picker">
             <DialogHeader>
               <DialogTitle>Select a Contact</DialogTitle>
               <DialogDescription>
@@ -793,7 +785,7 @@ export function Templates() {
             if (!open) setSendInlineError(null);
           }}
         >
-          <DialogContent className="max-w-lg" overlayClassName={WHATSAPP_TEMPLATE_DIALOG_OVERLAY}>
+          <DialogContent className="max-w-lg">
             {selectedTemplate && selectedChat && (
               <>
                 <DialogHeader>
@@ -872,7 +864,6 @@ export function Templates() {
         >
           <DialogContent
             className="max-w-lg max-h-[92vh] overflow-y-auto gap-0 sm:max-w-lg"
-            overlayClassName={WHATSAPP_TEMPLATE_DIALOG_OVERLAY}
             data-testid="dialog-library-template-preview"
           >
             {libraryModalTemplate ? (

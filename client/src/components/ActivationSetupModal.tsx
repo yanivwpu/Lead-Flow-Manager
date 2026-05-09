@@ -29,7 +29,6 @@ export function ActivationSetupModal({ open, onOpenChange, onChannelCta }: Activ
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         dir={dir}
-        overlayClassName="bg-black/30"
         className="sm:max-w-md gap-4 p-6 sm:p-8"
         data-testid="modal-activation-setup"
       >

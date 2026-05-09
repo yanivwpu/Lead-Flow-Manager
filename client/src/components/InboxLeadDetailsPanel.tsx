@@ -36,6 +36,7 @@ import {
 } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import { MODAL_OVERLAY_BACKDROP } from "@/lib/modalOverlay";
 import { format, parseISO } from "date-fns";
 import { TAG_COLORS, PIPELINE_STAGES, RGE_OPTIONAL_PIPELINE_STAGES } from "@/lib/data";
 import { CONVERSATION_STATUS_ROWS, getConversationStatusRow } from "@/lib/conversationStatusUi";
@@ -263,7 +264,10 @@ function AddNoteModal({ contactId, contactNotesList, currentUserId, teamMembers,
 
   return (
     <div
-      className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 animate-in fade-in duration-150"
+      className={cn(
+        "fixed inset-0 z-50 flex items-center justify-center animate-in fade-in duration-150",
+        MODAL_OVERLAY_BACKDROP
+      )}
       onClick={onClose}
       data-testid="modal-overlay-add-note"
     >
@@ -415,7 +419,10 @@ function EditNoteModal({ contactId, note, onSave, onDelete, onClose }: EditNoteM
 
   return (
     <div
-      className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 animate-in fade-in duration-150"
+      className={cn(
+        "fixed inset-0 z-50 flex items-center justify-center animate-in fade-in duration-150",
+        MODAL_OVERLAY_BACKDROP
+      )}
       onClick={onClose}
       data-testid="modal-overlay-edit-note"
     >

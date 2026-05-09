@@ -29,6 +29,7 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
+import { MODAL_OVERLAY_BACKDROP } from "@/lib/modalOverlay";
 import { useSubscription } from "@/lib/subscription-context";
 import { UpgradeModal, type UpgradeReason } from "@/components/UpgradeModal";
 
@@ -1855,7 +1856,10 @@ export function Workflows() {
       {/* ── Enroll Dialog (small, kept as dialog since it's a simple picker) ── */}
       {isEnrollDialogOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/40" onClick={() => setIsEnrollDialogOpen(false)} />
+          <div
+            className={cn("absolute inset-0", MODAL_OVERLAY_BACKDROP)}
+            onClick={() => setIsEnrollDialogOpen(false)}
+          />
           <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-sm mx-4 p-6">
             <div className="mb-4">
               <h3 className="text-base font-semibold text-gray-900">Enroll Contact</h3>
