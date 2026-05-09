@@ -158,6 +158,13 @@ function isClientRenderableMediaUrl(url: string): boolean {
   }
 }
 
+function inferTemplateMediaKindFromUrl(url: string): "image" | "video" | "document" {
+  const pathOnly = (url.split("?")[0] ?? "").toLowerCase();
+  if (/\.(mp4|webm)$/i.test(pathOnly)) return "video";
+  if (/\.pdf$/i.test(pathOnly)) return "document";
+  return "image";
+}
+
 interface InboxItem {
   contact: Contact;
   conversation: Conversation | null;
@@ -1994,7 +2001,7 @@ export function UnifiedInbox() {
                               const sep = raw.indexOf("\n\n");
                               const headerLine =
                                 sep >= 0 ? raw.slice(0, sep).trim() : raw.trim();
-                              const bodyPart = sep >= 0 ? raw.slice(sep + 2).trim() : "";
+                              let bodyPart = sep >= 0 ? raw.slice(sep + 2).trim() : "";
                               const tv = msg.templateVariables;
                               const lang =
                                 tv && typeof tv.templateLanguage === "string"
@@ -2011,8 +2018,125 @@ export function UnifiedInbox() {
                               const langBadge = lang
                                 ? lang.replace(/-/g, "_").toUpperCase()
                                 : null;
+
+                              const tvHeaderUrl =
+                                tv && typeof tv.headerMediaUrl === "string"
+                                  ? tv.headerMediaUrl.trim()
+                                  : "";
+                              const rowMedia = msg.mediaUrl?.trim() || "";
+                              let effectiveMediaUrl = tvHeaderUrl || rowMedia;
+
+                              if (effectiveMediaUrl && bodyPart.startsWith(effectiveMediaUrl)) {
+                                bodyPart = bodyPart
+                                  .slice(effectiveMediaUrl.length)
+                                  .replace(/^\n+/, "")
+                                  .trim();
+                              } else if (!effectiveMediaUrl && bodyPart) {
+                                const firstLine = bodyPart.split("\n")[0]?.trim() ?? "";
+                                if (
+                                  /^https?:\/\//i.test(firstLine) &&
+                                  !/\s/.test(firstLine)
+                                ) {
+                                  effectiveMediaUrl = firstLine;
+                                  bodyPart = bodyPart
+                                    .slice(firstLine.length)
+                                    .replace(/^\n+/, "")
+                                    .trim();
+                                }
+                              }
+
+                              const headerTypeTv =
+                                tv && typeof tv.headerType === "string"
+                                  ? tv.headerType.toLowerCase()
+                                  : "";
+                              const mediaKind =
+                                headerTypeTv === "image" ||
+                                headerTypeTv === "video" ||
+                                headerTypeTv === "document"
+                                  ? headerTypeTv
+                                  : effectiveMediaUrl
+                                    ? inferTemplateMediaKindFromUrl(effectiveMediaUrl)
+                                    : "";
+
+                              const isOptimisticTemplate = msg.id.startsWith("optimistic-");
+                              const tplUseDirect = !!(
+                                effectiveMediaUrl &&
+                                (isOptimisticTemplate ||
+                                  effectiveMediaUrl.startsWith("blob:") ||
+                                  effectiveMediaUrl.startsWith("/") ||
+                                  isClientRenderableMediaUrl(effectiveMediaUrl))
+                              );
+                              const templateProxyUrl = `/api/media/proxy?messageId=${encodeURIComponent(msg.id)}`;
+                              const templateMediaDisplayUrl = tplUseDirect
+                                ? effectiveMediaUrl
+                                : templateProxyUrl;
+
+                              let docLabel = msg.mediaFilename?.trim() || "";
+                              if (!docLabel && effectiveMediaUrl && mediaKind === "document") {
+                                try {
+                                  const seg =
+                                    new URL(effectiveMediaUrl).pathname.split("/").filter(Boolean).pop() ||
+                                    "";
+                                  docLabel = seg ? decodeURIComponent(seg) : "Document";
+                                } catch {
+                                  docLabel = "Document";
+                                }
+                              }
+
                               return (
                                 <div className="space-y-1.5 rounded-xl border border-emerald-100/90 bg-emerald-50/40 px-3 py-2 leading-snug">
+                                  {effectiveMediaUrl && mediaKind === "image" ? (
+                                    <div className="-mx-0.5">
+                                      <img
+                                        src={templateMediaDisplayUrl}
+                                        alt=""
+                                        className="max-w-full cursor-pointer rounded-md max-h-64 object-cover"
+                                        onClick={() =>
+                                          window.open(
+                                            tplUseDirect ? effectiveMediaUrl : templateProxyUrl,
+                                            "_blank"
+                                          )
+                                        }
+                                        onLoad={() => {
+                                          if (shouldPinRef.current || justSentRef.current) {
+                                            scrollToBottom();
+                                          }
+                                          justSentRef.current = false;
+                                        }}
+                                        onError={(e) => {
+                                          justSentRef.current = false;
+                                          if (!isOptimisticTemplate) {
+                                            (e.currentTarget.parentElement!).innerHTML =
+                                              '<span class="text-xs text-gray-400 italic">Media no longer available</span>';
+                                          }
+                                        }}
+                                      />
+                                    </div>
+                                  ) : null}
+                                  {effectiveMediaUrl && mediaKind === "video" ? (
+                                    <video
+                                      src={templateMediaDisplayUrl}
+                                      controls
+                                      className="max-w-full rounded-md max-h-64 bg-black"
+                                      onLoadedMetadata={() => {
+                                        if (shouldPinRef.current || justSentRef.current) {
+                                          scrollToBottom();
+                                        }
+                                        justSentRef.current = false;
+                                      }}
+                                    />
+                                  ) : null}
+                                  {effectiveMediaUrl && mediaKind === "document" ? (
+                                    <a
+                                      href={templateMediaDisplayUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="flex items-center gap-2 text-sm text-blue-700 underline underline-offset-2"
+                                    >
+                                      <FileText className="h-4 w-4 shrink-0" />
+                                      <span className="truncate">{docLabel || "Document"}</span>
+                                    </a>
+                                  ) : null}
                                   <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                                     <span className="text-[10px] font-semibold uppercase tracking-wide text-emerald-900/85">
                                       WhatsApp template
@@ -2023,7 +2147,9 @@ export function UnifiedInbox() {
                                       </span>
                                     ) : null}
                                   </div>
-                                  <p className="text-sm font-semibold text-gray-900">{tmplName || "Template"}</p>
+                                  <p className="text-sm font-semibold text-gray-900">
+                                    {tmplName || "Template"}
+                                  </p>
                                   {langBadge ? (
                                     <p className="text-[10px] text-gray-500">{langBadge}</p>
                                   ) : null}

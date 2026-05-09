@@ -250,6 +250,10 @@ export function Templates() {
   const [contactSearch, setContactSearch] = useState("");
   /** Where the send dialog was opened from — Campaign vs Library contact picker (sync with mutate). */
   const templateSendOriginRef = useRef<"library" | "campaign">("library");
+  /** After opening send dialog, apply last-used header media once defaults load. */
+  const pendingTemplatePrefillRef = useRef(false);
+  /** User changed media in the dialog — do not apply stale defaults over their choice. */
+  const suppressTemplatePrefillRef = useRef(false);
   const [sendInlineError, setSendInlineError] = useState<string | null>(null);
   /** When synced header media is empty (no {{n}}), sent as direct https link — upload / chat picker. */
   const [optionalHeaderMediaUrl, setOptionalHeaderMediaUrl] = useState<string | null>(null);
@@ -284,6 +288,40 @@ export function Templates() {
       return res.json();
     },
   });
+
+  const { data: templateSendDefaults, isLoading: templateSendDefaultsLoading } = useQuery<{
+    optionalHeaderMediaUrl: string | null;
+  }>({
+    queryKey: ["/api/templates/template-send-defaults", selectedChat?.id, selectedTemplate?.id],
+    enabled:
+      !!templatesEnabled && sendDialogOpen && !!selectedChat?.id && !!selectedTemplate?.id,
+    queryFn: async () => {
+      const res = await fetch(
+        `/api/templates/template-send-defaults?chatId=${encodeURIComponent(selectedChat!.id)}&templateId=${encodeURIComponent(selectedTemplate!.id)}`,
+        { credentials: "include" }
+      );
+      if (!res.ok) throw new Error("Failed to load template defaults");
+      return res.json();
+    },
+  });
+
+  useEffect(() => {
+    if (!sendDialogOpen || !pendingTemplatePrefillRef.current) return;
+    if (templateSendDefaultsLoading) return;
+    if (suppressTemplatePrefillRef.current) {
+      pendingTemplatePrefillRef.current = false;
+      return;
+    }
+    pendingTemplatePrefillRef.current = false;
+    const url = templateSendDefaults?.optionalHeaderMediaUrl;
+    if (typeof url === "string" && /^https?:\/\//i.test(url.trim())) {
+      setOptionalHeaderMediaUrl(url.trim());
+    }
+  }, [
+    sendDialogOpen,
+    templateSendDefaultsLoading,
+    templateSendDefaults?.optionalHeaderMediaUrl,
+  ]);
 
   const requiredPlaceholders = useMemo(() => {
     if (!selectedTemplate) return [] as string[];
@@ -411,6 +449,8 @@ export function Templates() {
     },
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/templates/retargetable-chats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/templates/recent-media"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/templates/template-send-defaults"] });
       setSendInlineError(null);
       setSendDialogOpen(false);
       setSelectedTemplate(null);
@@ -451,6 +491,8 @@ export function Templates() {
     setVariableValues({});
     setOptionalHeaderMediaUrl(null);
     setHeaderMediaBroken(false);
+    suppressTemplatePrefillRef.current = false;
+    pendingTemplatePrefillRef.current = true;
     setSendInlineError(null);
     setContactPickerOpen(false);
     setSendDialogOpen(true);
@@ -693,6 +735,7 @@ export function Templates() {
                               key={template.id}
                               template={template}
                               density="compact"
+                              variant="libraryCard"
                             />
                           </div>
                         ) : (
@@ -917,6 +960,8 @@ export function Templates() {
               setSendInlineError(null);
               setOptionalHeaderMediaUrl(null);
               setHeaderMediaBroken(false);
+              suppressTemplatePrefillRef.current = false;
+              pendingTemplatePrefillRef.current = false;
             }
           }}
         >
@@ -965,6 +1010,9 @@ export function Templates() {
                       onVariableValuesChange={setVariableValues}
                       optionalHeaderMediaUrl={optionalHeaderMediaUrl}
                       onOptionalHeaderMediaUrlChange={setOptionalHeaderMediaUrl}
+                      onUserAdjustedMedia={() => {
+                        suppressTemplatePrefillRef.current = true;
+                      }}
                     />
                   ) : null}
 

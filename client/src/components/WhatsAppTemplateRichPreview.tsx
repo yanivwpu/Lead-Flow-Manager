@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from "react";
+import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight, Image, Video, FileIcon, LayoutGrid } from "lucide-react";
@@ -50,6 +51,34 @@ export function TemplateShapeIndicator({ template }: { template: WhatsAppRichPre
   return null;
 }
 
+/** Compact library-grid hint — send-time media is chosen per contact in the send modal. */
+function LibraryCardMediaHintRow({
+  kind,
+  className,
+}: {
+  kind: "image" | "video" | "document";
+  className?: string;
+}) {
+  const Icon = kind === "image" ? Image : kind === "video" ? Video : FileIcon;
+  const label =
+    kind === "image"
+      ? "Image required at send"
+      : kind === "video"
+        ? "Video required at send"
+        : "Document required at send";
+  return (
+    <div
+      className={cn(
+        "flex items-center gap-2 rounded-lg border border-gray-200/90 bg-gray-50/90 px-2.5 py-1.5 text-left",
+        className
+      )}
+    >
+      <Icon className="h-3.5 w-3.5 shrink-0 text-gray-500" aria-hidden />
+      <span className="text-[11px] font-medium leading-tight text-gray-600">{label}</span>
+    </div>
+  );
+}
+
 /**
  * Soft header/media strip + body + CTA chips — used in template library cards and modals.
  */
@@ -57,6 +86,7 @@ export function WhatsAppTemplateRichPreview({
   template,
   className,
   density = "comfortable",
+  variant = "default",
   livePreview,
   onHeaderMediaError,
 }: {
@@ -64,6 +94,11 @@ export function WhatsAppTemplateRichPreview({
   className?: string;
   /** Cards use tighter vertical rhythm; modals use more padding. */
   density?: "compact" | "comfortable";
+  /**
+   * `libraryCard`: compact media-shape hints on WhatsApp Library grid cards (no large empty placeholders).
+   * Send modal should use default `variant`.
+   */
+  variant?: "default" | "libraryCard";
   livePreview?: WhatsAppTemplateLivePreview | null;
   /** Fires when image/video/document URL fails to load (broken link or blocked asset). */
   onHeaderMediaError?: () => void;
@@ -75,6 +110,7 @@ export function WhatsAppTemplateRichPreview({
   const [carouselIndex, setCarouselIndex] = useState(0);
   const pad = density === "compact" ? "p-2.5" : "p-4";
   const mediaRounded = "rounded-xl border border-gray-200/80 bg-gradient-to-b from-gray-50 to-white overflow-hidden";
+  const isLibraryCard = variant === "libraryCard";
 
   const liveMedia = (livePreview?.headerMediaUrl || "").trim();
   const displayMediaUrl =
@@ -97,7 +133,18 @@ export function WhatsAppTemplateRichPreview({
       <div className={mediaRounded}>
         <div className="relative bg-gray-100">
           {card?.headerUrl ? (
-            <img src={card.headerUrl} alt="" className="w-full max-h-40 object-cover" />
+            <img
+              src={card.headerUrl}
+              alt=""
+              className={cn("w-full object-cover", isLibraryCard ? "max-h-24" : "max-h-40")}
+            />
+          ) : isLibraryCard ? (
+            <div className="flex items-center gap-2 border-b border-gray-200/80 bg-gray-50/90 px-2.5 py-2">
+              <LayoutGrid className="h-3.5 w-3.5 shrink-0 text-gray-500" aria-hidden />
+              <span className="text-[11px] font-medium leading-tight text-gray-600">
+                Media per card at send
+              </span>
+            </div>
           ) : (
             <div className="flex h-32 items-center justify-center bg-gray-100">
               <Image className="h-10 w-10 text-gray-400" aria-hidden />
@@ -143,11 +190,16 @@ export function WhatsAppTemplateRichPreview({
           <img
             src={displayMediaUrl}
             alt=""
-            className="max-h-44 w-full object-cover"
+            className={cn(
+              "w-full object-cover",
+              isLibraryCard ? "max-h-20" : "max-h-44"
+            )}
             onError={() => onHeaderMediaError?.()}
           />
         </div>
       );
+    } else if (isLibraryCard) {
+      mediaBlock = <LibraryCardMediaHintRow kind="image" />;
     } else {
       mediaBlock = (
         <div
@@ -164,14 +216,20 @@ export function WhatsAppTemplateRichPreview({
         <div className={mediaRounded}>
           <video
             src={displayMediaUrl}
-            className="max-h-44 w-full bg-black object-contain"
-            controls
+            className={cn(
+              "w-full bg-black object-contain",
+              isLibraryCard ? "max-h-20" : "max-h-44"
+            )}
+            controls={!isLibraryCard}
+            muted={isLibraryCard}
             playsInline
             preload="metadata"
             onError={() => onHeaderMediaError?.()}
           />
         </div>
       );
+    } else if (isLibraryCard) {
+      mediaBlock = <LibraryCardMediaHintRow kind="video" />;
     } else {
       mediaBlock = (
         <div
@@ -193,7 +251,20 @@ export function WhatsAppTemplateRichPreview({
           return "Document";
         }
       })();
-      mediaBlock = (
+      mediaBlock = isLibraryCard ? (
+        <div
+          className={cn(
+            mediaRounded,
+            "flex items-center gap-2 py-2 pl-2 pr-2.5"
+          )}
+        >
+          <FileIcon className="h-4 w-4 shrink-0 text-gray-500" aria-hidden />
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[11px] font-medium text-gray-800">{tail}</p>
+            <p className="text-[10px] text-gray-500">Approved file in WhatsApp Manager</p>
+          </div>
+        </div>
+      ) : (
         <div className={`${mediaRounded} flex items-center gap-3 ${pad}`}>
           <FileIcon className="h-8 w-8 shrink-0 text-gray-600" aria-hidden />
           <div className="min-w-0 flex-1">
@@ -209,6 +280,8 @@ export function WhatsAppTemplateRichPreview({
           </div>
         </div>
       );
+    } else if (isLibraryCard) {
+      mediaBlock = <LibraryCardMediaHintRow kind="document" />;
     } else {
       mediaBlock = (
         <div
@@ -248,7 +321,9 @@ export function WhatsAppTemplateRichPreview({
 
   return (
     <div className={className}>
-      {mediaBlock ? <div className="mb-3 space-y-2">{mediaBlock}</div> : null}
+      {mediaBlock ? (
+        <div className={cn("space-y-2", isLibraryCard ? "mb-2" : "mb-3")}>{mediaBlock}</div>
+      ) : null}
       <div className={`rounded-xl border border-gray-100 bg-gray-50/90 ${density === "compact" ? "p-3" : "p-4"}`}>
         <p className="whitespace-pre-wrap text-sm leading-relaxed text-gray-800">
           {displayBodyText}

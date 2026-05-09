@@ -74,9 +74,18 @@ export function TemplateSendMediaControls(props: {
   onVariableValuesChange: Dispatch<SetStateAction<Record<string, string>>>;
   optionalHeaderMediaUrl: string | null;
   onOptionalHeaderMediaUrlChange: (url: string | null) => void;
+  /** User chose upload / recent / clear — skip automatic prefill from last send. */
+  onUserAdjustedMedia?: () => void;
 }) {
-  const { template, chatId, variableValues, onVariableValuesChange, optionalHeaderMediaUrl, onOptionalHeaderMediaUrlChange } =
-    props;
+  const {
+    template,
+    chatId,
+    variableValues,
+    onVariableValuesChange,
+    optionalHeaderMediaUrl,
+    onOptionalHeaderMediaUrlChange,
+    onUserAdjustedMedia,
+  } = props;
   const { toast } = useToast();
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
@@ -110,6 +119,7 @@ export function TemplateSendMediaControls(props: {
   const applyMediaUrl = (url: string) => {
     const trimmed = url.trim();
     if (!trimmed || !/^https?:\/\//i.test(trimmed)) return;
+    onUserAdjustedMedia?.();
     if (placeholderKeys.length > 0) {
       const primary = placeholderKeys[0];
       onVariableValuesChange((prev) => ({ ...prev, [primary]: trimmed }));
@@ -120,8 +130,8 @@ export function TemplateSendMediaControls(props: {
   };
 
   const clearMedia = () => {
+    onUserAdjustedMedia?.();
     if (placeholderKeys.length > 0) {
-      const primary = placeholderKeys[0];
       onVariableValuesChange((prev) => {
         const next = { ...prev };
         for (const k of placeholderKeys) {

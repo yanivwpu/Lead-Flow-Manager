@@ -8,6 +8,7 @@ import {
   inferMetaTemplateShape,
   normalizeTemplateVariableMap,
   parseMetaGraphTemplateForLibrary,
+  resolveLibraryHeaderMediaDisplayUrl,
   substituteTemplateVariablesForDisplay,
 } from "@shared/metaTemplateSend";
 import { storage } from "../storage";
@@ -15,7 +16,7 @@ import { getMetaMessageTemplates, sendMetaWhatsAppTemplate } from "../userMeta";
 import { getUserTwilioClient } from "../userTwilio";
 import { subscriptionService } from "../subscriptionService";
 
-/** Stored in `messages.content` — template label + optional resolved header/body (CRM bubble). */
+/** Stored in `messages.content` — template label + optional resolved text header + body (CRM bubble). */
 function buildOutboundTemplateDisplayContent(
   template: {
     name: string;
@@ -34,19 +35,24 @@ function buildOutboundTemplateDisplayContent(
       lines.push("");
       lines.push(renderedHeader);
     }
-  } else if (["image", "video", "document"].includes(ht) && (hc || "").trim()) {
-    const renderedMedia = substituteTemplateVariablesForDisplay(hc, variableValues);
-    if (renderedMedia) {
-      lines.push("");
-      lines.push(renderedMedia);
-    }
   }
+  /** Image/video/document URLs belong in `messages.media_url` + `template_variables.headerMediaUrl`, not body text. */
   const bodyRendered = substituteTemplateVariablesForDisplay(template.bodyText, variableValues);
   if (bodyRendered) {
     lines.push("");
     lines.push(bodyRendered);
   }
   return lines.join("\n").trim();
+}
+
+function headerTypeToMessageMediaType(
+  headerType: string | null | undefined
+): "image" | "video" | "document" | undefined {
+  const h = (headerType || "").toLowerCase();
+  if (h === "image") return "image";
+  if (h === "video") return "video";
+  if (h === "document") return "document";
+  return undefined;
 }
 
 /** User-facing message — no tokens; Meta codes OK for support. */
@@ -816,6 +822,69 @@ export function registerTemplateRoutes(app: Express): void {
     }
   });
 
+  /**
+   * Last header media URL used when sending a given library template to a legacy chat’s contact (prefill send modal).
+   */
+  app.get("/api/templates/template-send-defaults", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const limits = await subscriptionService.getUserLimits(req.user.id);
+      if (!(limits as any)?.templatesEnabled) {
+        return res.status(403).json({ error: "Template messaging is a Pro feature" });
+      }
+
+      const chatId = typeof req.query.chatId === "string" ? req.query.chatId.trim() : "";
+      const templateId = typeof req.query.templateId === "string" ? req.query.templateId.trim() : "";
+      if (!chatId || !templateId) {
+        return res.status(400).json({ error: "chatId and templateId are required" });
+      }
+
+      const chat = await storage.getChat(chatId);
+      if (!chat || chat.userId !== req.user.id) {
+        return res.status(404).json({ error: "Chat not found" });
+      }
+
+      const channelKey =
+        (chat.whatsappPhone || "").replace(/\D/g, "") || (chat.whatsappPhone || "");
+      const contact = channelKey
+        ? await storage.getContactByChannelId(req.user.id, "whatsapp", channelKey)
+        : undefined;
+
+      if (!contact) {
+        return res.json({ optionalHeaderMediaUrl: null });
+      }
+
+      const wa: Channel = "whatsapp";
+      const conv = await storage.getConversationByContactAndChannel(contact.id, wa);
+      if (!conv) {
+        return res.json({ optionalHeaderMediaUrl: null });
+      }
+
+      const msgs = await storage.getMessages(conv.id, 150);
+      for (let i = msgs.length - 1; i >= 0; i--) {
+        const m = msgs[i];
+        if (m.direction !== "outbound") continue;
+        if ((m.contentType || "").toLowerCase() !== "template") continue;
+        if (m.templateId !== templateId) continue;
+        const tv = m.templateVariables as Record<string, unknown> | null | undefined;
+        const fromTv = typeof tv?.headerMediaUrl === "string" ? tv.headerMediaUrl.trim() : "";
+        const fromRow = typeof m.mediaUrl === "string" ? m.mediaUrl.trim() : "";
+        const url = fromTv || fromRow;
+        if (url && /^https?:\/\//i.test(url)) {
+          return res.json({ optionalHeaderMediaUrl: url });
+        }
+      }
+
+      return res.json({ optionalHeaderMediaUrl: null });
+    } catch (error: unknown) {
+      console.error("template-send-defaults:", error);
+      res.status(500).json({ error: "Failed to load template send defaults" });
+    }
+  });
+
   // Send a template message via the active WhatsApp provider
   app.post("/api/templates/send", async (req, res) => {
     try {
@@ -1203,6 +1272,11 @@ export function registerTemplateRoutes(app: Express): void {
 
           const displaySource =
             metaSendPath === "library_full" ? libraryEffectiveTemplate : template;
+          const resolvedHeaderMediaUrl = resolveLibraryHeaderMediaDisplayUrl(
+            displaySource,
+            variableValues,
+            optionalHeaderMediaUrl ?? null
+          );
           const displayContent = buildOutboundTemplateDisplayContent(
             {
               name: displaySource.name,
@@ -1220,6 +1294,8 @@ export function registerTemplateRoutes(app: Express): void {
             templateName: template.name,
             channel: "whatsapp",
             provider: resolvedProvider === "meta" ? "meta" : resolvedProvider,
+            headerType: displaySource.headerType ?? null,
+            headerMediaUrl: resolvedHeaderMediaUrl,
           };
 
           const normalizedStatus = (sendStatus || "").toLowerCase();
@@ -1232,6 +1308,9 @@ export function registerTemplateRoutes(app: Express): void {
                 ? "pending"
                 : "sent";
 
+          const mediaMeta =
+            resolvedHeaderMediaUrl && headerTypeToMessageMediaType(displaySource.headerType);
+
           const persisted = await storage.createMessage({
             conversationId,
             contactId: crmContactId,
@@ -1241,6 +1320,12 @@ export function registerTemplateRoutes(app: Express): void {
             contentType: "template",
             templateId: template.id,
             templateVariables: templateVariablesPayload as any,
+            ...(resolvedHeaderMediaUrl
+              ? {
+                  mediaUrl: resolvedHeaderMediaUrl,
+                  ...(mediaMeta ? { mediaType: mediaMeta } : {}),
+                }
+              : {}),
             status: outboundMsgStatus,
             externalMessageId: messageId || null,
             sentAt: new Date(),
