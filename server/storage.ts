@@ -286,7 +286,15 @@ export interface IStorage {
   deleteUserAutomationTemplate(id: string): Promise<void>;
 
   getPresetCampaignsForUser(userId: string): Promise<PresetCampaign[]>;
+  getPresetCampaignForUser(campaignId: string, userId: string): Promise<PresetCampaign | undefined>;
   createPresetCampaign(row: InsertPresetCampaign): Promise<PresetCampaign>;
+  updatePresetCampaign(
+    campaignId: string,
+    userId: string,
+    updates: Partial<PresetCampaign>
+  ): Promise<PresetCampaign | undefined>;
+  deletePresetCampaign(campaignId: string, userId: string): Promise<boolean>;
+  duplicatePresetCampaign(campaignId: string, userId: string): Promise<PresetCampaign | undefined>;
   
   // Template usage analytics methods
   recordTemplateUsage(usage: InsertTemplateUsageAnalytics): Promise<TemplateUsageAnalytics>;
@@ -2603,6 +2611,78 @@ export class DbStorage implements IStorage {
   async createPresetCampaign(row: InsertPresetCampaign): Promise<PresetCampaign> {
     const result = await db.insert(presetCampaigns).values(row).returning();
     return result[0];
+  }
+
+  async getPresetCampaignForUser(campaignId: string, userId: string): Promise<PresetCampaign | undefined> {
+    const rows = await db
+      .select()
+      .from(presetCampaigns)
+      .where(and(eq(presetCampaigns.id, campaignId), eq(presetCampaigns.userId, userId)));
+    return rows[0];
+  }
+
+  async updatePresetCampaign(
+    campaignId: string,
+    userId: string,
+    updates: Partial<PresetCampaign>
+  ): Promise<PresetCampaign | undefined> {
+    const existing = await this.getPresetCampaignForUser(campaignId, userId);
+    if (!existing) return undefined;
+    const result = await db
+      .update(presetCampaigns)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(and(eq(presetCampaigns.id, campaignId), eq(presetCampaigns.userId, userId)))
+      .returning();
+    return result[0];
+  }
+
+  async deletePresetCampaign(campaignId: string, userId: string): Promise<boolean> {
+    const result = await db
+      .delete(presetCampaigns)
+      .where(and(eq(presetCampaigns.id, campaignId), eq(presetCampaigns.userId, userId)))
+      .returning({ id: presetCampaigns.id });
+    return result.length > 0;
+  }
+
+  async duplicatePresetCampaign(campaignId: string, userId: string): Promise<PresetCampaign | undefined> {
+    const existing = await this.getPresetCampaignForUser(campaignId, userId);
+    if (!existing) return undefined;
+
+    const msgs = Array.isArray(existing.messages) ? existing.messages : [];
+    const delayRows = Array.isArray(existing.delays)
+      ? existing.delays
+      : (msgs as Array<{ delay?: string }>).map((m) => String(m?.delay ?? "0"));
+
+    const placeholderDefaults =
+      existing.placeholderDefaults &&
+      typeof existing.placeholderDefaults === "object" &&
+      existing.placeholderDefaults !== null
+        ? (existing.placeholderDefaults as Record<string, unknown>)
+        : {};
+
+    const audience =
+      existing.audienceConfig &&
+      typeof existing.audienceConfig === "object" &&
+      existing.audienceConfig !== null
+        ? { ...(existing.audienceConfig as Record<string, unknown>), duplicatedFrom: existing.id }
+        : { duplicatedFrom: existing.id };
+
+    return this.createPresetCampaign({
+      userId,
+      name: `${existing.name} (copy)`,
+      sourcePresetId: existing.sourcePresetId,
+      status: "draft",
+      channel: existing.channel || "whatsapp",
+      language: existing.language ?? "en",
+      category: existing.category ?? "general",
+      industry: existing.industry ?? "general",
+      messages: msgs as unknown[],
+      delays: delayRows as unknown[],
+      placeholders: Array.isArray(existing.placeholders) ? existing.placeholders : [],
+      placeholderDefaults,
+      aiEnabled: existing.aiEnabled ?? false,
+      audienceConfig: audience,
+    });
   }
 
   // ============= Template Usage Analytics =============

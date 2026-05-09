@@ -1,5 +1,5 @@
 import type { Express } from "express";
-import type { Channel } from "@shared/schema";
+import type { Channel, PresetCampaign } from "@shared/schema";
 import {
   buildMetaCloudTemplateSendComponents,
   buildMetaLibraryTemplateSendComponents,
@@ -244,6 +244,190 @@ export function registerTemplateRoutes(app: Express): void {
     } catch (error) {
       console.error("Error creating preset campaign:", error);
       res.status(500).json({ error: "Failed to create campaign" });
+    }
+  });
+
+  app.get("/api/preset-campaigns/:id", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const row = await storage.getPresetCampaignForUser(req.params.id, req.user.id);
+      if (!row) {
+        return res.status(404).json({ error: "Campaign not found" });
+      }
+
+      res.json({
+        ...row,
+        statusLabel: getPresetCampaignStatusLabel(row.status),
+      });
+    } catch (error) {
+      console.error("Error fetching preset campaign:", error);
+      res.status(500).json({ error: "Failed to fetch campaign" });
+    }
+  });
+
+  app.patch("/api/preset-campaigns/:id", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const existing = await storage.getPresetCampaignForUser(req.params.id, req.user.id);
+      if (!existing) {
+        return res.status(404).json({ error: "Campaign not found" });
+      }
+
+      const body = req.body as Record<string, unknown>;
+      const action = typeof body.action === "string" ? body.action : "";
+
+      if (action === "pause") {
+        if (existing.status !== "active_pending" && existing.status !== "active") {
+          return res.status(400).json({
+            error: "Only campaigns that are active or queued can be paused.",
+          });
+        }
+        const prevAc =
+          typeof existing.audienceConfig === "object" && existing.audienceConfig !== null
+            ? (existing.audienceConfig as Record<string, unknown>)
+            : {};
+        const updated = await storage.updatePresetCampaign(req.params.id, req.user.id, {
+          status: "paused",
+          audienceConfig: {
+            ...prevAc,
+            previousStatusBeforePause: existing.status,
+          } as Record<string, unknown>,
+        });
+        if (!updated) return res.status(404).json({ error: "Campaign not found" });
+        return res.json({
+          campaign: updated,
+          statusLabel: getPresetCampaignStatusLabel(updated.status),
+          message: "Campaign paused. No messages were sent.",
+        });
+      }
+
+      if (action === "resume") {
+        if (existing.status !== "paused") {
+          return res.status(400).json({ error: "Only paused campaigns can be resumed." });
+        }
+        const ac =
+          typeof existing.audienceConfig === "object" && existing.audienceConfig !== null
+            ? ({ ...(existing.audienceConfig as Record<string, unknown>) } as Record<string, unknown>)
+            : {};
+        const prev =
+          typeof ac.previousStatusBeforePause === "string"
+            ? ac.previousStatusBeforePause
+            : "active_pending";
+        delete ac.previousStatusBeforePause;
+
+        let nextStatus = prev;
+        if (prev === "active" && !PRESET_CAMPAIGN_SEND_ENGINE_READY) {
+          nextStatus = "active_pending";
+        }
+
+        const updated = await storage.updatePresetCampaign(req.params.id, req.user.id, {
+          status: nextStatus,
+          audienceConfig: ac as Record<string, unknown>,
+        });
+        if (!updated) return res.status(404).json({ error: "Campaign not found" });
+        return res.json({
+          campaign: updated,
+          statusLabel: getPresetCampaignStatusLabel(updated.status),
+          message:
+            "Campaign resumed. Automated audience sends are still not scheduled — delivery setup comes next.",
+        });
+      }
+
+      const patch: Record<string, unknown> = {};
+      if (typeof body.name === "string" && body.name.trim()) {
+        patch.name = body.name.trim();
+      }
+      if (Array.isArray(body.messages)) {
+        const msgs = body.messages as Array<{ delay?: string }>;
+        patch.messages = msgs;
+        patch.delays = msgs.map((m) => String(m?.delay ?? "0"));
+      }
+      if (
+        body.placeholderDefaults &&
+        typeof body.placeholderDefaults === "object" &&
+        body.placeholderDefaults !== null
+      ) {
+        patch.placeholderDefaults = body.placeholderDefaults as Record<string, unknown>;
+      }
+      if (typeof body.channel === "string" && body.channel.trim()) {
+        patch.channel = body.channel.trim();
+      }
+      if (typeof body.language === "string" && body.language.trim()) {
+        patch.language = body.language.trim();
+      }
+      if (typeof body.category === "string") {
+        patch.category = body.category;
+      }
+      if (typeof body.industry === "string") {
+        patch.industry = body.industry;
+      }
+
+      if (Object.keys(patch).length === 0) {
+        return res.status(400).json({ error: "No valid fields to update" });
+      }
+
+      const updated = await storage.updatePresetCampaign(
+        req.params.id,
+        req.user.id,
+        patch as Partial<PresetCampaign>
+      );
+      if (!updated) return res.status(404).json({ error: "Campaign not found" });
+
+      res.json({
+        campaign: updated,
+        statusLabel: getPresetCampaignStatusLabel(updated.status),
+        message: "Campaign updated.",
+      });
+    } catch (error) {
+      console.error("Error updating preset campaign:", error);
+      res.status(500).json({ error: "Failed to update campaign" });
+    }
+  });
+
+  app.delete("/api/preset-campaigns/:id", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const removed = await storage.deletePresetCampaign(req.params.id, req.user.id);
+      if (!removed) {
+        return res.status(404).json({ error: "Campaign not found" });
+      }
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting preset campaign:", error);
+      res.status(500).json({ error: "Failed to delete campaign" });
+    }
+  });
+
+  app.post("/api/preset-campaigns/:id/duplicate", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const copy = await storage.duplicatePresetCampaign(req.params.id, req.user.id);
+      if (!copy) {
+        return res.status(404).json({ error: "Campaign not found" });
+      }
+
+      res.status(201).json({
+        campaign: copy,
+        statusLabel: getPresetCampaignStatusLabel(copy.status),
+        message:
+          "Duplicate saved as a draft. No messages were sent — audience automation is not running yet.",
+      });
+    } catch (error) {
+      console.error("Error duplicating preset campaign:", error);
+      res.status(500).json({ error: "Failed to duplicate campaign" });
     }
   });
 
