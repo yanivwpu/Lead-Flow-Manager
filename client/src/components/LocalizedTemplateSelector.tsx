@@ -128,10 +128,14 @@ export function LocalizedTemplateSelector({
     }
   });
   
-  const saveTemplateMutation = useMutation({
-    mutationFn: async (data: { template: AutomationTemplate; placeholderDefaults: Record<string, string>; activate: boolean }) => {
-      const response = await apiRequest("POST", "/api/user-automation-templates", {
-        presetTemplateId: data.template.id,
+  const createCampaignMutation = useMutation({
+    mutationFn: async (data: {
+      template: AutomationTemplate;
+      placeholderDefaults: Record<string, string>;
+      launchImmediately: boolean;
+    }) => {
+      const res = await apiRequest("POST", "/api/preset-campaigns", {
+        sourcePresetId: data.template.id,
         name: data.template.name,
         language: data.template.language,
         category: data.template.category,
@@ -140,29 +144,28 @@ export function LocalizedTemplateSelector({
         placeholders: data.template.placeholders,
         placeholderDefaults: data.placeholderDefaults,
         aiEnabled: data.template.aiEnabled,
-        isActive: data.activate,
+        channel: "whatsapp",
+        launchImmediately: data.launchImmediately,
       });
-      return response;
+      return res.json() as Promise<{ message: string; statusLabel?: string }>;
     },
-    onSuccess: (savedTemplate, variables) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/user-automation-templates"] });
+    onSuccess: (payload, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/preset-campaigns"] });
       toast({
-        title: variables.activate 
-          ? t("templates.launchedSuccess", "Automation Launched!") 
-          : t("templates.savedSuccess", "Template Saved!"),
-        description: variables.activate 
-          ? t("templates.launchedDesc", "Your automation flow is now active.")
-          : t("templates.savedDesc", "Template saved to your library."),
+        title: variables.launchImmediately
+          ? t("templates.campaignLaunchedTitle", "Campaign created")
+          : t("templates.campaignSavedTitle", "Campaign saved"),
+        description: payload.message,
       });
       setPreviewDialogOpen(false);
     },
-    onError: (error) => {
+    onError: () => {
       toast({
         title: t("errors.somethingWentWrong", "Something went wrong"),
-        description: t("templates.saveFailed", "Failed to save template"),
+        description: t("templates.campaignSaveFailed", "Could not save campaign"),
         variant: "destructive",
       });
-    }
+    },
   });
 
   const templates = data?.templates || [];
@@ -185,10 +188,10 @@ export function LocalizedTemplateSelector({
       if (onSelectTemplate) {
         onSelectTemplate(previewTemplate, placeholderValues);
       }
-      saveTemplateMutation.mutate({
+      createCampaignMutation.mutate({
         template: previewTemplate,
         placeholderDefaults: placeholderValues,
-        activate: launchImmediately,
+        launchImmediately,
       });
     }
   };
@@ -460,9 +463,9 @@ export function LocalizedTemplateSelector({
                 <Button 
                   className={`w-full sm:w-auto ${launchImmediately ? "bg-purple-600 hover:bg-purple-700" : "bg-emerald-600 hover:bg-emerald-700"}`}
                   onClick={handleUseTemplate}
-                  disabled={saveTemplateMutation.isPending}
+                  disabled={createCampaignMutation.isPending}
                 >
-                  {saveTemplateMutation.isPending ? (
+                  {createCampaignMutation.isPending ? (
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                   ) : launchImmediately ? (
                     <Rocket className="h-4 w-4 mr-2" />
@@ -470,8 +473,8 @@ export function LocalizedTemplateSelector({
                     <Send className="h-4 w-4 mr-2" />
                   )}
                   {launchImmediately 
-                    ? t("templates.launchNow", "Launch Now")
-                    : t("templates.saveTemplate", "Save Template")}
+                    ? t("templates.launchCampaign", "Launch Campaign")
+                    : t("templates.createCampaign", "Create Campaign")}
                 </Button>
               )}
             </div>

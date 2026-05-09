@@ -11,6 +11,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -43,7 +51,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
 import { useTranslation } from "react-i18next";
-import { formatDistanceToNow } from "date-fns";
+import { formatDistanceToNow, format } from "date-fns";
 
 interface MessageTemplate {
   id: string;
@@ -107,6 +115,17 @@ interface Chat {
   whatsappPhone: string | null;
   lastMessage: string;
 }
+
+type PresetCampaignListItem = {
+  id: string;
+  name: string;
+  sourcePresetId: string;
+  status: string;
+  statusLabel: string;
+  channel: string;
+  messages: unknown[];
+  updatedAt: string;
+};
 
 type VariableAutofillSuggestion = {
   name: string;
@@ -291,6 +310,13 @@ export function Templates() {
 
   const { data: templates = [], isLoading: templatesLoading } = useQuery<MessageTemplate[]>({
     queryKey: ["/api/templates"],
+    enabled: !!templatesEnabled,
+  });
+
+  const { data: savedPresetCampaigns = [], isLoading: savedCampaignsLoading } = useQuery<
+    PresetCampaignListItem[]
+  >({
+    queryKey: ["/api/preset-campaigns"],
     enabled: !!templatesEnabled,
   });
 
@@ -679,6 +705,75 @@ export function Templates() {
                     console.log("Selected template:", template, values);
                   }}
                 />
+              </CardContent>
+            </Card>
+
+            <Card className="overflow-hidden border-gray-200/90">
+              <CardHeader className="pb-2 pt-4 px-4 md:px-6">
+                <CardTitle className="text-base md:text-lg">Saved Campaigns</CardTitle>
+                <CardDescription className="text-sm">
+                  Blueprints you saved from presets become campaign instances here. Preset definitions in the library are never changed.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="px-3 md:px-6 pb-4">
+                {savedCampaignsLoading ? (
+                  <div className="flex justify-center py-8">
+                    <RefreshCw className="h-6 w-6 animate-spin text-gray-400" />
+                  </div>
+                ) : savedPresetCampaigns.length === 0 ? (
+                  <p className="text-sm text-gray-500 py-4 text-center">
+                    No saved campaigns yet. Open a preset, customize placeholders, then click Create Campaign.
+                  </p>
+                ) : (
+                  <div className="overflow-x-auto rounded-lg border border-gray-100">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Campaign</TableHead>
+                          <TableHead className="hidden sm:table-cell">Source preset</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead className="hidden md:table-cell">Channel</TableHead>
+                          <TableHead className="text-right">Steps</TableHead>
+                          <TableHead className="hidden lg:table-cell">Updated</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {savedPresetCampaigns.map((row) => {
+                          const steps = Array.isArray(row.messages) ? row.messages.length : 0;
+                          const updated =
+                            row.updatedAt &&
+                            !Number.isNaN(new Date(row.updatedAt).getTime())
+                              ? format(new Date(row.updatedAt), "MMM d, yyyy p")
+                              : "—";
+                          return (
+                            <TableRow key={row.id} data-testid={`saved-campaign-${row.id}`}>
+                              <TableCell className="font-medium text-gray-900 max-w-[140px] truncate">
+                                {row.name}
+                              </TableCell>
+                              <TableCell className="hidden sm:table-cell font-mono text-xs text-gray-600">
+                                {row.sourcePresetId.length > 14
+                                  ? `${row.sourcePresetId.slice(0, 14)}…`
+                                  : row.sourcePresetId}
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant="outline" className="text-[11px] font-normal whitespace-normal max-w-[200px] text-left h-auto py-1">
+                                  {row.statusLabel || row.status}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="hidden md:table-cell capitalize text-gray-700">
+                                {row.channel}
+                              </TableCell>
+                              <TableCell className="text-right tabular-nums">{steps}</TableCell>
+                              <TableCell className="hidden lg:table-cell text-gray-500 text-sm whitespace-nowrap">
+                                {updated}
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>

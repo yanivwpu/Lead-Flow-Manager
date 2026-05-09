@@ -15,6 +15,10 @@ import { storage } from "../storage";
 import { getMetaMessageTemplates, sendMetaWhatsAppTemplate } from "../userMeta";
 import { getUserTwilioClient } from "../userTwilio";
 import { subscriptionService } from "../subscriptionService";
+import { getPresetCampaignStatusLabel } from "@shared/presetCampaignLabels";
+
+/** When true, “launch” creates `active` and may enqueue sends. Until then, launch → `active_pending`. */
+const PRESET_CAMPAIGN_SEND_ENGINE_READY = false;
 
 /** Stored in `messages.content` — template label + optional resolved text header + body (CRM bubble). */
 function buildOutboundTemplateDisplayContent(
@@ -132,6 +136,114 @@ export function registerTemplateRoutes(app: Express): void {
     } catch (error) {
       console.error("Error fetching automation templates:", error);
       res.status(500).json({ error: "Failed to fetch automation templates" });
+    }
+  });
+
+  // ============= Preset campaigns (saved instances from localized presets) =============
+
+  app.get("/api/preset-campaigns", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const rows = await storage.getPresetCampaignsForUser(req.user.id);
+      res.json(
+        rows.map((c) => ({
+          ...c,
+          statusLabel: getPresetCampaignStatusLabel(c.status),
+        }))
+      );
+    } catch (error) {
+      console.error("Error fetching preset campaigns:", error);
+      res.status(500).json({ error: "Failed to fetch campaigns" });
+    }
+  });
+
+  app.post("/api/preset-campaigns", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const {
+        sourcePresetId,
+        name,
+        language,
+        category,
+        industry,
+        messages,
+        placeholders,
+        placeholderDefaults,
+        aiEnabled,
+        channel,
+        launchImmediately,
+      } = req.body as Record<string, unknown>;
+
+      if (!sourcePresetId || !name || !category) {
+        return res.status(400).json({
+          error: "Missing required fields: sourcePresetId, name, category",
+        });
+      }
+
+      const msgs = Array.isArray(messages) ? messages : [];
+      const delays = (msgs as Array<{ delay?: string }>).map((m) => String(m?.delay ?? "0"));
+
+      let status: string;
+      if (!launchImmediately) {
+        status = "draft";
+      } else if (!PRESET_CAMPAIGN_SEND_ENGINE_READY) {
+        status = "active_pending";
+      } else {
+        status = "active";
+      }
+
+      const audienceConfig: Record<string, unknown> = {
+        audiencePlaceholder: true,
+        note: "Audience targeting not configured",
+      };
+      if (launchImmediately && !PRESET_CAMPAIGN_SEND_ENGINE_READY) {
+        audienceConfig.launchRequestedAt = new Date().toISOString();
+        audienceConfig.sendEngineReady = false;
+      }
+
+      const campaign = await storage.createPresetCampaign({
+        userId: req.user.id,
+        name: String(name),
+        sourcePresetId: String(sourcePresetId),
+        status,
+        channel:
+          typeof channel === "string" && channel.trim() ? channel.trim() : "whatsapp",
+        language: typeof language === "string" ? language : "en",
+        category: String(category),
+        industry: typeof industry === "string" ? industry : "general",
+        messages: msgs as unknown[],
+        delays,
+        placeholders: Array.isArray(placeholders) ? placeholders : [],
+        placeholderDefaults:
+          typeof placeholderDefaults === "object" && placeholderDefaults !== null
+            ? (placeholderDefaults as Record<string, unknown>)
+            : {},
+        aiEnabled: !!aiEnabled,
+        audienceConfig,
+      });
+
+      const statusLabel = getPresetCampaignStatusLabel(campaign.status);
+      const message =
+        campaign.status === "draft"
+          ? "Campaign saved as a draft. No messages were sent."
+          : campaign.status === "active_pending"
+            ? "Campaign is active in your account. Automated audience sends are not scheduled yet — delivery setup comes next."
+            : "Campaign saved.";
+
+      res.json({
+        campaign,
+        statusLabel,
+        message,
+      });
+    } catch (error) {
+      console.error("Error creating preset campaign:", error);
+      res.status(500).json({ error: "Failed to create campaign" });
     }
   });
 

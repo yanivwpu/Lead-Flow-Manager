@@ -466,6 +466,34 @@ export const userAutomationTemplates = pgTable("user_automation_templates", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+/** User-owned campaign instances created from localized preset blueprints (library presets file is never mutated). */
+export const presetCampaigns = pgTable("preset_campaigns", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  sourcePresetId: text("source_preset_id").notNull(),
+  /** draft | active_pending | active | paused | completed */
+  status: text("status").notNull().default("draft"),
+  channel: text("channel").notNull().default("whatsapp"),
+  language: text("language").default("en"),
+  category: text("category"),
+  industry: text("industry"),
+  messages: jsonb("messages").notNull().default(sql`'[]'::jsonb`),
+  delays: jsonb("delays").notNull().default(sql`'[]'::jsonb`),
+  placeholders: jsonb("placeholders").notNull().default(sql`'[]'::jsonb`),
+  placeholderDefaults: jsonb("placeholder_defaults").default(sql`'{}'::jsonb`),
+  aiEnabled: boolean("ai_enabled").default(false),
+  audienceConfig: jsonb("audience_config").default(sql`'{}'::jsonb`),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertPresetCampaignSchema = createInsertSchema(presetCampaigns).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 // Template usage analytics
 export const templateUsageAnalytics = pgTable("template_usage_analytics", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -494,6 +522,8 @@ export const insertTemplateUsageAnalyticsSchema = createInsertSchema(templateUsa
 
 export type InsertUserAutomationTemplate = z.infer<typeof insertUserAutomationTemplateSchema>;
 export type UserAutomationTemplate = typeof userAutomationTemplates.$inferSelect;
+export type InsertPresetCampaign = z.infer<typeof insertPresetCampaignSchema>;
+export type PresetCampaign = typeof presetCampaigns.$inferSelect;
 export type InsertTemplateUsageAnalytics = z.infer<typeof insertTemplateUsageAnalyticsSchema>;
 export type TemplateUsageAnalytics = typeof templateUsageAnalytics.$inferSelect;
 

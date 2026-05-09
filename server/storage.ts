@@ -32,6 +32,7 @@ import {
   type AgreementAcceptance, type InsertAgreementAcceptance,
   type AiSettings, type AiBusinessKnowledge, type AiUsage, type AiLeadScore,
   type UserAutomationTemplate, type InsertUserAutomationTemplate,
+  type PresetCampaign, type InsertPresetCampaign,
   type TemplateUsageAnalytics, type InsertTemplateUsageAnalytics,
   type Template, type TemplateEntitlement, type InsertTemplateEntitlement,
   type RealtorOnboardingSubmission, type InsertRealtorOnboardingSubmission,
@@ -44,7 +45,7 @@ import {
   type GhlSyncFailure, type InsertGhlSyncFailure, ghlSyncFailures,
   type FlowJob, type InsertFlowJob,
   aiSettings, aiBusinessKnowledge, aiUsage, aiLeadScores,
-  userAutomationTemplates, templateUsageAnalytics,
+  userAutomationTemplates, presetCampaigns, templateUsageAnalytics,
   templates as templatesTable, templateEntitlements, realtorOnboardingSubmissions,
   templateInstalls, templateAssets, userTemplateData, ghlEventDedup
 } from "@shared/schema";
@@ -283,6 +284,9 @@ export interface IStorage {
   createUserAutomationTemplate(template: InsertUserAutomationTemplate): Promise<UserAutomationTemplate>;
   updateUserAutomationTemplate(id: string, updates: Partial<UserAutomationTemplate>): Promise<UserAutomationTemplate | undefined>;
   deleteUserAutomationTemplate(id: string): Promise<void>;
+
+  getPresetCampaignsForUser(userId: string): Promise<PresetCampaign[]>;
+  createPresetCampaign(row: InsertPresetCampaign): Promise<PresetCampaign>;
   
   // Template usage analytics methods
   recordTemplateUsage(usage: InsertTemplateUsageAnalytics): Promise<TemplateUsageAnalytics>;
@@ -2586,6 +2590,19 @@ export class DbStorage implements IStorage {
   async deleteUserAutomationTemplate(id: string): Promise<void> {
     await db.delete(userAutomationTemplates)
       .where(eq(userAutomationTemplates.id, id));
+  }
+
+  async getPresetCampaignsForUser(userId: string): Promise<PresetCampaign[]> {
+    return db
+      .select()
+      .from(presetCampaigns)
+      .where(eq(presetCampaigns.userId, userId))
+      .orderBy(desc(presetCampaigns.createdAt));
+  }
+
+  async createPresetCampaign(row: InsertPresetCampaign): Promise<PresetCampaign> {
+    const result = await db.insert(presetCampaigns).values(row).returning();
+    return result[0];
   }
 
   // ============= Template Usage Analytics =============
