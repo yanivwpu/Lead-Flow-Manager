@@ -24,7 +24,7 @@
  * Supported MIME types (16 MB max each)
  * ---------------------------------------
  *  image/jpeg, image/png, image/webp → type "image"
- *  application/pdf                   → type "document"
+ *  application/pdf, Word/Excel types → type "document"
  *  audio/mpeg, audio/m4a, audio/ogg  → type "audio"
  *  video/mp4                         → type "video"
  *
@@ -55,6 +55,10 @@ const ALLOWED_MIME_TYPES: Record<string, string> = {
   "image/png":         "image",
   "image/webp":        "image",
   "application/pdf":   "document",
+  "application/msword": "document",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "document",
+  "application/vnd.ms-excel": "document",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "document",
   "audio/mpeg":        "audio",
   "audio/mp3":         "audio",
   "audio/m4a":         "audio",
@@ -62,6 +66,7 @@ const ALLOWED_MIME_TYPES: Record<string, string> = {
   "audio/ogg":         "audio",
   "audio/opus":        "audio",
   "video/mp4":         "video",
+  "video/quicktime":   "video",
 };
 
 // MIME type → safe file extension (never trust the original filename extension)
@@ -71,6 +76,10 @@ const MIME_TO_EXT: Record<string, string> = {
   "image/png":         ".png",
   "image/webp":        ".webp",
   "application/pdf":   ".pdf",
+  "application/msword": ".doc",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
+  "application/vnd.ms-excel": ".xls",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": ".xlsx",
   "audio/mpeg":        ".mp3",
   "audio/mp3":         ".mp3",
   "audio/m4a":         ".m4a",
@@ -78,6 +87,7 @@ const MIME_TO_EXT: Record<string, string> = {
   "audio/ogg":         ".ogg",
   "audio/opus":        ".ogg",
   "video/mp4":         ".mp4",
+  "video/quicktime":   ".mov",
 };
 
 // ---------------------------------------------------------------------------

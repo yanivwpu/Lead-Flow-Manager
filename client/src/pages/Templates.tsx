@@ -76,6 +76,12 @@ interface MessageTemplate {
   bodyText: string | null;
   headerType: string | null;
   headerContent: string | null;
+  /** Meta HEADER format — mirrors headerType for synced templates. */
+  headerFormat?: string | null;
+  /** Approval sample URL only; runtime sends may use different media. */
+  approvedSampleMediaUrl?: string | null;
+  approvedSampleMediaType?: string | null;
+  mediaRuntimeRequired?: boolean | null;
   footerText: string | null;
   buttons: any[];
   carouselCards: any[];
@@ -281,6 +287,13 @@ function libraryQuickSendMeta(template: MessageTemplate) {
   });
 }
 
+/** WhatsApp media headers (image | video | document) support per-send runtime upload unless explicitly disabled. */
+function templateHasDynamicMediaHeader(template: MessageTemplate): boolean {
+  if (template.mediaRuntimeRequired === false) return false;
+  const ht = (template.headerType || "").toLowerCase();
+  return ["image", "video", "document"].includes(ht);
+}
+
 const ADVANCED_QUICK_SEND_NOTE =
   "This template includes media, buttons, or a carousel. It can't be sent from Inbox quick-send or campaign shortcuts — use Continue to send and fill any required variables.";
 
@@ -407,6 +420,8 @@ export function Templates() {
   const [sendInlineError, setSendInlineError] = useState<string | null>(null);
   /** When synced header media is empty (no {{n}}), sent as direct https link — upload / chat picker. */
   const [optionalHeaderMediaUrl, setOptionalHeaderMediaUrl] = useState<string | null>(null);
+  /** Passed to Meta document header `filename` when user uploads a file. */
+  const [optionalHeaderDocumentFilename, setOptionalHeaderDocumentFilename] = useState<string | null>(null);
   const [headerMediaBroken, setHeaderMediaBroken] = useState(false);
 
   const [savedCampaignModalId, setSavedCampaignModalId] = useState<string | null>(null);
@@ -691,13 +706,23 @@ export function Templates() {
 
   const sendStructureBlockReason = useMemo(() => {
     if (!selectedTemplate) return null as string | null;
+    const ht = (selectedTemplate.headerType || "").toLowerCase();
+    const docOpts =
+      ht === "document" ? { headerDocumentFilename: optionalHeaderDocumentFilename } : undefined;
     return getLibraryTemplateSendStructureBlockReason(
       selectedTemplate,
       variableValues,
       missingPlaceholders,
-      optionalHeaderMediaUrl
+      optionalHeaderMediaUrl,
+      docOpts
     );
-  }, [selectedTemplate, variableValues, missingPlaceholders, optionalHeaderMediaUrl]);
+  }, [
+    selectedTemplate,
+    variableValues,
+    missingPlaceholders,
+    optionalHeaderMediaUrl,
+    optionalHeaderDocumentFilename,
+  ]);
 
   const resolvedHeaderMediaForPreview = useMemo(() => {
     if (!selectedTemplate) return null as string | null;
@@ -750,8 +775,10 @@ export function Templates() {
       variables: Record<string, string>;
       sendSource: "templates_library" | "templates_campaign";
       optionalHeaderMediaUrl?: string | null;
+      optionalHeaderMediaFilename?: string | null;
     }) => {
       const trimmedOpt = data.optionalHeaderMediaUrl?.trim();
+      const trimmedFn = data.optionalHeaderMediaFilename?.trim();
       const payload = {
         templateId: data.templateId,
         variables: data.variables,
@@ -760,6 +787,7 @@ export function Templates() {
           ? { contactId: data.contactId }
           : { chatId: data.chatId as string }),
         ...(trimmedOpt ? { optionalHeaderMediaUrl: trimmedOpt } : {}),
+        ...(trimmedFn ? { optionalHeaderMediaFilename: trimmedFn } : {}),
       };
       console.log(
         `[WA_TEMPLATE_SEND_CLIENT] ${JSON.stringify({
@@ -785,6 +813,7 @@ export function Templates() {
       setSelectedChat(null);
       setVariableValues({});
       setOptionalHeaderMediaUrl(null);
+      setOptionalHeaderDocumentFilename(null);
       toast({
         title: "Template sent",
         description: data?.message || "Template message sent successfully.",
@@ -819,6 +848,7 @@ export function Templates() {
     setSelectedChat(chat);
     setVariableValues({});
     setOptionalHeaderMediaUrl(null);
+    setOptionalHeaderDocumentFilename(null);
     setHeaderMediaBroken(false);
     suppressTemplatePrefillRef.current = false;
     pendingTemplatePrefillRef.current = true;
@@ -1235,6 +1265,15 @@ export function Templates() {
                           {(template.variables?.length ?? 0) > 0 ? (
                             <Badge variant="outline" className="text-[10px] font-normal border-gray-200 bg-white text-gray-700">
                               Variables required
+                            </Badge>
+                          ) : null}
+                          {templateHasDynamicMediaHeader(template) ? (
+                            <Badge
+                              variant="outline"
+                              className="text-[10px] font-normal border-sky-200/90 bg-sky-50/90 text-sky-950"
+                              title="You can upload or pick different media for each send."
+                            >
+                              Dynamic media
                             </Badge>
                           ) : null}
                           <TemplateShapeIndicator template={template} />
@@ -1664,6 +1703,7 @@ export function Templates() {
             if (!open) {
               setSendInlineError(null);
               setOptionalHeaderMediaUrl(null);
+              setOptionalHeaderDocumentFilename(null);
               setHeaderMediaBroken(false);
               suppressTemplatePrefillRef.current = false;
               pendingTemplatePrefillRef.current = false;
@@ -1724,6 +1764,18 @@ export function Templates() {
                       onVariableValuesChange={setVariableValues}
                       optionalHeaderMediaUrl={optionalHeaderMediaUrl}
                       onOptionalHeaderMediaUrlChange={setOptionalHeaderMediaUrl}
+                      approvedSampleMediaUrl={
+                        selectedTemplate.approvedSampleMediaUrl ??
+                        (selectedTemplate.mediaRuntimeRequired !== false &&
+                        ["image", "video", "document"].includes(
+                          (selectedTemplate.headerType || "").toLowerCase()
+                        ) &&
+                        /^https?:\/\//i.test(String(selectedTemplate.headerContent || "").trim())
+                          ? String(selectedTemplate.headerContent).trim()
+                          : null)
+                      }
+                      mediaRuntimeRequired={selectedTemplate.mediaRuntimeRequired ?? true}
+                      onOptionalHeaderDocumentFilenameChange={setOptionalHeaderDocumentFilename}
                       onUserAdjustedMedia={() => {
                         suppressTemplatePrefillRef.current = true;
                       }}
@@ -1899,6 +1951,7 @@ export function Templates() {
                             ? "templates_campaign"
                             : "templates_library",
                         optionalHeaderMediaUrl,
+                        optionalHeaderMediaFilename: optionalHeaderDocumentFilename,
                       });
                     }}
                     disabled={
@@ -1971,6 +2024,14 @@ export function Templates() {
                   >
                     {libraryQuickSendMeta(libraryModalTemplate).blocked ? "Media template" : "Quick-send ready"}
                   </Badge>
+                  {templateHasDynamicMediaHeader(libraryModalTemplate) ? (
+                    <Badge
+                      variant="outline"
+                      className="text-[10px] font-normal border-sky-200/90 bg-sky-50/90 text-sky-950"
+                    >
+                      Dynamic media
+                    </Badge>
+                  ) : null}
                   <TemplateShapeIndicator template={libraryModalTemplate} />
                 </div>
                 <div className="min-w-0 pb-4">

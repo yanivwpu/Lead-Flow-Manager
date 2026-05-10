@@ -27,8 +27,21 @@ function uploadMediaTypeMatchesHeader(headerType: string, uploadMediaType: strin
 function inputAcceptForHeader(headerType: string): string {
   const h = headerType.toLowerCase();
   if (h === "image") return "image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp";
-  if (h === "video") return "video/mp4,.mp4";
-  if (h === "document") return "application/pdf,.pdf";
+  if (h === "video") return "video/mp4,video/quicktime,.mp4,.mov";
+  if (h === "document") {
+    return [
+      "application/pdf",
+      "application/msword",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "application/vnd.ms-excel",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      ".pdf",
+      ".doc",
+      ".docx",
+      ".xls",
+      ".xlsx",
+    ].join(",");
+  }
   return "*/*";
 }
 
@@ -77,6 +90,12 @@ export function TemplateSendMediaControls(props: {
   onVariableValuesChange: Dispatch<SetStateAction<Record<string, string>>>;
   optionalHeaderMediaUrl: string | null;
   onOptionalHeaderMediaUrlChange: (url: string | null) => void;
+  /** Meta approval sample URL — optional default for this send (not locked). */
+  approvedSampleMediaUrl?: string | null;
+  /** When false, hide runtime controls (rare; defaults true for image/video/document). */
+  mediaRuntimeRequired?: boolean;
+  /** Original filename for document-header sends (WhatsApp `document.filename`). */
+  onOptionalHeaderDocumentFilenameChange?: (name: string | null) => void;
   /** User chose upload / recent / clear — skip automatic prefill from last send. */
   onUserAdjustedMedia?: () => void;
 }) {
@@ -88,6 +107,9 @@ export function TemplateSendMediaControls(props: {
     onVariableValuesChange,
     optionalHeaderMediaUrl,
     onOptionalHeaderMediaUrlChange,
+    approvedSampleMediaUrl,
+    mediaRuntimeRequired = true,
+    onOptionalHeaderDocumentFilenameChange,
     onUserAdjustedMedia,
   } = props;
   const { toast } = useToast();
@@ -101,8 +123,18 @@ export function TemplateSendMediaControls(props: {
     return null;
   }
 
+  if (mediaRuntimeRequired === false) {
+    return (
+      <div className="rounded-lg border border-gray-100 bg-gray-50/80 p-3 text-sm text-gray-600">
+        <p className="font-medium text-gray-800">Fixed header media</p>
+        <p className="mt-1 text-xs text-gray-500">
+          This template does not use runtime media selection in the library send flow.
+        </p>
+      </div>
+    );
+  }
+
   const placeholderKeys = headerMediaPlaceholderKeys(template.headerContent);
-  const staticHttpsHeader = hc && /^https?:\/\//i.test(hc) && placeholderKeys.length === 0;
 
   const recentMediaKey = contactId ? `contact:${contactId}` : chatId ? `chat:${chatId}` : "";
 
@@ -129,6 +161,7 @@ export function TemplateSendMediaControls(props: {
     const trimmed = url.trim();
     if (!trimmed || !/^https?:\/\//i.test(trimmed)) return;
     onUserAdjustedMedia?.();
+    onOptionalHeaderDocumentFilenameChange?.(null);
     if (placeholderKeys.length > 0) {
       const primary = placeholderKeys[0];
       onVariableValuesChange((prev) => ({ ...prev, [primary]: trimmed }));
@@ -140,6 +173,7 @@ export function TemplateSendMediaControls(props: {
 
   const clearMedia = () => {
     onUserAdjustedMedia?.();
+    onOptionalHeaderDocumentFilenameChange?.(null);
     if (placeholderKeys.length > 0) {
       onVariableValuesChange((prev) => {
         const next = { ...prev };
@@ -190,13 +224,22 @@ export function TemplateSendMediaControls(props: {
             ht === "image"
               ? "Choose a JPG, PNG, or WebP image."
               : ht === "video"
-                ? "Choose an MP4 video."
-                : "Choose a PDF file.",
+                ? "Choose an MP4 or supported video file."
+                : "Choose a PDF or supported document file.",
           variant: "destructive",
         });
         return;
       }
       applyMediaUrl(json.mediaUrl);
+      if (ht === "document") {
+        onOptionalHeaderDocumentFilenameChange?.(
+          typeof json.mediaFilename === "string" && json.mediaFilename.trim()
+            ? json.mediaFilename.trim()
+            : null
+        );
+      } else {
+        onOptionalHeaderDocumentFilenameChange?.(null);
+      }
       toast({ title: "Added", description: "Your file is ready to send." });
     } catch (e: unknown) {
       toast({
@@ -215,29 +258,46 @@ export function TemplateSendMediaControls(props: {
 
   const MediaGlyph = ht === "image" ? ImageIcon : ht === "video" ? Video : FileIcon;
 
-  if (staticHttpsHeader) {
-    return (
-      <div className="rounded-lg border border-gray-100 bg-gray-50/80 p-3 text-sm text-gray-600">
-        <div className="flex items-center gap-2 font-medium text-gray-800">
-          <MediaGlyph className="h-4 w-4 shrink-0 text-gray-500" aria-hidden />
-          {headerKindLabel} is set in WhatsApp Manager
-        </div>
-        <p className="mt-1 text-xs text-gray-500">
-          This template already includes fixed media. No upload is needed before sending.
-        </p>
-      </div>
+  const sampleUrl = (approvedSampleMediaUrl || "").trim();
+  const selectedMediaUrl =
+    placeholderKeys.length > 0 && primaryPh
+      ? String(variableValues[primaryPh] ?? "").trim()
+      : optionalHeaderMediaUrl?.trim() || "";
+  const canUseSample =
+    Boolean(
+      sampleUrl &&
+        /^https?:\/\//i.test(sampleUrl) &&
+        selectedMediaUrl !== sampleUrl
     );
-  }
+
+  const useSampleMedia = () => {
+    onUserAdjustedMedia?.();
+    applyMediaUrl(sampleUrl);
+  };
 
   return (
     <div className="space-y-3 rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
       <div className="flex flex-col gap-0.5">
         <Label className="text-sm font-medium text-gray-900">{headerKindLabel} for this send</Label>
         <p className="text-xs text-gray-500">
-          Upload a file or pick something you already shared in this chat. Your customer sees this in the message
-          header.
+          Upload a file or pick something you already shared in this chat. Approval samples from WhatsApp Manager are
+          defaults only — you can replace them for each send.
         </p>
       </div>
+
+      {canUseSample ? (
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            className="gap-1.5"
+            onClick={useSampleMedia}
+          >
+            Use sample media
+          </Button>
+        </div>
+      ) : null}
 
       <div className="flex flex-wrap gap-2">
         <input

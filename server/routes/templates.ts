@@ -4,6 +4,7 @@ import {
   buildMetaCloudTemplateSendComponents,
   buildMetaLibraryTemplateSendComponents,
   effectiveTemplateRowForLibrarySend,
+  enrichMessageTemplateMediaFields,
   getInboxTemplateSendBlockReason,
   inferMetaTemplateShape,
   normalizeTemplateVariableMap,
@@ -781,7 +782,7 @@ export function registerTemplateRoutes(app: Express): void {
       }
 
       const templates = await storage.getMessageTemplates(req.user.id);
-      res.json(templates);
+      res.json(templates.map((t) => enrichMessageTemplateMediaFields(t)));
     } catch (error) {
       console.error("Error fetching templates:", error);
       res.status(500).json({ error: "Failed to fetch templates" });
@@ -878,6 +879,9 @@ export function registerTemplateRoutes(app: Express): void {
               components: t.components as Record<string, unknown>[],
             });
 
+            const hf = (parsed.headerType || "").toLowerCase();
+            const isMediaHeader = ["image", "video", "document"].includes(hf);
+
             console.log(
               `[WA_TEMPLATE_SYNC] classified name=${String(t.name)} templateType=${parsed.templateType} components=${parsed.componentTypesUpper.join(",")} carouselCards=${Array.isArray(parsed.carouselCards) ? parsed.carouselCards.length : 0}`
             );
@@ -893,7 +897,11 @@ export function registerTemplateRoutes(app: Express): void {
                 carouselCards: parsed.carouselCards as any,
                 bodyText: parsed.bodyText,
                 headerType: parsed.headerType,
+                headerFormat: parsed.headerFormat,
                 headerContent: parsed.headerContent,
+                approvedSampleMediaUrl: parsed.approvedSampleMediaUrl,
+                approvedSampleMediaType: isMediaHeader ? hf : null,
+                mediaRuntimeRequired: isMediaHeader,
                 footerText: parsed.footerText,
                 buttons: parsed.buttons as any,
                 variables: parsed.variables as any,
@@ -912,7 +920,11 @@ export function registerTemplateRoutes(app: Express): void {
                 templateType: parsed.templateType,
                 bodyText: parsed.bodyText,
                 headerType: parsed.headerType,
+                headerFormat: parsed.headerFormat,
                 headerContent: parsed.headerContent,
+                approvedSampleMediaUrl: parsed.approvedSampleMediaUrl,
+                approvedSampleMediaType: isMediaHeader ? hf : null,
+                mediaRuntimeRequired: isMediaHeader,
                 footerText: parsed.footerText,
                 buttons: parsed.buttons as any,
                 carouselCards: parsed.carouselCards as any,
@@ -1387,16 +1399,25 @@ export function registerTemplateRoutes(app: Express): void {
         return res.status(403).json({ error: "Template messaging is a Pro feature" });
       }
 
-      const { templateId, chatId, contactId, variables, sendSource, optionalHeaderMediaUrl: optionalHeaderMediaBody } =
-        req.body as {
-          templateId?: string;
-          chatId?: string;
-          contactId?: string;
-          variables?: Record<string, string>;
-          sendSource?: string;
-          /** Direct https URL when synced header media is empty (upload / library pick). */
-          optionalHeaderMediaUrl?: string;
-        };
+      const {
+        templateId,
+        chatId,
+        contactId,
+        variables,
+        sendSource,
+        optionalHeaderMediaUrl: optionalHeaderMediaBody,
+        optionalHeaderMediaFilename: optionalHeaderMediaFilenameBody,
+      } = req.body as {
+        templateId?: string;
+        chatId?: string;
+        contactId?: string;
+        variables?: Record<string, string>;
+        sendSource?: string;
+        /** Direct https URL when synced header media is empty (upload / library pick). */
+        optionalHeaderMediaUrl?: string;
+        /** Original filename for document-header sends (Meta `document.filename`). */
+        optionalHeaderMediaFilename?: string;
+      };
       const sendSourceTag =
         typeof sendSource === "string" && sendSource.trim()
           ? sendSource.trim()
@@ -1511,6 +1532,10 @@ export function registerTemplateRoutes(app: Express): void {
       const variableValues = normalizeTemplateVariableMap(variables || {});
       const optionalHeaderMediaUrl =
         typeof optionalHeaderMediaBody === "string" ? optionalHeaderMediaBody.trim() : undefined;
+      const optionalHeaderMediaFilename =
+        typeof optionalHeaderMediaFilenameBody === "string"
+          ? optionalHeaderMediaFilenameBody.trim()
+          : undefined;
       const libraryEffectiveTemplate =
         metaSendPath === "library_full"
           ? effectiveTemplateRowForLibrarySend(template, optionalHeaderMediaUrl ?? null)
@@ -1597,7 +1622,9 @@ export function registerTemplateRoutes(app: Express): void {
         const built =
           metaSendPath === "quick_send"
             ? buildMetaCloudTemplateSendComponents(template, variableValues)
-            : buildMetaLibraryTemplateSendComponents(libraryEffectiveTemplate, variableValues);
+            : buildMetaLibraryTemplateSendComponents(libraryEffectiveTemplate, variableValues, {
+                headerDocumentFilename: optionalHeaderMediaFilename ?? null,
+              });
 
         const resolvedShape =
           "shape" in built && built.shape ? built.shape : templateShape;
@@ -1819,6 +1846,10 @@ export function registerTemplateRoutes(app: Express): void {
             provider: resolvedProvider === "meta" ? "meta" : resolvedProvider,
             headerType: displaySource.headerType ?? null,
             headerMediaUrl: resolvedHeaderMediaUrl,
+            ...(optionalHeaderMediaFilename &&
+            (displaySource.headerType || "").toLowerCase() === "document"
+              ? { headerDocumentFilename: optionalHeaderMediaFilename }
+              : {}),
           };
 
           const normalizedStatus = (sendStatus || "").toLowerCase();

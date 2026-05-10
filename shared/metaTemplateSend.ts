@@ -224,7 +224,11 @@ export function parseMetaGraphTemplateForLibrary(t: {
   carouselCards: unknown[];
   bodyText: string;
   headerType: string | null;
+  /** Meta HEADER `format` (text|image|video|document) — same as `headerType` for library templates. */
+  headerFormat: string | null;
   headerContent: string | null;
+  /** `example.header_handle[0]` — approval sample; runtime sends may use a different https link. */
+  approvedSampleMediaUrl: string | null;
   footerText: string | null;
   buttons: unknown[];
   variables: string[];
@@ -232,7 +236,9 @@ export function parseMetaGraphTemplateForLibrary(t: {
 } {
   let bodyText = "";
   let headerType: string | null = null;
+  let headerFormat: string | null = null;
   let headerContent: string | null = null;
+  let approvedSampleMediaUrl: string | null = null;
   let footerText: string | null = null;
   let buttons: unknown[] = [];
   const variables: string[] = [];
@@ -256,17 +262,31 @@ export function parseMetaGraphTemplateForLibrary(t: {
         if (!variables.includes(v)) variables.push(v);
       });
     } else if (ctype === "HEADER") {
-      headerType = String(comp.format ?? "").toLowerCase() || null;
-      if (String(comp.format ?? "").toUpperCase() === "TEXT") {
+      const fmtRaw = String(comp.format ?? "").toLowerCase();
+      headerFormat = fmtRaw || null;
+      headerType = fmtRaw || null;
+
+      if (fmtRaw === "text") {
         headerContent = comp.text != null ? String(comp.text) : null;
         const hv = (headerContent || "").match(/\{\{\d+\}\}/g) || [];
         hv.forEach((v: string) => {
           if (!variables.includes(v)) variables.push(v);
         });
-      } else if (
-        (comp as { example?: { header_handle?: string[] } }).example?.header_handle?.[0]
-      ) {
-        headerContent = (comp as { example: { header_handle: string[] } }).example.header_handle[0];
+      } else if (["image", "video", "document"].includes(fmtRaw)) {
+        const ex0 = (comp as { example?: { header_handle?: string[] } }).example?.header_handle?.[0];
+        if (ex0 && /^https?:\/\//i.test(String(ex0).trim())) {
+          approvedSampleMediaUrl = String(ex0).trim();
+        }
+        const txt = comp.text != null ? String(comp.text).trim() : "";
+        if (txt) {
+          headerContent = txt;
+          const hv = txt.match(/\{\{\d+\}\}/g) || [];
+          hv.forEach((v: string) => {
+            if (!variables.includes(v)) variables.push(v);
+          });
+        } else if (approvedSampleMediaUrl) {
+          headerContent = approvedSampleMediaUrl;
+        }
       }
     } else if (ctype === "FOOTER") {
       footerText = comp.text != null ? String(comp.text) : null;
@@ -305,12 +325,66 @@ export function parseMetaGraphTemplateForLibrary(t: {
     carouselCards,
     bodyText,
     headerType,
+    headerFormat,
     headerContent,
+    approvedSampleMediaUrl,
     footerText,
     buttons,
     variables,
     componentTypesUpper,
   };
+}
+
+/** Backfill UI/API fields for templates synced before media metadata columns existed. */
+export function enrichMessageTemplateMediaFields<
+  T extends {
+    headerType?: string | null;
+    headerContent?: string | null;
+    headerFormat?: string | null;
+    approvedSampleMediaUrl?: string | null;
+    approvedSampleMediaType?: string | null;
+    mediaRuntimeRequired?: boolean | null;
+  },
+>(row: T): T & {
+  headerFormat: string | null;
+  approvedSampleMediaUrl: string | null;
+  approvedSampleMediaType: string | null;
+  mediaRuntimeRequired: boolean;
+} {
+  const ht = (row.headerType || "").toLowerCase();
+  const isMediaHeader = ["image", "video", "document"].includes(ht);
+  const hc = (row.headerContent || "").trim();
+  const sample =
+    (row.approvedSampleMediaUrl && String(row.approvedSampleMediaUrl).trim()) ||
+    (isMediaHeader && /^https?:\/\//i.test(hc) ? hc : "") ||
+    "";
+  return {
+    ...row,
+    headerFormat: row.headerFormat ?? row.headerType ?? null,
+    approvedSampleMediaUrl: sample || null,
+    approvedSampleMediaType:
+      row.approvedSampleMediaType ?? (isMediaHeader ? ht : null),
+    mediaRuntimeRequired: row.mediaRuntimeRequired ?? isMediaHeader,
+  };
+}
+
+function sanitizeDocumentFilenameForMeta(raw: string | null | undefined): string | null {
+  const t = (raw ?? "").trim();
+  if (!t) return null;
+  const base = t.replace(/^.*[/\\]/, "").slice(0, 200);
+  if (!base) return null;
+  return base;
+}
+
+function inferDocumentFilenameFromUrl(url: string): string | null {
+  try {
+    const u = new URL(url);
+    const seg = u.pathname.split("/").pop();
+    if (seg && /\.(pdf|doc|docx|ppt|pptx|xls|xlsx)$/i.test(seg)) return seg.slice(0, 200);
+  } catch {
+    /* ignore */
+  }
+  return null;
 }
 
 /**
@@ -578,7 +652,8 @@ function buildCarouselLibraryPayload(
  */
 export function buildMetaLibraryTemplateSendComponents(
   template: TemplateRowForMetaSend,
-  variableValues: Record<string, string>
+  variableValues: Record<string, string>,
+  options?: { headerDocumentFilename?: string | null }
 ): { components?: Record<string, unknown>[]; error?: string; shape: MetaTemplateSendShape } {
   const vv = normalizeTemplateVariableMap(variableValues);
   const shape = inferMetaTemplateShape(template);
@@ -627,12 +702,16 @@ export function buildMetaLibraryTemplateSendComponents(
         parameters: [{ type: "video", video: { link: url } }],
       });
     } else {
+      const docFilename =
+        sanitizeDocumentFilenameForMeta(options?.headerDocumentFilename) ||
+        inferDocumentFilenameFromUrl(url) ||
+        "document.pdf";
       components.push({
         type: "header",
         parameters: [
           {
             type: "document",
-            document: { link: url, filename: "document.pdf" },
+            document: { link: url, filename: docFilename },
           },
         ],
       });
@@ -714,11 +793,14 @@ export function getLibraryTemplateSendStructureBlockReason(
   template: TemplateRowForMetaSend,
   variableValues: Record<string, string>,
   missingPlaceholderKeys: string[],
-  optionalHeaderMediaUrl?: string | null
+  optionalHeaderMediaUrl?: string | null,
+  options?: { headerDocumentFilename?: string | null }
 ): string | null {
   if (missingPlaceholderKeys.length > 0) return null;
   const effective = effectiveTemplateRowForLibrarySend(template, optionalHeaderMediaUrl);
-  const built = buildMetaLibraryTemplateSendComponents(effective, variableValues);
+  const built = buildMetaLibraryTemplateSendComponents(effective, variableValues, {
+    headerDocumentFilename: options?.headerDocumentFilename,
+  });
   if (!built.error) return null;
   if (shouldUnifyLibraryErrorToMediaRequiredMessage(template, built.error)) {
     return LIBRARY_MEDIA_REQUIRED_BEFORE_SEND_MESSAGE;
@@ -735,13 +817,14 @@ export function effectiveTemplateRowForLibrarySend(
   optionalHeaderMediaUrl?: string | null
 ): TemplateRowForMetaSend {
   const opt = typeof optionalHeaderMediaUrl === "string" ? optionalHeaderMediaUrl.trim() : "";
-  if (!opt || !/^https?:\/\//i.test(opt)) return template;
   const ht = (template.headerType || "").toLowerCase();
   if (!["image", "video", "document"].includes(ht)) return template;
   const hc = (template.headerContent || "").trim();
   if (extractSortedPlaceholders(hc).length > 0) return template;
-  if (hc && /^https?:\/\//i.test(hc)) return template;
-  return { ...template, headerContent: opt };
+  if (opt && /^https?:\/\//i.test(opt)) {
+    return { ...template, headerContent: opt };
+  }
+  return template;
 }
 
 /** Resolved https URL for image/video/document header preview and validation (after optional merge). */
