@@ -64,9 +64,9 @@ export function TermsOfUse() {
           <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
             <p className="text-gray-700 font-medium mb-2">Subscription Plans:</p>
             <ul className="text-gray-600 space-y-1">
-              <li><strong>Free:</strong> $0/month - 50 active conversations, 1 user, 1 WhatsApp number</li>
-              <li><strong>Starter:</strong> $19/month - 500 active conversations, 3 users, 1 WhatsApp number</li>
-              <li><strong>Pro:</strong> $49/month - 2,000 active conversations, 10 users, 3 WhatsApp numbers</li>
+              <li><strong>Free:</strong> $0/month — 50 active conversations, 1 user, 1 WhatsApp number</li>
+              <li><strong>Starter:</strong> $19/month — 500 active conversations, up to 3 users, 1 WhatsApp number</li>
+              <li><strong>Pro:</strong> $49/month — 2,000 active conversations, unlimited users, up to 5 WhatsApp numbers</li>
             </ul>
           </div>
           <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4">

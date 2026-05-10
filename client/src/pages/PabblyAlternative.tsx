@@ -92,7 +92,7 @@ export function PabblyAlternative() {
               { feature: "Monthly pricing", us: "$19/mo", them: "$249+ one-time" },
               { feature: "No message credits", us: true, them: false },
               { feature: "Cancel anytime", us: true, them: "30-day refund only" },
-              { feature: "Unlimited team members", us: "$49/mo", them: true },
+              { feature: "Unlimited users", us: "$49/mo", them: true },
               { feature: "Visual chatbot builder", us: true, them: true },
               { feature: "Multiple WhatsApp numbers", us: "Up to 5", them: "Unlimited" },
               { feature: "No upfront investment", us: true, them: false },

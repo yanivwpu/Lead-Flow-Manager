@@ -255,7 +255,7 @@
       "everythingFree": "Everything in Free, plus:",
       "allChannels": "All channels: WhatsApp, SMS, Telegram, Instagram, Facebook, Web Chat",
       "tiktokIntake": "TikTok lead intake",
-      "threeUsers": "Up to 3 team members",
+      "threeUsers": "Up to 3 users",
       "activeConversations500": "500 active conversations / month",
       "chatbotBuilder": "Visual chatbot builder",
       "autoReply": "Auto-reply messages",
@@ -267,7 +267,7 @@
       "aiBrainAddon": "Full AI Brain add-on available (+$29/mo)",
       "everythingStarter": "Everything in Starter, plus:",
       "fiveNumbers": "Up to 5 WhatsApp Business numbers",
-      "unlimitedTeam": "Unlimited team members",
+      "unlimitedTeam": "Unlimited users",
       "activeConversations2000": "2,000 active conversations / month",
       "dripSequences": "Drip sequences & campaigns",
       "workflowAutomation": "Workflow automation",
@@ -814,7 +814,7 @@
       "q5": "Do you charge per message?",
       "a5": "No. WhachatCRM does not add any markup to messages. WhatsApp messaging fees are billed directly by Meta at their standard rates.",
       "q6": "Can teams use this system?",
-      "a6": "Absolutely. The Pro plan includes unlimited team members. You can assign leads, share notes, and collaborate from a single unified inbox."
+      "a6": "Absolutely. The Pro plan includes unlimited users. You can assign leads, share notes, and collaborate from a single unified inbox."
     },
     "cta": {
       "title": "Ready to Automate Your Lead Flow?",
@@ -1025,7 +1025,7 @@
         "period": "/mo",
         "desc": "For teams ready to automate follow-up, identify hot leads, and scale conversations",
         "f1": "2,000 active conversations",
-        "f2": "Multiple users",
+        "f2": "Unlimited users",
         "f3": "Up to 5 WhatsApp numbers",
         "f4": "Advanced automations",
         "f5": "AI Assist — up to 200/month",
@@ -1080,7 +1080,8 @@
       "basic": "Basic",
       "full": "Full",
       "upTo3": "Up to 3",
-      "multiple": "Multiple",
+      "multiple": "Unlimited users",
+      "upTo5": "Up to 5",
       "replyAndSentiment": "Reply suggestions + sentiment",
       "enhancedAI": "Enhanced AI assistance",
       "advanced": "Advanced"

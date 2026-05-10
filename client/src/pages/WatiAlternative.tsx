@@ -95,7 +95,7 @@ export function WatiAlternative() {
               { feature: "Zero message markup", us: true, them: false },
               { feature: "Cancel anytime (self-service)", us: true, them: false },
               { feature: "Multiple WhatsApp numbers", us: "Up to 5", them: "1 only" },
-              { feature: "Unlimited team members", us: "$49/mo", them: "$200+/mo" },
+              { feature: "Unlimited users", us: "$49/mo", them: "$200+/mo" },
               { feature: "Visual chatbot builder", us: "$19/mo", them: "$100+/mo" },
               { feature: "Simple setup", us: true, them: false },
               { feature: "No training required", us: true, them: false },
@@ -165,7 +165,7 @@ export function WatiAlternative() {
             </div>
             <div className="bg-emerald-50 border border-emerald-100 p-6 rounded-xl">
               <h3 className="font-bold text-emerald-900 mb-2">$49 Gets You Everything</h3>
-              <p className="text-emerald-700 text-sm">Workflows, templates, 10 team members, 3 WhatsApp numbers - features WATI charges $200+/month for.</p>
+              <p className="text-emerald-700 text-sm">Workflows, templates, unlimited users, up to 5 WhatsApp numbers — features WATI charges $200+/month for.</p>
             </div>
           </div>
         </div>

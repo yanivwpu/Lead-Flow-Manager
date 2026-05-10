@@ -92,7 +92,7 @@ export function RespondIoAlternative() {
               { feature: "Starting price", us: "$19/mo", them: "$79/mo" },
               { feature: "Zero message markup", us: true, them: false },
               { feature: "Visual chatbot builder", us: true, them: true },
-              { feature: "Unlimited team members", us: "$49/mo", them: "$279+/mo" },
+              { feature: "Unlimited users", us: "$49/mo", them: "$279+/mo" },
               { feature: "Multiple WhatsApp numbers", us: "Up to 5", them: "Extra cost" },
               { feature: "Simple pricing", us: true, them: false },
               { feature: "No training required", us: true, them: false },
@@ -141,7 +141,7 @@ export function RespondIoAlternative() {
             </div>
             <div className="bg-red-50 border border-red-100 p-5 rounded-xl">
               <h3 className="font-bold text-red-900 mb-2">Per-Seat Pricing</h3>
-              <p className="text-red-700 text-sm">Respond.io charges per user. Our Pro plan includes unlimited team members.</p>
+              <p className="text-red-700 text-sm">Respond.io charges per user. Our Pro plan includes unlimited users.</p>
             </div>
             <div className="bg-red-50 border border-red-100 p-5 rounded-xl">
               <h3 className="font-bold text-red-900 mb-2">Steep Learning Curve</h3>
@@ -152,7 +152,7 @@ export function RespondIoAlternative() {
           <div className="grid md:grid-cols-3 gap-6">
             <div className="bg-emerald-50 border border-emerald-100 p-6 rounded-xl">
               <h3 className="font-bold text-emerald-900 mb-2">SMB-Friendly Pricing</h3>
-              <p className="text-emerald-700 text-sm">$19/mo for Starter, $49/mo for Pro with unlimited team members. No enterprise contracts.</p>
+              <p className="text-emerald-700 text-sm">$19/mo for Starter, $49/mo for Pro with unlimited users. No enterprise contracts.</p>
             </div>
             <div className="bg-emerald-50 border border-emerald-100 p-6 rounded-xl">
               <h3 className="font-bold text-emerald-900 mb-2">WhatsApp Focused</h3>

@@ -98,7 +98,7 @@ export function Waba360Alternative() {
               { feature: "WhatsApp API access", us: "Via Twilio", them: true },
               { feature: "Starting price", us: "$19/mo", them: "API only pricing" },
               { feature: "Free plan", us: true, them: false },
-              { feature: "Unlimited team members", us: "$49/mo", them: "N/A" },
+              { feature: "Unlimited users", us: "$49/mo", them: "N/A" },
               { feature: "Ready to use", us: true, them: "Requires development" },
             ].map((row, i) => (
               <div key={i} className="grid grid-cols-3 p-4 border-t border-gray-100 items-center">

@@ -1021,7 +1021,7 @@ export function Settings() {
                   {atTeamLimit && effectivePlan === "free" && (
                     <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
                       <p className="mb-2">
-                        Free includes 1 user. Upgrade to Starter to invite up to 3 team members.
+                        Free includes 1 user. Upgrade to Starter to invite up to 3 users.
                       </p>
                       <Button
                         type="button"
@@ -1040,7 +1040,7 @@ export function Settings() {
                   {atTeamLimit && effectivePlan === "starter" && (
                     <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
                       <p className="mb-2">
-                        Starter includes up to 3 users. Upgrade to Pro for unlimited team members.
+                        Starter includes up to 3 users. Upgrade to Pro for unlimited users.
                       </p>
                       <Button
                         type="button"

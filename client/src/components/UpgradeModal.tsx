@@ -71,7 +71,7 @@ const UPGRADE_CONTENT: Record<
     description: "Add your team to collaborate on customer conversations.",
     targetPlan: "pro",
     ctaText: "Upgrade to Pro",
-    benefits: ["Up to 10 team members", "2,000 conversations/month", "Team inbox & collaboration"],
+    benefits: ["Unlimited users", "2,000 conversations/month", "Team inbox & collaboration"],
   },
   add_whatsapp_number: {
     icon: <Phone className="h-8 w-8 text-emerald-600" />,
@@ -79,7 +79,7 @@ const UPGRADE_CONTENT: Record<
     description: "Manage multiple WhatsApp Business numbers for different brands.",
     targetPlan: "pro",
     ctaText: "Upgrade to Pro",
-    benefits: ["Up to 3 WhatsApp numbers", "2,000 conversations/month", "Up to 10 team members"],
+    benefits: ["Up to 5 WhatsApp numbers", "2,000 conversations/month", "Unlimited users"],
   },
   add_team_member: {
     icon: <Users className="h-8 w-8 text-blue-500" />,
@@ -88,8 +88,8 @@ const UPGRADE_CONTENT: Record<
     targetPlan: "starter",
     ctaText: "Upgrade Now",
     benefits: [
-      "Up to 3 team members (Starter)",
-      "Up to 10 team members (Pro)",
+      "Up to 3 users (Starter)",
+      "Unlimited users (Pro)",
       "Shared team inbox",
     ],
   },
@@ -117,11 +117,11 @@ const UPGRADE_CONTENT: Record<
     icon: <Users className="h-8 w-8 text-blue-500" />,
     title: "Invite more team members",
     description:
-      "Free includes 1 user. Upgrade to Starter to invite up to 3 team members.",
+      "Free includes 1 user. Upgrade to Starter to invite up to 3 users.",
     targetPlan: "starter",
     ctaText: "Upgrade to Starter",
     benefits: [
-      "Up to 3 team members",
+      "Up to 3 users",
       "500 conversations/month",
       "Shared team inbox",
     ],
@@ -130,11 +130,11 @@ const UPGRADE_CONTENT: Record<
     icon: <Users className="h-8 w-8 text-blue-500" />,
     title: "Invite more team members",
     description:
-      "Starter includes up to 3 users. Upgrade to Pro for unlimited team members.",
+      "Starter includes up to 3 users. Upgrade to Pro for unlimited users.",
     targetPlan: "pro",
     ctaText: "Upgrade to Pro",
     benefits: [
-      "Unlimited team members",
+      "Unlimited users",
       "2,000 conversations/month",
       "Assignment & advanced CRM",
     ],
@@ -158,7 +158,7 @@ const AUTOMATIONS_PAID_PLAN_COPY = {
   proBenefits: [
     "Advanced Automations — integration triggers",
     "2,000 conversations/month",
-    "Up to 10 team members",
+    "Unlimited users",
   ],
 };
 

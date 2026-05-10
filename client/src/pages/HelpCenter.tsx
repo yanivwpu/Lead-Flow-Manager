@@ -907,7 +907,7 @@ They'll receive an email to join your workspace.
 
 - **Free**: 1 user
 - **Starter**: Up to 3 users
-- **Pro**: Unlimited team members
+- **Pro**: Unlimited users
 
 ## Assigning Chats
 
@@ -1043,7 +1043,7 @@ Manage your WhachatCRM subscription and billing.
 
 **Pro - $49/month**
 - 2,000 active conversations
-- Unlimited team members
+- Unlimited users
 - Drip sequences
 - Workflow automation
 - Chatbot automation

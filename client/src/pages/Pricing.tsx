@@ -293,7 +293,7 @@ export function Pricing() {
   }[] = [
     { feature: t(`${p}.compare.activeConversations`), free: "50", starter: "500", pro: "2,000" },
     { feature: t(`${p}.compare.users`), free: "1", starter: t(`${p}.compare.upTo3`), pro: t(`${p}.compare.multiple`) },
-    { feature: t(`${p}.compare.whatsappNumbers`), free: "1", starter: "1", pro: "5" },
+    { feature: t(`${p}.compare.whatsappNumbers`), free: "1", starter: "1", pro: t(`${p}.compare.upTo5`) },
     { feature: t(`${p}.compare.unifiedInbox`), free: true, starter: true, pro: true },
     { feature: t(`${p}.compare.crm`), free: t(`${p}.compare.basic`), starter: t(`${p}.compare.full`), pro: t(`${p}.compare.full`) },
     { feature: t(`${p}.compare.pipelineTasks`), free: true, starter: true, pro: true },

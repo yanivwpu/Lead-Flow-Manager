@@ -13,16 +13,16 @@ export function InteraktAlternative() {
     <div className="min-h-screen bg-white">
       <Helmet>
         <title>Best Interakt Alternative | WhachatCRM</title>
-        <meta name="description" content="Switch from Interakt to WhachatCRM: $19/mo, simpler pricing, unlimited team members. Visual chatbot builder & unified inbox for small teams." />
+        <meta name="description" content="Switch from Interakt to WhachatCRM: $19/mo, simpler pricing, unlimited users. Visual chatbot builder & unified inbox for small teams." />
         <meta name="keywords" content="Interakt alternative, WhatsApp CRM, Interakt competitor, WhatsApp business tool, affordable WhatsApp CRM" />
         <link rel="canonical" href={`${MARKETING_URL}/interakt-alternative`} />
         <meta property="og:title" content="Best Interakt Alternative | WhachatCRM" />
-        <meta property="og:description" content="Switch from Interakt to WhachatCRM: $19/mo, simpler pricing, unlimited team members." />
+        <meta property="og:description" content="Switch from Interakt to WhachatCRM: $19/mo, simpler pricing, unlimited users." />
         <meta property="og:url" content={`${MARKETING_URL}/interakt-alternative`} />
         <meta property="og:type" content="website" />
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content="Best Interakt Alternative for SMBs" />
-        <meta name="twitter:description" content="Switch from Interakt: $19/mo, simpler pricing, unlimited team members." />
+        <meta name="twitter:description" content="Switch from Interakt: $19/mo, simpler pricing, unlimited users." />
       </Helmet>
 
       <nav className="p-4 md:p-6 flex justify-between items-center max-w-7xl mx-auto">
@@ -92,7 +92,7 @@ export function InteraktAlternative() {
               { feature: "Zero message markup", us: true, them: false },
               { feature: "Starting price", us: "$19/mo", them: "$49/mo" },
               { feature: "Visual chatbot builder", us: true, them: true },
-              { feature: "Unlimited team members", us: "$49/mo", them: "Extra cost" },
+              { feature: "Unlimited users", us: "$49/mo", them: "Extra cost" },
               { feature: "Multiple WhatsApp numbers", us: "Up to 5", them: "Extra cost" },
               { feature: "Cancel anytime", us: true, them: true },
               { feature: "No training required", us: true, them: false },
@@ -141,7 +141,7 @@ export function InteraktAlternative() {
             </div>
             <div className="bg-emerald-50 border border-emerald-100 p-6 rounded-xl">
               <h3 className="font-bold text-emerald-900 mb-2">Unlimited Team Members</h3>
-              <p className="text-emerald-700 text-sm">Our Pro plan includes unlimited team members at $49/month. No per-seat pricing.</p>
+              <p className="text-emerald-700 text-sm">Our Pro plan includes unlimited users at $49/month. No per-seat pricing.</p>
             </div>
           </div>
         </div>
