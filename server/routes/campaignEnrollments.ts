@@ -151,11 +151,14 @@ export function registerCampaignEnrollmentRoutes(app: Express): void {
       const enriched = await Promise.all(
         rows.map(async (e) => {
           const c = await storage.getPresetCampaignForUser(e.campaignId, req.user.id);
+          const messages = Array.isArray(c?.messages) ? c.messages : [];
+          const totalSteps = messages.length;
           return {
             ...e,
             campaignName: c?.name ?? "(deleted campaign)",
             campaignChannel: c?.channel ?? null,
             campaignStatus: c?.status ?? null,
+            totalSteps,
           };
         })
       );

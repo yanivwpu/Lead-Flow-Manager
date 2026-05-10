@@ -504,6 +504,41 @@ function EditNoteModal({ contactId, note, onSave, onDelete, onClose }: EditNoteM
   );
 }
 
+type CampaignEnrollmentRow = {
+  id: string;
+  campaignId: string;
+  status: string;
+  campaignName?: string | null;
+  campaignChannel?: string | null;
+  campaignStatus?: string | null;
+  nextRunAt?: string | null;
+  currentStepIndex: number;
+  createdAt?: string | null;
+  totalSteps?: number | null;
+};
+
+function formatCampaignEnrollmentSubtitle(e: CampaignEnrollmentRow): string {
+  const total = typeof e.totalSteps === "number" ? e.totalSteps : 0;
+  const idx = e.currentStepIndex;
+  const humanStep =
+    total > 0 ? Math.min(Math.max(0, idx) + 1, total) : Math.max(1, idx + 1);
+
+  switch (e.status) {
+    case "active":
+      return total > 0 ? `Active · Step ${humanStep} of ${total}` : "Active";
+    case "paused":
+      return total > 0 ? `Paused · Step ${humanStep} of ${total}` : "Paused";
+    case "failed":
+      return "Failed · needs review";
+    case "completed":
+      return "Completed";
+    case "cancelled":
+      return "Cancelled";
+    default:
+      return e.status;
+  }
+}
+
 export function InboxLeadDetailsPanel({
   contact,
   primaryConversation,
@@ -605,19 +640,10 @@ export function InboxLeadDetailsPanel({
 
   const [campaignPickerOpen, setCampaignPickerOpen] = useState(false);
   const [pickedCampaignId, setPickedCampaignId] = useState<string>("");
+  const [showCampaignHistory, setShowCampaignHistory] = useState(false);
 
   const { data: campaignEnrollmentPayload } = useQuery<{
-    enrollments: Array<{
-      id: string;
-      campaignId: string;
-      status: string;
-      campaignName?: string | null;
-      campaignChannel?: string | null;
-      campaignStatus?: string | null;
-      nextRunAt?: string | null;
-      currentStepIndex: number;
-      createdAt?: string | null;
-    }>;
+    enrollments: CampaignEnrollmentRow[];
   }>({
     queryKey: ["/api/campaign-enrollments", contact.id],
     queryFn: async () => {
@@ -726,6 +752,21 @@ export function InboxLeadDetailsPanel({
       setPickedCampaignId(presetCampaignPickList[0].id);
     }
   }, [campaignPickerOpen, presetCampaignPickList, pickedCampaignId]);
+
+  useEffect(() => {
+    setShowCampaignHistory(false);
+  }, [contact.id]);
+
+  const campaignEnrollmentBuckets = useMemo(() => {
+    const list = campaignEnrollmentPayload?.enrollments ?? [];
+    const primary = list.filter((e) =>
+      ["active", "paused", "failed"].includes(e.status)
+    );
+    const history = list.filter((e) =>
+      ["completed", "cancelled"].includes(e.status)
+    );
+    return { primary, history };
+  }, [campaignEnrollmentPayload?.enrollments]);
 
   const { data: contactAppointments = [] } = useQuery<Array<{
     id: string;
@@ -2226,61 +2267,112 @@ export function InboxLeadDetailsPanel({
                 Add to campaign
               </button>
             </div>
-            {(campaignEnrollmentPayload?.enrollments ?? []).length === 0 ? (
+            {campaignEnrollmentBuckets.primary.length === 0 &&
+            campaignEnrollmentBuckets.history.length === 0 ? (
               <p className="text-[11px] text-gray-400 italic">Not enrolled in any saved campaigns.</p>
             ) : (
-              <div className="space-y-2 max-h-[220px] overflow-y-auto pr-0.5">
-                {(campaignEnrollmentPayload?.enrollments ?? []).slice(0, 12).map((e) => (
-                  <div
-                    key={e.id}
-                    className="rounded-lg border border-gray-100 bg-gray-50/80 px-2 py-2 text-[11px]"
-                    data-testid={`contact-enrollment-${e.id}`}
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0 flex-1">
-                        <p className="font-medium text-gray-800 truncate">{e.campaignName ?? "Campaign"}</p>
-                        <p className="text-[10px] text-gray-500 mt-0.5 capitalize">
-                          {e.status}
-                          {typeof e.currentStepIndex === "number" ? ` · next step ${e.currentStepIndex + 1}` : ""}
-                        </p>
+              <div className="space-y-2">
+                {campaignEnrollmentBuckets.primary.length === 0 ? (
+                  <p className="text-[11px] text-gray-400 italic">
+                    No enrollments in progress.
+                  </p>
+                ) : (
+                  <div className="max-h-[220px] space-y-2 overflow-y-auto pr-0.5">
+                    {campaignEnrollmentBuckets.primary.slice(0, 12).map((e) => (
+                      <div
+                        key={e.id}
+                        className="rounded-lg border border-gray-100 bg-gray-50/80 px-2 py-2 text-[11px]"
+                        data-testid={`contact-enrollment-${e.id}`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0 flex-1">
+                            <p className="font-medium text-gray-800 truncate">{e.campaignName ?? "Campaign"}</p>
+                            <p className="mt-0.5 text-[10px] text-gray-500">
+                              {formatCampaignEnrollmentSubtitle(e)}
+                            </p>
+                          </div>
+                          <div className="flex shrink-0 flex-col items-end gap-1">
+                            {e.status === "active" && (
+                              <button
+                                type="button"
+                                className="text-[10px] font-semibold text-amber-700 hover:underline"
+                                onClick={() => pauseEnrollmentMutation.mutate(e.id)}
+                              >
+                                Pause
+                              </button>
+                            )}
+                            {e.status === "paused" && (
+                              <button
+                                type="button"
+                                className="text-[10px] font-semibold text-emerald-700 hover:underline"
+                                onClick={() => resumeEnrollmentMutation.mutate(e.id)}
+                              >
+                                Resume
+                              </button>
+                            )}
+                            {(e.status === "active" || e.status === "paused") && (
+                              <button
+                                type="button"
+                                className="text-[10px] font-semibold text-red-600 hover:underline"
+                                onClick={() => cancelEnrollmentMutation.mutate(e.id)}
+                              >
+                                Cancel
+                              </button>
+                            )}
+                          </div>
+                        </div>
                       </div>
-                      <div className="flex flex-col items-end gap-1 shrink-0">
-                        {e.status === "active" && (
-                          <button
-                            type="button"
-                            className="text-[10px] font-semibold text-amber-700 hover:underline"
-                            onClick={() => pauseEnrollmentMutation.mutate(e.id)}
-                          >
-                            Pause
-                          </button>
-                        )}
-                        {e.status === "paused" && (
-                          <button
-                            type="button"
-                            className="text-[10px] font-semibold text-emerald-700 hover:underline"
-                            onClick={() => resumeEnrollmentMutation.mutate(e.id)}
-                          >
-                            Resume
-                          </button>
-                        )}
-                        {(e.status === "active" || e.status === "paused") && (
-                          <button
-                            type="button"
-                            className="text-[10px] font-semibold text-red-600 hover:underline"
-                            onClick={() => cancelEnrollmentMutation.mutate(e.id)}
-                          >
-                            Cancel
-                          </button>
-                        )}
-                      </div>
-                    </div>
+                    ))}
                   </div>
-                ))}
+                )}
+
+                {campaignEnrollmentBuckets.history.length > 0 && (
+                  <div className="pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setShowCampaignHistory((v) => !v)}
+                      className="flex w-full items-center justify-between gap-2 rounded-md py-1 text-left text-[10px] font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700"
+                      data-testid="button-toggle-campaign-history"
+                    >
+                      <span>
+                        View history ({campaignEnrollmentBuckets.history.length})
+                      </span>
+                      <ChevronDown
+                        className={cn(
+                          "h-3.5 w-3.5 shrink-0 transition-transform",
+                          showCampaignHistory && "rotate-180"
+                        )}
+                      />
+                    </button>
+                    {showCampaignHistory && (
+                      <div className="mt-2 max-h-[160px] space-y-1.5 overflow-y-auto border-t border-gray-100 pt-2">
+                        {campaignEnrollmentBuckets.history.map((e) => (
+                          <div
+                            key={e.id}
+                            className="rounded-md border border-gray-100 bg-gray-50/50 px-2 py-1.5 text-[10px] text-gray-600"
+                            data-testid={`contact-enrollment-history-${e.id}`}
+                          >
+                            <p className="truncate font-medium text-gray-700">{e.campaignName ?? "Campaign"}</p>
+                            <p className="mt-0.5 text-gray-500">
+                              {formatCampaignEnrollmentSubtitle(e)}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </div>
 
-          <Dialog open={campaignPickerOpen} onOpenChange={setCampaignPickerOpen}>
+          <Dialog
+            open={campaignPickerOpen}
+            onOpenChange={(open) => {
+              setCampaignPickerOpen(open);
+              if (!open) setPickedCampaignId("");
+            }}
+          >
             <DialogContent className="sm:max-w-md">
               <DialogHeader>
                 <DialogTitle>Add to campaign</DialogTitle>
