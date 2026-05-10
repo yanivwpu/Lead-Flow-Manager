@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
+import { useAuth } from "@/lib/auth-context";
 
 function RealtorMark() {
   return (
@@ -61,6 +62,8 @@ import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
 import { useTranslation } from "react-i18next";
 import { formatDistanceToNow, format } from "date-fns";
+import { isResendCoolingDown } from "@shared/reEngagement";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface MessageTemplate {
   id: string;
@@ -94,6 +97,11 @@ interface RetargetableChat {
   lastMessagePreview: string | null;
   lastMessageAt: string | null;
   daysSinceLastMessage: number;
+  reEngagementState: string;
+  lastTemplateSentAt: string | null;
+  lastTemplateName: string | null;
+  lastTemplateStatus: string | null;
+  replyWindowReopenedAt: string | null;
 }
 
 const RE_ENGAGEMENT_CHANNEL_BADGE: Record<
@@ -116,6 +124,49 @@ const RE_ENGAGEMENT_CHANNEL_BADGE: Record<
     className: "border-pink-200/90 bg-pink-50/80 text-pink-900",
   },
 };
+
+function ReEngagementStatusChip({ chat }: { chat: RetargetableChat }) {
+  const ch = (chat.channel || "").toLowerCase();
+  if (ch === "facebook" || ch === "instagram") {
+    return (
+      <Badge
+        variant="secondary"
+        className="text-[10px] font-normal shrink-0 border-gray-200 bg-slate-50 text-slate-700"
+      >
+        Inbox
+      </Badge>
+    );
+  }
+  if (chat.reEngagementState === "failed" || chat.lastTemplateStatus === "failed") {
+    return (
+      <Badge variant="destructive" className="text-[10px] font-normal shrink-0">
+        Template failed
+      </Badge>
+    );
+  }
+  if (chat.reEngagementState === "template_sent_awaiting_reply" && chat.lastTemplateStatus === "sent") {
+    return (
+      <Badge
+        variant="secondary"
+        className="text-[10px] font-normal shrink-0 border-amber-200/90 bg-amber-50/90 text-amber-950"
+      >
+        Awaiting reply
+      </Badge>
+    );
+  }
+  if (chat.reEngagementState === "blocked") {
+    return (
+      <Badge variant="secondary" className="text-[10px] font-normal shrink-0">
+        Blocked
+      </Badge>
+    );
+  }
+  return (
+    <Badge variant="outline" className="text-[10px] font-normal shrink-0 text-gray-600 border-gray-200">
+      Outside window
+    </Badge>
+  );
+}
 
 interface Chat {
   id: string;
@@ -335,6 +386,7 @@ function GrowthEnginesTab() {
 
 export function Templates() {
   const [, setLocation] = useLocation();
+  const { user } = useAuth();
   const { data: subscription, isLoading: subLoading } = useSubscription();
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -363,6 +415,42 @@ export function Templates() {
   const [pendingDeleteCampaignId, setPendingDeleteCampaignId] = useState<string | null>(null);
 
   const templatesEnabled = (subscription?.limits as any)?.templatesEnabled;
+
+  /** Re-render relative “Sent Xm ago” labels in Re-engagement. */
+  const [, setReEngagementClock] = useState(0);
+  useEffect(() => {
+    const id = window.setInterval(() => setReEngagementClock((n) => n + 1), 30000);
+    return () => clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    if (!templatesEnabled || !user) return;
+    let ws: WebSocket | null = null;
+    let destroyed = false;
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    ws = new WebSocket(`${protocol}//${window.location.host}/ws/presence`);
+    ws.onopen = () => {
+      if (!ws || destroyed) return;
+      ws.send(JSON.stringify({ type: "auth", userId: user.id, userName: user.name || "Agent" }));
+    };
+    ws.onmessage = (event) => {
+      try {
+        const msg = JSON.parse(event.data);
+        if (msg.type === "new_message" && msg.replyWindowReopened) {
+          queryClient.invalidateQueries({ queryKey: ["/api/templates/retargetable-chats"] });
+        }
+      } catch {
+        /* ignore */
+      }
+    };
+    ws.onerror = () => {
+      ws?.close();
+    };
+    return () => {
+      destroyed = true;
+      ws?.close();
+    };
+  }, [templatesEnabled, user, queryClient]);
 
   const { data: templates = [], isLoading: templatesLoading } = useQuery<MessageTemplate[]>({
     queryKey: ["/api/templates"],
@@ -703,6 +791,7 @@ export function Templates() {
       });
     },
     onError: (error: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/templates/retargetable-chats"] });
       const msg = String(error?.message || "");
       const afterStatus = msg.replace(/^\d+:\s*/, "");
       let clean = afterStatus;
@@ -1228,34 +1317,35 @@ export function Templates() {
             <div className="space-y-0.5 px-0.5">
               <h2 className="text-base md:text-lg font-semibold text-gray-900">Re-engagement</h2>
               <p className="text-sm text-gray-500">
-                Expired conversations across WhatsApp, Facebook, and Instagram.
+                Follow up when Meta&apos;s messaging window has closed — track template outreach and avoid duplicate sends.
               </p>
             </div>
             <Card className="overflow-hidden border-gray-200/80">
-              <CardHeader className="pb-3 px-4 pt-4">
+              <CardHeader className="pb-2 px-3 pt-3 md:pb-2 md:px-4 md:pt-3.5">
                 <CardTitle className="text-base md:text-lg flex items-center gap-2">
                   <Target className="h-5 w-5 text-brand-green shrink-0" />
                   Outside the reply window
                 </CardTitle>
-                <CardDescription className="text-sm">
-                  Same rules as Inbox reply-window status. WhatsApp: send an approved template. Messenger &amp; Instagram: continue in Inbox — Meta may still block sends outside policy.
+                <CardDescription className="text-sm leading-snug">
+                  WhatsApp: send an approved template to reopen the thread when allowed. Messenger &amp; Instagram don&apos;t use WhatsApp templates — continue in Inbox. Meta may still block sends outside policy.
                 </CardDescription>
               </CardHeader>
-              <CardContent className="px-4 pb-4">
+              <CardContent className="px-3 pb-3 md:px-4 md:pb-4">
                 {chatsLoading ? (
                   <div className="flex items-center justify-center py-8">
                     <RefreshCw className="h-5 w-5 animate-spin text-gray-400" />
                   </div>
                 ) : retargetableChats.length === 0 ? (
-                  <div className="text-center py-8 text-gray-500">
+                  <div className="text-center py-7 text-gray-500">
                     <Users className="h-10 w-10 mx-auto mb-3 text-gray-300" />
-                    <p className="font-medium">No expired conversations</p>
-                    <p className="text-sm">
-                      Everyone reachable is still inside the free-form reply window, or there are no WhatsApp, Messenger, or Instagram threads yet.
+                    <p className="font-medium text-gray-800">No conversations outside the reply window</p>
+                    <p className="text-sm mt-1 max-w-md mx-auto">
+                      Contacts that require approved templates or re-engagement actions will appear here.
                     </p>
                   </div>
                 ) : (
-                  <div className="space-y-2 md:space-y-3 max-h-[min(420px,55vh)] md:max-h-[480px] overflow-y-auto pr-1 md:pr-2 overscroll-contain" style={{ scrollbarWidth: 'thin' }}>
+                  <TooltipProvider delayDuration={200}>
+                  <div className="space-y-2 max-h-[min(420px,55vh)] md:max-h-[480px] overflow-y-auto pr-1 md:pr-2 overscroll-contain" style={{ scrollbarWidth: 'thin' }}>
                     {retargetableChats.map((chat) => {
                       const ch = (chat.channel || "").toLowerCase();
                       const badge = RE_ENGAGEMENT_CHANNEL_BADGE[ch] ?? RE_ENGAGEMENT_CHANNEL_BADGE.whatsapp;
@@ -1265,125 +1355,242 @@ export function Templates() {
                         ? formatDistanceToNow(new Date(chat.lastMessageAt), { addSuffix: true })
                         : null;
 
+                      const awaitingReply =
+                        isWhatsApp &&
+                        chat.reEngagementState === "template_sent_awaiting_reply" &&
+                        chat.lastTemplateStatus === "sent";
+
+                      const failedWa =
+                        isWhatsApp &&
+                        (chat.reEngagementState === "failed" || chat.lastTemplateStatus === "failed");
+
+                      const lastMatchedTemplate =
+                        chat.lastTemplateName != null && chat.lastTemplateName !== ""
+                          ? templates.find((t) => t.name === chat.lastTemplateName)
+                          : undefined;
+
+                      const resendCooldown = isResendCoolingDown(chat.lastTemplateSentAt);
+
+                      const approvedQuickTemplates = templates.filter(
+                        (t) => t.status === "approved" && !libraryQuickSendMeta(t).blocked
+                      );
+
+                      const templateSelect = (
+                        triggerClass: string,
+                        placeholder: string,
+                        testId: string
+                      ) => (
+                        <Select
+                          onValueChange={(templateId) => {
+                            const template = templates.find((t) => t.id === templateId);
+                            if (template && !libraryQuickSendMeta(template).blocked) {
+                              handleSendTemplate(template, chat, "campaign");
+                            }
+                          }}
+                        >
+                          <SelectTrigger
+                            className={triggerClass}
+                            data-testid={testId}
+                          >
+                            <SelectValue placeholder={placeholder} />
+                          </SelectTrigger>
+                          <SelectContent
+                            position="popper"
+                            side="bottom"
+                            align="end"
+                            className="z-[100] w-[240px] max-h-[300px] overflow-y-auto bg-white border border-gray-200 shadow-lg"
+                          >
+                            {approvedQuickTemplates.length > 0 ? (
+                              approvedQuickTemplates.map((template) => (
+                                <SelectItem key={template.id} value={template.id} className="cursor-pointer hover:bg-gray-100">
+                                  {template.name}
+                                </SelectItem>
+                              ))
+                            ) : (
+                              <div className="p-2 text-xs text-gray-500 text-center">
+                                No quick-send templates available.
+                                <br />
+                                Sync approved body-only templates or use the library tab.
+                              </div>
+                            )}
+                          </SelectContent>
+                        </Select>
+                      );
+
                       return (
                         <div
                           key={`${chat.conversationId}-${ch}`}
-                          className="flex flex-col gap-3 p-3 border border-gray-200 rounded-xl hover:bg-gray-50/80 min-w-0"
+                          className="flex flex-col gap-2 p-2.5 border border-gray-200 rounded-lg hover:bg-gray-50/80 min-w-0"
                           data-testid={`re-engagement-row-${chat.conversationId}`}
                         >
-                          <div className="flex items-start gap-3 min-w-0">
-                            <div
-                              className="h-10 w-10 rounded-full bg-cover bg-center bg-gray-200 shrink-0"
-                              style={{ backgroundImage: chat.avatar ? `url(${chat.avatar})` : undefined }}
-                            >
-                              {!chat.avatar && (
-                                <div className="h-full w-full flex items-center justify-center text-gray-500 font-medium text-sm">
-                                  {chat.name.charAt(0).toUpperCase()}
-                                </div>
-                              )}
-                            </div>
-                            <div className="min-w-0 flex-1 space-y-1">
-                              <div className="flex flex-wrap items-center gap-2 gap-y-1">
-                                <p className="font-medium text-gray-900 truncate">{chat.name}</p>
-                                <Badge
-                                  variant="outline"
-                                  className={`text-[10px] font-normal shrink-0 gap-1 pl-1 pr-1.5 py-0 ${badge.className}`}
-                                >
-                                  <BadgeIcon className="h-3 w-3" aria-hidden />
-                                  {badge.label}
-                                </Badge>
+                          <div className="flex flex-col sm:flex-row sm:items-start gap-3 sm:justify-between min-w-0">
+                            <div className="flex gap-2.5 min-w-0 flex-1">
+                              <div
+                                className="h-10 w-10 rounded-full bg-cover bg-center bg-gray-200 shrink-0"
+                                style={{ backgroundImage: chat.avatar ? `url(${chat.avatar})` : undefined }}
+                              >
+                                {!chat.avatar && (
+                                  <div className="h-full w-full flex items-center justify-center text-gray-500 font-medium text-sm">
+                                    {chat.name.charAt(0).toUpperCase()}
+                                  </div>
+                                )}
                               </div>
-                              <p className="text-xs text-gray-500 truncate" title={chat.displayHandle}>
-                                {chat.displayHandle}
-                              </p>
-                              {chat.lastMessagePreview ? (
-                                <p className="text-sm text-gray-600 line-clamp-2 break-words">
-                                  {chat.lastMessagePreview}
+                              <div className="min-w-0 flex-1 space-y-1">
+                                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                                  <p className="font-semibold text-gray-900 truncate">{chat.name}</p>
+                                  <Badge
+                                    variant="outline"
+                                    className={`text-[10px] font-normal shrink-0 gap-1 pl-1 pr-1.5 py-0 ${badge.className}`}
+                                  >
+                                    <BadgeIcon className="h-3 w-3" aria-hidden />
+                                    {badge.label}
+                                  </Badge>
+                                  <ReEngagementStatusChip chat={chat} />
+                                </div>
+                                <p className="text-xs text-gray-500 truncate" title={chat.displayHandle}>
+                                  {chat.displayHandle}
                                 </p>
-                              ) : (
-                                <p className="text-sm text-gray-400 italic">No message preview</p>
-                              )}
-                              <p className="text-[11px] text-gray-400">
-                                {lastAtLabel
-                                  ? `Last activity ${lastAtLabel}`
-                                  : `Last activity ~${chat.daysSinceLastMessage} day${chat.daysSinceLastMessage !== 1 ? "s" : ""} ago`}
-                              </p>
+                                {isWhatsApp && awaitingReply && (
+                                  <div className="text-xs text-gray-700 space-y-0.5 pt-0.5 border-l-2 border-amber-200/90 pl-2">
+                                    <p className="font-medium text-gray-900">Template sent • awaiting reply</p>
+                                    {chat.lastTemplateName ? (
+                                      <p className="text-gray-600">
+                                        Last template:{" "}
+                                        <span className="font-mono text-[11px] text-gray-800">{chat.lastTemplateName}</span>
+                                      </p>
+                                    ) : null}
+                                    {chat.lastTemplateSentAt ? (
+                                      <p className="text-gray-500">
+                                        Sent{" "}
+                                        {formatDistanceToNow(new Date(chat.lastTemplateSentAt), {
+                                          addSuffix: true,
+                                        })}
+                                      </p>
+                                    ) : null}
+                                  </div>
+                                )}
+                                {isWhatsApp && failedWa && (
+                                  <p className="text-xs text-red-600 pt-0.5">
+                                    Template failed — review the error in your provider logs, then retry.
+                                  </p>
+                                )}
+                                {(ch === "facebook" || ch === "instagram") && (
+                                  <p className="text-xs text-gray-600 pt-0.5">
+                                    Continue conversation in Inbox — this channel doesn&apos;t use WhatsApp templates here.
+                                  </p>
+                                )}
+                                {chat.lastMessagePreview ? (
+                                  <p className="text-sm text-gray-600 line-clamp-2 break-words">
+                                    {chat.lastMessagePreview}
+                                  </p>
+                                ) : (
+                                  <p className="text-sm text-gray-400 italic">No message preview</p>
+                                )}
+                                <p className="text-[11px] text-gray-400">
+                                  {lastAtLabel
+                                    ? `Last activity ${lastAtLabel}`
+                                    : `Last activity ~${chat.daysSinceLastMessage} day${chat.daysSinceLastMessage !== 1 ? "s" : ""} ago`}
+                                </p>
+                              </div>
                             </div>
-                          </div>
 
-                          <div className="flex flex-col sm:flex-row sm:justify-end gap-2 pt-0.5 border-t border-gray-100">
-                            {isWhatsApp ? (
-                              <Select
-                                onValueChange={(templateId) => {
-                                  const template = templates.find((t) => t.id === templateId);
-                                  if (template && !libraryQuickSendMeta(template).blocked) {
-                                    handleSendTemplate(template, chat, "campaign");
+                            <div className="flex flex-col items-stretch sm:items-end gap-2 shrink-0 w-full sm:w-auto sm:min-w-[200px] pt-0.5 sm:pt-0">
+                              {isWhatsApp && awaitingReply ? (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span className="w-full sm:w-auto inline-flex sm:justify-end">
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        className="w-full sm:w-auto min-h-[40px] border-gray-300 text-gray-800 hover:bg-gray-50"
+                                        disabled={resendCooldown || !lastMatchedTemplate}
+                                        data-testid={`resend-template-${chat.conversationId}`}
+                                        onClick={() => {
+                                          if (
+                                            lastMatchedTemplate &&
+                                            !libraryQuickSendMeta(lastMatchedTemplate).blocked
+                                          ) {
+                                            handleSendTemplate(lastMatchedTemplate, chat, "campaign");
+                                          }
+                                        }}
+                                      >
+                                        Resend template
+                                      </Button>
+                                    </span>
+                                  </TooltipTrigger>
+                                  {resendCooldown ? (
+                                    <TooltipContent side="top">Recently sent</TooltipContent>
+                                  ) : null}
+                                </Tooltip>
+                              ) : null}
+
+                              {isWhatsApp && awaitingReply && !lastMatchedTemplate ? (
+                                <p className="text-[11px] text-amber-800 text-right">
+                                  Last template name not in library — pick a template below.
+                                </p>
+                              ) : null}
+
+                              {isWhatsApp && awaitingReply && !lastMatchedTemplate
+                                ? templateSelect(
+                                    "w-full sm:w-[220px] min-h-[40px] shrink-0 border-gray-300",
+                                    "Choose template",
+                                    `select-template-fallback-${chat.id}`
+                                  )
+                                : null}
+
+                              {isWhatsApp && failedWa
+                                ? templateSelect(
+                                    "w-full sm:w-[220px] min-h-[40px] shrink-0 border-amber-300 bg-amber-50/50",
+                                    "Retry with template",
+                                    `retry-template-${chat.id}`
+                                  )
+                                : null}
+
+                              {isWhatsApp && !awaitingReply && !failedWa
+                                ? templateSelect(
+                                    "w-full sm:w-[220px] min-h-[40px] shrink-0 bg-brand-green hover:bg-brand-green/90 text-white border-0 shadow-sm",
+                                    "Send WhatsApp template",
+                                    `select-template-${chat.id}`
+                                  )
+                                : null}
+
+                              {ch === "facebook" ? (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  className="w-full sm:w-auto min-h-[40px] border-blue-200 text-blue-900 hover:bg-blue-50"
+                                  data-testid={`open-inbox-messenger-${chat.contactId}`}
+                                  onClick={() =>
+                                    setLocation(
+                                      `/app/inbox/${chat.contactId}?channel=facebook&focusComposer=1`
+                                    )
                                   }
-                                }}
-                              >
-                                <SelectTrigger
-                                  className="w-full sm:w-[200px] min-h-[40px] shrink-0"
-                                  data-testid={`select-template-${chat.id}`}
                                 >
-                                  <SelectValue placeholder="Send WhatsApp template" />
-                                </SelectTrigger>
-                                <SelectContent
-                                  position="popper"
-                                  side="bottom"
-                                  align="end"
-                                  className="z-[100] w-[240px] max-h-[300px] overflow-y-auto bg-white border border-gray-200 shadow-lg"
+                                  Continue conversation in Inbox
+                                </Button>
+                              ) : null}
+                              {ch === "instagram" ? (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  className="w-full sm:w-auto min-h-[40px] border-pink-200 text-pink-950 hover:bg-pink-50"
+                                  data-testid={`open-inbox-instagram-${chat.contactId}`}
+                                  onClick={() =>
+                                    setLocation(
+                                      `/app/inbox/${chat.contactId}?channel=instagram&focusComposer=1`
+                                    )
+                                  }
                                 >
-                                  {templates.filter((t) => t.status === "approved" && !libraryQuickSendMeta(t).blocked).length > 0 ? (
-                                    templates
-                                      .filter((t) => t.status === "approved" && !libraryQuickSendMeta(t).blocked)
-                                      .map((template) => (
-                                        <SelectItem key={template.id} value={template.id} className="cursor-pointer hover:bg-gray-100">
-                                          {template.name}
-                                        </SelectItem>
-                                      ))
-                                  ) : (
-                                    <div className="p-2 text-xs text-gray-500 text-center">
-                                      No quick-send templates available.
-                                      <br />
-                                      Sync approved body-only templates or use the library tab.
-                                    </div>
-                                  )}
-                                </SelectContent>
-                              </Select>
-                            ) : ch === "facebook" ? (
-                              <Button
-                                type="button"
-                                variant="default"
-                                className="w-full sm:w-auto bg-[#1877F2] hover:bg-[#166FE5] text-white"
-                                data-testid={`open-inbox-messenger-${chat.contactId}`}
-                                onClick={() =>
-                                  setLocation(
-                                    `/app/inbox/${chat.contactId}?channel=facebook&focusComposer=1`
-                                  )
-                                }
-                              >
-                                Open in Inbox (Messenger)
-                              </Button>
-                            ) : ch === "instagram" ? (
-                              <Button
-                                type="button"
-                                variant="default"
-                                className="w-full sm:w-auto bg-gradient-to-r from-[#f09433] via-[#dc2743] to-[#bc1888] hover:opacity-95 text-white border-0"
-                                data-testid={`open-inbox-instagram-${chat.contactId}`}
-                                onClick={() =>
-                                  setLocation(
-                                    `/app/inbox/${chat.contactId}?channel=instagram&focusComposer=1`
-                                  )
-                                }
-                              >
-                                Open in Inbox (Instagram)
-                              </Button>
-                            ) : null}
+                                  Continue conversation in Inbox
+                                </Button>
+                              ) : null}
+                            </div>
                           </div>
                         </div>
                       );
                     })}
                   </div>
+                  </TooltipProvider>
                 )}
               </CardContent>
             </Card>

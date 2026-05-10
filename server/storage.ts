@@ -53,6 +53,7 @@ import {
 } from "@shared/schema";
 import { computeConversationReplyWindowStatus } from "@shared/conversationReplyWindow";
 import type { RetargetEligibleContactRow } from "@shared/retargetEligibleContact";
+import { deriveRetargetReEngagementApiFields } from "@shared/reEngagement";
 import { db } from "../drizzle/db";
 import { users, chats, registeredPhones, messageUsage, conversationWindows, teamMembers, workflows, workflowExecutions, recurringReminders, webhooks, webhookDeliveries, integrations, messageTemplates, templateSends, dripCampaigns, dripSteps, dripEnrollments, dripSends, chatbotFlows, chatbotSessions, salespeople, demoBookings, salesConversions, adminSettings, contacts, conversations, messages, activityEvents, channelSettings, supportTickets, partners, commissions, agreementAcceptances, contactNotes, appointments, flowJobs, campaignEnrollments, type InsertConversationWindow, type ConversationWindow } from "@shared/schema";
 import { eq, and, lte, sql, isNotNull, isNull, asc, desc, gte, sum, gt, or, like, ilike, ne, inArray, notInArray } from "drizzle-orm";
@@ -1394,6 +1395,8 @@ export class DbStorage implements IStorage {
         ? Math.floor((now.getTime() - lastAt.getTime()) / (24 * 60 * 60 * 1000))
         : 0;
 
+      const reFields = deriveRetargetReEngagementApiFields(conv.channel, conv.reEngagement);
+
       out.push({
         conversationId: conv.id,
         contactId: contact.id,
@@ -1406,6 +1409,7 @@ export class DbStorage implements IStorage {
         lastMessagePreview: conv.lastMessagePreview ?? null,
         lastMessageAt: conv.lastMessageAt ? new Date(conv.lastMessageAt).toISOString() : null,
         daysSinceLastMessage: daysSince,
+        ...reFields,
       });
     }
 

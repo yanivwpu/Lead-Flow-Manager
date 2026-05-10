@@ -17,6 +17,11 @@ import { getUserTwilioClient } from "../userTwilio";
 import { subscriptionService } from "../subscriptionService";
 import { extractPlaceholderKeysFromCampaignMessages } from "@shared/campaignPlaceholders";
 import { getPresetCampaignStatusLabel } from "@shared/presetCampaignLabels";
+import {
+  buildReEngagementAfterFailedSend,
+  buildReEngagementAfterSuccessfulSend,
+  parseConversationReEngagement,
+} from "@shared/reEngagement";
 
 /** When true, “launch” creates `active` and may enqueue sends. Until then, launch → `active_pending`. */
 const PRESET_CAMPAIGN_SEND_ENGINE_READY = true;
@@ -1110,6 +1115,11 @@ export function registerTemplateRoutes(app: Express): void {
         lastMessagePreview: r.lastMessagePreview,
         lastMessageAt: r.lastMessageAt,
         daysSinceLastMessage: r.daysSinceLastMessage,
+        reEngagementState: r.reEngagementState,
+        lastTemplateSentAt: r.lastTemplateSentAt,
+        lastTemplateName: r.lastTemplateName,
+        lastTemplateStatus: r.lastTemplateStatus,
+        replyWindowReopenedAt: r.replyWindowReopenedAt,
       }));
 
       res.json(retargetableChats);
@@ -1445,6 +1455,30 @@ export function registerTemplateRoutes(app: Express): void {
         crmContactId = matched?.id ?? null;
       }
 
+      let waConversationIdForReEngagement: string | null = null;
+      if (crmContactId) {
+        const ensured = await ensureWhatsAppConversationForContact(req.user.id, crmContactId);
+        waConversationIdForReEngagement = ensured.conversationId;
+      }
+
+      const persistReEngagementSuccess = async () => {
+        if (!waConversationIdForReEngagement) return;
+        const conv = await storage.getConversation(waConversationIdForReEngagement);
+        const prev = parseConversationReEngagement(conv?.reEngagement);
+        await storage.updateConversation(waConversationIdForReEngagement, {
+          reEngagement: buildReEngagementAfterSuccessfulSend(template.name, prev) as Record<string, unknown>,
+        });
+      };
+
+      const persistReEngagementFailure = async () => {
+        if (!waConversationIdForReEngagement) return;
+        const conv = await storage.getConversation(waConversationIdForReEngagement);
+        const prev = parseConversationReEngagement(conv?.reEngagement);
+        await storage.updateConversation(waConversationIdForReEngagement, {
+          reEngagement: buildReEngagementAfterFailedSend(template.name, prev) as Record<string, unknown>,
+        });
+      };
+
       // Full session row — auth-core `getUser` omits whatsappProvider / Meta fields (defaults wrongly to Twilio).
       const user = await storage.getUserForSession(req.user.id);
       if (!user) {
@@ -1628,7 +1662,9 @@ export function registerTemplateRoutes(app: Express): void {
               components,
             })}`
           );
+          await persistReEngagementSuccess();
         } catch (metaErr: any) {
+          await persistReEngagementFailure();
           const responseStatus =
             typeof metaErr?.httpStatus === "number" ? metaErr.httpStatus : 500;
           const metaErrorRaw =
@@ -1720,7 +1756,14 @@ export function registerTemplateRoutes(app: Express): void {
               messageId,
             })}`
           );
+          const st = (sendStatus || "").toLowerCase();
+          if (st === "failed" || st === "undelivered" || st === "canceled") {
+            await persistReEngagementFailure();
+          } else {
+            await persistReEngagementSuccess();
+          }
         } catch (twilioErr: any) {
+          await persistReEngagementFailure();
           console.error(
             `[WA_TEMPLATE_SEND] ${JSON.stringify({
               phase: "error",

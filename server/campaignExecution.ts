@@ -2,6 +2,10 @@ import type { CampaignEnrollment, Contact, Conversation, PresetCampaign } from "
 import type { Channel } from "@shared/schema";
 import { CHANNEL_INFO } from "@shared/schema";
 import { parsePresetDelayToMs } from "@shared/campaignDelays";
+import {
+  buildReEngagementAfterSuccessfulSend,
+  parseConversationReEngagement,
+} from "@shared/reEngagement";
 import { storage } from "./storage";
 import { channelService } from "./channelService";
 import { subscriptionService } from "./subscriptionService";
@@ -187,6 +191,10 @@ async function sendCampaignWhatsApp(params: {
       lastMessageAt: new Date(),
       lastMessagePreview: body.slice(0, 100),
       lastMessageDirection: "outbound",
+      reEngagement: buildReEngagementAfterSuccessfulSend(
+        tplName,
+        parseConversationReEngagement(conv.reEngagement)
+      ) as any,
     });
     return { ok: true, externalMessageId: sendResult.messageId };
   } catch (err: unknown) {

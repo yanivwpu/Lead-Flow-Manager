@@ -1,3 +1,5 @@
+import type { ReEngagementState } from "./reEngagement";
+
 /**
  * Re-engagement list — unified CRM `conversations` + `contacts` (no legacy `chats` row required).
  * WhatsApp, Messenger (`facebook`), Instagram DM (`instagram`).
@@ -16,4 +18,10 @@ export type RetargetEligibleContactRow = {
   lastMessagePreview: string | null;
   lastMessageAt: string | null;
   daysSinceLastMessage: number;
+  /** WhatsApp-only follow-up state; Messenger/Instagram rows use waiting_template_send for API shape. */
+  reEngagementState: ReEngagementState;
+  lastTemplateSentAt: string | null;
+  lastTemplateName: string | null;
+  lastTemplateStatus: string | null;
+  replyWindowReopenedAt: string | null;
 };

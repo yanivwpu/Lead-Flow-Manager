@@ -363,6 +363,13 @@ export function UnifiedInbox() {
             /* no-op */
           } else if (msg.type === "new_message") {
             queryClient.refetchQueries({ queryKey: ["/api/inbox"], type: "active" });
+            if (msg.replyWindowReopened) {
+              queryClient.invalidateQueries({ queryKey: ["/api/templates/retargetable-chats"] });
+              toast({
+                title: "Reply window reopened",
+                description: "This conversation is back in your Inbox with a fresh messaging window.",
+              });
+            }
             if (msg.conversationId) {
               queryClient.refetchQueries({
                 queryKey: ["/api/conversations", msg.conversationId, "messages"],
@@ -398,7 +405,7 @@ export function UnifiedInbox() {
       clearTimeout(reconnectTimer);
       ws?.close();
     };
-  }, [user, queryClient]);
+  }, [user, queryClient, toast]);
 
   const { data: subscription } = useSubscription();
 

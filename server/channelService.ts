@@ -13,6 +13,7 @@ import { db } from "../drizzle/db";
 import { messages as messagesTbl } from "@shared/schema";
 import { eq, sql } from "drizzle-orm";
 import { scheduleHubSpotAutoSync } from "./hubspotAutoSync";
+import { parseConversationReEngagement } from "@shared/reEngagement";
 
 type ForceChannelInput = Channel | string | undefined;
 
@@ -670,6 +671,8 @@ class ChannelService {
     const acctId = (channel === 'whatsapp' || channel === 'sms') ? channelAccountId : undefined;
     let conversation = await storage.getConversationByContactAndChannel(contact.id, channel, acctId);
     let isNewConversation = false;
+    /** True when an awaited WhatsApp template re-engagement just reopened via inbound (clears awaiting state + optional toast). */
+    let shouldNotifyReplyWindowReopened = false;
     if (!conversation) {
       console.log(`[Inbox Worker] No existing conversation, creating new one for contactId=${contact.id}, channel=${channel}, channelAccountId=${acctId}`);
       conversation = await storage.createConversation({
@@ -686,9 +689,12 @@ class ChannelService {
       await subscriptionService.incrementConversationUsage(userId);
     } else {
       console.log(`[Inbox Worker] Existing conversation found — conversationId: ${conversation.id}`);
+      const priorRe = parseConversationReEngagement(conversation.reEngagement);
+      shouldNotifyReplyWindowReopened = priorRe?.state === "template_sent_awaiting_reply";
       await storage.updateConversation(conversation.id, {
         windowActive: true,
         windowExpiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+        ...(shouldNotifyReplyWindowReopened ? { reEngagement: {} } : {}),
       });
     }
 
@@ -757,6 +763,7 @@ class ChannelService {
       type: 'new_message',
       conversationId: conversation.id,
       contactId: contact.id,
+      ...(shouldNotifyReplyWindowReopened ? { replyWindowReopened: true } : {}),
     });
 
     await this.logActivity(userId, contact.id, conversation.id, 'message', {
