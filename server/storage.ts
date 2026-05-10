@@ -81,6 +81,78 @@ function userFromAuthCoreRow(row: UsersAuthCoreRow): User {
   return row as unknown as User;
 }
 
+function snakeToCamelKey(key: string): string {
+  return key.replace(/_([a-z])/g, (_, letter: string) => letter.toUpperCase());
+}
+
+/**
+ * When PG returns `SELECT *` rows (snake_case keys), map to Drizzle `User` camelCase so billing/meta fields load even if
+ * Drizzle `SELECT * FROM users` fails due to schema/DB drift (e.g. missing newly added columns).
+ */
+function widePgRowToUser(raw: Record<string, unknown>): User {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(raw)) {
+    out[snakeToCamelKey(k)] = v;
+  }
+  return out as User;
+}
+
+function sanitizeUserUpdatesForLog(updates: Partial<User>): Record<string, unknown> {
+  const sensitive = new Set([
+    "password",
+    "metaAccessToken",
+    "metaAppSecret",
+    "twilioAuthToken",
+    "twilioAccountSid",
+    "shopifyAccessToken",
+    "pushSubscription",
+  ]);
+  const o: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(updates)) {
+    o[k] = sensitive.has(k) ? (v != null && v !== "" ? "[redacted]" : v) : v;
+  }
+  return o;
+}
+
+function logUserUpdateFailure(userId: string, updates: Partial<User>, err: unknown, context = "storage.updateUser"): void {
+  const anyErr = err as {
+    message?: string;
+    code?: string;
+    detail?: string;
+    constraint?: string;
+    column?: string;
+  };
+  console.error(
+    JSON.stringify({
+      tag: "[USER_UPDATE_FAILED]",
+      context,
+      userId,
+      updatedFieldKeys: Object.keys(updates),
+      sanitizedUpdates: sanitizeUserUpdatesForLog(updates),
+      errorMessage: anyErr?.message ?? String(err),
+      pgCode: anyErr?.code ?? null,
+      pgDetail: anyErr?.detail ?? null,
+      pgConstraint: anyErr?.constraint ?? null,
+      pgColumn: anyErr?.column ?? null,
+      stack: err instanceof Error ? err.stack : null,
+    }),
+  );
+}
+
+function logUserSessionLoadFailure(phase: string, userId: string, err: unknown): void {
+  const anyErr = err as { message?: string; code?: string; detail?: string };
+  console.warn(
+    JSON.stringify({
+      tag: "[USER_SESSION_LOAD_FAILED]",
+      phase,
+      userId,
+      errorMessage: anyErr?.message ?? String(err),
+      pgCode: anyErr?.code ?? null,
+      pgDetail: anyErr?.detail ?? null,
+    }),
+  );
+}
+
 export interface IStorage {
   // User methods
   getUser(id: string): Promise<User | undefined>;
@@ -98,6 +170,8 @@ export interface IStorage {
   createUser(user: InsertUser): Promise<User>;
   updateUser(id: string, updates: Partial<User>): Promise<User | undefined>;
   deleteUser(id: string): Promise<void>;
+  /** Temporary diagnostics — subscription + Meta fields when investigating schema drift / entitlement bugs. */
+  getUserSubscriptionDebugSnapshot(userId: string): Promise<Record<string, unknown>>;
   /**
    * Marks account deletion requested, stops preset campaign enrollments and workflow-style automations (MVP; no row purge).
    * Idempotent if already requested.
@@ -393,10 +467,35 @@ export class DbStorage implements IStorage {
       const result = await db.select().from(users).where(eq(users.id, id)).limit(1);
       if (result[0]) return result[0];
     } catch (err: unknown) {
+      logUserSessionLoadFailure("drizzle_full_row_select", id, err);
+      try {
+        const wide = await this.loadUserWideRowViaSelectStar(id);
+        if (wide) {
+          console.warn(
+            JSON.stringify({
+              tag: "[USER_SESSION_DRIFT_FALLBACK_OK]",
+              userId: id,
+              note:
+                "Loaded user via SELECT * fallback — Drizzle ORM select failed (often missing DB column vs schema). Apply pending migrations.",
+            }),
+          );
+          return wide;
+        }
+      } catch (fallbackErr: unknown) {
+        logUserSessionLoadFailure("select_star_fallback_inner", id, fallbackErr);
+      }
       const message = err instanceof Error ? err.message : String(err);
       console.warn("[getUserForSession] Drizzle load failed; falling back to auth-core getUser:", message);
     }
     return this.getUser(id);
+  }
+
+  /** Loads full row using PG-native SELECT * so billing/meta columns survive even when Drizzle schema has columns not yet migrated. */
+  private async loadUserWideRowViaSelectStar(id: string): Promise<User | undefined> {
+    const result = await db.execute(sql`SELECT * FROM public.users WHERE id = ${id} LIMIT 1`);
+    const rows = (result as { rows: Record<string, unknown>[] }).rows;
+    if (!rows[0]) return undefined;
+    return widePgRowToUser(rows[0]);
   }
 
   async getUserByEmail(email: string): Promise<User | undefined> {
@@ -440,13 +539,37 @@ export class DbStorage implements IStorage {
   }
 
   async getUserByStripeCustomerId(customerId: string): Promise<User | undefined> {
-    const result = await db.select().from(users).where(eq(users.stripeCustomerId, customerId));
-    return result[0];
+    try {
+      const result = await db.select().from(users).where(eq(users.stripeCustomerId, customerId));
+      return result[0];
+    } catch (err: unknown) {
+      logUserSessionLoadFailure("getUserByStripeCustomerId_drizzle", customerId, err);
+      try {
+        const result = await db.execute(
+          sql`SELECT * FROM public.users WHERE stripe_customer_id = ${customerId} LIMIT 1`,
+        );
+        const rows = (result as { rows: Record<string, unknown>[] }).rows;
+        return rows[0] ? widePgRowToUser(rows[0]) : undefined;
+      } catch {
+        return undefined;
+      }
+    }
   }
 
   async getUserByShopifyShop(shop: string): Promise<User | undefined> {
-    const result = await db.select().from(users).where(eq(users.shopifyShop, shop));
-    return result[0];
+    try {
+      const result = await db.select().from(users).where(eq(users.shopifyShop, shop));
+      return result[0];
+    } catch (err: unknown) {
+      logUserSessionLoadFailure("getUserByShopifyShop_drizzle", shop, err);
+      try {
+        const result = await db.execute(sql`SELECT * FROM public.users WHERE shopify_shop = ${shop} LIMIT 1`);
+        const rows = (result as { rows: Record<string, unknown>[] }).rows;
+        return rows[0] ? widePgRowToUser(rows[0]) : undefined;
+      } catch {
+        return undefined;
+      }
+    }
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {
@@ -512,8 +635,76 @@ export class DbStorage implements IStorage {
   }
 
   async updateUser(id: string, updates: Partial<User>): Promise<User | undefined> {
-    const result = await db.update(users).set(updates).where(eq(users.id, id)).returning();
-    return result[0];
+    try {
+      // IMPORTANT: avoid `.returning()` with no args — Drizzle expands to ALL schema columns in RETURNING. If production
+      // DB is missing a newer column (pending migration), Postgres errors even when that column is not in SET.
+      await db.update(users).set(updates).where(eq(users.id, id)).returning({ id: users.id });
+    } catch (err: unknown) {
+      logUserUpdateFailure(id, updates, err);
+      throw err;
+    }
+    return this.getUserForSession(id);
+  }
+
+  async getUserSubscriptionDebugSnapshot(userId: string): Promise<Record<string, unknown>> {
+    let drizzleOk = false;
+    let drizzleError: string | null = null;
+    try {
+      const rows = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+      drizzleOk = !!rows[0];
+      if (!rows[0]) {
+        return { error: "user_not_found", userId };
+      }
+    } catch (e: unknown) {
+      drizzleError = e instanceof Error ? e.message : String(e);
+    }
+
+    let wide: User | undefined;
+    try {
+      wide = await this.loadUserWideRowViaSelectStar(userId);
+    } catch (e: unknown) {
+      return {
+        userId,
+        drizzleFullRowSelectWorked: drizzleOk,
+        drizzleError,
+        selectStarError: e instanceof Error ? e.message : String(e),
+        hint: "Could not load user row — check DB connectivity.",
+      };
+    }
+
+    if (!wide) {
+      return { userId, error: "user_not_found" };
+    }
+
+    const u = wide;
+    return {
+      userId: u.id,
+      email: u.email,
+      subscriptionPlan: u.subscriptionPlan ?? null,
+      subscriptionStatus: u.subscriptionStatus ?? null,
+      billingPlan: u.billingPlan ?? null,
+      planOverride: u.planOverride ?? null,
+      planOverrideEnabled: u.planOverrideEnabled ?? null,
+      stripeCustomerId: u.stripeCustomerId ?? null,
+      stripeSubscriptionId: u.stripeSubscriptionId ?? null,
+      currentPeriodEnd: u.currentPeriodEnd ?? null,
+      currentPeriodStart: u.currentPeriodStart ?? null,
+      trialStatus: u.trialStatus ?? null,
+      trialPlan: u.trialPlan ?? null,
+      trialEndsAt: u.trialEndsAt ?? null,
+      trialStartedAt: u.trialStartedAt ?? null,
+      shopifyShop: u.shopifyShop ?? null,
+      shopifySubscriptionStatus: u.shopifySubscriptionStatus ?? null,
+      metaConnected: u.metaConnected ?? null,
+      whatsappProvider: u.whatsappProvider ?? null,
+      twilioConnected: u.twilioConnected ?? null,
+      drizzleFullRowSelectWorked: drizzleOk,
+      drizzleFullRowSelectError: drizzleError,
+      schemaDriftSuspected: !drizzleOk && !!wide,
+      hint: !drizzleOk
+        ? "Drizzle full-row select failed but SELECT * worked — DB is missing at least one column present in shared/schema users table; run pending SQL migrations (e.g. migrations/*.sql)."
+        : null,
+    };
   }
 
   async deleteUser(id: string): Promise<void> {

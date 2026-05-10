@@ -302,6 +302,33 @@ export async function registerRoutes(
     }
   });
 
+  /**
+   * Temporary diagnostics for subscription + Meta connection issues (schema drift, Stripe mapping).
+   * Enable with ENABLE_DEBUG_SUBSCRIPTION_ENDPOINT=true — requires authenticated session.
+   */
+  if (process.env.ENABLE_DEBUG_SUBSCRIPTION_ENDPOINT === "true") {
+    app.get("/api/debug/user-subscription-state", async (req: any, res: any) => {
+      try {
+        if (!req.user?.id) {
+          return res.status(401).json({ error: "Unauthorized" });
+        }
+        const uid = req.user.id as string;
+        const snapshot = await storage.getUserSubscriptionDebugSnapshot(uid);
+        const full = await storage.getUserForSession(uid);
+        const now = new Date();
+        res.json({
+          ...snapshot,
+          effectivePlan: full ? getEffectivePlanForUser(full, now) : null,
+          hasActivePaidPlan: full ? hasActivePaidPlan(full, now) : null,
+          proAiTrialActive: full ? isProAiTrialActive(full, now) : null,
+        });
+      } catch (e: any) {
+        console.error("[GET /api/debug/user-subscription-state]", e);
+        res.status(500).json({ error: e?.message || "Failed to load debug snapshot" });
+      }
+    });
+  }
+
   // Help center feedback endpoint (public - no auth required)
   app.post("/api/help-feedback", async (req, res) => {
     try {
