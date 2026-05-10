@@ -1190,115 +1190,7 @@ export function Settings() {
             )}
           </div>
 
-          {/* Account deletion (self-service request — pending; not an immediate purge) */}
-          <div className="bg-white border border-red-200 rounded-xl p-4 sm:p-6 shadow-sm">
-            <div className="flex items-center gap-3 mb-4 sm:mb-6">
-              <div className="h-9 w-9 sm:h-10 sm:w-10 bg-red-50 rounded-lg flex items-center justify-center flex-shrink-0">
-                <AlertTriangle className="h-4 w-4 sm:h-5 sm:w-5 text-red-600" />
-              </div>
-              <div className="min-w-0">
-                <h2 className="text-base sm:text-lg font-bold text-gray-900">Danger zone</h2>
-                <p className="text-xs sm:text-sm text-gray-500">
-                  Request deletion of your account and associated data per our Privacy Policy. For retention details, see{" "}
-                  <Link href="/data-deletion" className="text-blue-600 hover:text-blue-700 underline underline-offset-2">
-                    Data deletion
-                  </Link>
-                  .
-                </p>
-              </div>
-            </div>
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-              <p className="text-sm text-gray-600 max-w-xl">
-                Submit a deletion request to disable access and begin processing according to our policies. This does not immediately remove every record until backend purge jobs complete.
-              </p>
-              <Button
-                type="button"
-                variant="destructive"
-                className="shrink-0"
-                onClick={() => {
-                  setDeleteConfirmText("");
-                  setDeleteAccountOpen(true);
-                }}
-                data-testid="button-delete-account"
-              >
-                Delete Account
-              </Button>
-            </div>
-          </div>
-
-          <Dialog
-            open={deleteAccountOpen}
-            onOpenChange={(open) => {
-              setDeleteAccountOpen(open);
-              if (!open) setDeleteConfirmText("");
-            }}
-          >
-            <DialogContent className="sm:max-w-lg">
-              <DialogHeader>
-                <DialogTitle>Delete account</DialogTitle>
-                <DialogDescription asChild>
-                  <div className="space-y-3 text-sm text-gray-600 pt-1">
-                    <p>
-                      Deleting your account will disable access to WhachatCRM, disconnect active integrations where
-                      possible, stop active automations, and begin deletion of account data according to our Privacy
-                      Policy.
-                    </p>
-                    <p>This action should not be triggered accidentally.</p>
-                    <p>
-                      You are submitting a <span className="font-medium text-gray-800">deletion request</span> (pending
-                      processing). For more information, see{" "}
-                      <Link href="/data-deletion" className="text-blue-600 hover:text-blue-700 underline underline-offset-2">
-                        Data deletion
-                      </Link>
-                      .
-                    </p>
-                  </div>
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-2 py-2">
-                <Label htmlFor="delete-account-confirm" className="text-gray-800">
-                  Type <span className="font-mono font-semibold">DELETE</span> to confirm
-                </Label>
-                <Input
-                  id="delete-account-confirm"
-                  autoComplete="off"
-                  placeholder="DELETE"
-                  value={deleteConfirmText}
-                  onChange={(e) => setDeleteConfirmText(e.target.value)}
-                  className="font-mono"
-                  data-testid="input-delete-account-confirm"
-                />
-              </div>
-              <DialogFooter className="gap-2 sm:gap-0">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setDeleteAccountOpen(false)}
-                  disabled={deleteAccountMutation.isPending}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="button"
-                  variant="destructive"
-                  disabled={deleteConfirmText !== "DELETE" || deleteAccountMutation.isPending}
-                  onClick={() => deleteAccountMutation.mutate()}
-                  data-testid="button-delete-account-confirm"
-                >
-                  {deleteAccountMutation.isPending ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                      Submitting…
-                    </>
-                  ) : (
-                    "Delete account"
-                  )}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-
-          {/* Your Profile Section - Last */}
+          {/* Your Profile */}
           <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 shadow-sm">
             <div className="flex items-center gap-3 mb-4 sm:mb-6">
               <div className="h-9 w-9 sm:h-10 sm:w-10 bg-blue-50 rounded-lg flex items-center justify-center flex-shrink-0">
@@ -1350,6 +1242,118 @@ export function Settings() {
               </div>
             </div>
           </div>
+
+          {/* Danger Zone — last section */}
+          <div className="rounded-xl border border-gray-200 bg-gray-50/70 p-4 sm:p-5 shadow-none">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
+              <div className="flex min-w-0 gap-3">
+                <div
+                  className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-gray-200/90 text-gray-500"
+                  aria-hidden
+                >
+                  <AlertTriangle className="h-4 w-4" />
+                </div>
+                <div className="min-w-0 space-y-2">
+                  <h2 className="text-sm font-semibold tracking-tight text-gray-800">Danger Zone</h2>
+                  <p className="text-sm leading-relaxed text-gray-600">
+                    Request permanent deletion of your WhachatCRM account and associated data. Some records may be temporarily
+                    retained for billing, security, fraud prevention, or legal compliance as described in our{" "}
+                    <Link href="/privacy-policy" className="text-blue-600 underline underline-offset-2 hover:text-blue-700">
+                      Privacy Policy
+                    </Link>
+                    .
+                  </p>
+                  <p className="text-xs leading-relaxed text-gray-500">
+                    Deleting your account will disable access, stop active automations, and disconnect integrations where possible.
+                  </p>
+                </div>
+              </div>
+              <Button
+                type="button"
+                variant="destructive"
+                className="w-full shrink-0 sm:w-auto"
+                onClick={() => {
+                  setDeleteConfirmText("");
+                  setDeleteAccountOpen(true);
+                }}
+                data-testid="button-delete-account"
+              >
+                Delete Account
+              </Button>
+            </div>
+          </div>
+
+          <Dialog
+            open={deleteAccountOpen}
+            onOpenChange={(open) => {
+              setDeleteAccountOpen(open);
+              if (!open) setDeleteConfirmText("");
+            }}
+          >
+            <DialogContent className="max-h-[min(92dvh,44rem)] w-[calc(100%-1.5rem)] gap-0 overflow-y-auto border-gray-200 p-5 sm:max-w-lg sm:p-6">
+              <DialogHeader className="space-y-0 pb-0 text-left sm:text-left">
+                <DialogTitle>Delete account</DialogTitle>
+                <DialogDescription asChild>
+                  <div className="space-y-4 pt-3 text-sm text-gray-600">
+                    <p className="leading-relaxed">
+                      Deleting your account will disable access to WhachatCRM and begin permanent deletion of your account
+                      data according to our{" "}
+                      <Link href="/privacy-policy" className="text-blue-600 underline underline-offset-2 hover:text-blue-700">
+                        Privacy Policy
+                      </Link>
+                      .
+                    </p>
+                    <p className="leading-relaxed pb-1">
+                      Some billing, security, and compliance records may be retained temporarily where required by law.
+                    </p>
+                    <p className="leading-relaxed text-gray-800">This action cannot be easily undone.</p>
+                  </div>
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-2 pt-6">
+                <Label htmlFor="delete-account-confirm" className="text-sm text-gray-800">
+                  Type DELETE to confirm
+                </Label>
+                <Input
+                  id="delete-account-confirm"
+                  autoComplete="off"
+                  placeholder="DELETE"
+                  value={deleteConfirmText}
+                  onChange={(e) => setDeleteConfirmText(e.target.value)}
+                  className="font-mono"
+                  data-testid="input-delete-account-confirm"
+                />
+              </div>
+              <DialogFooter className="mt-6 flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full sm:w-auto"
+                  onClick={() => setDeleteAccountOpen(false)}
+                  disabled={deleteAccountMutation.isPending}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  className="w-full sm:w-auto"
+                  disabled={deleteConfirmText !== "DELETE" || deleteAccountMutation.isPending}
+                  onClick={() => deleteAccountMutation.mutate()}
+                  data-testid="button-delete-account-confirm"
+                >
+                  {deleteAccountMutation.isPending ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Submitting…
+                    </>
+                  ) : (
+                    "Delete account"
+                  )}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
 
         </div>
       </div>
