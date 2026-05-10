@@ -697,6 +697,54 @@ export async function registerRoutes(
     }
   });
 
+  const ACCOUNT_DELETE_SUCCESS_MESSAGE =
+    "Your account deletion request has been received. Access may be disabled and data deletion will be processed according to our Privacy Policy.";
+
+  async function handleAccountDeletionRequest(req: any, res: any) {
+    try {
+      if (!req.user?.id) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const userId = req.user.id as string;
+
+      await storage.requestAccountDeletion(userId);
+
+      const fresh = await storage.getUserForSession(userId);
+      if (fresh?.twilioConnected) {
+        await disconnectWhatsAppProvider(userId, "twilio").catch((e: unknown) =>
+          console.warn("[account/delete-request] Twilio disconnect:", e)
+        );
+      }
+      if (fresh?.metaConnected) {
+        await disconnectWhatsAppProvider(userId, "meta").catch((e: unknown) =>
+          console.warn("[account/delete-request] Meta disconnect:", e)
+        );
+      }
+
+      req.logout((logoutErr: unknown) => {
+        if (logoutErr) {
+          console.error("[account/delete-request] logout:", logoutErr);
+        }
+        req.session.destroy((destroyErr: unknown) => {
+          if (destroyErr) {
+            console.error("[account/delete-request] session destroy:", destroyErr);
+          }
+          res.status(200).json({
+            success: true,
+            message: ACCOUNT_DELETE_SUCCESS_MESSAGE,
+          });
+        });
+      });
+    } catch (error) {
+      console.error("Account deletion request error:", error);
+      res.status(500).json({ error: "Failed to submit account deletion request" });
+    }
+  }
+
+  /** Self-service account deletion request (pending; no immediate purge). */
+  app.post("/api/account/delete-request", handleAccountDeletionRequest);
+  app.delete("/api/account", handleAccountDeletionRequest);
+
   // Get notification preferences
   app.get("/api/users/preferences", async (req, res) => {
     try {

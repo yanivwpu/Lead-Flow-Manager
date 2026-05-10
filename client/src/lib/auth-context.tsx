@@ -7,6 +7,8 @@ interface User {
   email: string;
   avatarUrl?: string | null;
   role?: string | null;
+  /** Set when a self-service deletion request has been recorded (pending processing). */
+  deletionRequestedAt?: string | null;
 }
 
 interface AuthContextType {

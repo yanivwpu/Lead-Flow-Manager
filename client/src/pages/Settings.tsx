@@ -8,6 +8,7 @@ import { useAuth } from "@/lib/auth-context";
 import { toast } from "@/hooks/use-toast";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link, useLocation, useSearch } from "wouter";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { UpgradeModal, type UpgradeReason } from "@/components/UpgradeModal";
 import { ConnectTwilioWizard } from "@/components/ConnectTwilioWizard";
 import { ConnectMetaWizard } from "@/components/ConnectMetaWizard";
@@ -371,6 +372,8 @@ export function Settings() {
   const [syncingSubscription, setSyncingSubscription] = useState(false);
   const [connectTwilioOpen, setConnectTwilioOpen] = useState(false);
   const [connectMetaOpen, setConnectMetaOpen] = useState(false);
+  const [deleteAccountOpen, setDeleteAccountOpen] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteName, setInviteName] = useState("");
   const [importFile, setImportFile] = useState<File | null>(null);
@@ -468,6 +471,35 @@ export function Settings() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
       toast({ title: "Avatar Updated", description: "Your profile picture has been updated successfully." });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const deleteAccountMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/account/delete-request", {
+        method: "POST",
+        credentials: "include",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(typeof data.error === "string" ? data.error : "Request failed");
+      }
+      return data as { success?: boolean; message?: string };
+    },
+    onSuccess: (data) => {
+      setDeleteAccountOpen(false);
+      setDeleteConfirmText("");
+      queryClient.clear();
+      toast({
+        title: "Deletion request received",
+        description:
+          data.message ||
+          "Your account deletion request has been received. Access may be disabled and data deletion will be processed according to our Privacy Policy.",
+      });
+      window.location.assign("/auth");
     },
     onError: (error: Error) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -1157,6 +1189,114 @@ export function Settings() {
               </div>
             )}
           </div>
+
+          {/* Account deletion (self-service request — pending; not an immediate purge) */}
+          <div className="bg-white border border-red-200 rounded-xl p-4 sm:p-6 shadow-sm">
+            <div className="flex items-center gap-3 mb-4 sm:mb-6">
+              <div className="h-9 w-9 sm:h-10 sm:w-10 bg-red-50 rounded-lg flex items-center justify-center flex-shrink-0">
+                <AlertTriangle className="h-4 w-4 sm:h-5 sm:w-5 text-red-600" />
+              </div>
+              <div className="min-w-0">
+                <h2 className="text-base sm:text-lg font-bold text-gray-900">Danger zone</h2>
+                <p className="text-xs sm:text-sm text-gray-500">
+                  Request deletion of your account and associated data per our Privacy Policy. For retention details, see{" "}
+                  <Link href="/data-deletion" className="text-blue-600 hover:text-blue-700 underline underline-offset-2">
+                    Data deletion
+                  </Link>
+                  .
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <p className="text-sm text-gray-600 max-w-xl">
+                Submit a deletion request to disable access and begin processing according to our policies. This does not immediately remove every record until backend purge jobs complete.
+              </p>
+              <Button
+                type="button"
+                variant="destructive"
+                className="shrink-0"
+                onClick={() => {
+                  setDeleteConfirmText("");
+                  setDeleteAccountOpen(true);
+                }}
+                data-testid="button-delete-account"
+              >
+                Delete Account
+              </Button>
+            </div>
+          </div>
+
+          <Dialog
+            open={deleteAccountOpen}
+            onOpenChange={(open) => {
+              setDeleteAccountOpen(open);
+              if (!open) setDeleteConfirmText("");
+            }}
+          >
+            <DialogContent className="sm:max-w-lg">
+              <DialogHeader>
+                <DialogTitle>Delete account</DialogTitle>
+                <DialogDescription asChild>
+                  <div className="space-y-3 text-sm text-gray-600 pt-1">
+                    <p>
+                      Deleting your account will disable access to WhachatCRM, disconnect active integrations where
+                      possible, stop active automations, and begin deletion of account data according to our Privacy
+                      Policy.
+                    </p>
+                    <p>This action should not be triggered accidentally.</p>
+                    <p>
+                      You are submitting a <span className="font-medium text-gray-800">deletion request</span> (pending
+                      processing). For more information, see{" "}
+                      <Link href="/data-deletion" className="text-blue-600 hover:text-blue-700 underline underline-offset-2">
+                        Data deletion
+                      </Link>
+                      .
+                    </p>
+                  </div>
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-2 py-2">
+                <Label htmlFor="delete-account-confirm" className="text-gray-800">
+                  Type <span className="font-mono font-semibold">DELETE</span> to confirm
+                </Label>
+                <Input
+                  id="delete-account-confirm"
+                  autoComplete="off"
+                  placeholder="DELETE"
+                  value={deleteConfirmText}
+                  onChange={(e) => setDeleteConfirmText(e.target.value)}
+                  className="font-mono"
+                  data-testid="input-delete-account-confirm"
+                />
+              </div>
+              <DialogFooter className="gap-2 sm:gap-0">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setDeleteAccountOpen(false)}
+                  disabled={deleteAccountMutation.isPending}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  disabled={deleteConfirmText !== "DELETE" || deleteAccountMutation.isPending}
+                  onClick={() => deleteAccountMutation.mutate()}
+                  data-testid="button-delete-account-confirm"
+                >
+                  {deleteAccountMutation.isPending ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                      Submitting…
+                    </>
+                  ) : (
+                    "Delete account"
+                  )}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
 
           {/* Your Profile Section - Last */}
           <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 shadow-sm">

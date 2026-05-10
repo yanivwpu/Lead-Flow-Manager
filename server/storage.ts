@@ -54,7 +54,7 @@ import {
 import { computeConversationReplyWindowStatus } from "@shared/conversationReplyWindow";
 import type { RetargetEligibleContactRow } from "@shared/retargetEligibleContact";
 import { db } from "../drizzle/db";
-import { users, chats, registeredPhones, messageUsage, conversationWindows, teamMembers, workflows, workflowExecutions, recurringReminders, webhooks, webhookDeliveries, integrations, messageTemplates, templateSends, dripCampaigns, dripSteps, dripEnrollments, dripSends, chatbotFlows, chatbotSessions, salespeople, demoBookings, salesConversions, adminSettings, contacts, conversations, messages, activityEvents, channelSettings, supportTickets, partners, commissions, agreementAcceptances, contactNotes, appointments, flowJobs, type InsertConversationWindow, type ConversationWindow } from "@shared/schema";
+import { users, chats, registeredPhones, messageUsage, conversationWindows, teamMembers, workflows, workflowExecutions, recurringReminders, webhooks, webhookDeliveries, integrations, messageTemplates, templateSends, dripCampaigns, dripSteps, dripEnrollments, dripSends, chatbotFlows, chatbotSessions, salespeople, demoBookings, salesConversions, adminSettings, contacts, conversations, messages, activityEvents, channelSettings, supportTickets, partners, commissions, agreementAcceptances, contactNotes, appointments, flowJobs, campaignEnrollments, type InsertConversationWindow, type ConversationWindow } from "@shared/schema";
 import { eq, and, lte, sql, isNotNull, isNull, asc, desc, gte, sum, gt, or, like, ilike, ne, inArray, notInArray } from "drizzle-orm";
 
 /** Columns always present on legacy Neon `public.users`; avoids Drizzle hydrating rows when DB lacks newer schema columns (42703). */
@@ -98,6 +98,11 @@ export interface IStorage {
   createUser(user: InsertUser): Promise<User>;
   updateUser(id: string, updates: Partial<User>): Promise<User | undefined>;
   deleteUser(id: string): Promise<void>;
+  /**
+   * Marks account deletion requested, stops preset campaign enrollments and workflow-style automations (MVP; no row purge).
+   * Idempotent if already requested.
+   */
+  requestAccountDeletion(userId: string): Promise<{ deletionRequestedAt: Date; alreadyRequested: boolean }>;
   
   // Chat methods
   getChats(userId: string, limit?: number): Promise<Chat[]>;
@@ -513,6 +518,56 @@ export class DbStorage implements IStorage {
 
   async deleteUser(id: string): Promise<void> {
     await db.delete(users).where(eq(users.id, id));
+  }
+
+  async requestAccountDeletion(userId: string): Promise<{ deletionRequestedAt: Date; alreadyRequested: boolean }> {
+    const existing = await db
+      .select({ deletionRequestedAt: users.deletionRequestedAt })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+    const row = existing[0];
+    if (row?.deletionRequestedAt) {
+      return { deletionRequestedAt: row.deletionRequestedAt, alreadyRequested: true };
+    }
+
+    const now = new Date();
+
+    await db
+      .update(campaignEnrollments)
+      .set({
+        status: "cancelled",
+        updatedAt: now,
+        nextRunAt: null,
+      })
+      .where(
+        and(
+          eq(campaignEnrollments.userId, userId),
+          or(eq(campaignEnrollments.status, "active"), eq(campaignEnrollments.status, "paused"))
+        )
+      );
+
+    await db
+      .update(workflows)
+      .set({ isActive: false, updatedAt: now })
+      .where(eq(workflows.userId, userId));
+
+    await db
+      .update(recurringReminders)
+      .set({ isActive: false })
+      .where(eq(recurringReminders.userId, userId));
+
+    const updated = await db
+      .update(users)
+      .set({ deletionRequestedAt: now })
+      .where(eq(users.id, userId))
+      .returning({ deletionRequestedAt: users.deletionRequestedAt });
+
+    const at = updated[0]?.deletionRequestedAt ?? now;
+    console.log(
+      `[AccountDeletion] deletion_requested userId=${userId} at=${at.toISOString()}`
+    );
+    return { deletionRequestedAt: at, alreadyRequested: false };
   }
 
   async getChats(userId: string, limit: number = 10000): Promise<Chat[]> {

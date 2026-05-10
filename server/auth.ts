@@ -203,7 +203,13 @@ export function setupAuth(app: Express) {
               path: 'demo_bypass',
             });
 
-            return done(null, user);
+            const demoSessionUser = await storage.getUserForSession(user.id);
+            if (demoSessionUser?.deletionRequestedAt) {
+              return done(null, false, {
+                message: 'This account has a pending deletion request.',
+              });
+            }
+            return done(null, demoSessionUser || user);
           }
           
           // Normal login flow for non-demo accounts (case-insensitive email match + NFKC via storage.getUserByEmail)
@@ -255,7 +261,13 @@ export function setupAuth(app: Express) {
             return done(null, false, { message: 'Invalid email or password' });
           }
 
-          return done(null, user);
+          const sessionUser = await storage.getUserForSession(user.id);
+          if (sessionUser?.deletionRequestedAt) {
+            return done(null, false, {
+              message: 'This account has a pending deletion request.',
+            });
+          }
+          return done(null, sessionUser || user);
         } catch (error) {
           console.error('[LOGIN] Error during authentication:', error);
           return done(error);
@@ -275,6 +287,9 @@ export function setupAuth(app: Express) {
       const user = await storage.getUserForSession(id);
       if (!user) {
         // User no longer exists in database, clear the session
+        return done(null, false);
+      }
+      if (user.deletionRequestedAt) {
         return done(null, false);
       }
       done(null, user);

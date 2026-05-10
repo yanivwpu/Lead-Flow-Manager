@@ -159,6 +159,8 @@ export const users = pgTable("users", {
   createdAt: timestamp("created_at").defaultNow(),
   // Trial re-engagement email tracking
   checkinEmailSent: boolean("checkin_email_sent").default(false),
+  /** When set, the user has requested account deletion; data may be purged per policy (not immediate hard-delete in MVP). */
+  deletionRequestedAt: timestamp("deletion_requested_at"),
 });
 
 /**
