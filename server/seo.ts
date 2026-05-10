@@ -287,6 +287,12 @@ export const PAGE_META: Record<string, PageMeta> = {
     description: "Request deletion of your WhachatCRM account and learn how Shopify-related data requests are supported.",
     canonical: `${BASE_URL}/data-deletion`
   },
+  "/user-guide": {
+    title: "User Guide & Getting Started | WhachatCRM",
+    description:
+      "Step-by-step guide: connect WhatsApp with Meta embedded signup, unified inbox, templates, campaigns, AI Copilot, integrations, and billing.",
+    canonical: `${BASE_URL}/user-guide`
+  },
   "/unsubscribe": {
     title: "Email preferences | WhachatCRM",
     description: "How to unsubscribe from marketing emails from WhachatCRM.",

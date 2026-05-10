@@ -40,7 +40,7 @@ export function SiteFooter() {
             <div className={isRTL ? 'text-right' : ''}>
               <h3 className="text-xs font-semibold text-gray-900 uppercase tracking-wider mb-4">{t('home.footer.resources', 'Resources')}</h3>
               <ul className="space-y-2.5 text-sm text-gray-500">
-                <li><a href="/WhachatCRM-User-Guide.html"><span className="hover:text-gray-900 transition-colors cursor-pointer">{t('home.footer.gettingStarted', 'Getting Started')}</span></a></li>
+                <li><a href="/user-guide"><span className="hover:text-gray-900 transition-colors cursor-pointer">{t('home.footer.gettingStarted', 'Getting Started')}</span></a></li>
                 <li><Link href="/help"><span className="hover:text-gray-900 transition-colors cursor-pointer">{t('home.footer.helpCenter', 'Help Center')}</span></Link></li>
                 <li><Link href="/blog"><span className="hover:text-gray-900 transition-colors cursor-pointer">{t('home.footer.blog', 'Blog')}</span></Link></li>
               </ul>

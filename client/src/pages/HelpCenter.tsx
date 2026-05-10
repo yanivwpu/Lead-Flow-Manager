@@ -39,6 +39,8 @@ const HELP_ARTICLES: Article[] = [
 
 Welcome to WhachatCRM! This guide will help you get up and running quickly with our unified multi-channel inbox.
 
+For the **latest step-by-step overview** (WhatsApp embedded signup, templates, campaigns, billing), open the **[User Guide](/user-guide)** — it is updated as the product evolves.
+
 ## Step 1: Connect Your Channels
 
 WhachatCRM supports 7 messaging channels in one unified inbox:

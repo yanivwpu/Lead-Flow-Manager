@@ -34,7 +34,7 @@ export function MobileNav() {
     { label: t('nav.integrations', 'Integrations'), href: "/app/integrations", testId: "integrations" },
     { label: t('nav.aiFeatures', 'AI Features'), href: "/app/ai-brain", testId: "ai-features" },
     { label: t('nav.search', 'Search'), href: "/app/search", testId: "search" },
-    { label: t('nav.gettingStarted', 'Getting Started'), href: "/WhachatCRM-User-Guide.html", testId: "getting-started", external: true },
+    { label: t('nav.gettingStarted', 'Getting Started'), href: "/user-guide", testId: "getting-started", external: true },
     { label: t('nav.help', 'Help'), href: "/app/help", testId: "help" },
   ];
 

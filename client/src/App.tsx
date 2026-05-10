@@ -39,6 +39,7 @@ const RealtorLanding = lazy(() => import("@/pages/RealtorLanding").then(m => ({ 
 const WidgetFrame = lazy(() => import("@/pages/WidgetFrame").then(m => ({ default: m.WidgetFrame })));
 const WidgetChat = lazy(() => import("@/pages/WidgetChat").then(m => ({ default: m.WidgetChat })));
 const HelpCenter = lazy(() => import("@/pages/HelpCenter").then(m => ({ default: m.HelpCenter })));
+const UserGuide = lazy(() => import("@/pages/UserGuide").then(m => ({ default: m.UserGuide })));
 const NotFound = lazy(() => import("@/pages/not-found"));
 import { ReferralCapture } from "@/components/ReferralCapture";
 import { CookieConsentRoot } from "@/components/CookieConsentRoot";
@@ -98,6 +99,10 @@ function Router() {
       <Route path="/widget-frame/:widgetId" component={WidgetFrame} />
       <Route path="/chat/:widgetId" component={WidgetChat} />
       <Route path="/help" component={HelpCenter} />
+      <Route path="/user-guide" component={UserGuide} />
+      <Route path="/WhachatCRM-User-Guide.html">
+        <Redirect to="/user-guide" />
+      </Route>
 
       <Route path="/post-checkout">
         <ProtectedRoute component={PostCheckout} />

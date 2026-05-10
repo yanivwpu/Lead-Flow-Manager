@@ -102,7 +102,7 @@ export function Sidebar() {
       label: t("nav.support", "Support"),
       items: [
         { icon: Settings, label: t("nav.settings", "Settings"), href: "/app/settings", testId: "sidebar-settings" },
-        { icon: BookOpen, label: t("nav.gettingStarted", "Getting Started"), href: "/WhachatCRM-User-Guide.html", testId: "sidebar-getting-started", external: true },
+        { icon: BookOpen, label: t("nav.gettingStarted", "Getting Started"), href: "/user-guide", testId: "sidebar-getting-started", external: true },
         { icon: HelpCircle, label: t("nav.help", "Help"), href: "/app/help", testId: "sidebar-help" },
       ],
     },

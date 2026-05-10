@@ -108,6 +108,11 @@ export function serveStatic(app: Express) {
     });
   });
 
+  // Legacy static HTML guide → canonical SPA route (301 before express.static)
+  app.get("/WhachatCRM-User-Guide.html", (_req, res) => {
+    res.redirect(301, "/user-guide");
+  });
+
   // Serve static assets (JS, CSS, images, etc.)
   app.use(express.static(distPath, {
     index: false // Disable automatic index.html serving for /
