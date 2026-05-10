@@ -629,7 +629,7 @@ export async function sendTrialCheckinEmail(firstName: string, email: string): P
               <p style="margin: 8px 0 0 0; color: #94a3b8; font-size: 11px;">WhaChatCRM · 1234 Main Street, Suite 100 · Miami, FL 33130</p>
               <p style="margin: 8px 0 0 0; color: #94a3b8; font-size: 11px;">
                 <a href="${APP_URL}/unsubscribe" style="color: #94a3b8; text-decoration: underline;">Unsubscribe</a> · 
-                <a href="${APP_URL}/privacy" style="color: #94a3b8; text-decoration: underline;">Privacy Policy</a>
+                <a href="${APP_URL}/privacy-policy" style="color: #94a3b8; text-decoration: underline;">Privacy Policy</a>
               </p>
               <p style="margin: 12px 0 0 0; color: #94a3b8; font-size: 11px;">&copy; ${new Date().getFullYear()} WhaChatCRM. All rights reserved.</p>
             </div>

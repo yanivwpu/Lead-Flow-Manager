@@ -282,6 +282,16 @@ export const PAGE_META: Record<string, PageMeta> = {
     description: "WhachatCRM terms of use. Read our service terms, user responsibilities, and platform guidelines.",
     canonical: `${BASE_URL}/terms-of-use`
   },
+  "/data-deletion": {
+    title: "Data Deletion | WhachatCRM",
+    description: "Request deletion of your WhachatCRM account and learn how Shopify-related data requests are supported.",
+    canonical: `${BASE_URL}/data-deletion`
+  },
+  "/unsubscribe": {
+    title: "Email preferences | WhachatCRM",
+    description: "How to unsubscribe from marketing emails from WhachatCRM.",
+    canonical: `${BASE_URL}/unsubscribe`
+  },
   "/realtor-growth-engine": {
     title: "Realtor Growth Engine – Turn Real Estate Leads Into Showings | WhachatCRM",
     description: "AI-powered WhatsApp automation that qualifies leads and schedules showings automatically. Fully done-for-you setup for real estate agents.",

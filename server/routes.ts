@@ -284,6 +284,24 @@ export async function registerRoutes(
     }
   });
 
+  /** Approximate country for cookie / analytics consent (Cloudflare or Vercel header when present). */
+  app.get("/api/geo", (req, res) => {
+    try {
+      const cf = req.headers["cf-ipcountry"];
+      const vercel = req.headers["x-vercel-ip-country"];
+      const raw = (typeof cf === "string" ? cf : typeof vercel === "string" ? vercel : "")
+        .trim()
+        .toUpperCase();
+      const country = raw && raw !== "XX" && /^[A-Z]{2}$/.test(raw) ? raw : null;
+      res.json({
+        country,
+        source: country ? (cf ? "cf-ipcountry" : "x-vercel-ip-country") : "unknown",
+      });
+    } catch {
+      res.json({ country: null, source: "error" });
+    }
+  });
+
   // Help center feedback endpoint (public - no auth required)
   app.post("/api/help-feedback", async (req, res) => {
     try {

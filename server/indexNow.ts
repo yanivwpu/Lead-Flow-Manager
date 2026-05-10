@@ -100,6 +100,8 @@ export const PUBLIC_PAGES: string[] = (() => {
     `${BASE_URL}/help`,
     `${BASE_URL}/privacy-policy`,
     `${BASE_URL}/terms-of-use`,
+    `${BASE_URL}/data-deletion`,
+    `${BASE_URL}/unsubscribe`,
     `${BASE_URL}/realtor-growth-engine`,
   ];
   return Array.from(new Set([...core, ...marketing, ...blog])).filter(

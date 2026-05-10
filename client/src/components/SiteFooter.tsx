@@ -1,9 +1,11 @@
 import { Link } from "wouter";
 import { useTranslation } from "react-i18next";
 import { getDirection } from "@/lib/i18n";
+import { useCookieConsent } from "@/components/CookieConsentRoot";
 
 export function SiteFooter() {
   const { t } = useTranslation();
+  const { openPreferences } = useCookieConsent();
   const dir = getDirection();
   const isRTL = dir === 'rtl';
 
@@ -60,6 +62,17 @@ export function SiteFooter() {
               <ul className="space-y-2.5 text-sm text-gray-500">
                 <li><Link href="/privacy-policy"><span className="hover:text-gray-900 transition-colors cursor-pointer">{t('home.footer.privacy', 'Privacy Policy')}</span></Link></li>
                 <li><Link href="/terms-of-use"><span className="hover:text-gray-900 transition-colors cursor-pointer">{t('home.footer.terms', 'Terms of Use')}</span></Link></li>
+                <li><Link href="/data-deletion"><span className="hover:text-gray-900 transition-colors cursor-pointer">Data deletion</span></Link></li>
+                <li><Link href="/unsubscribe"><span className="hover:text-gray-900 transition-colors cursor-pointer">Email preferences</span></Link></li>
+                <li>
+                  <button
+                    type="button"
+                    onClick={() => openPreferences()}
+                    className="hover:text-gray-900 transition-colors cursor-pointer text-left"
+                  >
+                    Cookie preferences
+                  </button>
+                </li>
               </ul>
             </div>
           </div>

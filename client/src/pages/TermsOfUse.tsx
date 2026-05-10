@@ -25,7 +25,7 @@ export function TermsOfUse() {
         </Link>
 
         <h1 className="text-3xl font-display font-bold text-gray-900 mb-2">Terms of Use</h1>
-        <p className="text-sm text-gray-500 mb-8">Last updated: January 26, 2026</p>
+        <p className="text-sm text-gray-500 mb-8">Last updated: May 8, 2026</p>
 
         <div className="prose prose-gray max-w-none">
           <h2 className="text-xl font-bold text-gray-900 mt-8 mb-4">1. Acceptance of Terms</h2>
@@ -35,7 +35,16 @@ export function TermsOfUse() {
 
           <h2 className="text-xl font-bold text-gray-900 mt-8 mb-4">2. Description of Service</h2>
           <p className="text-gray-600 mb-4">
-            WhachatCRM is a customer relationship management (CRM) platform that enables businesses to manage WhatsApp conversations, organize leads, set follow-up reminders, and track sales pipelines. The Service connects to your own WhatsApp Business API provider (Twilio or Meta WhatsApp Business API) for message delivery.
+            WhachatCRM is a <strong>customer relationship management (CRM) and customer communication platform</strong> for
+            businesses to manage conversations, organize leads, set follow-ups, and run sales workflows. Depending on your
+            configuration, the Service may support <strong>multiple channels</strong> (for example, WhatsApp, Instagram,
+            Facebook Messenger, SMS, Telegram, and web chat) and <strong>integrations</strong> such as Shopify, subject to
+            feature availability and your connected providers.
+          </p>
+          <p className="text-gray-600 mb-4">
+            The Service is intended for <strong>legitimate customer communication</strong> and relationship management. It is
+            not a “blast” or unsolicited bulk-messaging system, and you may not use it to evade platform rules, anti-spam laws, or
+            consent requirements.
           </p>
 
           <h2 className="text-xl font-bold text-gray-900 mt-8 mb-4">3. Account Registration</h2>
@@ -44,7 +53,10 @@ export function TermsOfUse() {
             <li>Provide accurate and complete registration information</li>
             <li>Be at least 18 years old or have legal authority to enter into agreements</li>
             <li>Maintain the security of your account credentials</li>
-            <li>Have a valid WhatsApp Business API provider account (Twilio or Meta)</li>
+            <li>
+              For WhatsApp features: maintain a valid WhatsApp Business API connection through a supported provider (for example
+              Twilio or Meta) when you use those features
+            </li>
             <li>Notify us immediately of any unauthorized access</li>
           </ul>
 
@@ -60,7 +72,9 @@ export function TermsOfUse() {
           <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4">
             <p className="text-gray-700 font-medium mb-2">Important - Separate Costs:</p>
             <p className="text-gray-600 mb-3">
-              WhachatCRM subscription fees cover CRM functionality only. WhatsApp message delivery costs are billed separately by your provider (Twilio or Meta). WhachatCRM does not charge per message.
+              WhachatCRM subscription fees cover platform functionality. <strong>Channel and carrier costs</strong> (for example
+              WhatsApp conversation fees, SMS, or other provider charges) are billed separately by your providers. WhachatCRM does
+              not charge per message for CRM use of the platform.
             </p>
             <p className="text-gray-600 text-sm">
               <strong>View message costs:</strong>{" "}
@@ -82,18 +96,25 @@ export function TermsOfUse() {
             <li>All fees are non-refundable unless required by law</li>
           </ul>
 
-          <h2 className="text-xl font-bold text-gray-900 mt-8 mb-4">5. WhatsApp Provider Integration</h2>
+          <h2 className="text-xl font-bold text-gray-900 mt-8 mb-4">5. Messaging providers, channels, and integrations</h2>
           <p className="text-gray-600 mb-4">
-            WhachatCRM supports two WhatsApp Business API providers: Twilio and Meta WhatsApp Business API. You are responsible for:
+            The Service may connect to third-party providers you authorize — including, depending on your setup,{" "}
+            <strong>Twilio</strong>, <strong>Meta</strong> (for example WhatsApp Cloud API and, where enabled, Instagram or
+            Messenger messaging products), and other channel providers. <strong>Shopify</strong> and other integrations are
+            optional and governed by the permissions you grant.
           </p>
+          <p className="text-gray-600 mb-4">You are responsible for:</p>
           <ul className="list-disc list-inside text-gray-600 mb-4 space-y-2">
-            <li>Maintaining a valid account with your chosen provider (Twilio or Meta)</li>
-            <li>Keeping your provider credentials and access tokens secure</li>
-            <li>Complying with your provider's Terms of Service and policies</li>
-            <li>All message delivery costs charged by your provider</li>
+            <li>Maintaining valid accounts and sufficient permissions with each provider you use</li>
+            <li>Keeping tokens, API keys, and credentials secure</li>
+            <li>Complying with each provider&apos;s terms, product policies, and technical requirements</li>
+            <li>All fees, rate limits, and message charges imposed by providers</li>
+            <li>Configuration required for webhooks, phone numbers, sender registration, and quality rules</li>
           </ul>
           <p className="text-gray-600 mb-4">
-            WhachatCRM stores your provider credentials securely (encrypted at rest) and uses them only to send and receive WhatsApp messages on your behalf.
+            WhachatCRM stores integration credentials using encryption at rest and uses them only to provide the features you
+            enable. <strong>Third-party services may change, suspend, or limit functionality</strong> without notice; WhachatCRM
+            is not responsible for provider outages, policy changes, or delivery failures outside our reasonable control.
           </p>
 
           <h2 className="text-xl font-bold text-gray-900 mt-8 mb-4">6. Acceptable Use</h2>
@@ -106,11 +127,65 @@ export function TermsOfUse() {
             <li>Attempt to access other users' accounts or data</li>
             <li>Interfere with or disrupt the Service</li>
             <li>Use automated systems to abuse the platform</li>
+            <li>
+              Run campaigns, workflows, or sequences in ways that are likely to violate anti-spam laws, consent rules, or a
+              provider&apos;s messaging policies
+            </li>
+            <li>Misrepresent automated content as human where disclosure is required</li>
           </ul>
 
-          <h2 className="text-xl font-bold text-gray-900 mt-8 mb-4">7. WhatsApp Compliance</h2>
+          <h2 className="text-xl font-bold text-gray-900 mt-8 mb-4">7. Messaging compliance, automation, AI features, and Shopify</h2>
           <p className="text-gray-600 mb-4">
-            You are responsible for complying with WhatsApp's Business Policy and all applicable messaging regulations. This includes obtaining proper consent from recipients before messaging them.
+            WhachatCRM provides tools; <strong>you remain responsible</strong> for lawful use. Nothing in these Terms guarantees
+            regulatory compliance for your business — requirements vary by region and industry.
+          </p>
+
+          <h3 className="text-lg font-bold text-gray-900 mt-6 mb-3">7.1 WhatsApp (Business Platform)</h3>
+          <p className="text-gray-600 mb-4">
+            Where you use WhatsApp, you must comply with WhatsApp&apos;s Business Policies and Commerce Policies, including rules
+            around user consent, messaging categories, template approvals where required, conversational windows, and messaging
+            limits. You must obtain and maintain appropriate permission to message recipients in line with applicable law and
+            WhatsApp rules.
+          </p>
+
+          <h3 className="text-lg font-bold text-gray-900 mt-6 mb-3">7.2 Instagram and Facebook Messenger</h3>
+          <p className="text-gray-600 mb-4">
+            Where you enable Instagram or Messenger messaging features, you must comply with Meta&apos;s applicable Platform Terms,
+            Developer Policies, and messaging/product policies for those surfaces — including restrictions on prohibited content and
+            permitted outreach practices.
+          </p>
+
+          <h3 className="text-lg font-bold text-gray-900 mt-6 mb-3">7.3 SMS and telephony</h3>
+          <p className="text-gray-600 mb-4">
+            Where you use SMS or telephony integrations, you must comply with carrier rules, consent and disclosure obligations
+            (including TCPA-like requirements where applicable), Do-Not-Call rules where relevant, and identification/opt-out
+            requirements imposed by your provider or regulators.
+          </p>
+
+          <h3 className="text-lg font-bold text-gray-900 mt-6 mb-3">7.4 Automation, campaigns, scheduling, and workflows</h3>
+          <p className="text-gray-600 mb-4">
+            Features such as preset campaigns, enrollment scheduling, reminders, and workflows send or queue messages based on your
+            configuration. <strong>Scheduled messaging is not a promise of delivery</strong> — delivery may fail due to provider
+            errors, recipient eligibility, conversation windows, blocks, quality enforcement, or maintenance. You must configure
+            automation responsibly and honor recipient opt-outs promptly (including tags/fields your workspace uses to suppress
+            outreach).
+          </p>
+
+          <h3 className="text-lg font-bold text-gray-900 mt-6 mb-3">7.5 Artificial intelligence (AI) features</h3>
+          <p className="text-gray-600 mb-4">
+            Certain features may generate drafts, summaries, or suggestions using AI. AI outputs can be incorrect or inappropriate.
+            <strong> You are responsible for reviewing content before sending</strong> when human oversight is required by law or
+            by your policies. WhachatCRM does not warrant that AI outputs are accurate, complete, or fit for any particular legal
+            purpose.
+          </p>
+
+          <h3 className="text-lg font-bold text-gray-900 mt-6 mb-3">7.6 Shopify merchants</h3>
+          <p className="text-gray-600 mb-4">
+            If you use WhachatCRM with Shopify, you acknowledge that you control how you collect and use your customers&apos;
+            information in your store and messaging practices. You are responsible for publishing appropriate privacy notices,
+            honoring buyer requests, and complying with Shopify&apos;s App Store policies and applicable commerce regulations.
+            Uninstalling the app may initiate Shopify&apos;s standard app uninstall flows; data handling may depend on Shopify&apos;s
+            processes and the permissions historically granted.
           </p>
 
           <h2 className="text-xl font-bold text-gray-900 mt-8 mb-4">8. Partner & Referral Program</h2>
@@ -172,6 +247,11 @@ export function TermsOfUse() {
           </p>
           <p className="text-gray-600 mb-4">
             WhachatCRM is not responsible for message delivery failures, provider downtime, or charges incurred through your WhatsApp provider.
+          </p>
+          <p className="text-gray-600 mb-4">
+            AI-assisted features may produce errors. To the maximum extent permitted by law, WhachatCRM is not liable for
+            decisions made based on AI outputs, missed sends due to automation safeguards, or enforcement actions by messaging
+            platforms arising from your messaging practices.
           </p>
 
           <h2 className="text-xl font-bold text-gray-900 mt-8 mb-4">11. Service Availability</h2>

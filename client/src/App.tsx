@@ -13,6 +13,8 @@ const AppLayout = lazy(() => import("@/pages/AppLayout").then(m => ({ default: m
 const ResetPassword = lazy(() => import("@/pages/ResetPassword").then(m => ({ default: m.ResetPassword })));
 const PrivacyPolicy = lazy(() => import("@/pages/PrivacyPolicy").then(m => ({ default: m.PrivacyPolicy })));
 const TermsOfUse = lazy(() => import("@/pages/TermsOfUse").then(m => ({ default: m.TermsOfUse })));
+const DataDeletion = lazy(() => import("@/pages/DataDeletion").then(m => ({ default: m.DataDeletion })));
+const Unsubscribe = lazy(() => import("@/pages/Unsubscribe").then(m => ({ default: m.Unsubscribe })));
 const Pricing = lazy(() => import("@/pages/Pricing").then(m => ({ default: m.Pricing })));
 const WatiAlternative = lazy(() => import("@/pages/WatiAlternative").then(m => ({ default: m.WatiAlternative })));
 const ZokoAlternative = lazy(() => import("@/pages/ZokoAlternative").then(m => ({ default: m.ZokoAlternative })));
@@ -39,6 +41,7 @@ const WidgetChat = lazy(() => import("@/pages/WidgetChat").then(m => ({ default:
 const HelpCenter = lazy(() => import("@/pages/HelpCenter").then(m => ({ default: m.HelpCenter })));
 const NotFound = lazy(() => import("@/pages/not-found"));
 import { ReferralCapture } from "@/components/ReferralCapture";
+import { CookieConsentRoot } from "@/components/CookieConsentRoot";
 import { Welcome } from "@/pages/Welcome";
 
 // Wrapper for protected routes
@@ -66,8 +69,13 @@ function Router() {
       <Route path="/" component={Welcome} />
       <Route path="/auth" component={AuthPage} />
       <Route path="/reset-password" component={ResetPassword} />
+      <Route path="/privacy">
+        <Redirect to="/privacy-policy" />
+      </Route>
       <Route path="/privacy-policy" component={PrivacyPolicy} />
       <Route path="/terms-of-use" component={TermsOfUse} />
+      <Route path="/data-deletion" component={DataDeletion} />
+      <Route path="/unsubscribe" component={Unsubscribe} />
       <Route path="/pricing" component={Pricing} />
       <Route path="/wati-alternative" component={WatiAlternative} />
       <Route path="/zoko-alternative" component={ZokoAlternative} />
@@ -131,11 +139,13 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <ReferralCapture />
-        <Toaster />
-        <Suspense fallback={<PageLoader />}>
-          <Router />
-        </Suspense>
+        <CookieConsentRoot>
+          <ReferralCapture />
+          <Toaster />
+          <Suspense fallback={<PageLoader />}>
+            <Router />
+          </Suspense>
+        </CookieConsentRoot>
       </AuthProvider>
     </QueryClientProvider>
   );
