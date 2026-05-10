@@ -155,6 +155,7 @@ type PresetCampaignDetail = PresetCampaignListItem & {
   placeholderDefaults?: Record<string, unknown> | null;
   aiEnabled?: boolean | null;
   audienceConfig?: Record<string, unknown> | null;
+  totalSteps?: number;
   executionStats?: CampaignExecutionStats;
   enrollments?: Array<{
     id: string;
@@ -164,6 +165,7 @@ type PresetCampaignDetail = PresetCampaignListItem & {
     contactId: string;
     contactName?: string;
     createdAt?: string | null;
+    totalSteps?: number;
   }>;
   recentStepEvents?: Array<{
     id: string;
@@ -357,8 +359,7 @@ export function Templates() {
 
   const [savedCampaignModalId, setSavedCampaignModalId] = useState<string | null>(null);
   const [savedCampaignModalOpen, setSavedCampaignModalOpen] = useState(false);
-  const [savedCampaignEditMode, setSavedCampaignEditMode] = useState(false);
-  const [savedCampaignEditName, setSavedCampaignEditName] = useState("");
+  const [savedCampaignOpenInEditMode, setSavedCampaignOpenInEditMode] = useState(false);
   const [pendingDeleteCampaignId, setPendingDeleteCampaignId] = useState<string | null>(null);
 
   const templatesEnabled = (subscription?.limits as any)?.templatesEnabled;
@@ -387,10 +388,6 @@ export function Templates() {
     enabled: !!templatesEnabled && !!savedCampaignModalId && savedCampaignModalOpen,
   });
 
-  useEffect(() => {
-    if (savedCampaignDetail?.name) setSavedCampaignEditName(savedCampaignDetail.name);
-  }, [savedCampaignDetail?.id, savedCampaignDetail?.name]);
-
   const patchPresetCampaignMutation = useMutation({
     mutationFn: async (vars: { id: string; body: Record<string, unknown> }) => {
       const res = await apiRequest("PATCH", `/api/preset-campaigns/${vars.id}`, vars.body);
@@ -399,7 +396,6 @@ export function Templates() {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/preset-campaigns"] });
       queryClient.invalidateQueries({ queryKey: ["/api/preset-campaigns", savedCampaignModalId] });
-      setSavedCampaignEditMode(false);
       toast({
         title: "Saved",
         description: data?.message ?? "Campaign updated.",
@@ -434,6 +430,32 @@ export function Templates() {
     },
   });
 
+  const enrollmentActionMutation = useMutation({
+    mutationFn: async (vars: {
+      enrollmentId: string;
+      action: "pause" | "resume" | "cancel" | "retry";
+    }) => {
+      const res = await apiRequest(
+        "POST",
+        `/api/campaign-enrollments/${vars.enrollmentId}/${vars.action}`,
+        {}
+      );
+      return res.json() as Promise<{ enrollment?: unknown }>;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/preset-campaigns", savedCampaignModalId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/preset-campaigns"] });
+      toast({ title: "Enrollment updated" });
+    },
+    onError: (e: Error) => {
+      toast({
+        title: "Action failed",
+        description: e.message.replace(/^\d+:\s*/, ""),
+        variant: "destructive",
+      });
+    },
+  });
+
   const duplicatePresetCampaignMutation = useMutation({
     mutationFn: async (id: string) => {
       const res = await apiRequest("POST", `/api/preset-campaigns/${id}/duplicate`);
@@ -457,8 +479,8 @@ export function Templates() {
 
   const openSavedCampaignModal = (id: string, edit = false) => {
     setSavedCampaignModalId(id);
+    setSavedCampaignOpenInEditMode(edit);
     setSavedCampaignModalOpen(true);
-    setSavedCampaignEditMode(edit);
   };
 
   const { data: retargetableChats = [], isLoading: chatsLoading } = useQuery<RetargetableChat[]>({
@@ -1020,10 +1042,8 @@ export function Templates() {
               setSavedCampaignModalOpen={setSavedCampaignModalOpen}
               savedCampaignModalId={savedCampaignModalId}
               setSavedCampaignModalId={setSavedCampaignModalId}
-              savedCampaignEditMode={savedCampaignEditMode}
-              setSavedCampaignEditMode={setSavedCampaignEditMode}
-              savedCampaignEditName={savedCampaignEditName}
-              setSavedCampaignEditName={setSavedCampaignEditName}
+              savedCampaignOpenInEditMode={savedCampaignOpenInEditMode}
+              onConsumedOpenInEditMode={() => setSavedCampaignOpenInEditMode(false)}
               savedCampaignDetail={savedCampaignDetail}
               savedCampaignDetailLoading={savedCampaignDetailLoading}
               pendingDeleteCampaignId={pendingDeleteCampaignId}
@@ -1031,6 +1051,7 @@ export function Templates() {
               patchPresetCampaignMutation={patchPresetCampaignMutation}
               duplicatePresetCampaignMutation={duplicatePresetCampaignMutation}
               deletePresetCampaignMutation={deletePresetCampaignMutation}
+              enrollmentMutation={enrollmentActionMutation}
             />
           </TabsContent>
 

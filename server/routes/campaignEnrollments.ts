@@ -223,4 +223,35 @@ export function registerCampaignEnrollmentRoutes(app: Express): void {
       res.status(500).json({ error: "Failed to cancel enrollment" });
     }
   });
+
+  /** Re-queue the failed step at `currentStepIndex` using current campaign content. */
+  app.post("/api/campaign-enrollments/:id/retry", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+      const row = await storage.getCampaignEnrollmentById(req.params.id);
+      if (!row || row.userId !== req.user.id) return res.status(404).json({ error: "Enrollment not found" });
+      if (row.status !== "failed") {
+        return res.status(400).json({ error: "Only failed enrollments can be retried" });
+      }
+      const campaign = await storage.getPresetCampaignForUser(row.campaignId, req.user.id);
+      if (!campaign) return res.status(404).json({ error: "Campaign not found" });
+      if (campaign.status === "paused" || campaign.status === "completed") {
+        return res.status(400).json({
+          error: "Campaign is paused or completed — resume or reopen the campaign before retrying.",
+        });
+      }
+      const messages = Array.isArray(campaign.messages) ? campaign.messages : [];
+      if (row.currentStepIndex >= messages.length) {
+        return res.status(400).json({ error: "Enrollment step is out of range for this campaign." });
+      }
+      const updated = await storage.updateCampaignEnrollment(row.id, {
+        status: "active",
+        nextRunAt: new Date(),
+      });
+      res.json({ enrollment: updated });
+    } catch (err) {
+      console.error("POST retry enrollment:", err);
+      res.status(500).json({ error: "Failed to retry enrollment" });
+    }
+  });
 }

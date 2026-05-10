@@ -15,10 +15,19 @@ import { storage } from "../storage";
 import { getMetaMessageTemplates, sendMetaWhatsAppTemplate } from "../userMeta";
 import { getUserTwilioClient } from "../userTwilio";
 import { subscriptionService } from "../subscriptionService";
+import { extractPlaceholderKeysFromCampaignMessages } from "@shared/campaignPlaceholders";
 import { getPresetCampaignStatusLabel } from "@shared/presetCampaignLabels";
 
 /** When true, “launch” creates `active` and may enqueue sends. Until then, launch → `active_pending`. */
 const PRESET_CAMPAIGN_SEND_ENGINE_READY = true;
+
+const ALLOWED_PRESET_CAMPAIGN_STATUS = new Set([
+  "draft",
+  "active_pending",
+  "active",
+  "paused",
+  "completed",
+]);
 
 /** Stored in `messages.content` — template label + optional resolved text header + body (CRM bubble). */
 function buildOutboundTemplateDisplayContent(
@@ -275,18 +284,22 @@ export function registerTemplateRoutes(app: Express): void {
         storage.getCampaignAggregatesForUser(req.user.id),
       ]);
 
+      const totalSteps = Array.isArray(row.messages) ? row.messages.length : 0;
+
       const enrollmentsWithNames = await Promise.all(
         enrollments.map(async (e) => {
           const contact = await storage.getContact(e.contactId);
           return {
             ...e,
             contactName: contact?.name ?? "Unknown contact",
+            totalSteps,
           };
         })
       );
 
       res.json({
         ...row,
+        totalSteps,
         statusLabel: getPresetCampaignStatusLabel(row.status),
         executionStats: agg[row.id] ?? {
           enrollmentCount: 0,
@@ -380,10 +393,44 @@ export function registerTemplateRoutes(app: Express): void {
       if (typeof body.name === "string" && body.name.trim()) {
         patch.name = body.name.trim();
       }
+      if (typeof body.status === "string" && ALLOWED_PRESET_CAMPAIGN_STATUS.has(body.status)) {
+        patch.status = body.status;
+      }
+      if (typeof body.aiEnabled === "boolean") {
+        patch.aiEnabled = body.aiEnabled;
+      }
       if (Array.isArray(body.messages)) {
-        const msgs = body.messages as Array<{ delay?: string }>;
+        const raw = body.messages as unknown[];
+        if (raw.length === 0) {
+          return res.status(400).json({ error: "Campaign must have at least one step." });
+        }
+        const prevSteps = Array.isArray(existing.messages) ? existing.messages : [];
+        const msgs = raw.map((item, idx) => {
+          const prev =
+            prevSteps[idx] && typeof prevSteps[idx] === "object" && prevSteps[idx] !== null
+              ? { ...(prevSteps[idx] as Record<string, unknown>) }
+              : {};
+          const incoming =
+            item && typeof item === "object" && item !== null
+              ? { ...(item as Record<string, unknown>) }
+              : {};
+          const merged = { ...prev, ...incoming };
+          const delayRaw = merged.delay;
+          const delay =
+            delayRaw === undefined || delayRaw === null
+              ? "0"
+              : String(delayRaw).trim() || "0";
+          const content =
+            typeof merged.content === "string" ? merged.content : "";
+          const type =
+            typeof merged.type === "string" ? merged.type : "text";
+          return { ...merged, delay, content, type };
+        });
         patch.messages = msgs;
-        patch.delays = msgs.map((m) => String(m?.delay ?? "0"));
+        patch.delays = msgs.map((m) => String((m as { delay: string }).delay));
+      }
+      if (Array.isArray(body.placeholders)) {
+        patch.placeholders = body.placeholders.map((p) => String(p));
       }
       if (
         body.placeholderDefaults &&
@@ -405,6 +452,32 @@ export function registerTemplateRoutes(app: Express): void {
         patch.industry = body.industry;
       }
 
+      if (patch.messages && !Array.isArray(body.placeholders)) {
+        const mergedKeys = new Set<string>(
+          extractPlaceholderKeysFromCampaignMessages(patch.messages as unknown[])
+        );
+        const defs =
+          (patch.placeholderDefaults ??
+            existing.placeholderDefaults) as Record<string, unknown> | null;
+        if (defs && typeof defs === "object") {
+          for (const k of Object.keys(defs)) mergedKeys.add(k);
+        }
+        patch.placeholders = Array.from(mergedKeys).sort();
+      } else if (
+        patch.placeholderDefaults !== undefined &&
+        patch.messages === undefined &&
+        !Array.isArray(body.placeholders)
+      ) {
+        const mergedKeys = new Set<string>(
+          extractPlaceholderKeysFromCampaignMessages(
+            Array.isArray(existing.messages) ? existing.messages : []
+          )
+        );
+        const defs = patch.placeholderDefaults as Record<string, unknown>;
+        for (const k of Object.keys(defs)) mergedKeys.add(k);
+        patch.placeholders = Array.from(mergedKeys).sort();
+      }
+
       if (Object.keys(patch).length === 0) {
         return res.status(400).json({ error: "No valid fields to update" });
       }
@@ -416,10 +489,34 @@ export function registerTemplateRoutes(app: Express): void {
       );
       if (!updated) return res.status(404).json({ error: "Campaign not found" });
 
+      let warning: string | undefined;
+      const affectsRunningEnrollments =
+        patch.messages !== undefined ||
+        patch.delays !== undefined ||
+        patch.placeholderDefaults !== undefined ||
+        patch.channel !== undefined ||
+        patch.placeholders !== undefined;
+      if (affectsRunningEnrollments) {
+        const enrollments = await storage.getCampaignEnrollmentsForCampaign(
+          req.user.id,
+          req.params.id,
+          400
+        );
+        const inflight = enrollments.filter((e) =>
+          ["active", "paused", "failed"].includes(e.status)
+        ).length;
+        if (inflight > 0) {
+          warning = ` ${inflight} enrollment(s) still in progress: upcoming sends use the updated steps and defaults. Delivered steps stay unchanged.`;
+        }
+      }
+
+      const message = warning ? `Campaign updated.${warning}` : "Campaign updated.";
+
       res.json({
         campaign: updated,
         statusLabel: getPresetCampaignStatusLabel(updated.status),
-        message: "Campaign updated.",
+        message,
+        warning,
       });
     } catch (error) {
       console.error("Error updating preset campaign:", error);
