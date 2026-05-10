@@ -23,7 +23,6 @@ import {
   Save,
   ChevronDown,
   Plus,
-  Megaphone,
 } from "lucide-react";
 import type { ContactNote } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
@@ -2256,15 +2255,15 @@ export function InboxLeadDetailsPanel({
           {/* ── CAMPAIGNS (preset automation enrollments) ───────────────── */}
           <div className="mt-6 pt-4 border-t border-[#eee]">
             <div className="flex items-center justify-between mb-2">
-              <RowLabel>Campaigns</RowLabel>
+              <p className="text-xs uppercase tracking-wide text-gray-500">Campaigns</p>
               <button
                 type="button"
                 onClick={() => setCampaignPickerOpen(true)}
                 className="flex items-center gap-0.5 text-[11px] font-medium text-gray-400 hover:text-gray-700 transition-colors"
                 data-testid="button-add-to-campaign"
               >
-                <Megaphone className="w-3 h-3" />
-                Add to campaign
+                <Plus className="w-3 h-3" />
+                Add Campaign
               </button>
             </div>
             {campaignEnrollmentBuckets.primary.length === 0 &&
