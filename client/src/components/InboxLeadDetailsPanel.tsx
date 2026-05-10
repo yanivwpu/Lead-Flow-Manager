@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import {
   Phone,
   Mail,
@@ -23,6 +23,7 @@ import {
   Save,
   ChevronDown,
   Plus,
+  Megaphone,
 } from "lucide-react";
 import type { ContactNote } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
@@ -35,7 +36,16 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import { MODAL_OVERLAY_BACKDROP } from "@/lib/modalOverlay";
 import { format, parseISO } from "date-fns";
 import { TAG_COLORS, PIPELINE_STAGES, RGE_OPTIONAL_PIPELINE_STAGES } from "@/lib/data";
@@ -592,6 +602,130 @@ export function InboxLeadDetailsPanel({
   useEffect(() => { setAnsweredCriteriaKeys(new Set()); }, [contact.id]);
 
   const queryClient = useQueryClient();
+
+  const [campaignPickerOpen, setCampaignPickerOpen] = useState(false);
+  const [pickedCampaignId, setPickedCampaignId] = useState<string>("");
+
+  const { data: campaignEnrollmentPayload } = useQuery<{
+    enrollments: Array<{
+      id: string;
+      campaignId: string;
+      status: string;
+      campaignName?: string | null;
+      campaignChannel?: string | null;
+      campaignStatus?: string | null;
+      nextRunAt?: string | null;
+      currentStepIndex: number;
+      createdAt?: string | null;
+    }>;
+  }>({
+    queryKey: ["/api/campaign-enrollments", contact.id],
+    queryFn: async () => {
+      const r = await fetch(
+        `/api/campaign-enrollments?contactId=${encodeURIComponent(contact.id)}`,
+        { credentials: "include" }
+      );
+      if (!r.ok) throw new Error("Failed to load enrollments");
+      return r.json();
+    },
+    enabled: !!contact.id,
+  });
+
+  const { data: presetCampaignPickList = [] } = useQuery<
+    Array<{ id: string; name: string; status: string; channel?: string }>
+  >({
+    queryKey: ["/api/preset-campaigns"],
+    queryFn: async () => {
+      const r = await fetch("/api/preset-campaigns", { credentials: "include" });
+      if (!r.ok) throw new Error("Failed to load campaigns");
+      return r.json();
+    },
+    enabled: !!contact.id,
+  });
+
+  const enrollContactCampaignMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest("POST", "/api/campaign-enrollments", {
+        campaignId: pickedCampaignId,
+        contactId: contact.id,
+        conversationId: primaryConversation?.id ?? undefined,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/campaign-enrollments", contact.id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/preset-campaigns"] });
+      setCampaignPickerOpen(false);
+      setPickedCampaignId("");
+      toast({
+        title: "Added to campaign",
+        description: "Enrollment created. Messages send when each step is due.",
+      });
+    },
+    onError: (e: Error) => {
+      toast({
+        title: "Could not enroll",
+        description: e.message.replace(/^\d+:\s*/, ""),
+        variant: "destructive",
+      });
+    },
+  });
+
+  const pauseEnrollmentMutation = useMutation({
+    mutationFn: async (enrollmentId: string) => {
+      await apiRequest("POST", `/api/campaign-enrollments/${enrollmentId}/pause`, {});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/campaign-enrollments", contact.id] });
+      toast({ title: "Enrollment paused" });
+    },
+    onError: (e: Error) => {
+      toast({
+        title: "Pause failed",
+        description: e.message.replace(/^\d+:\s*/, ""),
+        variant: "destructive",
+      });
+    },
+  });
+
+  const resumeEnrollmentMutation = useMutation({
+    mutationFn: async (enrollmentId: string) => {
+      await apiRequest("POST", `/api/campaign-enrollments/${enrollmentId}/resume`, {});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/campaign-enrollments", contact.id] });
+      toast({ title: "Enrollment resumed" });
+    },
+    onError: (e: Error) => {
+      toast({
+        title: "Resume failed",
+        description: e.message.replace(/^\d+:\s*/, ""),
+        variant: "destructive",
+      });
+    },
+  });
+
+  const cancelEnrollmentMutation = useMutation({
+    mutationFn: async (enrollmentId: string) => {
+      await apiRequest("POST", `/api/campaign-enrollments/${enrollmentId}/cancel`, {});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/campaign-enrollments", contact.id] });
+      toast({ title: "Enrollment cancelled" });
+    },
+    onError: (e: Error) => {
+      toast({
+        title: "Cancel failed",
+        description: e.message.replace(/^\d+:\s*/, ""),
+        variant: "destructive",
+      });
+    },
+  });
+
+  useEffect(() => {
+    if (campaignPickerOpen && presetCampaignPickList.length > 0 && !pickedCampaignId) {
+      setPickedCampaignId(presetCampaignPickList[0].id);
+    }
+  }, [campaignPickerOpen, presetCampaignPickList, pickedCampaignId]);
 
   const { data: contactAppointments = [] } = useQuery<Array<{
     id: string;
@@ -2077,6 +2211,123 @@ export function InboxLeadDetailsPanel({
               <p className="mt-1 text-[11px] text-gray-400 italic">Not set</p>
             )}
           </div>
+
+          {/* ── CAMPAIGNS (preset automation enrollments) ───────────────── */}
+          <div className="mt-6 pt-4 border-t border-[#eee]">
+            <div className="flex items-center justify-between mb-2">
+              <RowLabel>Campaigns</RowLabel>
+              <button
+                type="button"
+                onClick={() => setCampaignPickerOpen(true)}
+                className="flex items-center gap-0.5 text-[11px] font-medium text-gray-400 hover:text-gray-700 transition-colors"
+                data-testid="button-add-to-campaign"
+              >
+                <Megaphone className="w-3 h-3" />
+                Add to campaign
+              </button>
+            </div>
+            {(campaignEnrollmentPayload?.enrollments ?? []).length === 0 ? (
+              <p className="text-[11px] text-gray-400 italic">Not enrolled in any saved campaigns.</p>
+            ) : (
+              <div className="space-y-2 max-h-[220px] overflow-y-auto pr-0.5">
+                {(campaignEnrollmentPayload?.enrollments ?? []).slice(0, 12).map((e) => (
+                  <div
+                    key={e.id}
+                    className="rounded-lg border border-gray-100 bg-gray-50/80 px-2 py-2 text-[11px]"
+                    data-testid={`contact-enrollment-${e.id}`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium text-gray-800 truncate">{e.campaignName ?? "Campaign"}</p>
+                        <p className="text-[10px] text-gray-500 mt-0.5 capitalize">
+                          {e.status}
+                          {typeof e.currentStepIndex === "number" ? ` · next step ${e.currentStepIndex + 1}` : ""}
+                        </p>
+                      </div>
+                      <div className="flex flex-col items-end gap-1 shrink-0">
+                        {e.status === "active" && (
+                          <button
+                            type="button"
+                            className="text-[10px] font-semibold text-amber-700 hover:underline"
+                            onClick={() => pauseEnrollmentMutation.mutate(e.id)}
+                          >
+                            Pause
+                          </button>
+                        )}
+                        {e.status === "paused" && (
+                          <button
+                            type="button"
+                            className="text-[10px] font-semibold text-emerald-700 hover:underline"
+                            onClick={() => resumeEnrollmentMutation.mutate(e.id)}
+                          >
+                            Resume
+                          </button>
+                        )}
+                        {(e.status === "active" || e.status === "paused") && (
+                          <button
+                            type="button"
+                            className="text-[10px] font-semibold text-red-600 hover:underline"
+                            onClick={() => cancelEnrollmentMutation.mutate(e.id)}
+                          >
+                            Cancel
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <Dialog open={campaignPickerOpen} onOpenChange={setCampaignPickerOpen}>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle>Add to campaign</DialogTitle>
+                <DialogDescription>
+                  Enrolls this contact in a saved preset campaign. Messages send when each step is due (channel rules
+                  apply).
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-3 py-2">
+                <Select value={pickedCampaignId} onValueChange={setPickedCampaignId}>
+                  <SelectTrigger data-testid="select-campaign-enroll">
+                    <SelectValue placeholder="Choose a saved campaign" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {presetCampaignPickList.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {c.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {presetCampaignPickList.length === 0 && (
+                  <p className="text-xs text-gray-500">
+                    No saved campaigns yet. Create one under Templates → Presets → Saved Campaigns.
+                  </p>
+                )}
+              </div>
+              <DialogFooter className="gap-2 sm:gap-0">
+                <Button type="button" variant="outline" onClick={() => setCampaignPickerOpen(false)}>
+                  Close
+                </Button>
+                <Button
+                  type="button"
+                  className="bg-gray-900 text-white hover:bg-gray-800"
+                  disabled={
+                    !pickedCampaignId ||
+                    enrollContactCampaignMutation.isPending ||
+                    presetCampaignPickList.length === 0
+                  }
+                  onClick={() => enrollContactCampaignMutation.mutate()}
+                  data-testid="button-confirm-campaign-enroll"
+                >
+                  {enrollContactCampaignMutation.isPending ? "Enrolling…" : "Enroll"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
 
           {/* ── TEAM NOTES ───────────────────────────────────────────── */}
           <div className="mt-6 pt-4 border-t border-[#eee]">

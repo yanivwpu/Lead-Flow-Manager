@@ -990,6 +990,52 @@ export const messages = pgTable("messages", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+/** Preset campaign enrollments — manual enrollment first; scheduler advances steps. */
+export const campaignEnrollments = pgTable("campaign_enrollments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  campaignId: varchar("campaign_id").notNull().references(() => presetCampaigns.id, { onDelete: "cascade" }),
+  contactId: varchar("contact_id").notNull().references(() => contacts.id, { onDelete: "cascade" }),
+  conversationId: varchar("conversation_id").references(() => conversations.id, { onDelete: "set null" }),
+  status: text("status").notNull().default("active"), // active | paused | completed | failed | cancelled
+  currentStepIndex: integer("current_step_index").notNull().default(0),
+  nextRunAt: timestamp("next_run_at"),
+  lastRunAt: timestamp("last_run_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+/** Per-step send audit for preset campaign enrollments. */
+export const campaignStepEvents = pgTable("campaign_step_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  enrollmentId: varchar("enrollment_id").notNull().references(() => campaignEnrollments.id, { onDelete: "cascade" }),
+  campaignId: varchar("campaign_id").notNull().references(() => presetCampaigns.id, { onDelete: "cascade" }),
+  contactId: varchar("contact_id").notNull().references(() => contacts.id, { onDelete: "cascade" }),
+  stepIndex: integer("step_index").notNull(),
+  status: text("status").notNull().default("pending"), // pending | sent | failed | skipped
+  scheduledFor: timestamp("scheduled_for"),
+  sentAt: timestamp("sent_at"),
+  errorMessage: text("error_message"),
+  providerMessageId: text("provider_message_id"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertCampaignEnrollmentSchema = createInsertSchema(campaignEnrollments).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertCampaignStepEventSchema = createInsertSchema(campaignStepEvents).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertCampaignEnrollment = z.infer<typeof insertCampaignEnrollmentSchema>;
+export type CampaignEnrollment = typeof campaignEnrollments.$inferSelect;
+export type InsertCampaignStepEvent = z.infer<typeof insertCampaignStepEventSchema>;
+export type CampaignStepEvent = typeof campaignStepEvents.$inferSelect;
+
 // Activity events for timeline (messages, AI events, status changes)
 export const activityEvents = pgTable("activity_events", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

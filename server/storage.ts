@@ -33,6 +33,8 @@ import {
   type AiSettings, type AiBusinessKnowledge, type AiUsage, type AiLeadScore,
   type UserAutomationTemplate, type InsertUserAutomationTemplate,
   type PresetCampaign, type InsertPresetCampaign,
+  type CampaignEnrollment, type InsertCampaignEnrollment,
+  type CampaignStepEvent, type InsertCampaignStepEvent,
   type TemplateUsageAnalytics, type InsertTemplateUsageAnalytics,
   type Template, type TemplateEntitlement, type InsertTemplateEntitlement,
   type RealtorOnboardingSubmission, type InsertRealtorOnboardingSubmission,
@@ -45,7 +47,7 @@ import {
   type GhlSyncFailure, type InsertGhlSyncFailure, ghlSyncFailures,
   type FlowJob, type InsertFlowJob,
   aiSettings, aiBusinessKnowledge, aiUsage, aiLeadScores,
-  userAutomationTemplates, presetCampaigns, templateUsageAnalytics,
+  userAutomationTemplates, presetCampaigns, campaignEnrollments, campaignStepEvents, templateUsageAnalytics,
   templates as templatesTable, templateEntitlements, realtorOnboardingSubmissions,
   templateInstalls, templateAssets, userTemplateData, ghlEventDedup
 } from "@shared/schema";
@@ -53,7 +55,7 @@ import { computeConversationReplyWindowStatus } from "@shared/conversationReplyW
 import type { RetargetEligibleContactRow } from "@shared/retargetEligibleContact";
 import { db } from "../drizzle/db";
 import { users, chats, registeredPhones, messageUsage, conversationWindows, teamMembers, workflows, workflowExecutions, recurringReminders, webhooks, webhookDeliveries, integrations, messageTemplates, templateSends, dripCampaigns, dripSteps, dripEnrollments, dripSends, chatbotFlows, chatbotSessions, salespeople, demoBookings, salesConversions, adminSettings, contacts, conversations, messages, activityEvents, channelSettings, supportTickets, partners, commissions, agreementAcceptances, contactNotes, appointments, flowJobs, type InsertConversationWindow, type ConversationWindow } from "@shared/schema";
-import { eq, and, lte, sql, isNotNull, isNull, asc, desc, gte, sum, gt, or, like, ilike, ne, inArray } from "drizzle-orm";
+import { eq, and, lte, sql, isNotNull, isNull, asc, desc, gte, sum, gt, or, like, ilike, ne, inArray, notInArray } from "drizzle-orm";
 
 /** Columns always present on legacy Neon `public.users`; avoids Drizzle hydrating rows when DB lacks newer schema columns (42703). */
 type UsersAuthCoreRow = {
@@ -295,6 +297,39 @@ export interface IStorage {
   ): Promise<PresetCampaign | undefined>;
   deletePresetCampaign(campaignId: string, userId: string): Promise<boolean>;
   duplicatePresetCampaign(campaignId: string, userId: string): Promise<PresetCampaign | undefined>;
+
+  getCampaignEnrollmentById(id: string): Promise<CampaignEnrollment | undefined>;
+  listDueCampaignEnrollmentIds(limit: number): Promise<string[]>;
+  getActiveEnrollmentForContactCampaign(
+    userId: string,
+    contactId: string,
+    campaignId: string
+  ): Promise<CampaignEnrollment | undefined>;
+  createCampaignEnrollment(row: InsertCampaignEnrollment): Promise<CampaignEnrollment>;
+  updateCampaignEnrollment(id: string, updates: Partial<CampaignEnrollment>): Promise<CampaignEnrollment | undefined>;
+  getCampaignEnrollmentsForContact(userId: string, contactId: string): Promise<CampaignEnrollment[]>;
+  getCampaignEnrollmentsForCampaign(userId: string, campaignId: string, limit?: number): Promise<CampaignEnrollment[]>;
+  createCampaignStepEvent(row: InsertCampaignStepEvent): Promise<CampaignStepEvent>;
+  updateCampaignStepEvent(id: string, updates: Partial<CampaignStepEvent>): Promise<CampaignStepEvent | undefined>;
+  getRecentCampaignStepEventsForCampaign(
+    userId: string,
+    campaignId: string,
+    limit?: number
+  ): Promise<CampaignStepEvent[]>;
+  getCampaignAggregatesForUser(
+    userId: string
+  ): Promise<
+    Record<
+      string,
+      {
+        enrollmentCount: number;
+        activeEnrollments: number;
+        completedEnrollments: number;
+        sentStepEvents: number;
+        failedStepEvents: number;
+      }
+    >
+  >;
   
   // Template usage analytics methods
   recordTemplateUsage(usage: InsertTemplateUsageAnalytics): Promise<TemplateUsageAnalytics>;
@@ -2683,6 +2718,195 @@ export class DbStorage implements IStorage {
       aiEnabled: existing.aiEnabled ?? false,
       audienceConfig: audience,
     });
+  }
+
+  async getCampaignEnrollmentById(id: string): Promise<CampaignEnrollment | undefined> {
+    const rows = await db.select().from(campaignEnrollments).where(eq(campaignEnrollments.id, id)).limit(1);
+    return rows[0];
+  }
+
+  async listDueCampaignEnrollmentIds(limit: number): Promise<string[]> {
+    const rows = await db
+      .select({ id: campaignEnrollments.id })
+      .from(campaignEnrollments)
+      .innerJoin(presetCampaigns, eq(campaignEnrollments.campaignId, presetCampaigns.id))
+      .where(
+        and(
+          eq(campaignEnrollments.status, "active"),
+          isNotNull(campaignEnrollments.nextRunAt),
+          lte(campaignEnrollments.nextRunAt, new Date()),
+          notInArray(presetCampaigns.status, ["paused", "completed"])
+        )
+      )
+      .orderBy(asc(campaignEnrollments.nextRunAt))
+      .limit(limit);
+    return rows.map((r) => r.id);
+  }
+
+  async getActiveEnrollmentForContactCampaign(
+    userId: string,
+    contactId: string,
+    campaignId: string
+  ): Promise<CampaignEnrollment | undefined> {
+    const rows = await db
+      .select()
+      .from(campaignEnrollments)
+      .where(
+        and(
+          eq(campaignEnrollments.userId, userId),
+          eq(campaignEnrollments.contactId, contactId),
+          eq(campaignEnrollments.campaignId, campaignId),
+          eq(campaignEnrollments.status, "active")
+        )
+      )
+      .limit(1);
+    return rows[0];
+  }
+
+  async createCampaignEnrollment(row: InsertCampaignEnrollment): Promise<CampaignEnrollment> {
+    const result = await db.insert(campaignEnrollments).values(row).returning();
+    return result[0];
+  }
+
+  async updateCampaignEnrollment(
+    id: string,
+    updates: Partial<CampaignEnrollment>
+  ): Promise<CampaignEnrollment | undefined> {
+    const result = await db
+      .update(campaignEnrollments)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(campaignEnrollments.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async getCampaignEnrollmentsForContact(userId: string, contactId: string): Promise<CampaignEnrollment[]> {
+    return db
+      .select()
+      .from(campaignEnrollments)
+      .where(and(eq(campaignEnrollments.userId, userId), eq(campaignEnrollments.contactId, contactId)))
+      .orderBy(desc(campaignEnrollments.createdAt));
+  }
+
+  async getCampaignEnrollmentsForCampaign(
+    userId: string,
+    campaignId: string,
+    limit = 80
+  ): Promise<CampaignEnrollment[]> {
+    const camp = await this.getPresetCampaignForUser(campaignId, userId);
+    if (!camp) return [];
+    return db
+      .select()
+      .from(campaignEnrollments)
+      .where(eq(campaignEnrollments.campaignId, campaignId))
+      .orderBy(desc(campaignEnrollments.createdAt))
+      .limit(limit);
+  }
+
+  async createCampaignStepEvent(row: InsertCampaignStepEvent): Promise<CampaignStepEvent> {
+    const result = await db.insert(campaignStepEvents).values(row).returning();
+    return result[0];
+  }
+
+  async updateCampaignStepEvent(
+    id: string,
+    updates: Partial<CampaignStepEvent>
+  ): Promise<CampaignStepEvent | undefined> {
+    const result = await db
+      .update(campaignStepEvents)
+      .set(updates)
+      .where(eq(campaignStepEvents.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async getRecentCampaignStepEventsForCampaign(
+    userId: string,
+    campaignId: string,
+    limit = 40
+  ): Promise<CampaignStepEvent[]> {
+    const camp = await this.getPresetCampaignForUser(campaignId, userId);
+    if (!camp) return [];
+    return db
+      .select()
+      .from(campaignStepEvents)
+      .where(eq(campaignStepEvents.campaignId, campaignId))
+      .orderBy(desc(campaignStepEvents.createdAt))
+      .limit(limit);
+  }
+
+  async getCampaignAggregatesForUser(
+    userId: string
+  ): Promise<
+    Record<
+      string,
+      {
+        enrollmentCount: number;
+        activeEnrollments: number;
+        completedEnrollments: number;
+        sentStepEvents: number;
+        failedStepEvents: number;
+      }
+    >
+  > {
+    const out: Record<
+      string,
+      {
+        enrollmentCount: number;
+        activeEnrollments: number;
+        completedEnrollments: number;
+        sentStepEvents: number;
+        failedStepEvents: number;
+      }
+    > = {};
+
+    const enrollAgg = await db
+      .select({
+        campaignId: campaignEnrollments.campaignId,
+        total: sql<number>`count(*)::int`,
+        active: sql<number>`sum(case when ${campaignEnrollments.status} = 'active' then 1 else 0 end)::int`,
+        completed: sql<number>`sum(case when ${campaignEnrollments.status} = 'completed' then 1 else 0 end)::int`,
+      })
+      .from(campaignEnrollments)
+      .innerJoin(presetCampaigns, eq(campaignEnrollments.campaignId, presetCampaigns.id))
+      .where(eq(presetCampaigns.userId, userId))
+      .groupBy(campaignEnrollments.campaignId);
+
+    for (const row of enrollAgg) {
+      out[row.campaignId] = {
+        enrollmentCount: Number(row.total ?? 0),
+        activeEnrollments: Number(row.active ?? 0),
+        completedEnrollments: Number(row.completed ?? 0),
+        sentStepEvents: 0,
+        failedStepEvents: 0,
+      };
+    }
+
+    const evAgg = await db
+      .select({
+        campaignId: campaignStepEvents.campaignId,
+        sent: sql<number>`sum(case when ${campaignStepEvents.status} = 'sent' then 1 else 0 end)::int`,
+        failed: sql<number>`sum(case when ${campaignStepEvents.status} = 'failed' then 1 else 0 end)::int`,
+      })
+      .from(campaignStepEvents)
+      .innerJoin(presetCampaigns, eq(campaignStepEvents.campaignId, presetCampaigns.id))
+      .where(eq(presetCampaigns.userId, userId))
+      .groupBy(campaignStepEvents.campaignId);
+
+    for (const row of evAgg) {
+      const cur = out[row.campaignId] ?? {
+        enrollmentCount: 0,
+        activeEnrollments: 0,
+        completedEnrollments: 0,
+        sentStepEvents: 0,
+        failedStepEvents: 0,
+      };
+      cur.sentStepEvents = Number(row.sent ?? 0);
+      cur.failedStepEvents = Number(row.failed ?? 0);
+      out[row.campaignId] = cur;
+    }
+
+    return out;
   }
 
   // ============= Template Usage Analytics =============

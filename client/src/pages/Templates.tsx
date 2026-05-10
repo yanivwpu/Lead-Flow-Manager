@@ -125,6 +125,14 @@ interface Chat {
   lastMessage: string;
 }
 
+type CampaignExecutionStats = {
+  enrollmentCount: number;
+  activeEnrollments: number;
+  completedEnrollments: number;
+  sentStepEvents: number;
+  failedStepEvents: number;
+};
+
 type PresetCampaignListItem = {
   id: string;
   name: string;
@@ -135,6 +143,7 @@ type PresetCampaignListItem = {
   messages: unknown[];
   updatedAt: string;
   createdAt?: string;
+  executionStats?: CampaignExecutionStats;
 };
 
 type PresetCampaignDetail = PresetCampaignListItem & {
@@ -146,6 +155,25 @@ type PresetCampaignDetail = PresetCampaignListItem & {
   placeholderDefaults?: Record<string, unknown> | null;
   aiEnabled?: boolean | null;
   audienceConfig?: Record<string, unknown> | null;
+  executionStats?: CampaignExecutionStats;
+  enrollments?: Array<{
+    id: string;
+    status: string;
+    currentStepIndex: number;
+    nextRunAt?: string | null;
+    contactId: string;
+    contactName?: string;
+    createdAt?: string | null;
+  }>;
+  recentStepEvents?: Array<{
+    id: string;
+    stepIndex: number;
+    status: string;
+    sentAt?: string | null;
+    errorMessage?: string | null;
+    createdAt?: string | null;
+    contactId: string;
+  }>;
 };
 
 type VariableAutofillSuggestion = {
@@ -825,7 +853,7 @@ export function Templates() {
               <CardHeader className="pb-2 pt-4 px-4 md:px-6">
                 <CardTitle className="text-base md:text-lg">Saved Campaigns</CardTitle>
                 <CardDescription className="text-sm">
-                  Blueprints you saved from presets become campaign instances here. Preset definitions in the library are never changed.
+                  Saved presets become campaigns here. Manually enroll contacts from the inbox; the scheduler sends steps on each delay. Audience auto-triggers are not enabled yet.
                 </CardDescription>
               </CardHeader>
               <CardContent className="px-3 md:px-6 pb-4">
@@ -847,6 +875,9 @@ export function Templates() {
                           <TableHead>Status</TableHead>
                           <TableHead className="hidden md:table-cell">Channel</TableHead>
                           <TableHead className="text-right">Steps</TableHead>
+                          <TableHead className="text-right hidden sm:table-cell tabular-nums">Enrolled</TableHead>
+                          <TableHead className="text-right hidden md:table-cell tabular-nums">Sent</TableHead>
+                          <TableHead className="text-right hidden md:table-cell tabular-nums">Failed</TableHead>
                           <TableHead className="hidden lg:table-cell">Updated</TableHead>
                           <TableHead className="text-right w-[100px]">Actions</TableHead>
                         </TableRow>
@@ -854,6 +885,7 @@ export function Templates() {
                       <TableBody>
                         {savedPresetCampaigns.map((row) => {
                           const steps = Array.isArray(row.messages) ? row.messages.length : 0;
+                          const ex = row.executionStats;
                           const updated =
                             row.updatedAt &&
                             !Number.isNaN(new Date(row.updatedAt).getTime())
@@ -883,6 +915,15 @@ export function Templates() {
                                 {row.channel}
                               </TableCell>
                               <TableCell className="text-right tabular-nums">{steps}</TableCell>
+                              <TableCell className="text-right hidden sm:table-cell tabular-nums text-gray-700">
+                                {ex?.enrollmentCount ?? 0}
+                              </TableCell>
+                              <TableCell className="text-right hidden md:table-cell tabular-nums text-gray-700">
+                                {ex?.sentStepEvents ?? 0}
+                              </TableCell>
+                              <TableCell className="text-right hidden md:table-cell tabular-nums text-gray-700">
+                                {ex?.failedStepEvents ?? 0}
+                              </TableCell>
                               <TableCell className="hidden lg:table-cell text-gray-500 text-sm whitespace-nowrap">
                                 {updated}
                               </TableCell>

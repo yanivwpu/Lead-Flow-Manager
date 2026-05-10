@@ -1,4 +1,3 @@
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -42,6 +41,31 @@ export type SavedCampaignDetailShape = {
   aiEnabled?: boolean | null;
   createdAt?: string;
   updatedAt?: string;
+  executionStats?: {
+    enrollmentCount: number;
+    activeEnrollments: number;
+    completedEnrollments: number;
+    sentStepEvents: number;
+    failedStepEvents: number;
+  };
+  enrollments?: Array<{
+    id: string;
+    status: string;
+    currentStepIndex: number;
+    nextRunAt?: string | null;
+    contactId: string;
+    contactName?: string;
+    createdAt?: string | null;
+  }>;
+  recentStepEvents?: Array<{
+    id: string;
+    stepIndex: number;
+    status: string;
+    sentAt?: string | null;
+    errorMessage?: string | null;
+    createdAt?: string | null;
+    contactId: string;
+  }>;
 };
 
 type Props = {
@@ -106,7 +130,7 @@ export function SavedPresetCampaignModals(props: Props) {
           <DialogHeader>
             <DialogTitle>Saved campaign</DialogTitle>
             <DialogDescription>
-              Status reflects what you saved. Automated audience sends are not running yet.
+              Manual enrollments run on the server scheduler (WhatsApp/Meta policy applies). Automatic audience triggers are not enabled yet.
             </DialogDescription>
           </DialogHeader>
           {savedCampaignDetailLoading ? (
@@ -115,11 +139,6 @@ export function SavedPresetCampaignModals(props: Props) {
             </div>
           ) : savedCampaignDetail ? (
             <>
-              <Alert className="border-amber-100 bg-amber-50/80 text-amber-950">
-                <AlertDescription className="text-sm">
-                  Nothing is queued to recipients. “Active — sends not scheduled yet” means launch intent only until the send engine is connected.
-                </AlertDescription>
-              </Alert>
               <ScrollArea className="flex-1 max-h-[min(420px,50vh)] pr-3">
                 <div className="space-y-4 py-2">
                   <div className="space-y-1">
@@ -171,6 +190,25 @@ export function SavedPresetCampaignModals(props: Props) {
                       <Label className="text-xs text-gray-500">AI</Label>
                       <p className="mt-0.5">{savedCampaignDetail.aiEnabled ? "Enabled" : "Off"}</p>
                     </div>
+                    {savedCampaignDetail.executionStats && (
+                      <>
+                        <div>
+                          <Label className="text-xs text-gray-500">Enrollments</Label>
+                          <p className="mt-0.5 tabular-nums">
+                            {savedCampaignDetail.executionStats.enrollmentCount} total ·{" "}
+                            {savedCampaignDetail.executionStats.activeEnrollments} active ·{" "}
+                            {savedCampaignDetail.executionStats.completedEnrollments} completed
+                          </p>
+                        </div>
+                        <div>
+                          <Label className="text-xs text-gray-500">Step sends</Label>
+                          <p className="mt-0.5 tabular-nums">
+                            {savedCampaignDetail.executionStats.sentStepEvents} sent ·{" "}
+                            {savedCampaignDetail.executionStats.failedStepEvents} failed
+                          </p>
+                        </div>
+                      </>
+                    )}
                     <div>
                       <Label className="text-xs text-gray-500">Created</Label>
                       <p className="mt-0.5 text-gray-700">
@@ -246,6 +284,50 @@ export function SavedPresetCampaignModals(props: Props) {
                         </div>
                       </div>
                     )}
+
+                  {savedCampaignDetail.enrollments && savedCampaignDetail.enrollments.length > 0 && (
+                    <div className="space-y-2">
+                      <Label className="text-xs text-gray-500">Enrolled contacts</Label>
+                      <div className="rounded-lg border border-gray-100 bg-gray-50/80 divide-y divide-gray-100 max-h-36 overflow-y-auto text-xs">
+                        {savedCampaignDetail.enrollments.slice(0, 50).map((e) => (
+                          <div key={e.id} className="flex items-center justify-between gap-2 px-2 py-1.5">
+                            <span className="truncate font-medium text-gray-800">
+                              {e.contactName ?? e.contactId.slice(0, 8)}
+                            </span>
+                            <Badge variant="outline" className="text-[10px] shrink-0 capitalize">
+                              {e.status}
+                            </Badge>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {savedCampaignDetail.recentStepEvents && savedCampaignDetail.recentStepEvents.length > 0 && (
+                    <div className="space-y-2">
+                      <Label className="text-xs text-gray-500">Recent step events</Label>
+                      <div className="rounded-lg border border-gray-100 bg-white max-h-40 overflow-y-auto text-xs space-y-1.5 p-2">
+                        {savedCampaignDetail.recentStepEvents.slice(0, 30).map((ev) => (
+                          <div key={ev.id} className="border-b border-gray-50 last:border-0 pb-1.5 last:pb-0">
+                            <div className="flex flex-wrap gap-x-2 gap-y-0.5">
+                              <span className="font-medium text-gray-800">Step {ev.stepIndex + 1}</span>
+                              <Badge variant="secondary" className="text-[10px] capitalize">
+                                {ev.status}
+                              </Badge>
+                              {ev.sentAt && (
+                                <span className="text-gray-500">
+                                  {format(new Date(ev.sentAt), "MMM d, HH:mm")}
+                                </span>
+                              )}
+                            </div>
+                            {ev.errorMessage && (
+                              <p className="text-red-600 mt-0.5 break-words">{ev.errorMessage}</p>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </ScrollArea>
 

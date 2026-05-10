@@ -8,6 +8,7 @@ import { registerContactRoutes } from "./routes/contacts";
 import { registerConversationRoutes } from "./routes/conversations";
 import { registerChannelRoutes } from "./routes/channels";
 import { registerTemplateRoutes as registerAutomationTemplateRoutes } from "./routes/templates";
+import { registerCampaignEnrollmentRoutes } from "./routes/campaignEnrollments";
 import { registerWebhookRoutes } from "./routes/webhooks";
 import {
   getWhatsAppAvailability,
@@ -8646,6 +8647,7 @@ export async function registerRoutes(
   registerConversationRoutes(app);
   registerChannelRoutes(app);
   registerAutomationTemplateRoutes(app);
+  registerCampaignEnrollmentRoutes(app);
   registerTemplateRoutes(app);
   registerWebhookRoutes(app);
 

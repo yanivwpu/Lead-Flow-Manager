@@ -18,7 +18,7 @@ import { subscriptionService } from "../subscriptionService";
 import { getPresetCampaignStatusLabel } from "@shared/presetCampaignLabels";
 
 /** When true, “launch” creates `active` and may enqueue sends. Until then, launch → `active_pending`. */
-const PRESET_CAMPAIGN_SEND_ENGINE_READY = false;
+const PRESET_CAMPAIGN_SEND_ENGINE_READY = true;
 
 /** Stored in `messages.content` — template label + optional resolved text header + body (CRM bubble). */
 function buildOutboundTemplateDisplayContent(
@@ -148,11 +148,22 @@ export function registerTemplateRoutes(app: Express): void {
       }
 
       const rows = await storage.getPresetCampaignsForUser(req.user.id);
+      const aggregates = await storage.getCampaignAggregatesForUser(req.user.id);
       res.json(
-        rows.map((c) => ({
-          ...c,
-          statusLabel: getPresetCampaignStatusLabel(c.status),
-        }))
+        rows.map((c) => {
+          const agg = aggregates[c.id] ?? {
+            enrollmentCount: 0,
+            activeEnrollments: 0,
+            completedEnrollments: 0,
+            sentStepEvents: 0,
+            failedStepEvents: 0,
+          };
+          return {
+            ...c,
+            statusLabel: getPresetCampaignStatusLabel(c.status),
+            executionStats: agg,
+          };
+        })
       );
     } catch (error) {
       console.error("Error fetching preset campaigns:", error);
@@ -233,8 +244,8 @@ export function registerTemplateRoutes(app: Express): void {
         campaign.status === "draft"
           ? "Campaign saved as a draft. No messages were sent."
           : campaign.status === "active_pending"
-            ? "Campaign is active in your account. Automated audience sends are not scheduled yet — delivery setup comes next."
-            : "Campaign saved.";
+            ? "Campaign saved. Manual enrollments can send steps; automated audience triggers are not enabled yet."
+            : "Campaign saved. You can enroll contacts manually; the scheduler delivers steps on the configured delays.";
 
       res.json({
         campaign,
@@ -258,9 +269,34 @@ export function registerTemplateRoutes(app: Express): void {
         return res.status(404).json({ error: "Campaign not found" });
       }
 
+      const [enrollments, stepEvents, agg] = await Promise.all([
+        storage.getCampaignEnrollmentsForCampaign(req.user.id, row.id, 100),
+        storage.getRecentCampaignStepEventsForCampaign(req.user.id, row.id, 50),
+        storage.getCampaignAggregatesForUser(req.user.id),
+      ]);
+
+      const enrollmentsWithNames = await Promise.all(
+        enrollments.map(async (e) => {
+          const contact = await storage.getContact(e.contactId);
+          return {
+            ...e,
+            contactName: contact?.name ?? "Unknown contact",
+          };
+        })
+      );
+
       res.json({
         ...row,
         statusLabel: getPresetCampaignStatusLabel(row.status),
+        executionStats: agg[row.id] ?? {
+          enrollmentCount: 0,
+          activeEnrollments: 0,
+          completedEnrollments: 0,
+          sentStepEvents: 0,
+          failedStepEvents: 0,
+        },
+        enrollments: enrollmentsWithNames,
+        recentStepEvents: stepEvents,
       });
     } catch (error) {
       console.error("Error fetching preset campaign:", error);
@@ -303,7 +339,8 @@ export function registerTemplateRoutes(app: Express): void {
         return res.json({
           campaign: updated,
           statusLabel: getPresetCampaignStatusLabel(updated.status),
-          message: "Campaign paused. No messages were sent.",
+          message:
+            "Campaign paused. Scheduled steps will not run until you resume.",
         });
       }
 
@@ -335,7 +372,7 @@ export function registerTemplateRoutes(app: Express): void {
           campaign: updated,
           statusLabel: getPresetCampaignStatusLabel(updated.status),
           message:
-            "Campaign resumed. Automated audience sends are still not scheduled — delivery setup comes next.",
+            "Campaign resumed. Enrolled contacts will continue receiving scheduled steps when due.",
         });
       }
 

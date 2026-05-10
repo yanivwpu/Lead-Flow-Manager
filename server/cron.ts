@@ -2,6 +2,7 @@ import { db } from '../drizzle/db';
 import { users, chats, contacts, templateEntitlements, channelSettings } from '@shared/schema';
 import { eq, and, lte, gte, isNotNull, or, desc, ne, inArray, sql } from 'drizzle-orm';
 import { sendTrialCheckinEmail, sendDailyHotListEmail, type HotLeadEntry } from './email';
+import { runCampaignSchedulerTick } from './campaignExecution';
 
 const GRAPH = "https://graph.facebook.com/v19.0";
 
@@ -336,6 +337,10 @@ export function startCronJobs() {
       lastWebhookHealthHour = utcHour;
       runMetaWebhookHealthCheck().catch(err => console.error('[WebhookHealth] Hourly check error:', err));
     }
+
+    runCampaignSchedulerTick(40).catch((err) =>
+      console.error('[CampaignScheduler] tick error:', err)
+    );
   }, 60000);
   
   console.log('[Cron] Cron scheduler started (trial check-in: 10 AM EST, hot list: 9 AM EST, webhook health: hourly)');
