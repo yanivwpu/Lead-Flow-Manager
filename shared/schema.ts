@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, timestamp, boolean, jsonb, numeric } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, timestamp, boolean, jsonb, numeric, json, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -160,6 +160,26 @@ export const users = pgTable("users", {
   // Trial re-engagement email tracking
   checkinEmailSent: boolean("checkin_email_sent").default(false),
 });
+
+/**
+ * Express session table for `connect-pg-simple` (`tableName: "user_sessions"` in `server/auth.ts`).
+ * Existed in production before Drizzle tracked it — must remain in `shared/schema.ts` so
+ * `drizzle-kit push` / introspect diffs do not suggest renaming or dropping it.
+ * Columns match `node_modules/connect-pg-simple/table.sql` (default name is `session`; we use `user_sessions`).
+ */
+export const userSessions = pgTable(
+  "user_sessions",
+  {
+    sid: varchar("sid").primaryKey(),
+    sess: json("sess").notNull(),
+    expire: timestamp("expire", { precision: 6, mode: "date" }).notNull(),
+  },
+  (t) => ({
+    expireIdx: index("IDX_session_expire").on(t.expire),
+  })
+);
+
+export type UserSession = typeof userSessions.$inferSelect;
 
 /** CSRF state for Meta WhatsApp Embedded Signup OAuth (short-lived). */
 export const whatsappOauthStates = pgTable("whatsapp_oauth_states", {
