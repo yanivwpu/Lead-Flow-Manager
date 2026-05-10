@@ -20,7 +20,6 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Clock, Copy, Pause, Pencil, Play, RefreshCw, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -126,21 +125,23 @@ export function SavedPresetCampaignModals(props: Props) {
           }
         }}
       >
-        <DialogContent className="max-w-lg max-h-[90vh] flex flex-col gap-0">
-          <DialogHeader>
-            <DialogTitle>Saved campaign</DialogTitle>
-            <DialogDescription>
-              Manual enrollments run on the server scheduler (WhatsApp/Meta policy applies). Automatic audience triggers are not enabled yet.
-            </DialogDescription>
-          </DialogHeader>
+        <DialogContent className="flex max-h-[85vh] w-[calc(100%-2rem)] max-w-lg flex-col gap-0 overflow-hidden p-0 sm:max-h-[90vh]">
+          <div className="sticky top-0 z-10 shrink-0 border-b border-border/70 bg-background px-6 pb-3 pt-6 pr-14">
+            <DialogHeader className="space-y-2 text-left">
+              <DialogTitle>Saved campaign</DialogTitle>
+              <DialogDescription>
+                Contacts added to this campaign will run through the saved steps on the server scheduler. Automatic audience triggers are not enabled yet.
+              </DialogDescription>
+            </DialogHeader>
+          </div>
           {savedCampaignDetailLoading ? (
-            <div className="flex justify-center py-12">
-              <RefreshCw className="h-8 w-8 animate-spin text-gray-400" />
+            <div className="flex min-h-[min(240px,40vh)] flex-1 items-center justify-center px-6 py-12">
+              <RefreshCw className="h-8 w-8 animate-spin text-gray-400" aria-hidden />
             </div>
           ) : savedCampaignDetail ? (
             <>
-              <ScrollArea className="flex-1 max-h-[min(420px,50vh)] pr-3">
-                <div className="space-y-4 py-2">
+              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 pb-10 pt-4">
+                <div className="space-y-4">
                   <div className="space-y-1">
                     <Label>Name</Label>
                     {savedCampaignEditMode ? (
@@ -329,9 +330,9 @@ export function SavedPresetCampaignModals(props: Props) {
                     </div>
                   )}
                 </div>
-              </ScrollArea>
+              </div>
 
-              <DialogFooter className="flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-between border-t pt-4 mt-2">
+              <DialogFooter className="sticky bottom-0 z-10 mt-0 shrink-0 flex-col gap-2 border-t border-border/70 bg-background px-6 py-4 sm:flex-row sm:flex-wrap sm:justify-between">
                 <div className="flex flex-wrap gap-2">
                   {savedCampaignEditMode ? (
                     <>
@@ -433,7 +434,9 @@ export function SavedPresetCampaignModals(props: Props) {
               </DialogFooter>
             </>
           ) : (
-            <p className="text-sm text-gray-500 py-6 text-center">Could not load campaign.</p>
+            <div className="flex min-h-[min(200px,35vh)] flex-1 items-center justify-center px-6 py-10">
+              <p className="text-center text-sm text-gray-500">Could not load campaign.</p>
+            </div>
           )}
         </DialogContent>
       </Dialog>
