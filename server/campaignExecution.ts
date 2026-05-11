@@ -3,9 +3,15 @@ import type { Channel } from "@shared/schema";
 import { CHANNEL_INFO } from "@shared/schema";
 import { parsePresetDelayToMs } from "@shared/campaignDelays";
 import {
+  buildMetaVariableValuesForCampaignTemplate,
+  campaignBodyHasUnresolvedPlaceholders,
+  interpolateCampaignBody,
+} from "@shared/campaignPlaceholders";
+import {
   buildReEngagementAfterSuccessfulSend,
   parseConversationReEngagement,
 } from "@shared/reEngagement";
+import { buildMetaLibraryTemplateSendComponents, type TemplateRowForMetaSend } from "@shared/metaTemplateSend";
 import { storage } from "./storage";
 import { channelService } from "./channelService";
 import { subscriptionService } from "./subscriptionService";
@@ -38,36 +44,6 @@ function whatsAppFreeFormAllowed(conversation: Conversation | undefined): boolea
   return Date.now() < deadlineMs;
 }
 
-export function interpolateCampaignBody(
-  template: string,
-  defaults: Record<string, unknown> | null | undefined,
-  contact: Contact
-): string {
-  let out = template;
-  const cf =
-    contact.customFields && typeof contact.customFields === "object" && !Array.isArray(contact.customFields)
-      ? (contact.customFields as Record<string, unknown>)
-      : {};
-  const map: Record<string, string> = {
-    name: contact.name || "",
-    phone: contact.phone || "",
-    email: contact.email || "",
-  };
-  if (defaults && typeof defaults === "object") {
-    for (const [k, v] of Object.entries(defaults)) {
-      if (v != null) map[k] = String(v);
-    }
-  }
-  for (const [k, v] of Object.entries(cf)) {
-    if (typeof v === "string" || typeof v === "number") map[k] = String(v);
-  }
-  out = out.replace(/\{\{\s*([^}]+?)\s*\}\}/g, (_, key) => {
-    const k = String(key).trim();
-    return map[k] ?? "";
-  });
-  return out;
-}
-
 export function contactBlocksCampaignSends(contact: Contact): { blocked: boolean; reason?: string } {
   const tag = (contact.tag || "").toLowerCase();
   if (/\b(stop|unsubscribe|opt\s*out|do not contact|dnc)\b/i.test(contact.tag || "")) {
@@ -84,6 +60,31 @@ export function contactBlocksCampaignSends(contact: Contact): { blocked: boolean
     return { blocked: true, reason: "Contact opted out of marketing" };
   }
   return { blocked: false };
+}
+
+async function findUserLibraryTemplateRow(
+  userId: string,
+  tplName: string,
+  lang: string
+): Promise<TemplateRowForMetaSend | undefined> {
+  const rows = await storage.getMessageTemplates(userId);
+  const langNorm = (lang || "en").toLowerCase().replace("_", "-").split("-")[0] || "en";
+  const lower = tplName.trim().toLowerCase();
+  const hit = rows.find((r) => {
+    const rl = (r.language || "en").toLowerCase().replace("_", "-").split("-")[0] || "en";
+    return r.name?.trim().toLowerCase() === lower && rl === langNorm;
+  });
+  if (!hit) return undefined;
+  return {
+    name: hit.name,
+    bodyText: hit.bodyText,
+    headerType: hit.headerType,
+    headerContent: hit.headerContent,
+    buttons: hit.buttons,
+    templateType: hit.templateType,
+    carouselCards: hit.carouselCards,
+    category: hit.category,
+  };
 }
 
 async function ensureConversationForCampaign(
@@ -165,9 +166,57 @@ async function sendCampaignWhatsApp(params: {
       ? step.whatsappTemplateLanguage.trim()
       : (campaign.language || "en").replace("_", "-").split("-")[0] || "en";
 
-  const components = Array.isArray(step.whatsappTemplateComponents)
+  let components = Array.isArray(step.whatsappTemplateComponents)
     ? (step.whatsappTemplateComponents as any[])
     : undefined;
+
+  if ((!components || components.length === 0) && tplName) {
+    const row = await findUserLibraryTemplateRow(userId, tplName, lang);
+    if (row) {
+      const vv = buildMetaVariableValuesForCampaignTemplate(
+        row,
+        contact,
+        campaign.placeholderDefaults as Record<string, unknown> | null
+      );
+      const built = buildMetaLibraryTemplateSendComponents(row, vv, undefined);
+      if (built.components?.length) {
+        components = built.components as any[];
+      }
+      if (built.error) {
+        console.warn(
+          `[CAMPAIGN_META_TEMPLATE] ${JSON.stringify({
+            phase: "auto_components_failed",
+            template: tplName,
+            lang,
+            error: built.error,
+          })}`
+        );
+      }
+    } else {
+      console.warn(
+        `[CAMPAIGN_META_TEMPLATE] ${JSON.stringify({
+          phase: "template_row_not_found",
+          template: tplName,
+          lang,
+          userId,
+        })}`
+      );
+    }
+  }
+
+  console.log(
+    `[CAMPAIGN_WA_SEND] ${JSON.stringify({
+      phase: "meta_template_dispatch",
+      userId,
+      contactId,
+      template: tplName,
+      lang,
+      contactName: contact.name,
+      bodyPreview: body.slice(0, 160),
+      bodyHasUnresolvedCrmTokens: campaignBodyHasUnresolvedPlaceholders(body),
+      componentsCount: Array.isArray(components) ? components.length : 0,
+    })}`
+  );
 
   const messageRow = await storage.createMessage({
     conversationId: conv.id,
@@ -314,6 +363,17 @@ export async function processCampaignEnrollmentStep(enrollmentId: string): Promi
     campaign.placeholderDefaults as Record<string, unknown> | null,
     contact
   );
+  if (campaignBodyHasUnresolvedPlaceholders(body)) {
+    console.warn(
+      `[CAMPAIGN_INTERPOLATE] ${JSON.stringify({
+        phase: "post_pass_still_has_tokens",
+        campaignId: campaign.id,
+        contactId: contact.id,
+        stepIndex: idx,
+        preview: body.slice(0, 200),
+      })}`
+    );
+  }
 
   const scheduledFor = enrollment.nextRunAt ?? new Date();
   const pendingEvent = await storage.createCampaignStepEvent({
