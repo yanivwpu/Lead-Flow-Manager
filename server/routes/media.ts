@@ -3,7 +3,7 @@
  * ---------------------
  * POST /api/media/upload  (authenticated)
  *
- * Accepts a single file up to 16 MB, validates its MIME type, derives a safe
+ * Accepts a single file (per-type caps in `@shared/whatsappMediaLimits`), validates MIME type, derives a safe
  * extension from the MIME type (never from the original filename), and stores
  * the file in Replit Object Storage.  Returns a permanent public HTTPS URL
  * that Twilio and Meta can fetch without authentication.
@@ -21,7 +21,7 @@
  *   are only reachable from the same machine and will NOT survive a restart,
  *   so this path must never be used in production.
  *
- * Supported MIME types (16 MB max each)
+ * Supported MIME types (image / document / video each have their own max size)
  * ---------------------------------------
  *  image/jpeg, image/png, image/webp → type "image"
  *  application/pdf, Word/Excel types → type "document"
@@ -45,6 +45,11 @@ import path from "path";
 import fs from "fs";
 import { objectStorageClient } from "../replit_integrations/object_storage/objectStorage";
 import { uploadOutboundUserMedia } from "../mediaStorageService";
+import {
+  WA_OUTBOUND_UPLOAD_MULTER_MAX_BYTES,
+  waUploadFileSizeCheck,
+  waUploadTooLargeMessage,
+} from "@shared/whatsappMediaLimits";
 
 // ---------------------------------------------------------------------------
 // MIME type → friendly media type
@@ -154,7 +159,7 @@ export function registerMediaRoutes(app: Express): void {
   // Memory storage — no bytes touch local disk in the multer layer
   const upload = multer({
     storage: multer.memoryStorage(),
-    limits: { fileSize: 16 * 1024 * 1024 },
+    limits: { fileSize: WA_OUTBOUND_UPLOAD_MULTER_MAX_BYTES },
     fileFilter: (_req, file, cb) => {
       if (ALLOWED_MIME_TYPES[file.mimetype]) {
         cb(null, true);
@@ -175,7 +180,9 @@ export function registerMediaRoutes(app: Express): void {
         if (err) {
           if (err.code === "LIMIT_FILE_SIZE") {
             console.warn(`[MediaUpload] Rejected — file too large: ${req.headers["content-length"]} bytes`);
-            return res.status(413).json({ error: "File too large. Maximum size is 16 MB." });
+            return res.status(413).json({
+              error: `File is too large. Maximum upload size is ${Math.round(WA_OUTBOUND_UPLOAD_MULTER_MAX_BYTES / (1024 * 1024))} MB.`,
+            });
           }
           console.warn(`[MediaUpload] Multer rejection: ${err.message}`);
           return res.status(400).json({ error: err.message || "Upload error" });
@@ -190,6 +197,14 @@ export function registerMediaRoutes(app: Express): void {
         }
         if (!req.file) {
           return res.status(400).json({ error: "No file provided" });
+        }
+
+        const sizeCheck = waUploadFileSizeCheck(req.file.mimetype, req.file.size);
+        if (!sizeCheck.ok) {
+          console.warn(
+            `[MediaUpload] Rejected — over type cap mime=${req.file.mimetype} size=${req.file.size} max=${sizeCheck.maxBytes}`
+          );
+          return res.status(413).json({ error: waUploadTooLargeMessage(sizeCheck.kind) });
         }
 
         // Build base URL — prefer explicit APP_URL, fall back to Replit domain

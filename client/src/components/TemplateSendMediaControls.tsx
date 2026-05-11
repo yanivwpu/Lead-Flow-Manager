@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { extractSortedPlaceholders, type TemplateRowForMetaSend } from "@shared/metaTemplateSend";
+import { waUploadFileSizeCheck, waUploadTooLargeMessage } from "@shared/whatsappMediaLimits";
 import { Upload, Image as ImageIcon, Video, FileIcon, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -96,6 +97,8 @@ export function TemplateSendMediaControls(props: {
   mediaRuntimeRequired?: boolean;
   /** Original filename for document-header sends (WhatsApp `document.filename`). */
   onOptionalHeaderDocumentFilenameChange?: (name: string | null) => void;
+  /** MIME + size from last successful upload (CRM `template_variables.headerMedia`). */
+  onOptionalHeaderMediaMeta?: (meta: { mimeType: string | null; sizeBytes: number } | null) => void;
   /** User chose upload / recent / clear — skip automatic prefill from last send. */
   onUserAdjustedMedia?: () => void;
 }) {
@@ -110,6 +113,7 @@ export function TemplateSendMediaControls(props: {
     approvedSampleMediaUrl,
     mediaRuntimeRequired = true,
     onOptionalHeaderDocumentFilenameChange,
+    onOptionalHeaderMediaMeta,
     onUserAdjustedMedia,
   } = props;
   const { toast } = useToast();
@@ -161,6 +165,7 @@ export function TemplateSendMediaControls(props: {
     const trimmed = url.trim();
     if (!trimmed || !/^https?:\/\//i.test(trimmed)) return;
     onUserAdjustedMedia?.();
+    onOptionalHeaderMediaMeta?.(null);
     onOptionalHeaderDocumentFilenameChange?.(null);
     if (placeholderKeys.length > 0) {
       const primary = placeholderKeys[0];
@@ -173,6 +178,7 @@ export function TemplateSendMediaControls(props: {
 
   const clearMedia = () => {
     onUserAdjustedMedia?.();
+    onOptionalHeaderMediaMeta?.(null);
     onOptionalHeaderDocumentFilenameChange?.(null);
     if (placeholderKeys.length > 0) {
       onVariableValuesChange((prev) => {
@@ -197,10 +203,14 @@ export function TemplateSendMediaControls(props: {
 
   const onPickFile = async (file: File | null) => {
     if (!file) return;
-    if (file.size > 16 * 1024 * 1024) {
+    const mimeForCap =
+      (file.type && file.type.trim()) ||
+      (ht === "image" ? "image/jpeg" : ht === "video" ? "video/mp4" : "application/pdf");
+    const cap = waUploadFileSizeCheck(mimeForCap, file.size);
+    if (!cap.ok) {
       toast({
         title: "File too large",
-        description: "Maximum size is 16 MB.",
+        description: waUploadTooLargeMessage(cap.kind),
         variant: "destructive",
       });
       return;
@@ -240,6 +250,10 @@ export function TemplateSendMediaControls(props: {
       } else {
         onOptionalHeaderDocumentFilenameChange?.(null);
       }
+      onOptionalHeaderMediaMeta?.({
+        mimeType: typeof json.mimeType === "string" ? json.mimeType : file.type || null,
+        sizeBytes: file.size,
+      });
       toast({ title: "Added", description: "Your file is ready to send." });
     } catch (e: unknown) {
       toast({

@@ -45,10 +45,13 @@ import {
   TemplateShapeIndicator,
 } from "@/components/WhatsAppTemplateRichPreview";
 import { TemplateSendMediaControls } from "@/components/TemplateSendMediaControls";
+import { TemplateSendCarouselMediaControls } from "@/components/TemplateSendCarouselMediaControls";
 import { SavedPresetCampaignModals } from "@/components/SavedPresetCampaignModals";
 import { LocalizedTemplateSelector } from "@/components/LocalizedTemplateSelector";
 import {
   collectRequiredLibraryTemplatePlaceholders,
+  friendlyDocumentFilenameForTemplateSend,
+  getCarouselImageHeaderCardIndices,
   getInboxTemplateSendBlockReason,
   getLibraryTemplateSendStructureBlockReason,
   isLibraryPlainTextOnlyTemplate,
@@ -56,6 +59,7 @@ import {
   normalizeTemplateVariableMap,
   resolveLibraryHeaderMediaDisplayUrl,
   substituteTemplateVariablesForDisplay,
+  type CarouselCardRuntimeMedia,
 } from "@shared/metaTemplateSend";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -422,6 +426,13 @@ export function Templates() {
   const [optionalHeaderMediaUrl, setOptionalHeaderMediaUrl] = useState<string | null>(null);
   /** Passed to Meta document header `filename` when user uploads a file. */
   const [optionalHeaderDocumentFilename, setOptionalHeaderDocumentFilename] = useState<string | null>(null);
+  const [optionalHeaderMediaMeta, setOptionalHeaderMediaMeta] = useState<{
+    mimeType: string | null;
+    sizeBytes: number;
+  } | null>(null);
+  const [carouselCardMediaByIndex, setCarouselCardMediaByIndex] = useState<
+    Record<number, { url: string; originalFilename?: string | null }>
+  >({});
   const [headerMediaBroken, setHeaderMediaBroken] = useState(false);
 
   const [savedCampaignModalId, setSavedCampaignModalId] = useState<string | null>(null);
@@ -667,6 +678,26 @@ export function Templates() {
     return collectRequiredLibraryTemplatePlaceholders(selectedTemplate);
   }, [selectedTemplate]);
 
+  const carouselImageCardIndices = useMemo(() => {
+    if (!selectedTemplate) return [] as number[];
+    return getCarouselImageHeaderCardIndices(selectedTemplate);
+  }, [selectedTemplate]);
+
+  const carouselCardMediaForSend = useMemo((): CarouselCardRuntimeMedia[] => {
+    return carouselImageCardIndices
+      .map((i) => {
+        const m = carouselCardMediaByIndex[i];
+        const u = m?.url?.trim() ?? "";
+        if (!u || !/^https?:\/\//i.test(u)) return null;
+        return {
+          cardIndex: i,
+          mediaUrl: u,
+          originalFilename: m?.originalFilename ?? null,
+        };
+      })
+      .filter(Boolean) as CarouselCardRuntimeMedia[];
+  }, [carouselImageCardIndices, carouselCardMediaByIndex]);
+
   const normalizedVariableValues = useMemo(
     () => normalizeTemplateVariableMap(variableValues),
     [variableValues]
@@ -707,14 +738,15 @@ export function Templates() {
   const sendStructureBlockReason = useMemo(() => {
     if (!selectedTemplate) return null as string | null;
     const ht = (selectedTemplate.headerType || "").toLowerCase();
-    const docOpts =
-      ht === "document" ? { headerDocumentFilename: optionalHeaderDocumentFilename } : undefined;
     return getLibraryTemplateSendStructureBlockReason(
       selectedTemplate,
       variableValues,
       missingPlaceholders,
       optionalHeaderMediaUrl,
-      docOpts
+      {
+        headerDocumentFilename: ht === "document" ? optionalHeaderDocumentFilename : undefined,
+        carouselCardMedia: carouselCardMediaForSend,
+      }
     );
   }, [
     selectedTemplate,
@@ -722,6 +754,7 @@ export function Templates() {
     missingPlaceholders,
     optionalHeaderMediaUrl,
     optionalHeaderDocumentFilename,
+    carouselCardMediaForSend,
   ]);
 
   const resolvedHeaderMediaForPreview = useMemo(() => {
@@ -736,12 +769,36 @@ export function Templates() {
   const templateLivePreview = useMemo(() => {
     if (!selectedTemplate) return undefined;
     const ht = (selectedTemplate.headerType || "").toLowerCase();
+    const carouselUrls: Record<number, string> = {};
+    for (const [k, v] of Object.entries(carouselCardMediaByIndex)) {
+      const idx = Number(k);
+      const u = v.url.trim();
+      if (!Number.isFinite(idx) || idx < 0 || !/^https?:\/\//i.test(u)) continue;
+      carouselUrls[idx] = u;
+    }
+    const headerDocumentDisplayName =
+      ht === "document" && resolvedHeaderMediaForPreview
+        ? friendlyDocumentFilenameForTemplateSend({
+            headerDocumentFilename: optionalHeaderDocumentFilename,
+            mediaUrl: resolvedHeaderMediaForPreview,
+            templateName: selectedTemplate.name,
+          })
+        : undefined;
     return {
       bodyText: resolvedBodyPreview || undefined,
       headerTextResolved: ht === "text" ? resolvedHeaderPreview || undefined : undefined,
       headerMediaUrl: resolvedHeaderMediaForPreview ?? undefined,
+      headerDocumentDisplayName,
+      carouselCardMediaUrls: Object.keys(carouselUrls).length > 0 ? carouselUrls : undefined,
     };
-  }, [selectedTemplate, resolvedBodyPreview, resolvedHeaderPreview, resolvedHeaderMediaForPreview]);
+  }, [
+    selectedTemplate,
+    resolvedBodyPreview,
+    resolvedHeaderPreview,
+    resolvedHeaderMediaForPreview,
+    optionalHeaderDocumentFilename,
+    carouselCardMediaByIndex,
+  ]);
 
   const syncTemplatesMutation = useMutation({
     mutationFn: async () => {
@@ -789,9 +846,14 @@ export function Templates() {
       sendSource: "templates_library" | "templates_campaign";
       optionalHeaderMediaUrl?: string | null;
       optionalHeaderMediaFilename?: string | null;
+      optionalHeaderMediaMimeType?: string | null;
+      optionalHeaderMediaSizeBytes?: number | null;
+      carouselCardMedia?: CarouselCardRuntimeMedia[];
     }) => {
       const trimmedOpt = data.optionalHeaderMediaUrl?.trim();
       const trimmedFn = data.optionalHeaderMediaFilename?.trim();
+      const mime = data.optionalHeaderMediaMimeType?.trim();
+      const sizeB = data.optionalHeaderMediaSizeBytes;
       const payload = {
         templateId: data.templateId,
         variables: data.variables,
@@ -801,6 +863,11 @@ export function Templates() {
           : { chatId: data.chatId as string }),
         ...(trimmedOpt ? { optionalHeaderMediaUrl: trimmedOpt } : {}),
         ...(trimmedFn ? { optionalHeaderMediaFilename: trimmedFn } : {}),
+        ...(mime ? { optionalHeaderMediaMimeType: mime } : {}),
+        ...(typeof sizeB === "number" && Number.isFinite(sizeB) ? { optionalHeaderMediaSizeBytes: sizeB } : {}),
+        ...(data.carouselCardMedia && data.carouselCardMedia.length > 0
+          ? { carouselCardMedia: data.carouselCardMedia }
+          : {}),
       };
       console.log(
         `[WA_TEMPLATE_SEND_CLIENT] ${JSON.stringify({
@@ -827,6 +894,8 @@ export function Templates() {
       setVariableValues({});
       setOptionalHeaderMediaUrl(null);
       setOptionalHeaderDocumentFilename(null);
+      setOptionalHeaderMediaMeta(null);
+      setCarouselCardMediaByIndex({});
       toast({
         title: "Template sent",
         description: data?.message || "Template message sent successfully.",
@@ -862,6 +931,8 @@ export function Templates() {
     setVariableValues({});
     setOptionalHeaderMediaUrl(null);
     setOptionalHeaderDocumentFilename(null);
+    setOptionalHeaderMediaMeta(null);
+    setCarouselCardMediaByIndex({});
     setHeaderMediaBroken(false);
     suppressTemplatePrefillRef.current = false;
     pendingTemplatePrefillRef.current = true;
@@ -1717,6 +1788,8 @@ export function Templates() {
               setSendInlineError(null);
               setOptionalHeaderMediaUrl(null);
               setOptionalHeaderDocumentFilename(null);
+              setOptionalHeaderMediaMeta(null);
+              setCarouselCardMediaByIndex({});
               setHeaderMediaBroken(false);
               suppressTemplatePrefillRef.current = false;
               pendingTemplatePrefillRef.current = false;
@@ -1789,9 +1862,18 @@ export function Templates() {
                       }
                       mediaRuntimeRequired={selectedTemplate.mediaRuntimeRequired ?? true}
                       onOptionalHeaderDocumentFilenameChange={setOptionalHeaderDocumentFilename}
+                      onOptionalHeaderMediaMeta={setOptionalHeaderMediaMeta}
                       onUserAdjustedMedia={() => {
                         suppressTemplatePrefillRef.current = true;
                       }}
+                    />
+                  ) : null}
+
+                  {selectedTemplate && carouselImageCardIndices.length > 0 ? (
+                    <TemplateSendCarouselMediaControls
+                      imageCardIndices={carouselImageCardIndices}
+                      mediaByIndex={carouselCardMediaByIndex}
+                      onMediaByIndexChange={setCarouselCardMediaByIndex}
                     />
                   ) : null}
 
@@ -1965,6 +2047,9 @@ export function Templates() {
                             : "templates_library",
                         optionalHeaderMediaUrl,
                         optionalHeaderMediaFilename: optionalHeaderDocumentFilename,
+                        optionalHeaderMediaMimeType: optionalHeaderMediaMeta?.mimeType ?? null,
+                        optionalHeaderMediaSizeBytes: optionalHeaderMediaMeta?.sizeBytes ?? null,
+                        carouselCardMedia: carouselCardMediaForSend,
                       });
                     }}
                     disabled={

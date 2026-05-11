@@ -1,7 +1,12 @@
 import { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback } from "react";
 import { apiRequest } from "@/lib/queryClient";
 import { WHATSAPP_FREE_FORM_BUFFER_MS } from "@shared/conversationReplyWindow";
-import { getInboxTemplateSendBlockReason } from "@shared/metaTemplateSend";
+import {
+  friendlyDocumentFilenameForTemplateSend,
+  getInboxTemplateSendBlockReason,
+  looksLikeOpaqueStorageFilename,
+} from "@shared/metaTemplateSend";
+import { waUploadFileSizeCheck, waUploadTooLargeMessage } from "@shared/whatsappMediaLimits";
 import { Link, useRoute, useLocation } from "wouter";
 import { useAuth } from "@/lib/auth-context";
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
@@ -1319,8 +1324,9 @@ export function UnifiedInbox() {
       );
       return;
     }
-    if (file.size > 16 * 1024 * 1024) {
-      setFilePickerHint("This file is too large. Maximum size is 16 MB.");
+    const cap = waUploadFileSizeCheck(file.type, file.size);
+    if (!cap.ok) {
+      setFilePickerHint(waUploadTooLargeMessage(cap.kind));
       return;
     }
 
@@ -2130,15 +2136,53 @@ export function UnifiedInbox() {
                                 ? effectiveMediaUrl
                                 : templateProxyUrl;
 
-                              let docLabel = msg.mediaFilename?.trim() || "";
-                              if (!docLabel && effectiveMediaUrl && mediaKind === "document") {
+                              const tvHeaderMedia = tv?.headerMedia as
+                                | {
+                                    originalFilename?: unknown;
+                                    url?: unknown;
+                                  }
+                                | null
+                                | undefined;
+                              const fromHeaderMedia =
+                                tvHeaderMedia &&
+                                typeof tvHeaderMedia.originalFilename === "string" &&
+                                tvHeaderMedia.originalFilename.trim()
+                                  ? tvHeaderMedia.originalFilename.trim()
+                                  : "";
+                              const tvDocFn =
+                                (tv && typeof tv.headerDocumentFilename === "string"
+                                  ? tv.headerDocumentFilename.trim()
+                                  : "") || fromHeaderMedia;
+                              let docLabel = msg.mediaFilename?.trim() || tvDocFn || "";
+                              if (
+                                (!docLabel || looksLikeOpaqueStorageFilename(docLabel)) &&
+                                effectiveMediaUrl &&
+                                mediaKind === "document"
+                              ) {
+                                docLabel = friendlyDocumentFilenameForTemplateSend({
+                                  headerDocumentFilename: tvDocFn || null,
+                                  mediaUrl: effectiveMediaUrl,
+                                  templateName: tmplName,
+                                });
+                              } else if (!docLabel && effectiveMediaUrl && mediaKind === "document") {
                                 try {
                                   const seg =
                                     new URL(effectiveMediaUrl).pathname.split("/").filter(Boolean).pop() ||
                                     "";
-                                  docLabel = seg ? decodeURIComponent(seg) : "Document";
+                                  const raw = seg ? decodeURIComponent(seg) : "Document";
+                                  docLabel = looksLikeOpaqueStorageFilename(raw)
+                                    ? friendlyDocumentFilenameForTemplateSend({
+                                        headerDocumentFilename: null,
+                                        mediaUrl: effectiveMediaUrl,
+                                        templateName: tmplName,
+                                      })
+                                    : raw;
                                 } catch {
-                                  docLabel = "Document";
+                                  docLabel = friendlyDocumentFilenameForTemplateSend({
+                                    headerDocumentFilename: null,
+                                    mediaUrl: effectiveMediaUrl,
+                                    templateName: tmplName,
+                                  });
                                 }
                               }
 
@@ -2186,15 +2230,34 @@ export function UnifiedInbox() {
                                     />
                                   ) : null}
                                   {effectiveMediaUrl && mediaKind === "document" ? (
-                                    <a
-                                      href={templateMediaDisplayUrl}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="flex items-center gap-2 text-sm text-blue-700 underline underline-offset-2"
-                                    >
-                                      <FileText className="h-4 w-4 shrink-0" />
-                                      <span className="truncate">{docLabel || "Document"}</span>
-                                    </a>
+                                    <div className="rounded-lg border border-emerald-200/70 bg-white/70 px-2.5 py-2">
+                                      <div className="flex min-w-0 items-center gap-2">
+                                        <FileText className="h-4 w-4 shrink-0 text-gray-600" aria-hidden />
+                                        <span className="min-w-0 truncate text-sm font-medium text-gray-900">
+                                          {docLabel || "Document"}
+                                        </span>
+                                      </div>
+                                      <div className="mt-1.5 flex flex-wrap gap-x-2 gap-y-0.5 text-xs">
+                                        <a
+                                          href={templateMediaDisplayUrl}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="font-medium text-emerald-800 underline-offset-2 hover:underline"
+                                        >
+                                          Open
+                                        </a>
+                                        <span className="text-gray-300" aria-hidden>
+                                          ·
+                                        </span>
+                                        <a
+                                          href={templateMediaDisplayUrl}
+                                          download={docLabel || "document"}
+                                          className="font-medium text-emerald-800 underline-offset-2 hover:underline"
+                                        >
+                                          Download
+                                        </a>
+                                      </div>
+                                    </div>
                                   ) : null}
                                   <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                                     <span className="text-[10px] font-semibold uppercase tracking-wide text-emerald-900/85">

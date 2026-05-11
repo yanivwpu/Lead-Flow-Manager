@@ -25,6 +25,11 @@ import { storage } from "./storage";
 import { devLog } from "./devLog";
 import { insertChatSchema, insertRegisteredPhoneSchema, insertSalespersonSchema, insertDemoBookingSchema, PLAN_LIMITS, type SubscriptionPlan } from "@shared/schema";
 import { isConversationHandoffActive } from "@shared/handoffActivity";
+import {
+  WA_OUTBOUND_UPLOAD_MULTER_MAX_BYTES,
+  waUploadFileSizeCheck,
+  waUploadTooLargeMessage,
+} from "@shared/whatsappMediaLimits";
 import { z } from "zod";
 import { getVapidPublicKey } from "./notifications";
 import {
@@ -1587,7 +1592,7 @@ export async function registerRoutes(
         cb(null, uniqueSuffix + path.extname(file.originalname));
       }
     }),
-    limits: { fileSize: 16 * 1024 * 1024 }, // 16MB max
+    limits: { fileSize: WA_OUTBOUND_UPLOAD_MULTER_MAX_BYTES },
     fileFilter: (req, file, cb) => {
       const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'application/pdf'];
       if (allowedTypes.includes(file.mimetype)) {
@@ -1607,6 +1612,11 @@ export async function registerRoutes(
 
       if (!req.file) {
         return res.status(400).json({ error: "No file uploaded" });
+      }
+
+      const sizeCheck = waUploadFileSizeCheck(req.file.mimetype, req.file.size);
+      if (!sizeCheck.ok) {
+        return res.status(413).json({ error: waUploadTooLargeMessage(sizeCheck.kind) });
       }
 
       const { chatId, phone } = req.body;

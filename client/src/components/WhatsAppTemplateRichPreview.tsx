@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight, Image, Video, FileIcon, LayoutGrid } from "lucide-react";
-import { extractSortedPlaceholders } from "@shared/metaTemplateSend";
+import { extractSortedPlaceholders, looksLikeOpaqueStorageFilename } from "@shared/metaTemplateSend";
 
 /** Minimal shape for UI preview only — mirrors template rows from `/api/templates`. */
 export type WhatsAppRichPreviewTemplate = {
@@ -22,6 +22,10 @@ export type WhatsAppTemplateLivePreview = {
   bodyText?: string | null;
   headerTextResolved?: string | null;
   headerMediaUrl?: string | null;
+  /** Customer-facing document title (not storage URL tail). */
+  headerDocumentDisplayName?: string | null;
+  /** Runtime carousel card image URLs keyed by 0-based card index. */
+  carouselCardMediaUrls?: Record<number, string> | null;
 };
 
 export function templateCarouselCardCount(template: WhatsAppRichPreviewTemplate): number {
@@ -129,12 +133,19 @@ export function WhatsAppTemplateRichPreview({
 
   if (tt === "carousel" && cards.length > 0) {
     const card = cards[carouselIndex] as { headerUrl?: string; bodyText?: string };
+    const overrideUrl = (livePreview?.carouselCardMediaUrls?.[carouselIndex] || "").trim();
+    const cardImgSrc =
+      overrideUrl && /^https?:\/\//i.test(overrideUrl)
+        ? overrideUrl
+        : card?.headerUrl && /^https?:\/\//i.test(String(card.headerUrl).trim())
+          ? String(card.headerUrl).trim()
+          : null;
     mediaBlock = (
       <div className={mediaRounded}>
         <div className="relative bg-gray-100">
-          {card?.headerUrl ? (
+          {cardImgSrc ? (
             <img
-              src={card.headerUrl}
+              src={cardImgSrc}
               alt=""
               className={cn("w-full object-cover", isLibraryCard ? "max-h-24" : "max-h-40")}
             />
@@ -251,6 +262,9 @@ export function WhatsAppTemplateRichPreview({
           return "Document";
         }
       })();
+      const docTitle =
+        (livePreview?.headerDocumentDisplayName || "").trim() ||
+        (!looksLikeOpaqueStorageFilename(tail) ? tail : "Document");
       mediaBlock = isLibraryCard ? (
         <div
           className={cn(
@@ -260,7 +274,7 @@ export function WhatsAppTemplateRichPreview({
         >
           <FileIcon className="h-4 w-4 shrink-0 text-gray-500" aria-hidden />
           <div className="min-w-0 flex-1">
-            <p className="truncate text-[11px] font-medium text-gray-800">{tail}</p>
+            <p className="truncate text-[11px] font-medium text-gray-800">{docTitle}</p>
             <p className="text-[10px] text-gray-500">Approved file in WhatsApp Manager</p>
           </div>
         </div>
@@ -268,7 +282,7 @@ export function WhatsAppTemplateRichPreview({
         <div className={`${mediaRounded} flex items-center gap-3 ${pad}`}>
           <FileIcon className="h-8 w-8 shrink-0 text-gray-600" aria-hidden />
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium text-gray-900">{tail}</p>
+            <p className="truncate text-sm font-medium text-gray-900">{docTitle}</p>
             <a
               href={displayMediaUrl}
               target="_blank"

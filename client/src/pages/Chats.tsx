@@ -6,6 +6,7 @@ import { useAuth } from "@/lib/auth-context";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { usePresence } from "@/lib/usePresence";
 import { isMetaReplyWindowExpiredError } from "@/lib/metaReplyWindowError";
+import { waUploadFileSizeCheck, waUploadTooLargeMessage } from "@shared/whatsappMediaLimits";
 import { 
   Search, 
   MoreVertical, 
@@ -371,10 +372,14 @@ export function Chats() {
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (file.size > 16 * 1024 * 1024) {
+      const mimeForCap =
+        (file.type && file.type.trim()) ||
+        (file.name.toLowerCase().endsWith(".pdf") ? "application/pdf" : "image/jpeg");
+      const cap = waUploadFileSizeCheck(mimeForCap, file.size);
+      if (!cap.ok) {
         toast({
           title: "File too large",
-          description: "Maximum file size is 16MB",
+          description: waUploadTooLargeMessage(cap.kind),
           variant: "destructive",
         });
         return;

@@ -3,6 +3,7 @@ import type { Channel, PresetCampaign } from "@shared/schema";
 import {
   buildMetaCloudTemplateSendComponents,
   buildMetaLibraryTemplateSendComponents,
+  type CarouselCardRuntimeMedia,
   effectiveTemplateRowForLibrarySend,
   enrichMessageTemplateMediaFields,
   getInboxTemplateSendBlockReason,
@@ -1434,6 +1435,9 @@ export function registerTemplateRoutes(app: Express): void {
         sendSource,
         optionalHeaderMediaUrl: optionalHeaderMediaBody,
         optionalHeaderMediaFilename: optionalHeaderMediaFilenameBody,
+        optionalHeaderMediaMimeType: optionalHeaderMediaMimeTypeBody,
+        optionalHeaderMediaSizeBytes: optionalHeaderMediaSizeBytesBody,
+        carouselCardMedia: carouselCardMediaBody,
       } = req.body as {
         templateId?: string;
         chatId?: string;
@@ -1444,7 +1448,27 @@ export function registerTemplateRoutes(app: Express): void {
         optionalHeaderMediaUrl?: string;
         /** Original filename for document-header sends (Meta `document.filename`). */
         optionalHeaderMediaFilename?: string;
+        optionalHeaderMediaMimeType?: string;
+        optionalHeaderMediaSizeBytes?: number;
+        carouselCardMedia?: unknown;
       };
+
+      let carouselCardMediaNormalized: CarouselCardRuntimeMedia[] = [];
+      if (Array.isArray(carouselCardMediaBody)) {
+        for (const row of carouselCardMediaBody) {
+          if (!row || typeof row !== "object") continue;
+          const r = row as Record<string, unknown>;
+          const cardIndex = Number(r.cardIndex);
+          const mediaUrl = typeof r.mediaUrl === "string" ? r.mediaUrl.trim() : "";
+          if (!Number.isInteger(cardIndex) || cardIndex < 0) continue;
+          if (!/^https?:\/\//i.test(mediaUrl)) continue;
+          const originalFilename =
+            typeof r.originalFilename === "string" && r.originalFilename.trim()
+              ? r.originalFilename.trim().slice(0, 240)
+              : null;
+          carouselCardMediaNormalized.push({ cardIndex, mediaUrl, originalFilename });
+        }
+      }
       const sendSourceTag =
         typeof sendSource === "string" && sendSource.trim()
           ? sendSource.trim()
@@ -1563,6 +1587,15 @@ export function registerTemplateRoutes(app: Express): void {
         typeof optionalHeaderMediaFilenameBody === "string"
           ? optionalHeaderMediaFilenameBody.trim()
           : undefined;
+      const optionalHeaderMediaMimeType =
+        typeof optionalHeaderMediaMimeTypeBody === "string"
+          ? optionalHeaderMediaMimeTypeBody.trim().slice(0, 120)
+          : undefined;
+      const optionalHeaderMediaSizeBytes =
+        typeof optionalHeaderMediaSizeBytesBody === "number" &&
+        Number.isFinite(optionalHeaderMediaSizeBytesBody)
+          ? Math.max(0, Math.floor(optionalHeaderMediaSizeBytesBody))
+          : undefined;
       const libraryEffectiveTemplate =
         metaSendPath === "library_full"
           ? effectiveTemplateRowForLibrarySend(template, optionalHeaderMediaUrl ?? null)
@@ -1651,6 +1684,9 @@ export function registerTemplateRoutes(app: Express): void {
             ? buildMetaCloudTemplateSendComponents(template, variableValues)
             : buildMetaLibraryTemplateSendComponents(libraryEffectiveTemplate, variableValues, {
                 headerDocumentFilename: optionalHeaderMediaFilename ?? null,
+                ...(carouselCardMediaNormalized.length > 0
+                  ? { carouselCardMedia: carouselCardMediaNormalized }
+                  : {}),
               });
 
         const resolvedShape =
@@ -1865,6 +1901,20 @@ export function registerTemplateRoutes(app: Express): void {
           );
           const preview = displayContent.substring(0, 100);
 
+          const headerTypeLower = (displaySource.headerType || "").toLowerCase();
+          const headerMedia =
+            resolvedHeaderMediaUrl && ["image", "video", "document"].includes(headerTypeLower)
+              ? {
+                  url: resolvedHeaderMediaUrl,
+                  type: headerTypeLower,
+                  originalFilename:
+                    headerTypeLower === "document" ? optionalHeaderMediaFilename ?? null : null,
+                  mimeType: optionalHeaderMediaMimeType ?? null,
+                  sizeBytes:
+                    optionalHeaderMediaSizeBytes !== undefined ? optionalHeaderMediaSizeBytes : null,
+                }
+              : null;
+
           const templateVariablesPayload = {
             ...normalizeTemplateVariableMap(variableValues),
             templateLanguage: templateLang,
@@ -1873,6 +1923,7 @@ export function registerTemplateRoutes(app: Express): void {
             provider: resolvedProvider === "meta" ? "meta" : resolvedProvider,
             headerType: displaySource.headerType ?? null,
             headerMediaUrl: resolvedHeaderMediaUrl,
+            ...(headerMedia ? { headerMedia } : {}),
             ...(optionalHeaderMediaFilename &&
             (displaySource.headerType || "").toLowerCase() === "document"
               ? { headerDocumentFilename: optionalHeaderMediaFilename }

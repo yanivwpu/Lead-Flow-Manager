@@ -376,16 +376,75 @@ function sanitizeDocumentFilenameForMeta(raw: string | null | undefined): string
   return base;
 }
 
+/** Storage keys / UUID filenames — not suitable as customer-facing document labels. */
+export function looksLikeOpaqueStorageFilename(seg: string): boolean {
+  const s = (seg || "").trim();
+  if (!s) return true;
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\./i.test(s)) return true;
+  if (/^[0-9]{10,}-[0-9]{6,}\./.test(s)) return true;
+  if (/^blob:/i.test(s)) return true;
+  return false;
+}
+
 function inferDocumentFilenameFromUrl(url: string): string | null {
   try {
     const u = new URL(url);
-    const seg = u.pathname.split("/").pop();
-    if (seg && /\.(pdf|doc|docx|ppt|pptx|xls|xlsx)$/i.test(seg)) return seg.slice(0, 200);
+    const rawSeg = u.pathname.split("/").filter(Boolean).pop();
+    if (!rawSeg) return null;
+    const seg = decodeURIComponent(rawSeg);
+    if (looksLikeOpaqueStorageFilename(seg)) return null;
+    if (/\.(pdf|doc|docx|ppt|pptx|xls|xlsx)$/i.test(seg)) return seg.slice(0, 200);
   } catch {
     /* ignore */
   }
   return null;
 }
+
+/**
+ * WhatsApp `document.filename` + CRM display: prefer user upload name, else URL tail, else template-based default.
+ */
+export function friendlyDocumentFilenameForTemplateSend(opts: {
+  headerDocumentFilename?: string | null;
+  mediaUrl: string;
+  templateName?: string | null;
+}): string {
+  const user = sanitizeDocumentFilenameForMeta(opts.headerDocumentFilename);
+  if (user) return user;
+  const fromUrl = inferDocumentFilenameFromUrl(opts.mediaUrl);
+  if (fromUrl) return fromUrl;
+  const tn = (opts.templateName || "")
+    .trim()
+    .replace(/[/\\?%*:|"<>]/g, "_")
+    .replace(/\s+/g, " ");
+  if (tn) return `${tn.slice(0, 80)}.pdf`;
+  return "Document.pdf";
+}
+
+/** Carousel cards whose first HEADER component is an image (runtime upload targets). */
+export function getCarouselImageHeaderCardIndices(template: TemplateRowForMetaSend): number[] {
+  const cardsRaw = Array.isArray(template.carouselCards) ? template.carouselCards : [];
+  const out: number[] = [];
+  for (let i = 0; i < cardsRaw.length; i++) {
+    const card = cardsRaw[i] as { components?: unknown[] };
+    const rawList = Array.isArray(card.components) ? (card.components as Record<string, unknown>[]) : [];
+    for (const c of rawList) {
+      if (String(c.type || "").toUpperCase() !== "HEADER") continue;
+      const fmt = String(c.format || "").toLowerCase();
+      if (fmt === "image") out.push(i);
+      break;
+    }
+  }
+  return out;
+}
+
+export type CarouselCardRuntimeMedia = {
+  cardIndex: number;
+  mediaUrl: string;
+  originalFilename?: string | null;
+};
+
+export const CAROUSEL_SEND_REQUIRES_EACH_CARD_MEDIA_MESSAGE =
+  "Carousel sending requires media for each card.";
 
 /**
  * Inbox picker: only **body-only** templates (like `hello_world`): no header/media row, no buttons,
@@ -521,7 +580,8 @@ function resolveStaticOrVariableMediaUrl(
 function mapCarouselCardComponents(
   cardRaw: unknown,
   cardIndex: number,
-  vvStr: Record<string, string>
+  vvStr: Record<string, string>,
+  runtime?: { mediaUrl?: string | null; originalFilename?: string | null }
 ): { components: Record<string, unknown>[]; error?: string } {
   const card = cardRaw as Record<string, unknown>;
   const rawList = Array.isArray(card.components)
@@ -533,6 +593,8 @@ function mapCarouselCardComponents(
   const previewUrl =
     typeof card.headerUrl === "string" && /^https?:\/\//i.test(card.headerUrl) ? card.headerUrl : null;
 
+  const runtimeUrl = (runtime?.mediaUrl || "").trim();
+
   for (let ci = 0; ci < rawList.length; ci++) {
     const c = rawList[ci];
     const ctype = String(c.type || "").toUpperCase();
@@ -540,9 +602,10 @@ function mapCarouselCardComponents(
     if (ctype === "HEADER") {
       const fmt = String(c.format || "").toLowerCase();
       if (fmt === "image" || fmt === "IMAGE") {
-        let link = previewUrl;
+        let link = runtimeUrl && /^https?:\/\//i.test(runtimeUrl) ? runtimeUrl : null;
+        if (!link) link = previewUrl;
         const ex = (c as { example?: { header_handle?: string[] } }).example?.header_handle?.[0];
-        if (!link && ex && /^https?:\/\//i.test(ex)) link = ex;
+        if (!link && ex && /^https?:\/\//i.test(String(ex))) link = String(ex).trim();
         const txt = c.text != null ? String(c.text) : "";
         if (!link && txt) {
           const tph = extractSortedPlaceholders(txt);
@@ -557,6 +620,51 @@ function mapCarouselCardComponents(
         out.push({
           type: "header",
           parameters: [{ type: "image", image: { link } }],
+        });
+      } else if (fmt === "video") {
+        let link = runtimeUrl && /^https?:\/\//i.test(runtimeUrl) ? runtimeUrl : null;
+        if (!link) link = previewUrl;
+        const ex = (c as { example?: { header_handle?: string[] } }).example?.header_handle?.[0];
+        if (!link && ex && /^https?:\/\//i.test(String(ex))) link = String(ex).trim();
+        const txt = c.text != null ? String(c.text) : "";
+        if (!link && txt) {
+          const tph = extractSortedPlaceholders(txt);
+          if (tph.length && vvStr[tph[0]]) link = vvStr[tph[0]].trim();
+        }
+        if (!link || !/^https?:\/\//i.test(link)) {
+          return {
+            components: [],
+            error: `Carousel slide ${cardIndex + 1}: add a valid https video URL for this card's header—fill the matching variable or choose media, then try again.`,
+          };
+        }
+        out.push({
+          type: "header",
+          parameters: [{ type: "video", video: { link } }],
+        });
+      } else if (fmt === "document") {
+        let link = runtimeUrl && /^https?:\/\//i.test(runtimeUrl) ? runtimeUrl : null;
+        if (!link) link = previewUrl;
+        const ex = (c as { example?: { header_handle?: string[] } }).example?.header_handle?.[0];
+        if (!link && ex && /^https?:\/\//i.test(String(ex))) link = String(ex).trim();
+        const txt = c.text != null ? String(c.text) : "";
+        if (!link && txt) {
+          const tph = extractSortedPlaceholders(txt);
+          if (tph.length && vvStr[tph[0]]) link = vvStr[tph[0]].trim();
+        }
+        if (!link || !/^https?:\/\//i.test(link)) {
+          return {
+            components: [],
+            error: `Carousel slide ${cardIndex + 1}: add a valid https document URL for this card's header—fill the matching variable or choose media, then try again.`,
+          };
+        }
+        const fn = friendlyDocumentFilenameForTemplateSend({
+          headerDocumentFilename: runtime?.originalFilename,
+          mediaUrl: link,
+          templateName: null,
+        });
+        out.push({
+          type: "header",
+          parameters: [{ type: "document", document: { link, filename: fn } }],
         });
       }
     }
@@ -602,7 +710,8 @@ function mapCarouselCardComponents(
 function buildCarouselLibraryPayload(
   template: TemplateRowForMetaSend,
   vv: Record<string, string>,
-  shape: MetaTemplateSendShape
+  shape: MetaTemplateSendShape,
+  carouselCardMedia?: CarouselCardRuntimeMedia[]
 ): { components?: Record<string, unknown>[]; error?: string; shape: MetaTemplateSendShape } {
   const cardsRaw = Array.isArray(template.carouselCards) ? template.carouselCards : [];
   if (!cardsRaw.length) {
@@ -630,7 +739,15 @@ function buildCarouselLibraryPayload(
 
   const cardsOut: Record<string, unknown>[] = [];
   for (let i = 0; i < cardsRaw.length; i++) {
-    const mapped = mapCarouselCardComponents(cardsRaw[i], i, vv);
+    const rt = carouselCardMedia?.find((x) => x.cardIndex === i);
+    const mapped = mapCarouselCardComponents(
+      cardsRaw[i],
+      i,
+      vv,
+      rt?.mediaUrl
+        ? { mediaUrl: rt.mediaUrl.trim(), originalFilename: rt.originalFilename ?? null }
+        : undefined
+    );
     if (mapped.error) return { error: mapped.error, shape };
     cardsOut.push({
       card_index: i,
@@ -653,7 +770,10 @@ function buildCarouselLibraryPayload(
 export function buildMetaLibraryTemplateSendComponents(
   template: TemplateRowForMetaSend,
   variableValues: Record<string, string>,
-  options?: { headerDocumentFilename?: string | null }
+  options?: {
+    headerDocumentFilename?: string | null;
+    carouselCardMedia?: CarouselCardRuntimeMedia[];
+  }
 ): { components?: Record<string, unknown>[]; error?: string; shape: MetaTemplateSendShape } {
   const vv = normalizeTemplateVariableMap(variableValues);
   const shape = inferMetaTemplateShape(template);
@@ -667,7 +787,7 @@ export function buildMetaLibraryTemplateSendComponents(
 
   const tt = (template.templateType || "").toLowerCase();
   if (tt === "carousel" || (Array.isArray(template.carouselCards) && template.carouselCards.length > 0)) {
-    return buildCarouselLibraryPayload(template, vv, shape);
+    return buildCarouselLibraryPayload(template, vv, shape, options?.carouselCardMedia);
   }
 
   const components: Record<string, unknown>[] = [];
@@ -702,10 +822,11 @@ export function buildMetaLibraryTemplateSendComponents(
         parameters: [{ type: "video", video: { link: url } }],
       });
     } else {
-      const docFilename =
-        sanitizeDocumentFilenameForMeta(options?.headerDocumentFilename) ||
-        inferDocumentFilenameFromUrl(url) ||
-        "document.pdf";
+      const docFilename = friendlyDocumentFilenameForTemplateSend({
+        headerDocumentFilename: options?.headerDocumentFilename,
+        mediaUrl: url,
+        templateName: template.name,
+      });
       components.push({
         type: "header",
         parameters: [
@@ -776,12 +897,21 @@ function shouldUnifyLibraryErrorToMediaRequiredMessage(
 ): boolean {
   if (/\bmissing .+ variable\b/i.test(buildError)) return false;
   if (buildError.includes("Authentication templates")) return false;
-  const ht = (template.headerType || "").toLowerCase();
-  if (["image", "video", "document"].includes(ht)) return true;
   const tt = (template.templateType || "").toLowerCase();
   if (tt === "carousel" || (Array.isArray(template.carouselCards) && template.carouselCards.length > 0)) {
-    return true;
+    return false;
   }
+  const ht = (template.headerType || "").toLowerCase();
+  if (["image", "video", "document"].includes(ht)) return true;
+  return false;
+}
+
+function shouldMapCarouselMediaInstructionError(buildError: string): boolean {
+  if (/Carousel card \d+: missing body variable/i.test(buildError)) return false;
+  if (/Carousel card \d+: Missing URL button variable/i.test(buildError)) return false;
+  if (/Missing URL button variable/i.test(buildError)) return false;
+  if (/add a valid https/i.test(buildError)) return true;
+  if (/media couldn't be prepared/i.test(buildError)) return true;
   return false;
 }
 
@@ -794,14 +924,21 @@ export function getLibraryTemplateSendStructureBlockReason(
   variableValues: Record<string, string>,
   missingPlaceholderKeys: string[],
   optionalHeaderMediaUrl?: string | null,
-  options?: { headerDocumentFilename?: string | null }
+  options?: { headerDocumentFilename?: string | null; carouselCardMedia?: CarouselCardRuntimeMedia[] }
 ): string | null {
   if (missingPlaceholderKeys.length > 0) return null;
   const effective = effectiveTemplateRowForLibrarySend(template, optionalHeaderMediaUrl);
   const built = buildMetaLibraryTemplateSendComponents(effective, variableValues, {
     headerDocumentFilename: options?.headerDocumentFilename,
+    carouselCardMedia: options?.carouselCardMedia,
   });
   if (!built.error) return null;
+  const isCarousel =
+    (template.templateType || "").toLowerCase() === "carousel" ||
+    (Array.isArray(template.carouselCards) && template.carouselCards.length > 0);
+  if (isCarousel && shouldMapCarouselMediaInstructionError(built.error)) {
+    return CAROUSEL_SEND_REQUIRES_EACH_CARD_MEDIA_MESSAGE;
+  }
   if (shouldUnifyLibraryErrorToMediaRequiredMessage(template, built.error)) {
     return LIBRARY_MEDIA_REQUIRED_BEFORE_SEND_MESSAGE;
   }
