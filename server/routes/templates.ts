@@ -7,6 +7,8 @@ import {
   type CarouselCardRuntimeMedia,
   effectiveTemplateRowForLibrarySend,
   enrichMessageTemplateMediaFields,
+  coerceTemplateCarouselDefaultMediaMap,
+  runtimeCarouselRowsToDefaultMediaMap,
   getInboxTemplateSendBlockReason,
   inferMetaTemplateShape,
   normalizeTemplateVariableMap,
@@ -784,10 +786,58 @@ export function registerTemplateRoutes(app: Express): void {
       }
 
       const templates = await storage.getMessageTemplates(req.user.id);
-      res.json(templates.map((t) => enrichMessageTemplateMediaFields(t)));
+      const defaultsRows = await storage.listTemplateCarouselMediaDefaultsByUser(req.user.id);
+      const defaultsByTemplateId = new Map<string, ReturnType<typeof coerceTemplateCarouselDefaultMediaMap>>();
+      for (const row of defaultsRows) {
+        defaultsByTemplateId.set(row.templateId, coerceTemplateCarouselDefaultMediaMap(row.cardMedia));
+      }
+      res.json(
+        templates.map((t) => ({
+          ...enrichMessageTemplateMediaFields(t),
+          carouselDefaultMedia: defaultsByTemplateId.get(t.id) ?? {},
+        }))
+      );
     } catch (error) {
       console.error("Error fetching templates:", error);
       res.status(500).json({ error: "Failed to fetch templates" });
+    }
+  });
+
+  /**
+   * Save per-card carousel header media defaults for a library template (https URLs only).
+   */
+  app.put("/api/templates/carousel-defaults", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const limits = await subscriptionService.getUserLimits(req.user.id);
+      if (!(limits as any)?.templatesEnabled) {
+        return res.status(403).json({ error: "Template messaging is a Pro feature" });
+      }
+
+      const templateId = typeof req.body?.templateId === "string" ? req.body.templateId.trim() : "";
+      const rawCardMedia = req.body?.cardMedia;
+      if (!templateId || !rawCardMedia || typeof rawCardMedia !== "object") {
+        return res.status(400).json({ error: "templateId and cardMedia object are required" });
+      }
+
+      const template = await storage.getMessageTemplate(templateId);
+      if (!template || template.userId !== req.user.id) {
+        return res.status(404).json({ error: "Template not found" });
+      }
+
+      const normalized = coerceTemplateCarouselDefaultMediaMap(rawCardMedia);
+      await storage.upsertTemplateCarouselMediaDefaults(req.user.id, templateId, normalized as unknown as Record<string, unknown>);
+      res.json({ success: true, carouselDefaultMedia: normalized });
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      if (msg === "template_not_found_or_forbidden") {
+        return res.status(404).json({ error: "Template not found" });
+      }
+      console.error("carousel-defaults:", error);
+      res.status(500).json({ error: "Failed to save carousel defaults" });
     }
   });
 
@@ -1722,7 +1772,10 @@ export function registerTemplateRoutes(app: Express): void {
             shape: resolvedShape,
             phoneNumberId,
             wabaId,
+            contactId: crmContactId,
             recipient: recipientLog,
+            carouselCardCount: carouselCardMediaNormalized.length,
+            carouselCardMediaUrls: carouselCardMediaNormalized.map((c) => c.mediaUrl),
             components,
           })}`
         );
@@ -1747,7 +1800,10 @@ export function registerTemplateRoutes(app: Express): void {
               language: templateLang,
               shape: resolvedShape,
               phoneNumberId,
+              contactId: crmContactId,
               recipient: recipientLog,
+              carouselCardCount: carouselCardMediaNormalized.length,
+              carouselCardMediaUrls: carouselCardMediaNormalized.map((c) => c.mediaUrl),
               responseStatus: result.httpStatus,
               messageId,
               components,
@@ -1774,7 +1830,10 @@ export function registerTemplateRoutes(app: Express): void {
               language: templateLang,
               shape: resolvedShape,
               phoneNumberId,
+              contactId: crmContactId,
               recipient: recipientLog,
+              carouselCardCount: carouselCardMediaNormalized.length,
+              carouselCardMediaUrls: carouselCardMediaNormalized.map((c) => c.mediaUrl),
               responseStatus,
               metaError: metaErrorRaw,
               metaErrorCode: metaErr?.metaErrorCode,
@@ -1783,6 +1842,118 @@ export function registerTemplateRoutes(app: Express): void {
             })}`,
             metaErr
           );
+
+          if (crmContactId) {
+            try {
+              const { conversationId } = await ensureWhatsAppConversationForContact(
+                req.user.id,
+                crmContactId
+              );
+              const displaySource =
+                metaSendPath === "library_full" ? libraryEffectiveTemplate : template;
+              const resolvedHeaderMediaUrl = resolveLibraryHeaderMediaDisplayUrl(
+                displaySource,
+                variableValues,
+                optionalHeaderMediaUrl ?? null
+              );
+              const displayContent = buildOutboundTemplateDisplayContent(
+                {
+                  name: displaySource.name,
+                  bodyText: displaySource.bodyText,
+                  headerType: displaySource.headerType,
+                  headerContent: displaySource.headerContent,
+                },
+                variableValues
+              );
+              const preview = displayContent.substring(0, 100);
+
+              const headerTypeLower = (displaySource.headerType || "").toLowerCase();
+              const headerMedia =
+                resolvedHeaderMediaUrl && ["image", "video", "document"].includes(headerTypeLower)
+                  ? {
+                      url: resolvedHeaderMediaUrl,
+                      type: headerTypeLower,
+                      originalFilename:
+                        headerTypeLower === "document" ? optionalHeaderMediaFilename ?? null : null,
+                      mimeType: optionalHeaderMediaMimeType ?? null,
+                      sizeBytes:
+                        optionalHeaderMediaSizeBytes !== undefined ? optionalHeaderMediaSizeBytes : null,
+                    }
+                  : null;
+
+              const ttCarousel =
+                (template.templateType || "").toLowerCase() === "carousel" ||
+                (Array.isArray(template.carouselCards) && (template.carouselCards as unknown[]).length > 0);
+              let carouselCardsDisplay: ReturnType<typeof buildCarouselCrmDisplayCardsForPersist> | undefined;
+              if (ttCarousel && Array.isArray(template.carouselCards)) {
+                carouselCardsDisplay = buildCarouselCrmDisplayCardsForPersist({
+                  carouselCards: template.carouselCards as unknown[],
+                  variableValues,
+                  carouselCardMedia:
+                    carouselCardMediaNormalized.length > 0 ? carouselCardMediaNormalized : undefined,
+                });
+              }
+
+              const templateVariablesPayload = {
+                ...normalizeTemplateVariableMap(variableValues),
+                templateLanguage: templateLang,
+                templateName: template.name,
+                channel: "whatsapp",
+                provider: "meta",
+                headerType: displaySource.headerType ?? null,
+                headerMediaUrl: resolvedHeaderMediaUrl,
+                ...(headerMedia ? { headerMedia } : {}),
+                ...(optionalHeaderMediaFilename &&
+                (displaySource.headerType || "").toLowerCase() === "document"
+                  ? { headerDocumentFilename: optionalHeaderMediaFilename }
+                  : {}),
+                ...(carouselCardsDisplay && carouselCardsDisplay.length > 0
+                  ? { templateType: "carousel", carouselCardsDisplay }
+                  : {}),
+              };
+
+              const mediaMeta =
+                resolvedHeaderMediaUrl && headerTypeToMessageMediaType(displaySource.headerType);
+
+              await storage.createMessage({
+                conversationId,
+                contactId: crmContactId,
+                userId: req.user.id,
+                direction: "outbound",
+                content: displayContent,
+                contentType: "template",
+                templateId: template.id,
+                templateVariables: templateVariablesPayload as any,
+                ...(resolvedHeaderMediaUrl
+                  ? {
+                      mediaUrl: resolvedHeaderMediaUrl,
+                      ...(mediaMeta ? { mediaType: mediaMeta } : {}),
+                    }
+                  : {}),
+                status: "failed",
+                externalMessageId: null,
+                errorMessage: metaErrorOut,
+                errorCode: metaErr?.metaErrorCode != null ? String(metaErr.metaErrorCode) : undefined,
+                sentAt: new Date(),
+              });
+
+              await storage.updateConversation(conversationId, {
+                lastMessageAt: new Date(),
+                lastMessagePreview: preview,
+                lastMessageDirection: "outbound",
+              });
+            } catch (persistFail: unknown) {
+              console.error(
+                `[WA_TEMPLATE_SEND_FAILED_PERSIST] ${JSON.stringify({
+                  contactId: crmContactId,
+                  templateName: template.name,
+                  error: persistFail instanceof Error ? persistFail.message : String(persistFail),
+                })}`,
+                persistFail
+              );
+            }
+          }
+
           return res.status(responseStatus >= 400 && responseStatus < 600 ? responseStatus : 500).json({
             error: metaErrorOut,
             metaCode: metaErr?.metaErrorCode,
@@ -1996,6 +2167,27 @@ export function registerTemplateRoutes(app: Express): void {
               persistedMessageId: persisted.id,
             })}`
           );
+
+          if (carouselCardMediaNormalized.length > 0) {
+            try {
+              await storage.upsertTemplateCarouselMediaDefaults(
+                req.user.id,
+                template.id,
+                runtimeCarouselRowsToDefaultMediaMap(carouselCardMediaNormalized) as unknown as Record<
+                  string,
+                  unknown
+                >
+              );
+            } catch (carouselDefErr: unknown) {
+              console.warn(
+                `[WA_TEMPLATE_SEND_CAROUSEL_DEFAULTS] ${JSON.stringify({
+                  phase: "error",
+                  templateId: template.id,
+                  error: carouselDefErr instanceof Error ? carouselDefErr.message : String(carouselDefErr),
+                })}`
+              );
+            }
+          }
         } catch (persistErr: any) {
           console.error(
             `[WA_TEMPLATE_SEND_PERSIST] ${JSON.stringify({

@@ -12,12 +12,15 @@ type Props = {
   imageCardIndices: number[];
   mediaByIndex: Record<number, CarouselCardMediaEntry>;
   onMediaByIndexChange: (next: Record<number, CarouselCardMediaEntry>) => void;
+  /** True when slides were prefilled from last-sent defaults (user can replace/remove). */
+  savedDefaultsActive?: boolean;
 };
 
 export function TemplateSendCarouselMediaControls({
   imageCardIndices,
   mediaByIndex,
   onMediaByIndexChange,
+  savedDefaultsActive = false,
 }: Props) {
   const { toast } = useToast();
   const [uploadingIndex, setUploadingIndex] = useState<number | null>(null);
@@ -102,6 +105,12 @@ export function TemplateSendCarouselMediaControls({
           Upload one image per slide that needs a runtime image header. Carousel sending requires media for each
           card.
         </p>
+        {savedDefaultsActive ? (
+          <p className="text-[11px] leading-snug text-amber-900/90">
+            Using your last-sent images as defaults — use Replace or Remove on any slide before sending if you need
+            different media.
+          </p>
+        ) : null}
       </div>
       <div className="space-y-3">
         {imageCardIndices.map((cardIndex) => {

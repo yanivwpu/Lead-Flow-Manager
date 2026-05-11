@@ -5,6 +5,8 @@ import {
   friendlyDocumentFilenameForTemplateSend,
   getInboxTemplateSendBlockReason,
   looksLikeOpaqueStorageFilename,
+  carouselDefaultMediaUrlsForLivePreview,
+  type TemplateCarouselDefaultMediaMap,
 } from "@shared/metaTemplateSend";
 import { waUploadFileSizeCheck, waUploadTooLargeMessage } from "@shared/whatsappMediaLimits";
 import { Link, useRoute, useLocation } from "wouter";
@@ -146,6 +148,8 @@ interface Message {
   deliveryFailureKind?: "meta_reply_window" | "media_validation";
   /** User-facing line for `media_validation` (shown in bubble only, no toast). */
   deliveryFailureInline?: string;
+  errorMessage?: string | null;
+  errorCode?: string | null;
 }
 
 /** Prefer direct <img src> for permanent URLs (R2, app uploads); never use expiring provider CDNs. */
@@ -231,6 +235,7 @@ interface MessageTemplate {
   carouselCards?: unknown[] | null;
   buttons?: unknown[] | null;
   twilioSid?: string | null;
+  carouselDefaultMedia?: TemplateCarouselDefaultMediaMap | null;
 }
 
 const CHANNEL_CONFIG: Record<string, { icon: any; color: string; label: string }> = {
@@ -2084,6 +2089,28 @@ export function UnifiedInbox() {
                                 ? lang.replace(/-/g, "_").toUpperCase()
                                 : null;
 
+                              if (
+                                isOut &&
+                                msg.status === "failed" &&
+                                typeof msg.errorMessage === "string" &&
+                                msg.errorMessage.trim()
+                              ) {
+                                return (
+                                  <div className="space-y-1.5 rounded-xl border border-rose-200/90 bg-rose-50/50 px-3 py-2 leading-snug">
+                                    <p className="text-[10px] font-semibold uppercase tracking-wide text-rose-900/85">
+                                      Template not sent
+                                    </p>
+                                    <p className="text-sm text-rose-950 whitespace-pre-wrap">
+                                      {msg.errorMessage.trim()}
+                                    </p>
+                                    <p className="text-xs font-semibold text-gray-900">{tmplName || "Template"}</p>
+                                    {langBadge ? (
+                                      <p className="text-[10px] text-gray-500">{langBadge}</p>
+                                    ) : null}
+                                  </div>
+                                );
+                              }
+
                               const crmCarouselDisplay = tv?.carouselCardsDisplay;
                               if (Array.isArray(crmCarouselDisplay) && crmCarouselDisplay.length > 0) {
                                 const carouselForPreview = crmCarouselDisplay.map((row: unknown) => {
@@ -2131,6 +2158,7 @@ export function UnifiedInbox() {
                                         carouselCards: carouselForPreview,
                                       }}
                                       livePreview={{ bodyText: bodyPart || undefined }}
+                                      carouselStripScale="compact"
                                       className="min-w-0"
                                     />
                                     <div className="flex flex-wrap items-center gap-x-2 gap-y-1 pt-0.5">
@@ -2843,6 +2871,16 @@ export function UnifiedInbox() {
                 key={inboxPreviewTemplate.id}
                 template={inboxPreviewTemplate}
                 density="comfortable"
+                livePreview={{
+                  carouselCardMediaUrls: carouselDefaultMediaUrlsForLivePreview(
+                    inboxPreviewTemplate.carouselDefaultMedia ?? undefined
+                  ),
+                }}
+                savedCarouselDefaultsHint={
+                  !!carouselDefaultMediaUrlsForLivePreview(
+                    inboxPreviewTemplate.carouselDefaultMedia ?? undefined
+                  )
+                }
               />
               <p className="mt-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-xs leading-relaxed text-gray-600">
                 {INBOX_ADVANCED_PREVIEW_MODAL_NOTE}

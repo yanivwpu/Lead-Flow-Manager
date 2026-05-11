@@ -858,6 +858,8 @@ export function parseMetaStatusWebhook(body: any): {
   recipientId: string;
   errorCode?: number;
   errorTitle?: string;
+  /** Meta `errors[0].message` when present */
+  errorDetail?: string;
 } | null {
   try {
     const entry = body.entry?.[0] as MetaWebhookEntry;
@@ -869,6 +871,7 @@ export function parseMetaStatusWebhook(body: any): {
     }
 
     const status = value.statuses[0];
+    const err0 = status.errors?.[0] as { code?: number; title?: string; message?: string } | undefined;
 
     return {
       phoneNumberId: value.metadata.phone_number_id,
@@ -876,8 +879,9 @@ export function parseMetaStatusWebhook(body: any): {
       status: status.status,
       timestamp: status.timestamp,
       recipientId: status.recipient_id,
-      errorCode: status.errors?.[0]?.code,
-      errorTitle: status.errors?.[0]?.title,
+      errorCode: err0?.code,
+      errorTitle: err0?.title,
+      errorDetail: typeof err0?.message === "string" && err0.message.trim() ? err0.message.trim() : undefined,
     };
   } catch (error) {
     console.error("Error parsing Meta status webhook:", error);

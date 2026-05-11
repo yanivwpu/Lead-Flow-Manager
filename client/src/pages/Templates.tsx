@@ -59,7 +59,10 @@ import {
   normalizeTemplateVariableMap,
   resolveLibraryHeaderMediaDisplayUrl,
   substituteTemplateVariablesForDisplay,
+  carouselDefaultMediaUrlsForLivePreview,
+  carouselDefaultMediaToSendDialogState,
   type CarouselCardRuntimeMedia,
+  type TemplateCarouselDefaultMediaMap,
 } from "@shared/metaTemplateSend";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -92,6 +95,8 @@ interface MessageTemplate {
   variables: string[];
   lastSyncedAt: string;
   createdAt: string;
+  /** Persisted last-used carousel card media (https URLs) for previews + send prefill. */
+  carouselDefaultMedia?: TemplateCarouselDefaultMediaMap | null;
 }
 
 interface RetargetableChat {
@@ -112,6 +117,15 @@ interface RetargetableChat {
   lastTemplateName: string | null;
   lastTemplateStatus: string | null;
   replyWindowReopenedAt: string | null;
+}
+
+function libraryCarouselDefaultPreviewUrls(template: MessageTemplate): Record<number, string> | undefined {
+  return carouselDefaultMediaUrlsForLivePreview(template.carouselDefaultMedia ?? undefined);
+}
+
+function templateHasCarouselDefaultPreviews(template: MessageTemplate): boolean {
+  const u = libraryCarouselDefaultPreviewUrls(template);
+  return !!u && Object.keys(u).length > 0;
 }
 
 const RE_ENGAGEMENT_CHANNEL_BADGE: Record<
@@ -433,6 +447,8 @@ export function Templates() {
   const [carouselCardMediaByIndex, setCarouselCardMediaByIndex] = useState<
     Record<number, { url: string; originalFilename?: string | null }>
   >({});
+  /** Send-modal preview: show “saved defaults” hint after prefill from `carouselDefaultMedia`. */
+  const [carouselSavedDefaultsHint, setCarouselSavedDefaultsHint] = useState(false);
   const [headerMediaBroken, setHeaderMediaBroken] = useState(false);
 
   const [savedCampaignModalId, setSavedCampaignModalId] = useState<string | null>(null);
@@ -887,6 +903,7 @@ export function Templates() {
       queryClient.invalidateQueries({ queryKey: ["/api/templates/retargetable-chats"] });
       queryClient.invalidateQueries({ queryKey: ["/api/templates/recent-media"] });
       queryClient.invalidateQueries({ queryKey: ["/api/templates/template-send-defaults"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/templates"] });
       setSendInlineError(null);
       setSendDialogOpen(false);
       setSelectedTemplate(null);
@@ -896,6 +913,7 @@ export function Templates() {
       setOptionalHeaderDocumentFilename(null);
       setOptionalHeaderMediaMeta(null);
       setCarouselCardMediaByIndex({});
+      setCarouselSavedDefaultsHint(false);
       toast({
         title: "Template sent",
         description: data?.message || "Template message sent successfully.",
@@ -932,7 +950,9 @@ export function Templates() {
     setOptionalHeaderMediaUrl(null);
     setOptionalHeaderDocumentFilename(null);
     setOptionalHeaderMediaMeta(null);
-    setCarouselCardMediaByIndex({});
+    const carouselPrefill = carouselDefaultMediaToSendDialogState(template.carouselDefaultMedia ?? undefined);
+    setCarouselCardMediaByIndex(carouselPrefill);
+    setCarouselSavedDefaultsHint(Object.keys(carouselPrefill).length > 0);
     setHeaderMediaBroken(false);
     suppressTemplatePrefillRef.current = false;
     pendingTemplatePrefillRef.current = true;
@@ -1371,6 +1391,10 @@ export function Templates() {
                               template={template}
                               density="compact"
                               variant="libraryCard"
+                              livePreview={{
+                                carouselCardMediaUrls: libraryCarouselDefaultPreviewUrls(template),
+                              }}
+                              savedCarouselDefaultsHint={templateHasCarouselDefaultPreviews(template)}
                             />
                           </div>
                         ) : (
@@ -1790,6 +1814,7 @@ export function Templates() {
               setOptionalHeaderDocumentFilename(null);
               setOptionalHeaderMediaMeta(null);
               setCarouselCardMediaByIndex({});
+              setCarouselSavedDefaultsHint(false);
               setHeaderMediaBroken(false);
               suppressTemplatePrefillRef.current = false;
               pendingTemplatePrefillRef.current = false;
@@ -1816,6 +1841,7 @@ export function Templates() {
                       density="comfortable"
                       livePreview={templateLivePreview}
                       onHeaderMediaError={() => setHeaderMediaBroken(true)}
+                      savedCarouselDefaultsHint={carouselSavedDefaultsHint}
                     />
                     {previewUnresolvedTokens.length > 0 ? (
                       <div className="mt-3 flex flex-wrap gap-1.5 items-center border-t border-gray-100 pt-3">
@@ -1873,7 +1899,11 @@ export function Templates() {
                     <TemplateSendCarouselMediaControls
                       imageCardIndices={carouselImageCardIndices}
                       mediaByIndex={carouselCardMediaByIndex}
-                      onMediaByIndexChange={setCarouselCardMediaByIndex}
+                      onMediaByIndexChange={(next) => {
+                        setCarouselSavedDefaultsHint(false);
+                        setCarouselCardMediaByIndex(next);
+                      }}
+                      savedDefaultsActive={carouselSavedDefaultsHint}
                     />
                   ) : null}
 
@@ -2137,6 +2167,10 @@ export function Templates() {
                     key={libraryModalTemplate.id}
                     template={libraryModalTemplate}
                     density="comfortable"
+                    livePreview={{
+                      carouselCardMediaUrls: libraryCarouselDefaultPreviewUrls(libraryModalTemplate),
+                    }}
+                    savedCarouselDefaultsHint={templateHasCarouselDefaultPreviews(libraryModalTemplate)}
                   />
                 </div>
                 {libraryQuickSendMeta(libraryModalTemplate).blocked ? (

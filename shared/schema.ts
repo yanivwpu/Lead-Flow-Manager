@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, timestamp, boolean, jsonb, numeric, json, index } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, timestamp, boolean, jsonb, numeric, json, index, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -420,6 +420,25 @@ export const messageTemplates = pgTable("message_templates", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+/**
+ * Last successful carousel card media (https URLs) chosen when sending a library template.
+ * Keyed by internal `message_templates.id` (name/language are implicit on that row).
+ */
+export const templateCarouselMediaDefaults = pgTable(
+  "template_carousel_media_defaults",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    templateId: varchar("template_id").notNull().references(() => messageTemplates.id, { onDelete: "cascade" }),
+    /** `{ "0": { "mediaUrl": "https://...", "originalFilename": "...", "headerFormat": "image" } }` */
+    cardMedia: jsonb("card_media").notNull().default(sql`'{}'::jsonb`),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (t) => ({
+    userTemplateUq: uniqueIndex("template_carousel_media_defaults_user_template_uq").on(t.userId, t.templateId),
+  })
+);
+
 // Template send history for retargeting analytics
 export const templateSends = pgTable("template_sends", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -701,6 +720,8 @@ export const insertChatbotSessionSchema = createInsertSchema(chatbotSessions).om
 
 export type InsertMessageTemplate = z.infer<typeof insertMessageTemplateSchema>;
 export type MessageTemplate = typeof messageTemplates.$inferSelect;
+export type TemplateCarouselMediaDefault = typeof templateCarouselMediaDefaults.$inferSelect;
+export type InsertTemplateCarouselMediaDefault = typeof templateCarouselMediaDefaults.$inferInsert;
 export type InsertTemplateSend = z.infer<typeof insertTemplateSendSchema>;
 export type TemplateSend = typeof templateSends.$inferSelect;
 export type InsertDripCampaign = z.infer<typeof insertDripCampaignSchema>;

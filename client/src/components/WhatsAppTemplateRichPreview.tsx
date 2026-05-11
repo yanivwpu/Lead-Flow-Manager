@@ -93,6 +93,10 @@ export function WhatsAppTemplateRichPreview({
   variant = "default",
   livePreview,
   onHeaderMediaError,
+  /** Smaller carousel thumbnail strip (e.g. inbox CRM bubble). Main card media unchanged. */
+  carouselStripScale = "default",
+  /** When previews use persisted default card images, remind users they can replace before send. */
+  savedCarouselDefaultsHint = false,
 }: {
   template: WhatsAppRichPreviewTemplate;
   className?: string;
@@ -106,6 +110,8 @@ export function WhatsAppTemplateRichPreview({
   livePreview?: WhatsAppTemplateLivePreview | null;
   /** Fires when image/video/document URL fails to load (broken link or blocked asset). */
   onHeaderMediaError?: () => void;
+  carouselStripScale?: "default" | "compact";
+  savedCarouselDefaultsHint?: boolean;
 }) {
   const ht = (template.headerType || "").toLowerCase();
   const hc = (template.headerContent || "").trim();
@@ -130,6 +136,7 @@ export function WhatsAppTemplateRichPreview({
   const pad = density === "compact" ? "p-2.5" : "p-4";
   const mediaRounded = "rounded-xl border border-gray-200/80 bg-gradient-to-b from-gray-50 to-white overflow-hidden";
   const isLibraryCard = variant === "libraryCard";
+  const stripCompact = carouselStripScale === "compact";
 
   const liveMedia = (livePreview?.headerMediaUrl || "").trim();
   const displayMediaUrl =
@@ -314,6 +321,12 @@ export function WhatsAppTemplateRichPreview({
             <p className="text-[11px] text-gray-500">
               Card {carouselIndex + 1} of {cards.length}
             </p>
+            {savedCarouselDefaultsHint ? (
+              <p className="text-[10px] leading-snug text-amber-900/85">
+                Preview uses saved default card images. Replace or remove any slide before sending if you need a
+                different asset.
+              </p>
+            ) : null}
           </div>
         </div>
       </div>

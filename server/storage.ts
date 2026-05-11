@@ -9,7 +9,7 @@ import {
   type Webhook, type InsertWebhook,
   type WebhookDelivery, type InsertWebhookDelivery,
   type Integration, type InsertIntegration,
-  type MessageTemplate, type InsertMessageTemplate,
+  type MessageTemplate, type InsertMessageTemplate, type TemplateCarouselMediaDefault,
   type TemplateSend, type InsertTemplateSend,
   type DripCampaign, type InsertDripCampaign,
   type DripStep, type InsertDripStep,
@@ -55,7 +55,7 @@ import { computeConversationReplyWindowStatus } from "@shared/conversationReplyW
 import type { RetargetEligibleContactRow } from "@shared/retargetEligibleContact";
 import { deriveRetargetReEngagementApiFields } from "@shared/reEngagement";
 import { db } from "../drizzle/db";
-import { users, chats, registeredPhones, messageUsage, conversationWindows, teamMembers, workflows, workflowExecutions, recurringReminders, webhooks, webhookDeliveries, integrations, messageTemplates, templateSends, dripCampaigns, dripSteps, dripEnrollments, dripSends, chatbotFlows, chatbotSessions, salespeople, demoBookings, salesConversions, adminSettings, contacts, conversations, messages, activityEvents, channelSettings, supportTickets, partners, commissions, agreementAcceptances, contactNotes, appointments, flowJobs, campaignEnrollments, type InsertConversationWindow, type ConversationWindow } from "@shared/schema";
+import { users, chats, registeredPhones, messageUsage, conversationWindows, teamMembers, workflows, workflowExecutions, recurringReminders, webhooks, webhookDeliveries, integrations, messageTemplates, templateCarouselMediaDefaults, templateSends, dripCampaigns, dripSteps, dripEnrollments, dripSends, chatbotFlows, chatbotSessions, salespeople, demoBookings, salesConversions, adminSettings, contacts, conversations, messages, activityEvents, channelSettings, supportTickets, partners, commissions, agreementAcceptances, contactNotes, appointments, flowJobs, campaignEnrollments, type InsertConversationWindow, type ConversationWindow } from "@shared/schema";
 import { eq, and, lte, sql, isNotNull, isNull, asc, desc, gte, sum, gt, or, like, ilike, ne, inArray, notInArray } from "drizzle-orm";
 
 /** Columns always present on legacy Neon `public.users`; avoids Drizzle hydrating rows when DB lacks newer schema columns (42703). */
@@ -277,6 +277,12 @@ export interface IStorage {
   createMessageTemplate(template: InsertMessageTemplate): Promise<MessageTemplate>;
   updateMessageTemplate(id: string, updates: Partial<MessageTemplate>): Promise<MessageTemplate | undefined>;
   deleteMessageTemplate(id: string): Promise<void>;
+  listTemplateCarouselMediaDefaultsByUser(userId: string): Promise<TemplateCarouselMediaDefault[]>;
+  upsertTemplateCarouselMediaDefaults(
+    userId: string,
+    templateId: string,
+    cardMedia: Record<string, unknown>
+  ): Promise<void>;
   
   // Template send methods
   createTemplateSend(send: InsertTemplateSend): Promise<TemplateSend>;
@@ -1268,6 +1274,40 @@ export class DbStorage implements IStorage {
 
   async deleteMessageTemplate(id: string): Promise<void> {
     await db.delete(messageTemplates).where(eq(messageTemplates.id, id));
+  }
+
+  async listTemplateCarouselMediaDefaultsByUser(userId: string): Promise<TemplateCarouselMediaDefault[]> {
+    return await db
+      .select()
+      .from(templateCarouselMediaDefaults)
+      .where(eq(templateCarouselMediaDefaults.userId, userId));
+  }
+
+  async upsertTemplateCarouselMediaDefaults(
+    userId: string,
+    templateId: string,
+    cardMedia: Record<string, unknown>
+  ): Promise<void> {
+    const row = await this.getMessageTemplate(templateId);
+    if (!row || row.userId !== userId) {
+      throw new Error("template_not_found_or_forbidden");
+    }
+    const now = new Date();
+    await db
+      .insert(templateCarouselMediaDefaults)
+      .values({
+        userId,
+        templateId,
+        cardMedia,
+        updatedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: [templateCarouselMediaDefaults.userId, templateCarouselMediaDefaults.templateId],
+        set: {
+          cardMedia,
+          updatedAt: now,
+        },
+      });
   }
 
   // Template send methods

@@ -443,6 +443,96 @@ export type CarouselCardRuntimeMedia = {
   originalFilename?: string | null;
 };
 
+/** Stored in `template_carousel_media_defaults.card_media` (keys: `"0"`, `"1"`, …). */
+export type TemplateCarouselDefaultCardMedia = {
+  mediaUrl: string;
+  originalFilename?: string | null;
+  headerFormat?: string | null;
+};
+
+export type TemplateCarouselDefaultMediaMap = Record<string, TemplateCarouselDefaultCardMedia>;
+
+export function runtimeCarouselRowsToDefaultMediaMap(
+  rows: CarouselCardRuntimeMedia[]
+): TemplateCarouselDefaultMediaMap {
+  const out: TemplateCarouselDefaultMediaMap = {};
+  for (const r of rows) {
+    if (!Number.isInteger(r.cardIndex) || r.cardIndex < 0) continue;
+    const u = (r.mediaUrl || "").trim();
+    if (!/^https?:\/\//i.test(u)) continue;
+    out[String(r.cardIndex)] = {
+      mediaUrl: u,
+      originalFilename: r.originalFilename ?? null,
+      headerFormat: "image",
+    };
+  }
+  return out;
+}
+
+export function carouselDefaultMediaUrlsForLivePreview(
+  defaults: TemplateCarouselDefaultMediaMap | null | undefined
+): Record<number, string> | undefined {
+  if (!defaults || typeof defaults !== "object") return undefined;
+  const out: Record<number, string> = {};
+  for (const [k, v] of Object.entries(defaults)) {
+    const idx = Number(k);
+    if (!Number.isInteger(idx) || idx < 0 || !v || typeof v !== "object") continue;
+    const url = typeof (v as TemplateCarouselDefaultCardMedia).mediaUrl === "string"
+      ? (v as TemplateCarouselDefaultCardMedia).mediaUrl.trim()
+      : "";
+    if (url && /^https?:\/\//i.test(url)) out[idx] = url;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+export function carouselDefaultMediaToSendDialogState(
+  defaults: TemplateCarouselDefaultMediaMap | null | undefined
+): Record<number, { url: string; originalFilename?: string | null }> {
+  if (!defaults || typeof defaults !== "object") return {};
+  const out: Record<number, { url: string; originalFilename?: string | null }> = {};
+  for (const [k, v] of Object.entries(defaults)) {
+    const idx = Number(k);
+    if (!Number.isInteger(idx) || idx < 0 || !v || typeof v !== "object") continue;
+    const url = typeof (v as TemplateCarouselDefaultCardMedia).mediaUrl === "string"
+      ? (v as TemplateCarouselDefaultCardMedia).mediaUrl.trim()
+      : "";
+    if (!url || !/^https?:\/\//i.test(url)) continue;
+    out[idx] = {
+      url,
+      originalFilename:
+        typeof (v as TemplateCarouselDefaultCardMedia).originalFilename === "string"
+          ? (v as TemplateCarouselDefaultCardMedia).originalFilename
+          : (v as TemplateCarouselDefaultCardMedia).originalFilename ?? null,
+    };
+  }
+  return out;
+}
+
+/** Accepts API/DB JSON and returns a safe map for merging onto template rows. */
+export function coerceTemplateCarouselDefaultMediaMap(raw: unknown): TemplateCarouselDefaultMediaMap {
+  if (!raw || typeof raw !== "object") return {};
+  const out: TemplateCarouselDefaultMediaMap = {};
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (!/^\d+$/.test(k)) continue;
+    if (!v || typeof v !== "object") continue;
+    const rec = v as Record<string, unknown>;
+    const mediaUrl = typeof rec.mediaUrl === "string" ? rec.mediaUrl.trim() : "";
+    if (!mediaUrl || !/^https?:\/\//i.test(mediaUrl)) continue;
+    out[k] = {
+      mediaUrl,
+      originalFilename:
+        typeof rec.originalFilename === "string" && rec.originalFilename.trim()
+          ? rec.originalFilename.trim().slice(0, 240)
+          : null,
+      headerFormat:
+        typeof rec.headerFormat === "string" && rec.headerFormat.trim()
+          ? rec.headerFormat.trim().toLowerCase()
+          : "image",
+    };
+  }
+  return out;
+}
+
 /** Persisted on outbound template messages for CRM carousel bubble rendering. */
 export type CarouselCrmDisplayCard = {
   cardIndex: number;

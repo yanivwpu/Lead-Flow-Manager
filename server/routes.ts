@@ -23,7 +23,15 @@ import {
 } from "./whatsappService";
 import { storage } from "./storage";
 import { devLog } from "./devLog";
-import { insertChatSchema, insertRegisteredPhoneSchema, insertSalespersonSchema, insertDemoBookingSchema, PLAN_LIMITS, type SubscriptionPlan } from "@shared/schema";
+import {
+  insertChatSchema,
+  insertRegisteredPhoneSchema,
+  insertSalespersonSchema,
+  insertDemoBookingSchema,
+  PLAN_LIMITS,
+  type Message,
+  type SubscriptionPlan,
+} from "@shared/schema";
 import { isConversationHandoffActive } from "@shared/handoffActivity";
 import {
   WA_OUTBOUND_UPLOAD_MULTER_MAX_BYTES,
@@ -3080,6 +3088,79 @@ export async function registerRoutes(
 
       if (statusUpdate) {
         devLog("Meta status update:", statusUpdate);
+        const incomingRaw = String(statusUpdate.status || "").toLowerCase();
+        const allowed = new Set(["sent", "delivered", "read", "failed"]);
+        const incoming = allowed.has(incomingRaw)
+          ? (incomingRaw as "sent" | "delivered" | "read" | "failed")
+          : null;
+        console.log(
+          `[Meta WA Status] ${JSON.stringify({
+            messageId: statusUpdate.messageId,
+            status: statusUpdate.status,
+            recipientId: statusUpdate.recipientId,
+            phoneNumberId: statusUpdate.phoneNumberId,
+            errorCode: statusUpdate.errorCode,
+            errorTitle: statusUpdate.errorTitle,
+            errorDetail: statusUpdate.errorDetail,
+          })}`
+        );
+        if (incoming) {
+          void (async () => {
+            try {
+              const owner = await findUserByMetaPhoneNumberId(statusUpdate.phoneNumberId);
+              if (!owner) {
+                console.warn(
+                  `[Meta WA Status] No user for phone_number_id=${statusUpdate.phoneNumberId}`
+                );
+                return;
+              }
+              const row = await storage.getMessageByExternalId(statusUpdate.messageId);
+              if (!row || row.userId !== owner.id) {
+                console.warn(
+                  `[Meta WA Status] No local message for wamid=${statusUpdate.messageId} (user=${owner.id})`
+                );
+                return;
+              }
+              const tsSec = Number(statusUpdate.timestamp);
+              const ts = Number.isFinite(tsSec) ? new Date(tsSec * 1000) : new Date();
+              const cur = (row.status || "pending").toLowerCase();
+
+              if (incoming === "failed") {
+                const detail = statusUpdate.errorDetail;
+                const parts = [statusUpdate.errorTitle, detail].filter(Boolean) as string[];
+                const errLine = parts.length ? parts.join(" — ") : "Delivery failed";
+                await storage.updateMessage(row.id, {
+                  status: "failed",
+                  errorMessage: errLine,
+                  errorCode: statusUpdate.errorCode != null ? String(statusUpdate.errorCode) : undefined,
+                });
+                return;
+              }
+
+              const patch: Record<string, unknown> = {};
+              if (incoming === "read") {
+                patch.status = "read";
+                patch.readAt = ts;
+              } else if (incoming === "delivered") {
+                if (cur !== "read") {
+                  patch.status = "delivered";
+                  patch.deliveredAt = ts;
+                }
+              } else if (incoming === "sent") {
+                if (cur !== "delivered" && cur !== "read") {
+                  patch.status = "sent";
+                  if (!row.sentAt) patch.sentAt = ts;
+                }
+              }
+
+              if (Object.keys(patch).length > 0) {
+                await storage.updateMessage(row.id, patch as Partial<Message>);
+              }
+            } catch (e) {
+              console.error("[Meta WA Status] persist error", e);
+            }
+          })();
+        }
       }
     } catch (error) {
       console.error("Meta webhook error:", error);
