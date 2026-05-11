@@ -24,6 +24,7 @@ import {
   friendlyMessageForPreflightFailure,
   preflightHttpsMediaUrl,
 } from "../templateSendMediaPreflight";
+import { hostLooksLikeTransientMetaCdn, normalizeTemplatePayloadMediaUrls } from "../templateMediaNormalization";
 import { getUserTwilioClient } from "../userTwilio";
 import { subscriptionService } from "../subscriptionService";
 import { extractPlaceholderKeysFromCampaignMessages } from "@shared/campaignPlaceholders";
@@ -1952,7 +1953,7 @@ export function registerTemplateRoutes(app: Express): void {
             : "(none)";
 
       const variableValues = normalizeTemplateVariableMap(variables || {});
-      const optionalHeaderMediaUrl =
+      let optionalHeaderMediaUrl =
         typeof optionalHeaderMediaBody === "string" ? optionalHeaderMediaBody.trim() : undefined;
       const optionalHeaderMediaFilename =
         typeof optionalHeaderMediaFilenameBody === "string"
@@ -1967,7 +1968,7 @@ export function registerTemplateRoutes(app: Express): void {
         Number.isFinite(optionalHeaderMediaSizeBytesBody)
           ? Math.max(0, Math.floor(optionalHeaderMediaSizeBytesBody))
           : undefined;
-      const libraryEffectiveTemplate =
+      let libraryEffectiveTemplate =
         metaSendPath === "library_full"
           ? effectiveTemplateRowForLibrarySend(template, optionalHeaderMediaUrl ?? null)
           : template;
@@ -2088,9 +2089,13 @@ export function registerTemplateRoutes(app: Express): void {
                 metaError: inboxBlock.reason,
               })}`
             );
-            return res.status(400).json({
-              error: inboxBlock.reason || "This template can't be sent from this shortcut.",
-            });
+            return reply(
+              400,
+              {
+                error: inboxBlock.reason || "This template can't be sent from this shortcut.",
+              },
+              "inbox_quick_send_guard"
+            );
           }
         }
 
@@ -2127,6 +2132,44 @@ export function registerTemplateRoutes(app: Express): void {
         }
 
         components = built.components as any[] | undefined;
+
+        const norm = await normalizeTemplatePayloadMediaUrls({
+          userId: req.user.id,
+          components: components as Record<string, unknown>[] | undefined,
+          carouselMode: resolvedShape === "carousel",
+          templateName: template.name,
+        });
+        if (!norm.ok) {
+          console.warn(`[SEND_ROUTE_EARLY_EXIT] ${sendRouteId} status=400 reason=media_normalize_failed`);
+          return reply(
+            400,
+            { error: norm.errorMessage, errorCode: norm.errorCode },
+            "media_normalize_failed"
+          );
+        }
+
+        const urlRemapMeta = norm.urlMap;
+        if (Object.keys(urlRemapMeta).length > 0) {
+          if (optionalHeaderMediaUrl) {
+            const next = optionalHeaderMediaUrl.trim();
+            const repl = urlRemapMeta[next] ?? urlRemapMeta[next.trim()];
+            if (repl) {
+              optionalHeaderMediaUrl = repl;
+              if (metaSendPath === "library_full") {
+                libraryEffectiveTemplate = effectiveTemplateRowForLibrarySend(
+                  template,
+                  optionalHeaderMediaUrl ?? null
+                );
+              }
+            }
+          }
+          for (let i = 0; i < carouselCardMediaNormalized.length; i++) {
+            const row = carouselCardMediaNormalized[i];
+            const prev = row.mediaUrl.trim();
+            const repl = urlRemapMeta[prev];
+            if (repl) carouselCardMediaNormalized[i] = { ...row, mediaUrl: repl };
+          }
+        }
 
         const componentSummary = Array.isArray(components)
           ? components.map((c: any) => ({
@@ -2657,7 +2700,28 @@ export function registerTemplateRoutes(app: Express): void {
           // Persist header media defaults for single media templates (image/video/document) using the same defaults table.
           // Stored under key `"header"` in `template_carousel_media_defaults.card_media` (no schema change).
           const htLower = (displaySource.headerType || "").toLowerCase();
-          if (resolvedHeaderMediaUrl && ["image", "video", "document"].includes(htLower)) {
+          const headerHostTransient = (() => {
+            if (!resolvedHeaderMediaUrl) return false;
+            try {
+              return hostLooksLikeTransientMetaCdn(new URL(resolvedHeaderMediaUrl).hostname);
+            } catch {
+              return false;
+            }
+          })();
+          if (headerHostTransient) {
+            console.warn(
+              `[WA_TEMPLATE_SEND_HEADER_DEFAULTS] ${JSON.stringify({
+                phase: "skipped_transient_cdn",
+                templateId: template.id,
+                hint: "never_persist_whatsapp_cdn_template_media",
+              })}`
+            );
+          }
+          if (
+            resolvedHeaderMediaUrl &&
+            ["image", "video", "document"].includes(htLower) &&
+            !headerHostTransient
+          ) {
             try {
               const existing = await storage.getTemplateCarouselMediaDefaults(req.user.id, template.id);
               const prev =

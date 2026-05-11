@@ -519,6 +519,11 @@ export function carouselDefaultMediaToSendDialogState(
 }
 
 /** Accepts API/DB JSON and returns a safe map for merging onto template rows. */
+function hostMustNotReuseForTemplateDefaults(hostname: string): boolean {
+  const h = hostname.toLowerCase();
+  return /\.whatsapp\.net$/i.test(h) || /(^|\.)fbcdn\.net$/i.test(h);
+}
+
 export function coerceTemplateCarouselDefaultMediaMap(raw: unknown): TemplateCarouselDefaultMediaMap {
   if (!raw || typeof raw !== "object") return {};
   const out: TemplateCarouselDefaultMediaMap = {};
@@ -529,6 +534,11 @@ export function coerceTemplateCarouselDefaultMediaMap(raw: unknown): TemplateCar
     const rec = v as Record<string, unknown>;
     const mediaUrl = typeof rec.mediaUrl === "string" ? rec.mediaUrl.trim() : "";
     if (!mediaUrl || !/^https?:\/\//i.test(mediaUrl)) continue;
+    try {
+      if (hostMustNotReuseForTemplateDefaults(new URL(mediaUrl).hostname)) continue;
+    } catch {
+      continue;
+    }
     out[k] = {
       mediaUrl,
       originalFilename:

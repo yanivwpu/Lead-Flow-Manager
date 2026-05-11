@@ -28,7 +28,7 @@ const MIME_TO_EXT: Record<string, string> = {
 };
 
 const TRANSIENT_HOST_RE =
-  /fbcdn\.net|facebook\.com|fbsbx\.com|lookaside\.fbsbx\.com|instagram\.com|twilio\.com|graph\.facebook\.com/i;
+  /fbcdn\.net|facebook\.com|fbsbx\.com|lookaside\.fbsbx\.com|instagram\.com|twilio\.com|graph\.facebook\.com|\.whatsapp\.net$/i;
 
 export function isAlreadyCanonicalPermanentUrl(url: string | undefined | null): boolean {
   if (!url || typeof url !== "string") return false;
@@ -340,7 +340,19 @@ export async function uploadOutboundUserMedia(params: {
   originChannel?: string;
 }): Promise<{ mediaUrl: string; mediaStorageKey: string }> {
   const { userId, buffer, contentType, originChannel = "composer-upload" } = params;
-  const ext = extFromMime(contentType, "image");
+  const baseMime = contentType.split(";")[0]?.trim()?.toLowerCase() || "";
+  const category: "image" | "video" | "audio" | "document" = baseMime.startsWith("video/")
+    ? "video"
+    : baseMime.startsWith("audio/")
+      ? "audio"
+      : baseMime === "application/pdf" ||
+          baseMime.includes("msword") ||
+          baseMime.includes("spreadsheet") ||
+          baseMime.includes("wordprocessing") ||
+          baseMime === "application/vnd.ms-excel"
+        ? "document"
+        : "image";
+  const ext = extFromMime(contentType, category);
   const uuid = randomUUID();
   const storageKey = `media/${userId}/${normalizeChannelSegment(originChannel)}/${uuid}${ext}`;
   if (r2Configured()) {
