@@ -1663,13 +1663,42 @@ export function registerTemplateRoutes(app: Express): void {
 
   // Send a template message via the active WhatsApp provider
   app.post("/api/templates/send", async (req, res) => {
+    const sendRouteId = "POST /api/templates/send";
     try {
+      const rawBody = req.body as Record<string, unknown> | undefined;
+      const bodyKeys =
+        rawBody && typeof rawBody === "object" && !Array.isArray(rawBody)
+          ? Object.keys(rawBody)
+          : [];
+      res.setHeader("X-WhatsApp-Template-Send-Handler", "server/routes/templates.ts");
+
+      console.log(
+        `[ROUTE_HIT] ${sendRouteId}`,
+        JSON.stringify({
+          hasUser: !!req.user,
+          userId: req.user?.id ?? null,
+          contentType: req.headers["content-type"] ?? null,
+          bodyKeys,
+          templateId: typeof rawBody?.templateId === "string" ? rawBody.templateId : null,
+          sendSource: typeof rawBody?.sendSource === "string" ? rawBody.sendSource : null,
+          hasChatId: typeof rawBody?.chatId === "string" && !!String(rawBody.chatId).trim(),
+          hasContactId: typeof rawBody?.contactId === "string" && !!String(rawBody.contactId).trim(),
+          carouselCardMediaLen: Array.isArray(rawBody?.carouselCardMedia)
+            ? rawBody.carouselCardMedia.length
+            : null,
+        })
+      );
+
       if (!req.user) {
+        console.warn(`[SEND_ROUTE_EARLY_EXIT] ${sendRouteId} status=401 reason=unauthorized`);
         return res.status(401).json({ error: "Unauthorized" });
       }
 
       const limits = await subscriptionService.getUserLimits(req.user.id);
       if (!(limits as any)?.templatesEnabled) {
+        console.warn(
+          `[SEND_ROUTE_EARLY_EXIT] ${sendRouteId} status=403 reason=templates_disabled userId=${req.user.id}`
+        );
         return res.status(403).json({ error: "Template messaging is a Pro feature" });
       }
 
@@ -1728,11 +1757,17 @@ export function registerTemplateRoutes(app: Express): void {
             ? "quick_send"
             : "quick_send";
       if (!templateId || (!chatId && !contactId)) {
+        console.warn(
+          `[SEND_ROUTE_EARLY_EXIT] ${sendRouteId} status=400 reason=missing_template_or_recipient userId=${req.user.id} templateId=${templateId ?? "null"}`
+        );
         return res.status(400).json({ error: "Template ID and either Chat ID or Contact ID are required" });
       }
 
       const template = await storage.getMessageTemplate(templateId);
       if (!template || template.userId !== req.user.id) {
+        console.warn(
+          `[SEND_ROUTE_EARLY_EXIT] ${sendRouteId} status=404 reason=template_not_found userId=${req.user.id} templateId=${templateId}`
+        );
         return res.status(404).json({ error: "Template not found" });
       }
 
@@ -1746,10 +1781,16 @@ export function registerTemplateRoutes(app: Express): void {
       if (contactId) {
         const contact = await storage.getContact(contactId);
         if (!contact || contact.userId !== req.user.id) {
+          console.warn(
+            `[SEND_ROUTE_EARLY_EXIT] ${sendRouteId} status=404 reason=contact_not_found userId=${req.user.id} contactId=${contactId}`
+          );
           return res.status(404).json({ error: "Contact not found" });
         }
         const phone = contact.whatsappId || contact.phone;
         if (!phone) {
+          console.warn(
+            `[SEND_ROUTE_EARLY_EXIT] ${sendRouteId} status=400 reason=contact_no_whatsapp userId=${req.user.id} contactId=${contactId}`
+          );
           return res.status(400).json({ error: "Contact does not have a WhatsApp number" });
         }
         recipientPhone = phone;
@@ -1758,9 +1799,15 @@ export function registerTemplateRoutes(app: Express): void {
       } else {
         const chat = await storage.getChat(chatId);
         if (!chat || chat.userId !== req.user.id) {
+          console.warn(
+            `[SEND_ROUTE_EARLY_EXIT] ${sendRouteId} status=404 reason=chat_not_found userId=${req.user.id} chatId=${chatId}`
+          );
           return res.status(404).json({ error: "Chat not found" });
         }
         if (!chat.whatsappPhone) {
+          console.warn(
+            `[SEND_ROUTE_EARLY_EXIT] ${sendRouteId} status=400 reason=chat_no_whatsapp userId=${req.user.id} chatId=${chatId}`
+          );
           return res.status(400).json({ error: "Chat does not have a WhatsApp number" });
         }
         recipientPhone = chat.whatsappPhone;
@@ -1800,6 +1847,9 @@ export function registerTemplateRoutes(app: Express): void {
       // Full session row — auth-core `getUser` omits whatsappProvider / Meta fields (defaults wrongly to Twilio).
       const user = await storage.getUserForSession(req.user.id);
       if (!user) {
+        console.warn(
+          `[SEND_ROUTE_EARLY_EXIT] ${sendRouteId} status=404 reason=user_session_not_found userId=${req.user.id}`
+        );
         return res.status(404).json({ error: "User not found" });
       }
 
@@ -1880,6 +1930,9 @@ export function registerTemplateRoutes(app: Express): void {
 
       if (resolvedProvider === "none") {
         console.warn(
+          `[SEND_ROUTE_EARLY_EXIT] ${sendRouteId} status=400 reason=no_whatsapp_provider userId=${req.user.id}`
+        );
+        console.warn(
           `[WA_TEMPLATE_SEND] ${JSON.stringify({
             phase: "error",
             provider: resolvedProvider,
@@ -1896,6 +1949,9 @@ export function registerTemplateRoutes(app: Express): void {
 
       if (resolvedProvider === "meta") {
         if (!user.metaConnected || !phoneNumberId) {
+          console.warn(
+            `[SEND_ROUTE_EARLY_EXIT] ${sendRouteId} status=400 reason=meta_not_connected userId=${req.user.id} metaConnected=${!!user.metaConnected} hasPhoneNumberId=${!!phoneNumberId}`
+          );
           console.warn(
             `[WA_TEMPLATE_SEND] ${JSON.stringify({
               phase: "error",
@@ -1940,6 +1996,9 @@ export function registerTemplateRoutes(app: Express): void {
           );
           if (inboxBlock.blocked) {
             console.warn(
+              `[SEND_ROUTE_EARLY_EXIT] ${sendRouteId} status=400 reason=inbox_quick_send_guard metaSendPath=quick_send`
+            );
+            console.warn(
               `[WA_TEMPLATE_SEND] ${JSON.stringify({
                 phase: "blocked_quick_send",
                 sendSource: sendSourceTag,
@@ -1970,6 +2029,9 @@ export function registerTemplateRoutes(app: Express): void {
           "shape" in built && built.shape ? built.shape : templateShape;
 
         if (built.error) {
+          console.warn(
+            `[SEND_ROUTE_EARLY_EXIT] ${sendRouteId} status=400 reason=meta_components_build_error metaSendPath=${metaSendPath}`
+          );
           console.warn(
             `[WA_TEMPLATE_SEND] ${JSON.stringify({
               phase: "build_error",
@@ -2076,6 +2138,9 @@ export function registerTemplateRoutes(app: Express): void {
                   );
                 }
               }
+              console.warn(
+                `[SEND_ROUTE_EARLY_EXIT] ${sendRouteId} status=400 reason=media_url_preflight_failed errorCode=${errorCode}`
+              );
               return res.status(400).json({
                 error: userMessage,
                 errorCode,
@@ -2500,6 +2565,11 @@ export function registerTemplateRoutes(app: Express): void {
       });
     } catch (error: any) {
       console.error(
+        `[TEMPLATE_ROUTE_FATAL] POST /api/templates/send`,
+        error?.message || error,
+        error?.stack
+      );
+      console.error(
         `[WA_TEMPLATE_SEND] ${JSON.stringify({
           phase: "unexpected_error",
           metaError: error?.message || "unknown",
@@ -2509,4 +2579,8 @@ export function registerTemplateRoutes(app: Express): void {
       res.status(500).json({ error: error.message || "Failed to send template" });
     }
   });
+
+  console.log(
+    "[BOOT] WhatsApp template API: POST /api/templates/send registered (server/routes/templates.ts)"
+  );
 }

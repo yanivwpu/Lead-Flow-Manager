@@ -152,7 +152,8 @@ async function uploadMediaBuffer(
 export function registerMediaRoutes(app: Express): void {
   if (process.env.NODE_ENV === "production" && !process.env.PRIVATE_OBJECT_DIR) {
     console.warn(
-      "[MediaUpload] PRODUCTION: PRIVATE_OBJECT_DIR is unset — new uploads use ephemeral local /uploads/ and will not survive redeploys. Configure object storage (e.g. on Railway) and APP_URL."
+      "[MediaUpload] PRODUCTION: PRIVATE_OBJECT_DIR is unset — new uploads use ephemeral local /uploads/ and will not survive redeploys. Configure object storage (e.g. on Railway) and APP_URL. " +
+        "(Unrelated to POST /api/templates/send: that route does not read PRIVATE_OBJECT_DIR; template media preflight uses fetch() to your public https URLs.)"
     );
   }
 

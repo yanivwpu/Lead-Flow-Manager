@@ -919,8 +919,9 @@ export function Templates() {
           : {}),
       };
       console.log(
-        `[TEMPLATE_SEND_REQUEST] ${JSON.stringify({
+        `[BROWSER_TEMPLATE_SEND] ${JSON.stringify({
           endpoint: "POST /api/templates/send",
+          note: "This log is in the browser DevTools only; Railway shows server [ROUTE_HIT] / [TEMPLATE_SEND_REQUEST].",
           source: data.sendSource,
           templateId: data.templateId,
           chatId: data.chatId ?? null,
