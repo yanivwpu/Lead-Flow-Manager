@@ -18,13 +18,14 @@ import {
 } from "@shared/metaTemplateSend";
 import { storage } from "../storage";
 import { getMetaMessageTemplates, sendMetaWhatsAppTemplate } from "../userMeta";
+import { classifyTemplateMediaUrlForLog } from "../templateSendMediaPreflight";
 import {
-  classifyTemplateMediaUrlForLog,
-  collectHttpsLinksFromMetaTemplateComponents,
-  friendlyMessageForPreflightFailure,
-  preflightHttpsMediaUrl,
-} from "../templateSendMediaPreflight";
+  enumerateTemplateHttpsMediaLinks,
+  validateProductionTemplateMediaUrl,
+} from "../templateMediaProductionValidator";
 import { hostLooksLikeTransientMetaCdn, normalizeTemplatePayloadMediaUrls } from "../templateMediaNormalization";
+import { WA_TEMPLATE_MEDIA_NEEDS_CONVERSION_MESSAGE } from "../waTemplateMediaUserMessages";
+import { isPersistableWhatsAppTemplateDefaultUrl } from "../templateMediaPersistPolicy";
 import { getUserTwilioClient } from "../userTwilio";
 import { subscriptionService } from "../subscriptionService";
 import { extractPlaceholderKeysFromCampaignMessages } from "@shared/campaignPlaceholders";
@@ -1002,6 +1003,15 @@ export function registerTemplateRoutes(app: Express): void {
       }
 
       const normalized = coerceTemplateCarouselDefaultMediaMap(rawCardMedia);
+      for (const [k, v] of Object.entries(normalized)) {
+        if (!isPersistableWhatsAppTemplateDefaultUrl(v.mediaUrl)) {
+          return res.status(400).json({
+            error:
+              "Only stable public media URLs (e.g. your Cloudflare R2 pub host or /objects/uploads) can be saved. Remove Meta/WhatsApp CDN links, signed URLs, localhost, or /api/media/proxy links.",
+            field: k,
+          });
+        }
+      }
       await storage.upsertTemplateCarouselMediaDefaults(req.user.id, templateId, normalized as unknown as Record<string, unknown>);
       res.json({ success: true, carouselDefaultMedia: normalized });
     } catch (error: unknown) {
@@ -2143,7 +2153,11 @@ export function registerTemplateRoutes(app: Express): void {
           console.warn(`[SEND_ROUTE_EARLY_EXIT] ${sendRouteId} status=400 reason=media_normalize_failed`);
           return reply(
             400,
-            { error: norm.errorMessage, errorCode: norm.errorCode },
+            {
+              error: WA_TEMPLATE_MEDIA_NEEDS_CONVERSION_MESSAGE,
+              errorCode: norm.errorCode,
+              detail: norm.errorMessage,
+            },
             "media_normalize_failed"
           );
         }
@@ -2179,18 +2193,21 @@ export function registerTemplateRoutes(app: Express): void {
             }))
           : [];
 
-        const httpsLinksInPayload = collectHttpsLinksFromMetaTemplateComponents(components || []);
-        if (httpsLinksInPayload.length > 0) {
+        const mediaLinksForValidate = enumerateTemplateHttpsMediaLinks(
+          components as Record<string, unknown>[] | undefined
+        );
+        if (mediaLinksForValidate.length > 0) {
           sendFinal.preflightPassed = false;
           console.log(
             `[WA_TEMPLATE_CAROUSEL_MEDIA_MODE] ${JSON.stringify({
               mode: "public_https_links_in_template_components",
               note: "Meta fetches each URL server-side. This path does not use WhatsApp media upload IDs in the payload.",
-              distinctUrlCount: httpsLinksInPayload.length,
+              distinctUrlCount: mediaLinksForValidate.length,
             })}`
           );
-          for (let i = 0; i < httpsLinksInPayload.length; i++) {
-            const url = httpsLinksInPayload[i];
+          for (let i = 0; i < mediaLinksForValidate.length; i++) {
+            const ctx = mediaLinksForValidate[i];
+            const url = ctx.url;
             const bucket = classifyTemplateMediaUrlForLog(url);
             sendFinal.mediaUrlBucket = bucket;
             sendFinal.mediaUrlHost = (() => {
@@ -2211,15 +2228,13 @@ export function registerTemplateRoutes(app: Express): void {
                 return null;
               }
             })();
-            const matchCarousel = carouselCardMediaNormalized.find(
-              (c) => c.mediaUrl.trim() === url
-            );
+            const matchCarousel = carouselCardMediaNormalized.find((c) => c.mediaUrl.trim() === url);
             const label = matchCarousel
-              ? `carousel_card_${matchCarousel.cardIndex}`
-              : `template_payload_media_${i}`;
+              ? `carousel_card_${matchCarousel.cardIndex}_${ctx.paramType}`
+              : `template_payload_media_${i}_${ctx.paramType}`;
             console.log(
               `[WA_MEDIA_UPLOAD_START] ${JSON.stringify({
-                operation: "preflight_public_url_before_meta_fetch",
+                operation: "production_validate_public_url_before_meta_fetch",
                 label,
                 bucket,
                 urlHost: (() => {
@@ -2229,25 +2244,19 @@ export function registerTemplateRoutes(app: Express): void {
                     return "invalid";
                   }
                 })(),
+                paramType: ctx.paramType,
+                inCarousel: ctx.inCarousel,
               })}`
             );
-            const pf = await preflightHttpsMediaUrl(url);
-            if (!pf.ok) {
-              const { userMessage, errorCode } = friendlyMessageForPreflightFailure(
-                url,
-                bucket,
-                pf,
-                label
-              );
+            const v = await validateProductionTemplateMediaUrl(ctx);
+            if (!v.ok) {
               console.error(
                 `[WA_MEDIA_UPLOAD_FAILED] ${JSON.stringify({
-                  operation: "preflight_public_url_before_meta_fetch",
+                  operation: "production_validate_public_url_before_meta_fetch",
                   label,
                   bucket,
-                  friendlyError: userMessage,
-                  httpStatus: pf.httpStatus,
-                  reason: pf.reason,
-                  detail: pf.friendlyDetail,
+                  errorCode: v.code,
+                  detail: v.detail,
                 })}`
               );
               await persistReEngagementFailure();
@@ -2266,8 +2275,8 @@ export function registerTemplateRoutes(app: Express): void {
                     optionalHeaderMediaMimeType,
                     optionalHeaderMediaSizeBytes,
                     carouselCardMediaNormalized,
-                    errorMessage: userMessage,
-                    errorCode,
+                    errorMessage: WA_TEMPLATE_MEDIA_NEEDS_CONVERSION_MESSAGE,
+                    errorCode: v.code,
                   });
                 } catch (persistFail: unknown) {
                   console.error(
@@ -2281,36 +2290,32 @@ export function registerTemplateRoutes(app: Express): void {
                 }
               }
               console.warn(
-                `[SEND_ROUTE_EARLY_EXIT] ${sendRouteId} status=400 reason=media_url_preflight_failed errorCode=${errorCode}`
+                `[SEND_ROUTE_EARLY_EXIT] ${sendRouteId} status=400 reason=media_url_production_validate_failed errorCode=${v.code}`
               );
               sendFinal.preflightPassed = false;
-              sendFinal.metaMessage = userMessage;
-              sendFinal.metaCode = errorCode;
+              sendFinal.metaMessage = WA_TEMPLATE_MEDIA_NEEDS_CONVERSION_MESSAGE;
+              sendFinal.metaCode = v.code;
               return reply(
                 400,
                 {
-                  error: userMessage,
-                  errorCode,
+                  error: WA_TEMPLATE_MEDIA_NEEDS_CONVERSION_MESSAGE,
+                  errorCode: v.code,
+                  detail: v.detail,
                   metaCode: null,
                 },
-                "media_url_preflight_failed"
+                "media_url_production_validate_failed"
               );
             }
-            if (pf.ok) {
-              sendFinal.preflightContentType =
-                typeof pf.contentType === "string" ? pf.contentType : sendFinal.preflightContentType;
-              sendFinal.preflightContentLength =
-                typeof pf.contentLength === "number" ? pf.contentLength : sendFinal.preflightContentLength;
-            }
+            sendFinal.preflightContentType = v.contentType;
+            sendFinal.preflightContentLength = v.contentLength;
             console.log(
               `[WA_MEDIA_UPLOAD_SUCCESS] ${JSON.stringify({
-                operation: "preflight_public_url_before_meta_fetch",
+                operation: "production_validate_public_url_before_meta_fetch",
                 label,
                 bucket,
-                httpStatus: pf.httpStatus,
-                contentType: pf.ok ? pf.contentType ?? null : null,
-                contentLength: pf.ok ? pf.contentLength ?? null : null,
-                finalUrlHost: pf.ok && pf.finalUrl ? (() => { try { return new URL(pf.finalUrl).hostname; } catch { return null; } })() : null,
+                httpStatus: v.httpStatus,
+                contentType: v.contentType,
+                contentLength: v.contentLength,
               })}`
             );
           }

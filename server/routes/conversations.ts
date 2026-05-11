@@ -1,5 +1,6 @@
 import type { Express } from "express";
 import { computeConversationReplyWindowStatus } from "@shared/conversationReplyWindow";
+import { waMetaWebhookFailureHint } from "../waMetaDeliveryHints";
 import { storage } from "../storage";
 
 /** Include Postgres `code` / `detail` when present (node-postgres / Drizzle). */
@@ -78,6 +79,33 @@ function sanitizeMessagesForResponse(rows: unknown): unknown[] {
   }
 }
 
+/** Attach client-only delivery hint fields for failed outbound WhatsApp template bubbles. */
+function enrichConversationMessagesForClient(rows: unknown[]): unknown[] {
+  const sanitized = sanitizeMessagesForResponse(rows);
+  if (!Array.isArray(sanitized)) return [];
+  return sanitized.map((raw) => {
+    const m = raw as Record<string, unknown>;
+    const ct = String(m.contentType || "");
+    const st = String(m.status || "").toLowerCase();
+    const dir = String(m.direction || "");
+    if (ct !== "template" || dir !== "outbound" || st !== "failed") return raw;
+    const codeStr = m.errorCode != null ? String(m.errorCode) : "";
+    const hint = waMetaWebhookFailureHint(codeStr || undefined);
+    const base =
+      typeof m.errorMessage === "string" && m.errorMessage.trim()
+        ? m.errorMessage.trim()
+        : "Delivery failed";
+    const hintPrefix = hint.slice(0, 40);
+    const merged = base.includes(hintPrefix) ? base : `${base}\n\n${hint}`;
+    return {
+      ...m,
+      deliveryFailureKind: "media_validation",
+      deliveryFailureInline: merged,
+      errorMessage: merged,
+    };
+  });
+}
+
 export function registerConversationRoutes(app: Express): void {
   // Get conversation messages
   app.get("/api/conversations/:id/messages", async (req, res) => {
@@ -120,7 +148,7 @@ export function registerConversationRoutes(app: Express): void {
       const limit = Number.isFinite(rawL) ? rawL : 100;
       const offset = Number.isFinite(rawO) ? rawO : 0;
       const messages = await storage.getMessages(conversationId, limit, offset);
-      const payload = sanitizeMessagesForResponse(messages);
+      const payload = enrichConversationMessagesForClient(messages);
       if (process.env.NODE_ENV !== "production") {
         console.log("[GET /api/conversations/:id/messages] end", {
           conversationId,

@@ -9,6 +9,7 @@ import sharp from "sharp";
 import { uploadOutboundUserMedia } from "./mediaStorageService";
 import { getMetaAccessToken } from "./userMeta";
 import { waOutboundMediaKindFromMime, waUploadFileSizeCheck, waUploadTooLargeMessage } from "@shared/whatsappMediaLimits";
+import { transcodeVideoBufferToWhatsAppMp4 } from "./templateVideoTranscode";
 
 const WHATSAPP_CDN_HOST_RE = /\.whatsapp\.net$/i;
 const FBCDN_HOST_RE = /(^|\.)fbcdn\.net$/i;
@@ -272,14 +273,52 @@ async function normalizeOneMediaUrl(opts: {
     const too = assertSize(fetched.buffer, mime.startsWith("video/") ? mime : "video/mp4");
     if (too) return { ok: false, errorMessage: too };
 
+    let videoBody = fetched.buffer;
+    let videoMime = mime.startsWith("video/") ? mime : "video/mp4";
+    const trans = await transcodeVideoBufferToWhatsAppMp4(fetched.buffer);
+    if (trans.ok) {
+      const tooTc = assertSize(trans.buffer, "video/mp4");
+      if (tooTc) return { ok: false, errorMessage: tooTc };
+      videoBody = trans.buffer;
+      videoMime = "video/mp4";
+      console.log(
+        `[TEMPLATE_MEDIA_VIDEO_TRANSCODE_OK] ${JSON.stringify({
+          templateName,
+          bytesIn: fetched.buffer.length,
+          bytesOut: trans.buffer.length,
+        })}`
+      );
+    } else {
+      const looksMp4 = videoMime.includes("mp4");
+      if (looksMp4) {
+        console.warn(
+          `[TEMPLATE_MEDIA_VIDEO_TRANSCODE_SKIP] ${JSON.stringify({
+            templateName,
+            reason: trans.message,
+            fallback: "upload_original_mp4",
+          })}`
+        );
+      } else {
+        return {
+          ok: false,
+          errorMessage: `Video must be WhatsApp-safe MP4 (H.264 + AAC). ${trans.message}`,
+        };
+      }
+    }
+
     const uploaded = await uploadOutboundUserMedia({
       userId,
-      buffer: fetched.buffer,
-      contentType: mime,
+      buffer: videoBody,
+      contentType: videoMime,
       originChannel: "meta-template-send-video",
     });
     console.log(
-      `[TEMPLATE_MEDIA_MIRROR_OK] ${JSON.stringify({ templateName, role: "video", mime, sourceBucket })}`
+      `[TEMPLATE_MEDIA_MIRROR_OK] ${JSON.stringify({
+        templateName,
+        role: "video",
+        mime: videoMime,
+        sourceBucket,
+      })}`
     );
     return { ok: true, newUrl: uploaded.mediaUrl };
   }

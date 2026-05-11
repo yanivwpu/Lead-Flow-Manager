@@ -17,6 +17,7 @@ import { channelService } from "./channelService";
 import { subscriptionService } from "./subscriptionService";
 import { getWhatsAppAvailability } from "./whatsappService";
 import { sendMetaWhatsAppTemplate } from "./userMeta";
+import { prepareMetaTemplateComponentsForGraph } from "./metaTemplateMediaPipeline";
 
 const WHATSAPP_CSW_BUFFER_MS = 60 * 60 * 1000;
 
@@ -230,6 +231,25 @@ async function sendCampaignWhatsApp(params: {
   });
 
   try {
+    const rowForPipe = await findUserLibraryTemplateRow(userId, tplName, lang);
+    if (Array.isArray(components) && components.length > 0 && rowForPipe) {
+      const pipe = await prepareMetaTemplateComponentsForGraph({
+        userId,
+        templateName: tplName,
+        components: components as Record<string, unknown>[],
+        templateRow: rowForPipe,
+      });
+      if (!pipe.ok) {
+        await storage.updateMessage(messageRow.id, {
+          status: "failed",
+          errorMessage: pipe.errorMessage,
+          errorCode: pipe.errorCode,
+        });
+        return { ok: false, error: pipe.errorMessage };
+      }
+      components = pipe.components as any[];
+    }
+
     const sendResult = await sendMetaWhatsAppTemplate(userId, phone, tplName, lang, components);
     await storage.updateMessage(messageRow.id, {
       status: "sent",

@@ -11,7 +11,8 @@
     "start": "cross-env NODE_ENV=production node dist/index.cjs",
     "check": "tsc",
     "db:push": "drizzle-kit push",
-    "diagnose:messages": "tsx scripts/diagnose-conversation-messages.ts"
+    "diagnose:messages": "tsx scripts/diagnose-conversation-messages.ts",
+    "wa:template-media-matrix": "tsx scripts/wa-template-media-matrix.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1040.0",
@@ -84,6 +85,7 @@
     "emoji-picker-react": "^4.16.1",
     "express": "^4.22.1",
     "express-session": "^1.18.1",
+    "ffmpeg-static": "^5.2.0",
     "form-data": "^2.5.5",
     "framer-motion": "^12.23.24",
     "google-auth-library": "^10.5.0",

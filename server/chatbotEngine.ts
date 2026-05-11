@@ -1,6 +1,7 @@
 import { storage } from "./storage";
 import { type ChatbotFlow } from "@shared/schema";
 import { buildMetaCloudTemplateSendComponents, normalizeTemplateVariableMap } from "@shared/metaTemplateSend";
+import { prepareMetaTemplateComponentsForGraph } from "./metaTemplateMediaPipeline";
 import { sendMetaWhatsAppTemplate } from "./userMeta";
 import { getUserTwilioClient } from "./userTwilio";
 import { scheduleHubSpotAutoSync } from "./hubspotAutoSync";
@@ -562,12 +563,29 @@ async function sendFlowTemplate(
     }
     const components = built.components as any[] | undefined;
 
+    const pipe = await prepareMetaTemplateComponentsForGraph({
+      userId: ctx.userId,
+      templateName: template.name,
+      components: components as Record<string, unknown>[] | undefined,
+      templateRow: {
+        templateType: template.templateType,
+        carouselCards: template.carouselCards,
+        headerType: template.headerType,
+        headerContent: template.headerContent,
+        buttons: template.buttons,
+      },
+    });
+    if (!pipe.ok) {
+      throw new Error(pipe.errorMessage);
+    }
+    const finalComponents = pipe.components as any[] | undefined;
+
     const result = await sendMetaWhatsAppTemplate(
       ctx.userId,
       recipientPhone,
       template.name,
       templateLang,
-      components && components.length > 0 ? components : undefined
+      finalComponents && finalComponents.length > 0 ? finalComponents : undefined
     );
 
     console.log(`[Chatbot] ✅ Meta template sent — messageId=${result.messageId} status=${result.status}`);

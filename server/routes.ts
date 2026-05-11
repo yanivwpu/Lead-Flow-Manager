@@ -3127,9 +3127,19 @@ export async function registerRoutes(
               const cur = (row.status || "pending").toLowerCase();
 
               if (incoming === "failed") {
-                const detail = statusUpdate.errorDetail;
-                const parts = [statusUpdate.errorTitle, detail].filter(Boolean) as string[];
-                const errLine = parts.length ? parts.join(" — ") : "Delivery failed";
+                const { formatMetaTemplateDeliveryFailureLine } = await import("./waMetaDeliveryHints");
+                const errLine = formatMetaTemplateDeliveryFailureLine({
+                  errorTitle: statusUpdate.errorTitle,
+                  errorDetail: statusUpdate.errorDetail,
+                  errorCode: statusUpdate.errorCode,
+                });
+                console.warn(
+                  `[Meta WA Status] template_or_media_failure persisted ${JSON.stringify({
+                    messageId: statusUpdate.messageId,
+                    localMessageId: row.id,
+                    errorCode: statusUpdate.errorCode,
+                  })}`
+                );
                 await storage.updateMessage(row.id, {
                   status: "failed",
                   errorMessage: errLine,
@@ -6920,6 +6930,63 @@ export async function registerRoutes(
     if (token && await verifyAdminToken(token)) return next();
     return res.status(401).json({ error: "Admin authentication required" });
   };
+
+  /**
+   * Preflight-only matrix: validates optional `WA_MATRIX_*` public URLs (HTTPS, MIME, length, no CDN/proxy).
+   * Does not call Graph. Set env URLs to exercise image / PDF / video / carousel-style image checks.
+   */
+  app.get("/api/admin/wa-template-media-matrix", requireAdmin, async (_req, res) => {
+    try {
+      const { getBundledFfmpegPath } = await import("./templateVideoTranscode");
+      const { validateProductionTemplateMediaUrl } = await import("./templateMediaProductionValidator");
+      const matrix: Record<string, unknown> = {
+        ffmpegAvailable: !!getBundledFfmpegPath(),
+        r2PublicBaseConfigured: !!(process.env.CLOUDFLARE_R2_PUBLIC_URL || "").trim(),
+        graphAccepted: "not_called",
+        webhookDelivered: "not_observed (run a live send against WABA to test)",
+        finalStatus: "preflight_only",
+      };
+      const cases: Array<{
+        key: string;
+        envKey: string;
+        paramType: "image" | "video" | "document";
+        inCarousel: boolean;
+      }> = [
+        { key: "image_template", envKey: "WA_MATRIX_IMAGE_URL", paramType: "image", inCarousel: false },
+        { key: "pdf_template", envKey: "WA_MATRIX_PDF_URL", paramType: "document", inCarousel: false },
+        { key: "video_template", envKey: "WA_MATRIX_VIDEO_URL", paramType: "video", inCarousel: false },
+        { key: "carousel_card_image", envKey: "WA_MATRIX_CAROUSEL_IMAGE_URL", paramType: "image", inCarousel: true },
+      ];
+      for (const c of cases) {
+        const url = (process.env[c.envKey] || "").trim();
+        if (!url) {
+          matrix[c.key] = { skipped: true, hint: `Set ${c.envKey} to a public https URL` };
+          continue;
+        }
+        const v = await validateProductionTemplateMediaUrl({
+          url,
+          inCarousel: c.inCarousel,
+          paramType: c.paramType,
+        });
+        matrix[c.key] = v.ok
+          ? {
+              preflightPassed: true,
+              httpStatus: v.httpStatus,
+              contentType: v.contentType,
+              contentLength: v.contentLength,
+            }
+          : { preflightPassed: false, errorCode: v.code, detail: v.detail };
+      }
+      matrix.text_template = {
+        skipped: true,
+        note: "Text templates have no media URL — no preflight row",
+      };
+      res.json(matrix);
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      res.status(500).json({ error: msg });
+    }
+  });
 
   // Admin: Manual IndexNow submission
   app.post("/api/admin/indexnow/submit", requireAdmin, async (req, res) => {
