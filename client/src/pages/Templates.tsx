@@ -431,7 +431,6 @@ export function Templates() {
   const [variableValues, setVariableValues] = useState<Record<string, string>>({});
   const [libraryModalOpen, setLibraryModalOpen] = useState(false);
   const [libraryModalTemplate, setLibraryModalTemplate] = useState<MessageTemplate | null>(null);
-  const [contactPickerOpen, setContactPickerOpen] = useState(false);
   const [contactSearch, setContactSearch] = useState("");
   /** Where the send dialog was opened from — Campaign vs Library contact picker (sync with mutate). */
   const templateSendOriginRef = useRef<"library" | "campaign">("library");
@@ -951,10 +950,6 @@ export function Templates() {
       setOptionalHeaderMediaMeta(null);
       setCarouselCardMediaByIndex({});
       setCarouselSavedDefaultsHint(false);
-      toast({
-        title: "Template sent",
-        description: data?.message || "Template message sent successfully.",
-      });
     },
     onError: (error: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
@@ -984,16 +979,7 @@ export function Templates() {
     },
   });
 
-  const handleSendTemplate = (
-    template: MessageTemplate,
-    chat: Chat | RetargetableChat,
-    origin: "library" | "campaign" = "library"
-  ) => {
-    templateSendOriginRef.current = origin;
-    console.log(`[UseTemplate] Template selected: ${template.name} (id=${template.id}, status=${template.status})`);
-    console.log(`[UseTemplate] Contact selected: ${chat.name} (id=${chat.id}, phone=${chat.whatsappPhone})`);
-    setSelectedTemplate(template);
-    setSelectedChat(chat);
+  const prepareTemplateSendDialogState = (template: MessageTemplate) => {
     setVariableValues({});
     const ht = (template.headerType || "").toLowerCase();
     const headerDefaultUrl =
@@ -1012,17 +998,34 @@ export function Templates() {
     suppressTemplatePrefillRef.current = false;
     pendingTemplatePrefillRef.current = true;
     setSendInlineError(null);
-    setContactPickerOpen(false);
+  };
+
+  const openUnifiedTemplateSendDialog = (
+    template: MessageTemplate,
+    opts?: { chat?: Chat | RetargetableChat | null; origin?: "library" | "campaign" }
+  ) => {
+    templateSendOriginRef.current = opts?.origin ?? "library";
+    const chat = opts?.chat ?? null;
+    console.log(
+      `[UseTemplate] Open unified send — template=${template.name} (id=${template.id}) contact=${chat ? (chat as Chat).name : "(pick)"}`
+    );
+    setSelectedTemplate(template);
+    setSelectedChat(chat);
+    prepareTemplateSendDialogState(template);
+    setContactSearch("");
     setSendDialogOpen(true);
-    console.log(`[UseTemplate] Send dialog opened — variables required: ${template.variables?.length ?? 0}`);
+  };
+
+  const handleSendTemplate = (
+    template: MessageTemplate,
+    chat: Chat | RetargetableChat,
+    origin: "library" | "campaign" = "library"
+  ) => {
+    openUnifiedTemplateSendDialog(template, { chat, origin });
   };
 
   const handleUseTemplate = (template: MessageTemplate) => {
-    console.log(`[UseTemplate] Button clicked for template: ${template.name}`);
-    setSelectedTemplate(template);
-    templateSendOriginRef.current = "library";
-    setContactSearch("");
-    setContactPickerOpen(true);
+    openUnifiedTemplateSendDialog(template, { chat: null, origin: "library" });
   };
 
   const openPreviewDetails = (template: MessageTemplate) => {
@@ -1032,11 +1035,10 @@ export function Templates() {
 
   const continuePreviewToSend = () => {
     if (!libraryModalTemplate || !isApprovedTemplateStatus(libraryModalTemplate.status)) return;
-    templateSendOriginRef.current = "library";
+    const t = libraryModalTemplate;
     setLibraryModalOpen(false);
-    setSelectedTemplate(libraryModalTemplate);
-    setContactSearch("");
-    setContactPickerOpen(true);
+    setLibraryModalTemplate(null);
+    openUnifiedTemplateSendDialog(t, { chat: null, origin: "library" });
   };
 
   const getTemplateIcon = (type: string) => {
@@ -1468,22 +1470,11 @@ export function Templates() {
                             ))}
                           </div>
                         )}
-                        <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="w-full sm:flex-1 border-gray-200"
-                            onClick={() => openPreviewDetails(template)}
-                            data-testid={`button-preview-details-${template.id}`}
-                          >
-                            <Eye className="h-3.5 w-3.5 mr-2 shrink-0" />
-                            Preview Details
-                          </Button>
+                        <div className="flex items-stretch gap-2">
                           <Button
                             type="button"
                             size="sm"
-                            className="w-full sm:flex-1 bg-brand-green hover:bg-brand-green/90 text-white font-medium shadow-sm"
+                            className="min-w-0 flex-1 bg-brand-green hover:bg-brand-green/90 text-white font-medium shadow-sm"
                             disabled={!isApprovedTemplateStatus(template.status)}
                             onClick={() => handleUseTemplate(template)}
                             data-testid={`button-use-template-${template.id}`}
@@ -1491,6 +1482,24 @@ export function Templates() {
                             <Send className="h-3 w-3 mr-2 shrink-0" />
                             Use Template
                           </Button>
+                          <TooltipProvider delayDuration={200}>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="icon"
+                                  className="h-9 w-9 shrink-0 border-gray-200"
+                                  onClick={() => openPreviewDetails(template)}
+                                  aria-label="Quick preview"
+                                  data-testid={`button-template-quick-preview-${template.id}`}
+                                >
+                                  <Eye className="h-4 w-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent side="top">Quick preview</TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
                         </div>
                       </CardContent>
                     </Card>
@@ -1803,61 +1812,6 @@ export function Templates() {
           </TabsContent>
         </Tabs>
 
-        {/* Contact Picker Dialog */}
-        <Dialog open={contactPickerOpen} onOpenChange={setContactPickerOpen}>
-          <DialogContent className="max-w-md" data-testid="dialog-contact-picker">
-            <DialogHeader>
-              <DialogTitle>Select a Contact</DialogTitle>
-              <DialogDescription>
-                Choose who to send <strong>{selectedTemplate?.name}</strong> to
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-3 py-2">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <Input
-                  className="pl-9"
-                  placeholder="Search contacts..."
-                  value={contactSearch}
-                  onChange={(e) => setContactSearch(e.target.value)}
-                  data-testid="input-contact-search"
-                />
-              </div>
-              <div className="max-h-[340px] overflow-y-auto space-y-1 pr-1" style={{ scrollbarWidth: "thin" }}>
-                {allChats
-                  .filter(c => c.whatsappPhone && (
-                    !contactSearch ||
-                    c.name.toLowerCase().includes(contactSearch.toLowerCase()) ||
-                    (c.whatsappPhone || "").includes(contactSearch)
-                  ))
-                  .map((chat) => (
-                    <button
-                      key={chat.id}
-                      className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 text-left border border-transparent hover:border-gray-200 transition-colors"
-                      onClick={() => selectedTemplate && handleSendTemplate(selectedTemplate, chat, "library")}
-                      data-testid={`contact-picker-chat-${chat.id}`}
-                    >
-                      <div className="h-9 w-9 rounded-full bg-gray-200 flex items-center justify-center shrink-0 text-gray-600 font-medium text-sm">
-                        {chat.avatar ? (
-                          <img src={chat.avatar} alt="" className="h-9 w-9 rounded-full object-cover" />
-                        ) : (
-                          chat.name.charAt(0).toUpperCase()
-                        )}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-gray-900 truncate">{chat.name}</p>
-                        <p className="text-xs text-gray-500 truncate">{chat.whatsappPhone}</p>
-                      </div>
-                    </button>
-                  ))}
-                {allChats.filter(c => c.whatsappPhone).length === 0 && (
-                  <p className="text-center text-sm text-gray-500 py-6">No contacts with WhatsApp numbers found.</p>
-                )}
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
-
         {/* Send Template Dialog */}
         <Dialog
           open={sendDialogOpen}
@@ -1865,6 +1819,7 @@ export function Templates() {
             setSendDialogOpen(open);
             if (!open) {
               setSendInlineError(null);
+              setContactSearch("");
               setOptionalHeaderMediaUrl(null);
               setOptionalHeaderDocumentFilename(null);
               setOptionalHeaderMediaMeta(null);
@@ -1876,13 +1831,26 @@ export function Templates() {
             }
           }}
         >
-          <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
-            {selectedTemplate && selectedChat && (
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            {selectedTemplate && (
               <>
                 <DialogHeader>
-                  <DialogTitle>Send Template to {selectedChat.name}</DialogTitle>
-                  <DialogDescription>
-                    This preview shows what your customer will receive on WhatsApp. Add what&apos;s missing, then send.
+                  <DialogTitle className="text-left leading-snug pr-6">{selectedTemplate.name}</DialogTitle>
+                  <DialogDescription className="text-left">
+                    {selectedChat ? (
+                      <>
+                        Preview updates as you edit. Sending to{" "}
+                        <span className="font-medium text-foreground">{selectedChat.name}</span>
+                        {selectedChat.whatsappPhone ? (
+                          <> ({selectedChat.whatsappPhone})</>
+                        ) : null}
+                        .
+                      </>
+                    ) : (
+                      <>
+                        Live preview below. Choose a WhatsApp contact, add any required media or variables, then send.
+                      </>
+                    )}
                   </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4 py-4">
@@ -1914,41 +1882,39 @@ export function Templates() {
                     ) : null}
                   </div>
 
-                  {templateAuxRecipientKey ? (
-                    <TemplateSendMediaControls
-                      template={selectedTemplate}
-                      chatId={
-                        selectedChat && !("contactId" in selectedChat && selectedChat.contactId)
-                          ? selectedChat.id
-                          : undefined
-                      }
-                      contactId={
-                        selectedChat && "contactId" in selectedChat && selectedChat.contactId
-                          ? selectedChat.contactId
-                          : undefined
-                      }
-                      variableValues={variableValues}
-                      onVariableValuesChange={setVariableValues}
-                      optionalHeaderMediaUrl={optionalHeaderMediaUrl}
-                      onOptionalHeaderMediaUrlChange={setOptionalHeaderMediaUrl}
-                      approvedSampleMediaUrl={
-                        selectedTemplate.approvedSampleMediaUrl ??
-                        (selectedTemplate.mediaRuntimeRequired !== false &&
-                        ["image", "video", "document"].includes(
-                          (selectedTemplate.headerType || "").toLowerCase()
-                        ) &&
-                        /^https?:\/\//i.test(String(selectedTemplate.headerContent || "").trim())
-                          ? String(selectedTemplate.headerContent).trim()
-                          : null)
-                      }
-                      mediaRuntimeRequired={selectedTemplate.mediaRuntimeRequired ?? true}
-                      onOptionalHeaderDocumentFilenameChange={setOptionalHeaderDocumentFilename}
-                      onOptionalHeaderMediaMeta={setOptionalHeaderMediaMeta}
-                      onUserAdjustedMedia={() => {
-                        suppressTemplatePrefillRef.current = true;
-                      }}
-                    />
-                  ) : null}
+                  <TemplateSendMediaControls
+                    template={selectedTemplate}
+                    chatId={
+                      selectedChat && !("contactId" in selectedChat && selectedChat.contactId)
+                        ? selectedChat.id
+                        : undefined
+                    }
+                    contactId={
+                      selectedChat && "contactId" in selectedChat && selectedChat.contactId
+                        ? selectedChat.contactId
+                        : undefined
+                    }
+                    variableValues={variableValues}
+                    onVariableValuesChange={setVariableValues}
+                    optionalHeaderMediaUrl={optionalHeaderMediaUrl}
+                    onOptionalHeaderMediaUrlChange={setOptionalHeaderMediaUrl}
+                    approvedSampleMediaUrl={
+                      selectedTemplate.approvedSampleMediaUrl ??
+                      (selectedTemplate.mediaRuntimeRequired !== false &&
+                      ["image", "video", "document"].includes(
+                        (selectedTemplate.headerType || "").toLowerCase()
+                      ) &&
+                      /^https?:\/\//i.test(String(selectedTemplate.headerContent || "").trim())
+                        ? String(selectedTemplate.headerContent).trim()
+                        : null)
+                    }
+                    mediaRuntimeRequired={selectedTemplate.mediaRuntimeRequired ?? true}
+                    onOptionalHeaderDocumentFilenameChange={setOptionalHeaderDocumentFilename}
+                    onOptionalHeaderMediaMeta={setOptionalHeaderMediaMeta}
+                    onUserAdjustedMedia={() => {
+                      suppressTemplatePrefillRef.current = true;
+                    }}
+                  />
 
                   {selectedTemplate && carouselImageCardIndices.length > 0 ? (
                     <TemplateSendCarouselMediaControls
@@ -2064,6 +2030,10 @@ export function Templates() {
                                   </Button>
                                 ))}
                               </div>
+                            ) : !selectedChat ? (
+                              <p className="text-[11px] text-gray-400 pt-1">
+                                Select a contact below to load CRM suggestions, or enter values manually.
+                              </p>
                             ) : variableAutofill?.contactId === null ? (
                               <p className="text-[11px] text-gray-400 pt-1">
                                 No CRM contact linked to this chat — enter values manually.
@@ -2106,6 +2076,112 @@ export function Templates() {
                       </AlertDescription>
                     </Alert>
                   ) : null}
+
+                  <div className="space-y-3 border-t border-gray-100 pt-4">
+                    <div className="flex flex-col gap-0.5">
+                      <Label>WhatsApp recipient</Label>
+                      <p className="text-xs text-gray-500">
+                        Search your contacts with a WhatsApp number. Sending stays disabled until someone is selected.
+                      </p>
+                    </div>
+                    {selectedChat ? (
+                      <div className="flex items-center gap-3 rounded-lg border border-emerald-200/80 bg-emerald-50/50 px-3 py-2.5">
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-sm font-medium text-gray-600 ring-1 ring-gray-100">
+                          {selectedChat.avatar ? (
+                            <img src={selectedChat.avatar} alt="" className="h-9 w-9 rounded-full object-cover" />
+                          ) : (
+                            selectedChat.name.charAt(0).toUpperCase()
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium text-gray-900">{selectedChat.name}</p>
+                          <p className="truncate text-xs text-gray-500">{selectedChat.whatsappPhone ?? "—"}</p>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="shrink-0 text-gray-600"
+                          onClick={() => {
+                            setSelectedChat(null);
+                            setContactSearch("");
+                          }}
+                          data-testid="button-change-template-recipient"
+                        >
+                          Change
+                        </Button>
+                      </div>
+                    ) : null}
+                    <div className="relative">
+                      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                      <Input
+                        className="pl-9"
+                        placeholder="Search by name or phone…"
+                        value={contactSearch}
+                        onChange={(e) => setContactSearch(e.target.value)}
+                        data-testid="input-unified-send-contact-search"
+                      />
+                    </div>
+                    <div
+                      className="max-h-[min(280px,40vh)] space-y-1 overflow-y-auto rounded-lg border border-gray-100 bg-gray-50/40 p-1.5"
+                      style={{ scrollbarWidth: "thin" }}
+                    >
+                      {(() => {
+                        const waChats = allChats.filter((c) => c.whatsappPhone);
+                        const filtered = waChats.filter(
+                          (c) =>
+                            !contactSearch ||
+                            c.name.toLowerCase().includes(contactSearch.toLowerCase()) ||
+                            (c.whatsappPhone || "").includes(contactSearch)
+                        );
+                        if (waChats.length === 0) {
+                          return (
+                            <p className="px-2 py-6 text-center text-sm text-gray-500">
+                              No contacts with WhatsApp numbers found.
+                            </p>
+                          );
+                        }
+                        if (filtered.length === 0) {
+                          return (
+                            <p className="px-2 py-6 text-center text-sm text-gray-500">
+                              No contacts match your search.
+                            </p>
+                          );
+                        }
+                        return filtered.map((chat) => {
+                          const isSelected = selectedChat?.id === chat.id;
+                          return (
+                            <button
+                              key={chat.id}
+                              type="button"
+                              className={`flex w-full items-center gap-3 rounded-md border p-2.5 text-left transition-colors ${
+                                isSelected
+                                  ? "border-emerald-300 bg-emerald-50/90"
+                                  : "border-transparent hover:border-gray-200 hover:bg-white"
+                              }`}
+                              onClick={() => setSelectedChat(chat)}
+                              data-testid={`unified-send-pick-chat-${chat.id}`}
+                            >
+                              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gray-200 text-sm font-medium text-gray-600">
+                                {chat.avatar ? (
+                                  <img src={chat.avatar} alt="" className="h-9 w-9 rounded-full object-cover" />
+                                ) : (
+                                  chat.name.charAt(0).toUpperCase()
+                                )}
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <p className="truncate text-sm font-medium text-gray-900">{chat.name}</p>
+                                <p className="truncate text-xs text-gray-500">{chat.whatsappPhone}</p>
+                              </div>
+                              {isSelected ? (
+                                <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" aria-hidden />
+                              ) : null}
+                            </button>
+                          );
+                        });
+                      })()}
+                    </div>
+                  </div>
                 </div>
                 {sendInlineError ? (
                   <Alert variant="destructive" className="border-amber-200 bg-amber-50 text-amber-950 [&>svg]:text-amber-700">
@@ -2116,6 +2192,7 @@ export function Templates() {
                   <Button variant="outline" onClick={() => setSendDialogOpen(false)}>Cancel</Button>
                   <Button 
                     onClick={() => {
+                      if (!selectedChat) return;
                       const isRetarget =
                         "contactId" in selectedChat &&
                         !!selectedChat.contactId &&
@@ -2138,6 +2215,7 @@ export function Templates() {
                       });
                     }}
                     disabled={
+                      !selectedChat ||
                       sendTemplateMutation.isPending ||
                       missingPlaceholders.length > 0 ||
                       !!sendStructureBlockReason ||
@@ -2242,9 +2320,10 @@ export function Templates() {
                       type="button"
                       className="bg-brand-green hover:bg-brand-green/90 text-white"
                       onClick={continuePreviewToSend}
-                      data-testid="button-continue-to-send"
+                      data-testid="button-library-preview-use-template"
                     >
-                      Continue to send
+                      <Send className="mr-2 h-4 w-4" />
+                      Use Template
                     </Button>
                   ) : null}
                 </DialogFooter>

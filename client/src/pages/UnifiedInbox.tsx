@@ -488,7 +488,6 @@ export function UnifiedInbox() {
   const [showTemplatePicker, setShowTemplatePicker] = useState(false);
   const [templateSearch, setTemplateSearch] = useState("");
   const [selectedInboxTemplate, setSelectedInboxTemplate] = useState<MessageTemplate | null>(null);
-  const [showVarDialog, setShowVarDialog] = useState(false);
   const [varValues, setVarValues] = useState<Record<string, string>>({});
   const [inboxTemplatePreviewOpen, setInboxTemplatePreviewOpen] = useState(false);
   const [inboxPreviewTemplate, setInboxPreviewTemplate] = useState<MessageTemplate | null>(null);
@@ -1423,8 +1422,6 @@ export function UnifiedInbox() {
       return res.json();
     },
     onSuccess: (data) => {
-      toast({ title: "Template sent", description: data.message });
-      setShowVarDialog(false);
       setShowTemplatePicker(false);
       setSelectedInboxTemplate(null);
       setVarValues({});
@@ -1450,10 +1447,10 @@ export function UnifiedInbox() {
   const handleSelectTemplate = (template: MessageTemplate) => {
     setSelectedInboxTemplate(template);
     const initVars: Record<string, string> = {};
-    (template.variables || []).forEach((v: string) => { initVars[v] = ""; });
+    (template.variables || []).forEach((v: string) => {
+      initVars[v] = "";
+    });
     setVarValues(initVars);
-    setShowTemplatePicker(false);
-    setShowVarDialog(true);
   };
 
   const handleSendTemplateFromInbox = () => {
@@ -2862,104 +2859,193 @@ export function UnifiedInbox() {
         </DialogContent>
       </Dialog>
 
-      {/* Template Picker Dialog */}
-      <Dialog open={showTemplatePicker} onOpenChange={setShowTemplatePicker}>
-        <DialogContent className="max-w-lg">
+      {/* Template send: pick template + variables in one dialog */}
+      <Dialog
+        open={showTemplatePicker}
+        onOpenChange={(open) => {
+          setShowTemplatePicker(open);
+          if (!open) {
+            setSelectedInboxTemplate(null);
+            setVarValues({});
+            setTemplateSearch("");
+          }
+        }}
+      >
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <LayoutTemplate className="w-4 h-4 text-gray-600" />
-              Send WhatsApp Template
+              {selectedInboxTemplate ? selectedInboxTemplate.name : "Send WhatsApp template"}
             </DialogTitle>
-          </DialogHeader>
-          <div className="flex flex-col gap-3">
-            <Input
-              placeholder="Search templates…"
-              value={templateSearch}
-              onChange={(e) => setTemplateSearch(e.target.value)}
-              data-testid="input-template-search"
-            />
-            {inboxTemplates.length === 0 ? (
-              <p className="text-sm text-gray-500 text-center py-6">
-                No templates found. Go to the Templates page to sync your WhatsApp templates.
+            {selectedInboxTemplate ? (
+              <p className="text-left text-sm text-muted-foreground">
+                Sending to this conversation. Fill any variables, then send.
               </p>
-            ) : (
-              <div className="flex flex-col gap-2 max-h-80 overflow-y-auto">
-                {inboxTemplates
-                  .filter((t) =>
-                    t.status === "approved" &&
-                    (t.name.toLowerCase().includes(templateSearch.toLowerCase()) ||
-                      t.bodyText?.toLowerCase().includes(templateSearch.toLowerCase()))
-                  )
-                  .map((t) => {
-                    const { blocked } = getInboxTemplateSendBlockReason({
-                      name: t.name,
-                      bodyText: t.bodyText,
-                      headerType: t.headerType,
-                      headerContent: t.headerContent,
-                      buttons: t.buttons,
-                      templateType: t.templateType,
-                      carouselCards: t.carouselCards,
-                      category: t.category,
-                    });
-                    return (
-                      <div
-                        key={t.id}
-                        className={cn(
-                          "flex gap-2 rounded-lg border p-2.5 transition-colors min-w-0",
-                          blocked
-                            ? "border-gray-200 bg-gray-50/90"
-                            : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
-                        )}
-                        data-testid={`template-item-${t.id}`}
-                      >
-                        <button
-                          type="button"
-                          disabled={blocked}
-                          onClick={() => {
-                            if (!blocked) handleSelectTemplate(t);
-                          }}
+            ) : null}
+          </DialogHeader>
+          {!selectedInboxTemplate ? (
+            <div className="flex flex-col gap-3">
+              <Input
+                placeholder="Search templates…"
+                value={templateSearch}
+                onChange={(e) => setTemplateSearch(e.target.value)}
+                data-testid="input-template-search"
+              />
+              {inboxTemplates.length === 0 ? (
+                <p className="text-sm text-gray-500 text-center py-6">
+                  No templates found. Go to the Templates page to sync your WhatsApp templates.
+                </p>
+              ) : (
+                <div className="flex max-h-80 flex-col gap-2 overflow-y-auto">
+                  {inboxTemplates
+                    .filter(
+                      (t) =>
+                        t.status === "approved" &&
+                        (t.name.toLowerCase().includes(templateSearch.toLowerCase()) ||
+                          t.bodyText?.toLowerCase().includes(templateSearch.toLowerCase()))
+                    )
+                    .map((t) => {
+                      const { blocked } = getInboxTemplateSendBlockReason({
+                        name: t.name,
+                        bodyText: t.bodyText,
+                        headerType: t.headerType,
+                        headerContent: t.headerContent,
+                        buttons: t.buttons,
+                        templateType: t.templateType,
+                        carouselCards: t.carouselCards,
+                        category: t.category,
+                      });
+                      return (
+                        <div
+                          key={t.id}
                           className={cn(
-                            "min-w-0 flex-1 text-left rounded-md px-1 py-0.5 transition-colors",
-                            blocked ? "cursor-not-allowed opacity-90" : "hover:bg-white/60"
+                            "flex min-w-0 gap-2 rounded-lg border p-2.5 transition-colors",
+                            blocked
+                              ? "border-gray-200 bg-gray-50/90"
+                              : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
                           )}
+                          data-testid={`template-item-${t.id}`}
                         >
-                          <div className="flex items-center justify-between mb-1 gap-2 min-w-0">
-                            <span className="text-sm font-medium text-gray-900 truncate">{t.name}</span>
-                            <span className="text-[10px] text-gray-400 uppercase shrink-0">{t.language}</span>
-                          </div>
-                          <p className="text-xs text-gray-500 line-clamp-2 break-words">{t.bodyText}</p>
-                          {blocked ? (
-                            <p className="text-[11px] text-gray-600 mt-2 leading-snug rounded-md border border-gray-200 bg-white/90 px-2.5 py-2">
-                              {INBOX_QUICK_SEND_ADVANCED_COPY}
-                            </p>
-                          ) : null}
-                        </button>
-                        {blocked ? (
                           <button
                             type="button"
+                            disabled={blocked}
                             onClick={() => {
-                              setInboxPreviewTemplate(t);
-                              setInboxTemplatePreviewOpen(true);
+                              if (!blocked) handleSelectTemplate(t);
                             }}
-                            className="shrink-0 self-start rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-[11px] font-medium text-gray-700 shadow-sm hover:bg-gray-50"
-                            data-testid={`button-template-preview-${t.id}`}
+                            className={cn(
+                              "min-w-0 flex-1 rounded-md px-1 py-0.5 text-left transition-colors",
+                              blocked ? "cursor-not-allowed opacity-90" : "hover:bg-white/60"
+                            )}
                           >
-                            Preview
+                            <div className="mb-1 flex min-w-0 items-center justify-between gap-2">
+                              <span className="truncate text-sm font-medium text-gray-900">{t.name}</span>
+                              <span className="shrink-0 text-[10px] text-gray-400 uppercase">{t.language}</span>
+                            </div>
+                            <p className="line-clamp-2 break-words text-xs text-gray-500">{t.bodyText}</p>
+                            {blocked ? (
+                              <p className="mt-2 rounded-md border border-gray-200 bg-white/90 px-2.5 py-2 text-[11px] leading-snug text-gray-600">
+                                {INBOX_QUICK_SEND_ADVANCED_COPY}
+                              </p>
+                            ) : null}
                           </button>
-                        ) : null}
-                      </div>
-                    );
-                  })}
-                {inboxTemplates.filter((t) =>
-                  t.status === "approved" &&
-                  (t.name.toLowerCase().includes(templateSearch.toLowerCase()) ||
-                    t.bodyText?.toLowerCase().includes(templateSearch.toLowerCase()))
-                ).length === 0 && (
-                  <p className="text-sm text-gray-500 text-center py-4">No approved templates match your search.</p>
-                )}
+                          {blocked ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setInboxPreviewTemplate(t);
+                                setInboxTemplatePreviewOpen(true);
+                              }}
+                              className="shrink-0 self-start rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-[11px] font-medium text-gray-700 shadow-sm hover:bg-gray-50"
+                              data-testid={`button-template-preview-${t.id}`}
+                            >
+                              Preview
+                            </button>
+                          ) : null}
+                        </div>
+                      );
+                    })}
+                  {inboxTemplates.filter(
+                    (t) =>
+                      t.status === "approved" &&
+                      (t.name.toLowerCase().includes(templateSearch.toLowerCase()) ||
+                        t.bodyText?.toLowerCase().includes(templateSearch.toLowerCase()))
+                  ).length === 0 && (
+                    <p className="py-4 text-center text-sm text-gray-500">No approved templates match your search.</p>
+                  )}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="flex flex-col gap-4">
+              <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700 whitespace-pre-wrap">
+                {selectedInboxTemplate.bodyText}
               </div>
-            )}
-          </div>
+              {inboxQuickSendBlocked ? (
+                <p className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-xs leading-snug text-gray-600">
+                  {INBOX_QUICK_SEND_ADVANCED_COPY}
+                </p>
+              ) : (selectedInboxTemplate.variables || []).length > 0 ? (
+                <div className="flex flex-col gap-3">
+                  <p className="text-xs font-medium text-gray-500">Fill in the variables:</p>
+                  {(selectedInboxTemplate.variables || [])
+                    .slice()
+                    .sort((a, b) => {
+                      const na = parseInt(a.replace(/\D/g, ""), 10) || 0;
+                      const nb = parseInt(b.replace(/\D/g, ""), 10) || 0;
+                      return na - nb;
+                    })
+                    .map((v) => (
+                      <div key={v} className="flex flex-col gap-1">
+                        <label className="text-xs font-medium text-gray-600">{v}</label>
+                        <Input
+                          placeholder={`Value for ${v}`}
+                          value={varValues[v] || ""}
+                          onChange={(e) => setVarValues((prev) => ({ ...prev, [v]: e.target.value }))}
+                          data-testid={`input-template-var-${v.replace(/[{}]/g, "")}`}
+                        />
+                      </div>
+                    ))}
+                </div>
+              ) : (
+                <p className="text-xs text-gray-500">This template has no variables. Ready to send.</p>
+              )}
+              <div className="mt-1 flex justify-end gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setSelectedInboxTemplate(null);
+                    setVarValues({});
+                  }}
+                  data-testid="button-template-back"
+                >
+                  Back
+                </Button>
+                <Button
+                  onClick={handleSendTemplateFromInbox}
+                  disabled={sendTemplateFromInboxMutation.isPending || inboxQuickSendBlocked}
+                  className={cn(
+                    !inboxQuickSendBlocked && "bg-brand-green text-white hover:bg-brand-green/90"
+                  )}
+                  variant={inboxQuickSendBlocked ? "secondary" : "default"}
+                  data-testid="button-template-send"
+                >
+                  {sendTemplateFromInboxMutation.isPending ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Sending…
+                    </>
+                  ) : inboxQuickSendBlocked ? (
+                    "Not available in quick-send"
+                  ) : (
+                    <>
+                      <Send className="mr-2 h-4 w-4" />
+                      Send Template
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 
@@ -3005,86 +3091,6 @@ export function UnifiedInbox() {
         </DialogContent>
       </Dialog>
 
-      {/* Variable Fill Dialog */}
-      <Dialog open={showVarDialog} onOpenChange={(open) => {
-        setShowVarDialog(open);
-        if (!open) setShowTemplatePicker(false);
-      }}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <LayoutTemplate className="w-4 h-4 text-gray-600" />
-              {selectedInboxTemplate?.name}
-            </DialogTitle>
-          </DialogHeader>
-          {selectedInboxTemplate && (
-            <div className="flex flex-col gap-4">
-              <div className="bg-gray-50 rounded-lg p-3 text-sm text-gray-700 whitespace-pre-wrap border border-gray-200">
-                {selectedInboxTemplate.bodyText}
-              </div>
-              {inboxQuickSendBlocked ? (
-                <p className="text-xs text-gray-600 rounded-md border border-gray-200 bg-gray-50 px-3 py-2 leading-snug">
-                  {INBOX_QUICK_SEND_ADVANCED_COPY}
-                </p>
-              ) : (selectedInboxTemplate.variables || []).length > 0 ? (
-                <div className="flex flex-col gap-3">
-                  <p className="text-xs text-gray-500 font-medium">Fill in the variables:</p>
-                  {(selectedInboxTemplate.variables || [])
-                    .slice()
-                    .sort((a, b) => {
-                      const na = parseInt(a.replace(/\D/g, ""), 10) || 0;
-                      const nb = parseInt(b.replace(/\D/g, ""), 10) || 0;
-                      return na - nb;
-                    })
-                    .map((v) => (
-                      <div key={v} className="flex flex-col gap-1">
-                        <label className="text-xs font-medium text-gray-600">{v}</label>
-                        <Input
-                          placeholder={`Value for ${v}`}
-                          value={varValues[v] || ""}
-                          onChange={(e) => setVarValues((prev) => ({ ...prev, [v]: e.target.value }))}
-                          data-testid={`input-template-var-${v.replace(/[{}]/g, "")}`}
-                        />
-                      </div>
-                    ))}
-                </div>
-              ) : (
-                <p className="text-xs text-gray-500">This template has no variables. Ready to send.</p>
-              )}
-              <div className="flex justify-end gap-2 mt-1">
-                <Button
-                  variant="outline"
-                  onClick={() => { setShowVarDialog(false); setShowTemplatePicker(true); }}
-                  data-testid="button-template-back"
-                >
-                  Back
-                </Button>
-                <Button
-                  onClick={handleSendTemplateFromInbox}
-                  disabled={sendTemplateFromInboxMutation.isPending || inboxQuickSendBlocked}
-                  className={cn(
-                    !inboxQuickSendBlocked &&
-                      "bg-brand-green hover:bg-brand-green/90 text-white"
-                  )}
-                  variant={inboxQuickSendBlocked ? "secondary" : "default"}
-                  data-testid="button-template-send"
-                >
-                  {sendTemplateFromInboxMutation.isPending ? (
-                    <><Loader2 className="w-4 h-4 animate-spin mr-2" />Sending…</>
-                  ) : inboxQuickSendBlocked ? (
-                    "Not available in quick-send"
-                  ) : (
-                    <>
-                      <Send className="w-4 h-4 mr-2" />
-                      Send Template
-                    </>
-                  )}
-                </Button>
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

@@ -254,7 +254,6 @@ export function TemplateSendMediaControls(props: {
         mimeType: typeof json.mimeType === "string" ? json.mimeType : file.type || null,
         sizeBytes: file.size,
       });
-      toast({ title: "Added", description: "Your file is ready to send." });
     } catch (e: unknown) {
       toast({
         title: "Upload failed",
