@@ -202,10 +202,20 @@ export type InboxTemplateSendBlockInput = TemplateRowForMetaSend;
 
 const CAROUSEL_NAME_RE = /carousel|media_carousel|_carousel_|jaspers_market_media/i;
 
-function logInboxGuardBlocked(template: InboxTemplateSendBlockInput, reason: string): void {
+function logInboxGuardBlocked(
+  template: InboxTemplateSendBlockInput,
+  reason: string,
+  context: "inbox_quick_send" | "server_quick_send"
+): void {
   try {
     console.warn(
-      `[WA_INBOX_TEMPLATE_GUARD] ${JSON.stringify({ blocked: true, reason, template })}`
+      `[WA_INBOX_TEMPLATE_GUARD] ${JSON.stringify({
+        blocked: true,
+        context,
+        reason,
+        templateName: template.name,
+        templateType: template.templateType,
+      })}`
     );
   } catch {
     /* ignore */
@@ -665,50 +675,61 @@ export function buildCarouselCrmDisplayCardsForPersist(opts: {
 export const CAROUSEL_SEND_REQUIRES_EACH_CARD_MEDIA_MESSAGE =
   "Carousel sending requires media for each card.";
 
+const INBOX_QUICK_SEND_CAROUSEL_OR_MEDIA_REASON =
+  "This template can’t be sent from Inbox quick-send (body-only shortcut). Use Templates → Continue to send for carousel, media headers, URL buttons, or authentication templates.";
+
 /**
- * Inbox picker: only **body-only** templates (like `hello_world`): no header/media row, no buttons,
- * not carousel/media/auth. Prevents Meta `#132012` from unsupported component payloads.
+ * Inbox picker / campaign **quick-send** only: **body-only** templates (like `hello_world`):
+ * no header/media row, no buttons, not carousel/media/auth. Prevents Meta `#132012` from
+ * unsupported component payloads.
+ *
+ * Does **not** apply to `sendSource: templates_library` (full library send on server).
+ *
+ * @param opts.logWhenBlocked — log `[WA_INBOX_TEMPLATE_GUARD]` only when true (avoid noise
+ *   when this function is reused for Templates-page badges / eligibility only).
+ * @param opts.guardLogContext — distinguishes inbox UI vs server `quick_send` rejection.
  */
 export function getInboxTemplateSendBlockReason(
-  template: InboxTemplateSendBlockInput
+  template: InboxTemplateSendBlockInput,
+  opts?: { logWhenBlocked?: boolean; guardLogContext?: "inbox_quick_send" | "server_quick_send" }
 ): { blocked: boolean; reason?: string } {
-  const genericCarousel =
-    "This template uses carousel/media components and can't be sent from inbox yet.";
+  const log = opts?.logWhenBlocked === true;
+  const guardCtx = opts?.guardLogContext ?? "inbox_quick_send";
 
   const nm = String(template.name ?? "").toLowerCase();
   if (CAROUSEL_NAME_RE.test(nm)) {
-    logInboxGuardBlocked(template, genericCarousel);
-    return { blocked: true, reason: genericCarousel };
+    if (log) logInboxGuardBlocked(template, INBOX_QUICK_SEND_CAROUSEL_OR_MEDIA_REASON, guardCtx);
+    return { blocked: true, reason: INBOX_QUICK_SEND_CAROUSEL_OR_MEDIA_REASON };
   }
 
   const tt = (template.templateType || "").toLowerCase();
   if (tt === "carousel" || tt === "media") {
-    logInboxGuardBlocked(template, genericCarousel);
-    return { blocked: true, reason: genericCarousel };
+    if (log) logInboxGuardBlocked(template, INBOX_QUICK_SEND_CAROUSEL_OR_MEDIA_REASON, guardCtx);
+    return { blocked: true, reason: INBOX_QUICK_SEND_CAROUSEL_OR_MEDIA_REASON };
   }
 
   if (Array.isArray(template.carouselCards) && template.carouselCards.length > 0) {
-    logInboxGuardBlocked(template, genericCarousel);
-    return { blocked: true, reason: genericCarousel };
+    if (log) logInboxGuardBlocked(template, INBOX_QUICK_SEND_CAROUSEL_OR_MEDIA_REASON, guardCtx);
+    return { blocked: true, reason: INBOX_QUICK_SEND_CAROUSEL_OR_MEDIA_REASON };
   }
 
   const cat = (template.category || "").toLowerCase();
   if (cat === "authentication") {
     const reason =
-      "Authentication (OTP) templates can't be sent from the inbox yet. Use the Templates page.";
-    logInboxGuardBlocked(template, reason);
+      "Authentication (OTP) templates can't be sent from Inbox quick-send. Use the Templates page → Continue to send.";
+    if (log) logInboxGuardBlocked(template, reason, guardCtx);
     return { blocked: true, reason };
   }
 
   const hasHeader = !!(template.headerType && String(template.headerType).trim());
   if (hasHeader || headerNeedsUnsupportedDynamicMedia(template.headerType, template.headerContent)) {
-    logInboxGuardBlocked(template, genericCarousel);
-    return { blocked: true, reason: genericCarousel };
+    if (log) logInboxGuardBlocked(template, INBOX_QUICK_SEND_CAROUSEL_OR_MEDIA_REASON, guardCtx);
+    return { blocked: true, reason: INBOX_QUICK_SEND_CAROUSEL_OR_MEDIA_REASON };
   }
 
   if (Array.isArray(template.buttons) && template.buttons.length > 0) {
-    logInboxGuardBlocked(template, genericCarousel);
-    return { blocked: true, reason: genericCarousel };
+    if (log) logInboxGuardBlocked(template, INBOX_QUICK_SEND_CAROUSEL_OR_MEDIA_REASON, guardCtx);
+    return { blocked: true, reason: INBOX_QUICK_SEND_CAROUSEL_OR_MEDIA_REASON };
   }
 
   return { blocked: false };

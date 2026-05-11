@@ -366,8 +366,8 @@ export function ConnectWhatsAppHub({
 
   const graphPhoneStatus = String(coexistenceDiag?.graphPhoneStatus ?? "").toUpperCase();
   const graphCodeStatus = String(coexistenceDiag?.graphCodeVerificationStatus ?? "").toUpperCase();
-  const graphPhoneDisconnected =
-    graphPhoneStatus === "DISCONNECTED" || graphCodeStatus === "NOT_VERIFIED";
+  /** `NOT_VERIFIED` alone is common on test numbers and does not prove Cloud API is off. */
+  const graphPhoneDisconnected = graphPhoneStatus === "DISCONNECTED";
   const graphSubscriptionConfirmed = coexistenceDiag?.wabaSubscribedApps?.configuredAppIdPresent === true;
   const setupIncomplete =
     metaActive &&

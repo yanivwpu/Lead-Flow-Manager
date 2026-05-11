@@ -245,13 +245,12 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
       ) {
         blockerReason =
           "C) Phone Cloud API status is DISCONNECTED / NOT_VERIFIED. WABA subscription is OK, but Meta has not activated Cloud API routing for this phone.";
-      } else if (
-        phoneGraph.ok &&
-        (String(graphPhoneStatus || "").toUpperCase() === "DISCONNECTED" ||
-          String(graphCodeVerificationStatus || "").toUpperCase() === "NOT_VERIFIED")
-      ) {
+      } else if (phoneGraph.ok && String(graphPhoneStatus || "").toUpperCase() === "DISCONNECTED") {
         blockerReason =
-          "C) Phone Cloud API shows DISCONNECTED or code_verification_status NOT_VERIFIED — customer messages may stay in WhatsApp Business app.";
+          "C) Phone Cloud API status is DISCONNECTED — Cloud API routing may be inactive for this phone.";
+      } else if (phoneGraph.ok && String(graphCodeVerificationStatus || "").toUpperCase() === "NOT_VERIFIED") {
+        blockerReason =
+          "code_verification_status=NOT_VERIFIED (warning only): common on test numbers; outbound templates can still return HTTP 200 from Graph. Confirm with [WA_TEMPLATE_SEND_SUCCESS] or the Graph error body on failed sends.";
       } else if (!connectionSavedAsCoexistence && reasons.some((r) => r.includes("coexistence"))) {
         blockerReason = "D) Connection not saved as coexistence — provisioning route may differ.";
       } else if (!reasons.length && webhookProbe.webhookEndpointHealthy && subscribedApps.hasConfiguredAppId) {
@@ -261,14 +260,15 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
         blockerReason = reasons[0] || "Review reasons[] and Meta Business Manager.";
       }
 
+      const phoneDisconnectedForRouting =
+        phoneGraph.ok && String(graphPhoneStatus || "").toUpperCase() === "DISCONNECTED";
+
       const routingLikelyActive =
         webhookProbe.webhookEndpointHealthy &&
         !!(appId && subscribedApps.hasConfiguredAppId) &&
         debugToken.ok !== false &&
         debugToken.is_valid !== false &&
-        (!phoneGraph.ok ||
-          (String(graphPhoneStatus || "").toUpperCase() !== "DISCONNECTED" &&
-            String(graphCodeVerificationStatus || "").toUpperCase() !== "NOT_VERIFIED")) &&
+        (!phoneGraph.ok || !phoneDisconnectedForRouting) &&
         wabaPhones.phoneUnderWaba;
 
       const payload = {

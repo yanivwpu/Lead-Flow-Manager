@@ -1458,16 +1458,19 @@ export function UnifiedInbox() {
 
   const handleSendTemplateFromInbox = () => {
     if (!selectedInboxTemplate || !selectedContactId) return;
-    const { blocked } = getInboxTemplateSendBlockReason({
-      name: selectedInboxTemplate.name,
-      bodyText: selectedInboxTemplate.bodyText,
-      headerType: selectedInboxTemplate.headerType,
-      headerContent: selectedInboxTemplate.headerContent,
-      buttons: selectedInboxTemplate.buttons,
-      templateType: selectedInboxTemplate.templateType,
-      carouselCards: selectedInboxTemplate.carouselCards,
-      category: selectedInboxTemplate.category,
-    });
+    const { blocked } = getInboxTemplateSendBlockReason(
+      {
+        name: selectedInboxTemplate.name,
+        bodyText: selectedInboxTemplate.bodyText,
+        headerType: selectedInboxTemplate.headerType,
+        headerContent: selectedInboxTemplate.headerContent,
+        buttons: selectedInboxTemplate.buttons,
+        templateType: selectedInboxTemplate.templateType,
+        carouselCards: selectedInboxTemplate.carouselCards,
+        category: selectedInboxTemplate.category,
+      },
+      { logWhenBlocked: true, guardLogContext: "inbox_quick_send" }
+    );
     if (blocked) return;
     sendTemplateFromInboxMutation.mutate({
       templateId: selectedInboxTemplate.id,

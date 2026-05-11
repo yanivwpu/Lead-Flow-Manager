@@ -1856,6 +1856,7 @@ export function registerTemplateRoutes(app: Express): void {
           channel: "whatsapp" as const,
           sendSource: sendSourceTag,
           metaSendPath,
+          inboxQuickSendGuardSkipped: metaSendPath === "library_full",
           carouselCardCount: carouselCardMediaNormalized.length,
           carouselCardMediaUrls: carouselCardMediaNormalized.map((c) => ({
             cardIndex: c.cardIndex,
@@ -1924,16 +1925,19 @@ export function registerTemplateRoutes(app: Express): void {
         let components: any[] | undefined;
 
         if (metaSendPath === "quick_send") {
-          const inboxBlock = getInboxTemplateSendBlockReason({
-            name: template.name,
-            bodyText: template.bodyText,
-            headerType: template.headerType,
-            headerContent: template.headerContent,
-            buttons: template.buttons,
-            templateType: template.templateType,
-            carouselCards: template.carouselCards,
-            category: template.category,
-          });
+          const inboxBlock = getInboxTemplateSendBlockReason(
+            {
+              name: template.name,
+              bodyText: template.bodyText,
+              headerType: template.headerType,
+              headerContent: template.headerContent,
+              buttons: template.buttons,
+              templateType: template.templateType,
+              carouselCards: template.carouselCards,
+              category: template.category,
+            },
+            { logWhenBlocked: true, guardLogContext: "server_quick_send" }
+          );
           if (inboxBlock.blocked) {
             console.warn(
               `[WA_TEMPLATE_SEND] ${JSON.stringify({
