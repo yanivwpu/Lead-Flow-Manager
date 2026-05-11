@@ -50,7 +50,8 @@ import { SavedPresetCampaignModals } from "@/components/SavedPresetCampaignModal
 import { LocalizedTemplateSelector } from "@/components/LocalizedTemplateSelector";
 import {
   collectRequiredLibraryTemplatePlaceholders,
-  friendlyDocumentFilenameForTemplateSend,
+  extractSortedPlaceholders,
+  friendlyHeaderDocumentLabelForLibraryPreview,
   getCarouselImageHeaderCardIndices,
   getInboxTemplateSendBlockReason,
   getLibraryTemplateSendStructureBlockReason,
@@ -97,6 +98,9 @@ interface MessageTemplate {
   createdAt: string;
   /** Persisted last-used carousel card media (https URLs) for previews + send prefill. */
   carouselDefaultMedia?: TemplateCarouselDefaultMediaMap | null;
+  /** Last-sent header media (same table as carousel defaults, key `header`). */
+  headerDefaultMediaUrl?: string | null;
+  headerDefaultOriginalFilename?: string | null;
 }
 
 interface RetargetableChat {
@@ -794,6 +798,7 @@ export function Templates() {
       {
         headerDocumentFilename: ht === "document" ? optionalHeaderDocumentFilename : undefined,
         carouselCardMedia: carouselCardMediaForSend,
+        persistedHeaderDefaultMediaUrl: selectedTemplate.headerDefaultMediaUrl ?? null,
       }
     );
   }, [
@@ -807,7 +812,12 @@ export function Templates() {
 
   const resolvedHeaderMediaForPreview = useMemo(() => {
     if (!selectedTemplate) return null as string | null;
-    return resolveLibraryHeaderMediaDisplayUrl(selectedTemplate, variableValues, optionalHeaderMediaUrl);
+    return resolveLibraryHeaderMediaDisplayUrl(
+      selectedTemplate,
+      variableValues,
+      optionalHeaderMediaUrl,
+      selectedTemplate.headerDefaultMediaUrl ?? null
+    );
   }, [selectedTemplate, variableValues, optionalHeaderMediaUrl]);
 
   useEffect(() => {
@@ -826,10 +836,11 @@ export function Templates() {
     }
     const headerDocumentDisplayName =
       ht === "document" && resolvedHeaderMediaForPreview
-        ? friendlyDocumentFilenameForTemplateSend({
-            headerDocumentFilename: optionalHeaderDocumentFilename,
-            mediaUrl: resolvedHeaderMediaForPreview,
+        ? friendlyHeaderDocumentLabelForLibraryPreview({
             templateName: selectedTemplate.name,
+            savedOriginalFilename: selectedTemplate.headerDefaultOriginalFilename ?? null,
+            optionalRuntimeFilename: optionalHeaderDocumentFilename,
+            mediaUrl: resolvedHeaderMediaForPreview,
           })
         : undefined;
     return {
@@ -980,16 +991,27 @@ export function Templates() {
   });
 
   const prepareTemplateSendDialogState = (template: MessageTemplate) => {
-    setVariableValues({});
     const ht = (template.headerType || "").toLowerCase();
     const headerDefaultUrl =
-      (template as any)?.headerDefaultMediaUrl && typeof (template as any).headerDefaultMediaUrl === "string"
-        ? String((template as any).headerDefaultMediaUrl).trim()
-        : "";
-    setOptionalHeaderMediaUrl(
-      headerDefaultUrl && ["image", "video", "document"].includes(ht) ? headerDefaultUrl : null
+      typeof template.headerDefaultMediaUrl === "string" ? template.headerDefaultMediaUrl.trim() : "";
+    const headerDefaultOk =
+      headerDefaultUrl && /^https?:\/\//i.test(headerDefaultUrl) && ["image", "video", "document"].includes(ht);
+    const headerPhs = extractSortedPlaceholders((template.headerContent || "").trim());
+
+    setVariableValues({});
+    if (headerDefaultOk && headerPhs.length === 1) {
+      setVariableValues({ [headerPhs[0]]: headerDefaultUrl });
+      setOptionalHeaderMediaUrl(null);
+    } else if (headerDefaultOk) {
+      setOptionalHeaderMediaUrl(headerDefaultUrl);
+    } else {
+      setOptionalHeaderMediaUrl(null);
+    }
+    setOptionalHeaderDocumentFilename(
+      typeof template.headerDefaultOriginalFilename === "string" && template.headerDefaultOriginalFilename.trim()
+        ? template.headerDefaultOriginalFilename.trim().slice(0, 240)
+        : null
     );
-    setOptionalHeaderDocumentFilename(null);
     setOptionalHeaderMediaMeta(null);
     const carouselPrefill = carouselDefaultMediaToSendDialogState(template.carouselDefaultMedia ?? undefined);
     setCarouselCardMediaByIndex(carouselPrefill);

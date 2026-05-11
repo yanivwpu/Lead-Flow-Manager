@@ -392,8 +392,37 @@ export function looksLikeOpaqueStorageFilename(seg: string): boolean {
   if (!s) return true;
   if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\./i.test(s)) return true;
   if (/^[0-9]{10,}-[0-9]{6,}\./.test(s)) return true;
+  /** Meta / WhatsApp CDN-style names: long numeric segments + `_n.ext` */
+  if (s.length >= 20 && /^[0-9][0-9_]{8,}_n\.[a-z0-9]{1,8}$/i.test(s)) return true;
   if (/^blob:/i.test(s)) return true;
   return false;
+}
+
+/**
+ * Customer-facing PDF/document title for library cards, modals, and send preview.
+ * Prefer explicit display name, then a clean upload filename, then saved default, then template-based name.
+ */
+export function friendlyHeaderDocumentLabelForLibraryPreview(opts: {
+  templateName?: string | null;
+  /** Persisted from last successful send (`template_carousel_media_defaults.header`). */
+  savedOriginalFilename?: string | null;
+  /** Current send flow upload filename. */
+  optionalRuntimeFilename?: string | null;
+  /** Already-resolved label (e.g. from parent live preview). */
+  runtimeDisplayName?: string | null;
+  mediaUrl: string;
+}): string {
+  const rt = (opts.runtimeDisplayName || "").trim();
+  if (rt) return rt;
+  const opt = sanitizeDocumentFilenameForMeta(opts.optionalRuntimeFilename);
+  if (opt && !looksLikeOpaqueStorageFilename(opt)) return opt;
+  const saved = sanitizeDocumentFilenameForMeta(opts.savedOriginalFilename);
+  if (saved && !looksLikeOpaqueStorageFilename(saved)) return saved;
+  return friendlyDocumentFilenameForTemplateSend({
+    headerDocumentFilename: null,
+    mediaUrl: opts.mediaUrl,
+    templateName: opts.templateName,
+  });
 }
 
 function inferDocumentFilenameFromUrl(url: string): string | null {
@@ -1180,11 +1209,40 @@ export function getLibraryTemplateSendStructureBlockReason(
   variableValues: Record<string, string>,
   missingPlaceholderKeys: string[],
   optionalHeaderMediaUrl?: string | null,
-  options?: { headerDocumentFilename?: string | null; carouselCardMedia?: CarouselCardRuntimeMedia[] }
+  options?: {
+    headerDocumentFilename?: string | null;
+    carouselCardMedia?: CarouselCardRuntimeMedia[];
+    /** Saved R2/public URL from last send — satisfies single media-variable headers when form is empty. */
+    persistedHeaderDefaultMediaUrl?: string | null;
+  }
 ): string | null {
   if (missingPlaceholderKeys.length > 0) return null;
-  const effective = effectiveTemplateRowForLibrarySend(template, optionalHeaderMediaUrl);
-  const built = buildMetaLibraryTemplateSendComponents(effective, variableValues, {
+  const persisted = (options?.persistedHeaderDefaultMediaUrl || "").trim();
+  const vv = normalizeTemplateVariableMap(variableValues);
+  const hcRaw = (template.headerContent || "").trim();
+  const headerPh = extractSortedPlaceholders(hcRaw);
+  const ht = (template.headerType || "").toLowerCase();
+  const opt = typeof optionalHeaderMediaUrl === "string" ? optionalHeaderMediaUrl.trim() : "";
+  const vvAug = (() => {
+    if (!["image", "video", "document"].includes(ht) || headerPh.length !== 1) return vv;
+    const key = headerPh[0];
+    if ((vv[key] ?? "").trim()) return vv;
+    const fill =
+      opt && /^https?:\/\//i.test(opt)
+        ? opt
+        : persisted && /^https?:\/\//i.test(persisted)
+          ? persisted
+          : "";
+    if (!fill) return vv;
+    return { ...vv, [key]: fill };
+  })();
+
+  const effective = effectiveTemplateRowForLibrarySend(
+    template,
+    optionalHeaderMediaUrl,
+    persisted || null
+  );
+  const built = buildMetaLibraryTemplateSendComponents(effective, vvAug, {
     headerDocumentFilename: options?.headerDocumentFilename,
     carouselCardMedia: options?.carouselCardMedia,
   });
@@ -1207,15 +1265,21 @@ export function getLibraryTemplateSendStructureBlockReason(
  */
 export function effectiveTemplateRowForLibrarySend(
   template: TemplateRowForMetaSend,
-  optionalHeaderMediaUrl?: string | null
+  optionalHeaderMediaUrl?: string | null,
+  persistedHeaderDefaultMediaUrl?: string | null
 ): TemplateRowForMetaSend {
   const opt = typeof optionalHeaderMediaUrl === "string" ? optionalHeaderMediaUrl.trim() : "";
+  const persisted =
+    typeof persistedHeaderDefaultMediaUrl === "string" ? persistedHeaderDefaultMediaUrl.trim() : "";
   const ht = (template.headerType || "").toLowerCase();
   if (!["image", "video", "document"].includes(ht)) return template;
   const hc = (template.headerContent || "").trim();
   if (extractSortedPlaceholders(hc).length > 0) return template;
   if (opt && /^https?:\/\//i.test(opt)) {
     return { ...template, headerContent: opt };
+  }
+  if (persisted && /^https?:\/\//i.test(persisted)) {
+    return { ...template, headerContent: persisted };
   }
   return template;
 }
@@ -1224,17 +1288,24 @@ export function effectiveTemplateRowForLibrarySend(
 export function resolveLibraryHeaderMediaDisplayUrl(
   template: TemplateRowForMetaSend,
   variableValues: Record<string, string>,
-  optionalHeaderMediaUrl?: string | null
+  optionalHeaderMediaUrl?: string | null,
+  persistedHeaderDefaultMediaUrl?: string | null
 ): string | null {
-  const eff = effectiveTemplateRowForLibrarySend(template, optionalHeaderMediaUrl);
-  const ht = (eff.headerType || "").toLowerCase();
+  const opt = typeof optionalHeaderMediaUrl === "string" ? optionalHeaderMediaUrl.trim() : "";
+  const persisted =
+    typeof persistedHeaderDefaultMediaUrl === "string" ? persistedHeaderDefaultMediaUrl.trim() : "";
+  const ht = (template.headerType || "").toLowerCase();
   if (!["image", "video", "document"].includes(ht)) return null;
+  const eff = effectiveTemplateRowForLibrarySend(template, opt || null, persisted || null);
   const hc = (eff.headerContent || "").trim();
   const vv = normalizeTemplateVariableMap(variableValues);
   const ph = extractSortedPlaceholders(hc);
   if (ph.length) {
     const u = (vv[ph[0]] ?? "").trim();
-    return u || null;
+    if (u && /^https?:\/\//i.test(u)) return u;
+    if (opt && /^https?:\/\//i.test(opt)) return opt;
+    if (persisted && /^https?:\/\//i.test(persisted)) return persisted;
+    return null;
   }
   if (/^https?:\/\//i.test(hc)) return hc;
   return null;

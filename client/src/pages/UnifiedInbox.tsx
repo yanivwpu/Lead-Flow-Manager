@@ -2,9 +2,8 @@ import { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback } fr
 import { apiRequest } from "@/lib/queryClient";
 import { WHATSAPP_FREE_FORM_BUFFER_MS } from "@shared/conversationReplyWindow";
 import {
-  friendlyDocumentFilenameForTemplateSend,
+  friendlyHeaderDocumentLabelForLibraryPreview,
   getInboxTemplateSendBlockReason,
-  looksLikeOpaqueStorageFilename,
   carouselDefaultMediaUrlsForLivePreview,
   type TemplateCarouselDefaultMediaMap,
 } from "@shared/metaTemplateSend";
@@ -2318,59 +2317,20 @@ export function UnifiedInbox() {
                                 tvHeaderMedia.originalFilename.trim()
                                   ? tvHeaderMedia.originalFilename.trim()
                                   : "";
-                              const tvDocFn =
-                                (tv && typeof tv.headerDocumentFilename === "string"
-                                  ? tv.headerDocumentFilename.trim()
-                                  : "") || fromHeaderMedia;
-                              let docLabel = msg.mediaFilename?.trim() || tvDocFn || "";
-                              if (
-                                (!docLabel || looksLikeOpaqueStorageFilename(docLabel)) &&
-                                effectiveMediaUrl &&
-                                mediaKind === "document"
-                              ) {
-                                docLabel = friendlyDocumentFilenameForTemplateSend({
-                                  headerDocumentFilename: tvDocFn || null,
-                                  mediaUrl: effectiveMediaUrl,
-                                  templateName: tmplName,
-                                });
-                              } else if (!docLabel && effectiveMediaUrl && mediaKind === "document") {
-                                try {
-                                  const seg =
-                                    new URL(effectiveMediaUrl).pathname.split("/").filter(Boolean).pop() ||
-                                    "";
-                                  const raw = seg ? decodeURIComponent(seg) : "Document";
-                                  docLabel = looksLikeOpaqueStorageFilename(raw)
-                                    ? friendlyDocumentFilenameForTemplateSend({
-                                        headerDocumentFilename: null,
-                                        mediaUrl: effectiveMediaUrl,
-                                        templateName: tmplName,
-                                      })
-                                    : raw;
-                                } catch {
-                                  docLabel = friendlyDocumentFilenameForTemplateSend({
-                                    headerDocumentFilename: null,
-                                    mediaUrl: effectiveMediaUrl,
-                                    templateName: tmplName,
-                                  });
-                                }
-                              }
-
-                              let documentBubbleTitle = (docLabel || "Document").trim();
-                              if (mediaKind === "document") {
-                                const userOrig =
-                                  (tv && typeof tv.headerDocumentFilename === "string"
-                                    ? tv.headerDocumentFilename.trim()
-                                    : "") ||
-                                  (tvHeaderMedia && typeof tvHeaderMedia.originalFilename === "string"
-                                    ? tvHeaderMedia.originalFilename.trim()
-                                    : "") ||
-                                  (typeof msg.mediaFilename === "string" ? msg.mediaFilename.trim() : "");
-                                const hasUserUploadName =
-                                  userOrig.length > 0 && !looksLikeOpaqueStorageFilename(userOrig);
-                                documentBubbleTitle = hasUserUploadName
-                                  ? userOrig
-                                  : `${(tmplName || "Template").replace(/\.pdf$/i, "")}.pdf`;
-                              }
+                              const documentBubbleTitle =
+                                effectiveMediaUrl && mediaKind === "document"
+                                  ? friendlyHeaderDocumentLabelForLibraryPreview({
+                                      templateName: tmplName,
+                                      optionalRuntimeFilename:
+                                        (tv && typeof tv.headerDocumentFilename === "string"
+                                          ? tv.headerDocumentFilename.trim()
+                                          : "") ||
+                                        fromHeaderMedia ||
+                                        (typeof msg.mediaFilename === "string" ? msg.mediaFilename.trim() : "") ||
+                                        null,
+                                      mediaUrl: effectiveMediaUrl,
+                                    })
+                                  : "Document";
 
                               const hasTemplateBubbleMedia =
                                 !!effectiveMediaUrl &&

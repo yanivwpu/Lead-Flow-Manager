@@ -3,7 +3,10 @@ import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight, Image, Video, FileIcon, LayoutGrid } from "lucide-react";
-import { extractSortedPlaceholders, looksLikeOpaqueStorageFilename } from "@shared/metaTemplateSend";
+import {
+  extractSortedPlaceholders,
+  friendlyHeaderDocumentLabelForLibraryPreview,
+} from "@shared/metaTemplateSend";
 
 /** Minimal shape for UI preview only — mirrors template rows from `/api/templates`. */
 export type WhatsAppRichPreviewTemplate = {
@@ -15,6 +18,10 @@ export type WhatsAppRichPreviewTemplate = {
   footerText?: string | null;
   buttons?: unknown[] | null;
   carouselCards?: unknown[] | null;
+  /** Persisted last-used header media URL (R2 / public https) from `template_carousel_media_defaults.header`. */
+  headerDefaultMediaUrl?: string | null;
+  /** Original filename when header default was a user upload (documents). */
+  headerDefaultOriginalFilename?: string | null;
 };
 
 /** Resolved copy + media for send-review — mirrors what Meta will deliver when variables and assets are set. */
@@ -144,6 +151,8 @@ export function WhatsAppTemplateRichPreview({
     carouselInBubbleTight && (tt === "carousel" || cards.length > 0) && cards.length > 0;
 
   const liveMedia = (livePreview?.headerMediaUrl || "").trim();
+  const persistedHeader = (template.headerDefaultMediaUrl || "").trim();
+  const persistedOk = persistedHeader && /^https?:\/\//i.test(persistedHeader);
   const displayMediaUrl =
     liveMedia && /^https?:\/\//i.test(liveMedia)
       ? liveMedia
@@ -152,7 +161,9 @@ export function WhatsAppTemplateRichPreview({
           /^https?:\/\//i.test(hc) &&
           extractSortedPlaceholders(hc).length === 0
         ? hc
-        : null;
+        : persistedOk && ["image", "video", "document"].includes(ht)
+          ? persistedHeader
+          : null;
 
   const displayBodyText = (livePreview?.bodyText ?? template.bodyText) || "—";
 
@@ -400,18 +411,12 @@ export function WhatsAppTemplateRichPreview({
     }
   } else if (ht === "document") {
     if (displayMediaUrl) {
-      const tail = (() => {
-        try {
-          const u = new URL(displayMediaUrl);
-          const seg = u.pathname.split("/").filter(Boolean).pop();
-          return seg ? decodeURIComponent(seg) : "Document";
-        } catch {
-          return "Document";
-        }
-      })();
-      const docTitle =
-        (livePreview?.headerDocumentDisplayName || "").trim() ||
-        (!looksLikeOpaqueStorageFilename(tail) ? tail : "Document");
+      const docTitle = friendlyHeaderDocumentLabelForLibraryPreview({
+        templateName: template.name,
+        savedOriginalFilename: template.headerDefaultOriginalFilename ?? null,
+        runtimeDisplayName: livePreview?.headerDocumentDisplayName ?? null,
+        mediaUrl: displayMediaUrl,
+      });
       mediaBlock = isLibraryCard ? (
         <div
           className={cn(

@@ -129,6 +129,8 @@ async function persistFailedOutboundTemplateMessage(args: {
   carouselCardMediaNormalized: CarouselCardRuntimeMedia[];
   errorMessage: string;
   errorCode?: string | null;
+  persistedHeaderDefaultMediaUrl?: string | null;
+  persistedHeaderDefaultOriginalFilename?: string | null;
 }): Promise<void> {
   const { conversationId } = await ensureWhatsAppConversationForContact(args.userId, args.contactId);
   const displaySource =
@@ -136,7 +138,8 @@ async function persistFailedOutboundTemplateMessage(args: {
   const resolvedHeaderMediaUrl = resolveLibraryHeaderMediaDisplayUrl(
     displaySource,
     args.variableValues,
-    args.optionalHeaderMediaUrl ?? null
+    args.optionalHeaderMediaUrl ?? null,
+    args.persistedHeaderDefaultMediaUrl ?? null
   );
   const displayContent = buildOutboundTemplateDisplayContent(
     {
@@ -150,13 +153,16 @@ async function persistFailedOutboundTemplateMessage(args: {
   const preview = displayContent.substring(0, 100);
 
   const headerTypeLower = (displaySource.headerType || "").toLowerCase();
+  const docOrigPersist =
+    (args.optionalHeaderMediaFilename && String(args.optionalHeaderMediaFilename).trim()) ||
+    (args.persistedHeaderDefaultOriginalFilename && String(args.persistedHeaderDefaultOriginalFilename).trim()) ||
+    null;
   const headerMedia =
     resolvedHeaderMediaUrl && ["image", "video", "document"].includes(headerTypeLower)
       ? {
           url: resolvedHeaderMediaUrl,
           type: headerTypeLower,
-          originalFilename:
-            headerTypeLower === "document" ? args.optionalHeaderMediaFilename ?? null : null,
+          originalFilename: headerTypeLower === "document" ? docOrigPersist : null,
           mimeType: args.optionalHeaderMediaMimeType ?? null,
           sizeBytes:
             args.optionalHeaderMediaSizeBytes !== undefined ? args.optionalHeaderMediaSizeBytes : null,
@@ -176,6 +182,10 @@ async function persistFailedOutboundTemplateMessage(args: {
     });
   }
 
+  const docFnFailed =
+    (args.optionalHeaderMediaFilename && String(args.optionalHeaderMediaFilename).trim()) ||
+    (args.persistedHeaderDefaultOriginalFilename && String(args.persistedHeaderDefaultOriginalFilename).trim()) ||
+    "";
   const templateVariablesPayload = {
     ...normalizeTemplateVariableMap(args.variableValues),
     templateLanguage: args.templateLang,
@@ -185,9 +195,8 @@ async function persistFailedOutboundTemplateMessage(args: {
     headerType: displaySource.headerType ?? null,
     headerMediaUrl: resolvedHeaderMediaUrl,
     ...(headerMedia ? { headerMedia } : {}),
-    ...(args.optionalHeaderMediaFilename &&
-    (displaySource.headerType || "").toLowerCase() === "document"
-      ? { headerDocumentFilename: args.optionalHeaderMediaFilename }
+    ...(docFnFailed && (displaySource.headerType || "").toLowerCase() === "document"
+      ? { headerDocumentFilename: docFnFailed }
       : {}),
     ...(carouselCardsDisplay && carouselCardsDisplay.length > 0
       ? { templateType: "carousel", carouselCardsDisplay }
@@ -1978,9 +1987,33 @@ export function registerTemplateRoutes(app: Express): void {
         Number.isFinite(optionalHeaderMediaSizeBytesBody)
           ? Math.max(0, Math.floor(optionalHeaderMediaSizeBytesBody))
           : undefined;
+
+      let persistedHeaderDefaultMediaUrl: string | null = null;
+      let persistedHeaderDefaultOriginalFilename: string | null = null;
+      if (metaSendPath === "library_full") {
+        try {
+          const defRow = await storage.getTemplateCarouselMediaDefaults(req.user.id, template.id);
+          const cm = defRow?.cardMedia as Record<string, unknown> | undefined;
+          const hdr = cm?.header;
+          if (hdr && typeof hdr === "object") {
+            const h = hdr as Record<string, unknown>;
+            const u = typeof h.mediaUrl === "string" ? h.mediaUrl.trim() : "";
+            if (u && /^https?:\/\//i.test(u)) persistedHeaderDefaultMediaUrl = u;
+            const of = typeof h.originalFilename === "string" ? h.originalFilename.trim() : "";
+            if (of) persistedHeaderDefaultOriginalFilename = of.slice(0, 240);
+          }
+        } catch {
+          /* non-fatal */
+        }
+      }
+
       let libraryEffectiveTemplate =
         metaSendPath === "library_full"
-          ? effectiveTemplateRowForLibrarySend(template, optionalHeaderMediaUrl ?? null)
+          ? effectiveTemplateRowForLibrarySend(
+              template,
+              optionalHeaderMediaUrl ?? null,
+              persistedHeaderDefaultMediaUrl
+            )
           : template;
 
       console.log(
@@ -2113,7 +2146,10 @@ export function registerTemplateRoutes(app: Express): void {
           metaSendPath === "quick_send"
             ? buildMetaCloudTemplateSendComponents(template, variableValues)
             : buildMetaLibraryTemplateSendComponents(libraryEffectiveTemplate, variableValues, {
-                headerDocumentFilename: optionalHeaderMediaFilename ?? null,
+                headerDocumentFilename:
+                  (optionalHeaderMediaFilename && optionalHeaderMediaFilename.trim()) ||
+                  persistedHeaderDefaultOriginalFilename ||
+                  null,
                 ...(carouselCardMediaNormalized.length > 0
                   ? { carouselCardMedia: carouselCardMediaNormalized }
                   : {}),
@@ -2172,7 +2208,8 @@ export function registerTemplateRoutes(app: Express): void {
               if (metaSendPath === "library_full") {
                 libraryEffectiveTemplate = effectiveTemplateRowForLibrarySend(
                   template,
-                  optionalHeaderMediaUrl ?? null
+                  optionalHeaderMediaUrl ?? null,
+                  persistedHeaderDefaultMediaUrl
                 );
               }
             }
@@ -2277,6 +2314,8 @@ export function registerTemplateRoutes(app: Express): void {
                     carouselCardMediaNormalized,
                     errorMessage: WA_TEMPLATE_MEDIA_NEEDS_CONVERSION_MESSAGE,
                     errorCode: v.code,
+                    persistedHeaderDefaultMediaUrl,
+                    persistedHeaderDefaultOriginalFilename,
                   });
                 } catch (persistFail: unknown) {
                   console.error(
@@ -2435,6 +2474,8 @@ export function registerTemplateRoutes(app: Express): void {
                     : metaErr?.fetchFailureKind
                       ? String(metaErr.fetchFailureKind)
                       : undefined,
+                persistedHeaderDefaultMediaUrl,
+                persistedHeaderDefaultOriginalFilename,
               });
             } catch (persistFail: unknown) {
               console.error(
@@ -2573,7 +2614,8 @@ export function registerTemplateRoutes(app: Express): void {
           const resolvedHeaderMediaUrl = resolveLibraryHeaderMediaDisplayUrl(
             displaySource,
             variableValues,
-            optionalHeaderMediaUrl ?? null
+            optionalHeaderMediaUrl ?? null,
+            persistedHeaderDefaultMediaUrl
           );
           const displayContent = buildOutboundTemplateDisplayContent(
             {
@@ -2587,13 +2629,17 @@ export function registerTemplateRoutes(app: Express): void {
           const preview = displayContent.substring(0, 100);
 
           const headerTypeLower = (displaySource.headerType || "").toLowerCase();
+          const docFilenameForBubble =
+            (optionalHeaderMediaFilename && optionalHeaderMediaFilename.trim()) ||
+            persistedHeaderDefaultOriginalFilename ||
+            null;
           const headerMedia =
             resolvedHeaderMediaUrl && ["image", "video", "document"].includes(headerTypeLower)
               ? {
                   url: resolvedHeaderMediaUrl,
                   type: headerTypeLower,
                   originalFilename:
-                    headerTypeLower === "document" ? optionalHeaderMediaFilename ?? null : null,
+                    headerTypeLower === "document" ? docFilenameForBubble : null,
                   mimeType: optionalHeaderMediaMimeType ?? null,
                   sizeBytes:
                     optionalHeaderMediaSizeBytes !== undefined ? optionalHeaderMediaSizeBytes : null,
@@ -2622,9 +2668,9 @@ export function registerTemplateRoutes(app: Express): void {
             headerType: displaySource.headerType ?? null,
             headerMediaUrl: resolvedHeaderMediaUrl,
             ...(headerMedia ? { headerMedia } : {}),
-            ...(optionalHeaderMediaFilename &&
+            ...(docFilenameForBubble &&
             (displaySource.headerType || "").toLowerCase() === "document"
-              ? { headerDocumentFilename: optionalHeaderMediaFilename }
+              ? { headerDocumentFilename: docFilenameForBubble }
               : {}),
             ...(carouselCardsDisplay && carouselCardsDisplay.length > 0
               ? { templateType: "carousel", carouselCardsDisplay }
