@@ -966,8 +966,11 @@ export const conversations = pgTable("conversations", {
   lastMessagePreview: text("last_message_preview"),
   lastMessageDirection: text("last_message_direction"), // inbound, outbound
 
-  /** CRM re-engagement follow-up state — see `shared/reEngagement.ts`. Not delivery/read receipts. */
-  reEngagement: jsonb("re_engagement").default(sql`'{}'::jsonb`),
+  /**
+   * CRM re-engagement follow-up state (JSON document) — see `shared/reEngagement.ts`.
+   * DB: `migrations/0013_conversations_re_engagement.sql` (additive jsonb; not a boolean flag).
+   */
+  reEngagement: jsonb("re_engagement").notNull().default(sql`'{}'::jsonb`),
   
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
