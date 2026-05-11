@@ -428,7 +428,10 @@ export function ChatbotBuilder() {
   const { data: messageTemplates = [] } = useQuery<MessageTemplate[]>({
     queryKey: ["/api/templates"],
     retry: false,
-    select: (tpls: any[]) => tpls.filter((t) => t.status === "approved"),
+    select: (tpls: any[]) =>
+      Array.isArray(tpls)
+        ? tpls.filter((t) => (t?.status || "").toLowerCase().trim() === "approved")
+        : [],
   });
 
   /* ── Mutations ── */

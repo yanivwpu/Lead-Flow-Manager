@@ -411,7 +411,13 @@ export const messageTemplates = pgTable("message_templates", {
   templateType: text("template_type").default("text"), // 'text', 'media', 'carousel'
   bodyText: text("body_text"), // Template body with {{variables}}
   headerType: text("header_type"), // 'text', 'image', 'video', 'document'
+  /** Meta HEADER `format` — mirrors `header_type` for synced templates (migration 0014). */
+  headerFormat: text("header_format"),
   headerContent: text("header_content"), // Header text or media URL
+  /** Sample URL from Meta `example.header_handle` — preview only (migration 0014). */
+  approvedSampleMediaUrl: text("approved_sample_media_url"),
+  approvedSampleMediaType: text("approved_sample_media_type"),
+  mediaRuntimeRequired: boolean("media_runtime_required"),
   footerText: text("footer_text"),
   buttons: jsonb("buttons").default(sql`'[]'::jsonb`), // Array of button configs
   carouselCards: jsonb("carousel_cards").default(sql`'[]'::jsonb`), // For carousel templates

@@ -292,6 +292,10 @@ function formatLanguageCode(lang: string): string {
   return (lang || "").replace(/-/g, "_").toUpperCase() || "—";
 }
 
+function isApprovedTemplateStatus(status: string | null | undefined): boolean {
+  return (status || "").toLowerCase().trim() === "approved";
+}
+
 function libraryQuickSendMeta(template: MessageTemplate) {
   return getInboxTemplateSendBlockReason({
     name: template.name,
@@ -494,10 +498,39 @@ export function Templates() {
     };
   }, [templatesEnabled, user, queryClient]);
 
-  const { data: templates = [], isLoading: templatesLoading } = useQuery<MessageTemplate[]>({
+  const { data: templatesApiData, isLoading: templatesLoading } = useQuery<MessageTemplate[]>({
     queryKey: ["/api/templates"],
     enabled: !!templatesEnabled,
   });
+
+  /** Defensive: never treat non-array JSON as iterable (avoids empty UI + runtime errors). */
+  const templates = useMemo(
+    () => (Array.isArray(templatesApiData) ? templatesApiData : []),
+    [templatesApiData]
+  );
+
+  /** WhatsApp Library tab: synced rows from GET /api/templates (exclude malformed + hard-rejected only). */
+  const whatsappLibraryTemplates = useMemo(() => {
+    return templates.filter((t) => {
+      if (!t || typeof t !== "object" || typeof t.id !== "string") return false;
+      const st = (t.status || "").toLowerCase().trim();
+      if (st === "rejected") return false;
+      return true;
+    });
+  }, [templates]);
+
+  useEffect(() => {
+    if (!templatesEnabled) return;
+    const approved = templates.filter((t) => (t.status || "").toLowerCase().trim() === "approved");
+    console.log(
+      `[TEMPLATE_LIBRARY_FILTER] ${JSON.stringify({
+        queryReturnedArray: Array.isArray(templatesApiData),
+        apiRowCount: templates.length,
+        libraryTabRowCount: whatsappLibraryTemplates.length,
+        approvedNormalizedCount: approved.length,
+      })}`
+    );
+  }, [templates, templatesApiData, templatesEnabled, whatsappLibraryTemplates.length]);
 
   const { data: savedPresetCampaigns = [], isLoading: savedCampaignsLoading } = useQuery<
     PresetCampaignListItem[]
@@ -976,7 +1009,7 @@ export function Templates() {
   };
 
   const continuePreviewToSend = () => {
-    if (!libraryModalTemplate || libraryModalTemplate.status !== "approved") return;
+    if (!libraryModalTemplate || !isApprovedTemplateStatus(libraryModalTemplate.status)) return;
     templateSendOriginRef.current = "library";
     setLibraryModalOpen(false);
     setSelectedTemplate(libraryModalTemplate);
@@ -1055,8 +1088,8 @@ export function Templates() {
             <TabsTrigger value="templates" data-testid="tab-templates" className="text-[11px] sm:text-sm py-1.5 px-1 sm:px-2 md:px-3 flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1 rounded-md leading-tight">
               <FileText className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0 sm:mr-0" />
               <span className="text-center whitespace-normal break-words px-0.5">
-                <span className="hidden min-[420px]:inline">WhatsApp Library ({templates.length})</span>
-                <span className="min-[420px]:hidden">WA Lib. ({templates.length})</span>
+                <span className="hidden min-[420px]:inline">WhatsApp Library ({whatsappLibraryTemplates.length})</span>
+                <span className="min-[420px]:hidden">WA Lib. ({whatsappLibraryTemplates.length})</span>
               </span>
             </TabsTrigger>
             <TabsTrigger value="re-engagement" data-testid="tab-re-engagement" className="text-[11px] sm:text-sm py-1.5 px-1 sm:px-2 md:px-3 flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1 rounded-md leading-tight">
@@ -1290,7 +1323,7 @@ export function Templates() {
               <div className="flex items-center justify-center py-10 md:py-12">
                 <RefreshCw className="h-6 w-6 animate-spin text-gray-400" />
               </div>
-            ) : templates.length === 0 ? (
+            ) : whatsappLibraryTemplates.length === 0 ? (
               <Card className="overflow-hidden">
                 <CardContent className="py-10 md:py-12 text-center px-4">
                   <FileText className="h-12 w-12 mx-auto mb-3 text-gray-300" />
@@ -1310,13 +1343,13 @@ export function Templates() {
               </Card>
             ) : (
               <div className="grid gap-3 md:gap-4 md:grid-cols-2">
-                {templates.map((template) => {
+                {whatsappLibraryTemplates.map((template) => {
                   const StatusIcon = STATUS_ICONS[template.status]?.icon || AlertCircle;
                   const statusColor = STATUS_ICONS[template.status]?.color || "text-gray-500";
                   const TypeIcon = getTemplateIcon(template.templateType);
                   const qs = libraryQuickSendMeta(template);
                   const syncMeta = template.twilioSid?.startsWith("meta_");
-                  const approved = template.status === "approved";
+                  const approved = isApprovedTemplateStatus(template.status);
                   const catClass =
                     CATEGORY_BADGE_CLASS[(template.category || "").toLowerCase()] ||
                     "bg-gray-50 text-gray-700 border-gray-200";
@@ -1429,7 +1462,7 @@ export function Templates() {
                             type="button"
                             size="sm"
                             className="w-full sm:flex-1 bg-brand-green hover:bg-brand-green/90 text-white font-medium shadow-sm"
-                            disabled={template.status !== "approved"}
+                            disabled={!isApprovedTemplateStatus(template.status)}
                             onClick={() => handleUseTemplate(template)}
                             data-testid={`button-use-template-${template.id}`}
                           >
@@ -1519,7 +1552,7 @@ export function Templates() {
                       const resendCooldown = isResendCoolingDown(chat.lastTemplateSentAt);
 
                       const approvedQuickTemplates = templates.filter(
-                        (t) => t.status === "approved" && !libraryQuickSendMeta(t).blocked
+                        (t) => isApprovedTemplateStatus(t.status) && !libraryQuickSendMeta(t).blocked
                       );
 
                       const templateSelect = (
@@ -2117,7 +2150,7 @@ export function Templates() {
                   <DialogTitle className="pr-8 text-left leading-snug">{libraryModalTemplate.name}</DialogTitle>
                 </DialogHeader>
                 <div className="flex flex-wrap gap-1.5 pb-3">
-                  {libraryModalTemplate.status === "approved" ? (
+                  {isApprovedTemplateStatus(libraryModalTemplate.status) ? (
                     <span className="inline-flex items-center gap-1 text-[10px] font-normal text-gray-600">
                       <CheckCircle2 className="h-3 w-3 shrink-0 text-slate-500" aria-hidden />
                       Approved
@@ -2182,7 +2215,7 @@ export function Templates() {
                   <Button type="button" variant="outline" onClick={() => setLibraryModalOpen(false)}>
                     Close
                   </Button>
-                  {libraryModalTemplate.status === "approved" ? (
+                  {isApprovedTemplateStatus(libraryModalTemplate.status) ? (
                     <Button
                       type="button"
                       className="bg-brand-green hover:bg-brand-green/90 text-white"

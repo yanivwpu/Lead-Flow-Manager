@@ -791,6 +791,32 @@ export function registerTemplateRoutes(app: Express): void {
       for (const row of defaultsRows) {
         defaultsByTemplateId.set(row.templateId, coerceTemplateCarouselDefaultMediaMap(row.cardMedia));
       }
+      const approvedNorm = templates.filter(
+        (t) => (t.status || "").toLowerCase().trim() === "approved"
+      ).length;
+      const metaRows = templates.filter((t) => (t.twilioSid || "").startsWith("meta_")).length;
+      const approvedMeta = templates.filter(
+        (t) =>
+          (t.twilioSid || "").startsWith("meta_") &&
+          (t.status || "").toLowerCase().trim() === "approved"
+      ).length;
+      console.log(
+        `[TEMPLATE_LIBRARY_QUERY] ${JSON.stringify({
+          userId: req.user.id,
+          rowCount: templates.length,
+          approvedNormalized: approvedNorm,
+          metaTwilioSidPrefix: metaRows,
+          approvedMeta,
+          responsePreviewIds: templates.slice(0, 12).map((t) => ({
+            id: t.id,
+            name: t.name,
+            status: t.status,
+            twilioSidPrefix: (t.twilioSid || "").slice(0, 16),
+            templateType: t.templateType,
+          })),
+        })}`
+      );
+      res.setHeader("Cache-Control", "private, no-store, must-revalidate");
       res.json(
         templates.map((t) => ({
           ...enrichMessageTemplateMediaFields(t),
@@ -968,16 +994,26 @@ export function registerTemplateRoutes(app: Express): void {
             `[WA_TEMPLATE_SYNC] classified name=${templateName} templateType=${parsed.templateType} components=${parsed.componentTypesUpper.join(",")} carouselCards=${Array.isArray(parsed.carouselCards) ? parsed.carouselCards.length : 0}`
           );
 
-          /** DB columns only — omit optional migration-only fields so sync works before optional SQL migrations. */
+          const hf = (parsed.headerFormat || parsed.headerType || "").toLowerCase();
+          const isMediaHeader = ["image", "video", "document"].includes(hf);
+          const approvedSampleMediaType = isMediaHeader ? hf : null;
+          const mediaRuntimeRequired = isMediaHeader;
+
+          /** Persist Meta parse results + media metadata columns used by `/api/templates` + library send flows. */
           const metaRowPayload = {
             name: t.name,
+            language,
             status,
             category,
             templateType: parsed.templateType,
             carouselCards: parsed.carouselCards as any,
             bodyText: parsed.bodyText,
             headerType: parsed.headerType,
+            headerFormat: parsed.headerFormat,
             headerContent: parsed.headerContent,
+            approvedSampleMediaUrl: parsed.approvedSampleMediaUrl,
+            approvedSampleMediaType,
+            mediaRuntimeRequired,
             footerText: parsed.footerText,
             buttons: parsed.buttons as any,
             variables: parsed.variables as any,
@@ -996,7 +1032,6 @@ export function registerTemplateRoutes(app: Express): void {
               await storage.createMessageTemplate({
                 userId: req.user.id,
                 twilioSid: metaId,
-                language,
                 ...metaRowPayload,
               });
               inserted++;
@@ -1146,6 +1181,32 @@ export function registerTemplateRoutes(app: Express): void {
           wabaId,
           templateCount: fetched,
           syncResult: { inserted, updated, skipped },
+        })}`
+      );
+
+      const postSyncRows = await storage.getMessageTemplates(req.user.id);
+      const dbSnapshot = {
+        total: postSyncRows.length,
+        approvedNormalized: postSyncRows.filter(
+          (r) => (r.status || "").toLowerCase().trim() === "approved"
+        ).length,
+        metaProviderRows: postSyncRows.filter((r) => (r.twilioSid || "").startsWith("meta_")).length,
+        approvedMetaRows: postSyncRows.filter(
+          (r) =>
+            (r.twilioSid || "").startsWith("meta_") &&
+            (r.status || "").toLowerCase().trim() === "approved"
+        ).length,
+      };
+      console.log(
+        `[TEMPLATE_SYNC_RESULT] ${JSON.stringify({
+          userId: req.user.id,
+          provider: resolvedProvider,
+          wabaId,
+          fetchedFromProvider: fetched,
+          inserted,
+          updated,
+          skipped,
+          dbSnapshot,
         })}`
       );
 
