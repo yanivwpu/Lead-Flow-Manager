@@ -443,6 +443,135 @@ export type CarouselCardRuntimeMedia = {
   originalFilename?: string | null;
 };
 
+/** Persisted on outbound template messages for CRM carousel bubble rendering. */
+export type CarouselCrmDisplayCard = {
+  cardIndex: number;
+  headerMediaUrl: string | null;
+  headerMediaType: "image" | "video" | "document" | null;
+  originalFilename?: string | null;
+  documentDisplayName?: string | null;
+  bodyText: string | null;
+  buttonLabels: string[];
+};
+
+function resolveCarouselCardHeaderLinkForDisplay(
+  cardRaw: unknown,
+  vvStr: Record<string, string>,
+  runtime?: { mediaUrl?: string | null; originalFilename?: string | null } | null
+): { link: string | null; format: "image" | "video" | "document" | null } {
+  const card = cardRaw as Record<string, unknown>;
+  const rawList = Array.isArray(card.components)
+    ? (card.components as Record<string, unknown>[])
+    : [];
+  const previewUrl =
+    typeof card.headerUrl === "string" && /^https?:\/\//i.test(card.headerUrl) ? card.headerUrl : null;
+  const runtimeUrl = (runtime?.mediaUrl || "").trim();
+
+  for (const c of rawList) {
+    if (String(c.type || "").toUpperCase() !== "HEADER") continue;
+    const fmt = String(c.format || "").toLowerCase();
+    if (fmt !== "image" && fmt !== "video" && fmt !== "document") continue;
+    let link: string | null = runtimeUrl && /^https?:\/\//i.test(runtimeUrl) ? runtimeUrl : null;
+    if (!link) link = previewUrl;
+    const ex = (c as { example?: { header_handle?: string[] } }).example?.header_handle?.[0];
+    if (!link && ex && /^https?:\/\//i.test(String(ex))) link = String(ex).trim();
+    const txt = c.text != null ? String(c.text) : "";
+    if (!link && txt) {
+      const tph = extractSortedPlaceholders(txt);
+      if (tph.length && vvStr[tph[0]]) link = vvStr[tph[0]].trim();
+    }
+    if (!link || !/^https?:\/\//i.test(link)) {
+      return { link: null, format: fmt as "image" | "video" | "document" };
+    }
+    return { link, format: fmt as "image" | "video" | "document" };
+  }
+  return { link: null, format: null };
+}
+
+function extractCarouselCardBodyTextForDisplay(cardRaw: unknown, vvStr: Record<string, string>): string | null {
+  const card = cardRaw as Record<string, unknown>;
+  const rawList = Array.isArray(card.components)
+    ? (card.components as Record<string, unknown>[])
+    : [];
+  for (const c of rawList) {
+    if (String(c.type || "").toUpperCase() !== "BODY") continue;
+    const text = String((c as { text?: string }).text || "");
+    if (!text.trim()) return null;
+    return substituteTemplateVariablesForDisplay(text, vvStr) || null;
+  }
+  return null;
+}
+
+function extractCarouselCardButtonLabelsForDisplay(cardRaw: unknown): string[] {
+  const card = cardRaw as Record<string, unknown>;
+  const rawList = Array.isArray(card.components)
+    ? (card.components as Record<string, unknown>[])
+    : [];
+  const out: string[] = [];
+  for (const c of rawList) {
+    if (String(c.type || "").toUpperCase() !== "BUTTONS") continue;
+    const btnArr = Array.isArray((c as { buttons?: unknown }).buttons)
+      ? ((c as { buttons: unknown[] }).buttons as unknown[])
+      : [];
+    for (const b of btnArr) {
+      const br = b as Record<string, unknown>;
+      const t = String(br.text ?? br.title ?? "").trim();
+      if (t) out.push(t);
+    }
+    break;
+  }
+  return out;
+}
+
+/**
+ * Build JSON-safe carousel rows for CRM `messages.template_variables.carouselCardsDisplay`
+ * after a successful library send (merged runtime uploads + variable substitution).
+ */
+export function buildCarouselCrmDisplayCardsForPersist(opts: {
+  carouselCards: unknown[] | null | undefined;
+  variableValues: Record<string, string>;
+  carouselCardMedia?: CarouselCardRuntimeMedia[] | null;
+}): CarouselCrmDisplayCard[] {
+  const raw = Array.isArray(opts.carouselCards) ? opts.carouselCards : [];
+  const vv = normalizeTemplateVariableMap(opts.variableValues);
+  const byIdx = new Map<number, CarouselCardRuntimeMedia>();
+  for (const m of opts.carouselCardMedia || []) {
+    if (m && typeof m.cardIndex === "number" && Number.isFinite(m.cardIndex)) {
+      byIdx.set(m.cardIndex, m);
+    }
+  }
+  const out: CarouselCrmDisplayCard[] = [];
+  for (let i = 0; i < raw.length; i++) {
+    const rt = byIdx.get(i);
+    const runtime = rt
+      ? { mediaUrl: rt.mediaUrl, originalFilename: rt.originalFilename ?? null }
+      : null;
+    const { link, format } = resolveCarouselCardHeaderLinkForDisplay(raw[i], vv, runtime);
+    const bodyText = extractCarouselCardBodyTextForDisplay(raw[i], vv);
+    const buttonLabels = extractCarouselCardButtonLabelsForDisplay(raw[i]);
+    let documentDisplayName: string | null = null;
+    let originalFilename: string | null =
+      format === "document" && rt?.originalFilename ? String(rt.originalFilename).trim() || null : null;
+    if (format === "document" && link) {
+      documentDisplayName = friendlyDocumentFilenameForTemplateSend({
+        headerDocumentFilename: originalFilename,
+        mediaUrl: link,
+        templateName: null,
+      });
+    }
+    out.push({
+      cardIndex: i,
+      headerMediaUrl: link,
+      headerMediaType: format,
+      originalFilename: format === "document" ? originalFilename : null,
+      documentDisplayName,
+      bodyText,
+      buttonLabels,
+    });
+  }
+  return out;
+}
+
 export const CAROUSEL_SEND_REQUIRES_EACH_CARD_MEDIA_MESSAGE =
   "Carousel sending requires media for each card.";
 

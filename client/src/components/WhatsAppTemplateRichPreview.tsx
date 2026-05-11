@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -112,6 +112,21 @@ export function WhatsAppTemplateRichPreview({
   const tt = (template.templateType || "").toLowerCase();
   const cards = Array.isArray(template.carouselCards) ? template.carouselCards : [];
   const [carouselIndex, setCarouselIndex] = useState(0);
+
+  const carouselMediaUrls = useMemo(() => {
+    const isCarouselLayout = tt === "carousel" || cards.length > 0;
+    if (!isCarouselLayout || !cards.length) {
+      return [] as (string | null)[];
+    }
+    return cards.map((raw, idx) => {
+      const card = raw as { headerUrl?: string };
+      const override = (livePreview?.carouselCardMediaUrls?.[idx] || "").trim();
+      if (override && /^https?:\/\//i.test(override)) return override;
+      const hu = card.headerUrl ? String(card.headerUrl).trim() : "";
+      if (hu && /^https?:\/\//i.test(hu)) return hu;
+      return null;
+    });
+  }, [tt, cards, livePreview?.carouselCardMediaUrls]);
   const pad = density === "compact" ? "p-2.5" : "p-4";
   const mediaRounded = "rounded-xl border border-gray-200/80 bg-gradient-to-b from-gray-50 to-white overflow-hidden";
   const isLibraryCard = variant === "libraryCard";
@@ -132,65 +147,174 @@ export function WhatsAppTemplateRichPreview({
   let mediaBlock: ReactNode = null;
 
   if (tt === "carousel" && cards.length > 0) {
-    const card = cards[carouselIndex] as { headerUrl?: string; bodyText?: string };
-    const overrideUrl = (livePreview?.carouselCardMediaUrls?.[carouselIndex] || "").trim();
-    const cardImgSrc =
-      overrideUrl && /^https?:\/\//i.test(overrideUrl)
-        ? overrideUrl
-        : card?.headerUrl && /^https?:\/\//i.test(String(card.headerUrl).trim())
-          ? String(card.headerUrl).trim()
-          : null;
-    mediaBlock = (
-      <div className={mediaRounded}>
-        <div className="relative bg-gray-100">
-          {cardImgSrc ? (
-            <img
-              src={cardImgSrc}
-              alt=""
-              className={cn("w-full object-cover", isLibraryCard ? "max-h-24" : "max-h-40")}
-            />
-          ) : isLibraryCard ? (
-            <div className="flex items-center gap-2 border-b border-gray-200/80 bg-gray-50/90 px-2.5 py-2">
-              <LayoutGrid className="h-3.5 w-3.5 shrink-0 text-gray-500" aria-hidden />
-              <span className="text-[11px] font-medium leading-tight text-gray-600">
-                Media per card at send
-              </span>
-            </div>
-          ) : (
-            <div className="flex h-32 items-center justify-center bg-gray-100">
-              <Image className="h-10 w-10 text-gray-400" aria-hidden />
-            </div>
+    const card = cards[carouselIndex] as {
+      headerUrl?: string;
+      bodyText?: string;
+      headerFormat?: string;
+      buttons?: unknown[];
+      documentDisplayName?: string;
+      originalFilename?: string;
+    };
+    const cardFmt = (card.headerFormat || "image").toLowerCase();
+    const cardMediaSrc = carouselMediaUrls[carouselIndex] ?? null;
+    const docTitle =
+      (card.documentDisplayName || "").trim() ||
+      (cardMediaSrc
+        ? (() => {
+            try {
+              const seg = new URL(cardMediaSrc).pathname.split("/").filter(Boolean).pop();
+              return seg ? decodeURIComponent(seg) : "Document";
+            } catch {
+              return "Document";
+            }
+          })()
+        : "Document");
+    const cardButtons = Array.isArray(card.buttons) ? card.buttons : [];
+
+    const cardMediaInner =
+      cardMediaSrc && (cardFmt === "image" || !["video", "document"].includes(cardFmt)) ? (
+        <img
+          src={cardMediaSrc}
+          alt=""
+          className={cn("w-full object-cover", isLibraryCard ? "max-h-24" : "max-h-40")}
+          onError={() => onHeaderMediaError?.()}
+        />
+      ) : cardMediaSrc && cardFmt === "video" ? (
+        <video
+          src={cardMediaSrc}
+          className={cn("w-full bg-black object-contain", isLibraryCard ? "max-h-24" : "max-h-40")}
+          controls={!isLibraryCard}
+          muted={isLibraryCard}
+          playsInline
+          preload="metadata"
+          onError={() => onHeaderMediaError?.()}
+        />
+      ) : cardMediaSrc && cardFmt === "document" ? (
+        <div
+          className={cn(
+            "flex items-center gap-2 border-b border-gray-200/80 bg-white/90",
+            isLibraryCard ? "px-2 py-2" : pad
           )}
-          {cards.length > 1 ? (
-            <div className="absolute bottom-2 right-2 flex gap-1">
-              <Button
-                type="button"
-                size="icon"
-                variant="secondary"
-                className="h-7 w-7 bg-white/90 shadow-sm"
-                disabled={carouselIndex === 0}
-                onClick={() => setCarouselIndex((i) => Math.max(0, i - 1))}
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              <Button
-                type="button"
-                size="icon"
-                variant="secondary"
-                className="h-7 w-7 bg-white/90 shadow-sm"
-                disabled={carouselIndex === cards.length - 1}
-                onClick={() => setCarouselIndex((i) => Math.min(cards.length - 1, i + 1))}
-              >
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-            </div>
-          ) : null}
+        >
+          <FileIcon className="h-5 w-5 shrink-0 text-gray-600" aria-hidden />
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-xs font-medium text-gray-900">{docTitle}</p>
+            <a
+              href={cardMediaSrc}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[11px] text-emerald-700 underline-offset-2 hover:underline"
+            >
+              Open
+            </a>
+          </div>
         </div>
-        <div className={`${pad} space-y-1`}>
-          <p className="text-sm text-gray-800">{card?.bodyText || "—"}</p>
-          <p className="text-[11px] text-gray-500">
-            Card {carouselIndex + 1} of {cards.length}
-          </p>
+      ) : isLibraryCard ? (
+        <div className="flex items-center gap-2 border-b border-gray-200/80 bg-gray-50/90 px-2.5 py-2">
+          <LayoutGrid className="h-3.5 w-3.5 shrink-0 text-gray-500" aria-hidden />
+          <span className="text-[11px] font-medium leading-tight text-gray-600">
+            Media per card at send
+          </span>
+        </div>
+      ) : (
+        <div className="flex min-h-[100px] flex-col items-center justify-center gap-1 bg-gray-100 px-3 py-4 text-center">
+          <LayoutGrid className="h-8 w-8 text-gray-400" aria-hidden />
+          <span className="text-xs font-medium text-gray-600">No card media to preview</span>
+          <span className="text-[11px] text-gray-500">
+            Upload or link media when sending if this card requires it.
+          </span>
+        </div>
+      );
+
+    mediaBlock = (
+      <div className="space-y-2">
+        {cards.length > 1 ? (
+          <div className="-mx-0.5 flex gap-1.5 overflow-x-auto px-0.5 pb-0.5">
+            {cards.map((c, idx) => {
+              const u = carouselMediaUrls[idx];
+              const fmt = (
+                String((c as { headerFormat?: string }).headerFormat || "image") || "image"
+              ).toLowerCase();
+              const isSel = idx === carouselIndex;
+              return (
+                <button
+                  type="button"
+                  key={idx}
+                  onClick={() => setCarouselIndex(idx)}
+                  className={cn(
+                    "relative h-14 w-[4.5rem] shrink-0 overflow-hidden rounded-md border-2 bg-gray-100 transition-colors",
+                    isSel
+                      ? "border-emerald-600 ring-1 ring-emerald-500/30"
+                      : "border-gray-200 hover:border-gray-300"
+                  )}
+                >
+                  {u && (fmt === "image" || !["video", "document"].includes(fmt)) ? (
+                    <img src={u} alt="" className="h-full w-full object-cover" />
+                  ) : u && fmt === "video" ? (
+                    <div className="flex h-full w-full items-center justify-center bg-black">
+                      <Video className="h-5 w-5 text-white" aria-hidden />
+                    </div>
+                  ) : u && fmt === "document" ? (
+                    <div className="flex h-full w-full items-center justify-center bg-gray-50">
+                      <FileIcon className="h-5 w-5 text-gray-600" aria-hidden />
+                    </div>
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center px-1 text-center text-[9px] leading-tight text-gray-500">
+                      {idx + 1}
+                    </div>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
+        <div className={mediaRounded}>
+          <div className="relative bg-gray-100">
+            {cardMediaInner}
+            {cards.length > 1 ? (
+              <div className="absolute bottom-2 right-2 flex gap-1">
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="secondary"
+                  className="h-7 w-7 bg-white/90 shadow-sm"
+                  disabled={carouselIndex === 0}
+                  onClick={() => setCarouselIndex((i) => Math.max(0, i - 1))}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="secondary"
+                  className="h-7 w-7 bg-white/90 shadow-sm"
+                  disabled={carouselIndex === cards.length - 1}
+                  onClick={() => setCarouselIndex((i) => Math.min(cards.length - 1, i + 1))}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            ) : null}
+          </div>
+          <div className={`${pad} space-y-1`}>
+            <p className="text-sm text-gray-800">{card?.bodyText || "—"}</p>
+            {cardButtons.length > 0 ? (
+              <div className="flex flex-wrap gap-1.5 pt-0.5">
+                {cardButtons.map((btn: Record<string, unknown>, bi: number) => (
+                  <Badge
+                    key={bi}
+                    variant="outline"
+                    className="border-orange-200/90 bg-orange-50/90 text-[10px] font-normal text-orange-950"
+                  >
+                    {String(btn.text ?? btn.title ?? `Button ${bi + 1}`)}
+                  </Badge>
+                ))}
+              </div>
+            ) : null}
+            <p className="text-[11px] text-gray-500">
+              Card {carouselIndex + 1} of {cards.length}
+            </p>
+          </div>
         </div>
       </div>
     );

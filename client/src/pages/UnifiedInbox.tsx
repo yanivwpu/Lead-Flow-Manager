@@ -2084,6 +2084,75 @@ export function UnifiedInbox() {
                                 ? lang.replace(/-/g, "_").toUpperCase()
                                 : null;
 
+                              const crmCarouselDisplay = tv?.carouselCardsDisplay;
+                              if (Array.isArray(crmCarouselDisplay) && crmCarouselDisplay.length > 0) {
+                                const carouselForPreview = crmCarouselDisplay.map((row: unknown) => {
+                                  const r = row as Record<string, unknown>;
+                                  const url =
+                                    typeof r.headerMediaUrl === "string" ? r.headerMediaUrl.trim() : "";
+                                  const hfRaw =
+                                    typeof r.headerMediaType === "string"
+                                      ? String(r.headerMediaType).toLowerCase()
+                                      : "image";
+                                  const hf =
+                                    hfRaw === "video" || hfRaw === "document" ? hfRaw : "image";
+                                  const bodyTx =
+                                    typeof r.bodyText === "string" ? r.bodyText : "—";
+                                  const labels = Array.isArray(r.buttonLabels)
+                                    ? (r.buttonLabels as unknown[]).filter((x) => typeof x === "string")
+                                    : [];
+                                  const docDisp =
+                                    typeof r.documentDisplayName === "string"
+                                      ? r.documentDisplayName.trim()
+                                      : "";
+                                  const origFn =
+                                    typeof r.originalFilename === "string"
+                                      ? r.originalFilename.trim()
+                                      : "";
+                                  return {
+                                    headerUrl:
+                                      url && /^https?:\/\//i.test(url) ? url : undefined,
+                                    headerFormat: hf,
+                                    bodyText: bodyTx || "—",
+                                    buttons: labels.map((t) => ({ text: String(t) })),
+                                    documentDisplayName: docDisp || undefined,
+                                    originalFilename: origFn || undefined,
+                                  };
+                                });
+                                return (
+                                  <div className="space-y-1.5 rounded-xl border border-emerald-100/90 bg-emerald-50/40 px-3 py-2 leading-snug">
+                                    <WhatsAppTemplateRichPreview
+                                      template={{
+                                        name: tmplName || "Template",
+                                        templateType: "carousel",
+                                        bodyText: bodyPart || null,
+                                        headerType: null,
+                                        headerContent: null,
+                                        carouselCards: carouselForPreview,
+                                      }}
+                                      livePreview={{ bodyText: bodyPart || undefined }}
+                                      className="min-w-0"
+                                    />
+                                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 pt-0.5">
+                                      <span className="text-[10px] font-semibold uppercase tracking-wide text-emerald-900/85">
+                                        WhatsApp template
+                                      </span>
+                                      {provider === "meta" ? (
+                                        <span className="rounded-full border border-emerald-200/70 bg-white/70 px-1.5 py-px text-[9px] font-medium text-emerald-900/80">
+                                          Meta
+                                        </span>
+                                      ) : null}
+                                    </div>
+                                    <p className="text-sm font-semibold text-gray-900">
+                                      {tmplName || "Template"}
+                                    </p>
+                                    {langBadge ? (
+                                      <p className="text-[10px] text-gray-500">{langBadge}</p>
+                                    ) : null}
+                                  </div>
+                                );
+                              }
+
                               const tvHeaderUrl =
                                 tv && typeof tv.headerMediaUrl === "string"
                                   ? tv.headerMediaUrl.trim()

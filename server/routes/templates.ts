@@ -2,6 +2,7 @@ import type { Express } from "express";
 import type { Channel, PresetCampaign } from "@shared/schema";
 import {
   buildMetaCloudTemplateSendComponents,
+  buildCarouselCrmDisplayCardsForPersist,
   buildMetaLibraryTemplateSendComponents,
   type CarouselCardRuntimeMedia,
   effectiveTemplateRowForLibrarySend,
@@ -1915,6 +1916,19 @@ export function registerTemplateRoutes(app: Express): void {
                 }
               : null;
 
+          const ttCarousel =
+            (template.templateType || "").toLowerCase() === "carousel" ||
+            (Array.isArray(template.carouselCards) && (template.carouselCards as unknown[]).length > 0);
+          let carouselCardsDisplay: ReturnType<typeof buildCarouselCrmDisplayCardsForPersist> | undefined;
+          if (ttCarousel && Array.isArray(template.carouselCards)) {
+            carouselCardsDisplay = buildCarouselCrmDisplayCardsForPersist({
+              carouselCards: template.carouselCards as unknown[],
+              variableValues,
+              carouselCardMedia:
+                carouselCardMediaNormalized.length > 0 ? carouselCardMediaNormalized : undefined,
+            });
+          }
+
           const templateVariablesPayload = {
             ...normalizeTemplateVariableMap(variableValues),
             templateLanguage: templateLang,
@@ -1927,6 +1941,9 @@ export function registerTemplateRoutes(app: Express): void {
             ...(optionalHeaderMediaFilename &&
             (displaySource.headerType || "").toLowerCase() === "document"
               ? { headerDocumentFilename: optionalHeaderMediaFilename }
+              : {}),
+            ...(carouselCardsDisplay && carouselCardsDisplay.length > 0
+              ? { templateType: "carousel", carouselCardsDisplay }
               : {}),
           };
 
