@@ -1664,6 +1664,41 @@ export function registerTemplateRoutes(app: Express): void {
   // Send a template message via the active WhatsApp provider
   app.post("/api/templates/send", async (req, res) => {
     const sendRouteId = "POST /api/templates/send";
+    const sendFinal = {
+      routeReached: false,
+      /** `true` after all URL preflights succeed or none required; `false` if preflight failed; `null` if not applicable yet. */
+      preflightPassed: null as boolean | null,
+      /** Meta Graph `POST /{phone-number-id}/messages` was invoked. */
+      graphCalled: false,
+      /** HTTP 2xx from Graph for the template send. */
+      graphSucceeded: false,
+      metaCode: null as number | string | null,
+      metaMessage: null as string | null,
+      fetchFailureKind: null as string | null,
+      finalResponseStatus: 500,
+      exitPhase: "not_started",
+    };
+    const logCarouselSendFinalState = () => {
+      console.log(`[CAROUSEL_SEND_FINAL_STATE] ${JSON.stringify(sendFinal)}`);
+    };
+    const reply = (status: number, body: Record<string, unknown>, exitPhase: string) => {
+      sendFinal.finalResponseStatus = status;
+      sendFinal.exitPhase = exitPhase;
+      const mc = body.metaCode;
+      if (typeof mc === "number" || typeof mc === "string") {
+        sendFinal.metaCode = mc;
+      }
+      const ec = body.errorCode;
+      if (typeof ec === "string" && sendFinal.metaCode == null) {
+        sendFinal.metaCode = ec;
+      }
+      const err = body.error;
+      if (typeof err === "string") {
+        sendFinal.metaMessage = err;
+      }
+      logCarouselSendFinalState();
+      return res.status(status).json(body);
+    };
     try {
       const rawBody = req.body as Record<string, unknown> | undefined;
       const bodyKeys =
@@ -1688,10 +1723,11 @@ export function registerTemplateRoutes(app: Express): void {
             : null,
         })
       );
+      sendFinal.routeReached = true;
 
       if (!req.user) {
         console.warn(`[SEND_ROUTE_EARLY_EXIT] ${sendRouteId} status=401 reason=unauthorized`);
-        return res.status(401).json({ error: "Unauthorized" });
+        return reply(401, { error: "Unauthorized" }, "unauthorized");
       }
 
       const limits = await subscriptionService.getUserLimits(req.user.id);
@@ -1699,7 +1735,7 @@ export function registerTemplateRoutes(app: Express): void {
         console.warn(
           `[SEND_ROUTE_EARLY_EXIT] ${sendRouteId} status=403 reason=templates_disabled userId=${req.user.id}`
         );
-        return res.status(403).json({ error: "Template messaging is a Pro feature" });
+        return reply(403, { error: "Template messaging is a Pro feature" }, "templates_pro_required");
       }
 
       const {
@@ -1760,7 +1796,11 @@ export function registerTemplateRoutes(app: Express): void {
         console.warn(
           `[SEND_ROUTE_EARLY_EXIT] ${sendRouteId} status=400 reason=missing_template_or_recipient userId=${req.user.id} templateId=${templateId ?? "null"}`
         );
-        return res.status(400).json({ error: "Template ID and either Chat ID or Contact ID are required" });
+        return reply(
+          400,
+          { error: "Template ID and either Chat ID or Contact ID are required" },
+          "missing_template_or_recipient"
+        );
       }
 
       const template = await storage.getMessageTemplate(templateId);
@@ -1768,7 +1808,7 @@ export function registerTemplateRoutes(app: Express): void {
         console.warn(
           `[SEND_ROUTE_EARLY_EXIT] ${sendRouteId} status=404 reason=template_not_found userId=${req.user.id} templateId=${templateId}`
         );
-        return res.status(404).json({ error: "Template not found" });
+        return reply(404, { error: "Template not found" }, "template_not_found");
       }
 
       // Resolve recipient — either from legacy chats table or new contacts table
@@ -1784,14 +1824,18 @@ export function registerTemplateRoutes(app: Express): void {
           console.warn(
             `[SEND_ROUTE_EARLY_EXIT] ${sendRouteId} status=404 reason=contact_not_found userId=${req.user.id} contactId=${contactId}`
           );
-          return res.status(404).json({ error: "Contact not found" });
+          return reply(404, { error: "Contact not found" }, "contact_not_found");
         }
         const phone = contact.whatsappId || contact.phone;
         if (!phone) {
           console.warn(
             `[SEND_ROUTE_EARLY_EXIT] ${sendRouteId} status=400 reason=contact_no_whatsapp userId=${req.user.id} contactId=${contactId}`
           );
-          return res.status(400).json({ error: "Contact does not have a WhatsApp number" });
+          return reply(
+            400,
+            { error: "Contact does not have a WhatsApp number" },
+            "contact_no_whatsapp"
+          );
         }
         recipientPhone = phone;
         recipientName = contact.name;
@@ -1802,13 +1846,13 @@ export function registerTemplateRoutes(app: Express): void {
           console.warn(
             `[SEND_ROUTE_EARLY_EXIT] ${sendRouteId} status=404 reason=chat_not_found userId=${req.user.id} chatId=${chatId}`
           );
-          return res.status(404).json({ error: "Chat not found" });
+          return reply(404, { error: "Chat not found" }, "chat_not_found");
         }
         if (!chat.whatsappPhone) {
           console.warn(
             `[SEND_ROUTE_EARLY_EXIT] ${sendRouteId} status=400 reason=chat_no_whatsapp userId=${req.user.id} chatId=${chatId}`
           );
-          return res.status(400).json({ error: "Chat does not have a WhatsApp number" });
+          return reply(400, { error: "Chat does not have a WhatsApp number" }, "chat_no_whatsapp");
         }
         recipientPhone = chat.whatsappPhone;
         recipientName = chat.name;
@@ -1850,7 +1894,7 @@ export function registerTemplateRoutes(app: Express): void {
         console.warn(
           `[SEND_ROUTE_EARLY_EXIT] ${sendRouteId} status=404 reason=user_session_not_found userId=${req.user.id}`
         );
-        return res.status(404).json({ error: "User not found" });
+        return reply(404, { error: "User not found" }, "user_session_not_found");
       }
 
       const providerPref = (user.whatsappProvider || "").toString().trim().toLowerCase();
@@ -1944,7 +1988,7 @@ export function registerTemplateRoutes(app: Express): void {
             metaError: "no_provider_connected",
           })}`
         );
-        return res.status(400).json({ error: "No WhatsApp provider connected" });
+        return reply(400, { error: "No WhatsApp provider connected" }, "no_whatsapp_provider");
       }
 
       if (resolvedProvider === "meta") {
@@ -1964,7 +2008,11 @@ export function registerTemplateRoutes(app: Express): void {
               metaError: "meta_not_connected",
             })}`
           );
-          return res.status(400).json({ error: "Meta WhatsApp account not connected" });
+          return reply(
+            400,
+            { error: "Meta WhatsApp account not connected" },
+            "meta_not_connected"
+          );
         }
 
         const templateShape = inferMetaTemplateShape({
@@ -2044,7 +2092,7 @@ export function registerTemplateRoutes(app: Express): void {
               metaError: built.error,
             })}`
           );
-          return res.status(400).json({ error: built.error });
+          return reply(400, { error: built.error }, "meta_components_build_error");
         }
 
         components = built.components as any[] | undefined;
@@ -2059,6 +2107,7 @@ export function registerTemplateRoutes(app: Express): void {
 
         const httpsLinksInPayload = collectHttpsLinksFromMetaTemplateComponents(components || []);
         if (httpsLinksInPayload.length > 0) {
+          sendFinal.preflightPassed = false;
           console.log(
             `[WA_TEMPLATE_CAROUSEL_MEDIA_MODE] ${JSON.stringify({
               mode: "public_https_links_in_template_components",
@@ -2141,11 +2190,18 @@ export function registerTemplateRoutes(app: Express): void {
               console.warn(
                 `[SEND_ROUTE_EARLY_EXIT] ${sendRouteId} status=400 reason=media_url_preflight_failed errorCode=${errorCode}`
               );
-              return res.status(400).json({
-                error: userMessage,
-                errorCode,
-                metaCode: null,
-              });
+              sendFinal.preflightPassed = false;
+              sendFinal.metaMessage = userMessage;
+              sendFinal.metaCode = errorCode;
+              return reply(
+                400,
+                {
+                  error: userMessage,
+                  errorCode,
+                  metaCode: null,
+                },
+                "media_url_preflight_failed"
+              );
             }
             console.log(
               `[WA_MEDIA_UPLOAD_SUCCESS] ${JSON.stringify({
@@ -2156,6 +2212,9 @@ export function registerTemplateRoutes(app: Express): void {
               })}`
             );
           }
+          sendFinal.preflightPassed = true;
+        } else {
+          sendFinal.preflightPassed = true;
         }
 
         console.log(
@@ -2178,6 +2237,7 @@ export function registerTemplateRoutes(app: Express): void {
         );
 
         try {
+          sendFinal.graphCalled = true;
           const result = await sendMetaWhatsAppTemplate(
             req.user.id,
             recipientPhone,
@@ -2187,6 +2247,7 @@ export function registerTemplateRoutes(app: Express): void {
           );
           messageId = result.messageId;
           sendStatus = result.status;
+          sendFinal.graphSucceeded = true;
           console.log(
             `[WA_TEMPLATE_SEND] ${JSON.stringify({
               phase: "success",
@@ -2279,14 +2340,24 @@ export function registerTemplateRoutes(app: Express): void {
             }
           }
 
-          return res.status(responseStatus).json({
-            error: metaErrorOut,
-            metaCode: metaErr?.metaErrorCode,
-            errorCode:
-              metaErr?.metaErrorCode != null
-                ? String(metaErr.metaErrorCode)
-                : metaErr?.fetchFailureKind ?? undefined,
-          });
+          sendFinal.graphSucceeded = false;
+          sendFinal.metaCode =
+            metaErr?.metaErrorCode != null ? metaErr.metaErrorCode : metaErr?.fetchFailureKind ?? null;
+          sendFinal.metaMessage = metaErrorRaw;
+          sendFinal.fetchFailureKind =
+            typeof metaErr?.fetchFailureKind === "string" ? metaErr.fetchFailureKind : null;
+          return reply(
+            responseStatus,
+            {
+              error: metaErrorOut,
+              metaCode: metaErr?.metaErrorCode,
+              errorCode:
+                metaErr?.metaErrorCode != null
+                  ? String(metaErr.metaErrorCode)
+                  : metaErr?.fetchFailureKind ?? undefined,
+            },
+            "meta_graph_http_or_network_error"
+          );
         }
       } else if (resolvedProvider === "twilio") {
         const twilioClient = await getUserTwilioClient(req.user.id);
@@ -2303,7 +2374,7 @@ export function registerTemplateRoutes(app: Express): void {
               metaError: "twilio_not_connected",
             })}`
           );
-          return res.status(400).json({ error: "Twilio is not connected" });
+          return reply(400, { error: "Twilio is not connected" }, "twilio_not_connected");
         }
 
         console.log(
@@ -2367,9 +2438,14 @@ export function registerTemplateRoutes(app: Express): void {
             })}`,
             twilioErr
           );
-          return res.status(500).json({
-            error: twilioErr?.message || "Failed to send template via Twilio",
-          });
+          sendFinal.metaMessage = twilioErr?.message || "Failed to send template via Twilio";
+          return reply(
+            500,
+            {
+              error: twilioErr?.message || "Failed to send template via Twilio",
+            },
+            "twilio_send_failed"
+          );
         }
       }
 
@@ -2554,16 +2630,24 @@ export function registerTemplateRoutes(app: Express): void {
         console.log(`[TemplateSend] No legacy chatId — skipping analytics record`);
       }
 
-      res.json({
-        success: true,
-        message: `Template "${template.name}" sent to ${recipientName}`,
-        sendId,
-        messageId,
-        provider: resolvedProvider,
-        persistedMessageId,
-        conversationId: persistedConversationId,
-      });
+      return reply(
+        200,
+        {
+          success: true,
+          message: `Template "${template.name}" sent to ${recipientName}`,
+          sendId,
+          messageId,
+          provider: resolvedProvider,
+          persistedMessageId,
+          conversationId: persistedConversationId,
+        },
+        "completed_ok"
+      );
     } catch (error: any) {
+      sendFinal.exitPhase = "fatal_unhandled_exception";
+      sendFinal.metaMessage = error?.message || String(error);
+      sendFinal.finalResponseStatus = 500;
+      logCarouselSendFinalState();
       console.error(
         `[TEMPLATE_ROUTE_FATAL] POST /api/templates/send`,
         error?.message || error,
