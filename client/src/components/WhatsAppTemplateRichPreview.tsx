@@ -97,6 +97,8 @@ export function WhatsAppTemplateRichPreview({
   carouselStripScale = "default",
   /** When previews use persisted default card images, remind users they can replace before send. */
   savedCarouselDefaultsHint = false,
+  /** In-chat outbound bubble: tighter strip/main/body rhythm without changing thumb size or media aspect. */
+  carouselInBubbleTight = false,
 }: {
   template: WhatsAppRichPreviewTemplate;
   className?: string;
@@ -112,6 +114,7 @@ export function WhatsAppTemplateRichPreview({
   onHeaderMediaError?: () => void;
   carouselStripScale?: "default" | "compact";
   savedCarouselDefaultsHint?: boolean;
+  carouselInBubbleTight?: boolean;
 }) {
   const ht = (template.headerType || "").toLowerCase();
   const hc = (template.headerContent || "").trim();
@@ -137,6 +140,8 @@ export function WhatsAppTemplateRichPreview({
   const mediaRounded = "rounded-xl border border-gray-200/80 bg-gradient-to-b from-gray-50 to-white overflow-hidden";
   const isLibraryCard = variant === "libraryCard";
   const stripCompact = carouselStripScale === "compact";
+  const carouselTight =
+    carouselInBubbleTight && (tt === "carousel" || cards.length > 0) && cards.length > 0;
 
   const liveMedia = (livePreview?.headerMediaUrl || "").trim();
   const displayMediaUrl =
@@ -233,10 +238,15 @@ export function WhatsAppTemplateRichPreview({
         </div>
       );
 
+    const stripGap = carouselTight ? "gap-1" : "gap-1.5";
+    const stripPb = carouselTight ? "pb-0" : "pb-0.5";
+    const cardBodyPad = carouselTight ? "px-2.5 pt-1.5 pb-2" : pad;
+    const cardBodyStack = carouselTight ? "space-y-0.5" : "space-y-1";
+
     mediaBlock = (
-      <div className="space-y-2">
+      <div className={carouselTight ? "space-y-1" : "space-y-2"}>
         {cards.length > 1 ? (
-          <div className="-mx-0.5 flex gap-1.5 overflow-x-auto px-0.5 pb-0.5">
+          <div className={cn("-mx-0.5 flex overflow-x-auto px-0.5", stripGap, stripPb)}>
             {cards.map((c, idx) => {
               const u = carouselMediaUrls[idx];
               const fmt = (
@@ -303,10 +313,10 @@ export function WhatsAppTemplateRichPreview({
               </div>
             ) : null}
           </div>
-          <div className={`${pad} space-y-1`}>
+          <div className={`${cardBodyPad} ${cardBodyStack}`}>
             <p className="text-sm text-gray-800">{card?.bodyText || "—"}</p>
             {cardButtons.length > 0 ? (
-              <div className="flex flex-wrap gap-1.5 pt-0.5">
+              <div className={cn("flex flex-wrap", carouselTight ? "gap-1 pt-0" : "gap-1.5 pt-0.5")}>
                 {cardButtons.map((btn: Record<string, unknown>, bi: number) => (
                   <Badge
                     key={bi}
@@ -318,7 +328,7 @@ export function WhatsAppTemplateRichPreview({
                 ))}
               </div>
             ) : null}
-            <p className="text-[11px] text-gray-500">
+            <p className={cn("text-gray-500", carouselTight ? "text-[10px] leading-tight" : "text-[11px]")}>
               Card {carouselIndex + 1} of {cards.length}
             </p>
             {savedCarouselDefaultsHint ? (
@@ -457,7 +467,7 @@ export function WhatsAppTemplateRichPreview({
   const buttons = Array.isArray(template.buttons) ? template.buttons : [];
   const btnRow =
     buttons.length > 0 ? (
-      <div className="flex flex-wrap gap-2 pt-1">
+      <div className={cn("flex flex-wrap gap-2", carouselTight ? "mx-1.5 pt-0.5" : "pt-1")}>
         {buttons.map((btn: Record<string, unknown>, i: number) => (
           <Badge
             key={i}
@@ -470,17 +480,34 @@ export function WhatsAppTemplateRichPreview({
       </div>
     ) : null;
 
+  const mainBodyPad =
+    carouselTight ? "p-2.5" : density === "compact" ? "p-3" : "p-4";
+  const mediaBlockBottom = carouselTight ? "mb-1.5" : isLibraryCard ? "mb-2" : "mb-3";
+
   return (
     <div className={className}>
       {mediaBlock ? (
-        <div className={cn("space-y-2", isLibraryCard ? "mb-2" : "mb-3")}>{mediaBlock}</div>
+        <div className={cn("space-y-2", mediaBlockBottom)}>{mediaBlock}</div>
       ) : null}
-      <div className={`rounded-xl border border-gray-100 bg-gray-50/90 ${density === "compact" ? "p-3" : "p-4"}`}>
-        <p className="whitespace-pre-wrap text-sm leading-relaxed text-gray-800">
+      <div
+        className={cn(
+          "rounded-xl border border-gray-100 bg-gray-50/90",
+          mainBodyPad,
+          carouselTight && "mx-1.5"
+        )}
+      >
+        <p
+          className={cn(
+            "whitespace-pre-wrap text-sm text-gray-800",
+            carouselTight ? "leading-snug" : "leading-relaxed"
+          )}
+        >
           {displayBodyText}
         </p>
         {template.footerText ? (
-          <p className="mt-2 text-xs text-gray-500">{template.footerText}</p>
+          <p className={cn("text-xs text-gray-500", carouselTight ? "mt-1" : "mt-2")}>
+            {template.footerText}
+          </p>
         ) : null}
       </div>
       {btnRow}

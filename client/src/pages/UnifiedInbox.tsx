@@ -2094,10 +2094,18 @@ export function UnifiedInbox() {
                   messages.map((msg, i) => {
                     const isOut = msg.direction === 'outbound';
                     const isSending = msg.status === 'sending';
+                    const tvCarousel = msg.templateVariables?.carouselCardsDisplay;
+                    const isWaCarouselChatBubble =
+                      msg.contentType === "template" &&
+                      Array.isArray(tvCarousel) &&
+                      tvCarousel.length > 0;
                     return (
                       <div key={msg.id || i} className={cn("flex animate-msg-in", isOut ? "justify-end" : "justify-start")}>
                         <div className={cn(
-                          "max-w-[75%] rounded-lg px-3 py-1.5 text-sm shadow-sm relative",
+                          "max-w-[75%] rounded-lg text-sm shadow-sm relative",
+                          isWaCarouselChatBubble
+                            ? "px-1.5 pt-0.5 pb-1"
+                            : "px-3 py-1.5",
                           isOut ? "bg-[#d9fdd3] text-gray-900 rounded-tr-none" : "bg-white text-gray-900 rounded-tl-none",
                           isSending && "opacity-75"
                         )}>
@@ -2208,7 +2216,7 @@ export function UnifiedInbox() {
                                   };
                                 });
                                 return (
-                                  <div className="space-y-1.5 rounded-xl border border-emerald-100/90 bg-emerald-50/40 px-3 py-2 leading-snug">
+                                  <div className="overflow-hidden rounded-lg border border-emerald-100/90 bg-emerald-50/40 leading-snug">
                                     <WhatsAppTemplateRichPreview
                                       template={{
                                         name: tmplName || "Template",
@@ -2220,24 +2228,28 @@ export function UnifiedInbox() {
                                       }}
                                       livePreview={{ bodyText: bodyPart || undefined }}
                                       carouselStripScale="compact"
+                                      density="compact"
+                                      carouselInBubbleTight
                                       className="min-w-0"
                                     />
-                                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 pt-0.5">
-                                      <span className="text-[10px] font-semibold uppercase tracking-wide text-emerald-900/85">
+                                    <div className="flex min-w-0 items-center gap-1.5 overflow-hidden border-t border-emerald-200/35 px-1.5 py-0.5">
+                                      <span className="shrink-0 text-[8px] font-semibold uppercase tracking-wide text-emerald-900/65">
                                         WhatsApp template
                                       </span>
                                       {provider === "meta" ? (
-                                        <span className="rounded-full border border-emerald-200/70 bg-white/70 px-1.5 py-px text-[9px] font-medium text-emerald-900/80">
+                                        <span className="shrink-0 rounded-full border border-emerald-200/60 bg-white/60 px-1 py-px text-[8px] font-medium leading-none text-emerald-900/75">
                                           Meta
                                         </span>
                                       ) : null}
+                                      <span className="min-w-0 flex-1 truncate text-[11px] font-semibold leading-tight text-gray-900">
+                                        {tmplName || "Template"}
+                                      </span>
+                                      {langBadge ? (
+                                        <span className="shrink-0 text-[8px] tabular-nums leading-none text-gray-500">
+                                          {langBadge}
+                                        </span>
+                                      ) : null}
                                     </div>
-                                    <p className="text-sm font-semibold text-gray-900">
-                                      {tmplName || "Template"}
-                                    </p>
-                                    {langBadge ? (
-                                      <p className="text-[10px] text-gray-500">{langBadge}</p>
-                                    ) : null}
                                   </div>
                                 );
                               }
