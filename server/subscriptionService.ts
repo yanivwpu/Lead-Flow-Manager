@@ -518,6 +518,15 @@ class SubscriptionService {
     const user = await storage.getUserForSession(userId);
     if (!user) throw new Error("User not found");
 
+    if (isProAiTrialActive(user)) {
+      throw Object.assign(
+        new Error(
+          "AI Brain is already included in your active trial. Choose a paid plan when your trial ends to keep AI Brain.",
+        ),
+        { code: "AI_BRAIN_TRIAL_INCLUDES_BRAIN" },
+      );
+    }
+
     const limits = await this.getUserLimits(userId);
     const plan = limits?.plan ?? "free";
     if (plan !== "starter" && plan !== "pro") {

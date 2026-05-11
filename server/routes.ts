@@ -3500,6 +3500,9 @@ export async function registerRoutes(
       if (error?.code === "AI_BRAIN_PLAN_INELIGIBLE") {
         return res.status(400).json({ error: error.message });
       }
+      if (error?.code === "AI_BRAIN_TRIAL_INCLUDES_BRAIN") {
+        return res.status(400).json({ error: error.message });
+      }
       res.status(500).json({ error: error.message || "Failed to create checkout" });
     }
   });
