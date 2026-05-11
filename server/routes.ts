@@ -57,6 +57,7 @@ import {
   type TwilioCredentials,
 } from "./userTwilio";
 import { getAccessTokenExpiryFromDebug } from "./whatsappEmbeddedSignup";
+import { fetchMetaGraphJsonWithRetries } from "./metaChannelHealthUtils";
 import {
   sendMetaWhatsAppMessage,
   connectUserMeta,
@@ -5332,9 +5333,8 @@ export async function registerRoutes(
 
   // ─── Channel Health Status ─────────────────────────────────────────────────
   // Deep health check for all connected channels. For Meta (FB/IG) channels,
-  // verifies four independent conditions: token validity, required permission
-  // scopes, page accessibility, and webhook subscription presence.
-  // `healthy` is true only when every check passes.
+  // verifies token (debug_token), page probe, and webhook subscription with retries.
+  // Transient Meta timeouts do not mark the integration disconnected; see `warnings` + `healthState`.
   app.get("/api/channel-health", async (req, res) => {
     try {
       if (!req.user) return res.status(401).json({ error: "Unauthorized" });
@@ -5397,6 +5397,10 @@ export async function registerRoutes(
               : cfg?.pageName ?? cfg?.phoneNumberId ?? null,
           healthy:     null as boolean | null, // null = could not determine
           issues:      [] as string[],
+          /** Non-blocking notices (e.g. Meta introspection timeout while Page API still works). */
+          warnings:    [] as string[],
+          /** Aggregate UX hint; inbox uses this for softer banners. */
+          healthState: "unknown" as "healthy" | "degraded" | "unhealthy" | "unknown",
           checks: {
             tokenValid:      null as boolean | null,
             tokenScopes:     null as string[] | null,
@@ -5413,88 +5417,177 @@ export async function registerRoutes(
         }
 
         // ── Meta channels (Facebook / Instagram) ──────────────────────────────
-        if ((s.channel === 'facebook' || s.channel === 'instagram') && cfg?.pageId && cfg?.accessToken) {
+        if ((s.channel === "facebook" || s.channel === "instagram") && cfg?.pageId && cfg?.accessToken) {
           const { pageId, accessToken } = cfg as { pageId: string; accessToken: string };
+          const tokenSource = "channel_settings.page_access_token";
 
           try {
-            // Run all four checks in parallel to keep latency low
-            const [tokenResult, pageResult, subResult] = await Promise.allSettled([
-
-              // 1. Token validity + scopes
-              (async () => {
-                if (!appId || !appSecret) return null; // env vars not set
-                const r = await fetch(
-                  `${GRAPH_LOCAL}/debug_token?input_token=${encodeURIComponent(accessToken)}&access_token=${encodeURIComponent(`${appId}|${appSecret}`)}`,
-                  { signal: AbortSignal.timeout(5000) }
-                );
-                return r.ok ? (await r.json()) as any : null;
-              })(),
-
-              // 2. Page accessibility
-              (async () => {
-                const r = await fetch(
-                  `${GRAPH_LOCAL}/${pageId}?fields=name&access_token=${encodeURIComponent(accessToken)}`,
-                  { signal: AbortSignal.timeout(5000) }
-                );
-                return r.ok ? (await r.json()) as any : null;
-              })(),
-
-              // 3. Webhook subscription
-              (async () => {
-                const r = await fetch(
-                  `${GRAPH_LOCAL}/${pageId}/subscribed_apps?access_token=${encodeURIComponent(accessToken)}`,
-                  { signal: AbortSignal.timeout(5000) }
-                );
-                return r.ok ? (await r.json()) as any : null;
-              })(),
+            const [tokenRes, pageRes, subRes] = await Promise.all([
+              appId && appSecret
+                ? fetchMetaGraphJsonWithRetries({
+                    url: `${GRAPH_LOCAL}/debug_token?input_token=${encodeURIComponent(accessToken)}&access_token=${encodeURIComponent(`${appId}|${appSecret}`)}`,
+                    logTag: "debug_token",
+                    tokenSource,
+                    extraLog: { userId: req.user.id, channel: s.channel, pageId },
+                  })
+                : Promise.resolve({
+                    ok: false,
+                    status: 0,
+                    json: null,
+                    outcome: "network" as const,
+                    attempts: 0,
+                    totalLatencyMs: 0,
+                  }),
+              fetchMetaGraphJsonWithRetries({
+                url: `${GRAPH_LOCAL}/${pageId}?fields=name&access_token=${encodeURIComponent(accessToken)}`,
+                logTag: "page_probe",
+                tokenSource,
+                extraLog: { userId: req.user.id, channel: s.channel, pageId },
+              }),
+              fetchMetaGraphJsonWithRetries({
+                url: `${GRAPH_LOCAL}/${pageId}/subscribed_apps?access_token=${encodeURIComponent(accessToken)}`,
+                logTag: "subscribed_apps",
+                tokenSource,
+                extraLog: { userId: req.user.id, channel: s.channel, pageId },
+              }),
             ]);
 
-            // ── Interpret: token ──
-            const tokenData = tokenResult.status === 'fulfilled' ? tokenResult.value : null;
-            if (tokenData?.data) {
-              entry.checks.tokenValid  = tokenData.data.is_valid === true;
-              entry.checks.tokenScopes = tokenData.data.scopes ?? [];
-              const required = REQUIRED_SCOPES[s.channel] ?? [];
-              const missing  = required.filter((sc: string) => !(entry.checks.tokenScopes ?? []).includes(sc));
-              entry.checks.missingScopes = missing;
-              if (!entry.checks.tokenValid)  entry.issues.push('Access token is invalid or expired');
-              if (missing.length)            entry.issues.push(`Missing permissions: ${missing.join(', ')}`);
+            let tokenIntrospectionTransient = false;
+
+            // ── Token introspection (app token) — never conflate timeout with invalid token ──
+            if (appId && appSecret && tokenRes.ok && tokenRes.json && typeof tokenRes.json === "object") {
+              const td = (tokenRes.json as { data?: { is_valid?: boolean; scopes?: string[] } }).data;
+              if (td) {
+                entry.checks.tokenValid = td.is_valid === true;
+                entry.checks.tokenScopes = td.scopes ?? [];
+                const required = REQUIRED_SCOPES[s.channel] ?? [];
+                const missing = required.filter((sc: string) => !(entry.checks.tokenScopes ?? []).includes(sc));
+                entry.checks.missingScopes = missing;
+                if (!entry.checks.tokenValid) entry.issues.push("Access token is invalid or expired");
+                if (missing.length) entry.issues.push(`Missing permissions: ${missing.join(", ")}`);
+              } else {
+                entry.checks.tokenValid = false;
+                entry.issues.push("Token debug response missing data");
+              }
             } else if (appId && appSecret) {
-              entry.issues.push('Could not verify token (Meta API timeout)');
+              if (tokenRes.outcome === "timeout" || tokenRes.outcome === "network") {
+                tokenIntrospectionTransient = true;
+                entry.checks.tokenValid = null;
+              } else {
+                entry.checks.tokenValid = false;
+                entry.issues.push("Access token verification failed");
+              }
+            } else {
+              entry.checks.tokenValid = null;
+              entry.warnings.push(
+                "Meta app credentials are not configured on the server; token introspection was skipped."
+              );
             }
 
-            // ── Interpret: page access ──
-            const pageData = pageResult.status === 'fulfilled' ? pageResult.value : null;
-            entry.checks.pageAccessible = !!(pageData?.id || pageData?.name);
-            if (!entry.checks.pageAccessible) entry.issues.push('Page is not accessible (revoked or unpublished)');
+            // ── Page probe (same user token) — source of truth when introspection is flaky ──
+            const pageJson = pageRes.ok && pageRes.json && typeof pageRes.json === "object" ? (pageRes.json as any) : null;
+            const pageTransient = !pageRes.ok && (pageRes.outcome === "timeout" || pageRes.outcome === "network");
+            if (pageJson && (pageJson.id || pageJson.name)) {
+              entry.checks.pageAccessible = true;
+            } else if (pageTransient) {
+              entry.checks.pageAccessible = null;
+              entry.warnings.push("Meta Page API temporarily unreachable.");
+            } else {
+              entry.checks.pageAccessible = false;
+              entry.issues.push("Page is not accessible (revoked or unpublished)");
+            }
 
-            // ── Interpret: subscription ──
-            const subData = subResult.status === 'fulfilled' ? subResult.value : null;
-            if (subData?.data !== undefined) {
-              const fields: string[] = (subData.data ?? []).flatMap((x: any) => x.subscribed_fields ?? []);
+            // ── Webhook subscription ──
+            const subJson = subRes.ok && subRes.json && typeof subRes.json === "object" ? (subRes.json as any) : null;
+            let subscriptionTransient = false;
+            if (subJson?.data !== undefined) {
+              const fields: string[] = (subJson.data ?? []).flatMap((x: any) => x.subscribed_fields ?? []);
               entry.checks.subscriptionFields = fields;
-              entry.checks.subscriptionOk     = fields.includes('messages');
-              if (!entry.checks.subscriptionOk) entry.issues.push('Webhook not subscribed to "messages" field');
+              entry.checks.subscriptionOk = fields.includes("messages");
+              if (!entry.checks.subscriptionOk) {
+                entry.issues.push('Webhook not subscribed to "messages" field');
+              }
             } else {
               entry.checks.subscriptionOk = null;
-              entry.issues.push('Could not verify webhook subscription');
+              subscriptionTransient = !subRes.ok && (subRes.outcome === "timeout" || subRes.outcome === "network");
+              if (subscriptionTransient) {
+                entry.warnings.push("Could not verify webhook subscription (Meta API timeout).");
+              } else {
+                entry.issues.push("Could not verify webhook subscription");
+              }
             }
 
-            // ── Overall health ──
-            // healthy only when every check we could run passed
-            const checksRun = [
-              entry.checks.tokenValid,
-              entry.checks.pageAccessible,
-              entry.checks.subscriptionOk,
-            ].filter(v => v !== null);
+            // If Graph debug_token flaked but Page API accepts the same token, treat session as valid (degraded).
+            if (
+              (entry.checks.tokenValid === null || entry.checks.tokenValid === undefined) &&
+              tokenIntrospectionTransient &&
+              entry.checks.pageAccessible === true
+            ) {
+              entry.checks.tokenValid = true;
+              entry.warnings.push(
+                "Meta verification temporarily unavailable (token introspection); session validated via Page API."
+              );
+              console.log(
+                `[META_TOKEN_VERIFY] ${JSON.stringify({
+                  phase: "inferred_valid_from_page",
+                  userId: req.user.id,
+                  channel: s.channel,
+                  pageId,
+                  tokenSource,
+                })}`
+              );
+            }
 
-            entry.healthy = checksRun.length > 0
-              ? checksRun.every(Boolean) && entry.issues.length === 0
-              : null;
+            const missing = (entry.checks.missingScopes ?? []) as string[];
+            const definitiveFailure =
+              entry.checks.tokenValid === false ||
+              missing.length > 0 ||
+              entry.checks.pageAccessible === false ||
+              entry.checks.subscriptionOk === false;
 
+            const runnable = [entry.checks.tokenValid, entry.checks.pageAccessible, entry.checks.subscriptionOk].filter(
+              (v) => v !== null && v !== undefined
+            ) as boolean[];
+            const allKnownPass = runnable.length > 0 && runnable.every(Boolean) && entry.issues.length === 0;
+
+            if (definitiveFailure) {
+              entry.healthy = false;
+              entry.healthState = "unhealthy";
+            } else if (allKnownPass) {
+              entry.healthy = true;
+              entry.healthState = entry.warnings.length ? "degraded" : "healthy";
+            } else if (entry.issues.length > 0) {
+              entry.healthy = false;
+              entry.healthState = "unhealthy";
+            } else {
+              entry.healthy = null;
+              entry.healthState = entry.warnings.length ? "degraded" : "unknown";
+            }
+
+            if (definitiveFailure) {
+              console.warn(
+                `[META_HEALTHCHECK] ${JSON.stringify({
+                  severity: "definitive_integration_failure",
+                  userId: req.user.id,
+                  channel: s.channel,
+                  pageId,
+                  tokenSource,
+                  note: "Outbound sends are not gated on this inbox health API; fix integration before relying on IG/FB delivery.",
+                })}`
+              );
+            }
           } catch (err) {
-            entry.issues.push('Health check failed (network error)');
+            entry.warnings.push("Health check encountered an unexpected error (treated as transient).");
             entry.healthy = null;
+            entry.healthState = "degraded";
+            console.warn(
+              `[META_HEALTHCHECK] ${JSON.stringify({
+                phase: "unexpected_catch",
+                userId: req.user.id,
+                channel: s.channel,
+                error: err instanceof Error ? err.message : String(err),
+              })}`
+            );
           }
 
         // ── WhatsApp ──────────────────────────────────────────────────────────
@@ -5507,6 +5600,7 @@ export async function registerRoutes(
             entry.checks.subscriptionOk = !!(userSession as any)?.metaWebhookSubscribed;
             if (!metaFullyOk) entry.issues.push('Meta WhatsApp is not fully connected — check Settings');
             entry.healthy = metaFullyOk ? true : false;
+            entry.healthState = metaFullyOk ? "healthy" : "unhealthy";
 
           } else {
             // Twilio — validate credentials against Twilio API
@@ -5528,19 +5622,23 @@ export async function registerRoutes(
                   entry.checks.tokenValid = active;
                   if (!active) entry.issues.push(`Twilio account status: ${data?.status ?? 'unknown'}`);
                   entry.healthy = active;
+                  entry.healthState = active ? "healthy" : "unhealthy";
                 } else {
                   entry.checks.tokenValid = false;
                   entry.issues.push('Twilio credentials are invalid or rejected');
                   entry.healthy = false;
+                  entry.healthState = "unhealthy";
                 }
               } catch {
                 entry.healthy = null;
-                entry.issues.push('Could not reach Twilio to verify credentials');
+                entry.healthState = "degraded";
+                entry.warnings.push("Twilio verification temporarily unavailable (network timeout).");
               }
             } else {
               entry.checks.tokenValid = false;
               entry.issues.push('Twilio credentials missing — reconnect in Settings');
               entry.healthy = false;
+              entry.healthState = "unhealthy";
             }
           }
 
@@ -5552,6 +5650,7 @@ export async function registerRoutes(
             entry.checks.tokenValid = false;
             entry.issues.push('Bot token not found — reconnect Telegram in Settings');
             entry.healthy = false;
+            entry.healthState = "unhealthy";
           } else {
             try {
               const [getMeData, webhookData] = await Promise.all([
@@ -5572,10 +5671,13 @@ export async function registerRoutes(
 
               const ran = [entry.checks.tokenValid, entry.checks.subscriptionOk].filter(v => v !== null);
               entry.healthy = ran.length > 0 ? ran.every(Boolean) && entry.issues.length === 0 : null;
+              entry.healthState =
+                entry.healthy === true ? "healthy" : entry.healthy === false ? "unhealthy" : "degraded";
 
             } catch {
               entry.healthy = null;
-              entry.issues.push('Could not reach Telegram API');
+              entry.healthState = "degraded";
+              entry.warnings.push("Telegram API temporarily unreachable.");
             }
           }
 
@@ -5586,16 +5688,24 @@ export async function registerRoutes(
           if (s.isEnabled) {
             entry.checks.subscriptionOk = true;
             entry.healthy = true;
+            entry.healthState = "healthy";
           } else {
             entry.checks.subscriptionOk = false;
             entry.issues.push('Lead intake is not enabled — enable it in Settings');
             entry.healthy = false;
+            entry.healthState = "unhealthy";
           }
 
         // ── Other connected channels (SMS, Webchat, …) ────────────────────────
         } else if (s.isConnected) {
           entry.checks.subscriptionOk = true;
           entry.healthy = true;
+          entry.healthState = "healthy";
+        }
+
+        if (!entry.healthState || entry.healthState === "unknown") {
+          if (entry.healthy === true) entry.healthState = "healthy";
+          else if (entry.healthy === false) entry.healthState = "unhealthy";
         }
 
         result.push(entry);
@@ -5612,6 +5722,8 @@ export async function registerRoutes(
             pageName: null,
             healthy: null,
             issues: [],
+            warnings: [],
+            healthState: "unknown",
             checks: {
               tokenValid: null,
               tokenScopes: null,

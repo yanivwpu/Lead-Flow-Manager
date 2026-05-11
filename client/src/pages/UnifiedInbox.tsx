@@ -847,6 +847,8 @@ export function UnifiedInbox() {
     pageName: string | null;
     healthy: boolean | null;   // null = could not determine; true = all checks passed; false = at least one failed
     issues: string[];          // human-readable list of specific problems found
+    warnings?: string[];
+    healthState?: "healthy" | "degraded" | "unhealthy" | "unknown";
     checks: {
       tokenValid: boolean | null;
       tokenScopes: string[] | null;
@@ -868,12 +870,22 @@ export function UnifiedInbox() {
     refetchOnWindowFocus: true,
   });
 
-  // Channels that are connected but failed at least one health check
-  const unhealthyChannels = channelHealth.filter(c => c.isConnected && c.healthy === false);
+  // Channels that are connected but failed definitive health checks (not transient Meta timeouts)
+  const unhealthyChannels = channelHealth.filter((c) => c.isConnected && c.healthy === false);
+  const degradedChannels = channelHealth.filter(
+    (c) =>
+      c.isConnected &&
+      c.healthy !== false &&
+      (c.healthState === "degraded" || (Array.isArray(c.warnings) && c.warnings.length > 0))
+  );
   const [dismissedHealthAlert, setDismissedHealthAlert] = useState<string | null>(null);
+  const [dismissedDegradedAlert, setDismissedDegradedAlert] = useState<string | null>(null);
   // Only dismiss per session; if different channel breaks, show again
-  const alertKey = unhealthyChannels.map(c => c.channel).sort().join(',');
+  const alertKey = unhealthyChannels.map((c) => c.channel).sort().join(",");
+  const degradedKey = degradedChannels.map((c) => c.channel).sort().join(",");
   const showHealthAlert = unhealthyChannels.length > 0 && dismissedHealthAlert !== alertKey;
+  const showDegradedAlert =
+    degradedChannels.length > 0 && unhealthyChannels.length === 0 && dismissedDegradedAlert !== degradedKey;
 
 
   // Smart scroll: runs synchronously after DOM commit (useLayoutEffect) so
@@ -1699,7 +1711,7 @@ export function UnifiedInbox() {
             const healthMap = new Map(channelHealth.map(ch => [ch.channel, ch]));
             const rows = ORDERED.map(key => healthMap.get(key) ?? {
               channel: key, isConnected: false, isEnabled: false,
-              pageName: null, healthy: null, issues: [], checks: {},
+              pageName: null, healthy: null, issues: [], warnings: [], healthState: "unknown", checks: {},
             });
 
             const getTooltip = (ch: typeof rows[0]) => {
@@ -1709,19 +1721,28 @@ export function UnifiedInbox() {
                 if (ch.channel === 'whatsapp') return `${label}: account verified and ready`;
                 if (ch.channel === 'telegram') return `${label}: bot token valid, webhook active`;
                 if (ch.channel === 'tiktok')   return `${label}: lead intake is active`;
+                if (ch.healthState === "degraded" || (ch.warnings && ch.warnings.length))
+                  return `${label}: connected — ${ch.warnings?.[0] ?? "Meta verification temporarily unavailable."}`;
                 return `${label}: token valid, page accessible, webhook subscribed`;
               }
               if (ch.healthy === false) return `${label} issue: ${ch.issues[0] ?? 'check Settings'}`;
+              if (ch.healthState === "degraded" || (ch.warnings && ch.warnings.length))
+                return `${label}: ${ch.warnings?.[0] ?? "Verification temporarily unavailable"}`;
               return `${label}: status unknown`;
             };
 
             return (
               <div className="flex items-center gap-2 mt-2 pt-2 border-t flex-wrap" data-testid="channel-health-bar">
                 {rows.map(ch => {
+                  const isDegraded =
+                    ch.isConnected &&
+                    ch.healthy !== false &&
+                    (ch.healthState === "degraded" || (!!ch.warnings && ch.warnings.length > 0));
                   const dotColor = !ch.isConnected
                     ? "bg-gray-300"
-                    : ch.healthy === true ? "bg-emerald-500"
+                    : ch.healthy === true ? (isDegraded ? "bg-amber-400" : "bg-emerald-500")
                     : ch.healthy === false ? "bg-red-500"
+                    : isDegraded ? "bg-amber-400"
                     : "bg-gray-400";
                   const textColor = !ch.isConnected ? "text-gray-400" : "text-gray-500";
                   return (
@@ -1742,6 +1763,43 @@ export function UnifiedInbox() {
         </div>
 
         {/* ── Channel health alert banner ── */}
+        {showDegradedAlert && (
+          <div className="mx-3 mb-2 rounded-lg border border-amber-200 bg-amber-50/90 p-2.5" data-testid="channel-health-degraded-alert">
+            <div className="flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold text-amber-900 leading-tight">
+                  Meta verification temporarily unavailable
+                </p>
+                {degradedChannels.map((ch) => (
+                  <p key={ch.channel} className="text-[11px] text-amber-900/85 mt-0.5 leading-tight">
+                    {(ch.channel.charAt(0).toUpperCase() + ch.channel.slice(1))}:{" "}
+                    {ch.warnings?.[0] ?? "Live checks timed out; your saved connection may still work."}
+                  </p>
+                ))}
+                <p className="text-[10px] text-amber-800/80 mt-1 leading-tight">
+                  Messaging and template sends are not blocked by this banner alone. If problems persist, open Settings.
+                </p>
+                <a
+                  href="/app/settings"
+                  className="text-[11px] text-amber-900 font-medium underline underline-offset-2 mt-1 inline-block"
+                  data-testid="channel-health-degraded-settings-link"
+                >
+                  Settings →
+                </a>
+              </div>
+              <button
+                onClick={() => setDismissedDegradedAlert(degradedKey)}
+                className="text-amber-500 hover:text-amber-700 flex-shrink-0"
+                title="Dismiss"
+                data-testid="channel-health-degraded-dismiss"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
+
         {showHealthAlert && (
           <div className="mx-3 mb-2 rounded-lg border border-red-200 bg-red-50 p-2.5" data-testid="channel-health-alert">
             <div className="flex items-start gap-2">
