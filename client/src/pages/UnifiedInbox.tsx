@@ -82,7 +82,10 @@ import { settingsChannelsHref } from "@/lib/settingsChannelsNavigation";
 import { analyzeConversation } from "@/lib/conversationIntelligence";
 import type { ContactContext } from "@/components/AIComposer";
 import { isConversationHandoffActive } from "@shared/handoffActivity";
-import { isMetaReplyWindowExpiredError } from "@/lib/metaReplyWindowError";
+import {
+  isGenericOutboundSendFallbackMessage,
+  isMetaReplyWindowExpiredError,
+} from "@/lib/metaReplyWindowError";
 import {
   isMediaChannelValidationError,
   mediaChannelValidationBubbleText,
@@ -459,6 +462,7 @@ export function UnifiedInbox() {
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const messagesInnerRef = useRef<HTMLDivElement>(null);
   const prevMsgCountRef = useRef(0);
+  const prevLastMessageSigRef = useRef<string>("");
   const prevContactIdRef = useRef<string | null>(null);
   const [showNewMsgBanner, setShowNewMsgBanner] = useState(false);
   // true when user is at/near the bottom — auto-scroll should happen
@@ -468,8 +472,19 @@ export function UnifiedInbox() {
   const justSentRef = useRef(false);
 
   const scrollToBottom = useCallback(() => {
-    const c = messagesContainerRef.current;
-    if (c) c.scrollTop = c.scrollHeight;
+    const run = () => {
+      const c = messagesContainerRef.current;
+      const end = messagesEndRef.current;
+      if (end) {
+        end.scrollIntoView({ block: "end", behavior: "instant" });
+      }
+      if (c) {
+        c.scrollTop = Math.max(0, c.scrollHeight - c.clientHeight);
+      }
+    };
+    requestAnimationFrame(() => {
+      requestAnimationFrame(run);
+    });
   }, []);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -893,29 +908,37 @@ export function UnifiedInbox() {
     const container = messagesContainerRef.current;
     if (!container || messages.length === 0) return;
 
+    const last = messages[messages.length - 1];
+    const lastSig = last
+      ? `${last.id}:${last.status}:${last.errorMessage ?? ""}:${last.errorCode ?? ""}:${last.deliveryFailureKind ?? ""}`
+      : "";
+
     // Conversation switch: pin to bottom immediately.
     if (selectedContactId !== prevContactIdRef.current) {
       prevContactIdRef.current = selectedContactId;
       prevMsgCountRef.current = messages.length;
+      prevLastMessageSigRef.current = lastSig;
       shouldPinRef.current = true;
       setShowNewMsgBanner(false);
-      container.scrollTop = container.scrollHeight;
+      scrollToBottom();
       return;
     }
 
     const isNew = messages.length > prevMsgCountRef.current;
+    const tailChanged = lastSig !== prevLastMessageSigRef.current;
     prevMsgCountRef.current = messages.length;
+    prevLastMessageSigRef.current = lastSig;
 
-    if (!isNew) return;
+    if (!isNew && !tailChanged) return;
 
     if (justSentRef.current || shouldPinRef.current) {
       setShowNewMsgBanner(false);
-      container.scrollTop = container.scrollHeight;
+      scrollToBottom();
     } else {
       // User is reading history — show banner instead of yanking them down.
       setShowNewMsgBanner(true);
     }
-  }, [messages, selectedContactId]);
+  }, [messages, selectedContactId, scrollToBottom]);
 
   // Track pin state and hide banner when user scrolls near bottom.
   useEffect(() => {
@@ -997,7 +1020,12 @@ export function UnifiedInbox() {
         }),
       });
       const json = await res.json();
-      if (!res.ok) throw new Error(json.error || "Failed to send message");
+      if (!res.ok) {
+        const msg = (typeof json?.error === "string" && json.error.trim()) || "Failed to send message";
+        const err = new Error(msg) as Error & { sendPayload?: unknown };
+        err.sendPayload = json;
+        throw err;
+      }
       return json;
     },
     onMutate: async (data) => {
@@ -1078,31 +1106,19 @@ export function UnifiedInbox() {
 
       if (isReplyWindow && context?.conversationId) {
         const messagesKey = ["/api/conversations", context.conversationId, "messages"] as const;
-        const before = queryClient.getQueryData<Message[]>(messagesKey);
-        let patchIdx = -1;
-        if (before?.length) {
-          for (let i = before.length - 1; i >= 0; i--) {
-            if (before[i].id.startsWith("optimistic-") && before[i].status === "sending") {
-              patchIdx = i;
-              break;
-            }
-          }
-        }
-        if (patchIdx >= 0 && before) {
-          const next = [...before];
-          next[patchIdx] = {
-            ...next[patchIdx],
-            status: "failed",
-            deliveryFailureKind: "meta_reply_window",
-          };
-          queryClient.setQueryData(messagesKey, next);
-        } else if (context.previousMessages !== undefined) {
-          queryClient.setQueryData(messagesKey, context.previousMessages);
-        }
+        queryClient.setQueryData<Message[]>(messagesKey, (old) =>
+          (old ?? []).filter((m) => !(m.id.startsWith("optimistic-") && m.status === "sending"))
+        );
         if (context.previousInbox !== undefined) {
           queryClient.setQueryData(["/api/inbox"], context.previousInbox);
         }
         setMessageInput(data.content);
+        void queryClient.invalidateQueries({ queryKey: messagesKey });
+        setTimeout(() => {
+          justSentRef.current = true;
+          shouldPinRef.current = true;
+          scrollToBottom();
+        }, 0);
         return;
       }
 
@@ -1143,19 +1159,47 @@ export function UnifiedInbox() {
             mimeType: "",
           });
         }
+        setTimeout(() => {
+          justSentRef.current = true;
+          shouldPinRef.current = true;
+          scrollToBottom();
+        }, 0);
         return;
       }
 
-      if (context?.conversationId && context.previousMessages !== undefined) {
-        queryClient.setQueryData(
-          ["/api/conversations", context.conversationId, "messages"],
-          context.previousMessages
-        );
+      if (context?.conversationId) {
+        const messagesKey = ["/api/conversations", context.conversationId, "messages"] as const;
+        const before = queryClient.getQueryData<Message[]>(messagesKey);
+        let patchIdx = -1;
+        if (before?.length) {
+          for (let i = before.length - 1; i >= 0; i--) {
+            if (before[i].id.startsWith("optimistic-") && before[i].status === "sending") {
+              patchIdx = i;
+              break;
+            }
+          }
+        }
+        if (patchIdx >= 0 && before) {
+          const next = [...before];
+          next[patchIdx] = {
+            ...next[patchIdx],
+            status: "failed",
+            errorMessage: errMsg,
+          };
+          queryClient.setQueryData(messagesKey, next);
+        } else if (context.previousMessages !== undefined) {
+          queryClient.setQueryData(messagesKey, context.previousMessages);
+        }
+        if (context.previousInbox !== undefined) {
+          queryClient.setQueryData(["/api/inbox"], context.previousInbox);
+        }
+        setMessageInput(data.content);
+        setTimeout(() => {
+          justSentRef.current = true;
+          shouldPinRef.current = true;
+          scrollToBottom();
+        }, 0);
       }
-      if (context?.previousInbox !== undefined) {
-        queryClient.setQueryData(["/api/inbox"], context.previousInbox);
-      }
-      setMessageInput(data.content);
       toast({ title: "Message not sent", description: error.message, variant: "destructive" });
     },
     onSettled: (_data, error, vars, context) => {
@@ -1420,16 +1464,19 @@ export function UnifiedInbox() {
       const res = await apiRequest("POST", "/api/templates/send", payload);
       return res.json();
     },
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
       setShowTemplatePicker(false);
       setSelectedInboxTemplate(null);
       setVarValues({});
       const convId =
         (data as { conversationId?: string })?.conversationId || primaryConversation?.id;
       if (convId) {
-        queryClient.invalidateQueries({ queryKey: ["/api/conversations", convId, "messages"] });
+        await queryClient.invalidateQueries({ queryKey: ["/api/conversations", convId, "messages"] });
       }
-      queryClient.invalidateQueries({ queryKey: ["/api/inbox"] });
+      await queryClient.invalidateQueries({ queryKey: ["/api/inbox"] });
+      justSentRef.current = true;
+      shouldPinRef.current = true;
+      setTimeout(() => scrollToBottom(), 0);
     },
     onError: (error: Error) => {
       toast({ title: "Failed to send template", description: error.message, variant: "destructive" });
@@ -2072,7 +2119,7 @@ export function UnifiedInbox() {
               style={{ backgroundImage: 'url("https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png")', backgroundRepeat: 'repeat', backgroundSize: '400px' }}
             >
               <div className="absolute inset-0 bg-[#efeae2]/90 pointer-events-none" />
-              <div ref={messagesInnerRef} className="relative z-10 p-3 pb-5 flex flex-col gap-1.5 min-h-full justify-end">
+              <div ref={messagesInnerRef} className="relative z-10 flex min-h-full flex-col justify-end gap-1.5 p-3 pb-28">
                 {messagesLoading && messages.length === 0 ? (
                   <div className="flex flex-col gap-3 pb-4">
                     {[80, 55, 120, 45, 90].map((w, i) => (
@@ -2090,6 +2137,15 @@ export function UnifiedInbox() {
                   messages.map((msg, i) => {
                     const isOut = msg.direction === 'outbound';
                     const isSending = msg.status === 'sending';
+                    const errBubbleText = (msg.errorMessage || "").trim();
+                    const showReplyWindowFailureUi =
+                      msg.deliveryFailureKind === "meta_reply_window" ||
+                      msg.errorCode === "meta_reply_window" ||
+                      isMetaReplyWindowExpiredError(errBubbleText);
+                    const showSpecificNonReplyFailure =
+                      !!errBubbleText &&
+                      !showReplyWindowFailureUi &&
+                      !isGenericOutboundSendFallbackMessage(errBubbleText);
                     const tvCarousel = msg.templateVariables?.carouselCardsDisplay;
                     const isWaCarouselChatBubble =
                       msg.contentType === "template" &&
@@ -2509,7 +2565,9 @@ export function UnifiedInbox() {
                                 ? <Loader2 className="w-2.5 h-2.5 text-gray-400 animate-spin" />
                                 : msg.status === 'failed'
                                   ? msg.deliveryFailureKind === 'meta_reply_window' ||
-                                      msg.deliveryFailureKind === 'media_validation'
+                                      msg.deliveryFailureKind === 'media_validation' ||
+                                      msg.errorCode === 'meta_reply_window' ||
+                                      isMetaReplyWindowExpiredError(errBubbleText)
                                     ? null
                                     : <span className="text-[10px] text-red-500 font-medium">Not sent</span>
                                   : <span className="text-[10px] text-gray-400">
@@ -2522,21 +2580,32 @@ export function UnifiedInbox() {
                             msg.deliveryFailureKind !== "media_validation" && (
                             <div
                               className={cn(
-                                "mt-0.5 text-right space-y-0.5",
-                                msg.deliveryFailureKind === "meta_reply_window" ? "max-w-[min(100%,18rem)] ml-auto" : "",
+                                "mt-0.5 space-y-0.5 text-right",
+                                (showReplyWindowFailureUi || showSpecificNonReplyFailure) &&
+                                  "ml-auto max-w-[min(100%,18rem)]",
                               )}
                             >
-                              {msg.deliveryFailureKind === "meta_reply_window" ? (
+                              {showReplyWindowFailureUi ? (
                                 <>
-                                  <p className="text-[10px] font-medium text-red-600 leading-snug">
+                                  <p className="text-[10px] font-medium leading-snug text-red-600">
                                     Message not sent — outside the 24-hour reply window.
                                   </p>
-                                  <p className="text-[10px] text-muted-foreground leading-snug">
-                                    You can reply after the customer messages you again or use an approved message template.
+                                  <p className="text-[10px] leading-snug text-muted-foreground">
+                                    You can reply after the customer messages you again or use an approved WhatsApp
+                                    message template.
                                   </p>
+                                  {errBubbleText &&
+                                  !errBubbleText.toLowerCase().includes("message not sent") &&
+                                  errBubbleText.length < 400 ? (
+                                    <p className="text-[10px] leading-snug text-muted-foreground/90">{errBubbleText}</p>
+                                  ) : null}
                                 </>
-                              ) : msg.deliveryFailureKind === "media_validation" ? null : (
-                                <p className="text-[10px] text-gray-600 leading-snug">
+                              ) : showSpecificNonReplyFailure ? (
+                                <p className="whitespace-pre-wrap text-[10px] font-medium leading-snug text-red-600">
+                                  {errBubbleText}
+                                </p>
+                              ) : (
+                                <p className="text-[10px] leading-snug text-gray-600">
                                   Couldn&apos;t send this message. Check your connection or try again.
                                 </p>
                               )}
@@ -2547,7 +2616,7 @@ export function UnifiedInbox() {
                     );
                   })
                 )}
-                <div ref={messagesEndRef} className="h-1 shrink-0" />
+                <div ref={messagesEndRef} className="h-6 min-h-6 shrink-0 scroll-mt-4" aria-hidden />
               </div>
 
               {/* New messages banner — shown when user is scrolled up */}

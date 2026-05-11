@@ -14,6 +14,7 @@ import { messages as messagesTbl } from "@shared/schema";
 import { eq, sql } from "drizzle-orm";
 import { scheduleHubSpotAutoSync } from "./hubspotAutoSync";
 import { parseConversationReEngagement } from "@shared/reEngagement";
+import { isMetaReplyWindowExpiredError } from "@shared/metaReplyWindowError";
 
 type ForceChannelInput = Channel | string | undefined;
 
@@ -76,7 +77,7 @@ async function countMessagesInConversation(conversationId: string): Promise<numb
 const WHATSAPP_INBOX_CSW_BUFFER_MS = 60 * 60 * 1000;
 
 const WHATSAPP_WINDOW_EXPIRED_MSG =
-  'WhatsApp window expired. Use an approved template or switch to another available channel.';
+  "Message not sent — outside the 24-hour reply window. Use an approved WhatsApp template or wait until the customer messages you again.";
 
 /** Human-readable last-message preview for media messages. */
 function mediaPreviewLabel(contentType?: string): string {
@@ -351,10 +352,31 @@ class ChannelService {
             `selectedChannel=${explicitForce ? targetChannel : '(auto)'} finalChannel=whatsapp ` +
             `windowExpiresAt=${conversation.windowExpiresAt ?? 'null'} reason=${waWin.reason}`
         );
+        const preview = content || (mediaUrl ? mediaPreviewLabel(contentType) : "");
+        const failed = await storage.createMessage({
+          conversationId: conversation.id,
+          contactId,
+          userId,
+          direction: "outbound",
+          content,
+          contentType,
+          mediaUrl,
+          mediaType,
+          mediaFilename,
+          status: "failed",
+          errorMessage: WHATSAPP_WINDOW_EXPIRED_MSG,
+          errorCode: "meta_reply_window",
+        });
+        await storage.updateConversation(conversation.id, {
+          lastMessageAt: new Date(),
+          lastMessagePreview: preview.substring(0, 100),
+          lastMessageDirection: "outbound",
+        });
         return {
           success: false,
-          channel: 'whatsapp',
+          channel: "whatsapp",
           error: WHATSAPP_WINDOW_EXPIRED_MSG,
+          messageId: failed.id,
         };
       }
     }
@@ -427,8 +449,11 @@ class ChannelService {
 
     if (pinChannelNoFallback) {
       await storage.updateMessage(message.id, {
-        status: 'failed',
+        status: "failed",
         errorMessage: sendResult.error,
+        ...(sendResult.error && isMetaReplyWindowExpiredError(sendResult.error)
+          ? { errorCode: "meta_reply_window" as const }
+          : {}),
       });
       console.warn(
         `[sendMessage] failed contactId=${contactId} finalChannel=${targetChannel} error=${sendResult.error || 'unknown'}`
@@ -503,19 +528,22 @@ class ChannelService {
     }
 
     await storage.updateMessage(message.id, {
-      status: 'failed',
+      status: "failed",
       errorMessage: sendResult.error,
+      ...(sendResult.error && isMetaReplyWindowExpiredError(sendResult.error)
+        ? { errorCode: "meta_reply_window" as const }
+        : {}),
     });
 
     console.warn(
-      `[sendMessage] failed contactId=${contactId} finalChannel=${targetChannel} error=${sendResult.error || 'unknown'}`
+      `[sendMessage] failed contactId=${contactId} finalChannel=${targetChannel} error=${sendResult.error || "unknown"}`
     );
 
     return {
       success: false,
       messageId: message.id,
       channel: targetChannel,
-      error: sendResult.error || 'Message delivery failed',
+      error: sendResult.error || "Message delivery failed",
     };
   }
 
