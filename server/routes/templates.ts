@@ -1,5 +1,5 @@
 import type { Express } from "express";
-import type { Channel, PresetCampaign } from "@shared/schema";
+import type { Channel, MessageTemplate, PresetCampaign } from "@shared/schema";
 import {
   buildMetaCloudTemplateSendComponents,
   buildCarouselCrmDisplayCardsForPersist,
@@ -18,6 +18,12 @@ import {
 } from "@shared/metaTemplateSend";
 import { storage } from "../storage";
 import { getMetaMessageTemplates, sendMetaWhatsAppTemplate } from "../userMeta";
+import {
+  classifyTemplateMediaUrlForLog,
+  collectHttpsLinksFromMetaTemplateComponents,
+  friendlyMessageForPreflightFailure,
+  preflightHttpsMediaUrl,
+} from "../templateSendMediaPreflight";
 import { getUserTwilioClient } from "../userTwilio";
 import { subscriptionService } from "../subscriptionService";
 import { extractPlaceholderKeysFromCampaignMessages } from "@shared/campaignPlaceholders";
@@ -80,7 +86,23 @@ function headerTypeToMessageMediaType(
 
 /** User-facing message — no tokens; Meta codes OK for support. */
 function formatFriendlyMetaTemplateUserMessage(metaErr: unknown): string {
-  const e = metaErr as { message?: string; metaErrorCode?: number };
+  const e = metaErr as {
+    message?: string;
+    metaErrorCode?: number;
+    fetchFailureKind?: string;
+    httpStatus?: number;
+  };
+  if (e.fetchFailureKind === "missing_token_or_phone_number_id") {
+    return String(e.message || "Connect WhatsApp (Meta) in Settings.");
+  }
+  if (
+    e.fetchFailureKind === "timeout" ||
+    e.fetchFailureKind === "dns" ||
+    e.fetchFailureKind === "connection" ||
+    e.fetchFailureKind === "unknown_network"
+  ) {
+    return String(e.message || "Network error while contacting WhatsApp (Meta). Try again.");
+  }
   const msg = String(e?.message || "");
   const code = e?.metaErrorCode;
   if (code === 132012 || msg.includes("132012")) {
@@ -88,6 +110,118 @@ function formatFriendlyMetaTemplateUserMessage(metaErr: unknown): string {
   }
   if (!msg) return "WhatsApp couldn’t send this template. Try again or verify the template in WhatsApp Manager.";
   return msg;
+}
+
+async function persistFailedOutboundTemplateMessage(args: {
+  userId: string;
+  contactId: string;
+  template: MessageTemplate;
+  templateLang: string;
+  metaSendPath: "library_full" | "quick_send";
+  libraryEffectiveTemplate: MessageTemplate;
+  variableValues: Record<string, string>;
+  optionalHeaderMediaUrl: string | null | undefined;
+  optionalHeaderMediaFilename: string | null | undefined;
+  optionalHeaderMediaMimeType: string | null | undefined;
+  optionalHeaderMediaSizeBytes: number | undefined;
+  carouselCardMediaNormalized: CarouselCardRuntimeMedia[];
+  errorMessage: string;
+  errorCode?: string | null;
+}): Promise<void> {
+  const { conversationId } = await ensureWhatsAppConversationForContact(args.userId, args.contactId);
+  const displaySource =
+    args.metaSendPath === "library_full" ? args.libraryEffectiveTemplate : args.template;
+  const resolvedHeaderMediaUrl = resolveLibraryHeaderMediaDisplayUrl(
+    displaySource,
+    args.variableValues,
+    args.optionalHeaderMediaUrl ?? null
+  );
+  const displayContent = buildOutboundTemplateDisplayContent(
+    {
+      name: displaySource.name,
+      bodyText: displaySource.bodyText,
+      headerType: displaySource.headerType,
+      headerContent: displaySource.headerContent,
+    },
+    args.variableValues
+  );
+  const preview = displayContent.substring(0, 100);
+
+  const headerTypeLower = (displaySource.headerType || "").toLowerCase();
+  const headerMedia =
+    resolvedHeaderMediaUrl && ["image", "video", "document"].includes(headerTypeLower)
+      ? {
+          url: resolvedHeaderMediaUrl,
+          type: headerTypeLower,
+          originalFilename:
+            headerTypeLower === "document" ? args.optionalHeaderMediaFilename ?? null : null,
+          mimeType: args.optionalHeaderMediaMimeType ?? null,
+          sizeBytes:
+            args.optionalHeaderMediaSizeBytes !== undefined ? args.optionalHeaderMediaSizeBytes : null,
+        }
+      : null;
+
+  const ttCarousel =
+    (args.template.templateType || "").toLowerCase() === "carousel" ||
+    (Array.isArray(args.template.carouselCards) && (args.template.carouselCards as unknown[]).length > 0);
+  let carouselCardsDisplay: ReturnType<typeof buildCarouselCrmDisplayCardsForPersist> | undefined;
+  if (ttCarousel && Array.isArray(args.template.carouselCards)) {
+    carouselCardsDisplay = buildCarouselCrmDisplayCardsForPersist({
+      carouselCards: args.template.carouselCards as unknown[],
+      variableValues: args.variableValues,
+      carouselCardMedia:
+        args.carouselCardMediaNormalized.length > 0 ? args.carouselCardMediaNormalized : undefined,
+    });
+  }
+
+  const templateVariablesPayload = {
+    ...normalizeTemplateVariableMap(args.variableValues),
+    templateLanguage: args.templateLang,
+    templateName: args.template.name,
+    channel: "whatsapp",
+    provider: "meta",
+    headerType: displaySource.headerType ?? null,
+    headerMediaUrl: resolvedHeaderMediaUrl,
+    ...(headerMedia ? { headerMedia } : {}),
+    ...(args.optionalHeaderMediaFilename &&
+    (displaySource.headerType || "").toLowerCase() === "document"
+      ? { headerDocumentFilename: args.optionalHeaderMediaFilename }
+      : {}),
+    ...(carouselCardsDisplay && carouselCardsDisplay.length > 0
+      ? { templateType: "carousel", carouselCardsDisplay }
+      : {}),
+  };
+
+  const mediaMeta =
+    resolvedHeaderMediaUrl && headerTypeToMessageMediaType(displaySource.headerType);
+
+  await storage.createMessage({
+    conversationId,
+    contactId: args.contactId,
+    userId: args.userId,
+    direction: "outbound",
+    content: displayContent,
+    contentType: "template",
+    templateId: args.template.id,
+    templateVariables: templateVariablesPayload as any,
+    ...(resolvedHeaderMediaUrl
+      ? {
+          mediaUrl: resolvedHeaderMediaUrl,
+          ...(mediaMeta ? { mediaType: mediaMeta } : {}),
+        }
+      : {}),
+    status: "failed",
+    externalMessageId: null,
+    errorMessage: args.errorMessage,
+    errorCode: args.errorCode ?? undefined,
+    sentAt: new Date(),
+  });
+
+  await storage.updateConversation(conversationId, {
+    lastMessageAt: new Date(),
+    lastMessagePreview: preview,
+    lastMessageDirection: "outbound",
+  });
 }
 
 async function ensureWhatsAppConversationForContact(
@@ -1713,6 +1847,33 @@ export function registerTemplateRoutes(app: Express): void {
           ? effectiveTemplateRowForLibrarySend(template, optionalHeaderMediaUrl ?? null)
           : template;
 
+      console.log(
+        `[TEMPLATE_SEND_REQUEST] ${JSON.stringify({
+          templateId: template.id,
+          templateName: template.name,
+          language: templateLang,
+          contactId: crmContactId,
+          channel: "whatsapp" as const,
+          sendSource: sendSourceTag,
+          metaSendPath,
+          carouselCardCount: carouselCardMediaNormalized.length,
+          carouselCardMediaUrls: carouselCardMediaNormalized.map((c) => ({
+            cardIndex: c.cardIndex,
+            urlBucket: classifyTemplateMediaUrlForLog(c.mediaUrl),
+            urlHost: (() => {
+              try {
+                return new URL(c.mediaUrl).hostname;
+              } catch {
+                return "invalid";
+              }
+            })(),
+          })),
+          optionalHeaderMediaBucket: optionalHeaderMediaUrl
+            ? classifyTemplateMediaUrlForLog(optionalHeaderMediaUrl)
+            : null,
+        })}`
+      );
+
       let messageId = "";
       let sendStatus = "sent";
 
@@ -1822,6 +1983,112 @@ export function registerTemplateRoutes(app: Express): void {
 
         components = built.components as any[] | undefined;
 
+        const componentSummary = Array.isArray(components)
+          ? components.map((c: any) => ({
+              type: c?.type,
+              carouselCards:
+                c?.type === "carousel" && Array.isArray(c?.cards) ? c.cards.length : undefined,
+            }))
+          : [];
+
+        const httpsLinksInPayload = collectHttpsLinksFromMetaTemplateComponents(components || []);
+        if (httpsLinksInPayload.length > 0) {
+          console.log(
+            `[WA_TEMPLATE_CAROUSEL_MEDIA_MODE] ${JSON.stringify({
+              mode: "public_https_links_in_template_components",
+              note: "Meta fetches each URL server-side. This path does not use WhatsApp media upload IDs in the payload.",
+              distinctUrlCount: httpsLinksInPayload.length,
+            })}`
+          );
+          for (let i = 0; i < httpsLinksInPayload.length; i++) {
+            const url = httpsLinksInPayload[i];
+            const bucket = classifyTemplateMediaUrlForLog(url);
+            const matchCarousel = carouselCardMediaNormalized.find(
+              (c) => c.mediaUrl.trim() === url
+            );
+            const label = matchCarousel
+              ? `carousel_card_${matchCarousel.cardIndex}`
+              : `template_payload_media_${i}`;
+            console.log(
+              `[WA_MEDIA_UPLOAD_START] ${JSON.stringify({
+                operation: "preflight_public_url_before_meta_fetch",
+                label,
+                bucket,
+                urlHost: (() => {
+                  try {
+                    return new URL(url).hostname;
+                  } catch {
+                    return "invalid";
+                  }
+                })(),
+              })}`
+            );
+            const pf = await preflightHttpsMediaUrl(url);
+            if (!pf.ok) {
+              const { userMessage, errorCode } = friendlyMessageForPreflightFailure(
+                url,
+                bucket,
+                pf,
+                label
+              );
+              console.error(
+                `[WA_MEDIA_UPLOAD_FAILED] ${JSON.stringify({
+                  operation: "preflight_public_url_before_meta_fetch",
+                  label,
+                  bucket,
+                  friendlyError: userMessage,
+                  httpStatus: pf.httpStatus,
+                  reason: pf.reason,
+                  detail: pf.friendlyDetail,
+                })}`
+              );
+              await persistReEngagementFailure();
+              if (crmContactId) {
+                try {
+                  await persistFailedOutboundTemplateMessage({
+                    userId: req.user.id,
+                    contactId: crmContactId,
+                    template,
+                    templateLang,
+                    metaSendPath,
+                    libraryEffectiveTemplate: libraryEffectiveTemplate as MessageTemplate,
+                    variableValues,
+                    optionalHeaderMediaUrl,
+                    optionalHeaderMediaFilename,
+                    optionalHeaderMediaMimeType,
+                    optionalHeaderMediaSizeBytes,
+                    carouselCardMediaNormalized,
+                    errorMessage: userMessage,
+                    errorCode,
+                  });
+                } catch (persistFail: unknown) {
+                  console.error(
+                    `[WA_TEMPLATE_SEND_FAILED_PERSIST] ${JSON.stringify({
+                      contactId: crmContactId,
+                      templateName: template.name,
+                      error: persistFail instanceof Error ? persistFail.message : String(persistFail),
+                    })}`,
+                    persistFail
+                  );
+                }
+              }
+              return res.status(400).json({
+                error: userMessage,
+                errorCode,
+                metaCode: null,
+              });
+            }
+            console.log(
+              `[WA_MEDIA_UPLOAD_SUCCESS] ${JSON.stringify({
+                operation: "preflight_public_url_before_meta_fetch",
+                label,
+                bucket,
+                httpStatus: pf.httpStatus,
+              })}`
+            );
+          }
+        }
+
         console.log(
           `[WA_TEMPLATE_SEND] ${JSON.stringify({
             phase: "request",
@@ -1837,7 +2104,7 @@ export function registerTemplateRoutes(app: Express): void {
             recipient: recipientLog,
             carouselCardCount: carouselCardMediaNormalized.length,
             carouselCardMediaUrls: carouselCardMediaNormalized.map((c) => c.mediaUrl),
-            components,
+            componentSummary,
           })}`
         );
 
@@ -1867,23 +2134,25 @@ export function registerTemplateRoutes(app: Express): void {
               carouselCardMediaUrls: carouselCardMediaNormalized.map((c) => c.mediaUrl),
               responseStatus: result.httpStatus,
               messageId,
-              components,
+              componentSummary,
             })}`
           );
           await persistReEngagementSuccess();
         } catch (metaErr: any) {
           await persistReEngagementFailure();
+          const rawHttp = typeof metaErr?.httpStatus === "number" ? metaErr.httpStatus : 0;
           const responseStatus =
-            typeof metaErr?.httpStatus === "number" ? metaErr.httpStatus : 500;
+            rawHttp >= 400 && rawHttp < 600
+              ? rawHttp
+              : rawHttp === 0
+                ? 503
+                : 500;
           const metaErrorRaw =
             metaErr?.message || "Failed to send template via Meta WhatsApp API";
-          const metaErrorOut =
-            metaSendPath === "library_full"
-              ? formatFriendlyMetaTemplateUserMessage(metaErr)
-              : metaErrorRaw;
+          const metaErrorOut = formatFriendlyMetaTemplateUserMessage(metaErr);
           console.error(
-            `[WA_TEMPLATE_SEND] ${JSON.stringify({
-              phase: "error",
+            `[WA_TEMPLATE_SEND_FAILED] ${JSON.stringify({
+              phase: "meta_send_catch",
               sendSource: sendSourceTag,
               metaSendPath,
               provider: resolvedProvider,
@@ -1896,112 +2165,38 @@ export function registerTemplateRoutes(app: Express): void {
               carouselCardCount: carouselCardMediaNormalized.length,
               carouselCardMediaUrls: carouselCardMediaNormalized.map((c) => c.mediaUrl),
               responseStatus,
-              metaError: metaErrorRaw,
+              metaErrorRaw,
+              metaErrorFriendly: metaErrorOut,
               metaErrorCode: metaErr?.metaErrorCode,
               metaErrorType: metaErr?.metaErrorType,
-              components,
+              fetchFailureKind: metaErr?.fetchFailureKind,
+              componentSummary,
             })}`,
             metaErr
           );
 
           if (crmContactId) {
             try {
-              const { conversationId } = await ensureWhatsAppConversationForContact(
-                req.user.id,
-                crmContactId
-              );
-              const displaySource =
-                metaSendPath === "library_full" ? libraryEffectiveTemplate : template;
-              const resolvedHeaderMediaUrl = resolveLibraryHeaderMediaDisplayUrl(
-                displaySource,
-                variableValues,
-                optionalHeaderMediaUrl ?? null
-              );
-              const displayContent = buildOutboundTemplateDisplayContent(
-                {
-                  name: displaySource.name,
-                  bodyText: displaySource.bodyText,
-                  headerType: displaySource.headerType,
-                  headerContent: displaySource.headerContent,
-                },
-                variableValues
-              );
-              const preview = displayContent.substring(0, 100);
-
-              const headerTypeLower = (displaySource.headerType || "").toLowerCase();
-              const headerMedia =
-                resolvedHeaderMediaUrl && ["image", "video", "document"].includes(headerTypeLower)
-                  ? {
-                      url: resolvedHeaderMediaUrl,
-                      type: headerTypeLower,
-                      originalFilename:
-                        headerTypeLower === "document" ? optionalHeaderMediaFilename ?? null : null,
-                      mimeType: optionalHeaderMediaMimeType ?? null,
-                      sizeBytes:
-                        optionalHeaderMediaSizeBytes !== undefined ? optionalHeaderMediaSizeBytes : null,
-                    }
-                  : null;
-
-              const ttCarousel =
-                (template.templateType || "").toLowerCase() === "carousel" ||
-                (Array.isArray(template.carouselCards) && (template.carouselCards as unknown[]).length > 0);
-              let carouselCardsDisplay: ReturnType<typeof buildCarouselCrmDisplayCardsForPersist> | undefined;
-              if (ttCarousel && Array.isArray(template.carouselCards)) {
-                carouselCardsDisplay = buildCarouselCrmDisplayCardsForPersist({
-                  carouselCards: template.carouselCards as unknown[],
-                  variableValues,
-                  carouselCardMedia:
-                    carouselCardMediaNormalized.length > 0 ? carouselCardMediaNormalized : undefined,
-                });
-              }
-
-              const templateVariablesPayload = {
-                ...normalizeTemplateVariableMap(variableValues),
-                templateLanguage: templateLang,
-                templateName: template.name,
-                channel: "whatsapp",
-                provider: "meta",
-                headerType: displaySource.headerType ?? null,
-                headerMediaUrl: resolvedHeaderMediaUrl,
-                ...(headerMedia ? { headerMedia } : {}),
-                ...(optionalHeaderMediaFilename &&
-                (displaySource.headerType || "").toLowerCase() === "document"
-                  ? { headerDocumentFilename: optionalHeaderMediaFilename }
-                  : {}),
-                ...(carouselCardsDisplay && carouselCardsDisplay.length > 0
-                  ? { templateType: "carousel", carouselCardsDisplay }
-                  : {}),
-              };
-
-              const mediaMeta =
-                resolvedHeaderMediaUrl && headerTypeToMessageMediaType(displaySource.headerType);
-
-              await storage.createMessage({
-                conversationId,
-                contactId: crmContactId,
+              await persistFailedOutboundTemplateMessage({
                 userId: req.user.id,
-                direction: "outbound",
-                content: displayContent,
-                contentType: "template",
-                templateId: template.id,
-                templateVariables: templateVariablesPayload as any,
-                ...(resolvedHeaderMediaUrl
-                  ? {
-                      mediaUrl: resolvedHeaderMediaUrl,
-                      ...(mediaMeta ? { mediaType: mediaMeta } : {}),
-                    }
-                  : {}),
-                status: "failed",
-                externalMessageId: null,
+                contactId: crmContactId,
+                template,
+                templateLang,
+                metaSendPath,
+                libraryEffectiveTemplate: libraryEffectiveTemplate as MessageTemplate,
+                variableValues,
+                optionalHeaderMediaUrl,
+                optionalHeaderMediaFilename,
+                optionalHeaderMediaMimeType,
+                optionalHeaderMediaSizeBytes,
+                carouselCardMediaNormalized,
                 errorMessage: metaErrorOut,
-                errorCode: metaErr?.metaErrorCode != null ? String(metaErr.metaErrorCode) : undefined,
-                sentAt: new Date(),
-              });
-
-              await storage.updateConversation(conversationId, {
-                lastMessageAt: new Date(),
-                lastMessagePreview: preview,
-                lastMessageDirection: "outbound",
+                errorCode:
+                  metaErr?.metaErrorCode != null
+                    ? String(metaErr.metaErrorCode)
+                    : metaErr?.fetchFailureKind
+                      ? String(metaErr.fetchFailureKind)
+                      : undefined,
               });
             } catch (persistFail: unknown) {
               console.error(
@@ -2015,9 +2210,13 @@ export function registerTemplateRoutes(app: Express): void {
             }
           }
 
-          return res.status(responseStatus >= 400 && responseStatus < 600 ? responseStatus : 500).json({
+          return res.status(responseStatus).json({
             error: metaErrorOut,
             metaCode: metaErr?.metaErrorCode,
+            errorCode:
+              metaErr?.metaErrorCode != null
+                ? String(metaErr.metaErrorCode)
+                : metaErr?.fetchFailureKind ?? undefined,
           });
         }
       } else if (resolvedProvider === "twilio") {

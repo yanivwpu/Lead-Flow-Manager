@@ -919,14 +919,16 @@ export function Templates() {
           : {}),
       };
       console.log(
-        `[WA_TEMPLATE_SEND_CLIENT] ${JSON.stringify({
+        `[TEMPLATE_SEND_REQUEST] ${JSON.stringify({
+          endpoint: "POST /api/templates/send",
           source: data.sendSource,
           templateId: data.templateId,
           chatId: data.chatId ?? null,
           contactId: data.contactId ?? null,
+          carouselCardCount: data.carouselCardMedia?.length ?? 0,
+          carouselCardMediaUrls: (data.carouselCardMedia ?? []).map((c) => c.mediaUrl),
           variables: data.variables,
           optionalHeaderMediaUrl: trimmedOpt ?? null,
-          components: "(built server-side from template row + variables)",
         })}`
       );
       const res = await apiRequest("POST", "/api/templates/send", payload);
@@ -937,6 +939,7 @@ export function Templates() {
       queryClient.invalidateQueries({ queryKey: ["/api/templates/recent-media"] });
       queryClient.invalidateQueries({ queryKey: ["/api/templates/template-send-defaults"] });
       queryClient.invalidateQueries({ queryKey: ["/api/templates"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
       setSendInlineError(null);
       setSendDialogOpen(false);
       setSelectedTemplate(null);
@@ -953,6 +956,7 @@ export function Templates() {
       });
     },
     onError: (error: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
       queryClient.invalidateQueries({ queryKey: ["/api/templates/retargetable-chats"] });
       const msg = String(error?.message || "");
       const afterStatus = msg.replace(/^\d+:\s*/, "");
@@ -964,6 +968,16 @@ export function Templates() {
         }
       } catch {
         clean = afterStatus.replace(/^\{"error":"/, "").replace(/"\}$/, "");
+      }
+      if (/^\s*\{/.test(clean)) {
+        try {
+          const parsed2 = JSON.parse(clean) as { error?: string };
+          if (typeof parsed2?.error === "string" && parsed2.error.trim()) {
+            clean = parsed2.error.trim();
+          }
+        } catch {
+          /* keep clean */
+        }
       }
       setSendInlineError(clean || "Could not send this template.");
     },

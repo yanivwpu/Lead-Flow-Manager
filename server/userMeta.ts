@@ -535,6 +535,17 @@ export async function sendMetaWhatsAppMedia(
   return { messageId, status: "sent" };
 }
 
+function classifyGraphFetchFailure(err: unknown): "timeout" | "dns" | "connection" | "unknown_network" {
+  const msg = err instanceof Error ? `${err.name} ${err.message}` : String(err);
+  const m = msg.toLowerCase();
+  if (m.includes("abort") || m.includes("timeout")) return "timeout";
+  if (m.includes("enotfound") || m.includes("getaddrinfo")) return "dns";
+  if (m.includes("econnrefused") || m.includes("econnreset") || m.includes("fetch failed")) {
+    return "connection";
+  }
+  return "unknown_network";
+}
+
 export async function sendMetaWhatsAppTemplate(
   userId: string,
   toPhone: string,
@@ -547,13 +558,30 @@ export async function sendMetaWhatsAppTemplate(
 
   if (!accessToken || !phoneNumberId) {
     const err = new Error(
-      "Meta WhatsApp Business API not connected. Please connect your Meta account first."
-    ) as Error & { httpStatus?: number; metaErrorCode?: number; metaErrorType?: string };
+      "Meta WhatsApp is not fully connected: missing access token or phone number ID. Open Settings and reconnect WhatsApp (Meta)."
+    ) as Error & {
+      httpStatus?: number;
+      metaErrorCode?: number;
+      metaErrorType?: string;
+      fetchFailureKind?: string;
+    };
     err.httpStatus = 0;
+    err.fetchFailureKind = "missing_token_or_phone_number_id";
+    console.warn(
+      `[WA_TEMPLATE_SEND_FAILED] ${JSON.stringify({
+        phase: "missing_credentials",
+        templateName,
+        language: languageCode,
+        hasToken: !!accessToken,
+        hasPhoneNumberId: !!phoneNumberId,
+      })}`
+    );
     throw err;
   }
 
   const normalizedPhone = toPhone.replace(/[^\d]/g, "");
+  const recipientLog =
+    normalizedPhone.length > 4 ? `***${normalizedPhone.slice(-4)}` : normalizedPhone ? "(short)" : "(none)";
 
   const templatePayload: any = {
     name: templateName,
@@ -566,9 +594,27 @@ export async function sendMetaWhatsAppTemplate(
     templatePayload.components = components;
   }
 
-  const response = await fetch(
-    `${getMetaGraphApiBase()}/${phoneNumberId}/messages`,
-    {
+  const graphPath = `${getMetaGraphApiBase()}/${phoneNumberId}/messages`;
+  console.log(
+    `[WA_TEMPLATE_SEND_REQUEST] ${JSON.stringify({
+      templateName,
+      language: languageCode,
+      phoneNumberId,
+      recipient: recipientLog,
+      componentCount: Array.isArray(components) ? components.length : 0,
+      graphPathHost: (() => {
+        try {
+          return new URL(graphPath).hostname;
+        } catch {
+          return "unknown";
+        }
+      })(),
+    })}`
+  );
+
+  let response: Response;
+  try {
+    response = await fetch(graphPath, {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${accessToken}`,
@@ -581,13 +627,46 @@ export async function sendMetaWhatsAppTemplate(
         type: "template",
         template: templatePayload,
       }),
-    }
-  );
+    });
+  } catch (fetchErr: unknown) {
+    const kind = classifyGraphFetchFailure(fetchErr);
+    const detail = fetchErr instanceof Error ? fetchErr.message : String(fetchErr);
+    const err = new Error(
+      kind === "timeout"
+        ? "Network timeout while calling WhatsApp (Meta). Try again."
+        : kind === "dns"
+          ? "Could not resolve Meta’s servers (DNS). Check network or VPN."
+          : kind === "connection"
+            ? "Could not connect to WhatsApp (Meta). Check firewall, proxy, or try again."
+            : "Network error while calling WhatsApp (Meta). Try again."
+    ) as Error & {
+      httpStatus?: number;
+      metaErrorCode?: number;
+      metaErrorType?: string;
+      fetchFailureKind?: string;
+    };
+    err.httpStatus = 0;
+    err.fetchFailureKind = kind;
+    console.error(
+      `[WA_TEMPLATE_SEND_FAILED] ${JSON.stringify({
+        phase: "graph_fetch_threw",
+        templateName,
+        language: languageCode,
+        phoneNumberId,
+        recipient: recipientLog,
+        fetchFailureKind: kind,
+        friendlyError: err.message,
+        detail: detail.slice(0, 280),
+      })}`,
+      fetchErr
+    );
+    throw err;
+  }
 
   const httpStatus = response.status;
 
   if (!response.ok) {
-    let body: { error?: { message?: string; code?: number; type?: string } } = {};
+    let body: { error?: { message?: string; code?: number; type?: string; error_subcode?: number } } = {};
     try {
       body = (await response.json()) as typeof body;
     } catch {
@@ -602,12 +681,37 @@ export async function sendMetaWhatsAppTemplate(
     err.httpStatus = httpStatus;
     err.metaErrorCode = body.error?.code;
     err.metaErrorType = body.error?.type;
+    console.error(
+      `[WA_TEMPLATE_SEND_FAILED] ${JSON.stringify({
+        phase: "graph_http_error",
+        templateName,
+        language: languageCode,
+        phoneNumberId,
+        recipient: recipientLog,
+        responseStatus: httpStatus,
+        metaMessage: msg,
+        metaCode: body.error?.code,
+        metaType: body.error?.type,
+        metaSubcode: body.error?.error_subcode,
+      })}`
+    );
     throw err;
   }
 
   const result = await response.json();
+  const messageId = result.messages?.[0]?.id || "";
+  console.log(
+    `[WA_TEMPLATE_SEND_SUCCESS] ${JSON.stringify({
+      templateName,
+      language: languageCode,
+      phoneNumberId,
+      recipient: recipientLog,
+      responseStatus: httpStatus,
+      messageId,
+    })}`
+  );
   return {
-    messageId: result.messages?.[0]?.id || "",
+    messageId,
     status: "sent",
     httpStatus,
   };

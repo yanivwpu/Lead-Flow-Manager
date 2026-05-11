@@ -926,6 +926,11 @@ function mapCarouselCardComponents(
   return { components: out };
 }
 
+/**
+ * WhatsApp Cloud API carousel templates use **public HTTPS links** in each card’s
+ * header parameters (`image.link` / `video.link` / `document.link`). Meta’s servers
+ * fetch those URLs when the message is sent; they are not WhatsApp-resumable media IDs.
+ */
 function buildCarouselLibraryPayload(
   template: TemplateRowForMetaSend,
   vv: Record<string, string>,
