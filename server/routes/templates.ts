@@ -955,6 +955,18 @@ export function registerTemplateRoutes(app: Express): void {
         templates.map((t) => ({
           ...enrichMessageTemplateMediaFields(t),
           carouselDefaultMedia: defaultsByTemplateId.get(t.id) ?? {},
+          headerDefaultMediaUrl: (() => {
+            const d = defaultsByTemplateId.get(t.id) ?? {};
+            const header = (d as any)?.header as { mediaUrl?: string } | undefined;
+            const u = typeof header?.mediaUrl === "string" ? header.mediaUrl.trim() : "";
+            return u && /^https?:\/\//i.test(u) ? u : null;
+          })(),
+          headerDefaultOriginalFilename: (() => {
+            const d = defaultsByTemplateId.get(t.id) ?? {};
+            const header = (d as any)?.header as { originalFilename?: string | null } | undefined;
+            const fn = typeof header?.originalFilename === "string" ? header.originalFilename.trim() : "";
+            return fn ? fn.slice(0, 240) : null;
+          })(),
         }))
       );
     } catch (error) {
@@ -1677,9 +1689,21 @@ export function registerTemplateRoutes(app: Express): void {
       fetchFailureKind: null as string | null,
       finalResponseStatus: 500,
       exitPhase: "not_started",
+      templateName: null as string | null,
+      templateType: null as string | null,
+      headerFormat: null as string | null,
+      mediaUrlBucket: null as string | null,
+      mediaUrlHost: null as string | null,
+      mediaUrlExt: null as string | null,
+      preflightContentType: null as string | null,
+      preflightContentLength: null as number | null,
+      externalWamid: null as string | null,
     };
     const logCarouselSendFinalState = () => {
       console.log(`[CAROUSEL_SEND_FINAL_STATE] ${JSON.stringify(sendFinal)}`);
+    };
+    const logMediaTemplateFinalState = () => {
+      console.log(`[MEDIA_TEMPLATE_SEND_FINAL_STATE] ${JSON.stringify(sendFinal)}`);
     };
     const reply = (status: number, body: Record<string, unknown>, exitPhase: string) => {
       sendFinal.finalResponseStatus = status;
@@ -1697,6 +1721,7 @@ export function registerTemplateRoutes(app: Express): void {
         sendFinal.metaMessage = err;
       }
       logCarouselSendFinalState();
+      logMediaTemplateFinalState();
       return res.status(status).json(body);
     };
     try {
@@ -1810,6 +1835,12 @@ export function registerTemplateRoutes(app: Express): void {
         );
         return reply(404, { error: "Template not found" }, "template_not_found");
       }
+      sendFinal.templateName = template.name;
+      sendFinal.templateType = (template.templateType || null) as any;
+      sendFinal.headerFormat =
+        (template.headerFormat || template.headerType || null) != null
+          ? String(template.headerFormat || template.headerType || "").toLowerCase() || null
+          : null;
 
       // Resolve recipient — either from legacy chats table or new contacts table
       let recipientPhone: string;
@@ -2118,6 +2149,25 @@ export function registerTemplateRoutes(app: Express): void {
           for (let i = 0; i < httpsLinksInPayload.length; i++) {
             const url = httpsLinksInPayload[i];
             const bucket = classifyTemplateMediaUrlForLog(url);
+            sendFinal.mediaUrlBucket = bucket;
+            sendFinal.mediaUrlHost = (() => {
+              try {
+                return new URL(url).hostname;
+              } catch {
+                return null;
+              }
+            })();
+            sendFinal.mediaUrlExt = (() => {
+              try {
+                const p = new URL(url).pathname;
+                const last = p.split("/").pop() || "";
+                const dot = last.lastIndexOf(".");
+                if (dot <= 0) return null;
+                return last.slice(dot + 1).toLowerCase().slice(0, 16) || null;
+              } catch {
+                return null;
+              }
+            })();
             const matchCarousel = carouselCardMediaNormalized.find(
               (c) => c.mediaUrl.trim() === url
             );
@@ -2203,12 +2253,21 @@ export function registerTemplateRoutes(app: Express): void {
                 "media_url_preflight_failed"
               );
             }
+            if (pf.ok) {
+              sendFinal.preflightContentType =
+                typeof pf.contentType === "string" ? pf.contentType : sendFinal.preflightContentType;
+              sendFinal.preflightContentLength =
+                typeof pf.contentLength === "number" ? pf.contentLength : sendFinal.preflightContentLength;
+            }
             console.log(
               `[WA_MEDIA_UPLOAD_SUCCESS] ${JSON.stringify({
                 operation: "preflight_public_url_before_meta_fetch",
                 label,
                 bucket,
                 httpStatus: pf.httpStatus,
+                contentType: pf.ok ? pf.contentType ?? null : null,
+                contentLength: pf.ok ? pf.contentLength ?? null : null,
+                finalUrlHost: pf.ok && pf.finalUrl ? (() => { try { return new URL(pf.finalUrl).hostname; } catch { return null; } })() : null,
               })}`
             );
           }
@@ -2248,6 +2307,7 @@ export function registerTemplateRoutes(app: Express): void {
           messageId = result.messageId;
           sendStatus = result.status;
           sendFinal.graphSucceeded = true;
+          sendFinal.externalWamid = messageId || null;
           console.log(
             `[WA_TEMPLATE_SEND] ${JSON.stringify({
               phase: "success",
@@ -2589,6 +2649,38 @@ export function registerTemplateRoutes(app: Express): void {
                   phase: "error",
                   templateId: template.id,
                   error: carouselDefErr instanceof Error ? carouselDefErr.message : String(carouselDefErr),
+                })}`
+              );
+            }
+          }
+
+          // Persist header media defaults for single media templates (image/video/document) using the same defaults table.
+          // Stored under key `"header"` in `template_carousel_media_defaults.card_media` (no schema change).
+          const htLower = (displaySource.headerType || "").toLowerCase();
+          if (resolvedHeaderMediaUrl && ["image", "video", "document"].includes(htLower)) {
+            try {
+              const existing = await storage.getTemplateCarouselMediaDefaults(req.user.id, template.id);
+              const prev =
+                existing && existing.cardMedia && typeof existing.cardMedia === "object"
+                  ? (existing.cardMedia as Record<string, unknown>)
+                  : {};
+              const merged = {
+                ...prev,
+                header: {
+                  mediaUrl: resolvedHeaderMediaUrl,
+                  originalFilename:
+                    htLower === "document" ? optionalHeaderMediaFilename ?? null : null,
+                  headerFormat: htLower,
+                },
+              };
+              await storage.upsertTemplateCarouselMediaDefaults(req.user.id, template.id, merged);
+            } catch (headerDefErr: unknown) {
+              console.warn(
+                `[WA_TEMPLATE_SEND_HEADER_DEFAULTS] ${JSON.stringify({
+                  phase: "error",
+                  templateId: template.id,
+                  headerType: htLower,
+                  error: headerDefErr instanceof Error ? headerDefErr.message : String(headerDefErr),
                 })}`
               );
             }

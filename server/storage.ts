@@ -278,6 +278,10 @@ export interface IStorage {
   updateMessageTemplate(id: string, updates: Partial<MessageTemplate>): Promise<MessageTemplate | undefined>;
   deleteMessageTemplate(id: string): Promise<void>;
   listTemplateCarouselMediaDefaultsByUser(userId: string): Promise<TemplateCarouselMediaDefault[]>;
+  getTemplateCarouselMediaDefaults(
+    userId: string,
+    templateId: string
+  ): Promise<TemplateCarouselMediaDefault | undefined>;
   upsertTemplateCarouselMediaDefaults(
     userId: string,
     templateId: string,
@@ -1281,6 +1285,23 @@ export class DbStorage implements IStorage {
       .select()
       .from(templateCarouselMediaDefaults)
       .where(eq(templateCarouselMediaDefaults.userId, userId));
+  }
+
+  async getTemplateCarouselMediaDefaults(
+    userId: string,
+    templateId: string
+  ): Promise<TemplateCarouselMediaDefault | undefined> {
+    const rows = await db
+      .select()
+      .from(templateCarouselMediaDefaults)
+      .where(
+        and(
+          eq(templateCarouselMediaDefaults.userId, userId),
+          eq(templateCarouselMediaDefaults.templateId, templateId)
+        )
+      )
+      .limit(1);
+    return rows[0];
   }
 
   async upsertTemplateCarouselMediaDefaults(

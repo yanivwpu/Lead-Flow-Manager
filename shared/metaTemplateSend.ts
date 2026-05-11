@@ -523,7 +523,8 @@ export function coerceTemplateCarouselDefaultMediaMap(raw: unknown): TemplateCar
   if (!raw || typeof raw !== "object") return {};
   const out: TemplateCarouselDefaultMediaMap = {};
   for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
-    if (!/^\d+$/.test(k)) continue;
+    /** Allow `"header"` for single media header defaults; numeric keys remain carousel cards. */
+    if (!(k === "header" || /^\d+$/.test(k))) continue;
     if (!v || typeof v !== "object") continue;
     const rec = v as Record<string, unknown>;
     const mediaUrl = typeof rec.mediaUrl === "string" ? rec.mediaUrl.trim() : "";

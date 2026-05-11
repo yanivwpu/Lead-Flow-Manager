@@ -995,7 +995,14 @@ export function Templates() {
     setSelectedTemplate(template);
     setSelectedChat(chat);
     setVariableValues({});
-    setOptionalHeaderMediaUrl(null);
+    const ht = (template.headerType || "").toLowerCase();
+    const headerDefaultUrl =
+      (template as any)?.headerDefaultMediaUrl && typeof (template as any).headerDefaultMediaUrl === "string"
+        ? String((template as any).headerDefaultMediaUrl).trim()
+        : "";
+    setOptionalHeaderMediaUrl(
+      headerDefaultUrl && ["image", "video", "document"].includes(ht) ? headerDefaultUrl : null
+    );
     setOptionalHeaderDocumentFilename(null);
     setOptionalHeaderMediaMeta(null);
     const carouselPrefill = carouselDefaultMediaToSendDialogState(template.carouselDefaultMedia ?? undefined);

@@ -37,7 +37,14 @@ export type PreflightFailureReason =
   | "unknown";
 
 export type PreflightResult =
-  | { ok: true; httpStatus: number }
+  | {
+      ok: true;
+      httpStatus: number;
+      /** Final URL after redirects (if any). */
+      finalUrl?: string;
+      contentType?: string | null;
+      contentLength?: number | null;
+    }
   | { ok: false; reason: PreflightFailureReason; httpStatus?: number; friendlyDetail: string };
 
 const DEFAULT_TIMEOUT_MS = 12_000;
@@ -65,7 +72,14 @@ export async function preflightHttpsMediaUrl(
     }
     clearTimeout(timer);
     const st = res.status;
-    if (st >= 200 && st < 300) return { ok: true, httpStatus: st };
+    const ct = res.headers.get("content-type");
+    const clRaw = res.headers.get("content-length");
+    const cl = clRaw != null ? Number(clRaw) : NaN;
+    const contentLength = Number.isFinite(cl) ? cl : null;
+    const finalUrl = typeof (res as any)?.url === "string" ? String((res as any).url) : undefined;
+    if (st >= 200 && st < 300) {
+      return { ok: true, httpStatus: st, finalUrl, contentType: ct, contentLength };
+    }
     if (st === 403 || st === 401) {
       return {
         ok: false,
@@ -75,7 +89,7 @@ export async function preflightHttpsMediaUrl(
       };
     }
     if (st === 416) {
-      return { ok: true, httpStatus: st };
+      return { ok: true, httpStatus: st, finalUrl, contentType: ct, contentLength };
     }
     return {
       ok: false,
