@@ -2099,11 +2099,13 @@ export function UnifiedInbox() {
                       msg.contentType === "template" &&
                       Array.isArray(tvCarousel) &&
                       tvCarousel.length > 0;
+                    const isWaTightTemplateBubble =
+                      msg.contentType === "template" && !isWaCarouselChatBubble;
                     return (
                       <div key={msg.id || i} className={cn("flex animate-msg-in", isOut ? "justify-end" : "justify-start")}>
                         <div className={cn(
                           "max-w-[75%] rounded-lg text-sm shadow-sm relative",
-                          isWaCarouselChatBubble
+                          isWaCarouselChatBubble || isWaTightTemplateBubble
                             ? "px-1.5 pt-0.5 pb-1"
                             : "px-3 py-1.5",
                           isOut ? "bg-[#d9fdd3] text-gray-900 rounded-tr-none" : "bg-white text-gray-900 rounded-tl-none",
@@ -2356,14 +2358,37 @@ export function UnifiedInbox() {
                                 }
                               }
 
+                              let documentBubbleTitle = (docLabel || "Document").trim();
+                              if (mediaKind === "document") {
+                                const userOrig =
+                                  (tv && typeof tv.headerDocumentFilename === "string"
+                                    ? tv.headerDocumentFilename.trim()
+                                    : "") ||
+                                  (tvHeaderMedia && typeof tvHeaderMedia.originalFilename === "string"
+                                    ? tvHeaderMedia.originalFilename.trim()
+                                    : "") ||
+                                  (typeof msg.mediaFilename === "string" ? msg.mediaFilename.trim() : "");
+                                const hasUserUploadName =
+                                  userOrig.length > 0 && !looksLikeOpaqueStorageFilename(userOrig);
+                                documentBubbleTitle = hasUserUploadName
+                                  ? userOrig
+                                  : `${(tmplName || "Template").replace(/\.pdf$/i, "")}.pdf`;
+                              }
+
+                              const hasTemplateBubbleMedia =
+                                !!effectiveMediaUrl &&
+                                (mediaKind === "image" ||
+                                  mediaKind === "video" ||
+                                  mediaKind === "document");
+
                               return (
-                                <div className="space-y-1.5 rounded-xl border border-emerald-100/90 bg-emerald-50/40 px-3 py-2 leading-snug">
+                                <div className="overflow-hidden rounded-lg border border-emerald-100/90 bg-emerald-50/40 leading-snug">
                                   {effectiveMediaUrl && mediaKind === "image" ? (
-                                    <div className="-mx-0.5">
+                                    <div className="min-w-0">
                                       <img
                                         src={templateMediaDisplayUrl}
                                         alt=""
-                                        className="max-w-full cursor-pointer rounded-md max-h-64 object-cover"
+                                        className="block max-h-40 w-full cursor-pointer rounded-lg object-cover"
                                         onClick={() =>
                                           window.open(
                                             tplUseDirect ? effectiveMediaUrl : templateProxyUrl,
@@ -2390,7 +2415,7 @@ export function UnifiedInbox() {
                                     <video
                                       src={templateMediaDisplayUrl}
                                       controls
-                                      className="max-w-full rounded-md max-h-64 bg-black"
+                                      className="block max-h-40 w-full rounded-lg bg-black"
                                       onLoadedMetadata={() => {
                                         if (shouldPinRef.current || justSentRef.current) {
                                           scrollToBottom();
@@ -2400,14 +2425,17 @@ export function UnifiedInbox() {
                                     />
                                   ) : null}
                                   {effectiveMediaUrl && mediaKind === "document" ? (
-                                    <div className="rounded-lg border border-emerald-200/70 bg-white/70 px-2.5 py-2">
-                                      <div className="flex min-w-0 items-center gap-2">
-                                        <FileText className="h-4 w-4 shrink-0 text-gray-600" aria-hidden />
-                                        <span className="min-w-0 truncate text-sm font-medium text-gray-900">
-                                          {docLabel || "Document"}
+                                    <div className="mx-1.5 rounded-md border border-emerald-200/70 bg-white/80 px-2 py-1.5">
+                                      <div className="flex min-w-0 items-center gap-1.5">
+                                        <FileText
+                                          className="h-3.5 w-3.5 shrink-0 text-gray-600"
+                                          aria-hidden
+                                        />
+                                        <span className="min-w-0 truncate text-xs font-medium text-gray-900">
+                                          {documentBubbleTitle}
                                         </span>
                                       </div>
-                                      <div className="mt-1.5 flex flex-wrap gap-x-2 gap-y-0.5 text-xs">
+                                      <div className="mt-1 flex flex-wrap items-center gap-x-1.5 text-[11px] leading-tight">
                                         <a
                                           href={templateMediaDisplayUrl}
                                           target="_blank"
@@ -2421,7 +2449,7 @@ export function UnifiedInbox() {
                                         </span>
                                         <a
                                           href={templateMediaDisplayUrl}
-                                          download={docLabel || "document"}
+                                          download={documentBubbleTitle}
                                           className="font-medium text-emerald-800 underline-offset-2 hover:underline"
                                         >
                                           Download
@@ -2429,24 +2457,33 @@ export function UnifiedInbox() {
                                       </div>
                                     </div>
                                   ) : null}
-                                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                                    <span className="text-[10px] font-semibold uppercase tracking-wide text-emerald-900/85">
+                                  <div
+                                    className={cn(
+                                      "flex min-w-0 items-center gap-1.5 overflow-hidden px-1.5 py-0.5",
+                                      hasTemplateBubbleMedia && "border-t border-emerald-200/35"
+                                    )}
+                                  >
+                                    <span className="shrink-0 text-[8px] font-semibold uppercase tracking-wide text-emerald-900/65">
                                       WhatsApp template
                                     </span>
                                     {provider === "meta" ? (
-                                      <span className="rounded-full border border-emerald-200/70 bg-white/70 px-1.5 py-px text-[9px] font-medium text-emerald-900/80">
+                                      <span className="shrink-0 rounded-full border border-emerald-200/60 bg-white/60 px-1 py-px text-[8px] font-medium leading-none text-emerald-900/75">
                                         Meta
                                       </span>
                                     ) : null}
+                                    <span className="min-w-0 flex-1 truncate text-[11px] font-semibold leading-tight text-gray-900">
+                                      {tmplName || "Template"}
+                                    </span>
+                                    {langBadge ? (
+                                      <span className="shrink-0 text-[8px] tabular-nums leading-none text-gray-500">
+                                        {langBadge}
+                                      </span>
+                                    ) : null}
                                   </div>
-                                  <p className="text-sm font-semibold text-gray-900">
-                                    {tmplName || "Template"}
-                                  </p>
-                                  {langBadge ? (
-                                    <p className="text-[10px] text-gray-500">{langBadge}</p>
-                                  ) : null}
                                   {bodyPart ? (
-                                    <p className="text-sm whitespace-pre-wrap text-gray-800">{bodyPart}</p>
+                                    <p className="whitespace-pre-wrap px-1.5 pb-1 pt-0.5 text-sm leading-snug text-gray-800">
+                                      {bodyPart}
+                                    </p>
                                   ) : null}
                                 </div>
                               );
