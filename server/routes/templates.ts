@@ -835,6 +835,24 @@ export function registerTemplateRoutes(app: Express): void {
       let inserted = 0;
       let updated = 0;
       let skipped = 0;
+      const skipLog: Array<{
+        templateName: string;
+        status: string;
+        category: string;
+        language: string;
+        provider: string;
+        skipReason: string;
+      }> = [];
+
+      function logMetaSkip(entry: (typeof skipLog)[0]) {
+        skipLog.push(entry);
+        console.warn(
+          `[WA_TEMPLATE_SYNC_SKIP] ${JSON.stringify({
+            ...entry,
+            phase: "template_row_failed",
+          })}`
+        );
+      }
 
       // ===== META SYNC =====
       if (resolvedProvider === "meta") {
@@ -868,74 +886,82 @@ export function registerTemplateRoutes(app: Express): void {
         );
 
         for (const t of approvedTemplates) {
+          const status = (t.status || "pending").toLowerCase();
+          const category = (t.category || "utility").toLowerCase();
+          const language = t.language || "en";
+          const templateName = String(t.name ?? "(unnamed)");
+
+          let parsed: ReturnType<typeof parseMetaGraphTemplateForLibrary>;
           try {
-            const status = (t.status || "pending").toLowerCase();
-            const category = (t.category || "utility").toLowerCase();
-            const language = t.language || "en";
-            const metaId = `meta_${t.id || t.name}_${language}`;
-
-            const parsed = parseMetaGraphTemplateForLibrary({
+            parsed = parseMetaGraphTemplateForLibrary({
               name: t.name,
-              components: t.components as Record<string, unknown>[],
+              components: (Array.isArray(t.components) ? t.components : []) as Record<string, unknown>[],
             });
+          } catch (parseErr: unknown) {
+            const skipReason =
+              parseErr instanceof Error ? parseErr.message : String(parseErr || "parse_failed");
+            skipped++;
+            logMetaSkip({
+              templateName,
+              status,
+              category,
+              language,
+              provider: "meta",
+              skipReason: `parseMetaGraphTemplateForLibrary: ${skipReason}`,
+            });
+            continue;
+          }
 
-            const hf = (parsed.headerType || "").toLowerCase();
-            const isMediaHeader = ["image", "video", "document"].includes(hf);
+          console.log(
+            `[WA_TEMPLATE_SYNC] classified name=${templateName} templateType=${parsed.templateType} components=${parsed.componentTypesUpper.join(",")} carouselCards=${Array.isArray(parsed.carouselCards) ? parsed.carouselCards.length : 0}`
+          );
 
-            console.log(
-              `[WA_TEMPLATE_SYNC] classified name=${String(t.name)} templateType=${parsed.templateType} components=${parsed.componentTypesUpper.join(",")} carouselCards=${Array.isArray(parsed.carouselCards) ? parsed.carouselCards.length : 0}`
-            );
+          /** DB columns only — omit optional migration-only fields so sync works before optional SQL migrations. */
+          const metaRowPayload = {
+            name: t.name,
+            status,
+            category,
+            templateType: parsed.templateType,
+            carouselCards: parsed.carouselCards as any,
+            bodyText: parsed.bodyText,
+            headerType: parsed.headerType,
+            headerContent: parsed.headerContent,
+            footerText: parsed.footerText,
+            buttons: parsed.buttons as any,
+            variables: parsed.variables as any,
+            lastSyncedAt: new Date(),
+          };
 
+          try {
+            const metaId = `meta_${t.id || t.name}_${language}`;
             const existing = await storage.getMessageTemplateByTwilioSid(req.user.id, metaId);
 
             if (existing) {
-              await storage.updateMessageTemplate(existing.id, {
-                name: t.name,
-                status,
-                category,
-                templateType: parsed.templateType,
-                carouselCards: parsed.carouselCards as any,
-                bodyText: parsed.bodyText,
-                headerType: parsed.headerType,
-                headerFormat: parsed.headerFormat,
-                headerContent: parsed.headerContent,
-                approvedSampleMediaUrl: parsed.approvedSampleMediaUrl,
-                approvedSampleMediaType: isMediaHeader ? hf : null,
-                mediaRuntimeRequired: isMediaHeader,
-                footerText: parsed.footerText,
-                buttons: parsed.buttons as any,
-                variables: parsed.variables as any,
-                lastSyncedAt: new Date(),
-              });
+              await storage.updateMessageTemplate(existing.id, metaRowPayload);
               updated++;
-              console.log(`[TemplateSync] Updated: ${t.name} [${status}]`);
+              console.log(`[TemplateSync] Updated: ${templateName} [${status}]`);
             } else {
               await storage.createMessageTemplate({
                 userId: req.user.id,
                 twilioSid: metaId,
-                name: t.name,
                 language,
-                category,
-                status,
-                templateType: parsed.templateType,
-                bodyText: parsed.bodyText,
-                headerType: parsed.headerType,
-                headerFormat: parsed.headerFormat,
-                headerContent: parsed.headerContent,
-                approvedSampleMediaUrl: parsed.approvedSampleMediaUrl,
-                approvedSampleMediaType: isMediaHeader ? hf : null,
-                mediaRuntimeRequired: isMediaHeader,
-                footerText: parsed.footerText,
-                buttons: parsed.buttons as any,
-                carouselCards: parsed.carouselCards as any,
-                variables: parsed.variables as any,
+                ...metaRowPayload,
               });
               inserted++;
-              console.log(`[WA_TEMPLATE_SYNC] Inserted: ${t.name} [${status}]`);
+              console.log(`[WA_TEMPLATE_SYNC] Inserted: ${templateName} [${status}]`);
             }
-          } catch (err) {
+          } catch (err: unknown) {
             skipped++;
-            console.error(`[WA_TEMPLATE_SYNC] Skipped template "${t.name}":`, err);
+            const skipReason = err instanceof Error ? err.message : String(err || "unknown_db_error");
+            logMetaSkip({
+              templateName,
+              status,
+              category,
+              language,
+              provider: "meta",
+              skipReason,
+            });
+            console.error(`[WA_TEMPLATE_SYNC] DB error for template "${templateName}":`, err);
           }
         }
 
@@ -1079,6 +1105,7 @@ export function registerTemplateRoutes(app: Express): void {
         inserted,
         updated,
         skipped,
+        ...(skipLog.length > 0 ? { skipLog: skipLog.slice(0, 50) } : {}),
       });
     } catch (error: any) {
       console.error(

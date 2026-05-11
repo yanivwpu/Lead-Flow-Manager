@@ -412,13 +412,6 @@ export const messageTemplates = pgTable("message_templates", {
   bodyText: text("body_text"), // Template body with {{variables}}
   headerType: text("header_type"), // 'text', 'image', 'video', 'document'
   headerContent: text("header_content"), // Header text or media URL
-  /** Same as Meta HEADER `format` — redundant with header_type for synced Meta templates. */
-  headerFormat: text("header_format"),
-  /** Approval-time sample URL (`example.header_handle`); not locked at runtime when media_runtime_required. */
-  approvedSampleMediaUrl: text("approved_sample_media_url"),
-  approvedSampleMediaType: text("approved_sample_media_type"),
-  /** When true, send UI allows upload/select runtime media (image|video|document headers). */
-  mediaRuntimeRequired: boolean("media_runtime_required"),
   footerText: text("footer_text"),
   buttons: jsonb("buttons").default(sql`'[]'::jsonb`), // Array of button configs
   carouselCards: jsonb("carousel_cards").default(sql`'[]'::jsonb`), // For carousel templates

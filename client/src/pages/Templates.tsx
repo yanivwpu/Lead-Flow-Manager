@@ -751,9 +751,22 @@ export function Templates() {
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/templates"] });
       const count = (data?.inserted ?? 0) + (data?.updated ?? 0);
+      const skipped = Number(data?.skipped ?? 0);
+      const skipLog = Array.isArray(data?.skipLog) ? data.skipLog : [];
+      const firstSkip =
+        skipLog[0] &&
+        typeof skipLog[0].templateName === "string" &&
+        typeof skipLog[0].skipReason === "string"
+          ? `${skipLog[0].templateName}: ${skipLog[0].skipReason}`
+          : null;
+      const baseDesc = data?.message || `${count} template(s) synced successfully.`;
       toast({
         title: "Templates synced",
-        description: data?.message || `${count} template(s) synced successfully.`,
+        description:
+          skipped > 0 && firstSkip
+            ? `${baseDesc} First skip — ${firstSkip.slice(0, 220)}${firstSkip.length > 220 ? "…" : ""}`
+            : baseDesc,
+        ...(skipped > 0 && count === 0 ? { variant: "destructive" as const } : {}),
       });
     },
     onError: (error: any) => {
@@ -940,7 +953,7 @@ export function Templates() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 md:px-6 py-2 md:py-3 pb-24 md:pb-6">
+      <div className="flex-1 min-h-0 overflow-y-auto px-4 md:px-6 py-2 md:py-3 pb-24 md:pb-6 overscroll-y-contain">
         <div className="max-w-5xl mx-auto">
           <Tabs defaultValue="presets" className="space-y-2 md:space-y-4">
           <TabsList className="grid w-full grid-cols-4 h-auto gap-0.5 p-0.5 sticky top-0 z-10 bg-muted/95 backdrop-blur-sm rounded-lg border border-gray-100/80 shadow-sm">
@@ -1007,7 +1020,7 @@ export function Templates() {
                     No saved campaigns yet. Open a preset, customize placeholders, then click Create Campaign.
                   </p>
                 ) : (
-                  <div className="overflow-x-auto rounded-lg border border-gray-100">
+                  <div className="overflow-x-auto overflow-y-visible rounded-lg border border-gray-100 touch-pan-y">
                     <Table>
                       <TableHeader>
                         <TableRow>
@@ -1218,7 +1231,7 @@ export function Templates() {
                     "bg-gray-50 text-gray-700 border-gray-200";
 
                   return (
-                    <Card key={template.id} className="overflow-hidden border-gray-200/80 shadow-sm min-w-0" data-testid={`template-card-${template.id}`}>
+                    <Card key={template.id} className="overflow-visible border-gray-200/80 shadow-sm min-w-0" data-testid={`template-card-${template.id}`}>
                       <CardHeader className="pb-2 pt-4 px-4 space-y-3">
                         <div className="flex items-start justify-between gap-3 min-w-0">
                           <div className="flex items-start gap-2 min-w-0 flex-1">
@@ -1281,7 +1294,7 @@ export function Templates() {
                       </CardHeader>
                       <CardContent className="px-4 pb-4 pt-0">
                         {qs.blocked ? (
-                          <div className="mb-3 min-w-0 max-h-[min(320px,55vh)] overflow-y-auto overscroll-contain pr-0.5">
+                          <div className="mb-3 min-w-0 overflow-visible pr-0.5">
                             <WhatsAppTemplateRichPreview
                               key={template.id}
                               template={template}
@@ -1290,8 +1303,8 @@ export function Templates() {
                             />
                           </div>
                         ) : (
-                          <div className="bg-gray-50 rounded-lg p-3 mb-3 max-h-28 md:max-h-32 overflow-y-auto overscroll-contain">
-                            <p className="text-sm text-gray-700 whitespace-pre-wrap line-clamp-4 break-words">
+                          <div className="bg-gray-50 rounded-lg p-3 mb-3">
+                            <p className="text-sm text-gray-700 whitespace-pre-wrap line-clamp-6 break-words">
                               {template.bodyText || "No body text"}
                             </p>
                           </div>
@@ -1320,7 +1333,7 @@ export function Templates() {
                           <Button
                             type="button"
                             size="sm"
-                            className="w-full sm:flex-1 bg-brand-green hover:bg-brand-green/90"
+                            className="w-full sm:flex-1 bg-brand-green hover:bg-brand-green/90 text-white font-medium shadow-sm"
                             disabled={template.status !== "approved"}
                             onClick={() => handleUseTemplate(template)}
                             data-testid={`button-use-template-${template.id}`}
@@ -1541,7 +1554,7 @@ export function Templates() {
                                       <Button
                                         type="button"
                                         variant="outline"
-                                        className="w-full sm:w-auto min-h-[40px] border-gray-300 text-gray-800 hover:bg-gray-50"
+                                        className="w-full sm:w-auto min-h-[40px] border-gray-300 text-gray-900 hover:bg-gray-50 disabled:opacity-55 disabled:cursor-not-allowed disabled:hover:bg-transparent"
                                         disabled={resendCooldown || !lastMatchedTemplate}
                                         data-testid={`resend-template-${chat.conversationId}`}
                                         onClick={() => {
@@ -1587,7 +1600,7 @@ export function Templates() {
 
                               {isWhatsApp && !awaitingReply && !failedWa
                                 ? templateSelect(
-                                    "w-full sm:w-[220px] min-h-[40px] shrink-0 bg-brand-green hover:bg-brand-green/90 text-white border-0 shadow-sm",
+                                    "w-full sm:w-[220px] min-h-[40px] shrink-0 bg-brand-green hover:bg-brand-green/90 text-white font-medium border-0 shadow-sm data-[placeholder]:text-white/90 [&>svg]:text-white/90",
                                     "Send WhatsApp template",
                                     `select-template-${chat.id}`
                                   )
