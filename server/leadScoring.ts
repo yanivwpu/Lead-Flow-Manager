@@ -1,3 +1,7 @@
+/**
+ * Legacy per-message keyword scoring + decay (used for seeds / docs).
+ * Copilot and Full Auto gates use `client/src/lib/leadScoring.ts` (`scoreLead`) — different thresholds (e.g. hot 75 vs 80 here).
+ */
 export interface ScoringSignal {
   key: string;
   label: string;

@@ -49,18 +49,20 @@ type ScoreOptions = {
   isRealEstate?: boolean;
 };
 
+export type InterestIntent = "booking" | "pricing" | "quote" | "availability" | "inquiry";
+
 export type StageSignalSummary = {
   isRealEstate: boolean;
   strongEngagement: boolean;
   strongIntent: boolean;
   viewingIntent: boolean;
-  intents: Array<"booking" | "pricing" | "quote" | "availability">;
+  intents: InterestIntent[];
 };
 
 // ── Constants ───────────────────────────────────────────────────────────────
 
 /** On 0–~32 scale; at or above → `hot` bucket (score also floored to 75). */
-const DECISION_HOT_THRESHOLD = 20;
+const DECISION_HOT_THRESHOLD = 18;
 
 /** Inbound phrases that indicate deal-ready intent — always HOT with score ≥ 90. */
 const DEAL_READY_INTENT_PATTERNS: RegExp[] = [
@@ -73,7 +75,11 @@ const DEAL_READY_INTENT_PATTERNS: RegExp[] = [
   /\bproceed\b/i,
   /\bsign\s+(the\s+)?(contract|papers|agreement|lease)\b/i,
   /\blet'?s\s+sign\b/i,
-  /\b(want|ready|going)\s+to\s+buy\b/i,
+  /\b(want|ready|going|need|plan|hoping)\s+to\s+buy\b/i,
+  /\blooking\s+to\s+buy\b/i,
+  /\b(would\s+like|i'?d\s+like)\s+to\s+buy\b/i,
+  /\b(?:want|need)\s+to\s+purchase\b/i,
+  /\bready\s+to\s+purchase\b/i,
   /\b(i\s*['']?ll|i\s+will)\s+buy\b/i,
   /\bbuy\s+(it|now|today)\b/i,
   /\bbuy\s+now\b/i,
@@ -116,8 +122,6 @@ const SOFT_NEGATIVE_PATTERNS: Array<{ key: string; re: RegExp; pts: number; id: 
   { key: "hesitation", re: /\b(i don'?t know|not sure (?:yet|if)|skeptical|wary)\b/i, pts: 4, id: "negative:hesitate" },
 ];
 
-type InterestIntent = "booking" | "pricing" | "quote" | "availability";
-
 const DECISION_SIGNALS: Array<{ re: RegExp; pts: number; id: string }> = [
   { re: /\b(let'?s|lets)\s+(sign|close|proceed|do it|move forward)\b/i, pts: 18, id: "decision:commit" },
   { re: /\b(sign|signing)\s+(the\s+)?(contract|papers|agreement|lease)\b/i, pts: 18, id: "decision:sign" },
@@ -129,6 +133,14 @@ const DECISION_SIGNALS: Array<{ re: RegExp; pts: number; id: string }> = [
   { re: /\b(accept|take)\s+(your\s+|the\s+|my\s+)?offer\b/i, pts: 14, id: "decision:offer" },
   { re: /\bready\s+to\s+(buy|pay|sign|close|proceed|move|commit)\b/i, pts: 14, id: "decision:ready" },
   { re: /\b(enroll|register|checkout|purchase|subscribe)\b/i, pts: 10, id: "decision:transact" },
+  /** Human handoff / sales — strong commercial intent, not a disqualifier */
+  {
+    re: /\b(speak|talk)\s+(with|to)\s+(a\s+|an\s+|the\s+|some\s+)?(agent|human|someone|person|sales|rep|manager)\b/i,
+    pts: 14,
+    id: "decision:human_request",
+  },
+  { re: /\b(connect|put)\s+me\s+(through|with)\b/i, pts: 12, id: "decision:connect_me" },
+  { re: /\b(call|phone)\s+me\b/i, pts: 10, id: "decision:call_me" },
 ];
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -142,7 +154,12 @@ function clamp01(n: number): number {
 }
 
 function normalize(text: string): string {
-  return (text || "").toLowerCase().replace(/['"]/g, "").replace(/\s+/g, " ").trim();
+  return (text || "")
+    .toLowerCase()
+    .replace(/[\u2018\u2019\u201c\u201d]/g, "'")
+    .replace(/"/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function inboundText(messages: ConversationMessage[]): string {
@@ -162,6 +179,7 @@ function detectIntent(inbound: string): InterestIntent[] {
   if (/\b(price|pricing|cost|how much|rate|rates|fee|fees)\b/i.test(inbound)) intents.push("pricing");
   if (/\bquote|estimate\b/i.test(inbound)) intents.push("quote");
   if (/\bavailable|availability|in stock|still available|open slots?\b/i.test(inbound)) intents.push("availability");
+  if (/\b(interested|interest in)\b/i.test(inbound)) intents.push("inquiry");
   return intents;
 }
 
@@ -505,6 +523,21 @@ export function scoreLead(
     core.negativeScore +
     (industry?.bonus ?? 0);
 
+  /** Pricing + commercial action language across the thread (often split across messages). */
+  const comboPricingAndBuy =
+    /\b(price|pricing|cost|how much|rate|fees?)\b/i.test(inbound) &&
+    (/\b(buy|purchase|bought|buying|order)\b/i.test(inbound) ||
+      /\b(want|need|looking|hoping)\s+to\s+buy\b/i.test(inbound));
+  const comboHumanAndCommercial =
+    decision.detected.includes("decision:human_request") &&
+    (/\b(price|pricing|cost|how much|buy|purchase|appointment|book)\b/i.test(inbound) ||
+      interest.detected.some((d) => d === "interest:pricing" || d === "interest:booking"));
+  let comboBoost = 0;
+  if (comboPricingAndBuy || comboHumanAndCommercial) {
+    comboBoost = 12;
+    score += comboBoost;
+  }
+
   const dealReadyIntent = detectDealReadyIntent(inbound);
 
   let decisionOverride = false;
@@ -537,6 +570,7 @@ export function scoreLead(
       ...criticalUrgency.detected,
       ...softNeg.detected,
       ...(industry?.detected ?? []),
+      ...(comboBoost > 0 ? ["combo:pricing_and_buy_intent"] : []),
       ...(dealReadyIntent ? ["decision:deal_ready"] : []),
     ]),
   );
@@ -546,6 +580,7 @@ export function scoreLead(
     reasons.push("Customer ready to proceed");
     reasons.push("Strong buying intent detected");
   }
+  if (comboBoost > 0) reasons.push("Combined pricing and buying signals");
   if (engagement.value >= 12) reasons.push("Strong engagement from customer");
   else if (engagement.value >= 6) reasons.push("Some engagement from customer");
   if (interest.detected.some((d) => d.startsWith("interest:"))) reasons.push("Interest / discovery signals");
