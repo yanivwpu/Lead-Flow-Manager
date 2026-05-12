@@ -604,9 +604,7 @@ async function installTemplateForUser(userId: string) {
                   ...wf.trigger,
                   templateKey: wf.key,
                   templateId: TEMPLATE_ID_CONST,
-                  ...(Array.isArray((wf as any).conditions) && (wf as any).conditions.length > 0
-                    ? { rgeConditions: (wf as any).conditions }
-                    : {}),
+                  rgeConditions: Array.isArray((wf as any).conditions) ? (wf as any).conditions : [],
                 },
                 actions: wf.actions || [],
               });

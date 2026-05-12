@@ -114,6 +114,8 @@ interface Contact {
   source?: string;
   lastIncomingAt?: string;
   createdAt: string;
+  /** CRM / RGE persisted score (0–100); Copilot uses as primary when present. */
+  leadScore?: number | null;
   whatsappId?: string;
   instagramId?: string;
   facebookId?: string;
@@ -1642,7 +1644,10 @@ export function UnifiedInbox() {
   const contactContext: ContactContext | undefined = useMemo(() => {
     if (!contact) return undefined;
     const msgList = messages.map(m => ({ direction: m.direction, content: m.content || '' }));
-    const intel = msgList.length > 0 ? analyzeConversation(msgList, { industry: aiBusinessKnowledge?.industry }) : null;
+    const intel = analyzeConversation(msgList, {
+      industry: aiBusinessKnowledge?.industry,
+      crmLeadScore: contact.leadScore ?? null,
+    });
     return {
       name:          contact.name,
       tag:           contact.tag || undefined,
@@ -2844,7 +2849,15 @@ export function UnifiedInbox() {
                 else if (event.eventType === "tag_change") description = `Tag changed to "${data?.to || data?.tag}"`;
                 else if (event.eventType === "stage_change") description = `Pipeline: ${data?.from} → ${data?.to}`;
                 else if (event.eventType === "channel_switch") description = `Channel: ${data?.from} → ${data?.to}`;
-                else if (event.eventType === "note") description = `Note: "${data?.content || ''}"`;
+                else if (event.eventType === "note") {
+                  if (data?.kind === "workflow_task") {
+                    description = data?.content || `Task: ${data?.title || "Workflow task"}`;
+                  } else if (data?.kind === "language_detected") {
+                    description = data?.content || `Language: ${data?.language || ""}`;
+                  } else {
+                    description = `Note: "${data?.content || ''}"`;
+                  }
+                }
                 else if (event.eventType === "assignment") description = `Assigned to ${data?.assignee || data?.to || "team member"}`;
                 else if (event.eventType === "contact_created") description = "Contact created";
                 else description = Object.entries(data || {}).map(([k, v]) => `${k}: ${v}`).join(', ') || "Activity recorded";

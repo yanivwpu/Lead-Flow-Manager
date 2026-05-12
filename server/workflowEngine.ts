@@ -25,7 +25,9 @@ export interface WorkflowAction {
     | "add_note"
     | "set_followup"
     | "message_template"
-    | "task_created";
+    | "task_created"
+    | "language_detected"
+    | "lead_fields_updated";
   value: string;
 }
 
@@ -142,6 +144,56 @@ async function dualWriteConversation(
   }
 }
 
+function stripUnresolvedTemplateVars(body: string): string {
+  return body
+    .replace(/\{\{\s*[^}]+\s*\}\}/g, "")
+    .replace(/[ \t]{2,}/g, " ")
+    .trim();
+}
+
+function detectLanguageCodeFromText(text: string): "en" | "es" | "he" {
+  const t = (text || "").trim();
+  if (!t) return "en";
+  let he = 0;
+  for (let i = 0; i < t.length; i++) {
+    const c = t.charCodeAt(i);
+    if (c >= 0x0590 && c <= 0x05ff) he++;
+  }
+  if (he >= 3 || he / Math.max(t.length, 1) > 0.07) return "he";
+  if (
+    /\b(hola|gracias|por\s+favor|casa|d[ií]as|cu[aá]ndo|d[oó]nde|usted|quiero|necesito)\b/i.test(t) ||
+    /[áéíóúñ¿¡]/i.test(t)
+  ) {
+    return "es";
+  }
+  return "en";
+}
+
+function extractInboundSnippetForLanguage(triggerData: Record<string, unknown>, chat: Chat | null): string {
+  const fromTrigger =
+    (typeof triggerData?.inboundText === "string" && (triggerData.inboundText as string)) ||
+    (typeof triggerData?.message === "string" && (triggerData.message as string)) ||
+    "";
+  if (fromTrigger.trim()) return fromTrigger;
+  const msgs = (chat as any)?.messages as
+    | { text?: string; content?: string; sender?: string; direction?: string; sent?: boolean }[]
+    | undefined;
+  if (msgs?.length) {
+    for (let i = msgs.length - 1; i >= 0; i--) {
+      const m = msgs[i];
+      const body = String(m?.text ?? m?.content ?? "").trim();
+      const isInbound =
+        m?.direction === "inbound" ||
+        m?.sender === "them" ||
+        (m?.sent === false && m?.sender !== "me");
+      if (isInbound && body) return body;
+    }
+    const last = msgs[msgs.length - 1];
+    return String(last?.text ?? last?.content ?? "");
+  }
+  return "";
+}
+
 function interpolateRgeMessageTemplate(body: string, contact: Contact): string {
   const cf = (contact.customFields as Record<string, unknown>) || {};
   const rawName = (contact.name || "").trim() || "there";
@@ -207,7 +259,19 @@ async function executeSendMessageTemplateAction(params: {
     );
     return false;
   }
-  const content = interpolateRgeMessageTemplate(rawBody, contact);
+  const content = stripUnresolvedTemplateVars(interpolateRgeMessageTemplate(rawBody, contact));
+  if (!content.trim()) {
+    console.warn(
+      JSON.stringify({
+        tag: "[WorkflowAction]",
+        event: "send_message_template_skipped",
+        reason: "empty_after_interpolation",
+        workflowId: workflow.id,
+        templateKey,
+      })
+    );
+    return false;
+  }
   const { withAutomationSendDedup } = await import("./automationSendGuard");
   const dedupKey = `wf_msg_tpl:${workflow.id}:${templateKey}:${contact.id}:${content.slice(0, 80)}`;
   const out = await withAutomationSendDedup(dedupKey, workflow.userId, contact.id, async () => {
@@ -282,6 +346,69 @@ export async function executeWorkflowActions(
         executedActions.push({ type: "set_pipeline", value: action.stage });
         continue;
       }
+      if (action.type === "detect_language") {
+        const snippet = extractInboundSnippetForLanguage(triggerData, chat);
+        const lang = detectLanguageCodeFromText(snippet);
+        if (contact?.id) {
+          const prev = (contact.customFields as Record<string, unknown>) || {};
+          await storage
+            .updateContact(
+              contact.id,
+              {
+                customFields: {
+                  ...prev,
+                  languageDetected: lang,
+                  _languageDetectedAt: new Date().toISOString(),
+                },
+              },
+              { skipAutomationHooks: true }
+            )
+            .catch(() => {});
+        }
+        if (chat) {
+          const prev = ((chat as any).customFields as Record<string, unknown>) || {};
+          await storage
+            .updateChat(chat.id, { customFields: { ...prev, languageDetected: lang } } as any)
+            .catch(() => {});
+        }
+        if (contact?.id) {
+          await storage
+            .createActivityEvent({
+              userId: workflow.userId,
+              contactId: contact.id,
+              conversationId: conversationId ?? null,
+              eventType: "note",
+              eventData: {
+                kind: "language_detected",
+                content: `Language detected: ${lang} (from inbound snippet)`,
+                language: lang,
+              },
+              actorType: "system",
+            })
+            .catch(() => {});
+        }
+        executedActions.push({ type: "language_detected", value: lang });
+        continue;
+      }
+      if (action.type === "update_lead_fields" && Array.isArray(action.fields) && contact?.id) {
+        const fresh = await storage.getContact(contact.id);
+        if (!fresh) continue;
+        const cf = { ...((fresh.customFields as Record<string, unknown>) || {}) };
+        let changed = false;
+        if (action.fields.includes("languageDetected")) {
+          if (typeof cf.languageDetected !== "string" || !cf.languageDetected) {
+            const snippet = extractInboundSnippetForLanguage(triggerData, chat);
+            cf.languageDetected = detectLanguageCodeFromText(snippet);
+            cf._languageDetectedAt = new Date().toISOString();
+            changed = true;
+          }
+        }
+        if (changed) {
+          await storage.updateContact(contact.id, { customFields: cf }, { skipAutomationHooks: true }).catch(() => {});
+        }
+        executedActions.push({ type: "lead_fields_updated", value: action.fields.map(String).join(",") });
+        continue;
+      }
       if (action.type === "create_or_update_lead") {
         // Inbound unified inbox already materializes contacts; nothing to create.
         continue;
@@ -300,6 +427,11 @@ export async function executeWorkflowActions(
       }
       if (action.type === "create_task" && typeof action.title === "string" && action.title.trim() && contact?.id) {
         const dueDays = Number.isFinite(Number(action.dueDays)) ? Number(action.dueDays) : 1;
+        const title = action.title.trim();
+        const wfLabel = workflow.name || "Workflow";
+        const dueAt = new Date();
+        dueAt.setDate(dueAt.getDate() + Math.max(0, dueDays));
+        const content = `Task: ${title}\nDue: ${dueAt.toLocaleDateString()} (${dueDays} day(s))\nWorkflow: ${wfLabel}`;
         await storage
           .createActivityEvent({
             userId: workflow.userId,
@@ -308,10 +440,12 @@ export async function executeWorkflowActions(
             eventType: "note",
             eventData: {
               kind: "workflow_task",
-              title: action.title.trim(),
-              dueDays: dueDays,
+              content,
+              title,
+              dueDays,
+              dueAt: dueAt.toISOString(),
               workflowId: workflow.id,
-              workflowName: workflow.name,
+              workflowName: wfLabel,
             },
             actorType: "system",
           })
@@ -472,7 +606,8 @@ export async function triggerNewChatWorkflows(
   userId: string,
   chat: Chat,
   contact?: Contact,
-  conversationId?: string
+  conversationId?: string,
+  inboundMessage?: string
 ): Promise<void> {
   try {
     const limits = await subscriptionService.getUserLimits(userId);
@@ -482,7 +617,13 @@ export async function triggerNewChatWorkflows(
     }
     const workflows = await storage.getActiveWorkflowsByTrigger(userId, "new_chat");
     for (const workflow of workflows) {
-      await executeWorkflowActions(workflow, chat, { trigger: "new_chat" }, contact, conversationId);
+      await executeWorkflowActions(
+        workflow,
+        chat,
+        { trigger: "new_chat", inboundText: inboundMessage ?? "" },
+        contact,
+        conversationId
+      );
     }
   } catch (error) {
     console.error("Error triggering new chat workflows:", error);

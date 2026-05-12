@@ -5,9 +5,7 @@ import { executeWorkflowActions } from "./workflowEngine";
 import { resolveLegacyChatForContact } from "./automationEventDispatcher";
 
 function combinedNoReplyConditionRows(tc: Record<string, unknown> | undefined): { type?: string; value?: string; stages?: string[] }[] {
-  const a = Array.isArray(tc?.conditions) ? (tc!.conditions as { type?: string; value?: string; stages?: string[] }[]) : [];
-  const b = Array.isArray(tc?.rgeConditions) ? (tc!.rgeConditions as { type?: string; value?: string; stages?: string[] }[]) : [];
-  return [...a, ...b];
+  return Array.isArray(tc?.rgeConditions) ? (tc!.rgeConditions as { type?: string; value?: string; stages?: string[] }[]) : [];
 }
 
 function noReplyWorkflowMatchesConversation(workflow: Workflow, conversationChannel: string): boolean {

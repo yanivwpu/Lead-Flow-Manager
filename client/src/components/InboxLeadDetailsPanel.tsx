@@ -77,6 +77,8 @@ interface Contact {
   followUp?: string | null;
   followUpDate?: string | null;
   assignedTo?: string | null;
+  /** CRM cumulative / RGE score (0–100); when set, Copilot aligns primary score to this value. */
+  leadScore?: number | null;
   source?: string;
   createdAt: string;
 }
@@ -882,8 +884,13 @@ export function InboxLeadDetailsPanel({
 
   // ── Conversation intelligence — re-runs whenever messages change ──
   const intel = useMemo(
-    () => analyzeConversation(messages, { industry: businessKnowledge?.industry, businessKnowledge }),
-    [messages, businessKnowledge]
+    () =>
+      analyzeConversation(messages, {
+        industry: businessKnowledge?.industry,
+        businessKnowledge,
+        crmLeadScore: contact.leadScore ?? null,
+      }),
+    [messages, businessKnowledge, contact.leadScore]
   );
 
   // ── Workflow layer — computes recommended actions from intel + contact state ──
@@ -1813,7 +1820,21 @@ export function InboxLeadDetailsPanel({
                             </div>
                           ) : null}
                           <p className="text-[10px] text-gray-400 font-medium tabular-nums pt-0.5">
-                            Score {intel.leadScoreDetails.score}
+                            {intel.leadScoreDetails.scoreSource === "crm" ? (
+                              <>
+                                CRM lead score {intel.leadScoreDetails.score}
+                                {typeof intel.leadScoreDetails.conversationScore === "number" ? (
+                                  <span className="text-gray-500">
+                                    {" "}
+                                    · Conversation estimate {intel.leadScoreDetails.conversationScore}
+                                  </span>
+                                ) : null}
+                              </>
+                            ) : (
+                              <>
+                                Score {intel.leadScoreDetails.score}
+                              </>
+                            )}
                             {intel.leadScoreDetails.signals?.decisionOverride ? (
                               <span className="text-gray-600"> · decision override</span>
                             ) : null}

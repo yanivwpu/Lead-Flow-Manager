@@ -4,7 +4,12 @@
  * Computes lead score and AI state dynamically.
  */
 
-import { scoreLead, type BusinessKnowledgeForScoring, type LeadScoringSignals } from "./leadScoring";
+import {
+  scoreLead,
+  type BusinessKnowledgeForScoring,
+  type LeadScoringSignals,
+  type LeadBucket,
+} from "./leadScoring";
 
 export interface ConversationMessage {
   direction: 'inbound' | 'outbound';
@@ -51,6 +56,10 @@ export interface LeadScoreDetails {
   negativeSignals: string[];
   confidence01: number; // 0–1
   signals?: LeadScoringSignals;
+  /** When set, `score` / `bucket` / badge reflect CRM; `conversationScore` is the message-only heuristic. */
+  scoreSource?: "crm" | "conversation";
+  /** Message-only score (same scale as `score`) when `scoreSource === "crm"`. */
+  conversationScore?: number;
 }
 
 export interface CopilotIntelligence extends QualificationData {
@@ -283,11 +292,69 @@ function computeAiState(
 
 // ── Main Entry Point ───────────────────────────────────────────────────────────
 
+function normalizeCrmLeadScore(raw: unknown): number | null {
+  if (raw === null || raw === undefined) return null;
+  const n = typeof raw === "number" ? raw : Number(raw);
+  if (!Number.isFinite(n)) return null;
+  return Math.max(0, Math.min(100, Math.round(n)));
+}
+
+function bucketFromNumericScore(score: number): LeadBucket {
+  return score >= 75 ? "hot" : score >= 45 ? "warm" : score >= 15 ? "cold" : "unqualified";
+}
+
+function leadScoreBadgeFromBucket(bucket: LeadBucket, confidence01: number): LeadScore {
+  const confidence = Math.round(Math.max(0, Math.min(1, confidence01)) * 100);
+  if (bucket === "unqualified") {
+    return { label: "Cold", color: "text-gray-500", dot: "bg-gray-400", confidence };
+  }
+  const label = bucket === "hot" ? "Hot" : bucket === "warm" ? "Warm" : "Cold";
+  if (label === "Hot") return { label, color: "text-red-600", dot: "bg-red-500", confidence };
+  if (label === "Warm") return { label, color: "text-amber-600", dot: "bg-amber-400", confidence };
+  return { label: "Cold", color: "text-blue-500", dot: "bg-blue-400", confidence };
+}
+
 export function analyzeConversation(
   messages: ConversationMessage[],
-  opts?: { industry?: string; isRealEstate?: boolean; businessKnowledge?: BusinessKnowledgeForScoring }
+  opts?: {
+    industry?: string;
+    isRealEstate?: boolean;
+    businessKnowledge?: BusinessKnowledgeForScoring;
+    /** When present, Copilot uses this as the primary score (aligned with `contacts.lead_score`). */
+    crmLeadScore?: number | null;
+  }
 ): CopilotIntelligence {
+  const crmScore = normalizeCrmLeadScore(opts?.crmLeadScore);
+
   if (!messages || messages.length === 0) {
+    if (crmScore != null) {
+      const bucket = bucketFromNumericScore(crmScore);
+      const confidence01 = 0.78;
+      return {
+        budget: null,
+        timeline: null,
+        financing: null,
+        intent: "Browsing",
+        hasBudget: false,
+        hasTimeline: false,
+        hasFinancing: false,
+        leadScore: leadScoreBadgeFromBucket(bucket, confidence01),
+        leadScoreDetails: {
+          score: crmScore,
+          bucket,
+          reasons: ["Primary score from your CRM (contact lead score)."],
+          missingRequired: [],
+          negativeSignals: [],
+          confidence01,
+          scoreSource: "crm",
+        },
+        aiState: "Stalled",
+        signalCount: 0,
+        isUrgent: false,
+        messageCount: 0,
+        lastDirection: null,
+      };
+    }
     return {
       budget: null, timeline: null, financing: null, intent: 'Browsing',
       hasBudget: false, hasTimeline: false, hasFinancing: false,
@@ -324,29 +391,37 @@ export function analyzeConversation(
   const signalCount   = [hasBudget, hasTimeline, hasFinancing].filter(Boolean).length;
 
   const scoring = scoreLead(messages, opts?.businessKnowledge ?? { industry: opts?.industry }, { isRealEstate });
-  const leadScore: LeadScore = (() => {
-    const label = scoring.bucket === "hot" ? "Hot" : scoring.bucket === "warm" ? "Warm" : "Cold";
-    if (scoring.bucket === "unqualified") {
-      return { label: "Cold", color: "text-gray-500", dot: "bg-gray-400", confidence: Math.round(scoring.confidence * 100) };
-    }
-    if (label === "Hot") return { label, color: "text-red-600", dot: "bg-red-500", confidence: Math.round(scoring.confidence * 100) };
-    if (label === "Warm") return { label, color: "text-amber-600", dot: "bg-amber-400", confidence: Math.round(scoring.confidence * 100) };
-    return { label: "Cold", color: "text-blue-500", dot: "bg-blue-400", confidence: Math.round(scoring.confidence * 100) };
-  })();
+  const useCrm = crmScore != null;
+  const displayBucket: LeadBucket = useCrm ? bucketFromNumericScore(crmScore) : scoring.bucket;
+  const displayScore = useCrm ? crmScore : scoring.score;
+  const confidence01 = useCrm ? Math.max(scoring.confidence, 0.78) : scoring.confidence;
+  const leadScore = leadScoreBadgeFromBucket(displayBucket, confidence01);
   const aiState   = computeAiState(hasBudget, hasTimeline, hasFinancing, messageCount, lastDirection, isUrgent);
+
+  const reasons = useCrm
+    ? Array.from(
+        new Set([
+          "Primary score from your CRM (contact lead score).",
+          "Conversation signals (reference only):",
+          ...scoring.reasons,
+        ]),
+      ).slice(0, 12)
+    : scoring.reasons;
 
   return {
     budget, timeline, financing, intent,
     hasBudget, hasTimeline, hasFinancing,
     leadScore,
     leadScoreDetails: {
-      score: scoring.score,
-      bucket: scoring.bucket,
-      reasons: scoring.reasons,
+      score: displayScore,
+      bucket: displayBucket,
+      reasons,
       missingRequired: scoring.missingRequired,
       negativeSignals: scoring.negativeSignals,
-      confidence01: scoring.confidence,
+      confidence01,
       signals: scoring.signals,
+      scoreSource: useCrm ? "crm" : "conversation",
+      conversationScore: useCrm ? scoring.score : undefined,
     },
     aiState,
     signalCount, isUrgent, messageCount, lastDirection,

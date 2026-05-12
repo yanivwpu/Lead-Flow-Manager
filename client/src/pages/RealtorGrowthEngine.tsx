@@ -294,7 +294,26 @@ export function RealtorGrowthEngine() {
     enabled: !!templateData && status === 'installed'
   });
 
-  const workflows = assetsData?.assets?.find((a: any) => a.assetType === 'workflows')?.definition?.workflows || [];
+  const rawWorkflows =
+    assetsData?.assets?.find((a: any) => a.assetType === "workflows")?.definition?.workflows || [];
+  /** Template asset rows plus a synthetic W2 row (qualification runs in the message engine, not as a DB workflow). */
+  const workflows = React.useMemo(() => {
+    const list = [...(rawWorkflows as any[])];
+    if (!list.some((w) => w?.key === "W2")) {
+      const afterW1 = list.findIndex((w) => w?.key === "W1");
+      const synthetic = {
+        key: "W2",
+        name: "Lead qualification (AI engine — runs on every inbound message)",
+        enabledByDefault: true,
+        trigger: { type: "inbound_message" },
+        actions: [],
+        conditions: [],
+      };
+      if (afterW1 >= 0) list.splice(afterW1 + 1, 0, synthetic);
+      else list.unshift(synthetic);
+    }
+    return list;
+  }, [rawWorkflows]);
   const pipeline = assetsData?.assets?.find((a: any) => a.assetType === 'pipeline')?.definition || { stages: [] };
   const subscriptionActive = templateData?.subscription?.active !== false;
   const isPaused = !subscriptionActive && (status === 'purchased' || status === 'submitted' || status === 'installed');
@@ -1408,9 +1427,10 @@ export function RealtorGrowthEngine() {
       timing: "Immediate on keyword detection",
     },
     W8: {
-      summary: "Detects the language of incoming messages and updates the lead's language field. Can be used to route leads to language-appropriate agents or templates.",
-      triggers: "Every inbound message",
-      timing: "Real-time analysis",
+      summary:
+        "On the first message of a new chat, detects English, Spanish, or Hebrew from the inbound text and stores it on the lead (custom field languageDetected).",
+      triggers: "New chat / first message",
+      timing: "Immediate on first inbound message",
     },
   };
 

@@ -160,40 +160,8 @@ export async function seedRealtorTemplate() {
               { type: "create_task", title: "Review new lead", dueDays: 1 },
             ],
           },
-          {
-            key: "W2",
-            name: "AI Qualify + Score on Every Inbound",
-            enabledByDefault: true,
-            trigger: { type: "keyword" },
-            conditions: [],
-            actions: [
-              { type: "run_lead_scoring" },
-              { type: "update_lead_fields", fields: ["leadScore", "leadType", "budget", "timeline", "location", "lastScoreAt", "lastScoreReasons", "lastMessageAt"] },
-              { type: "conditional", rules: [
-                { condition: "leadScore >= 80", actions: [
-                  { type: "apply_tag", tag: "Hot" },
-                  { type: "set_pipeline_stage", stage: "Qualified (Hot)" },
-                  { type: "create_task", title: "Call / Follow up today", dueDays: 0 },
-                ]},
-                { condition: "leadScore >= 50", actions: [
-                  { type: "apply_tag", tag: "Warm" },
-                  { type: "set_pipeline_stage", stage: "Qualified (Warm)" },
-                ]},
-                { condition: "leadScore >= 20", actions: [
-                  { type: "apply_tag", tag: "New" },
-                  { type: "set_pipeline_stage", stage: "New Lead" },
-                ]},
-                { condition: "leadScore >= 1", actions: [
-                  { type: "apply_tag", tag: "Low Intent" },
-                  { type: "set_pipeline_stage", stage: "New Lead" },
-                ]},
-                { condition: "leadScore <= 0", actions: [
-                  { type: "apply_tag", tag: "Unqualified" },
-                  { type: "set_pipeline_stage", stage: "Unqualified" },
-                ]},
-              ]},
-            ],
-          },
+          // W2 is NOT a DB workflow row: buyer qualification + cumulative `contacts.lead_score`
+          // run in `runW2QualificationEngine` on every inbound message (see server/routes + workflowEngine).
           {
             key: "W3",
             name: "Appointment Intent -> Booking Prompt",
@@ -252,9 +220,9 @@ export async function seedRealtorTemplate() {
           },
           {
             key: "W8",
-            name: "Language Detection",
-            enabledByDefault: false,
-            trigger: { type: "keyword" },
+            name: "Language detection (first message)",
+            enabledByDefault: true,
+            trigger: { type: "new_chat" },
             conditions: [],
             actions: [
               { type: "detect_language" },

@@ -145,7 +145,7 @@ export async function dispatchInboundMessagingAutomation(
 ): Promise<void> {
   const { userId, isNewChat, updatedChat, messageBody, contact, conversationId, skipKeywordWorkflows } = params;
   if (isNewChat) {
-    triggerNewChatWorkflows(userId, updatedChat, contact, conversationId).catch((err) =>
+    triggerNewChatWorkflows(userId, updatedChat, contact, conversationId, messageBody).catch((err) =>
       console.error("[AutomationDispatcher] new_chat workflows:", err)
     );
   }
