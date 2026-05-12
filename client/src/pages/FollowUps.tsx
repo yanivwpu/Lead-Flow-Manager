@@ -1,10 +1,11 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useLocation } from "wouter";
 import { ArrowRight, CheckCircle2, Calendar as CalendarIcon, List, Sparkles, ChevronLeft, ChevronRight, Kanban, AlertCircle, Clock, CalendarCheck, MessageSquare, CheckCheck, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast";
 import { format, isSameDay, startOfMonth, endOfMonth, eachDayOfInterval, addMonths, subMonths, isToday, isBefore, startOfWeek, endOfWeek } from "date-fns";
 import { useIsMobile } from "@/hooks/use-mobile";
 
@@ -629,6 +630,7 @@ export function FollowUps() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
+  const { toast } = useToast();
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [kpiFilter, setKpiFilter] = useState<KPIFilter>(null);
   const isMobile = useIsMobile();
@@ -652,6 +654,42 @@ export function FollowUps() {
     queryKey: ['/api/appointments'],
     enabled: !!user && !isDemoUser,
   });
+
+  useEffect(() => {
+    if (!user || isDemoUser) return;
+    let ws: WebSocket | null = null;
+    let heartbeat: ReturnType<typeof setInterval> | undefined;
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    ws = new WebSocket(`${protocol}//${window.location.host}/ws/presence`);
+    ws.onopen = () => {
+      ws?.send(JSON.stringify({ type: "auth", userId: user.id, userName: user.name || "Agent" }));
+      heartbeat = setInterval(() => {
+        if (ws?.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: "heartbeat" }));
+        }
+      }, 25000);
+    };
+    ws.onmessage = (event) => {
+      try {
+        const msg = JSON.parse(event.data);
+        if (msg.type === "calendly_booking_confirmed") {
+          queryClient.invalidateQueries({ queryKey: ["/api/appointments"] });
+          queryClient.invalidateQueries({ queryKey: ["/api/inbox"] });
+          toast({
+            title: "Booking confirmed",
+            description:
+              typeof msg.title === "string" && msg.title ? msg.title : "Calendly booking saved to Tasks.",
+          });
+        }
+      } catch {
+        /* ignore malformed WS frames */
+      }
+    };
+    return () => {
+      if (heartbeat) clearInterval(heartbeat);
+      ws?.close();
+    };
+  }, [user, isDemoUser, queryClient, toast]);
 
   // Map /api/inbox items to the Chat shape used by this page
   const chats = useMemo<Chat[]>(() => {

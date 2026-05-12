@@ -640,6 +640,11 @@ class ChannelService {
     telegramMedia?: { botToken: string; fileId: string };
     /** Meta Messenger / IG attachment.type (image, video, …) — stored on messages.media_type when not superseded by persist */
     attachmentType?: string;
+    /**
+     * Calendly inbound: attach to this CRM contact when known (RGE W3 utm_content),
+     * instead of creating a duplicate Calendly-only contact.
+     */
+    preferredContactId?: string;
   }): Promise<{ contact: Contact; conversation: Conversation; message: Message; isNewConversation: boolean; chatbotWillFire: boolean }> {
     const {
       userId,
@@ -653,6 +658,7 @@ class ChannelService {
       channelAccountId,
       telegramMedia,
       attachmentType,
+      preferredContactId,
     } = params;
     let { channelContactId, contactName } = params;
 
@@ -681,7 +687,32 @@ class ChannelService {
 
     console.log(`[Inbound] Channel identified: ${channel} — starting processIncomingMessage`);
 
-    let contact = await storage.getContactByChannelId(userId, channel, channelContactId);
+    let contact: Contact | undefined;
+
+    if (channel === "calendly" && preferredContactId) {
+      const pc = await storage.getContact(preferredContactId);
+      if (pc && pc.userId === userId) {
+        contact = pc;
+        const em = channelContactId.trim().toLowerCase();
+        const patch: Partial<Contact> = {
+          lastIncomingChannel: channel,
+          lastIncomingAt: new Date(),
+        };
+        if (em.includes("@") && (!pc.email || !String(pc.email).trim())) {
+          patch.email = em;
+        }
+        await storage.updateContact(pc.id, patch);
+        console.log(
+          `[Inbox Worker] preferredContactId=${preferredContactId} for Calendly inbound (email hint=${em})`
+        );
+      } else {
+        console.warn(`[Inbox Worker] preferredContactId invalid or wrong user — falling back to channel lookup`);
+      }
+    }
+
+    if (!contact) {
+      contact = await storage.getContactByChannelId(userId, channel, channelContactId);
+    }
     
     if (!contact) {
       console.log(`[Inbox Worker] Contact not found for channelId=${channelContactId}, creating new contact`);
@@ -713,7 +744,9 @@ class ChannelService {
       const contactUpdates: Partial<Contact> = {
         lastIncomingChannel: channel,
         lastIncomingAt: new Date(),
-        primaryChannel: channel,
+        ...(channel === "calendly" && preferredContactId
+          ? {}
+          : { primaryChannel: channel }),
       };
       // If this contact was matched via the phone fallback (whatsappId was null),
       // backfill the whatsappId now so subsequent inbound lookups hit the fast path.

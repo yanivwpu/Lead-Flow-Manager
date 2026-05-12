@@ -337,6 +337,10 @@ export interface IStorage {
   createAppointment(data: InsertAppointment): Promise<Appointment>;
   getAppointmentsByUser(userId: string): Promise<Appointment[]>;
   getAppointmentsByContact(userId: string, contactId: string): Promise<Appointment[]>;
+  getAppointmentByCalendlyScheduledEventUri(
+    userId: string,
+    calendlyScheduledEventUri: string
+  ): Promise<Appointment | undefined>;
   deleteAppointment(id: string): Promise<boolean>;
   
   // Conversation methods
@@ -2244,6 +2248,20 @@ export class DbStorage implements IStorage {
     return await db.select().from(appointments)
       .where(and(eq(appointments.userId, userId), eq(appointments.contactId, contactId)))
       .orderBy(asc(appointments.appointmentDate));
+  }
+
+  async getAppointmentByCalendlyScheduledEventUri(
+    userId: string,
+    calendlyScheduledEventUri: string
+  ): Promise<Appointment | undefined> {
+    const uri = calendlyScheduledEventUri.trim();
+    if (!uri) return undefined;
+    const r = await db
+      .select()
+      .from(appointments)
+      .where(and(eq(appointments.userId, userId), eq(appointments.calendlyScheduledEventUri, uri)))
+      .limit(1);
+    return r[0];
   }
 
   async deleteAppointment(id: string): Promise<boolean> {

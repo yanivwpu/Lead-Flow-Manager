@@ -651,7 +651,7 @@ export function registerContactRoutes(app: Express): void {
   app.post("/api/appointments", async (req, res) => {
     try {
       if (!req.user) return res.status(401).json({ error: "Unauthorized" });
-      const { contactId, contactName, appointmentType, appointmentDate, title } = req.body;
+      const { contactId, contactName, appointmentType, appointmentDate, title, conversationId, source } = req.body;
       if (!contactId || !appointmentDate) {
         return res.status(400).json({ error: "contactId and appointmentDate are required" });
       }
@@ -663,6 +663,8 @@ export function registerContactRoutes(app: Express): void {
         appointmentDate: new Date(appointmentDate),
         title: title || "",
         status: "scheduled",
+        ...(typeof conversationId === "string" && conversationId ? { conversationId } : {}),
+        ...(source === "calendly" || source === "manual" ? { source } : {}),
       });
       res.json(appt);
     } catch (err) {

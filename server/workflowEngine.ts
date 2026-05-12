@@ -10,6 +10,7 @@ import {
 import {
   getCalendlyPublicSchedulingUrl,
   isUserCalendlyBookingConnected,
+  appendCalendlyW3TrackingParams,
 } from "./calendlyBookingConnected";
 import { channelService } from "./channelService";
 import { sendUserWhatsAppMessage, isLegacyCalendlyWorkflowChat } from "./userTwilio";
@@ -710,8 +711,12 @@ async function executeW3CalendlyKeywordResponse(
     { tag: "Appointment Requested" }
   );
 
-  const url = await getCalendlyPublicSchedulingUrl(workflow.userId);
-  const body = url ? `You can book directly here: ${url}` : "";
+  const rawSchedulingUrl = await getCalendlyPublicSchedulingUrl(workflow.userId);
+  const trackedUrl =
+    contact?.id && rawSchedulingUrl
+      ? appendCalendlyW3TrackingParams(rawSchedulingUrl, contact.id)
+      : rawSchedulingUrl;
+  const body = trackedUrl ? `You can book directly here: ${trackedUrl}` : "";
 
   const baseExecuted: WorkflowAction[] = [{ type: "tag", value: "Appointment Requested" }];
 
@@ -799,7 +804,48 @@ async function executeW3CalendlyKeywordResponse(
   }
 
   if (sent) {
-    await persistW3CalendlySentAt(contact, chat);
+    if (contact?.id) {
+      const fresh = await storage.getContact(contact.id);
+      const prev = ((fresh?.customFields as Record<string, unknown> | null) || {}) as Record<string, unknown>;
+      await storage
+        .updateContact(
+          contact.id,
+          {
+            customFields: {
+              ...prev,
+              [W3_CALENDLY_SENT_AT_KEY]: new Date().toISOString(),
+              _w3CalendlyAwaitBooking: {
+                conversationId: conversationId ?? null,
+                sentAt: new Date().toISOString(),
+                expiresAt: new Date(Date.now() + 14 * 86400000).toISOString(),
+              },
+            },
+          },
+          { skipAutomationHooks: true }
+        )
+        .catch(() => {});
+      if (conversationId) {
+        await storage
+          .createActivityEvent({
+            userId: workflow.userId,
+            contactId: contact.id,
+            conversationId,
+            eventType: "note",
+            eventData: {
+              kind: "workflow_task",
+              content:
+                "RGE W3 (Calendly mode): scheduling link sent. Seeded message template + create_task are skipped; use this thread + Calendly webhook for confirmed bookings.",
+              title: "Book appointment (W3 Calendly)",
+              dueDays: 1,
+              workflowName: workflow.name || "W3",
+            },
+            actorType: "system",
+          })
+          .catch(() => {});
+      }
+    } else {
+      await persistW3CalendlySentAt(contact, chat);
+    }
   }
 
   await finalizeW3CalendlyWorkflowRun(

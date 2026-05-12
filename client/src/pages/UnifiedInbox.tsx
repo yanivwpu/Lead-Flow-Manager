@@ -396,6 +396,21 @@ export function UnifiedInbox() {
               });
               bumpReplyWindowClockRef.current();
             }
+          } else if (msg.type === "calendly_booking_confirmed") {
+            queryClient.invalidateQueries({ queryKey: ["/api/appointments"] });
+            queryClient.refetchQueries({ queryKey: ["/api/inbox"], type: "active" });
+            if (msg.conversationId) {
+              queryClient.invalidateQueries({
+                queryKey: ["/api/conversations", msg.conversationId, "messages"],
+              });
+            }
+            toast({
+              title: "Booking confirmed",
+              description:
+                typeof msg.title === "string" && msg.title
+                  ? msg.title
+                  : "A lead completed scheduling via Calendly.",
+            });
           }
         } catch {}
       };

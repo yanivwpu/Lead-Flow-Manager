@@ -18,3 +18,19 @@ export async function getCalendlyPublicSchedulingUrl(userId: string): Promise<st
   const u = raw.trim();
   return u.startsWith("http://") || u.startsWith("https://") ? u : "";
 }
+
+/** Append UTM params so Calendly webhooks can resolve the originating CRM contact. */
+export function appendCalendlyW3TrackingParams(schedulingUrl: string, contactId: string): string {
+  const raw = (schedulingUrl || "").trim();
+  if (!raw || !contactId) return raw;
+  try {
+    const url = raw.startsWith("http://") || raw.startsWith("https://") ? new URL(raw) : new URL(`https://${raw}`);
+    url.searchParams.set("utm_source", "whachatcrm");
+    url.searchParams.set("utm_medium", "rge_w3");
+    url.searchParams.set("utm_content", contactId);
+    return url.toString();
+  } catch {
+    const join = raw.includes("?") ? "&" : "?";
+    return `${raw}${join}utm_source=whachatcrm&utm_medium=rge_w3&utm_content=${encodeURIComponent(contactId)}`;
+  }
+}
