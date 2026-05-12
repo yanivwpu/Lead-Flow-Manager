@@ -4,20 +4,42 @@ import { subscriptionService } from "./subscriptionService";
 import { executeWorkflowActions } from "./workflowEngine";
 import { resolveLegacyChatForContact } from "./automationEventDispatcher";
 
+function combinedNoReplyConditionRows(tc: Record<string, unknown> | undefined): { type?: string; value?: string; stages?: string[] }[] {
+  const a = Array.isArray(tc?.conditions) ? (tc!.conditions as { type?: string; value?: string; stages?: string[] }[]) : [];
+  const b = Array.isArray(tc?.rgeConditions) ? (tc!.rgeConditions as { type?: string; value?: string; stages?: string[] }[]) : [];
+  return [...a, ...b];
+}
+
 function noReplyWorkflowMatchesConversation(workflow: Workflow, conversationChannel: string): boolean {
-  const tc = workflow.triggerConditions as {
-    conditions?: { type: string; value: string }[];
-    channel?: string;
-  };
-  const arr = tc?.conditions;
-  if (arr && arr.length > 0) {
+  const tc = workflow.triggerConditions as Record<string, unknown> | undefined;
+  const arr = combinedNoReplyConditionRows(tc);
+  if (arr.length > 0) {
     const ch = arr.find((c) => c.type === "channel");
     if (ch?.value) {
       return ch.value === conversationChannel;
     }
   }
-  if (tc?.channel && tc.channel !== "any") {
-    return tc.channel === conversationChannel;
+  const flatChannel = tc?.channel as string | undefined;
+  if (flatChannel && flatChannel !== "any") {
+    return flatChannel === conversationChannel;
+  }
+  return true;
+}
+
+/** RGE seed `stage_in` / `stage_not_in` rows live under `triggerConditions.rgeConditions`. */
+function noReplyStageConditionsAllow(workflow: Workflow, contact: { pipelineStage?: string | null }): boolean {
+  const tc = workflow.triggerConditions as { rgeConditions?: { type?: string; stages?: string[] }[] } | undefined;
+  const rules = tc?.rgeConditions;
+  if (!rules?.length) return true;
+  const stage = (contact.pipelineStage || "").trim();
+  for (const rule of rules) {
+    const t = (rule.type || "").trim();
+    const stages = Array.isArray(rule.stages) ? rule.stages.map((s) => String(s).trim()) : [];
+    if (t === "stage_in") {
+      if (stages.length > 0 && !stages.includes(stage)) return false;
+    } else if (t === "stage_not_in") {
+      if (stages.length > 0 && stages.includes(stage)) return false;
+    }
   }
   return true;
 }
@@ -55,6 +77,7 @@ export async function scheduleNoReplyJobsAfterTeamOutbound(params: {
 
   for (const wf of workflows) {
     if (!noReplyWorkflowMatchesConversation(wf, channel)) continue;
+    if (!noReplyStageConditionsAllow(wf, contact)) continue;
     const tc = wf.triggerConditions as {
       durationMinutes?: number;
       durationHours?: number;
@@ -126,11 +149,11 @@ export async function processNoReplyJob(job: NoReplyJob): Promise<void> {
     await storage.markNoReplyJobSkipped(job.id, "customer_replied_after_anchor");
     return;
   }
-  const chat = await resolveLegacyChatForContact(contact, job.userId);
-  if (!chat) {
-    await storage.markNoReplyJobSkipped(job.id, "no_legacy_chat");
+  if (!noReplyStageConditionsAllow(wf, contact)) {
+    await storage.markNoReplyJobSkipped(job.id, "stage_filter_no_match");
     return;
   }
+  const chat = await resolveLegacyChatForContact(contact, job.userId);
   await executeWorkflowActions(
     wf,
     chat,

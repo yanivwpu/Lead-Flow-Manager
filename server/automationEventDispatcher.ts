@@ -1,4 +1,5 @@
 import type { Chat, Contact } from "@shared/schema";
+import { storage } from "./storage";
 import { findOrCreateChatByPhone } from "./userTwilio";
 import {
   triggerKeywordWorkflows,
@@ -68,17 +69,17 @@ export async function dispatchAutomationContactDiff(params: ContactAutomationDif
       return;
     }
     const chat = await resolveLegacyChatForContact(after, userId);
-    if (!chat) {
-      console.log(
-        JSON.stringify({
-          tag: "[AutomationDispatcher]",
-          event: "contact_tag_changed",
-          skipped: true,
-          reason: "no_legacy_chat",
-          contactId: after.id,
-        })
-      );
-      return;
+    let conversationId: string | undefined;
+    try {
+      const pack = await storage.getContactWithConversations(after.id);
+      if (pack?.conversations?.length) {
+        const sorted = [...pack.conversations].sort(
+          (a, b) => (b.lastMessageAt?.getTime() || 0) - (a.lastMessageAt?.getTime() || 0)
+        );
+        conversationId = sorted[0]?.id;
+      }
+    } catch {
+      /* non-critical */
     }
     await triggerTagChangeWorkflows(
       userId,
@@ -86,7 +87,7 @@ export async function dispatchAutomationContactDiff(params: ContactAutomationDif
       before.tag || "New",
       after.tag || "New",
       after,
-      undefined
+      conversationId
     );
   }
 
@@ -104,17 +105,17 @@ export async function dispatchAutomationContactDiff(params: ContactAutomationDif
       return;
     }
     const chat = await resolveLegacyChatForContact(after, userId);
-    if (!chat) {
-      console.log(
-        JSON.stringify({
-          tag: "[AutomationDispatcher]",
-          event: "pipeline_changed",
-          skipped: true,
-          reason: "no_legacy_chat",
-          contactId: after.id,
-        })
-      );
-      return;
+    let conversationId: string | undefined;
+    try {
+      const pack = await storage.getContactWithConversations(after.id);
+      if (pack?.conversations?.length) {
+        const sorted = [...pack.conversations].sort(
+          (a, b) => (b.lastMessageAt?.getTime() || 0) - (a.lastMessageAt?.getTime() || 0)
+        );
+        conversationId = sorted[0]?.id;
+      }
+    } catch {
+      /* non-critical */
     }
     await triggerPipelineChangeWorkflows(
       userId,
@@ -122,7 +123,7 @@ export async function dispatchAutomationContactDiff(params: ContactAutomationDif
       before.pipelineStage || "Lead",
       after.pipelineStage || "Lead",
       after,
-      undefined
+      conversationId
     );
   }
 }
@@ -155,14 +156,23 @@ export async function dispatchInboundMessagingAutomation(
   }
 }
 
-/** Reserved hook for future AI-score-driven automations (no default workflows today). */
-export async function dispatchAiScoreChanged(_params: {
+/** Reserved hook for future AI-score-driven automations; logs for observability. */
+export async function dispatchAiScoreChanged(params: {
   userId: string;
   contactId: string;
   score?: number;
   bucket?: string;
 }): Promise<void> {
-  // Intentionally empty — Phase 1 wires the event surface without adding new trigger types.
+  console.log(
+    JSON.stringify({
+      tag: "[AiScoreAutomation]",
+      event: "score_changed",
+      userId: params.userId,
+      contactId: params.contactId,
+      score: params.score ?? null,
+      bucket: params.bucket ?? null,
+    })
+  );
 }
 
 /** Reserved hook for booking-intent automations beyond keyword/W3 paths. */

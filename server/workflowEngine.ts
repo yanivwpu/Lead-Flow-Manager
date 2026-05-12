@@ -17,7 +17,15 @@ import { scheduleHubSpotAutoSync } from "./hubspotAutoSync";
 import { sendMetaWhatsAppMessage } from "./userMeta";
 
 export interface WorkflowAction {
-  type: "assign" | "tag" | "set_status" | "set_pipeline" | "add_note" | "set_followup";
+  type:
+    | "assign"
+    | "tag"
+    | "set_status"
+    | "set_pipeline"
+    | "add_note"
+    | "set_followup"
+    | "message_template"
+    | "task_created";
   value: string;
 }
 
@@ -40,7 +48,7 @@ export interface WorkflowCondition {
  */
 async function blockGrowthEngineWorkflowIfNotEntitled(
   workflow: Workflow,
-  chat: Chat,
+  chat: Chat | null,
   conversationId: string | undefined,
   triggerData: Record<string, unknown>
 ): Promise<string | null> {
@@ -68,7 +76,7 @@ async function blockGrowthEngineWorkflowIfNotEntitled(
   await storage
     .logWorkflowExecution({
       workflowId: workflow.id,
-      chatId: chat.id,
+      chatId: chat?.id ?? null,
       conversationId: conversationId ?? null,
       triggerData: {
         ...triggerData,
@@ -102,7 +110,7 @@ export async function getTemplatePreferences(userId: string): Promise<Record<str
 async function dualWriteContact(
   contact: Contact | undefined,
   contactUpdates: Partial<Contact>,
-  chat: Chat,
+  chat: Chat | null,
   chatUpdates: Parameters<typeof storage.updateChat>[1],
   opts?: { skipAutomationHooks?: boolean }
 ) {
@@ -115,24 +123,129 @@ async function dualWriteContact(
       scheduleHubSpotAutoSync(contact.userId, contact.id);
     }
   }
-  await storage.updateChat(chat.id, chatUpdates).catch(() => {});
+  if (chat) {
+    await storage.updateChat(chat.id, chatUpdates).catch(() => {});
+  }
 }
 
 async function dualWriteConversation(
   conversationId: string | undefined,
   status: string,
-  chat: Chat
+  chat: Chat | null
 ) {
   if (conversationId) {
     await storage.updateConversation(conversationId, { status } as any).catch(() => {});
   }
   // Legacy chat also carries status for the chat-list UI
-  await storage.updateChat(chat.id, { status } as any).catch(() => {});
+  if (chat) {
+    await storage.updateChat(chat.id, { status } as any).catch(() => {});
+  }
+}
+
+function interpolateRgeMessageTemplate(body: string, contact: Contact): string {
+  const cf = (contact.customFields as Record<string, unknown>) || {};
+  const rawName = (contact.name || "").trim() || "there";
+  const firstName = rawName.split(/\s+/)[0] || "there";
+  const city = String(cf.city ?? cf.City ?? "your area");
+  return body
+    .replace(/\{\{\s*firstName\s*\}\}/gi, firstName)
+    .replace(/\{\{\s*city\s*\}\}/gi, city);
+}
+
+async function executeSendMessageTemplateAction(params: {
+  workflow: Workflow;
+  contact: Contact | undefined;
+  conversationId: string | undefined;
+  templateKey: string;
+}): Promise<boolean> {
+  const { workflow, contact, conversationId, templateKey } = params;
+  if (!contact?.id) {
+    console.warn(
+      JSON.stringify({
+        tag: "[WorkflowAction]",
+        event: "send_message_template_skipped",
+        reason: "no_contact",
+        workflowId: workflow.id,
+        templateKey,
+      })
+    );
+    return false;
+  }
+  if (!conversationId) {
+    console.warn(
+      JSON.stringify({
+        tag: "[WorkflowAction]",
+        event: "send_message_template_skipped",
+        reason: "no_conversation_id",
+        workflowId: workflow.id,
+        contactId: contact.id,
+        templateKey,
+      })
+    );
+    return false;
+  }
+  const tc = workflow.triggerConditions as { templateId?: string };
+  const templateId = tc?.templateId || "realtor-growth-engine";
+  const row = await storage.getUserTemplateDataByKey(
+    workflow.userId,
+    templateId,
+    "message_templates",
+    `msg_${templateKey}`
+  );
+  const def = row?.definition as { body?: string; title?: string } | undefined;
+  const rawBody = typeof def?.body === "string" ? def.body : "";
+  if (!rawBody.trim()) {
+    console.warn(
+      JSON.stringify({
+        tag: "[WorkflowAction]",
+        event: "send_message_template_skipped",
+        reason: "template_missing_or_empty",
+        workflowId: workflow.id,
+        templateKey,
+        templateId,
+      })
+    );
+    return false;
+  }
+  const content = interpolateRgeMessageTemplate(rawBody, contact);
+  const { withAutomationSendDedup } = await import("./automationSendGuard");
+  const dedupKey = `wf_msg_tpl:${workflow.id}:${templateKey}:${contact.id}:${content.slice(0, 80)}`;
+  const out = await withAutomationSendDedup(dedupKey, workflow.userId, contact.id, async () => {
+    let forceChannel: Channel | undefined;
+    const conv = await storage.getConversation(conversationId);
+    if (conv?.channel && conv.channel !== "calendly") {
+      forceChannel = conv.channel as Channel;
+    }
+    return channelService.sendMessage({
+      userId: workflow.userId,
+      contactId: contact.id,
+      content,
+      contentType: "text",
+      ...(forceChannel ? { forceChannel, suppressFallback: true as const } : {}),
+      enforceWhatsAppCustomerServiceWindow: false,
+    });
+  });
+  if (!out.ok) {
+    console.log(JSON.stringify({ tag: "[WorkflowAction]", event: "send_message_template_deduped", templateKey }));
+    return false;
+  }
+  if (!out.result.success) {
+    console.warn(
+      JSON.stringify({
+        tag: "[WorkflowAction]",
+        event: "send_message_template_failed",
+        templateKey,
+        error: out.result.error,
+      })
+    );
+    return false;
+  }
+  return true;
 }
 
 export async function executeWorkflowActions(
   workflow: Workflow,
-  chat: Chat,
+  chat: Chat | null,
   triggerData: any = {},
   contact?: Contact,
   conversationId?: string
@@ -167,6 +280,43 @@ export async function executeWorkflowActions(
           { skipAutomationHooks: true }
         );
         executedActions.push({ type: "set_pipeline", value: action.stage });
+        continue;
+      }
+      if (action.type === "create_or_update_lead") {
+        // Inbound unified inbox already materializes contacts; nothing to create.
+        continue;
+      }
+      if (action.type === "send_message_template" && typeof action.templateKey === "string" && action.templateKey) {
+        const sent = await executeSendMessageTemplateAction({
+          workflow,
+          contact,
+          conversationId,
+          templateKey: action.templateKey,
+        });
+        if (sent) {
+          executedActions.push({ type: "message_template", value: action.templateKey });
+        }
+        continue;
+      }
+      if (action.type === "create_task" && typeof action.title === "string" && action.title.trim() && contact?.id) {
+        const dueDays = Number.isFinite(Number(action.dueDays)) ? Number(action.dueDays) : 1;
+        await storage
+          .createActivityEvent({
+            userId: workflow.userId,
+            contactId: contact.id,
+            conversationId: conversationId ?? null,
+            eventType: "note",
+            eventData: {
+              kind: "workflow_task",
+              title: action.title.trim(),
+              dueDays: dueDays,
+              workflowId: workflow.id,
+              workflowName: workflow.name,
+            },
+            actorType: "system",
+          })
+          .catch(() => {});
+        executedActions.push({ type: "task_created", value: action.title.trim() });
         continue;
       }
       switch (action.type) {
@@ -236,7 +386,7 @@ export async function executeWorkflowActions(
         case "add_note":
           if (action.value) {
             // Read existing notes from the authoritative source
-            const currentNotes = (contact ? contact.notes : chat.notes) || "";
+            const currentNotes = (contact ? contact.notes : chat?.notes) || "";
             const timestamp = new Date().toLocaleString();
             const newNote = currentNotes
               ? `${currentNotes}\n\n[${timestamp}] ${action.value}`
@@ -294,7 +444,7 @@ export async function executeWorkflowActions(
     await storage.incrementWorkflowExecution(workflow.id);
     await storage.logWorkflowExecution({
       workflowId: workflow.id,
-      chatId: chat.id,
+      chatId: chat?.id ?? null,
       // Phase E Step 3: also log conversationId (unified inbox reference)
       conversationId: conversationId ?? null,
       triggerData,
@@ -307,7 +457,7 @@ export async function executeWorkflowActions(
     console.error("Workflow execution error:", error);
     await storage.logWorkflowExecution({
       workflowId: workflow.id,
-      chatId: chat.id,
+      chatId: chat?.id ?? null,
       conversationId: conversationId ?? null,
       triggerData,
       actionsExecuted: executedActions,
@@ -764,6 +914,45 @@ export async function runW2QualificationEngine(
     }
   }
 
+  // Cumulative CRM score on `contacts.lead_score` (0–100) + Copilot-facing custom field mirrors.
+  if (contact?.id && (score > 0 || signals.length > 0)) {
+    try {
+      const fresh = await storage.getContact(contact.id);
+      if (fresh) {
+        const prevLead =
+          typeof fresh.leadScore === "number" && Number.isFinite(fresh.leadScore) ? fresh.leadScore : 0;
+        const nextLead = Math.min(100, Math.max(0, prevLead + score));
+        const cfPrev = (fresh.customFields as Record<string, unknown>) || {};
+        await storage
+          .updateContact(
+            contact.id,
+            {
+              leadScore: nextLead,
+              customFields: {
+                ...cfPrev,
+                leadScore: nextLead,
+                lastW2InboundAt: new Date().toISOString(),
+                lastW2Signals: signals,
+                ...(signals.length ? { lastScoreReasons: signals.join(", ") } : {}),
+              },
+            },
+            { skipAutomationHooks: true }
+          )
+          .catch(() => {});
+        void import("./automationEventDispatcher").then(({ dispatchAiScoreChanged }) =>
+          dispatchAiScoreChanged({
+            userId,
+            contactId: contact.id,
+            score: nextLead,
+            bucket: nextLead >= 80 ? "hot" : nextLead >= 50 ? "warm" : nextLead >= 20 ? "mild" : "cold",
+          })
+        );
+      }
+    } catch {
+      /* non-critical */
+    }
+  }
+
   return { scoreAdjustment: score, qualificationQuestion, fieldUpdates, signalsDetected: signals };
 }
 
@@ -926,7 +1115,7 @@ export async function runServiceRoutingEngine(
 
 export async function triggerPipelineChangeWorkflows(
   userId: string,
-  chat: Chat,
+  chat: Chat | null,
   oldStage: string,
   newStage: string,
   contact?: Contact,
@@ -977,7 +1166,7 @@ export async function triggerPipelineChangeWorkflows(
 
 export async function triggerTagChangeWorkflows(
   userId: string,
-  chat: Chat,
+  chat: Chat | null,
   oldTag: string,
   newTag: string,
   contact?: Contact,

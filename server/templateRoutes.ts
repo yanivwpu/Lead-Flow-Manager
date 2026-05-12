@@ -600,7 +600,14 @@ async function installTemplateForUser(userId: string) {
                 description: `Realtor Growth Engine: ${wf.name}`,
                 isActive: wf.enabledByDefault !== false,
                 triggerType: wf.trigger?.type || "new_chat",
-                triggerConditions: { ...wf.trigger, templateKey: wf.key, templateId: TEMPLATE_ID_CONST },
+                triggerConditions: {
+                  ...wf.trigger,
+                  templateKey: wf.key,
+                  templateId: TEMPLATE_ID_CONST,
+                  ...(Array.isArray((wf as any).conditions) && (wf as any).conditions.length > 0
+                    ? { rgeConditions: (wf as any).conditions }
+                    : {}),
+                },
                 actions: wf.actions || [],
               });
               installLog.push(`Workflow: ${wf.name} created`);

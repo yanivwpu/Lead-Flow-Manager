@@ -119,10 +119,6 @@ export const GROWTH_ENGINE_RUNTIME_SAFE_ACTION_TYPES = new Set<string>([
   "set_status",
   "add_note",
   "set_followup",
-  "create_or_update_lead",
-  "create_task",
-  "update_lead_fields",
-  "send_message_template",
 ]);
 
 /**

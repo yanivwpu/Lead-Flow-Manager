@@ -5247,7 +5247,12 @@ export async function registerRoutes(
     try {
       if (!req.user) return res.status(401).json({ error: "Unauthorized" });
 
-      const TARGET_PAGE_ID = "982745938248038";
+      // Optional allow-list for destructive Meta debug (comma-separated page IDs).
+      // If unset, any Instagram-connected page stored on the user may be modified (still auth-only).
+      const allowedPages = (process.env.META_DEBUG_ALLOWED_PAGE_IDS || "")
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
       const GRAPH = "https://graph.facebook.com/v19.0";
       const subscribedFields = "messages,messaging_postbacks,message_reads";
 
@@ -5262,9 +5267,10 @@ export async function registerRoutes(
       if (!pageId || !accessToken) {
         return res.status(400).json({ error: "Missing pageId or stored PAGE access token for Instagram channel." });
       }
-      if (pageId !== TARGET_PAGE_ID) {
+      if (allowedPages.length > 0 && !allowedPages.includes(pageId)) {
         return res.status(400).json({
-          error: `Refusing to modify pageId=${pageId}. This endpoint is hard-locked to pageId=${TARGET_PAGE_ID}.`,
+          error: `pageId not in META_DEBUG_ALLOWED_PAGE_IDS allow-list (set env to enable this debug route for specific pages).`,
+          pageId,
         });
       }
 

@@ -946,6 +946,8 @@ export const contacts = pgTable("contacts", {
   // CRM fields
   tag: text("tag").notNull().default("New"),
   pipelineStage: text("pipeline_stage").notNull().default("Lead"),
+  /** 0–100 cumulative score (W2, automations); null = never scored */
+  leadScore: integer("lead_score"),
   notes: text("notes").default(""),
   
   // Follow-up
