@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import debounce from "lodash/debounce";
 import {
+  Brain,
   Sparkles,
   Loader2,
   Plus,
@@ -31,7 +32,6 @@ import { getCheckoutReturnPaths } from "@/lib/checkoutReturnPaths";
 import { getSubscriptionApiUrl, useShopifyShopHint } from "@/lib/shopifyBillingHint";
 import { Link } from "wouter";
 import { cn } from "@/lib/utils";
-import { useAICapabilities } from "@/lib/useAICapabilities";
 
 interface AISettings {
   aiMode: string;
@@ -150,68 +150,85 @@ const INDUSTRY_QUALIFY_TEMPLATES: Record<string, QualifyingQuestion[]> = {
   ],
 };
 
-/** Short list for the single upgrade card (pricing appears once on CTA). */
-const AI_BRAIN_CARD_FEATURES = [
-  "Business knowledge tailored to your services and tone",
-  "Lead scoring and qualification context",
-  "Qualifying questions that guide discovery",
-  "Automation intelligence for workflows and next steps",
-  "Smarter Copilot recommendations in the inbox",
+/** Premium intelligence layer — business context, not quota marketing. */
+const AI_BRAIN_HIGHLIGHTS = [
+  "premium intelligence layer",
+  "business knowledge",
+  "qualifying questions",
+  "lead scoring",
+  "Copilot recommendations",
+  "automation intelligence",
+  "handoff rules",
+  "Growth Engine intelligence",
 ] as const;
 
-function assistIncludedLines(
-  plan: string,
-  caps: { monthlyLimit: number; canUseAuto: boolean },
-  opts: { trialProAi: boolean },
-): string[] {
-  if (opts.trialProAi) {
+function assistTierLabel(plan: string, trialProAi: boolean): string {
+  if (trialProAi || plan === "pro" || plan === "enterprise") return "AI Assist Enhanced";
+  if (plan === "starter") return "AI Assist Basic";
+  return "AI Assist";
+}
+
+/** No numeric limits — product copy only. */
+function assistPlanBullets(plan: string, trialProAi: boolean): string[] {
+  if (trialProAi) {
     return [
-      "Pro-level AI Assist limits for the rest of your trial",
-      caps.canUseAuto
-        ? "Suggest and Auto modes (respects monthly credits and fair use)"
-        : "Suggest mode; Auto when credits allow",
-      "Team-ready inbox Copilot and richer recommendations",
+      "Smart reply suggestions tuned to each thread",
+      "Inbox assistance and Copilot-style help",
+      "Suggest and Auto modes on your trial",
+      "Automation-aware context for faster decisions",
     ];
   }
   if (plan === "starter") {
     return [
-      caps.monthlyLimit > 0
-        ? `Up to ${caps.monthlyLimit} AI credits per billing cycle`
-        : "AI credits reset each billing period",
-      "Suggest mode: draft replies you approve before sending",
-      "Inbox Copilot for faster replies (Auto-send requires Pro)",
+      "Smart reply suggestions you can send in one tap",
+      "Inbox assistance to move conversations forward",
+      "Suggest mode — you stay in control of every send",
+      "Light automation-aware help in context",
     ];
   }
   if (plan === "pro" || plan === "enterprise") {
     return [
-      caps.monthlyLimit > 0
-        ? `Up to ${caps.monthlyLimit} AI credits per billing cycle`
-        : "AI credits reset each billing period",
-      caps.canUseAuto
-        ? "Suggest and Auto modes when credits allow"
-        : "Suggest mode; Auto unlocks when usage allows",
-      "Team-ready inbox assistance and automation-aware recommendations",
+      "Smart reply suggestions with deeper thread context",
+      "Inbox assistance across your team workflow",
+      "Suggest and Auto modes when your plan allows",
+      "Automation-aware help for workflows and follow-ups",
     ];
   }
   return [];
 }
 
-function LockedFeatureTeaser({ title, description }: { title: string; description: string }) {
+function LockedFeatureTeaser({
+  title,
+  description,
+  preview,
+}: {
+  title: string;
+  description: string;
+  preview?: string;
+}) {
   return (
-    <div className="rounded-xl border border-slate-200/60 bg-white p-5">
-      <div className="flex items-start gap-3.5">
-        <span
-          className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-slate-50 text-slate-400"
-          title="Locked"
-          aria-hidden
-        >
-          <Lock className="h-3.5 w-3.5" strokeWidth={2} />
-        </span>
-        <div className="min-w-0 space-y-1">
-          <h3 className="text-sm font-semibold tracking-tight text-slate-900">{title}</h3>
-          <p className="text-sm text-slate-600 leading-relaxed">{description}</p>
-        </div>
-      </div>
+    <div
+      className={cn(
+        "group relative flex min-h-[176px] flex-col overflow-hidden rounded-2xl border border-violet-200/55",
+        "bg-gradient-to-br from-white via-violet-50/35 to-purple-50/25",
+        "p-6 shadow-md shadow-violet-500/[0.07] ring-1 ring-white/80",
+        "transition-all duration-200 hover:border-violet-300/60 hover:shadow-lg hover:shadow-violet-500/12",
+      )}
+    >
+      <span
+        className="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-lg border border-violet-200/80 bg-white/90 text-violet-500 shadow-sm"
+        title="Unlock with AI Brain"
+        aria-hidden
+      >
+        <Lock className="h-3.5 w-3.5" strokeWidth={2} />
+      </span>
+      <h3 className="pr-12 text-base font-semibold tracking-tight text-violet-950">{title}</h3>
+      <p className="mt-2 flex-1 text-sm leading-relaxed text-slate-700">{description}</p>
+      {preview ? (
+        <p className="mt-3 rounded-xl border border-violet-100/90 bg-white/80 px-3.5 py-2.5 text-xs font-medium leading-snug text-violet-900/80">
+          {preview}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -232,8 +249,6 @@ function AIBrainContent() {
       return res.json();
     },
   });
-
-  const aiCaps = useAICapabilities();
 
   const limits = subscription?.limits;
   const plan = (limits?.plan || limits?.effectivePlan || "free") as string;
@@ -472,8 +487,8 @@ function AIBrainContent() {
   
   if (subscriptionLoading) {
     return (
-      <div className="h-full flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
+      <div className="h-full flex items-center justify-center bg-gradient-to-b from-violet-50/40 to-white">
+        <Loader2 className="h-9 w-9 animate-spin text-violet-500" />
       </div>
     );
   }
@@ -481,31 +496,43 @@ function AIBrainContent() {
   // No paid (or trial) tier — AI Assist is not available on Free; AI Brain requires Starter/Pro first.
   if (!hasAIAssist && !effectiveHasAIBrain) {
     return (
-      <div className="h-full overflow-y-auto bg-slate-50/80 p-6 sm:p-10">
-        <div className="max-w-lg mx-auto space-y-10 py-8">
-          <div className="text-center space-y-4">
-            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-slate-200 bg-white shadow-sm">
-              <Sparkles className="h-7 w-7 text-slate-700" />
+      <div className="h-full overflow-y-auto bg-gradient-to-b from-violet-50/50 via-slate-50/90 to-white p-6 sm:p-10">
+        <div className="mx-auto max-w-lg space-y-10 py-10">
+          <div className="text-center space-y-5">
+            <div className="relative mx-auto w-fit">
+              <div className="absolute -inset-2 rounded-3xl bg-gradient-to-br from-violet-400/20 to-emerald-400/15 blur-lg" aria-hidden />
+              <div className="relative flex h-16 w-16 items-center justify-center gap-0.5 rounded-2xl border border-violet-100/90 bg-white shadow-md shadow-violet-500/10">
+                <Sparkles className="h-7 w-7 text-violet-600" aria-hidden />
+                <Brain className="h-6 w-6 text-purple-600" aria-hidden />
+              </div>
             </div>
-            <h1 className="text-2xl font-semibold tracking-tight text-slate-900">AI Assist &amp; AI Brain</h1>
-            <div className="text-sm text-slate-600 space-y-2 text-left max-w-sm mx-auto leading-relaxed">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-violet-600">WhachatCRM</p>
+              <h1 className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">AI workspace</h1>
+            </div>
+            <div className="mx-auto max-w-sm space-y-2 text-left text-sm leading-relaxed text-slate-600">
               <p>
-                <span className="font-medium text-slate-900">AI Assist</span> — included with Starter and Pro.
+                <span className="font-medium text-slate-900">Starter</span> is{" "}
+                <span className="text-violet-900/90">AI Assist Basic</span>.{" "}
+                <span className="font-medium text-slate-900">Pro</span> is{" "}
+                <span className="text-violet-900/90">AI Assist Enhanced</span>.
               </p>
               <p>
-                <span className="font-medium text-slate-900">AI Brain</span> — advanced intelligence on top of your plan.
+                <span className="font-medium text-violet-900">AI Brain</span> — the serious upgrade for business memory,
+                scoring, and automation intelligence.
               </p>
             </div>
           </div>
 
-          <div className="rounded-xl border border-slate-200/80 bg-white p-6 space-y-4">
-            <p className="text-sm text-slate-600 leading-relaxed">
-              Choose a plan to enable AI Assist. You can add the intelligence layer after you are on Starter or Pro.
+          <div className="space-y-4 rounded-2xl border border-violet-100/80 bg-white/95 p-7 shadow-lg shadow-violet-500/[0.06] ring-1 ring-slate-200/40">
+            <p className="text-sm leading-relaxed text-slate-600">
+              Choose a plan to turn on AI Assist. Add AI Brain on Starter or Pro for the full intelligence layer.
             </p>
             {isFree && !isShopify ? (
               <>
                 <Button
-                  className="w-full bg-slate-900 text-white hover:bg-slate-800 h-10"
+                  type="button"
+                  className="h-11 w-full rounded-full border-0 bg-gradient-to-r from-violet-600 to-purple-600 text-[15px] font-semibold text-white shadow-md shadow-violet-500/25 hover:from-violet-500 hover:to-purple-500 focus-visible:ring-2 focus-visible:ring-violet-400/50 focus-visible:ring-offset-2"
                   onClick={() => setBundleModalOpen(true)}
                   disabled={isCheckingOut}
                 >
@@ -519,27 +546,29 @@ function AIBrainContent() {
                     </DialogHeader>
                     <div className="grid gap-3 py-2">
                       <Button
+                        type="button"
                         variant="outline"
-                        className="h-auto py-4 flex flex-col items-stretch gap-1 border-slate-200 hover:bg-slate-50"
+                        className="h-auto flex-col items-stretch gap-1 rounded-xl border-violet-100/90 py-4 hover:bg-violet-50/50"
                         onClick={() => handlePlanAIBundleCheckout("starter")}
                         disabled={isCheckingOut}
                       >
-                        <span className="font-semibold text-slate-900">Starter + AI Brain</span>
-                        <span className="text-xs text-slate-500 font-normal">Starter with intelligence add-on</span>
+                        <span className="font-semibold text-violet-950">Starter + AI Brain</span>
+                        <span className="text-xs font-normal text-violet-800/80">AI Assist Basic + intelligence layer</span>
                       </Button>
                       <Button
+                        type="button"
                         variant="outline"
-                        className="h-auto py-4 flex flex-col items-stretch gap-1 border-slate-200 hover:bg-slate-50"
+                        className="h-auto flex-col items-stretch gap-1 rounded-xl border-violet-100/90 py-4 hover:bg-violet-50/50"
                         onClick={() => handlePlanAIBundleCheckout("pro")}
                         disabled={isCheckingOut}
                       >
-                        <span className="font-semibold text-slate-900">Pro + AI Brain</span>
-                        <span className="text-xs text-slate-500 font-normal">Pro with intelligence add-on</span>
+                        <span className="font-semibold text-violet-950">Pro + AI Brain</span>
+                        <span className="text-xs font-normal text-violet-800/80">AI Assist Enhanced + intelligence layer</span>
                       </Button>
                     </div>
                     {isCheckingOut && (
-                      <div className="flex items-center justify-center gap-2 text-sm text-gray-600">
-                        <Loader2 className="w-4 h-4 animate-spin" />
+                      <div className="flex items-center justify-center gap-2 text-sm text-slate-600">
+                        <Loader2 className="h-4 w-4 animate-spin text-violet-500" />
                         Redirecting to checkout…
                       </div>
                     )}
@@ -548,7 +577,12 @@ function AIBrainContent() {
               </>
             ) : (
               <Link href="/pricing">
-                <Button className="w-full bg-slate-900 text-white hover:bg-slate-800 h-10">View plans</Button>
+                <Button
+                  type="button"
+                  className="h-11 w-full rounded-full border-0 bg-gradient-to-r from-violet-600 to-purple-600 text-[15px] font-semibold text-white shadow-md shadow-violet-500/25 hover:from-violet-500 hover:to-purple-500 focus-visible:ring-2 focus-visible:ring-violet-400/50 focus-visible:ring-offset-2"
+                >
+                  View plans
+                </Button>
               </Link>
             )}
           </div>
@@ -557,10 +591,10 @@ function AIBrainContent() {
     );
   }
 
-  if (settingsLoading || (effectiveHasAIBrain && knowledgeLoading) || (hasAIAssist && aiCaps.isLoading)) {
+  if (settingsLoading || (effectiveHasAIBrain && knowledgeLoading)) {
     return (
-      <div className="h-full flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
+      <div className="h-full flex items-center justify-center bg-gradient-to-b from-violet-50/40 to-white">
+        <Loader2 className="h-9 w-9 animate-spin text-violet-500" />
       </div>
     );
   }
@@ -570,108 +604,142 @@ function AIBrainContent() {
       "box-border h-9 min-h-[2.25rem] shrink-0 px-3.5 rounded-lg border border-solid text-sm font-medium transition-colors duration-150 ease-out",
       selected
         ? "bg-brand-green/10 text-emerald-900 border-brand-green/45"
-        : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-white hover:border-slate-300 hover:text-slate-900",
+        : "border-slate-200/90 bg-white text-slate-700 hover:border-violet-200/70 hover:bg-violet-50/40 hover:text-violet-950",
       saveSettingsMutation.isPending && "pointer-events-none cursor-wait",
     );
 
-  const assistLines = assistIncludedLines(plan, aiCaps, { trialProAi: showTrialFullSuite });
+  const assistBullets = assistPlanBullets(plan, showTrialFullSuite);
+  const assistTier = assistTierLabel(plan, showTrialFullSuite);
   const showBrainUpgradeSection = hasAIAssist && !effectiveHasAIBrain;
   const hidePaidBrainCta = isInTrial && trialIncludesAIBrain;
   const starterOnly = isStarter && !isPro;
-  const autoModeLocked = !aiCaps.canUseAuto;
+  const autoModeLocked = starterOnly;
 
   return (
-    <div className="h-full overflow-y-auto overflow-x-hidden bg-slate-50/90">
-      <div className="p-6 sm:p-10 max-w-[720px] mx-auto w-full space-y-10 pb-28">
-        <header className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-6">
-          <div className="space-y-3 max-w-md">
-            <h1 className="text-xl font-semibold tracking-tight text-slate-900">AI settings</h1>
-            <div className="text-sm text-slate-600 space-y-1.5 leading-relaxed">
-              <p>
-                <span className="font-medium text-slate-900">AI Assist</span> — included with your plan.
-              </p>
-              <p>
-                <span className="font-medium text-slate-900">AI Brain</span> — advanced intelligence layer for your inbox.
-              </p>
+    <div className="h-full overflow-y-auto overflow-x-hidden bg-gradient-to-b from-violet-50/50 via-slate-50/95 to-white">
+      <div className="p-6 sm:p-10 max-w-[800px] mx-auto w-full space-y-9 pb-28">
+        <header className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex gap-4">
+            <div className="relative shrink-0">
+              <div className="absolute -inset-1 rounded-2xl bg-gradient-to-br from-violet-400/25 via-purple-400/15 to-emerald-400/20 blur-md" aria-hidden />
+              <div className="relative flex h-14 w-14 items-center justify-center gap-0.5 rounded-2xl border border-violet-100/90 bg-gradient-to-br from-white to-violet-50/70 shadow-sm shadow-violet-500/10">
+                <Sparkles className="h-6 w-6 text-violet-600" aria-hidden />
+                <Brain className="h-5 w-5 text-purple-600" aria-hidden />
+              </div>
             </div>
-            {showTrialFullSuite && (
-              <p className="text-sm text-slate-500 pt-1">
-                Trial includes full Pro-level Assist and AI Brain. Subscribe before it ends to keep both.
-              </p>
-            )}
-            {effectiveHasAIBrain && !showTrialFullSuite && (
-              <p className="text-sm text-slate-500 pt-1">AI Brain is active — configuration below is available.</p>
-            )}
+            <div className="min-w-0 space-y-2 pt-0.5">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-violet-600/90">WhachatCRM</p>
+              <h1 className="text-2xl font-semibold tracking-tight text-slate-900 sm:text-[1.65rem]">AI workspace</h1>
+              <div className="max-w-lg text-sm leading-relaxed text-slate-600">
+                <p>
+                  <span className="font-medium text-slate-900">AI Assist</span> is included with your plan — smart
+                  suggestions, inbox help, and modes your tier allows.
+                </p>
+                <p className="mt-1.5">
+                  <span className="font-medium text-violet-900">AI Brain</span> is the premium intelligence layer — full
+                  business context for your inbox and automations.
+                </p>
+              </div>
+              {showTrialFullSuite && (
+                <p className="text-sm text-violet-700/90">
+                  Trial includes AI Assist Enhanced and AI Brain. Subscribe before it ends to keep both.
+                </p>
+              )}
+              {effectiveHasAIBrain && !showTrialFullSuite && (
+                <p className="text-sm text-emerald-800/90">AI Brain is active — your intelligence layer is unlocked below.</p>
+              )}
+            </div>
           </div>
           {effectiveHasAIBrain && saveKnowledgeMutation.isPending && (
-            <span className="text-xs text-slate-500 flex items-center gap-1.5 shrink-0">
-              <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-400" aria-hidden />
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-violet-100/90 bg-white/90 px-3 py-1 text-xs font-medium text-violet-800 shadow-sm">
+              <Loader2 className="h-3.5 w-3.5 animate-spin text-violet-500" aria-hidden />
               Saving…
             </span>
           )}
         </header>
 
-        <Card className="rounded-xl border-0 bg-white shadow-sm ring-1 ring-slate-200/60">
-          <CardHeader className="pb-2 space-y-1">
-            <CardTitle className="text-base font-semibold text-slate-900 tracking-tight">AI Assist</CardTitle>
+        <Card className="overflow-hidden rounded-2xl border-0 bg-white/95 shadow-md shadow-slate-900/[0.04] ring-1 ring-violet-100/40 ring-offset-0">
+          <div className="h-0.5 bg-gradient-to-r from-violet-400/50 via-brand-green/40 to-emerald-400/40" aria-hidden />
+          <CardHeader className="pb-2 pt-5 space-y-1">
+            <div className="flex flex-wrap items-baseline gap-2">
+              <CardTitle className="text-lg font-semibold text-slate-900 tracking-tight">AI Assist</CardTitle>
+              <span className="rounded-full border border-violet-100 bg-violet-50/90 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-violet-800">
+                {assistTier}
+              </span>
+            </div>
             <CardDescription className="text-slate-500 text-sm">
-              {limits?.planName ?? "Your plan"}
+              {limits?.planName ?? "Your plan"} · included with your subscription
             </CardDescription>
           </CardHeader>
-          <CardContent className="pt-0 space-y-3">
-            <ul className="text-sm text-slate-600 space-y-1.5 list-disc pl-4 marker:text-slate-300">
-              {assistLines.map((line) => (
-                <li key={line}>{line}</li>
+          <CardContent className="pb-6 pt-0">
+            <ul className="text-sm text-slate-600 space-y-2">
+              {assistBullets.map((line) => (
+                <li key={line} className="flex gap-2.5">
+                  <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-violet-400/80" aria-hidden />
+                  <span>{line}</span>
+                </li>
               ))}
             </ul>
-            {!aiCaps.isLoading && aiCaps.monthlyLimit > 0 && (
-              <p className="text-xs text-slate-500 pt-1">
-                Credits: {aiCaps.creditsUsed} / {aiCaps.monthlyLimit} this period.
-              </p>
-            )}
           </CardContent>
         </Card>
 
         {showBrainUpgradeSection && (
-          <Card className="rounded-xl border-0 bg-white shadow-sm ring-1 ring-slate-200/60">
-            <CardHeader className="pb-2 space-y-1">
-              <CardTitle className="text-base font-semibold text-slate-900 tracking-tight">AI Brain</CardTitle>
-              <CardDescription className="text-slate-500 text-sm">
-                Advanced business intelligence for your inbox.
+          <Card className="overflow-hidden rounded-2xl border-0 bg-gradient-to-br from-white via-violet-50/35 to-purple-50/30 shadow-lg shadow-violet-500/[0.08] ring-1 ring-violet-200/45">
+            <div className="h-1 bg-gradient-to-r from-violet-500/70 via-purple-500/50 to-fuchsia-400/40" aria-hidden />
+            <CardHeader className="space-y-2 pb-2 pt-6">
+              <div className="flex items-center gap-2">
+                <Brain className="h-6 w-6 text-violet-600 drop-shadow-sm" aria-hidden />
+                <CardTitle className="text-lg font-semibold tracking-tight text-violet-950">AI Brain</CardTitle>
+              </div>
+              <CardDescription className="text-base leading-relaxed text-slate-600">
+                The premium intelligence layer for your inbox and automations — memory, scoring, Copilot depth, and
+                workflow context built around your business.
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6">
-              <ul className="text-sm text-slate-600 space-y-2">
-                {AI_BRAIN_CARD_FEATURES.map((f) => (
-                  <li key={f} className="flex gap-2">
-                    <span className="text-slate-300 select-none" aria-hidden>
-                      ·
+            <CardContent className="space-y-8 pb-6">
+              <ul className="grid gap-x-6 gap-y-2.5 text-sm text-slate-700 sm:grid-cols-2">
+                {AI_BRAIN_HIGHLIGHTS.map((f) => (
+                  <li key={f} className="flex gap-2.5">
+                    <span className="mt-0.5 font-medium text-violet-500 select-none" aria-hidden>
+                      ✦
                     </span>
                     <span>{f}</span>
                   </li>
                 ))}
               </ul>
               {hidePaidBrainCta ? (
-                <p className="text-sm text-slate-500">Included in your trial — no separate checkout.</p>
+                <p className="text-sm font-medium text-violet-800">Included in your trial — no separate checkout.</p>
               ) : (
-                <Button
-                  className="w-full sm:w-auto bg-slate-900 text-white hover:bg-slate-800 h-10 px-6"
-                  onClick={handleAddonCheckout}
-                  disabled={isCheckingOut}
-                  data-testid="button-ai-brain-primary-cta"
-                >
-                  {isCheckingOut ? "Processing…" : "Unlock AI Brain — $29/mo"}
-                </Button>
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                  <div className="space-y-2">
+                    <Button
+                      type="button"
+                      className={cn(
+                        "h-11 rounded-full px-8 text-[15px] font-semibold shadow-md shadow-violet-500/20",
+                        "bg-gradient-to-r from-violet-600 to-purple-600 text-white",
+                        "hover:from-violet-500 hover:to-purple-500 hover:shadow-lg hover:shadow-violet-500/25",
+                        "border-0 focus-visible:ring-2 focus-visible:ring-violet-400/50 focus-visible:ring-offset-2",
+                      )}
+                      onClick={handleAddonCheckout}
+                      disabled={isCheckingOut}
+                      data-testid="button-ai-brain-primary-cta"
+                    >
+                      {isCheckingOut ? "Processing…" : "Unlock AI Brain"}
+                    </Button>
+                    <p className="text-xs text-slate-500">From $29/mo · cancel anytime from billing</p>
+                  </div>
+                </div>
               )}
             </CardContent>
           </Card>
         )}
 
         {/* Section 1: AI behavior — primary control surface */}
-        <Card className="rounded-xl border-0 bg-white shadow-sm ring-1 ring-slate-200/60">
-          <CardHeader className="pb-4 space-y-1">
+        <Card className="overflow-hidden rounded-2xl border-0 bg-white/95 shadow-md shadow-slate-900/[0.04] ring-1 ring-violet-100/35">
+          <div className="h-0.5 bg-gradient-to-r from-violet-300/40 via-brand-green/35 to-emerald-400/35" aria-hidden />
+          <CardHeader className="pb-4 space-y-1 pt-5">
             <CardTitle className="text-lg font-semibold text-slate-900 tracking-tight">AI behavior</CardTitle>
-            <CardDescription className="text-slate-600">Mode and tone for replies</CardDescription>
+            <CardDescription className="text-slate-500">Mode and tone for replies</CardDescription>
           </CardHeader>
           <CardContent className="pt-0">
             <div className="flex flex-col gap-8 sm:flex-row sm:gap-0">
@@ -689,7 +757,7 @@ function AIBrainContent() {
                         aria-checked={selected}
                         title={
                           autoLocked
-                            ? "Auto mode requires Pro (effective). Upgrade or complete your trial on Pro."
+                            ? "Auto mode requires AI Assist Enhanced (Pro). Upgrade or complete your trial on Pro."
                             : mode.tooltip
                         }
                         onClick={() => {
@@ -710,8 +778,8 @@ function AIBrainContent() {
                 </div>
                 {starterOnly && (
                   <p className="text-xs text-slate-500">
-                    Auto-send is a <strong>Pro</strong> entitlement. On Starter you can use <strong>Suggest</strong> mode
-                    with the included credits.
+                    <span className="font-medium text-slate-700">Auto</span> is part of AI Assist Enhanced. On AI Assist
+                    Basic, use <span className="font-medium text-slate-700">Suggest</span> to review every send.
                   </p>
                 )}
               </div>
@@ -751,7 +819,7 @@ function AIBrainContent() {
         {effectiveHasAIBrain && (
           <>
             {/* Section 2: Business profile */}
-            <Card className="rounded-xl border-0 bg-white shadow-sm ring-1 ring-slate-200/50">
+            <Card className="rounded-2xl border-0 bg-white/95 shadow-md shadow-slate-900/[0.03] ring-1 ring-violet-100/50">
               <CardHeader className="pb-3">
                 <CardTitle className="text-base font-semibold text-slate-900">Business profile</CardTitle>
                 <CardDescription className="text-slate-600">Helps the model stay aligned with what you offer</CardDescription>
@@ -808,7 +876,7 @@ function AIBrainContent() {
             </Card>
 
             {/* Section 3: Lead understanding */}
-            <Card className="rounded-xl border border-slate-200/70 bg-white shadow-sm shadow-slate-900/[0.03]">
+            <Card className="rounded-2xl border-0 bg-white/95 shadow-md shadow-slate-900/[0.03] ring-1 ring-violet-100/50">
               <CardHeader className="pb-3 flex flex-row items-start justify-between gap-3 space-y-0">
                 <div>
                   <CardTitle className="text-base font-semibold text-slate-900">What AI should learn from leads</CardTitle>
@@ -819,7 +887,7 @@ function AIBrainContent() {
                     type="button"
                     variant="outline"
                     size="sm"
-                    className="h-8 shrink-0 text-xs border-slate-200 text-slate-700 hover:bg-slate-50 hover:text-slate-900"
+                    className="h-8 shrink-0 border-violet-200/80 bg-white/90 text-xs text-violet-900 hover:bg-violet-50 hover:text-violet-950"
                     onClick={() => {
                       const template = INDUSTRY_QUALIFY_TEMPLATES[knowledge.industry];
                       if (template) setKnowledge((prev) => ({ ...prev, qualifyingQuestions: [...template] }));
@@ -940,7 +1008,7 @@ function AIBrainContent() {
                       type="button"
                       variant="outline"
                       size="sm"
-                      className="h-8 gap-1.5 border-slate-200 bg-white font-medium text-slate-800 shadow-sm shadow-slate-900/[0.04] hover:bg-slate-50 hover:border-slate-300 disabled:opacity-50"
+                      className="h-8 gap-1.5 border-violet-200/80 bg-gradient-to-r from-white to-violet-50/40 font-medium text-violet-900 shadow-sm hover:border-violet-300/80 hover:from-violet-50/50 hover:to-violet-50/70 disabled:opacity-50"
                       disabled={!newQQ.label.trim() || !newQQ.question.trim()}
                       onClick={() => {
                         if (!newQQ.label.trim() || !newQQ.question.trim()) return;
@@ -973,7 +1041,7 @@ function AIBrainContent() {
             </Card>
 
             {/* Section 4: Booking */}
-            <Card className="rounded-xl border-0 bg-white shadow-sm ring-1 ring-slate-200/50">
+            <Card className="rounded-2xl border-0 bg-white/95 shadow-md shadow-slate-900/[0.03] ring-1 ring-violet-100/50">
               <CardHeader className="pb-3">
                 <CardTitle className="text-base font-semibold text-slate-900">Booking &amp; next steps</CardTitle>
                 <CardDescription className="text-slate-600">Used when AI suggests scheduling or follow-ups</CardDescription>
@@ -999,7 +1067,7 @@ function AIBrainContent() {
 
         {/* AI Brain configuration — handoff is one control among several */}
         {effectiveHasAIBrain ? (
-          <Card className="rounded-xl border-0 bg-white shadow-sm ring-1 ring-slate-200/50">
+          <Card className="rounded-2xl border-0 bg-white/95 shadow-md shadow-slate-900/[0.03] ring-1 ring-violet-100/50">
             <CardHeader className="pb-3">
               <CardTitle className="text-base font-semibold text-slate-900">Human handoff phrases</CardTitle>
               <CardDescription className="text-slate-600">
@@ -1037,7 +1105,7 @@ function AIBrainContent() {
                 <Button
                   type="button"
                   variant="outline"
-                  className="h-9 shrink-0 border-slate-200 text-slate-700 hover:bg-slate-50"
+                  className="h-9 shrink-0 border-violet-200/80 text-violet-900 hover:bg-violet-50"
                   onClick={handleAddKeyword}
                   data-testid="add-handoff-keyword"
                 >
@@ -1047,31 +1115,50 @@ function AIBrainContent() {
             </CardContent>
           </Card>
         ) : (
-          <div className="space-y-6">
-            <div className="space-y-1">
-              <h2 className="text-base font-semibold text-slate-900">With AI Brain</h2>
-              <p className="text-sm text-slate-500">Unlock to configure. Your work is preserved when you upgrade.</p>
+          <div className="space-y-8">
+            <div className="space-y-2">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-violet-600">AI Brain</p>
+              <h2 className="text-lg font-semibold tracking-tight text-violet-950">Unlock the intelligence layer</h2>
+              <p className="max-w-2xl text-sm leading-relaxed text-slate-700">
+                Premium context on top of AI Assist — scoring, Copilot, automations, and handoffs. Your drafts stay saved
+                when you upgrade.
+              </p>
             </div>
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-5 sm:grid-cols-2">
               <LockedFeatureTeaser
                 title="Business knowledge"
-                description="Train the model on your services, tone, FAQs, and how you sell."
-              />
-              <LockedFeatureTeaser
-                title="Industry & services"
-                description="Categories and offerings so answers stay accurate and on-brand."
+                description="A living profile of what you sell, how you sound, and what customers should always hear — so replies stay unmistakably yours."
+                preview="Services · tone · FAQs · policies"
               />
               <LockedFeatureTeaser
                 title="Qualifying questions"
-                description="Structured discovery to understand intent before you reply."
+                description="Structured discovery that captures intent, urgency, and fit before your team invests time."
+                preview="Budget · timeline · use case"
               />
               <LockedFeatureTeaser
-                title="Human handoff"
-                description="Keywords that pause automation so your team can step in."
+                title="Lead scoring"
+                description="Signals from the conversation roll up into clearer priority so you focus on the right leads first."
+                preview="Hot / warm / nurture signals"
+              />
+              <LockedFeatureTeaser
+                title="Copilot recommendations"
+                description="Richer next-reply and next-step ideas grounded in your business profile, not generic templates."
+                preview="Thread-aware suggestions"
               />
               <LockedFeatureTeaser
                 title="Automation intelligence"
-                description="Smarter workflow hints, context, and next-best actions."
+                description="Connects chat context to workflows — smarter nudges when a sequence or playbook should kick in."
+                preview="Workflow-aware hints"
+              />
+              <LockedFeatureTeaser
+                title="Handoff rules"
+                description="Phrase-based guardrails that pause AI when a human should take over — calm, explicit control."
+                preview="“Agent” · “call me” · custom phrases"
+              />
+              <LockedFeatureTeaser
+                title="Growth Engine intelligence"
+                description="Where your plan supports it, unlocks deeper industry playbooks and accelerators built on the same memory layer."
+                preview="Industry-ready depth (plan-dependent)"
               />
             </div>
           </div>
@@ -1079,11 +1166,11 @@ function AIBrainContent() {
 
         {effectiveHasAIBrain && (
           <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
-            <Card className="rounded-xl border border-dashed border-slate-200/70 bg-slate-50/30 shadow-none">
+            <Card className="rounded-2xl border border-dashed border-violet-200/50 bg-violet-50/20 shadow-none">
               <CollapsibleTrigger asChild>
                 <button
                   type="button"
-                  className="flex w-full items-center justify-between text-left p-5 hover:bg-slate-100/50 transition-colors rounded-xl"
+                  className="flex w-full items-center justify-between text-left p-5 hover:bg-violet-50/40 transition-colors rounded-2xl"
                 >
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-widest text-slate-500">Advanced</p>
