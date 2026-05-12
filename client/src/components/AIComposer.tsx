@@ -590,7 +590,7 @@ export function AIComposer({
 
       <div className="px-3 pt-1.5 pb-2 flex flex-col gap-1.5">
 
-        {/* Row 1: AI mode pills + credit badge */}
+        {/* Row 1: AI mode pills + usage hint (no public credit counts) */}
         {showAIModes && (
           <div className="flex items-center gap-1 flex-wrap" data-testid="ai-mode-selector">
             {(["manual", "suggest", "auto"] as AIMode[]).map((mode) => {
@@ -610,7 +610,7 @@ export function AIComposer({
                   : !modeEnabled && mode === "auto" && capabilities?.plan === "starter"
                   ? "Unlock Autopilot to reply automatically"
                   : !modeEnabled && (capabilities?.isExhausted)
-                  ? "Monthly replies exhausted — upgrade for more"
+                  ? "AI Assist limit reached for this period — upgrade for more"
                   : !modeEnabled
                   ? "Upgrade to unlock"
                   : null;
@@ -641,7 +641,7 @@ export function AIComposer({
               );
             })}
 
-            {/* Credit badge — shown when >75% used */}
+            {/* Usage hint when approaching plan limits — no numeric quotas shown */}
             {capabilities && (
               <AICreditBadge
                 creditsRemaining={capabilities.creditsRemaining}
@@ -653,12 +653,12 @@ export function AIComposer({
           </div>
         )}
 
-        {/* Upgrade prompt — shown when credits are exhausted and user needs AI */}
+        {/* Upgrade prompt when plan AI Assist limit is reached */}
         {capabilities?.isExhausted && capabilities.upgradePlan && (
           <AIUpgradePrompt
-            feature="unlimited AI replies"
+            feature="more AI Assist capacity"
             requiredPlan={capabilities.upgradePlan}
-            reason={`You've used all ${capabilities.monthlyLimit} AI replies for this month. More credits reset on your billing cycle.`}
+            reason="You've reached your plan's AI Assist limit for this period. Upgrade for more capacity."
             size="sm"
             className="mt-0.5"
           />

@@ -97,12 +97,14 @@ export function AICreditBadge({
           : "bg-yellow-50 text-yellow-700 border-yellow-200",
         className
       )}
-      title={`${creditsRemaining} of ${monthlyLimit} AI credits remaining this month (${planName} plan)`}
+      title={`High AI Assist usage on your ${planName} plan`}
       data-testid="ai-credit-badge"
     >
       {isExhausted
-        ? "AI credits exhausted"
-        : `${creditsRemaining} credit${creditsRemaining === 1 ? "" : "s"} left`}
+        ? "AI Assist limit reached"
+        : isNearLimit
+        ? "Almost at your AI Assist limit"
+        : "High AI Assist usage"}
     </span>
   );
 }

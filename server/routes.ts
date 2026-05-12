@@ -8714,7 +8714,7 @@ export async function registerRoutes(
         const creditsUsed = (usage?.repliesSuggested || 0) + (usage?.messagesGenerated || 0);
         if (creditsUsed >= access.monthlyLimit) {
           return res.status(429).json({
-            error:        "Monthly AI credit limit reached. Upgrade your plan for more credits.",
+            error:        "Your plan's AI Assist limit for this period has been reached. Upgrade for more capacity.",
             status:       "credits_exhausted",
             creditsUsed,
             monthlyLimit: access.monthlyLimit,

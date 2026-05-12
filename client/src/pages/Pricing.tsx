@@ -66,7 +66,7 @@ function FeatureGroup({
 
 // ─── Comparison table cell helpers ──────────────────────────────────────────
 // TableCellValue renders a single value cell (boolean or string).
-// String values use dir="auto" so LTR strings ("50/month") stay LTR and
+// String values use dir="auto" so LTR plan labels stay LTR and
 // Hebrew strings stay RTL regardless of the table's inherited direction.
 function TableCellValue({ val }: { val: boolean | string }) {
   if (val === true)  return <Check className="w-4 h-4 text-emerald-500 mx-auto" />;
@@ -297,9 +297,8 @@ export function Pricing() {
     { feature: t(`${p}.compare.unifiedInbox`), free: true, starter: true, pro: true },
     { feature: t(`${p}.compare.crm`), free: t(`${p}.compare.basic`), starter: t(`${p}.compare.full`), pro: t(`${p}.compare.full`) },
     { feature: t(`${p}.compare.pipelineTasks`), free: true, starter: true, pro: true },
-    { feature: t(`${p}.compare.aiAssistIncluded`), free: false, starter: "50/month", pro: "200/month" },
-    { feature: t(`${p}.compare.aiAssistType`), free: false, starter: t(`${p}.compare.replyAndSentiment`), pro: t(`${p}.compare.enhancedAI`) },
-    { feature: t(`${p}.compare.automations`), free: false, starter: t(`${p}.compare.basic`), pro: t(`${p}.compare.advanced`) },
+    { feature: t(`${p}.compare.aiAssist`), free: false, starter: t(`${p}.compare.aiAssistBasicIncluded`), pro: t(`${p}.compare.aiAssistEnhancedIncluded`) },
+    { feature: t(`${p}.compare.automations`), free: false, starter: t(`${p}.compare.basic`), pro: t(`${p}.compare.advancedAutomations`) },
     { feature: t(`${p}.compare.leadScoring`), free: false, starter: false, pro: true },
     { feature: t(`${p}.compare.smartRetargeting`), free: false, starter: true, pro: true },
     { feature: t(`${p}.compare.integrationsWebhooks`), free: false, starter: true, pro: true },
@@ -765,7 +764,7 @@ export function Pricing() {
                   />
                   <FeatureGroup
                     label={t(`${p}.sections.automation`)}
-                    features={[t(`${p}.plans.pro.f4`)]}
+                    features={[t(`${p}.plans.pro.f4`), t(`${p}.plans.pro.f4b`)]}
                     iconClass="text-brand-green"
                     isRTL={isRTL}
                   />
@@ -873,7 +872,7 @@ export function Pricing() {
               </Link>
             ) : aiBrainBasePlanEligible ? (
               <Button
-                className="w-full bg-gray-900 hover:bg-gray-800 text-white"
+                className="w-full bg-purple-600 hover:bg-purple-700 text-white"
                 onClick={handleAIBrainAddonCheckout}
                 disabled={aiBrainAddonLoading || planButtonsDisabled}
                 data-testid="button-ai-brain-addon-checkout"
@@ -885,7 +884,7 @@ export function Pricing() {
               </Button>
             ) : (
               <Button
-                className="w-full bg-gray-900 hover:bg-gray-800 text-white"
+                className="w-full bg-purple-600 hover:bg-purple-700 text-white"
                 onClick={() => handleUpgrade("starter")}
                 disabled={planButtonsDisabled || loadingPlan === "starter"}
                 data-testid="button-upgrade-for-ai-brain"
@@ -949,7 +948,7 @@ export function Pricing() {
                     </td>
 
                     {/* Value cells: always centered.
-                        dir="auto" on string values so "50/month" stays LTR
+                        dir="auto" on string values so English plan labels stay LTR
                         and Hebrew strings stay RTL. */}
                     <td className="py-3 px-3 text-center">
                       <TableCellValue val={row.free} />
