@@ -35,7 +35,10 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { extractPlaceholderKeysFromCampaignMessages } from "@shared/campaignPlaceholders";
+import {
+  extractPlaceholderKeysFromCampaignMessages,
+  parsePresetCampaignMessagesArray,
+} from "@shared/campaignPlaceholders";
 import { getPresetCampaignStatusLabel } from "@shared/presetCampaignLabels";
 import {
   ChevronDown,
@@ -72,6 +75,8 @@ export type SavedCampaignDetailShape = {
   createdAt?: string;
   updatedAt?: string;
   totalSteps?: number;
+  /** Mirrors list API when present */
+  stepCount?: number;
   executionStats?: {
     enrollmentCount: number;
     activeEnrollments: number;
@@ -130,7 +135,7 @@ const CAMPAIGN_STATUS_OPTIONS = [
 ] as const;
 
 function detailToDraft(d: SavedCampaignDetailShape): CampaignDraft {
-  const msgs = Array.isArray(d.messages) ? d.messages : [];
+  const msgs = parsePresetCampaignMessagesArray(d.messages);
   const normalized = msgs.map((raw, i) => {
     const m = raw as { delay?: string; content?: string; type?: string };
     const delay =
@@ -160,6 +165,24 @@ function detailToDraft(d: SavedCampaignDetailShape): CampaignDraft {
     messages:
       normalized.length > 0 ? normalized : [{ delay: "0", content: "", type: "text" }],
     placeholderDefaults: defaults,
+  };
+}
+
+function buildSaveBody(d: CampaignDraft, status: string): Record<string, unknown> {
+  return {
+    name: d.name.trim(),
+    status,
+    channel: d.channel,
+    language: d.language.trim() || "en",
+    category: d.category.trim() || undefined,
+    industry: d.industry.trim() || undefined,
+    aiEnabled: d.aiEnabled,
+    messages: d.messages.map((m) => ({
+      delay: (m.delay || "0").trim(),
+      content: m.content,
+      type: m.type || "text",
+    })),
+    placeholderDefaults: d.placeholderDefaults,
   };
 }
 
@@ -319,26 +342,12 @@ export function SavedPresetCampaignModals(props: Props) {
     setDraft(null);
   };
 
-  const saveDraft = () => {
+  const commitDraft = (nextStatus: string) => {
     if (!savedCampaignModalId || !draft) return;
     patchPresetCampaignMutation.mutate(
       {
         id: savedCampaignModalId,
-        body: {
-          name: draft.name.trim(),
-          status: draft.status,
-          channel: draft.channel,
-          language: draft.language.trim() || "en",
-          category: draft.category.trim() || undefined,
-          industry: draft.industry.trim() || undefined,
-          aiEnabled: draft.aiEnabled,
-          messages: draft.messages.map((m) => ({
-            delay: (m.delay || "0").trim(),
-            content: m.content,
-            type: m.type || "text",
-          })),
-          placeholderDefaults: draft.placeholderDefaults,
-        },
+        body: buildSaveBody(draft, nextStatus),
       },
       {
         onSuccess: () => {
@@ -348,6 +357,20 @@ export function SavedPresetCampaignModals(props: Props) {
       }
     );
   };
+
+  const saveChanges = () => {
+    if (!draft) return;
+    commitDraft(draft.status);
+  };
+
+  const saveAsDraft = () => commitDraft("draft");
+
+  const activateCampaignFromEditor = () => commitDraft("active");
+
+  const canActivateFromEditor =
+    isEditing &&
+    draft &&
+    (draft.status === "draft" || draft.status === "active_pending");
 
   const updatePlaceholderDefault = (key: string, value: string) => {
     setDraft((d) =>
@@ -550,11 +573,13 @@ export function SavedPresetCampaignModals(props: Props) {
         <DialogContent className="flex max-h-[85vh] w-[calc(100%-2rem)] max-w-lg flex-col gap-0 overflow-hidden p-0 sm:max-h-[90vh] sm:max-w-xl">
           <div className="sticky top-0 z-10 shrink-0 border-b border-border/70 bg-background px-6 pb-3 pt-6 pr-14">
             <DialogHeader className="space-y-2 text-left">
-              <DialogTitle>Saved campaign</DialogTitle>
-              <DialogDescription>
-                Manage steps, defaults, and enrollments. The library preset (
-                <span className="font-mono text-xs">{savedCampaignDetail?.sourcePresetId}</span>) is not
-                modified.
+              <DialogTitle>Your saved campaign</DialogTitle>
+              <DialogDescription className="space-y-1.5">
+                <span>
+                  This is <strong>your editable copy</strong>. The library preset{" "}
+                  <span className="font-mono text-xs">({savedCampaignDetail?.sourcePresetId})</span> stays{" "}
+                  <strong>read-only</strong> for everyone — nothing you change here affects the catalog.
+                </span>
               </DialogDescription>
             </DialogHeader>
           </div>
@@ -572,6 +597,15 @@ export function SavedPresetCampaignModals(props: Props) {
                       <AlertDescription className="text-xs text-amber-900">
                         {inflightEnrollmentCount} enrollment(s) may still receive upcoming steps. Editing steps or
                         defaults changes what gets sent next — already delivered messages stay as sent.
+                      </AlertDescription>
+                    </Alert>
+                  )}
+
+                  {isEditing && (
+                    <Alert className="border-gray-200 bg-muted/40 text-muted-foreground">
+                      <AlertDescription className="text-xs">
+                        To <strong>pause</strong> or <strong>resume</strong> the whole campaign, save your edits first,
+                        then use <strong>Pause campaign</strong> / <strong>Resume campaign</strong> in view mode.
                       </AlertDescription>
                     </Alert>
                   )}
@@ -1013,17 +1047,44 @@ export function SavedPresetCampaignModals(props: Props) {
                         Cancel edit
                       </Button>
                       <Button
-                        className="bg-brand-green hover:bg-brand-green/90"
+                        variant="outline"
                         disabled={
                           patchPresetCampaignMutation.isPending ||
                           !draft?.name.trim() ||
                           !draft?.messages.length
                         }
-                        onClick={saveDraft}
-                        data-testid="saved-campaign-save"
+                        onClick={saveAsDraft}
+                        data-testid="saved-campaign-save-draft"
+                      >
+                        Save draft
+                      </Button>
+                      <Button
+                        variant="default"
+                        className="bg-muted-foreground/15 text-foreground hover:bg-muted-foreground/25"
+                        disabled={
+                          patchPresetCampaignMutation.isPending ||
+                          !draft?.name.trim() ||
+                          !draft?.messages.length
+                        }
+                        onClick={saveChanges}
+                        data-testid="saved-campaign-save-changes"
                       >
                         Save changes
                       </Button>
+                      {canActivateFromEditor && (
+                        <Button
+                          className="bg-brand-green hover:bg-brand-green/90 text-white"
+                          disabled={
+                            patchPresetCampaignMutation.isPending ||
+                            !draft?.name.trim() ||
+                            !draft?.messages.length
+                          }
+                          onClick={activateCampaignFromEditor}
+                          data-testid="saved-campaign-activate"
+                        >
+                          Activate campaign
+                        </Button>
+                      )}
                     </>
                   ) : (
                     <>

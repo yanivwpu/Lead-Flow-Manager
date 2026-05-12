@@ -65,6 +65,7 @@ import {
   type CarouselCardRuntimeMedia,
   type TemplateCarouselDefaultMediaMap,
 } from "@shared/metaTemplateSend";
+import { getPresetCampaignStepCount } from "@shared/campaignPlaceholders";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
@@ -220,6 +221,8 @@ type PresetCampaignListItem = {
   statusLabel: string;
   channel: string;
   messages: unknown[];
+  /** Server-computed step count (robust vs jsonb shape); falls back to messages.length in UI. */
+  stepCount?: number;
   updatedAt: string;
   createdAt?: string;
   executionStats?: CampaignExecutionStats;
@@ -235,6 +238,7 @@ type PresetCampaignDetail = PresetCampaignListItem & {
   aiEnabled?: boolean | null;
   audienceConfig?: Record<string, unknown> | null;
   totalSteps?: number;
+  stepCount?: number;
   executionStats?: CampaignExecutionStats;
   enrollments?: Array<{
     id: string;
@@ -540,6 +544,7 @@ export function Templates() {
   >({
     queryKey: ["/api/preset-campaigns"],
     enabled: !!templatesEnabled,
+    staleTime: 0,
   });
 
   const { data: savedCampaignDetail, isLoading: savedCampaignDetailLoading } = useQuery<PresetCampaignDetail>({
@@ -552,6 +557,7 @@ export function Templates() {
       return res.json();
     },
     enabled: !!templatesEnabled && !!savedCampaignModalId && savedCampaignModalOpen,
+    staleTime: 0,
   });
 
   const patchPresetCampaignMutation = useMutation({
@@ -559,9 +565,13 @@ export function Templates() {
       const res = await apiRequest("PATCH", `/api/preset-campaigns/${vars.id}`, vars.body);
       return res.json() as Promise<{ message?: string }>;
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       queryClient.invalidateQueries({ queryKey: ["/api/preset-campaigns"] });
       queryClient.invalidateQueries({ queryKey: ["/api/preset-campaigns", savedCampaignModalId] });
+      await queryClient.refetchQueries({ queryKey: ["/api/preset-campaigns"] });
+      if (savedCampaignModalId) {
+        await queryClient.refetchQueries({ queryKey: ["/api/preset-campaigns", savedCampaignModalId] });
+      }
     },
     onError: (e: Error) => {
       toast({
@@ -576,11 +586,12 @@ export function Templates() {
     mutationFn: async (id: string) => {
       await apiRequest("DELETE", `/api/preset-campaigns/${id}`);
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       queryClient.invalidateQueries({ queryKey: ["/api/preset-campaigns"] });
       setSavedCampaignModalOpen(false);
       setSavedCampaignModalId(null);
       setPendingDeleteCampaignId(null);
+      await queryClient.refetchQueries({ queryKey: ["/api/preset-campaigns"] });
     },
     onError: (e: Error) => {
       toast({
@@ -603,9 +614,15 @@ export function Templates() {
       );
       return res.json() as Promise<{ enrollment?: unknown }>;
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       queryClient.invalidateQueries({ queryKey: ["/api/preset-campaigns", savedCampaignModalId] });
       queryClient.invalidateQueries({ queryKey: ["/api/preset-campaigns"] });
+      await Promise.all([
+        queryClient.refetchQueries({ queryKey: ["/api/preset-campaigns"] }),
+        savedCampaignModalId
+          ? queryClient.refetchQueries({ queryKey: ["/api/preset-campaigns", savedCampaignModalId] })
+          : Promise.resolve(),
+      ]);
     },
     onError: (e: Error) => {
       toast({
@@ -621,8 +638,9 @@ export function Templates() {
       const res = await apiRequest("POST", `/api/preset-campaigns/${id}/duplicate`);
       return res.json() as Promise<{ message?: string }>;
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       queryClient.invalidateQueries({ queryKey: ["/api/preset-campaigns"] });
+      await queryClient.refetchQueries({ queryKey: ["/api/preset-campaigns"] });
     },
     onError: (e: Error) => {
       toast({
@@ -1150,7 +1168,10 @@ export function Templates() {
                   Preset Automation Templates
                 </CardTitle>
                 <CardDescription className="text-sm">
-                  Start with ready-made WhatsApp sequences in English, Spanish, and Hebrew.
+                  <span className="block">
+                    <strong>Library presets</strong> below are read-only blueprints.{" "}
+                    <strong>Use This Template</strong> creates your own saved campaign (draft) that you can edit, activate, and enroll contacts into — nothing here changes the shared catalog.
+                  </span>
                 </CardDescription>
               </CardHeader>
               <CardContent className="px-3 md:px-6">
@@ -1196,7 +1217,10 @@ export function Templates() {
                       </TableHeader>
                       <TableBody>
                         {savedPresetCampaigns.map((row) => {
-                          const steps = Array.isArray(row.messages) ? row.messages.length : 0;
+                          const steps =
+                            typeof row.stepCount === "number"
+                              ? row.stepCount
+                              : getPresetCampaignStepCount(row.messages);
                           const ex = row.executionStats;
                           const updated =
                             row.updatedAt &&
@@ -1271,6 +1295,20 @@ export function Templates() {
                                       <Pencil className="h-4 w-4 mr-2 shrink-0" />
                                       Edit
                                     </DropdownMenuItem>
+                                    {(row.status === "draft" || row.status === "active_pending") && (
+                                      <DropdownMenuItem
+                                        className="cursor-pointer"
+                                        onClick={() =>
+                                          patchPresetCampaignMutation.mutate({
+                                            id: row.id,
+                                            body: { status: "active" },
+                                          })
+                                        }
+                                      >
+                                        <Rocket className="h-4 w-4 mr-2 shrink-0" />
+                                        Activate
+                                      </DropdownMenuItem>
+                                    )}
                                     {(row.status === "active_pending" || row.status === "active") && (
                                       <DropdownMenuItem
                                         className="cursor-pointer"

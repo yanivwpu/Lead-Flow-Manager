@@ -6,6 +6,7 @@ import {
   buildMetaVariableValuesForCampaignTemplate,
   campaignBodyHasUnresolvedPlaceholders,
   interpolateCampaignBody,
+  parsePresetCampaignMessagesArray,
 } from "@shared/campaignPlaceholders";
 import {
   buildReEngagementAfterSuccessfulSend,
@@ -360,7 +361,7 @@ export async function processCampaignEnrollmentStep(enrollmentId: string): Promi
     return;
   }
 
-  const messages = Array.isArray(campaign.messages) ? (campaign.messages as CampaignMessageStep[]) : [];
+  const messages = parsePresetCampaignMessagesArray(campaign.messages) as CampaignMessageStep[];
   if (messages.length === 0) {
     await storage.updateCampaignEnrollment(enrollment.id, { status: "completed", nextRunAt: null });
     return;

@@ -28,7 +28,11 @@ import { WA_TEMPLATE_MEDIA_NEEDS_CONVERSION_MESSAGE } from "../waTemplateMediaUs
 import { isPersistableWhatsAppTemplateDefaultUrl } from "../templateMediaPersistPolicy";
 import { getUserTwilioClient } from "../userTwilio";
 import { subscriptionService } from "../subscriptionService";
-import { extractPlaceholderKeysFromCampaignMessages } from "@shared/campaignPlaceholders";
+import {
+  extractPlaceholderKeysFromCampaignMessages,
+  getPresetCampaignStepCount,
+  parsePresetCampaignMessagesArray,
+} from "@shared/campaignPlaceholders";
 import { getPresetCampaignStatusLabel } from "@shared/presetCampaignLabels";
 import {
   buildReEngagementAfterFailedSend,
@@ -324,6 +328,7 @@ export function registerTemplateRoutes(app: Express): void {
           };
           return {
             ...c,
+            stepCount: getPresetCampaignStepCount(c.messages),
             statusLabel: getPresetCampaignStatusLabel(c.status),
             executionStats: agg,
           };
@@ -439,7 +444,7 @@ export function registerTemplateRoutes(app: Express): void {
         storage.getCampaignAggregatesForUser(req.user.id),
       ]);
 
-      const totalSteps = Array.isArray(row.messages) ? row.messages.length : 0;
+      const totalSteps = getPresetCampaignStepCount(row.messages);
 
       const enrollmentsWithNames = await Promise.all(
         enrollments.map(async (e) => {
@@ -559,7 +564,7 @@ export function registerTemplateRoutes(app: Express): void {
         if (raw.length === 0) {
           return res.status(400).json({ error: "Campaign must have at least one step." });
         }
-        const prevSteps = Array.isArray(existing.messages) ? existing.messages : [];
+        const prevSteps = parsePresetCampaignMessagesArray(existing.messages);
         const msgs = raw.map((item, idx) => {
           const prev =
             prevSteps[idx] && typeof prevSteps[idx] === "object" && prevSteps[idx] !== null
@@ -609,7 +614,9 @@ export function registerTemplateRoutes(app: Express): void {
 
       if (patch.messages && !Array.isArray(body.placeholders)) {
         const mergedKeys = new Set<string>(
-          extractPlaceholderKeysFromCampaignMessages(patch.messages as unknown[])
+          extractPlaceholderKeysFromCampaignMessages(
+            parsePresetCampaignMessagesArray(patch.messages)
+          )
         );
         const defs =
           (patch.placeholderDefaults ??
@@ -624,9 +631,7 @@ export function registerTemplateRoutes(app: Express): void {
         !Array.isArray(body.placeholders)
       ) {
         const mergedKeys = new Set<string>(
-          extractPlaceholderKeysFromCampaignMessages(
-            Array.isArray(existing.messages) ? existing.messages : []
-          )
+          extractPlaceholderKeysFromCampaignMessages(parsePresetCampaignMessagesArray(existing.messages))
         );
         const defs = patch.placeholderDefaults as Record<string, unknown>;
         for (const k of Object.keys(defs)) mergedKeys.add(k);

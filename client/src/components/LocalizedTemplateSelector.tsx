@@ -23,12 +23,6 @@ import {
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import {
   ShoppingCart,
   Users,
   Bell,
@@ -159,8 +153,9 @@ export function LocalizedTemplateSelector({
       });
       return res.json() as Promise<CreatePresetCampaignResponse>;
     },
-    onSuccess: (payload, variables) => {
+    onSuccess: async (payload, variables) => {
       queryClient.invalidateQueries({ queryKey: ["/api/preset-campaigns"] });
+      await queryClient.refetchQueries({ queryKey: ["/api/preset-campaigns"] });
       const id = payload.campaign?.id;
       if (id) onCampaignCreated?.(id);
       onSelectTemplate?.(variables.template, variables.placeholderDefaults);
@@ -228,8 +223,7 @@ export function LocalizedTemplateSelector({
   };
 
   return (
-    <TooltipProvider delayDuration={200}>
-      <div className="space-y-4" dir={isRTL ? "rtl" : "ltr"}>
+    <div className="space-y-4" dir={isRTL ? "rtl" : "ltr"}>
         <div className={`grid grid-cols-1 sm:grid-cols-3 gap-3 ${isRTL ? "text-right" : ""}`}>
           <div>
             <Label className={`text-sm font-medium mb-2 block ${isRTL ? "text-right" : ""}`}>
@@ -362,28 +356,21 @@ export function LocalizedTemplateSelector({
                           ) : (
                             <Send className="h-3.5 w-3.5 shrink-0" />
                           )}
-                          <span>{t("templates.useTemplate", "Use Template")}</span>
+                          <span>{t("templates.useThisTemplate", "Use This Template")}</span>
                         </span>
                       </Button>
                     )}
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="icon"
-                          className="h-9 w-9 shrink-0 min-h-[44px] min-w-[44px] border-gray-200"
-                          onClick={() => openReadOnlyPreview(template)}
-                          data-testid={`template-preview-${template.id}`}
-                          aria-label={t("templates.previewPresetAria", "Preview template")}
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent side="top">
-                        {t("templates.quickPreview", "Quick preview")}
-                      </TooltipContent>
-                    </Tooltip>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="h-9 w-9 shrink-0 min-h-[44px] min-w-[44px] border-gray-200"
+                      onClick={() => openReadOnlyPreview(template)}
+                      data-testid={`template-preview-${template.id}`}
+                      aria-label={t("templates.previewPresetAria", "Preview library preset")}
+                    >
+                      <Eye className="h-4 w-4" />
+                    </Button>
                   </div>
                 </CardContent>
               </Card>
@@ -437,6 +424,5 @@ export function LocalizedTemplateSelector({
           </DialogContent>
         </Dialog>
       </div>
-    </TooltipProvider>
   );
 }

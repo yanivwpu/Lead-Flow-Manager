@@ -231,3 +231,30 @@ export function campaignBodyHasUnresolvedPlaceholders(content: string): boolean 
   PLACEHOLDER_TOKEN_RE.lastIndex = 0;
   return PLACEHOLDER_TOKEN_RE.test(content);
 }
+
+/**
+ * Normalize preset campaign `messages` from DB/API (jsonb may arrive as array, JSON string, or legacy object).
+ */
+export function parsePresetCampaignMessagesArray(messages: unknown): unknown[] {
+  if (Array.isArray(messages)) return messages;
+  if (typeof messages === "string") {
+    try {
+      const parsed = JSON.parse(messages) as unknown;
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+  if (messages && typeof messages === "object") {
+    const o = messages as Record<string, unknown>;
+    const keys = Object.keys(o)
+      .filter((k) => /^\d+$/.test(k))
+      .sort((a, b) => Number(a) - Number(b));
+    if (keys.length > 0) return keys.map((k) => o[k]!);
+  }
+  return [];
+}
+
+export function getPresetCampaignStepCount(messages: unknown): number {
+  return parsePresetCampaignMessagesArray(messages).length;
+}
