@@ -97,6 +97,7 @@ import bcrypt from "bcryptjs";
 import { dispatchInboundMessagingAutomation } from "./automationEventDispatcher";
 import { evaluateChatbotInboundArbitration } from "./chatbotEngine";
 import { runW2QualificationEngine, runServiceRoutingEngine } from "./workflowEngine";
+import { evaluateGrowthEngineAccess, isGrowthEngineWorkflow } from "./growthEngineEntitlements";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import shopifyRoutes from "./shopifyRoutes";
 import ghlRoutes from "./ghlRoutes";
@@ -3567,6 +3568,25 @@ export async function registerRoutes(
       if (!name || !triggerType) {
         return res.status(400).json({ error: "Name and trigger type are required" });
       }
+      const tc = triggerConditions || {};
+      if (
+        isGrowthEngineWorkflow({
+          triggerConditions: tc,
+          description: description || null,
+        })
+      ) {
+        const ge = await evaluateGrowthEngineAccess(req.user.id);
+        if (!ge.ok) {
+          return res.status(403).json({
+            error: ge.message,
+            code: ge.reason,
+            growthEngine: true,
+            hasPro: ge.hasProTier,
+            hasAI: ge.hasAIBrainAddon,
+            workflowsEnabled: ge.workflowsEnabled,
+          });
+        }
+      }
       const workflow = await storage.createWorkflow({
         userId: req.user.id,
         name,
@@ -3592,6 +3612,33 @@ export async function registerRoutes(
       const workflow = await storage.getWorkflow(req.params.id);
       if (!workflow || workflow.userId !== req.user.id) {
         return res.status(404).json({ error: "Workflow not found" });
+      }
+      const nextIsActive = req.body.isActive !== undefined ? req.body.isActive : workflow.isActive;
+      const activating = nextIsActive === true && workflow.isActive === false;
+      if (activating) {
+        const nextTriggerConditions =
+          req.body.triggerConditions !== undefined
+            ? { ...(workflow.triggerConditions as object), ...req.body.triggerConditions }
+            : workflow.triggerConditions;
+        const nextWorkflow = {
+          ...workflow,
+          ...req.body,
+          triggerConditions: nextTriggerConditions,
+          isActive: nextIsActive,
+        };
+        if (isGrowthEngineWorkflow(nextWorkflow)) {
+          const ge = await evaluateGrowthEngineAccess(req.user.id);
+          if (!ge.ok) {
+            return res.status(403).json({
+              error: ge.message,
+              code: ge.reason,
+              growthEngine: true,
+              hasPro: ge.hasProTier,
+              hasAI: ge.hasAIBrainAddon,
+              workflowsEnabled: ge.workflowsEnabled,
+            });
+          }
+        }
       }
       const updated = await storage.updateWorkflow(req.params.id, req.body);
       res.json(updated);

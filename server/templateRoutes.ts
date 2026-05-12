@@ -9,6 +9,7 @@ import { z } from "zod";
 import { getAppOrigin } from "./urlOrigins";
 import { buildPostCheckoutSuccessUrl, buildStripeCancelUrl, sanitizeStripeReturnPath } from "./checkoutReturnPath";
 import { isUserCalendlyBookingConnected } from "./calendlyBookingConnected";
+import { evaluateGrowthEngineAccess } from "./growthEngineEntitlements";
 
 const TEMPLATE_ID = "realtor-growth-engine";
 const TEMPLATE_PRICE_CENTS = 19900;
@@ -20,10 +21,10 @@ export function registerTemplateRoutes(app: Express) {
       const user = await storage.getUser(userId);
       if (!user) return res.status(404).json({ error: "User not found" });
 
-      const limits = await subscriptionService.getUserLimits(userId);
-      const plan = (limits?.plan || "free").toLowerCase();
-      const hasPro = plan === "pro" || plan === "scale";
-      const hasAI = limits?.hasAIBrainAddon || false;
+      const ge = await evaluateGrowthEngineAccess(userId);
+      const plan = ge.ok ? ge.limits.plan : (await subscriptionService.getUserLimits(userId))?.plan || "free";
+      const hasPro = ge.ok ? ge.limits.plan === "pro" || ge.limits.plan === "scale" : ge.hasProTier;
+      const hasAI = ge.ok ? !!ge.limits.hasAIBrainAddon : ge.hasAIBrainAddon;
 
       res.json({ hasPro, hasAI, plan });
     } catch (error: any) {
@@ -63,11 +64,10 @@ export function registerTemplateRoutes(app: Express) {
         });
       }
 
-      const limits = await subscriptionService.getUserLimits(userId);
-      const plan = (limits?.plan || "free").toLowerCase();
-      const hasPro = plan === "pro" || plan === "scale";
-      const hasAI = limits?.hasAIBrainAddon || false;
-      const subscriptionActive = hasPro && hasAI;
+      const ge = await evaluateGrowthEngineAccess(userId);
+      const hasPro = ge.ok ? ge.limits.plan === "pro" || ge.limits.plan === "scale" : ge.hasProTier;
+      const hasAI = ge.ok ? !!ge.limits.hasAIBrainAddon : ge.hasAIBrainAddon;
+      const subscriptionActive = ge.ok;
 
       res.json({
         template: template || {
@@ -107,17 +107,17 @@ export function registerTemplateRoutes(app: Express) {
         return res.json({ success: true, alreadyPurchased: true });
       }
 
-      const limits = await subscriptionService.getUserLimits(userId);
-      const plan = (limits?.plan || "free").toLowerCase();
-      const hasPro = plan === "pro" || plan === "scale";
-      const hasAI = limits?.hasAIBrainAddon || false;
-
-      if (user.email !== "demo@whachat.com" && (!hasPro || !hasAI)) {
-        return res.status(403).json({
-          error: "Active Pro + AI plan required",
-          hasPro,
-          hasAI,
-        });
+      if (user.email !== "demo@whachat.com") {
+        const ge = await evaluateGrowthEngineAccess(userId);
+        if (!ge.ok) {
+          return res.status(403).json({
+            error: ge.message,
+            code: ge.reason,
+            hasPro: ge.hasProTier,
+            hasAI: ge.hasAIBrainAddon,
+            workflowsEnabled: ge.workflowsEnabled,
+          });
+        }
       }
 
       if (user.email === "demo@whachat.com") {
@@ -228,12 +228,17 @@ export function registerTemplateRoutes(app: Express) {
         return res.status(403).json({ error: "Template not purchased" });
       }
 
-      const limits = await subscriptionService.getUserLimits(userId);
-      const plan = (limits?.plan || "free").toLowerCase();
-      const hasPro = plan === "pro" || plan === "scale";
-      const hasAI = limits?.hasAIBrainAddon || false;
-      if (user.email !== "demo@whachat.com" && (!hasPro || !hasAI)) {
-        return res.status(403).json({ error: "Active Pro + AI plan required", hasPro, hasAI });
+      if (user.email !== "demo@whachat.com") {
+        const ge = await evaluateGrowthEngineAccess(userId);
+        if (!ge.ok) {
+          return res.status(403).json({
+            error: ge.message,
+            code: ge.reason,
+            hasPro: ge.hasProTier,
+            hasAI: ge.hasAIBrainAddon,
+            workflowsEnabled: ge.workflowsEnabled,
+          });
+        }
       }
 
       if (entitlement.onboardingSubmittedAt) {
@@ -333,12 +338,15 @@ export function registerTemplateRoutes(app: Express) {
       }
 
       if (user && user.email !== "demo@whachat.com") {
-        const limits = await subscriptionService.getUserLimits(userId);
-        const plan = (limits?.plan || "free").toLowerCase();
-        const hasPro = plan === "pro" || plan === "scale";
-        const hasAI = limits?.hasAIBrainAddon || false;
-        if (!hasPro || !hasAI) {
-          return res.status(403).json({ error: "Active Pro + AI plan required", hasPro, hasAI });
+        const ge = await evaluateGrowthEngineAccess(userId);
+        if (!ge.ok) {
+          return res.status(403).json({
+            error: ge.message,
+            code: ge.reason,
+            hasPro: ge.hasProTier,
+            hasAI: ge.hasAIBrainAddon,
+            workflowsEnabled: ge.workflowsEnabled,
+          });
         }
       }
 

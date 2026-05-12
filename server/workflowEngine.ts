@@ -2,6 +2,12 @@ import { storage } from "./storage";
 import { type Chat, type Workflow, type Contact, type Channel } from "@shared/schema";
 import { subscriptionService } from "./subscriptionService";
 import {
+  evaluateGrowthEngineAccess,
+  isGrowthEngineWorkflow,
+  isAiBrainWorkflowActionType,
+  isRuntimeSafeWorkflowActionType,
+} from "./growthEngineEntitlements";
+import {
   getCalendlyPublicSchedulingUrl,
   isUserCalendlyBookingConnected,
 } from "./calendlyBookingConnected";
@@ -27,19 +33,54 @@ export interface WorkflowCondition {
   conditions?: { type: string; value: string }[];
 }
 
-async function isTemplateWorkflowAllowed(workflow: Workflow): Promise<boolean> {
-  const conditions = workflow.triggerConditions as any;
-  if (!conditions?.templateKey) return true;
-
-  const user = await storage.getUser(workflow.userId);
-  if (!user) return false;
-
-  const limits = await subscriptionService.getUserLimits(workflow.userId);
-  const plan = (limits?.plan || "free").toLowerCase();
-  const hasPro = plan === "pro" || plan === "scale";
-  if (!hasPro) return false;
-
-  return limits?.hasAIBrainAddon || false;
+/**
+ * Growth Engine workflows: single subscription gate (Pro + AI Brain + automations).
+ * Returns `null` when execution may proceed, or a human-readable block reason.
+ * Logs + persists a workflow execution row so skips are never silent.
+ */
+async function blockGrowthEngineWorkflowIfNotEntitled(
+  workflow: Workflow,
+  chat: Chat,
+  conversationId: string | undefined,
+  triggerData: Record<string, unknown>
+): Promise<string | null> {
+  if (!isGrowthEngineWorkflow(workflow)) {
+    return null;
+  }
+  const access = await evaluateGrowthEngineAccess(workflow.userId);
+  if (access.ok) {
+    return null;
+  }
+  console.log(
+    JSON.stringify({
+      tag: "[GrowthEngineAccess]",
+      event: "workflow_runtime_blocked",
+      workflowId: workflow.id,
+      workflowName: workflow.name,
+      userId: workflow.userId,
+      reason: access.reason,
+      message: access.message,
+      hasProTier: access.hasProTier,
+      hasAIBrainAddon: access.hasAIBrainAddon,
+      workflowsEnabled: access.workflowsEnabled,
+    })
+  );
+  await storage
+    .logWorkflowExecution({
+      workflowId: workflow.id,
+      chatId: chat.id,
+      conversationId: conversationId ?? null,
+      triggerData: {
+        ...triggerData,
+        growthEngineAccessDenied: true,
+        denialReason: access.reason,
+      },
+      actionsExecuted: [],
+      status: "failed",
+      errorMessage: `[Growth Engine] ${access.message}`,
+    })
+    .catch(() => {});
+  return access.message;
 }
 
 export async function getTemplatePreferences(userId: string): Promise<Record<string, any>> {
@@ -95,14 +136,14 @@ export async function executeWorkflowActions(
   triggerData: any = {},
   contact?: Contact,
   conversationId?: string
-): Promise<{ success: boolean; actionsExecuted: WorkflowAction[] }> {
+): Promise<{ success: boolean; actionsExecuted: WorkflowAction[]; blockedReason?: string }> {
   const actions = workflow.actions as any[];
   const executedActions: WorkflowAction[] = [];
   
   try {
-    if (!(await isTemplateWorkflowAllowed(workflow))) {
-      console.log(`[Workflow] Skipping template workflow "${workflow.name}" — Pro+AI subscription inactive for user ${workflow.userId}`);
-      return { success: false, actionsExecuted: [] };
+    const blockedReason = await blockGrowthEngineWorkflowIfNotEntitled(workflow, chat, conversationId, triggerData);
+    if (blockedReason) {
+      return { success: false, actionsExecuted: [], blockedReason };
     }
     for (const action of actions) {
       if (action.type === "apply_tag" && typeof action.tag === "string" && action.tag) {
@@ -114,6 +155,18 @@ export async function executeWorkflowActions(
           { skipAutomationHooks: true }
         );
         executedActions.push({ type: "tag", value: action.tag });
+        continue;
+      }
+      // RGE seed JSON uses `set_pipeline_stage` + `stage`; executor historically used `set_pipeline` + `value`.
+      if (action.type === "set_pipeline_stage" && typeof action.stage === "string" && action.stage) {
+        await dualWriteContact(
+          contact,
+          { pipelineStage: action.stage },
+          chat,
+          { pipelineStage: action.stage },
+          { skipAutomationHooks: true }
+        );
+        executedActions.push({ type: "set_pipeline", value: action.stage });
         continue;
       }
       switch (action.type) {
@@ -216,8 +269,25 @@ export async function executeWorkflowActions(
           }
           break;
 
-        default:
+        default: {
+          const t = action?.type as string | undefined;
+          if (t) {
+            const aiBucket = isAiBrainWorkflowActionType(t);
+            const safeBucket = isRuntimeSafeWorkflowActionType(t);
+            console.log(
+              JSON.stringify({
+                tag: "[WorkflowAction]",
+                event: safeBucket ? "not_implemented_runtime_safe" : aiBucket ? "not_implemented_ai_brain_action" : "unknown_action_type",
+                actionType: t,
+                workflowId: workflow.id,
+                workflowName: workflow.name,
+                userId: workflow.userId,
+                requiresAIBrainWhenImplemented: aiBucket,
+              })
+            );
+          }
           break;
+        }
       }
     }
     
@@ -326,7 +396,13 @@ async function executeW3CalendlyKeywordResponse(
   contact: Contact | undefined,
   conversationId: string | undefined
 ): Promise<void> {
-  if (!(await isTemplateWorkflowAllowed(workflow))) {
+  const denied = await blockGrowthEngineWorkflowIfNotEntitled(workflow, chat, conversationId, {
+    trigger: "keyword",
+    message,
+    templateKey: "W3",
+    path: "w3_calendly",
+  });
+  if (denied) {
     return;
   }
 

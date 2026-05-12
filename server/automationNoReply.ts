@@ -55,15 +55,23 @@ export async function scheduleNoReplyJobsAfterTeamOutbound(params: {
 
   for (const wf of workflows) {
     if (!noReplyWorkflowMatchesConversation(wf, channel)) continue;
-    const tc = wf.triggerConditions as { durationMinutes?: number; durationHours?: number };
+    const tc = wf.triggerConditions as {
+      durationMinutes?: number;
+      durationHours?: number;
+      /** RGE seed workflows use `delayHours` on `no_reply` triggers (merged into triggerConditions). */
+      delayHours?: number;
+    };
     const mins = Number(tc.durationMinutes);
     const hours = Number(tc.durationHours);
+    const delayHoursFromSeed = Number(tc.delayHours);
     const delayMs =
       Number.isFinite(mins) && mins > 0
         ? mins * 60_000
         : Number.isFinite(hours) && hours > 0
           ? hours * 3_600_000
-          : 24 * 3_600_000;
+          : Number.isFinite(delayHoursFromSeed) && delayHoursFromSeed > 0
+            ? delayHoursFromSeed * 3_600_000
+            : 24 * 3_600_000;
     const runAt = new Date(Date.now() + delayMs);
     const idempotencyKey = `nr:${wf.id}:${contactId}:${anchorOutboundAt.getTime()}:${scheduled}`;
     try {
