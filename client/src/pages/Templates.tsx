@@ -66,6 +66,7 @@ import {
   type TemplateCarouselDefaultMediaMap,
 } from "@shared/metaTemplateSend";
 import { getPresetCampaignStepCount } from "@shared/campaignPlaceholders";
+import { getSavedCampaignSourceLabel } from "@shared/localizedTemplates";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
@@ -1169,8 +1170,8 @@ export function Templates() {
                 </CardTitle>
                 <CardDescription className="text-sm">
                   <span className="block">
-                    <strong>Library presets</strong> below are read-only blueprints.{" "}
-                    <strong>Use This Template</strong> creates your own saved campaign (draft) that you can edit, activate, and enroll contacts into — nothing here changes the shared catalog.
+                    These gallery templates are shared starting points. <strong>Use this template</strong> saves your
+                    own editable copy — your changes never affect the originals.
                   </span>
                 </CardDescription>
               </CardHeader>
@@ -1204,7 +1205,7 @@ export function Templates() {
                       <TableHeader>
                         <TableRow>
                           <TableHead>Campaign</TableHead>
-                          <TableHead className="hidden sm:table-cell">Source preset</TableHead>
+                          <TableHead className="hidden sm:table-cell">Based on</TableHead>
                           <TableHead>Status</TableHead>
                           <TableHead className="hidden md:table-cell">Channel</TableHead>
                           <TableHead className="text-right">Steps</TableHead>
@@ -1237,10 +1238,8 @@ export function Templates() {
                               <TableCell className="font-medium text-gray-900 max-w-[140px] truncate">
                                 {row.name}
                               </TableCell>
-                              <TableCell className="hidden sm:table-cell font-mono text-xs text-gray-600">
-                                {row.sourcePresetId.length > 14
-                                  ? `${row.sourcePresetId.slice(0, 14)}…`
-                                  : row.sourcePresetId}
+                              <TableCell className="hidden sm:table-cell text-sm text-gray-700 max-w-[200px] truncate">
+                                {getSavedCampaignSourceLabel(row.sourcePresetId)}
                               </TableCell>
                               <TableCell>
                                 <Badge variant="outline" className="text-[11px] font-normal whitespace-normal max-w-[200px] text-left h-auto py-1">

@@ -1,7 +1,16 @@
-import type { CampaignEnrollment, Contact, Conversation, PresetCampaign } from "@shared/schema";
-import type { Channel } from "@shared/schema";
+import type {
+  CampaignEnrollment,
+  Contact,
+  Conversation,
+  PresetCampaign,
+  Channel,
+} from "@shared/schema";
 import { CHANNEL_INFO } from "@shared/schema";
 import { parsePresetDelayToMs } from "@shared/campaignDelays";
+import {
+  coerceReplyWindowErrorToUserMessage,
+  userFacingReplyWindowBlockedMessage,
+} from "@shared/metaReplyWindowError";
 import {
   buildMetaVariableValuesForCampaignTemplate,
   campaignBodyHasUnresolvedPlaceholders,
@@ -144,8 +153,7 @@ async function sendCampaignWhatsApp(params: {
   if (!tplName) {
     return {
       ok: false,
-      error:
-        "Outside the free-form WhatsApp window. Add whatsappTemplateName to this step (approved Meta template) or wait until the customer messages you.",
+      error: userFacingReplyWindowBlockedMessage("whatsapp"),
     };
   }
 
@@ -154,7 +162,7 @@ async function sendCampaignWhatsApp(params: {
     return {
       ok: false,
       error:
-        "Outside the free-form WhatsApp window. Template sends require Meta WhatsApp (Cloud API); Twilio cannot send this template path yet.",
+        "Outside the WhatsApp reply window. Template sends require Meta WhatsApp (Cloud API); Twilio cannot send this template path yet.",
     };
   }
 
@@ -284,21 +292,7 @@ async function sendCampaignChannelMessage(params: {
   body: string;
 }): Promise<{ ok: true; externalMessageId?: string } | { ok: false; error: string }> {
   const { userId, contactId, campaign, body } = params;
-  const ch = (campaign.channel || "whatsapp") as Channel;
-  if (ch === "whatsapp") {
-    const contact = await storage.getContact(contactId);
-    if (!contact) return { ok: false, error: "Contact not found" };
-    const step: CampaignMessageStep = { content: body };
-    return sendCampaignWhatsApp({
-      userId,
-      contactId,
-      contact,
-      campaign,
-      body,
-      step,
-    });
-  }
-
+  const ch = campaign.channel as Channel;
   const result = await channelService.sendMessage({
     userId,
     contactId,
@@ -313,9 +307,10 @@ async function sendCampaignChannelMessage(params: {
     return { ok: true, externalMessageId: result.externalMessageId };
   }
   const label = CHANNEL_INFO[ch]?.label || ch;
+  const raw = result.error || `Could not send on ${label}`;
   return {
     ok: false,
-    error: result.error || `Could not send on ${label}`,
+    error: coerceReplyWindowErrorToUserMessage(ch, raw),
   };
 }
 
@@ -427,9 +422,11 @@ export async function processCampaignEnrollmentStep(enrollmentId: string): Promi
   }
 
   if (!sendResult.ok) {
+    const ch = (campaign.channel || "whatsapp") as Channel;
+    const errMsg = coerceReplyWindowErrorToUserMessage(ch, sendResult.error);
     await storage.updateCampaignStepEvent(pendingEvent.id, {
       status: "failed",
-      errorMessage: sendResult.error,
+      errorMessage: errMsg,
       sentAt: null,
     });
     await storage.updateCampaignEnrollment(enrollment.id, {

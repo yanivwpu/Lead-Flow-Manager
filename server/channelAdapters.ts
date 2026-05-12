@@ -9,7 +9,8 @@ import {
   getUserTwilioClient,
   getUserTwilioNumber 
 } from "./userTwilio";
-import type { Channel } from "@shared/schema";
+import { CHANNEL_INFO } from "@shared/schema";
+import { userFacingReplyWindowBlockedMessage } from "@shared/metaReplyWindowError";
 
 // Meta's 24-hour messaging window constants
 const META_WINDOW_HOURS = 24;
@@ -56,36 +57,37 @@ export async function updateMetaWindowOnInbound(conversationId: string): Promise
   });
 }
 
-// Parse Meta API errors into user-friendly messages
-function parseMetaError(error: any, channel: string): string {
+// Parse Meta API errors into user-friendly messages (Instagram / Facebook Messenger Graph sends).
+function parseMetaError(error: any, metaChannel: "facebook" | "instagram"): string {
   const code = error?.code;
   const subcode = error?.error_subcode;
-  const message = error?.message || '';
+  const message = error?.message || "";
+  const label = CHANNEL_INFO[metaChannel].label;
 
   // Common Meta error codes
-  if (code === 10 || message.includes('permission')) {
-    return `${channel} permissions error. Please reconnect your ${channel} account in Settings.`;
+  if (code === 10 || message.includes("permission")) {
+    return `${label} permissions error. Please reconnect your ${label} account in Settings.`;
   }
   if (code === 100 && subcode === 2018278) {
-    return `The 24-hour messaging window has expired. You can only respond after the customer messages you first.`;
+    return userFacingReplyWindowBlockedMessage(metaChannel);
   }
-  if (code === 100 && message.includes('recipient')) {
-    return `Cannot reach this user on ${channel}. They may have blocked messages or their account is unavailable.`;
+  if (code === 100 && message.includes("recipient")) {
+    return `Cannot reach this user on ${label}. They may have blocked messages or their account is unavailable.`;
   }
-  if (code === 100 && message.toLowerCase().includes('upload attachment')) {
-    return `${channel} does not support this file type. Only images, videos, and audio can be sent — documents and PDFs are not supported.`;
+  if (code === 100 && message.toLowerCase().includes("upload attachment")) {
+    return `${label} does not support this file type. Only images, videos, and audio can be sent — documents and PDFs are not supported.`;
   }
   if (code === 190) {
-    return `${channel} access token expired. Please reconnect your account in Settings.`;
+    return `${label} access token expired. Please reconnect your account in Settings.`;
   }
   if (code === 551) {
-    return `This user cannot receive messages on ${channel}. They may need to start the conversation first.`;
+    return `This user cannot receive messages on ${label}. They may need to start the conversation first.`;
   }
-  if (message.includes('rate limit') || code === 4) {
+  if (message.includes("rate limit") || code === 4) {
     return `Too many messages sent. Please wait a moment before sending more.`;
   }
 
-  return error?.message || `Failed to send ${channel} message`;
+  return error?.message || `Failed to send ${label} message`;
 }
 
 class WhatsAppAdapter implements ChannelAdapter {
@@ -267,9 +269,9 @@ class InstagramAdapter implements ChannelAdapter {
       // Check 24-hour messaging window (Meta policy)
       const windowStatus = await checkMetaWindow(params.conversationId);
       if (!windowStatus.isActive) {
-        return { 
-          success: false, 
-          error: "The 24-hour Instagram messaging window has expired. You can only respond after the customer messages you first.",
+        return {
+          success: false,
+          error: userFacingReplyWindowBlockedMessage("instagram"),
           windowStatus,
         };
       }
@@ -378,7 +380,7 @@ class InstagramAdapter implements ChannelAdapter {
       const result = await response.json();
 
       if (!response.ok || result.error) {
-        const errorMessage = parseMetaError(result.error, 'Instagram');
+        const errorMessage = parseMetaError(result.error, "instagram");
         console.error("Instagram API error:", response.status, result.error);
         return { success: false, error: errorMessage, windowStatus };
       }
@@ -392,7 +394,7 @@ class InstagramAdapter implements ChannelAdapter {
       console.error("Instagram send error:", error);
       return {
         success: false,
-        error: parseMetaError(error, 'Instagram'),
+        error: parseMetaError(error, "instagram"),
       };
     }
   }
@@ -433,9 +435,9 @@ class FacebookAdapter implements ChannelAdapter {
       // Check 24-hour messaging window (Meta policy)
       const windowStatus = await checkMetaWindow(params.conversationId);
       if (!windowStatus.isActive) {
-        return { 
-          success: false, 
-          error: "The 24-hour Facebook Messenger window has expired. You can only respond after the customer messages you first.",
+        return {
+          success: false,
+          error: userFacingReplyWindowBlockedMessage("facebook"),
           windowStatus,
         };
       }
@@ -530,7 +532,7 @@ class FacebookAdapter implements ChannelAdapter {
       console.error("Facebook send error:", error);
       return {
         success: false,
-        error: parseMetaError(error, 'Facebook Messenger'),
+        error: parseMetaError(error, "facebook"),
       };
     }
   }

@@ -367,7 +367,7 @@ export function LocalizedTemplateSelector({
                       className="h-9 w-9 shrink-0 min-h-[44px] min-w-[44px] border-gray-200"
                       onClick={() => openReadOnlyPreview(template)}
                       data-testid={`template-preview-${template.id}`}
-                      aria-label={t("templates.previewPresetAria", "Preview library preset")}
+                      aria-label={t("templates.previewPresetAria", "Preview template")}
                     >
                       <Eye className="h-4 w-4" />
                     </Button>

@@ -85,6 +85,8 @@ import { isConversationHandoffActive } from "@shared/handoffActivity";
 import {
   isGenericOutboundSendFallbackMessage,
   isMetaReplyWindowExpiredError,
+  errorLooksLikeReplyWindowOrTemplateBlock,
+  userFacingReplyWindowBlockedMessageInbox,
 } from "@/lib/metaReplyWindowError";
 import {
   isMediaChannelValidationError,
@@ -2141,7 +2143,8 @@ export function UnifiedInbox() {
                     const showReplyWindowFailureUi =
                       msg.deliveryFailureKind === "meta_reply_window" ||
                       msg.errorCode === "meta_reply_window" ||
-                      isMetaReplyWindowExpiredError(errBubbleText);
+                      isMetaReplyWindowExpiredError(errBubbleText) ||
+                      errorLooksLikeReplyWindowOrTemplateBlock(errBubbleText);
                     const showSpecificNonReplyFailure =
                       !!errBubbleText &&
                       !showReplyWindowFailureUi &&
@@ -2587,11 +2590,9 @@ export function UnifiedInbox() {
                             >
                               {showReplyWindowFailureUi ? (
                                 <p className="text-[11px] leading-snug text-rose-900/90">
-                                  <span className="font-medium">Message not sent — outside the 24-hour reply window.</span>
-                                  <br />
-                                  <span className="text-rose-800/85">
-                                    Use an approved message template or wait for the customer to reply again.
-                                  </span>
+                                  {userFacingReplyWindowBlockedMessageInbox(
+                                    (primaryConversation?.channel || activeChannel || "whatsapp") as string
+                                  )}
                                 </p>
                               ) : showSpecificNonReplyFailure ? (
                                 <p className="whitespace-pre-wrap text-[11px] font-medium leading-snug text-red-600">

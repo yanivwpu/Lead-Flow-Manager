@@ -40,6 +40,7 @@ import {
   parsePresetCampaignMessagesArray,
 } from "@shared/campaignPlaceholders";
 import { getPresetCampaignStatusLabel } from "@shared/presetCampaignLabels";
+import { getLocalizedPresetDisplayName } from "@shared/localizedTemplates";
 import {
   ChevronDown,
   ChevronUp,
@@ -557,6 +558,11 @@ export function SavedPresetCampaignModals(props: Props) {
     );
   };
 
+  const sourceTemplateTitle = useMemo(
+    () => getLocalizedPresetDisplayName(savedCampaignDetail?.sourcePresetId),
+    [savedCampaignDetail?.sourcePresetId],
+  );
+
   return (
     <>
       <Dialog
@@ -575,11 +581,15 @@ export function SavedPresetCampaignModals(props: Props) {
             <DialogHeader className="space-y-2 text-left">
               <DialogTitle>Your saved campaign</DialogTitle>
               <DialogDescription className="space-y-1.5">
-                <span>
-                  This is <strong>your editable copy</strong>. The library preset{" "}
-                  <span className="font-mono text-xs">({savedCampaignDetail?.sourcePresetId})</span> stays{" "}
-                  <strong>read-only</strong> for everyone — nothing you change here affects the catalog.
-                </span>
+                <p className="text-sm text-muted-foreground">
+                  This campaign is your editable copy. Changes here only affect your version. The original template
+                  remains unchanged.
+                </p>
+                {sourceTemplateTitle ? (
+                  <p className="text-sm text-muted-foreground">
+                    Based on: <span className="font-medium text-foreground">{sourceTemplateTitle}</span>
+                  </p>
+                ) : null}
               </DialogDescription>
             </DialogHeader>
           </div>
@@ -1169,7 +1179,7 @@ export function SavedPresetCampaignModals(props: Props) {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete campaign?</AlertDialogTitle>
             <AlertDialogDescription>
-              Removes this saved instance only. Library presets are unchanged. No messages are sent.
+              Deletes this saved campaign only. Your gallery templates stay the same. No messages are sent.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

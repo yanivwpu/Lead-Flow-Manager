@@ -14,7 +14,12 @@ import { messages as messagesTbl } from "@shared/schema";
 import { eq, sql } from "drizzle-orm";
 import { scheduleHubSpotAutoSync } from "./hubspotAutoSync";
 import { parseConversationReEngagement } from "@shared/reEngagement";
-import { isMetaReplyWindowExpiredError } from "@shared/metaReplyWindowError";
+import {
+  coerceReplyWindowErrorToUserMessage,
+  errorLooksLikeReplyWindowOrTemplateBlock,
+  isMetaReplyWindowExpiredError,
+  userFacingReplyWindowBlockedMessageInbox,
+} from "@shared/metaReplyWindowError";
 
 type ForceChannelInput = Channel | string | undefined;
 
@@ -76,8 +81,7 @@ async function countMessagesInConversation(conversationId: string): Promise<numb
 /** Inbox WhatsApp free-form: enforce ~23h from last inbound when DB stores a 24h ceiling (1h safety margin). */
 const WHATSAPP_INBOX_CSW_BUFFER_MS = 60 * 60 * 1000;
 
-const WHATSAPP_WINDOW_EXPIRED_MSG =
-  "Message not sent — outside the 24-hour reply window. Use an approved WhatsApp template or wait until the customer messages you again.";
+const WHATSAPP_WINDOW_EXPIRED_MSG = userFacingReplyWindowBlockedMessageInbox("whatsapp");
 
 /** Human-readable last-message preview for media messages. */
 function mediaPreviewLabel(contentType?: string): string {
@@ -457,12 +461,14 @@ class ChannelService {
     }
 
     if (pinChannelNoFallback) {
+      const rawErr = sendResult.error || "";
+      const displayErr = coerceReplyWindowErrorToUserMessage(targetChannel, rawErr || "Message delivery failed");
+      const windowClass =
+        !!rawErr && (isMetaReplyWindowExpiredError(rawErr) || errorLooksLikeReplyWindowOrTemplateBlock(rawErr));
       await storage.updateMessage(message.id, {
         status: "failed",
-        errorMessage: sendResult.error,
-        ...(sendResult.error && isMetaReplyWindowExpiredError(sendResult.error)
-          ? { errorCode: "meta_reply_window" as const }
-          : {}),
+        errorMessage: displayErr,
+        ...(windowClass ? { errorCode: "meta_reply_window" as const } : {}),
       });
       console.warn(
         `[sendMessage] failed contactId=${contactId} finalChannel=${targetChannel} error=${sendResult.error || 'unknown'}`
@@ -471,7 +477,7 @@ class ChannelService {
         success: false,
         messageId: message.id,
         channel: targetChannel,
-        error: sendResult.error || 'Message delivery failed',
+        error: displayErr,
       };
     }
 
@@ -547,8 +553,13 @@ class ChannelService {
 
     await storage.updateMessage(message.id, {
       status: "failed",
-      errorMessage: sendResult.error,
-      ...(sendResult.error && isMetaReplyWindowExpiredError(sendResult.error)
+      errorMessage: coerceReplyWindowErrorToUserMessage(
+        targetChannel,
+        sendResult.error || "Message delivery failed"
+      ),
+      ...(sendResult.error &&
+      (isMetaReplyWindowExpiredError(sendResult.error) ||
+        errorLooksLikeReplyWindowOrTemplateBlock(sendResult.error))
         ? { errorCode: "meta_reply_window" as const }
         : {}),
     });
@@ -561,7 +572,7 @@ class ChannelService {
       success: false,
       messageId: message.id,
       channel: targetChannel,
-      error: sendResult.error || "Message delivery failed",
+      error: coerceReplyWindowErrorToUserMessage(targetChannel, sendResult.error || "Message delivery failed"),
     };
   }
 

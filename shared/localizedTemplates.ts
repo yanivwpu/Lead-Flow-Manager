@@ -493,3 +493,20 @@ export function replacePlaceholders(content: string, values: Record<string, stri
   }
   return result;
 }
+
+const LOCALIZED_PRESET_ID_TO_NAME = new Map(LOCALIZED_TEMPLATES.map((t) => [t.id, t.name]));
+
+/** Human title for a known library blueprint id (never the raw slug). */
+export function getLocalizedPresetDisplayName(presetId: string | null | undefined): string | undefined {
+  const id = (presetId || "").trim();
+  if (!id) return undefined;
+  return LOCALIZED_PRESET_ID_TO_NAME.get(id);
+}
+
+/**
+ * Table / summary label for “where this saved campaign came from”.
+ * Returns a friendly template name when known; otherwise a generic label (never the internal id).
+ */
+export function getSavedCampaignSourceLabel(presetId: string | null | undefined): string {
+  return getLocalizedPresetDisplayName(presetId) ?? "Gallery template";
+}
