@@ -283,6 +283,10 @@ export function AIComposer({
           autoSendAllowed: allowed,
           reason: clientReason,
           serverReason: reason,
+          flowMatched: data.flowMatched === true,
+          aiAutoSuppressed: data.aiAutoSuppressed === true,
+          suppressionReason:
+            typeof data.suppressionReason === "string" ? data.suppressionReason : undefined,
           suggestionLength: trimmed.length,
           contactId: contactId || "unknown",
           confidence,

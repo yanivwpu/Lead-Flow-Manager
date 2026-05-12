@@ -140,6 +140,15 @@ function matchPendingButton(message: string, buttons: ButtonOption[]): ButtonOpt
   return null;
 }
 
+/** Dry-run: would `checkAndResolvePendingButton` consume this message, or clear pending without a match? */
+function dryRunPendingButton(ctx: TriggerContext): "none" | "consume" | "cleared" {
+  const pending = getPendingButtons(ctx.conversationId);
+  if (!pending) return "none";
+  const matched = matchPendingButton(ctx.message, pending.buttons);
+  if (matched) return "consume";
+  return "cleared";
+}
+
 // Max delay cap removed — delays are now handled durably via flow_jobs table
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
@@ -159,21 +168,63 @@ function keywordMatches(message: string, keywords: string[]): boolean {
   });
 }
 
-export async function willChatbotTrigger(
-  userId: string,
-  message: string,
-  isNewConversation: boolean
-): Promise<boolean> {
+export type InboundChatbotArbitration = {
+  flowMatched: boolean;
+  reason: string;
+};
+
+/**
+ * Read-only: whether an active chatbot flow would own this inbound (same rules as
+ * `triggerChatbotFlows` for keyword / new-chat / pending-button / cooldown), without executing flows.
+ * Used to suppress AI Full Auto send on the same event while a deterministic flow handles the thread.
+ */
+export async function evaluateChatbotInboundArbitration(
+  ctx: TriggerContext
+): Promise<InboundChatbotArbitration> {
   try {
-    const activeFlows = await storage.getActiveChatbotFlows(userId);
+    const dry = dryRunPendingButton(ctx);
+    if (dry === "consume") {
+      return { flowMatched: true, reason: "pending_button_reply" };
+    }
+
+    if (isCoolingDown(ctx.conversationId)) {
+      return { flowMatched: true, reason: "chatbot_post_flow_cooldown" };
+    }
+
+    const activeFlows = await storage.getActiveChatbotFlows(ctx.userId);
     for (const flow of activeFlows) {
       const keywords = (flow.triggerKeywords as string[]) || [];
-      if (keywords.length > 0 && keywordMatches(message, keywords)) return true;
-      if (flow.triggerOnNewChat && isNewConversation) return true;
+      const triggerOnNewChat = flow.triggerOnNewChat ?? false;
+      const triggerChannels = (flow.triggerChannels as string[] | null) || [];
+
+      if (triggerChannels.length > 0 && !triggerChannels.includes(ctx.channel)) {
+        continue;
+      }
+
+      let shouldTrigger = false;
+      let triggerReason = "";
+
+      if (keywords.length > 0 && keywordMatches(ctx.message, keywords)) {
+        shouldTrigger = true;
+        triggerReason = `keyword_match:${flow.id}`;
+      }
+      if (!shouldTrigger && triggerOnNewChat && ctx.isNewConversation) {
+        shouldTrigger = true;
+        triggerReason = `new_chat_trigger:${flow.id}`;
+      }
+
+      if (shouldTrigger) {
+        return { flowMatched: true, reason: triggerReason };
+      }
     }
-    return false;
-  } catch {
-    return false;
+
+    return {
+      flowMatched: false,
+      reason: dry === "cleared" ? "pending_cleared_no_keyword_flow" : "no_flow_match",
+    };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { flowMatched: false, reason: `arbitration_error:${msg}` };
   }
 }
 

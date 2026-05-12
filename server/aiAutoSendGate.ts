@@ -14,6 +14,26 @@ export function normalizeBusinessAiMode(raw: string | undefined | null): "off" |
   return "off";
 }
 
+/** Inbound text suitable for Full Auto generation (excludes empty / media placeholders without transcription). */
+export function isSubstantiveTextForAiAutoSend(text: string | undefined | null): boolean {
+  const raw = (text || "").trim();
+  if (!raw) return false;
+  const t = raw.toLowerCase();
+  const placeholders = new Set([
+    "media received",
+    "sticker received",
+    "attachment",
+    "[media]",
+    "[image]",
+    "[video]",
+    "[audio]",
+    "[document]",
+  ]);
+  if (placeholders.has(t)) return false;
+  if (/^\[[^\]]+\]$/.test(t) && t.length < 40) return false;
+  return true;
+}
+
 export function toConversationMessages(history: ChatTurn[]) {
   return history.map((m) => ({
     direction: (m.role === "user" ? "inbound" : "outbound") as "inbound" | "outbound",

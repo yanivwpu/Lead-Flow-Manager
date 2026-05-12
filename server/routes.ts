@@ -82,6 +82,7 @@ import {
   businessKnowledgeFromAiRecord,
   detectStrongAutoIntent,
   evaluateFullAutoSend,
+  isSubstantiveTextForAiAutoSend,
   normalizeBusinessAiMode,
   shouldBypassAutoGuardsForInbound,
   type ChatTurn,
@@ -94,6 +95,7 @@ import { getMarketingOrigin } from "./urlOrigins";
 import { sendWelcomeEmail, sendContactFormEmail, sendDemoBookingNotification, sendDemoConfirmationEmail, sendSalespersonWelcomeEmail } from "./email";
 import bcrypt from "bcryptjs";
 import { dispatchInboundMessagingAutomation } from "./automationEventDispatcher";
+import { evaluateChatbotInboundArbitration } from "./chatbotEngine";
 import { runW2QualificationEngine, runServiceRoutingEngine } from "./workflowEngine";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import shopifyRoutes from "./shopifyRoutes";
@@ -8826,21 +8828,62 @@ export async function registerRoutes(
       // Use explicit language override from request, fall back to user's preferred language
       const validLanguages = ["en", "he", "es", "ar"];
       const requestLanguage = req.body.language;
-      const aiLanguage = (validLanguages.includes(requestLanguage) ? requestLanguage : req.user.language) as "en" | "he" | "es" | "ar" | undefined;
-      
-      const suggestion = await aiService.suggestReply(
-        userId,
-        chatId,
-        conversationHistory,
-        knowledge || undefined,
-        settings || undefined,
-        selectedTone,
-        aiLanguage,
-        contactContext || undefined
-      );
+      const aiLanguage = (validLanguages.includes(requestLanguage) ? requestLanguage : req.user.language) as
+        | "en"
+        | "he"
+        | "es"
+        | "ar"
+        | undefined;
 
       const businessMode = normalizeBusinessAiMode((settings as any)?.aiMode);
       const wantsAuto = requestedMode === "auto";
+
+      const userInboundTurns = historyTurns.filter((m) => m.role === "user").length;
+      const isNewConversationHeuristic = userInboundTurns <= 1;
+
+      let chatbotArb = { flowMatched: false as boolean, reason: "skipped_no_chat_id" as string };
+      if (chatId) {
+        try {
+          const convArb = await storage.getConversation(chatId);
+          if (convArb?.contactId) {
+            chatbotArb = await evaluateChatbotInboundArbitration({
+              userId,
+              contactId: convArb.contactId,
+              conversationId: chatId,
+              channel: convArb.channel || "whatsapp",
+              message: lastInbound,
+              isNewConversation: isNewConversationHeuristic,
+            });
+          } else {
+            chatbotArb = { flowMatched: false, reason: "conversation_missing_contact" };
+          }
+        } catch {
+          chatbotArb = { flowMatched: false, reason: "arbitration_fetch_failed" };
+        }
+      }
+
+      const substantiveInbound = isSubstantiveTextForAiAutoSend(lastInbound);
+      const skipAiModelForAutoNonText =
+        wantsAuto && !substantiveInbound && !forceAutoBypass;
+
+      let suggestion: { suggestion?: string; confidence?: number } = {
+        suggestion: "",
+        confidence: 0,
+      };
+
+      if (!skipAiModelForAutoNonText) {
+        suggestion = await aiService.suggestReply(
+          userId,
+          chatId,
+          conversationHistory,
+          knowledge || undefined,
+          settings || undefined,
+          selectedTone,
+          aiLanguage,
+          contactContext || undefined
+        );
+      }
+
       let autoSendAllowed = false;
       let autoSendReason = wantsAuto ? "not_evaluated" : "not_requested";
       let contactIdForLog: string | null = null;
@@ -8859,19 +8902,41 @@ export async function registerRoutes(
         const history = conversationHistory as Array<{ role: string; content?: string }>;
         const inboundContents = history.filter((m) => m.role === "user").map((m) => m.content || "");
         const joinedInbound = inboundContents.join("\n");
-        const lastInbound = inboundContents[inboundContents.length - 1]?.trim() || "";
-        autoSendStrongIntent = detectStrongAutoIntent(joinedInbound, lastInbound);
+        const lastInboundForIntent = inboundContents[inboundContents.length - 1]?.trim() || "";
+        autoSendStrongIntent = detectStrongAutoIntent(joinedInbound, lastInboundForIntent);
 
-        const scoringKnowledge = businessKnowledgeFromAiRecord(knowledge as any);
-        const gate = evaluateFullAutoSend({
-          businessMode,
-          conversationHistory,
-          suggestion: suggestion.suggestion || "",
-          confidence: typeof suggestion.confidence === "number" ? suggestion.confidence : 0,
-          businessKnowledge: scoringKnowledge,
+        if (skipAiModelForAutoNonText) {
+          autoSendAllowed = false;
+          autoSendReason = chatbotArb.flowMatched
+            ? "non_text_inbound_chatbot_active"
+            : "non_text_inbound";
+        } else if (chatbotArb.flowMatched) {
+          autoSendAllowed = false;
+          autoSendReason = "chatbot_flow_active";
+        } else {
+          const scoringKnowledge = businessKnowledgeFromAiRecord(knowledge as any);
+          const gate = evaluateFullAutoSend({
+            businessMode,
+            conversationHistory,
+            suggestion: suggestion.suggestion || "",
+            confidence: typeof suggestion.confidence === "number" ? suggestion.confidence : 0,
+            businessKnowledge: scoringKnowledge,
+          });
+          autoSendAllowed = gate.allowed;
+          autoSendReason = gate.reason;
+        }
+
+        console.info("[AI-AUTO-ARBITRATION]", {
+          flowMatched: chatbotArb.flowMatched,
+          aiAutoSuppressed:
+            (wantsAuto && chatbotArb.flowMatched && !autoSendAllowed) ||
+            (wantsAuto && skipAiModelForAutoNonText),
+          reason: autoSendReason,
+          chatbotReason: chatbotArb.reason,
+          substantiveInbound,
+          skipAiModelForAutoNonText,
         });
-        autoSendAllowed = gate.allowed;
-        autoSendReason = gate.reason;
+
         console.info("[AI-AUTO]", {
           userId,
           chatId: chatId ?? null,
@@ -8883,8 +8948,6 @@ export async function registerRoutes(
           confidence: suggestion.confidence,
           strongIntent: autoSendStrongIntent,
           forceBypass: forceAutoBypass,
-          inboundCount: gate.inboundCount,
-          missingRequiredLen: gate.missingRequiredLen,
           suggestionLen: (suggestion.suggestion || "").trim().length,
           hasBusinessKnowledge: !!knowledgeRaw,
           fairUseStatus: fairUse.status,
@@ -8892,16 +8955,22 @@ export async function registerRoutes(
         console.info("[AI-AUTO] triggered", autoSendAllowed);
         console.info("[AI-AUTO] blocked", autoSendAllowed ? "(none)" : autoSendReason);
       }
-      
+
       // Track usage
-      await storage.incrementAiUsage(userId, 'repliesSuggested');
-      
-      res.json({ 
-        ...suggestion, 
+      await storage.incrementAiUsage(userId, "repliesSuggested");
+
+      res.json({
+        ...suggestion,
         status: fairUse.status,
         shouldDowngradeToSuggestOnly: fairUse.shouldDowngradeToSuggestOnly,
         autoSendAllowed,
         autoSendReason,
+        flowMatched: chatbotArb.flowMatched,
+        aiAutoSuppressed:
+          wantsAuto &&
+          (!autoSendAllowed) &&
+          (chatbotArb.flowMatched || skipAiModelForAutoNonText),
+        suppressionReason: wantsAuto ? autoSendReason : undefined,
         ...(wantsAuto ? { autoSendStrongIntent } : {}),
       });
     } catch (error) {

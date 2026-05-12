@@ -877,8 +877,24 @@ class ChannelService {
 
     // Evaluate chatbot trigger once — used both to fire the flow and to let
     // callers gate their own outbound messages without an extra DB round-trip.
-    const { willChatbotTrigger, triggerChatbotFlows } = await import('./chatbotEngine');
-    const chatbotWillFire = await willChatbotTrigger(userId, content, isNewConversation);
+    const { evaluateChatbotInboundArbitration, triggerChatbotFlows } = await import('./chatbotEngine');
+    const chatbotArb = await evaluateChatbotInboundArbitration({
+      userId,
+      contactId: contact.id,
+      conversationId: conversation.id,
+      channel,
+      message: content,
+      isNewConversation,
+    });
+    const chatbotWillFire = chatbotArb.flowMatched;
+    console.info("[INBOUND_AUTOMATION]", {
+      tag: "channel_inbound",
+      conversationId: conversation.id,
+      contactId: contact.id,
+      flowMatched: chatbotArb.flowMatched,
+      aiAutoSuppressed: chatbotArb.flowMatched,
+      reason: chatbotArb.reason,
+    });
 
     // Trigger chatbot flows asynchronously (does not block webhook response)
     triggerChatbotFlows({
