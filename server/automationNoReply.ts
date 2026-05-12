@@ -1,0 +1,134 @@
+import type { NoReplyJob, Workflow } from "@shared/schema";
+import { storage } from "./storage";
+import { subscriptionService } from "./subscriptionService";
+import { executeWorkflowActions } from "./workflowEngine";
+import { resolveLegacyChatForContact } from "./automationEventDispatcher";
+
+function noReplyWorkflowMatchesConversation(workflow: Workflow, conversationChannel: string): boolean {
+  const tc = workflow.triggerConditions as {
+    conditions?: { type: string; value: string }[];
+    channel?: string;
+  };
+  const arr = tc?.conditions;
+  if (arr && arr.length > 0) {
+    const ch = arr.find((c) => c.type === "channel");
+    if (ch?.value) {
+      return ch.value === conversationChannel;
+    }
+  }
+  if (tc?.channel && tc.channel !== "any") {
+    return tc.channel === conversationChannel;
+  }
+  return true;
+}
+
+/** Cancel pending no-reply timers when the customer sends an inbound message. */
+export async function onInboundMessageForNoReplyTimers(contactId: string): Promise<void> {
+  await storage.cancelPendingNoReplyJobsForContact(contactId);
+}
+
+/**
+ * After a successful team outbound, (re)schedule durable no-reply workflow checks.
+ * Prior pending jobs for the contact are cancelled first.
+ */
+export async function scheduleNoReplyJobsAfterTeamOutbound(params: {
+  userId: string;
+  contactId: string;
+  conversationId: string;
+  channel: string;
+}): Promise<void> {
+  const { userId, contactId, conversationId, channel } = params;
+  const limits = await subscriptionService.getUserLimits(userId);
+  if (!limits?.workflowsEnabled) return;
+
+  const contact = await storage.getContact(contactId);
+  if (!contact) return;
+
+  await storage.cancelPendingNoReplyJobsForContact(contactId);
+
+  const workflows = await storage.getActiveWorkflowsByTrigger(userId, "no_reply");
+  if (workflows.length === 0) return;
+
+  const anchorOutboundAt = new Date();
+  const snapshotLastInboundAt = contact.lastIncomingAt ?? null;
+  let scheduled = 0;
+
+  for (const wf of workflows) {
+    if (!noReplyWorkflowMatchesConversation(wf, channel)) continue;
+    const tc = wf.triggerConditions as { durationMinutes?: number; durationHours?: number };
+    const mins = Number(tc.durationMinutes);
+    const hours = Number(tc.durationHours);
+    const delayMs =
+      Number.isFinite(mins) && mins > 0
+        ? mins * 60_000
+        : Number.isFinite(hours) && hours > 0
+          ? hours * 3_600_000
+          : 24 * 3_600_000;
+    const runAt = new Date(Date.now() + delayMs);
+    const idempotencyKey = `nr:${wf.id}:${contactId}:${anchorOutboundAt.getTime()}:${scheduled}`;
+    try {
+      await storage.createNoReplyJob({
+        userId,
+        workflowId: wf.id,
+        contactId,
+        conversationId,
+        chatId: null,
+        runAt,
+        status: "pending",
+        idempotencyKey,
+        anchorOutboundAt,
+        snapshotLastInboundAt,
+        scheduledReason: "team_outbound",
+        stuckRecoveries: 0,
+        failCount: 0,
+        maxFailRetries: 3,
+      });
+      scheduled++;
+    } catch (e: any) {
+      if (!String(e?.message || "").includes("duplicate") && e?.code !== "23505") {
+        console.warn("[NoReplySchedule] insert failed:", e?.message || e);
+      }
+    }
+  }
+
+  if (scheduled > 0) {
+    console.log(
+      JSON.stringify({
+        tag: "[NoReplyJobsScheduled]",
+        userId,
+        contactId,
+        scheduled,
+      })
+    );
+  }
+}
+
+export async function processNoReplyJob(job: NoReplyJob): Promise<void> {
+  const wf = await storage.getWorkflow(job.workflowId);
+  if (!wf || !wf.isActive) {
+    await storage.markNoReplyJobSkipped(job.id, "workflow_missing_or_inactive");
+    return;
+  }
+  const contact = await storage.getContact(job.contactId);
+  if (!contact) {
+    await storage.markNoReplyJobSkipped(job.id, "contact_missing");
+    return;
+  }
+  if (contact.lastIncomingAt && contact.lastIncomingAt.getTime() > job.anchorOutboundAt.getTime()) {
+    await storage.markNoReplyJobSkipped(job.id, "customer_replied_after_anchor");
+    return;
+  }
+  const chat = await resolveLegacyChatForContact(contact, job.userId);
+  if (!chat) {
+    await storage.markNoReplyJobSkipped(job.id, "no_legacy_chat");
+    return;
+  }
+  await executeWorkflowActions(
+    wf,
+    chat,
+    { trigger: "no_reply", jobId: job.id, workflowId: wf.id },
+    contact,
+    job.conversationId ?? undefined
+  );
+  await storage.markNoReplyJobCompleted(job.id);
+}

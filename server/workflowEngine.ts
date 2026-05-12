@@ -18,8 +18,13 @@ export interface WorkflowAction {
 export interface WorkflowCondition {
   keywords?: string[];
   tags?: string[];
+  /** Target pipeline stage for `pipeline_change` workflows (UI: triggerToStage) */
+  stage?: string;
   assignmentRoundRobin?: boolean;
   noReplyMinutes?: number;
+  durationHours?: number;
+  durationMinutes?: number;
+  conditions?: { type: string; value: string }[];
 }
 
 async function isTemplateWorkflowAllowed(workflow: Workflow): Promise<boolean> {
@@ -57,10 +62,13 @@ async function dualWriteContact(
   contact: Contact | undefined,
   contactUpdates: Partial<Contact>,
   chat: Chat,
-  chatUpdates: Parameters<typeof storage.updateChat>[1]
+  chatUpdates: Parameters<typeof storage.updateChat>[1],
+  opts?: { skipAutomationHooks?: boolean }
 ) {
   if (contact) {
-    await storage.updateContact(contact.id, contactUpdates).catch(() => {});
+    await storage
+      .updateContact(contact.id, contactUpdates, { skipAutomationHooks: opts?.skipAutomationHooks === true })
+      .catch(() => {});
     const keys = Object.keys(contactUpdates);
     if (keys.some((k) => ["tag", "pipelineStage", "name", "email", "phone"].includes(k))) {
       scheduleHubSpotAutoSync(contact.userId, contact.id);
@@ -102,7 +110,8 @@ export async function executeWorkflowActions(
           contact,
           { tag: action.tag },
           chat,
-          { tag: action.tag }
+          { tag: action.tag },
+          { skipAutomationHooks: true }
         );
         executedActions.push({ type: "tag", value: action.tag });
         continue;
@@ -119,7 +128,8 @@ export async function executeWorkflowActions(
                 contact,
                 { assignedTo: assignee.memberId ?? null },
                 chat,
-                { assignedTo: assignee.memberId }
+                { assignedTo: assignee.memberId },
+                { skipAutomationHooks: true }
               );
               executedActions.push({ type: "assign", value: assignee.memberId || "unassigned" });
             }
@@ -128,7 +138,8 @@ export async function executeWorkflowActions(
               contact,
               { assignedTo: action.value },
               chat,
-              { assignedTo: action.value }
+              { assignedTo: action.value },
+              { skipAutomationHooks: true }
             );
             executedActions.push(action);
           }
@@ -140,7 +151,8 @@ export async function executeWorkflowActions(
               contact,
               { tag: action.value },
               chat,
-              { tag: action.value }
+              { tag: action.value },
+              { skipAutomationHooks: true }
             );
             executedActions.push(action);
           }
@@ -161,7 +173,8 @@ export async function executeWorkflowActions(
               contact,
               { pipelineStage: action.value },
               chat,
-              { pipelineStage: action.value }
+              { pipelineStage: action.value },
+              { skipAutomationHooks: true }
             );
             executedActions.push(action);
           }
@@ -179,7 +192,8 @@ export async function executeWorkflowActions(
               contact,
               { notes: newNote },
               chat,
-              { notes: newNote }
+              { notes: newNote },
+              { skipAutomationHooks: true }
             );
             executedActions.push(action);
           }
@@ -195,7 +209,8 @@ export async function executeWorkflowActions(
               contact,
               { followUpDate, followUp },
               chat,
-              { followUpDate, followUp }
+              { followUpDate, followUp },
+              { skipAutomationHooks: true }
             );
             executedActions.push(action);
           }
@@ -272,7 +287,7 @@ async function persistW3CalendlySentAt(contact: Contact | undefined, chat: Chat)
   if (contact) {
     const prev = (contact.customFields as Record<string, unknown> | null) || {};
     await storage
-      .updateContact(contact.id, { customFields: { ...prev, [W3_CALENDLY_SENT_AT_KEY]: ts } })
+      .updateContact(contact.id, { customFields: { ...prev, [W3_CALENDLY_SENT_AT_KEY]: ts } }, { skipAutomationHooks: true })
       .catch(() => {});
   } else {
     const prev = ((chat as any).customFields as Record<string, unknown> | null) || {};
@@ -369,31 +384,45 @@ async function executeW3CalendlyKeywordResponse(
         forceChannel = conv.channel as Channel;
       }
     }
-    const sendRes = await channelService.sendMessage({
-      userId: workflow.userId,
-      contactId: contact.id,
-      content: body,
-      contentType: "text",
-      ...(forceChannel ? { forceChannel, suppressFallback: true as const } : {}),
-      enforceWhatsAppCustomerServiceWindow: false,
-    });
-    if (sendRes.success) {
+    const { withAutomationSendDedup } = await import("./automationSendGuard");
+    const dedupKey = `w3cal_send:${workflow.userId}:${contact.id}:${body.slice(0, 120)}`;
+    const sendOutcome = await withAutomationSendDedup(dedupKey, workflow.userId, contact.id, async () =>
+      channelService.sendMessage({
+        userId: workflow.userId,
+        contactId: contact.id,
+        content: body,
+        contentType: "text",
+        ...(forceChannel ? { forceChannel, suppressFallback: true as const } : {}),
+        enforceWhatsAppCustomerServiceWindow: false,
+      })
+    );
+    if (sendOutcome.ok && sendOutcome.result.success) {
       sent = true;
+    } else if (!sendOutcome.ok) {
+      console.log(JSON.stringify({ tag: "[W3+Calendly]", deduped: true, contactId: contact.id }));
     } else {
-      console.warn(`[W3+Calendly] channelService.sendMessage failed contact=${contact.id}: ${sendRes.error}`);
+      console.warn(`[W3+Calendly] channelService.sendMessage failed contact=${contact.id}: ${sendOutcome.result.error}`);
     }
   } else {
     const raw = ((contact?.phone as string | undefined) || chat.whatsappPhone || "").toString();
     const digits = raw.replace(/\D/g, "");
     if (digits.length >= 10) {
       try {
-        const user = await storage.getUser(workflow.userId);
-        if (user?.whatsappProvider === "meta") {
-          await sendMetaWhatsAppMessage(workflow.userId, digits, body);
+        const { withAutomationSendDedup } = await import("./automationSendGuard");
+        const dedupKey = `w3cal_fallback:${workflow.userId}:${digits}:${body.slice(0, 120)}`;
+        const out = await withAutomationSendDedup(dedupKey, workflow.userId, contact?.id ?? null, async () => {
+          const user = await storage.getUser(workflow.userId);
+          if (user?.whatsappProvider === "meta") {
+            await sendMetaWhatsAppMessage(workflow.userId, digits, body);
+          } else {
+            await sendUserWhatsAppMessage(workflow.userId, digits, body);
+          }
+        });
+        if (out.ok) {
+          sent = true;
         } else {
-          await sendUserWhatsAppMessage(workflow.userId, digits, body);
+          console.log(JSON.stringify({ tag: "[W3+Calendly]", deduped: true, digits }));
         }
-        sent = true;
       } catch (e: any) {
         console.warn(`[W3+Calendly] WhatsApp fallback send failed: ${e?.message || e}`);
       }
@@ -607,7 +636,7 @@ export async function runW2QualificationEngine(
     const merged = { ...existingCustomFields, ...fieldUpdates };
     try {
       if (contact) {
-        await storage.updateContact(contact.id, { customFields: merged }).catch(() => {});
+        await storage.updateContact(contact.id, { customFields: merged }, { skipAutomationHooks: true }).catch(() => {});
       }
       await storage.updateChat(chat.id, { customFields: merged } as any).catch(() => {});
     } catch (e) {
@@ -651,7 +680,7 @@ export async function runW2QualificationEngine(
         const cfWithTimestamp = { ...cf, _lastQualificationAskedAt: new Date().toISOString() };
         try {
           if (contact) {
-            await storage.updateContact(contact.id, { customFields: cfWithTimestamp }).catch(() => {});
+            await storage.updateContact(contact.id, { customFields: cfWithTimestamp }, { skipAutomationHooks: true }).catch(() => {});
           }
           await storage.updateChat(chat.id, { customFields: cfWithTimestamp } as any).catch(() => {});
         } catch (e) { /* non-critical */ }
@@ -759,7 +788,7 @@ export async function runServiceRoutingEngine(
           };
           try {
             if (contact) {
-              await storage.updateContact(contact.id, { customFields: cfAfterRoute }).catch(() => {});
+              await storage.updateContact(contact.id, { customFields: cfAfterRoute }, { skipAutomationHooks: true }).catch(() => {});
             }
             await storage.updateChat(chat.id, { customFields: cfAfterRoute } as any).catch(() => {});
           } catch { /* non-critical */ }
@@ -772,7 +801,7 @@ export async function runServiceRoutingEngine(
           const cfDeclined = { ...cf, _pendingServiceOffer: null };
           try {
             if (contact) {
-              await storage.updateContact(contact.id, { customFields: cfDeclined }).catch(() => {});
+              await storage.updateContact(contact.id, { customFields: cfDeclined }, { skipAutomationHooks: true }).catch(() => {});
             }
             await storage.updateChat(chat.id, { customFields: cfDeclined } as any).catch(() => {});
           } catch { /* non-critical */ }
@@ -804,7 +833,7 @@ export async function runServiceRoutingEngine(
       };
       try {
         if (contact) {
-          await storage.updateContact(contact.id, { customFields: cfWithOffer }).catch(() => {});
+          await storage.updateContact(contact.id, { customFields: cfWithOffer }, { skipAutomationHooks: true }).catch(() => {});
         }
         await storage.updateChat(chat.id, { customFields: cfWithOffer } as any).catch(() => {});
       } catch { /* non-critical */ }
@@ -816,6 +845,57 @@ export async function runServiceRoutingEngine(
   } catch (error) {
     console.error("[ServiceRoutingEngine] Error:", error);
     return empty;
+  }
+}
+
+export async function triggerPipelineChangeWorkflows(
+  userId: string,
+  chat: Chat,
+  oldStage: string,
+  newStage: string,
+  contact?: Contact,
+  conversationId?: string
+): Promise<void> {
+  try {
+    const limits = await subscriptionService.getUserLimits(userId);
+    if (!limits?.workflowsEnabled) {
+      return;
+    }
+    const workflows = await storage.getActiveWorkflowsByTrigger(userId, "pipeline_change");
+    for (const workflow of workflows) {
+      const conditions = workflow.triggerConditions as WorkflowCondition;
+      const targetStage = conditions?.stage;
+      const matches =
+        !targetStage ||
+        targetStage === "any" ||
+        targetStage.trim() === "" ||
+        targetStage === newStage;
+      if (!matches) continue;
+
+      console.log(
+        JSON.stringify({
+          tag: "[WorkflowTrigger]",
+          trigger: "pipeline_change",
+          workflowId: workflow.id,
+          workflowName: workflow.name,
+          oldStage,
+          newStage,
+        })
+      );
+      await executeWorkflowActions(
+        workflow,
+        chat,
+        {
+          trigger: "pipeline_change",
+          oldStage,
+          newStage,
+        },
+        contact,
+        conversationId
+      );
+    }
+  } catch (error) {
+    console.error("Error triggering pipeline change workflows:", error);
   }
 }
 
@@ -836,12 +916,21 @@ export async function triggerTagChangeWorkflows(
     for (const workflow of workflows) {
       const conditions = workflow.triggerConditions as WorkflowCondition;
       const targetTags = conditions?.tags || [];
-      
+
       if (targetTags.length === 0 || targetTags.includes(newTag)) {
-        await executeWorkflowActions(workflow, chat, { 
-          trigger: "tag_change", 
+        console.log(
+          JSON.stringify({
+            tag: "[WorkflowTrigger]",
+            trigger: "tag_change",
+            workflowId: workflow.id,
+            workflowName: workflow.name,
+            newTag,
+          })
+        );
+        await executeWorkflowActions(workflow, chat, {
+          trigger: "tag_change",
           oldTag,
-          newTag 
+          newTag,
         }, contact, conversationId);
       }
     }

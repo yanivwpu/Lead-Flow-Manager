@@ -11,7 +11,7 @@ import {
   type WhatsAppMessage,
 } from "./userTwilio";
 import { storage } from "./storage";
-import { triggerNewChatWorkflows, triggerKeywordWorkflows } from "./workflowEngine";
+import { dispatchInboundMessagingAutomation } from "./automationEventDispatcher";
 import { subscriptionService } from "./subscriptionService";
 
 const DECRYPT_KEYS = [
@@ -174,16 +174,15 @@ async function handleInviteeCreated(
 
   const updatedChat = await storage.getChat(chat.id);
   if (updatedChat) {
-    if (isNewChat) {
-      triggerNewChatWorkflows(userId, updatedChat, contact, conversation.id).catch((err) =>
-        console.error("[Calendly] New chat workflow error:", err)
-      );
-    }
-    if (!chatbotWillFire) {
-      triggerKeywordWorkflows(userId, updatedChat, content, contact, conversation.id).catch((err) =>
-        console.error("[Calendly] Keyword workflow error:", err)
-      );
-    }
+    dispatchInboundMessagingAutomation({
+      userId,
+      isNewChat,
+      updatedChat,
+      messageBody: content,
+      contact,
+      conversationId: conversation.id,
+      skipKeywordWorkflows: chatbotWillFire,
+    }).catch((err) => console.error("[Calendly] workflow dispatch error:", err));
   }
 }
 
@@ -212,7 +211,14 @@ async function handleInviteeCanceled(userId: string, body: Record<string, unknow
     .limit(1);
   const chat = chatRows[0];
   if (chat) {
-    triggerKeywordWorkflows(userId, chat, "Booking canceled", contact, undefined).catch(() => {});
+    dispatchInboundMessagingAutomation({
+      userId,
+      isNewChat: false,
+      updatedChat: chat,
+      messageBody: "Booking canceled",
+      contact,
+      conversationId: undefined,
+    }).catch(() => {});
   }
 }
 

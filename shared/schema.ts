@@ -317,7 +317,7 @@ export const workflows = pgTable("workflows", {
   name: text("name").notNull(),
   description: text("description"),
   isActive: boolean("is_active").default(true),
-  triggerType: text("trigger_type").notNull(), // 'new_chat', 'keyword', 'no_reply', 'tag_change'
+  triggerType: text("trigger_type").notNull(), // 'new_chat', 'keyword', 'no_reply', 'tag_change', 'pipeline_change'
   triggerConditions: jsonb("trigger_conditions").notNull().default(sql`'{}'::jsonb`), // JSON with conditions
   actions: jsonb("actions").notNull().default(sql`'[]'::jsonb`), // Array of actions to perform
   executionCount: integer("execution_count").default(0),
@@ -1565,12 +1565,84 @@ export const flowJobs = pgTable("flow_jobs", {
   conversationId: varchar("conversation_id").notNull(),
   nodeId: varchar("node_id").notNull(), // the node to resume execution from after the delay
   runAt: timestamp("run_at").notNull(),
-  status: varchar("status").notNull().default("pending"), // pending | running | completed | failed
-  payload: jsonb("payload").notNull().default({}), // serialized TriggerContext
+  status: varchar("status").notNull().default("pending"), // pending | running | completed | failed | skipped
+  payload: jsonb("payload").notNull().default({}), // serialized TriggerContext (+ optional _stopReplySnapshot)
   errorMessage: text("error_message"),
+  /** When status became running — used for stuck-running recovery */
+  lockedAt: timestamp("locked_at"),
+  /** contact.lastIncomingAt at schedule time — stop-on-reply guard for delayed chatbot sends */
+  snapshotLastInboundAt: timestamp("snapshot_last_inbound_at"),
+  /** Incremented when a stuck running job is reclaimed for retry */
+  stuckRecoveries: integer("stuck_recoveries").notNull().default(0),
+  /** Incremented when execution throws before terminal failure */
+  failCount: integer("fail_count").notNull().default(0),
+  maxFailRetries: integer("max_fail_retries").notNull().default(3),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
 export const insertFlowJobSchema = createInsertSchema(flowJobs).omit({ id: true, createdAt: true });
 export type FlowJob = typeof flowJobs.$inferSelect;
 export type InsertFlowJob = z.infer<typeof insertFlowJobSchema>;
+
+// ─── No-reply workflow jobs (CRM workflows triggerType = no_reply) ─────────────
+export const noReplyJobs = pgTable("no_reply_jobs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  workflowId: varchar("workflow_id").notNull().references(() => workflows.id, { onDelete: "cascade" }),
+  contactId: varchar("contact_id").notNull().references(() => contacts.id, { onDelete: "cascade" }),
+  conversationId: varchar("conversation_id"),
+  chatId: varchar("chat_id"),
+  runAt: timestamp("run_at").notNull(),
+  status: varchar("status").notNull().default("pending"), // pending | running | completed | failed | cancelled | skipped
+  idempotencyKey: text("idempotency_key").notNull().unique(),
+  /** Monotonic anchor: schedule no-reply relative to this outbound moment */
+  anchorOutboundAt: timestamp("anchor_outbound_at").notNull(),
+  /** contact.lastIncomingAt when job was scheduled (secondary guard) */
+  snapshotLastInboundAt: timestamp("snapshot_last_inbound_at"),
+  scheduledReason: text("scheduled_reason"),
+  stuckRecoveries: integer("stuck_recoveries").notNull().default(0),
+  failCount: integer("fail_count").notNull().default(0),
+  maxFailRetries: integer("max_fail_retries").notNull().default(3),
+  lockedAt: timestamp("locked_at"),
+  lastError: text("last_error"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertNoReplyJobSchema = createInsertSchema(noReplyJobs).omit({ id: true, createdAt: true, updatedAt: true });
+export type NoReplyJob = typeof noReplyJobs.$inferSelect;
+export type InsertNoReplyJob = z.infer<typeof insertNoReplyJobSchema>;
+
+// ─── Durable timer sends (W2 qualification / routing follow-ups) ───────────────
+export const automationTimerJobs = pgTable("automation_timer_jobs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  kind: text("kind").notNull(), // w2_qualification | w2_routing
+  runAt: timestamp("run_at").notNull(),
+  status: varchar("status").notNull().default("pending"),
+  dedupKey: text("dedup_key").notNull().unique(),
+  payload: jsonb("payload").notNull().default(sql`'{}'::jsonb`),
+  snapshotLastInboundAt: timestamp("snapshot_last_inbound_at"),
+  stuckRecoveries: integer("stuck_recoveries").notNull().default(0),
+  failCount: integer("fail_count").notNull().default(0),
+  maxFailRetries: integer("max_fail_retries").notNull().default(3),
+  lockedAt: timestamp("locked_at"),
+  lastError: text("last_error"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertAutomationTimerJobSchema = createInsertSchema(automationTimerJobs).omit({ id: true, createdAt: true });
+export type AutomationTimerJob = typeof automationTimerJobs.$inferSelect;
+export type InsertAutomationTimerJob = z.infer<typeof insertAutomationTimerJobSchema>;
+
+// ─── Idempotency keys for automation sends ─────────────────────────────────────
+export const automationSendDedup = pgTable("automation_send_dedup", {
+  dedupKey: text("dedup_key").primaryKey(),
+  userId: varchar("user_id").notNull(),
+  contactId: varchar("contact_id"),
+  status: text("status").notNull().default("locked"), // locked | completed | skipped
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export type AutomationSendDedup = typeof automationSendDedup.$inferSelect;
+export type InsertAutomationSendDedup = typeof automationSendDedup.$inferInsert;

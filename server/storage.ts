@@ -46,6 +46,8 @@ import {
   type GhlEventDedup, type InsertGhlEventDedup,
   type GhlSyncFailure, type InsertGhlSyncFailure, ghlSyncFailures,
   type FlowJob, type InsertFlowJob,
+  type NoReplyJob, type InsertNoReplyJob,
+  type AutomationTimerJob, type InsertAutomationTimerJob,
   aiSettings, aiBusinessKnowledge, aiUsage, aiLeadScores,
   userAutomationTemplates, presetCampaigns, campaignEnrollments, campaignStepEvents, templateUsageAnalytics,
   templates as templatesTable, templateEntitlements, realtorOnboardingSubmissions,
@@ -55,8 +57,8 @@ import { computeConversationReplyWindowStatus } from "@shared/conversationReplyW
 import type { RetargetEligibleContactRow } from "@shared/retargetEligibleContact";
 import { deriveRetargetReEngagementApiFields } from "@shared/reEngagement";
 import { db } from "../drizzle/db";
-import { users, chats, registeredPhones, messageUsage, conversationWindows, teamMembers, workflows, workflowExecutions, recurringReminders, webhooks, webhookDeliveries, integrations, messageTemplates, templateCarouselMediaDefaults, templateSends, dripCampaigns, dripSteps, dripEnrollments, dripSends, chatbotFlows, chatbotSessions, salespeople, demoBookings, salesConversions, adminSettings, contacts, conversations, messages, activityEvents, channelSettings, supportTickets, partners, commissions, agreementAcceptances, contactNotes, appointments, flowJobs, campaignEnrollments, type InsertConversationWindow, type ConversationWindow } from "@shared/schema";
-import { eq, and, lte, sql, isNotNull, isNull, asc, desc, gte, sum, gt, or, like, ilike, ne, inArray, notInArray } from "drizzle-orm";
+import { users, chats, registeredPhones, messageUsage, conversationWindows, teamMembers, workflows, workflowExecutions, recurringReminders, webhooks, webhookDeliveries, integrations, messageTemplates, templateCarouselMediaDefaults, templateSends, dripCampaigns, dripSteps, dripEnrollments, dripSends, chatbotFlows, chatbotSessions, salespeople, demoBookings, salesConversions, adminSettings, contacts, conversations, messages, activityEvents, channelSettings, supportTickets, partners, commissions, agreementAcceptances, contactNotes, appointments, flowJobs, noReplyJobs, automationTimerJobs, automationSendDedup, campaignEnrollments, type InsertConversationWindow, type ConversationWindow } from "@shared/schema";
+import { eq, and, lte, sql, isNotNull, isNull, asc, desc, gte, sum, gt, or, like, ilike, ne, inArray, notInArray, lt } from "drizzle-orm";
 
 /** Columns always present on legacy Neon `public.users`; avoids Drizzle hydrating rows when DB lacks newer schema columns (42703). */
 type UsersAuthCoreRow = {
@@ -153,6 +155,11 @@ function logUserSessionLoadFailure(phase: string, userId: string, err: unknown):
     }),
   );
 }
+
+export type UpdateContactOptions = {
+  /** When true, suppress automation dispatch (tag/stage) to avoid workflow recursion */
+  skipAutomationHooks?: boolean;
+};
 
 export interface IStorage {
   // User methods
@@ -318,7 +325,7 @@ export interface IStorage {
   getContact(id: string): Promise<Contact | undefined>;
   getContactByChannelId(userId: string, channel: Channel, channelId: string): Promise<Contact | undefined>;
   createContact(contact: InsertContact): Promise<Contact>;
-  updateContact(id: string, updates: Partial<Contact>): Promise<Contact | undefined>;
+  updateContact(id: string, updates: Partial<Contact>, options?: UpdateContactOptions): Promise<Contact | undefined>;
   deleteContact(id: string): Promise<void>;
   mergeContacts(targetId: string, sourceId: string): Promise<Contact>;
   searchContacts(userId: string, query: string, limit?: number): Promise<Contact[]>;
@@ -443,10 +450,35 @@ export interface IStorage {
   resetTemplateForUser(userId: string, templateId: string): Promise<void>;
 
   // Flow Job methods (durable Wait/delay scheduling)
-  createFlowJob(job: import("@shared/schema").InsertFlowJob): Promise<import("@shared/schema").FlowJob>;
-  claimPendingFlowJobs(limit?: number): Promise<import("@shared/schema").FlowJob[]>;
+  createFlowJob(job: InsertFlowJob): Promise<FlowJob>;
+  recoverStuckFlowJobs(): Promise<{ requeued: number; failedTerminal: number }>;
+  claimPendingFlowJobs(limit?: number): Promise<FlowJob[]>;
   markFlowJobCompleted(id: string): Promise<void>;
   markFlowJobFailed(id: string, errorMessage: string): Promise<void>;
+  markFlowJobSkipped(id: string, reason: string): Promise<void>;
+
+  // No-reply workflow jobs
+  cancelPendingNoReplyJobsForContact(contactId: string): Promise<number>;
+  createNoReplyJob(job: InsertNoReplyJob): Promise<NoReplyJob>;
+  recoverStuckNoReplyJobs(): Promise<{ requeued: number; failedTerminal: number }>;
+  claimPendingNoReplyJobs(limit?: number): Promise<NoReplyJob[]>;
+  markNoReplyJobCompleted(id: string): Promise<void>;
+  markNoReplyJobFailed(id: string, errorMessage: string): Promise<void>;
+  markNoReplyJobSkipped(id: string, reason: string): Promise<void>;
+  markNoReplyJobCancelled(id: string): Promise<void>;
+
+  // Durable automation timers (e.g. W2 qualification / routing)
+  createAutomationTimerJob(job: InsertAutomationTimerJob): Promise<AutomationTimerJob>;
+  cancelPendingAutomationTimerJobsForUserKinds(userId: string, kinds: string[]): Promise<number>;
+  recoverStuckAutomationTimerJobs(): Promise<{ requeued: number; failedTerminal: number }>;
+  claimPendingAutomationTimerJobs(limit?: number): Promise<AutomationTimerJob[]>;
+  markAutomationTimerJobCompleted(id: string): Promise<void>;
+  markAutomationTimerJobFailed(id: string, errorMessage: string): Promise<void>;
+  markAutomationTimerJobSkipped(id: string, reason: string): Promise<void>;
+
+  // Automation outbound send idempotency
+  tryAcquireAutomationSendDedup(dedupKey: string, userId: string, contactId?: string | null): Promise<boolean>;
+  completeAutomationSendDedup(dedupKey: string, status: "completed" | "skipped"): Promise<void>;
 }
 
 export class DbStorage implements IStorage {
@@ -2055,12 +2087,41 @@ export class DbStorage implements IStorage {
     return result[0];
   }
 
-  async updateContact(id: string, updates: Partial<Contact>): Promise<Contact | undefined> {
+  async updateContact(
+    id: string,
+    updates: Partial<Contact>,
+    options?: UpdateContactOptions
+  ): Promise<Contact | undefined> {
+    const before = await this.getContact(id);
+    if (!before) {
+      const result = await db.update(contacts)
+        .set({ ...updates, updatedAt: new Date() })
+        .where(eq(contacts.id, id))
+        .returning();
+      return result[0];
+    }
+
     const result = await db.update(contacts)
       .set({ ...updates, updatedAt: new Date() })
       .where(eq(contacts.id, id))
       .returning();
-    return result[0];
+    const after = result[0];
+    if (!after) return undefined;
+
+    if (!options?.skipAutomationHooks) {
+      try {
+        const { dispatchAutomationContactDiff } = await import("./automationEventDispatcher");
+        await dispatchAutomationContactDiff({
+          userId: before.userId,
+          before,
+          after,
+        });
+      } catch (e) {
+        console.warn("[updateContact] automation dispatch error:", (e as Error)?.message || e);
+      }
+    }
+
+    return after;
   }
 
   async deleteContact(id: string): Promise<void> {
@@ -3373,33 +3434,430 @@ export class DbStorage implements IStorage {
 
   // ─── Flow Job methods ──────────────────────────────────────────────────────
 
+  private static readonly FLOW_STUCK_MS = 10 * 60 * 1000;
+  private static readonly MAX_FLOW_STUCK_RECOVERIES = 5;
+
   async createFlowJob(job: InsertFlowJob): Promise<FlowJob> {
     const result = await db.insert(flowJobs).values(job).returning();
     return result[0];
   }
 
-  async claimPendingFlowJobs(limit = 50): Promise<FlowJob[]> {
-    // Atomically claim jobs: update status to 'running' where status = 'pending' and run_at <= now()
-    // Returns only the rows that were actually updated (idempotent — prevents double execution)
-    const claimed = await db
+  async recoverStuckFlowJobs(): Promise<{ requeued: number; failedTerminal: number }> {
+    const stuckBefore = new Date(Date.now() - DbStorage.FLOW_STUCK_MS);
+    const requeued = await db
       .update(flowJobs)
-      .set({ status: "running" })
+      .set({
+        status: "pending",
+        lockedAt: null,
+        stuckRecoveries: sql`${flowJobs.stuckRecoveries} + 1`,
+        runAt: new Date(Date.now() + 15_000),
+        errorMessage: sql`coalesce(${flowJobs.errorMessage}, '') || ' |stuck_running_recovered'`,
+      })
       .where(
         and(
-          eq(flowJobs.status, "pending"),
-          lte(flowJobs.runAt, new Date())
+          eq(flowJobs.status, "running"),
+          isNotNull(flowJobs.lockedAt),
+          lt(flowJobs.lockedAt, stuckBefore),
+          lt(flowJobs.stuckRecoveries, DbStorage.MAX_FLOW_STUCK_RECOVERIES)
         )
       )
-      .returning();
-    return claimed.slice(0, limit);
+      .returning({ id: flowJobs.id });
+    const failedTerminal = await db
+      .update(flowJobs)
+      .set({
+        status: "failed",
+        lockedAt: null,
+        errorMessage: "stuck_running_max_recoveries",
+      })
+      .where(
+        and(
+          eq(flowJobs.status, "running"),
+          isNotNull(flowJobs.lockedAt),
+          lt(flowJobs.lockedAt, stuckBefore),
+          gte(flowJobs.stuckRecoveries, DbStorage.MAX_FLOW_STUCK_RECOVERIES)
+        )
+      )
+      .returning({ id: flowJobs.id });
+    const rq = requeued.length;
+    const ft = failedTerminal.length;
+    if (rq > 0 || ft > 0) {
+      console.log(
+        JSON.stringify({
+          tag: "[FlowJobsRecovery]",
+          requeued: rq,
+          failedTerminal: ft,
+        })
+      );
+    }
+    return { requeued: rq, failedTerminal: ft };
+  }
+
+  async claimPendingFlowJobs(limit = 50): Promise<FlowJob[]> {
+    return await db.transaction(async (tx) => {
+      const picked = await tx.execute(sql`
+        SELECT id FROM flow_jobs
+        WHERE status = 'pending' AND run_at <= NOW()
+        ORDER BY run_at ASC
+        LIMIT ${limit}
+        FOR UPDATE SKIP LOCKED
+      `);
+      const rows = (picked as { rows: { id: string }[] }).rows;
+      const ids = rows.map((r) => r.id).filter(Boolean);
+      if (ids.length === 0) return [];
+      const claimed = await tx
+        .update(flowJobs)
+        .set({ status: "running", lockedAt: new Date() })
+        .where(inArray(flowJobs.id, ids))
+        .returning();
+      console.log(
+        JSON.stringify({
+          tag: "[FlowJobsClaim]",
+          claimed: claimed.length,
+          limit,
+        })
+      );
+      return claimed;
+    });
   }
 
   async markFlowJobCompleted(id: string): Promise<void> {
-    await db.update(flowJobs).set({ status: "completed" }).where(eq(flowJobs.id, id));
+    await db
+      .update(flowJobs)
+      .set({ status: "completed", lockedAt: null, errorMessage: null })
+      .where(eq(flowJobs.id, id));
   }
 
+  async markFlowJobSkipped(id: string, reason: string): Promise<void> {
+    await db
+      .update(flowJobs)
+      .set({ status: "skipped", lockedAt: null, errorMessage: reason })
+      .where(eq(flowJobs.id, id));
+  }
+
+  /**
+   * Chatbot flow jobs must **fail closed** (no re-queue): re-running `executeFlowFromJob`
+   * from the same `nodeId` can duplicate outbound sends if the first attempt partially succeeded.
+   */
   async markFlowJobFailed(id: string, errorMessage: string): Promise<void> {
-    await db.update(flowJobs).set({ status: "failed", errorMessage }).where(eq(flowJobs.id, id));
+    await db
+      .update(flowJobs)
+      .set({
+        status: "failed",
+        errorMessage,
+        lockedAt: null,
+        failCount: sql`coalesce(${flowJobs.failCount}, 0) + 1`,
+      })
+      .where(eq(flowJobs.id, id));
+    console.log(JSON.stringify({ tag: "[FlowJobFailed]", id, error: errorMessage.slice(0, 200) }));
+  }
+
+  // ─── No-reply jobs ───────────────────────────────────────────────────────────
+
+  private static readonly NR_STUCK_MS = 10 * 60 * 1000;
+  private static readonly MAX_NR_STUCK_RECOVERIES = 5;
+
+  async cancelPendingNoReplyJobsForContact(contactId: string): Promise<number> {
+    const updated = await db
+      .update(noReplyJobs)
+      .set({ status: "cancelled", updatedAt: new Date(), lastError: "inbound_cancel" })
+      .where(and(eq(noReplyJobs.contactId, contactId), eq(noReplyJobs.status, "pending")))
+      .returning({ id: noReplyJobs.id });
+    if (updated.length > 0) {
+      console.log(
+        JSON.stringify({
+          tag: "[NoReplyJobsCancelled]",
+          contactId,
+          count: updated.length,
+        })
+      );
+    }
+    return updated.length;
+  }
+
+  async createNoReplyJob(job: InsertNoReplyJob): Promise<NoReplyJob> {
+    const [row] = await db.insert(noReplyJobs).values(job).returning();
+    return row;
+  }
+
+  async recoverStuckNoReplyJobs(): Promise<{ requeued: number; failedTerminal: number }> {
+    const stuckBefore = new Date(Date.now() - DbStorage.NR_STUCK_MS);
+    const requeued = await db
+      .update(noReplyJobs)
+      .set({
+        status: "pending",
+        lockedAt: null,
+        stuckRecoveries: sql`${noReplyJobs.stuckRecoveries} + 1`,
+        runAt: new Date(Date.now() + 20_000),
+        lastError: sql`coalesce(${noReplyJobs.lastError}, '') || ' |stuck_running_recovered'`,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(noReplyJobs.status, "running"),
+          isNotNull(noReplyJobs.lockedAt),
+          lt(noReplyJobs.lockedAt, stuckBefore),
+          lt(noReplyJobs.stuckRecoveries, DbStorage.MAX_NR_STUCK_RECOVERIES)
+        )
+      )
+      .returning({ id: noReplyJobs.id });
+    const failedTerminal = await db
+      .update(noReplyJobs)
+      .set({
+        status: "failed",
+        lockedAt: null,
+        lastError: "stuck_running_max_recoveries",
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(noReplyJobs.status, "running"),
+          isNotNull(noReplyJobs.lockedAt),
+          lt(noReplyJobs.lockedAt, stuckBefore),
+          gte(noReplyJobs.stuckRecoveries, DbStorage.MAX_NR_STUCK_RECOVERIES)
+        )
+      )
+      .returning({ id: noReplyJobs.id });
+    const rq = requeued.length;
+    const ft = failedTerminal.length;
+    if (rq > 0 || ft > 0) {
+      console.log(JSON.stringify({ tag: "[NoReplyJobsRecovery]", requeued: rq, failedTerminal: ft }));
+    }
+    return { requeued: rq, failedTerminal: ft };
+  }
+
+  async claimPendingNoReplyJobs(limit = 30): Promise<NoReplyJob[]> {
+    return await db.transaction(async (tx) => {
+      const picked = await tx.execute(sql`
+        SELECT id FROM no_reply_jobs
+        WHERE status = 'pending' AND run_at <= NOW()
+        ORDER BY run_at ASC
+        LIMIT ${limit}
+        FOR UPDATE SKIP LOCKED
+      `);
+      const ids = ((picked as { rows: { id: string }[] }).rows || []).map((r) => r.id).filter(Boolean);
+      if (ids.length === 0) return [];
+      return await tx
+        .update(noReplyJobs)
+        .set({ status: "running", lockedAt: new Date(), updatedAt: new Date() })
+        .where(inArray(noReplyJobs.id, ids))
+        .returning();
+    });
+  }
+
+  async markNoReplyJobCompleted(id: string): Promise<void> {
+    await db
+      .update(noReplyJobs)
+      .set({ status: "completed", lockedAt: null, updatedAt: new Date() })
+      .where(eq(noReplyJobs.id, id));
+  }
+
+  async markNoReplyJobSkipped(id: string, reason: string): Promise<void> {
+    await db
+      .update(noReplyJobs)
+      .set({ status: "skipped", lockedAt: null, lastError: reason, updatedAt: new Date() })
+      .where(eq(noReplyJobs.id, id));
+  }
+
+  async markNoReplyJobCancelled(id: string): Promise<void> {
+    await db
+      .update(noReplyJobs)
+      .set({ status: "cancelled", lockedAt: null, updatedAt: new Date() })
+      .where(eq(noReplyJobs.id, id));
+  }
+
+  async markNoReplyJobFailed(id: string, errorMessage: string): Promise<void> {
+    const [row] = await db.select().from(noReplyJobs).where(eq(noReplyJobs.id, id));
+    if (!row) return;
+    const max = row.maxFailRetries ?? 3;
+    const nextFail = (row.failCount ?? 0) + 1;
+    if (nextFail < max) {
+      await db
+        .update(noReplyJobs)
+        .set({
+          status: "pending",
+          failCount: nextFail,
+          lastError: errorMessage,
+          lockedAt: null,
+          runAt: new Date(Date.now() + 45_000),
+          updatedAt: new Date(),
+        })
+        .where(eq(noReplyJobs.id, id));
+    } else {
+      await db
+        .update(noReplyJobs)
+        .set({
+          status: "failed",
+          lastError: errorMessage,
+          lockedAt: null,
+          updatedAt: new Date(),
+          failCount: nextFail,
+        })
+        .where(eq(noReplyJobs.id, id));
+    }
+  }
+
+  // ─── Automation timer jobs (W2 etc.) ─────────────────────────────────────────
+
+  private static readonly TIMER_STUCK_MS = 10 * 60 * 1000;
+  private static readonly MAX_TIMER_STUCK_RECOVERIES = 5;
+
+  async createAutomationTimerJob(job: InsertAutomationTimerJob): Promise<AutomationTimerJob> {
+    const [row] = await db.insert(automationTimerJobs).values(job).returning();
+    return row;
+  }
+
+  async cancelPendingAutomationTimerJobsForUserKinds(userId: string, kinds: string[]): Promise<number> {
+    if (!kinds.length) return 0;
+    const updated = await db
+      .update(automationTimerJobs)
+      .set({ status: "cancelled", lastError: "superseded_or_inbound" })
+      .where(
+        and(
+          eq(automationTimerJobs.userId, userId),
+          eq(automationTimerJobs.status, "pending"),
+          inArray(automationTimerJobs.kind, kinds)
+        )
+      )
+      .returning({ id: automationTimerJobs.id });
+    return updated.length;
+  }
+
+  async recoverStuckAutomationTimerJobs(): Promise<{ requeued: number; failedTerminal: number }> {
+    const stuckBefore = new Date(Date.now() - DbStorage.TIMER_STUCK_MS);
+    const requeued = await db
+      .update(automationTimerJobs)
+      .set({
+        status: "pending",
+        lockedAt: null,
+        stuckRecoveries: sql`${automationTimerJobs.stuckRecoveries} + 1`,
+        runAt: new Date(Date.now() + 20_000),
+        lastError: sql`coalesce(${automationTimerJobs.lastError}, '') || ' |stuck_running_recovered'`,
+      })
+      .where(
+        and(
+          eq(automationTimerJobs.status, "running"),
+          isNotNull(automationTimerJobs.lockedAt),
+          lt(automationTimerJobs.lockedAt, stuckBefore),
+          lt(automationTimerJobs.stuckRecoveries, DbStorage.MAX_TIMER_STUCK_RECOVERIES)
+        )
+      )
+      .returning({ id: automationTimerJobs.id });
+    const failedTerminal = await db
+      .update(automationTimerJobs)
+      .set({
+        status: "failed",
+        lockedAt: null,
+        lastError: "stuck_running_max_recoveries",
+      })
+      .where(
+        and(
+          eq(automationTimerJobs.status, "running"),
+          isNotNull(automationTimerJobs.lockedAt),
+          lt(automationTimerJobs.lockedAt, stuckBefore),
+          gte(automationTimerJobs.stuckRecoveries, DbStorage.MAX_TIMER_STUCK_RECOVERIES)
+        )
+      )
+      .returning({ id: automationTimerJobs.id });
+    const rq = requeued.length;
+    const ft = failedTerminal.length;
+    if (rq > 0 || ft > 0) {
+      console.log(JSON.stringify({ tag: "[AutomationTimerRecovery]", requeued: rq, failedTerminal: ft }));
+    }
+    return { requeued: rq, failedTerminal: ft };
+  }
+
+  async claimPendingAutomationTimerJobs(limit = 30): Promise<AutomationTimerJob[]> {
+    return await db.transaction(async (tx) => {
+      const picked = await tx.execute(sql`
+        SELECT id FROM automation_timer_jobs
+        WHERE status = 'pending' AND run_at <= NOW()
+        ORDER BY run_at ASC
+        LIMIT ${limit}
+        FOR UPDATE SKIP LOCKED
+      `);
+      const ids = ((picked as { rows: { id: string }[] }).rows || []).map((r) => r.id).filter(Boolean);
+      if (ids.length === 0) return [];
+      return await tx
+        .update(automationTimerJobs)
+        .set({ status: "running", lockedAt: new Date() })
+        .where(inArray(automationTimerJobs.id, ids))
+        .returning();
+    });
+  }
+
+  async markAutomationTimerJobCompleted(id: string): Promise<void> {
+    await db
+      .update(automationTimerJobs)
+      .set({ status: "completed", lockedAt: null, lastError: null })
+      .where(eq(automationTimerJobs.id, id));
+  }
+
+  async markAutomationTimerJobSkipped(id: string, reason: string): Promise<void> {
+    await db
+      .update(automationTimerJobs)
+      .set({ status: "skipped", lockedAt: null, lastError: reason })
+      .where(eq(automationTimerJobs.id, id));
+  }
+
+  async markAutomationTimerJobFailed(id: string, errorMessage: string): Promise<void> {
+    const [row] = await db.select().from(automationTimerJobs).where(eq(automationTimerJobs.id, id));
+    if (!row) return;
+    const max = row.maxFailRetries ?? 3;
+    const nextFail = (row.failCount ?? 0) + 1;
+    if (nextFail < max) {
+      await db
+        .update(automationTimerJobs)
+        .set({
+          status: "pending",
+          failCount: nextFail,
+          lastError: errorMessage,
+          lockedAt: null,
+          runAt: new Date(Date.now() + 45_000),
+        })
+        .where(eq(automationTimerJobs.id, id));
+    } else {
+      await db
+        .update(automationTimerJobs)
+        .set({
+          status: "failed",
+          lastError: errorMessage,
+          lockedAt: null,
+          failCount: nextFail,
+        })
+        .where(eq(automationTimerJobs.id, id));
+    }
+  }
+
+  // ─── Automation send dedup ───────────────────────────────────────────────────
+
+  async tryAcquireAutomationSendDedup(
+    dedupKey: string,
+    userId: string,
+    contactId?: string | null
+  ): Promise<boolean> {
+    try {
+      const inserted = await db
+        .insert(automationSendDedup)
+        .values({
+          dedupKey,
+          userId,
+          contactId: contactId ?? null,
+          status: "locked",
+        })
+        .onConflictDoNothing({ target: automationSendDedup.dedupKey })
+        .returning({ dedupKey: automationSendDedup.dedupKey });
+      return inserted.length > 0;
+    } catch (e: any) {
+      console.warn("[tryAcquireAutomationSendDedup]", e?.message || e);
+      return true;
+    }
+  }
+
+  async completeAutomationSendDedup(dedupKey: string, status: "completed" | "skipped"): Promise<void> {
+    await db
+      .update(automationSendDedup)
+      .set({ status })
+      .where(eq(automationSendDedup.dedupKey, dedupKey));
   }
 }
 

@@ -755,6 +755,13 @@ async function executeFlow(
 
         const runAt = new Date(Date.now() + minutes * 60 * 1000);
         try {
+          let snapshotLastInboundAt: Date | null = null;
+          try {
+            const c = await storage.getContact(ctx.contactId);
+            snapshotLastInboundAt = c?.lastIncomingAt ?? null;
+          } catch {
+            snapshotLastInboundAt = null;
+          }
           await storage.createFlowJob({
             flowId: flow.id,
             contactId: ctx.contactId,
@@ -762,7 +769,11 @@ async function executeFlow(
             nodeId: nextNodeId,
             runAt,
             status: "pending",
-            payload: ctx as any,
+            payload: {
+              ...(ctx as any),
+              _stopReplySnapshot: { lastInboundAt: snapshotLastInboundAt?.toISOString() ?? null },
+            },
+            snapshotLastInboundAt: snapshotLastInboundAt ?? undefined,
           });
           console.log(
             `[Chatbot] ⏱ Flow "${flow.name}" — scheduled durable job to resume from node "${nextNodeId}" at ${runAt.toISOString()} (delay: ${minutes}m)`

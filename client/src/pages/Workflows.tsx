@@ -60,13 +60,13 @@ const TRIGGER_GROUPS = [
     triggers: [
       { value: "tag_added",       label: "Tag Added",               icon: Tag,        description: "A tag is applied to a contact",      hasChannel: false },
       { value: "tag_removed",     label: "Tag Removed",             icon: Tag,        description: "A tag is removed from a contact",    hasChannel: false },
-      { value: "pipeline_change", label: "Pipeline Stage Changed",  icon: ArrowRight, description: "Contact moves to a pipeline stage",  hasChannel: false },
+      { value: "pipeline_change", label: "Pipeline Stage Changed",  icon: ArrowRight, description: "Runs when a contact's pipeline stage changes (inbox/API). Requires DB migration 0020 + flow worker.", hasChannel: false },
     ],
   },
   {
     label: "Timing",
     triggers: [
-      { value: "no_reply", label: "No Reply For", icon: BellOff, description: "No response after a set duration", hasChannel: true },
+      { value: "no_reply", label: "No Reply For", icon: BellOff, description: "Runs if the contact stays silent after a team outbound (per workflow delay). Requires DB migration 0020 + flow worker.", hasChannel: true },
     ],
   },
   {

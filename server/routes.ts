@@ -41,7 +41,6 @@ import {
 import { z } from "zod";
 import { getVapidPublicKey } from "./notifications";
 import {
-  sendUserWhatsAppMessage,
   parseIncomingWebhook,
   parseStatusWebhook,
   findOrCreateChatByPhone,
@@ -59,7 +58,6 @@ import {
 import { getAccessTokenExpiryFromDebug } from "./whatsappEmbeddedSignup";
 import { fetchMetaGraphJsonWithRetries } from "./metaChannelHealthUtils";
 import {
-  sendMetaWhatsAppMessage,
   connectUserMeta,
   validateMetaCredentials,
   switchProvider,
@@ -95,7 +93,8 @@ import { getAppOrigin } from "./urlOrigins";
 import { getMarketingOrigin } from "./urlOrigins";
 import { sendWelcomeEmail, sendContactFormEmail, sendDemoBookingNotification, sendDemoConfirmationEmail, sendSalespersonWelcomeEmail } from "./email";
 import bcrypt from "bcryptjs";
-import { triggerNewChatWorkflows, triggerKeywordWorkflows, triggerTagChangeWorkflows, runW2QualificationEngine, runServiceRoutingEngine } from "./workflowEngine";
+import { dispatchInboundMessagingAutomation } from "./automationEventDispatcher";
+import { runW2QualificationEngine, runServiceRoutingEngine } from "./workflowEngine";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import shopifyRoutes from "./shopifyRoutes";
 import ghlRoutes from "./ghlRoutes";
@@ -2312,17 +2311,18 @@ export async function registerRoutes(
       });
       console.log(`[Inbound] Webhook returned 200 — channel: ${channel}, messageSid: ${parsed.messageSid}, userId: ${userId}`);
 
-      // Trigger workflow automations (Pro feature)
+      // Trigger workflow automations (Pro feature) — centralized dispatcher
       const updatedChat = await storage.getChat(chat.id);
       if (updatedChat) {
-        if (isNewChat) {
-          triggerNewChatWorkflows(userId, updatedChat, inboxContact, inboxConversation.id).catch(err => 
-            console.error("New chat workflow error:", err)
-          );
-        }
-        triggerKeywordWorkflows(userId, updatedChat, parsed.body, inboxContact, inboxConversation.id).catch(err => 
-          console.error("Keyword workflow error:", err)
-        );
+        dispatchInboundMessagingAutomation({
+          userId,
+          isNewChat,
+          updatedChat,
+          messageBody: parsed.body || "",
+          contact: inboxContact,
+          conversationId: inboxConversation.id,
+          skipKeywordWorkflows: inboxChatbotWillFire,
+        }).catch((err) => console.error("[AutomationDispatcher] inbound workflows:", err));
         // W2 Financial Qualification Engine (Realtor Growth Engine)
         // chatbotWillFire was determined once inside processIncomingMessage —
         // no extra DB round-trip needed here.
@@ -2338,34 +2338,26 @@ export async function registerRoutes(
               if (w2.signalsDetected.length > 0) {
                 console.log(`[W2] Signals detected for chat ${updatedChat.id}: ${w2.signalsDetected.join(", ")} score+=${w2.scoreAdjustment}`);
               }
-              // Only send qualification question if chatbot is NOT handling this conversation
-              if (!inboxChatbotWillFire && w2.qualificationQuestion && updatedChat.whatsappPhone) {
-                setTimeout(async () => {
-                  try {
-                    await sendUserWhatsAppMessage(userId, updatedChat.whatsappPhone!, w2.qualificationQuestion!);
-                    console.log(`[W2] Qualification question sent to ${updatedChat.whatsappPhone}`);
-                  } catch (err) { console.error("[W2] Failed to send qualification question:", err); }
-                }, 3000);
-              }
               // Service Routing Engine
               try {
                 const routing = await runServiceRoutingEngine(userId, updatedChat, parsed.body, inboxContact);
                 const routingMsg = routing.offerMessage || routing.routingMessage;
-                // Only send routing message if chatbot is NOT handling this conversation
-                if (!inboxChatbotWillFire && routingMsg && updatedChat.whatsappPhone) {
-                  const delay = w2.qualificationQuestion ? 6000 : 3500;
-                  setTimeout(async () => {
-                    try {
-                      await sendUserWhatsAppMessage(userId, updatedChat.whatsappPhone!, routingMsg);
-                      console.log(`[Routing] ${routing.offerMessage ? "Offer" : "Routing"} message sent (${routing.serviceType}) to ${updatedChat.whatsappPhone}`);
-                    } catch (err) { console.error("[Routing] Failed to send routing message:", err); }
-                  }, delay);
+                if (!inboxChatbotWillFire && inboxContact?.id && updatedChat.whatsappPhone) {
+                  const snap = inboxContact.lastIncomingAt ?? null;
+                  const { scheduleW2FollowUpTimers } = await import("./automationTimerHandlers");
+                  await scheduleW2FollowUpTimers({
+                    userId,
+                    contactId: inboxContact.id,
+                    qualificationText: w2.qualificationQuestion || null,
+                    routingText: routingMsg || null,
+                    twilioDigits: updatedChat.whatsappPhone.replace(/\D/g, ""),
+                    metaFrom: undefined,
+                    snapshotInboundAt: snap,
+                  }).catch((e) => console.error("[W2] schedule timers:", e));
                 }
                 // Phase D: apply service-routing tags via dual-write (contact-first)
-                // Phase E Step 4: fire tag-change workflows after the write
                 if (routing.tagsToApply.length > 0) {
                   const newTag = routing.tagsToApply[0];
-                  const oldTag = inboxContact?.tag ?? updatedChat.tag ?? 'New';
                   try {
                     if (inboxContact) {
                       await storage.updateContact(inboxContact.id, { tag: newTag }).catch(() => {});
@@ -2375,10 +2367,6 @@ export async function registerRoutes(
                     }
                     await storage.updateChat(updatedChat.id, { tag: newTag }).catch(() => {});
                     console.log(`[Routing] Tag applied (Twilio): "${newTag}" for chat ${updatedChat.id}`);
-                    if (oldTag !== newTag) {
-                      triggerTagChangeWorkflows(userId, updatedChat, oldTag, newTag, inboxContact, inboxConversation.id)
-                        .catch(e => console.error('[TagChange] Twilio routing:', e));
-                    }
                   } catch (err) { console.error("[Routing] Failed to apply tag:", err); }
                 }
                 if (routing.taskNote) {
@@ -3001,19 +2989,24 @@ export async function registerRoutes(
 
             await markMessageAsRead(user.id, incomingMessage.messageId);
 
-            if (messages.length === 1) {
-              triggerNewChatWorkflows(user.id, chat, metaInboxContact ?? undefined, metaInboxConversationId ?? undefined).catch(err => console.error("New chat workflow error:", err));
+            if (messages.length === 1 || incomingMessage.text) {
+              dispatchInboundMessagingAutomation({
+                userId: user.id,
+                isNewChat: messages.length === 1,
+                updatedChat: chat,
+                messageBody: incomingMessage.text || "",
+                contact: metaInboxContact ?? undefined,
+                conversationId: metaInboxConversationId ?? "",
+                skipKeywordWorkflows: (metaInboxResult as { chatbotWillFire: boolean } | null)?.chatbotWillFire ?? false,
+              }).catch((err) => console.error("[AutomationDispatcher] Meta inbound workflows:", err));
             }
 
             if (incomingMessage.text) {
-              triggerKeywordWorkflows(user.id, chat, incomingMessage.text, metaInboxContact ?? undefined, metaInboxConversationId ?? undefined).catch(err => console.error("Keyword workflow error:", err));
               // W2 Financial Qualification Engine (Realtor Growth Engine)
               ;(async () => {
                 try {
                   const install = await storage.getTemplateInstall(user.id, "realtor-growth-engine");
                   if (install?.installStatus === "installed") {
-                    // chatbotWillFire was determined once inside processIncomingMessage
-                    // and captured in metaInboxResult — no extra DB round-trip needed.
                     const chatbotHandlesReplyMeta = (metaInboxResult as { chatbotWillFire: boolean } | null)?.chatbotWillFire ?? false;
                     if (chatbotHandlesReplyMeta) {
                       devLog(`[W2] Outbound suppressed (Meta) — chatbot owns this reply for userId: ${user.id}`);
@@ -3025,34 +3018,24 @@ export async function registerRoutes(
                     if (w2.signalsDetected.length > 0) {
                       devLog(`[W2] Signals detected for chat ${chat.id}: ${w2.signalsDetected.join(", ")} score+=${w2.scoreAdjustment}`);
                     }
-                    // Only send qualification question if chatbot is NOT handling this conversation
-                    if (!chatbotHandlesReplyMeta && w2.qualificationQuestion && incomingMessage.from) {
-                      setTimeout(async () => {
-                        try {
-                          await sendMetaWhatsAppMessage(user.id, incomingMessage.from, w2.qualificationQuestion!);
-                          devLog(`[W2] Qualification question sent (Meta) to ${incomingMessage.from}`);
-                        } catch (err) { console.error("[W2] Failed to send qualification question (Meta):", err); }
-                      }, 3000);
-                    }
-                    // Service Routing Engine (Meta)
                     try {
                       const routing = await runServiceRoutingEngine(user.id, freshChat, incomingMessage.text!, metaInboxContact ?? undefined);
                       const routingMsg = routing.offerMessage || routing.routingMessage;
-                      // Only send routing message if chatbot is NOT handling this conversation
-                      if (!chatbotHandlesReplyMeta && routingMsg && incomingMessage.from) {
-                        const delay = w2.qualificationQuestion ? 6000 : 3500;
-                        setTimeout(async () => {
-                          try {
-                            await sendMetaWhatsAppMessage(user.id, incomingMessage.from, routingMsg);
-                            devLog(`[Routing] ${routing.offerMessage ? "Offer" : "Routing"} message sent (Meta, ${routing.serviceType}) to ${incomingMessage.from}`);
-                          } catch (err) { console.error("[Routing] Failed to send routing message (Meta):", err); }
-                        }, delay);
+                      if (!chatbotHandlesReplyMeta && metaInboxContact?.id && incomingMessage.from) {
+                        const snap = metaInboxContact.lastIncomingAt ?? null;
+                        const { scheduleW2FollowUpTimers } = await import("./automationTimerHandlers");
+                        await scheduleW2FollowUpTimers({
+                          userId: user.id,
+                          contactId: metaInboxContact.id,
+                          qualificationText: w2.qualificationQuestion || null,
+                          routingText: routingMsg || null,
+                          twilioDigits: undefined,
+                          metaFrom: incomingMessage.from,
+                          snapshotInboundAt: snap,
+                        }).catch((e) => console.error("[W2] schedule timers (Meta):", e));
                       }
-                      // Phase D: apply service-routing tags via dual-write (contact-first)
-                      // Phase E Step 4: fire tag-change workflows after the write
                       if (routing.tagsToApply.length > 0) {
                         const newTag = routing.tagsToApply[0];
-                        const oldTag = metaInboxContact?.tag ?? freshChat.tag ?? 'New';
                         try {
                           if (metaInboxContact) {
                             await storage.updateContact(metaInboxContact.id, { tag: newTag }).catch(() => {});
@@ -3062,10 +3045,6 @@ export async function registerRoutes(
                           }
                           await storage.updateChat(freshChat.id, { tag: newTag }).catch(() => {});
                           devLog(`[Routing] Tag applied (Meta): "${newTag}" for chat ${freshChat.id}`);
-                          if (oldTag !== newTag) {
-                            triggerTagChangeWorkflows(user.id, freshChat, oldTag, newTag, metaInboxContact ?? undefined, metaInboxConversationId ?? undefined)
-                              .catch(e => console.error('[TagChange] Meta routing:', e));
-                          }
                         } catch (err) { console.error("[Routing] Failed to apply tag (Meta):", err); }
                       }
                       if (routing.taskNote) {

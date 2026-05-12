@@ -432,6 +432,15 @@ class ChannelService {
 
       await this.resolveHandoffIfActive(userId, contactId, conversation.id, "agent_outbound_message");
 
+      void import("./automationNoReply").then(({ scheduleNoReplyJobsAfterTeamOutbound }) =>
+        scheduleNoReplyJobsAfterTeamOutbound({
+          userId,
+          contactId,
+          conversationId: conversation.id,
+          channel: targetChannel,
+        }).catch(() => {})
+      );
+
       // Mirror outbound message to GHL if contact has a GHL ID (fire-and-forget)
       if (contact.ghlId) {
         import('./ghlSync').then(({ ghlSyncOutboundMessage }) => {
@@ -516,6 +525,15 @@ class ChannelService {
         });
 
         await this.resolveHandoffIfActive(userId, contactId, fallbackConv.id, "agent_outbound_message");
+
+        void import("./automationNoReply").then(({ scheduleNoReplyJobsAfterTeamOutbound }) =>
+          scheduleNoReplyJobsAfterTeamOutbound({
+            userId,
+            contactId,
+            conversationId: fallbackConv.id,
+            channel: fallbackChannel,
+          }).catch(() => {})
+        );
 
         return {
           success: true,
@@ -837,6 +855,9 @@ class ChannelService {
     // Handoff means: stop all automated responses (AI, chatbot, auto-replies).
     // The conversation is effectively "Snoozed" and a human should take over.
     if (handoffTriggered) {
+      void import("./automationNoReply").then(({ onInboundMessageForNoReplyTimers }) =>
+        onInboundMessageForNoReplyTimers(contact.id).catch(() => {})
+      );
       scheduleHubSpotAutoSync(userId, contact.id);
       return {
         contact,
@@ -886,8 +907,11 @@ class ChannelService {
       console.log(`[AutoReply] Suppressed — chatbot will fire for userId: ${userId}, channel: ${channel}`);
     }
 
+    void import("./automationNoReply").then(({ onInboundMessageForNoReplyTimers }) =>
+      onInboundMessageForNoReplyTimers(contact.id).catch(() => {})
+    );
+
     scheduleHubSpotAutoSync(userId, contact.id);
-    return { contact, conversation, message, isNewConversation, chatbotWillFire };
   }
 
   private async _scheduleAutoReply(params: {
