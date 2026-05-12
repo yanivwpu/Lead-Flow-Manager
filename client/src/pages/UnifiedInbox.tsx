@@ -2119,7 +2119,7 @@ export function UnifiedInbox() {
               style={{ backgroundImage: 'url("https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png")', backgroundRepeat: 'repeat', backgroundSize: '400px' }}
             >
               <div className="absolute inset-0 bg-[#efeae2]/90 pointer-events-none" />
-              <div ref={messagesInnerRef} className="relative z-10 flex min-h-full flex-col justify-end gap-1.5 p-3 pb-28">
+              <div ref={messagesInnerRef} className="relative z-10 flex flex-col gap-1.5 p-3">
                 {messagesLoading && messages.length === 0 ? (
                   <div className="flex flex-col gap-3 pb-4">
                     {[80, 55, 120, 45, 90].map((w, i) => (
@@ -2580,32 +2580,25 @@ export function UnifiedInbox() {
                             msg.deliveryFailureKind !== "media_validation" && (
                             <div
                               className={cn(
-                                "mt-0.5 space-y-0.5 text-right",
-                                (showReplyWindowFailureUi || showSpecificNonReplyFailure) &&
-                                  "ml-auto max-w-[min(100%,18rem)]",
+                                "mt-1 w-full text-left",
+                                showReplyWindowFailureUi &&
+                                  "rounded-md border border-rose-200/70 bg-rose-50/50 px-2 py-1.5",
                               )}
                             >
                               {showReplyWindowFailureUi ? (
-                                <>
-                                  <p className="text-[10px] font-medium leading-snug text-red-600">
-                                    Message not sent — outside the 24-hour reply window.
-                                  </p>
-                                  <p className="text-[10px] leading-snug text-muted-foreground">
-                                    You can reply after the customer messages you again or use an approved WhatsApp
-                                    message template.
-                                  </p>
-                                  {errBubbleText &&
-                                  !errBubbleText.toLowerCase().includes("message not sent") &&
-                                  errBubbleText.length < 400 ? (
-                                    <p className="text-[10px] leading-snug text-muted-foreground/90">{errBubbleText}</p>
-                                  ) : null}
-                                </>
+                                <p className="text-[11px] leading-snug text-rose-900/90">
+                                  <span className="font-medium">Message not sent — outside the 24-hour reply window.</span>
+                                  <br />
+                                  <span className="text-rose-800/85">
+                                    Use an approved message template or wait for the customer to reply again.
+                                  </span>
+                                </p>
                               ) : showSpecificNonReplyFailure ? (
-                                <p className="whitespace-pre-wrap text-[10px] font-medium leading-snug text-red-600">
+                                <p className="whitespace-pre-wrap text-[11px] font-medium leading-snug text-red-600">
                                   {errBubbleText}
                                 </p>
                               ) : (
-                                <p className="text-[10px] leading-snug text-gray-600">
+                                <p className="text-[11px] leading-snug text-gray-600">
                                   Couldn&apos;t send this message. Check your connection or try again.
                                 </p>
                               )}
@@ -2616,7 +2609,7 @@ export function UnifiedInbox() {
                     );
                   })
                 )}
-                <div ref={messagesEndRef} className="h-6 min-h-6 shrink-0 scroll-mt-4" aria-hidden />
+                <div ref={messagesEndRef} className="h-2 w-full shrink-0" aria-hidden />
               </div>
 
               {/* New messages banner — shown when user is scrolled up */}
