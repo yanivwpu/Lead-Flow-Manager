@@ -681,10 +681,6 @@ export function InboxLeadDetailsPanel({
       queryClient.invalidateQueries({ queryKey: ["/api/preset-campaigns"] });
       setCampaignPickerOpen(false);
       setPickedCampaignId("");
-      toast({
-        title: "Added to campaign",
-        description: "Enrollment created. Messages send when each step is due.",
-      });
     },
     onError: (e: Error) => {
       toast({
@@ -701,7 +697,6 @@ export function InboxLeadDetailsPanel({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/campaign-enrollments", contact.id] });
-      toast({ title: "Enrollment paused" });
     },
     onError: (e: Error) => {
       toast({
@@ -718,7 +713,6 @@ export function InboxLeadDetailsPanel({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/campaign-enrollments", contact.id] });
-      toast({ title: "Enrollment resumed" });
     },
     onError: (e: Error) => {
       toast({
@@ -735,7 +729,6 @@ export function InboxLeadDetailsPanel({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/campaign-enrollments", contact.id] });
-      toast({ title: "Enrollment cancelled" });
     },
     onError: (e: Error) => {
       toast({

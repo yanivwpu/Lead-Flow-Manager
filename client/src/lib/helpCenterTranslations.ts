@@ -238,12 +238,11 @@ We offer specialized templates for:
 
 ## How to Use Templates
 
-1. Go to **Templates** > **Preset Templates**
+1. Go to **Templates** > **Presets**
 2. Filter by language, category, or industry
-3. Click **Preview** to see the message sequence
-4. Customize placeholders with your actual values
-5. Toggle **Launch immediately** if you want to activate right away
-6. Click **Save Template** or **Launch Now**
+3. Use the **eye** icon for a read-only preview of the sequence
+4. Click **Use Template** to create a **draft** campaign and open the full editor
+5. Edit name, status, steps, messages, delays, and placeholders — then **Save Draft** or activate from the editor
 
 ## Placeholders
 

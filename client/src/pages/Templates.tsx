@@ -559,13 +559,9 @@ export function Templates() {
       const res = await apiRequest("PATCH", `/api/preset-campaigns/${vars.id}`, vars.body);
       return res.json() as Promise<{ message?: string }>;
     },
-    onSuccess: (data) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/preset-campaigns"] });
       queryClient.invalidateQueries({ queryKey: ["/api/preset-campaigns", savedCampaignModalId] });
-      toast({
-        title: "Saved",
-        description: data?.message ?? "Campaign updated.",
-      });
     },
     onError: (e: Error) => {
       toast({
@@ -585,7 +581,6 @@ export function Templates() {
       setSavedCampaignModalOpen(false);
       setSavedCampaignModalId(null);
       setPendingDeleteCampaignId(null);
-      toast({ title: "Campaign deleted" });
     },
     onError: (e: Error) => {
       toast({
@@ -611,7 +606,6 @@ export function Templates() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/preset-campaigns", savedCampaignModalId] });
       queryClient.invalidateQueries({ queryKey: ["/api/preset-campaigns"] });
-      toast({ title: "Enrollment updated" });
     },
     onError: (e: Error) => {
       toast({
@@ -627,12 +621,8 @@ export function Templates() {
       const res = await apiRequest("POST", `/api/preset-campaigns/${id}/duplicate`);
       return res.json() as Promise<{ message?: string }>;
     },
-    onSuccess: (data) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/preset-campaigns"] });
-      toast({
-        title: "Campaign duplicated",
-        description: data?.message ?? "Draft copy created. No sends ran.",
-      });
     },
     onError: (e: Error) => {
       toast({
@@ -1164,11 +1154,9 @@ export function Templates() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="px-3 md:px-6">
-                <LocalizedTemplateSelector 
+                <LocalizedTemplateSelector
                   showPreviewOnly={false}
-                  onSelectTemplate={(template, values) => {
-                    console.log("Selected template:", template, values);
-                  }}
+                  onCampaignCreated={(id) => openSavedCampaignModal(id, true)}
                 />
               </CardContent>
             </Card>
@@ -1187,7 +1175,7 @@ export function Templates() {
                   </div>
                 ) : savedPresetCampaigns.length === 0 ? (
                   <p className="text-sm text-gray-500 py-4 text-center">
-                    No saved campaigns yet. Open a preset, customize placeholders, then click Create Campaign.
+                    No saved campaigns yet. Click &quot;Use Template&quot; on a preset to create a draft, then edit and activate when ready.
                   </p>
                 ) : (
                   <div className="overflow-x-auto overflow-y-visible rounded-lg border border-gray-100 touch-pan-y">
