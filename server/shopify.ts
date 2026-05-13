@@ -223,6 +223,98 @@ export async function createShopifyBillingCharge(
   }
 }
 
+/** One-time Realtor Growth Engine license (USD) — align with `templateRoutes` Stripe list price. */
+export const SHOPIFY_RGE_ONETIME_USD = 199;
+
+export async function createShopifyRgeOneTimePurchase(
+  shop: string,
+  accessToken: string,
+  returnUrl: string,
+  isTest: boolean = true
+): Promise<{ confirmationUrl: string; purchaseId: string } | null> {
+  const shopify = getShopifyApi();
+  if (!shopify) return null;
+
+  try {
+    const client = new shopify.clients.Graphql({
+      session: { shop, accessToken } as Session,
+    });
+
+    const response = await client.request(
+      `
+      mutation appPurchaseOneTimeCreate($name: String!, $returnUrl: URL!, $price: MoneyInput!, $test: Boolean) {
+        appPurchaseOneTimeCreate(name: $name, returnUrl: $returnUrl, price: $price, test: $test) {
+          appPurchaseOneTime { id }
+          confirmationUrl
+          userErrors { field message }
+        }
+      }
+    `,
+      {
+        variables: {
+          name: 'WhachatCRM Realtor Growth Engine (one-time)',
+          returnUrl,
+          test: isTest,
+          price: { amount: SHOPIFY_RGE_ONETIME_USD, currencyCode: 'USD' },
+        },
+      },
+    );
+
+    const data = response.data as any;
+    if (data?.appPurchaseOneTimeCreate?.userErrors?.length > 0) {
+      console.error('[Shopify RGE] appPurchaseOneTimeCreate userErrors:', data.appPurchaseOneTimeCreate.userErrors);
+      return null;
+    }
+
+    const purchaseId = data?.appPurchaseOneTimeCreate?.appPurchaseOneTime?.id as string | undefined;
+    const confirmationUrl = data?.appPurchaseOneTimeCreate?.confirmationUrl as string | undefined;
+    if (!purchaseId || !confirmationUrl) return null;
+
+    return { confirmationUrl, purchaseId };
+  } catch (error) {
+    console.error('[Shopify RGE] appPurchaseOneTimeCreate failed:', error);
+    return null;
+  }
+}
+
+export async function getAppPurchaseOneTimeStatus(
+  shop: string,
+  accessToken: string,
+  chargeIdOrGid: string
+): Promise<string | null> {
+  const shopify = getShopifyApi();
+  if (!shopify) return null;
+
+  const id = chargeIdOrGid.startsWith('gid://')
+    ? chargeIdOrGid
+    : `gid://shopify/AppPurchaseOneTime/${chargeIdOrGid}`;
+
+  try {
+    const client = new shopify.clients.Graphql({
+      session: { shop, accessToken } as Session,
+    });
+
+    const response = await client.request(
+      `
+      query appPurchaseOneTimeStatus($id: ID!) {
+        node(id: $id) {
+          ... on AppPurchaseOneTime {
+            status
+          }
+        }
+      }
+    `,
+      { variables: { id } },
+    );
+
+    const status = (response.data as any)?.node?.status as string | undefined;
+    return status || null;
+  } catch (error) {
+    console.error('[Shopify RGE] Failed to load one-time purchase status:', error);
+    return null;
+  }
+}
+
 export async function getActiveShopifySubscription(
   shop: string,
   accessToken: string

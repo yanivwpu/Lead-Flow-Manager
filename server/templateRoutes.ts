@@ -5,6 +5,7 @@ import { sendRealtorOnboardingEmail, sendRealtorPaymentConfirmationEmail } from 
 import { getUncachableStripeClient } from "./stripeClient";
 import { resolveStripeCheckoutRedirectOrigin } from "./stripeCheckoutRedirectBase";
 import { subscriptionService } from "./subscriptionService";
+import { createShopifyRgeOneTimePurchase } from "./shopify";
 import { z } from "zod";
 import { getAppOrigin } from "./urlOrigins";
 import { buildPostCheckoutSuccessUrl, buildStripeCancelUrl, sanitizeStripeReturnPath } from "./checkoutReturnPath";
@@ -151,6 +152,27 @@ export function registerTemplateRoutes(app: Express) {
           console.error("[Template] GE setup task (demo purchase):", e)
         );
         return res.json({ success: true, demo: true });
+      }
+
+      if (user.shopifyShop) {
+        if (!user.shopifyAccessToken) {
+          return res.status(400).json({
+            error: "Shopify connection is incomplete. Re-open the app from your Shopify admin, then try again.",
+            code: "SHOPIFY_TOKEN_MISSING",
+          });
+        }
+        const base = resolveStripeCheckoutRedirectOrigin(getAppOrigin());
+        const returnUrl = `${base}/api/shopify/billing/rge-onetime-callback?shop=${encodeURIComponent(user.shopifyShop)}`;
+        const billing = await createShopifyRgeOneTimePurchase(
+          user.shopifyShop,
+          user.shopifyAccessToken,
+          returnUrl,
+          process.env.NODE_ENV !== "production",
+        );
+        if (!billing?.confirmationUrl) {
+          return res.status(500).json({ error: "Failed to start Shopify billing for this purchase" });
+        }
+        return res.json({ shopifyConfirmationUrl: billing.confirmationUrl });
       }
 
       const stripe = await getUncachableStripeClient();

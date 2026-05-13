@@ -3240,7 +3240,8 @@ export async function registerRoutes(
               trialStartedAt: user.trialStartedAt,
               trialEndsAt: user.trialEndsAt,
               trialDaysRemaining: limits?.trialDaysRemaining ?? 0,
-              trialIncludesAIBrain: isProAiTrialActive(user, now),
+              trialIncludesAIBrain:
+                isProAiTrialActive(user, now) && !user.shopifyShop,
               trialPlan: user.trialPlan ?? null,
               isShopify,
               upgradeProvider: isShopify ? ("shopify" as const) : ("stripe" as const),
@@ -8791,6 +8792,14 @@ export async function registerRoutes(
         return res.status(401).json({ error: "Unauthorized" });
       }
       const userId = req.user.id;
+      const limits = await subscriptionService.getUserLimits(userId);
+      if (!limits?.effectiveHasAIBrain) {
+        return res.status(403).json({
+          error: "AI Brain add-on is required for business profile and premium intelligence settings.",
+          needsUpgrade: true,
+          code: "AI_BRAIN_REQUIRED",
+        });
+      }
       const knowledge = await storage.getAiBusinessKnowledge(userId);
       const defaults = {
         businessName: "",
@@ -8823,6 +8832,14 @@ export async function registerRoutes(
         return res.status(401).json({ error: "Unauthorized" });
       }
       const userId = req.user.id;
+      const limits = await subscriptionService.getUserLimits(userId);
+      if (!limits?.effectiveHasAIBrain) {
+        return res.status(403).json({
+          error: "AI Brain add-on is required for business profile and premium intelligence settings.",
+          needsUpgrade: true,
+          code: "AI_BRAIN_REQUIRED",
+        });
+      }
       const body =
         (await isUserCalendlyBookingConnected(userId))
           ? { ...req.body, bookingLink: "" }
@@ -9307,6 +9324,15 @@ export async function registerRoutes(
     try {
       if (!req.user) {
         return res.status(401).json({ error: "Unauthorized" });
+      }
+      const userId = req.user.id;
+      const limits = await subscriptionService.getUserLimits(userId);
+      if (!limits?.effectiveHasAIBrain) {
+        return res.status(403).json({
+          error: "AI Brain add-on is required for AI Memory.",
+          needsUpgrade: true,
+          code: "AI_BRAIN_REQUIRED",
+        });
       }
       const { messages, intel } = req.body;
 

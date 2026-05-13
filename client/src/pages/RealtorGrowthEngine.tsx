@@ -62,6 +62,7 @@ import { settingsChannelsHref } from "@/lib/settingsChannelsNavigation";
 import type { ActivationStatusPayload } from "@/lib/activationStatus";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { getCheckoutReturnPaths } from "@/lib/checkoutReturnPaths";
+import { getSubscriptionApiUrl, useShopifyShopHint } from "@/lib/shopifyBillingHint";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -715,6 +716,22 @@ export function RealtorGrowthEngine() {
   const [purchaseIntroOpen, setPurchaseIntroOpen] = useState(false);
   const [subscriptionGate, setSubscriptionGate] = useState<{ show: boolean; hasPro: boolean; hasAI: boolean }>({ show: false, hasPro: true, hasAI: true });
   const [checkingSubscription, setCheckingSubscription] = useState(false);
+  const [shopifyGateLoading, setShopifyGateLoading] = useState(false);
+
+  const shopHint = useShopifyShopHint();
+  const { data: billingAccount } = useQuery<{
+    subscription?: { isShopify?: boolean };
+  }>({
+    queryKey: ["/api/subscription", shopHint ?? ""],
+    queryFn: async () => {
+      const res = await fetch(getSubscriptionApiUrl(), { credentials: "include" });
+      if (res.status === 401) throw new Error("401");
+      if (!res.ok) throw new Error(await res.text());
+      return res.json();
+    },
+    staleTime: 60_000,
+  });
+  const isShopify = !!(billingAccount?.subscription?.isShopify) || !!shopHint;
 
   const isOnboardingPath = location.includes("/realtor-growth-engine/onboarding");
 
@@ -760,6 +777,16 @@ export function RealtorGrowthEngine() {
     if (paid === "true" && sessionId) {
       verifyPaymentMutation.mutate(sessionId);
     }
+    if (params.get("shopify_rge") === "success") {
+      queryClient.invalidateQueries({ queryKey: ["/api/templates/realtor-growth-engine"] });
+      toast({
+        title: "Shopify purchase approved",
+        description: "Continue with your guided Realtor Growth Engine setup.",
+      });
+      const url = new URL(window.location.href);
+      url.searchParams.delete("shopify_rge");
+      window.history.replaceState({}, "", url.pathname + url.search);
+    }
   }, []);
 
   const purchaseMutation = useMutation({
@@ -780,7 +807,11 @@ export function RealtorGrowthEngine() {
       }
       return res.json();
     },
-    onSuccess: (data) => {
+    onSuccess: (data: { url?: string; shopifyConfirmationUrl?: string }) => {
+      if (data.shopifyConfirmationUrl) {
+        window.location.href = data.shopifyConfirmationUrl;
+        return;
+      }
       if (data.url) {
         window.location.href = data.url;
       } else {
@@ -1334,8 +1365,33 @@ export function RealtorGrowthEngine() {
           </Button>
           <Button
             className="bg-brand-green hover:bg-brand-green/90"
+            disabled={shopifyGateLoading}
             onClick={async () => {
               try {
+                if (isShopify) {
+                  setShopifyGateLoading(true);
+                  const plan = !subscriptionGate.hasPro ? "Pro" : "AI Brain Add-on";
+                  const res = await fetch("/api/shopify/billing/checkout-web", {
+                    method: "POST",
+                    credentials: "include",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ plan }),
+                  });
+                  if (res.status === 401) {
+                    window.location.href = `/auth?redirect=${encodeURIComponent(`${window.location.pathname}${window.location.search}`)}`;
+                    return;
+                  }
+                  if (!res.ok) {
+                    const err = await res.json().catch(() => ({}));
+                    throw new Error(err.error || "Failed to start Shopify billing");
+                  }
+                  const data = await res.json();
+                  if (data.confirmationUrl) {
+                    window.location.href = data.confirmationUrl;
+                  }
+                  return;
+                }
+
                 const endpoint = !subscriptionGate.hasPro
                   ? "/api/subscription/checkout/pro-ai"
                   : "/api/subscription/addon/ai-brain";
@@ -1356,11 +1412,26 @@ export function RealtorGrowthEngine() {
                 }
               } catch (err) {
                 console.error("Checkout error:", err);
+                toast({
+                  title: "Could not start checkout",
+                  description: err instanceof Error ? err.message : "Please try again.",
+                  variant: "destructive",
+                });
+              } finally {
+                setShopifyGateLoading(false);
               }
             }}
             data-testid="button-upgrade-plan"
           >
-            {!subscriptionGate.hasPro ? "Upgrade to Pro + AI" : "Enable AI Add-on"}
+            {shopifyGateLoading
+              ? "Opening Shopify…"
+              : isShopify
+                ? !subscriptionGate.hasPro
+                  ? "Approve Pro in Shopify"
+                  : "Approve AI Brain in Shopify"
+                : !subscriptionGate.hasPro
+                  ? "Upgrade to Pro + AI"
+                  : "Enable AI Add-on"}
           </Button>
         </DialogFooter>
       </DialogContent>

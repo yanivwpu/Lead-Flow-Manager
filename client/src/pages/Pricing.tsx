@@ -867,7 +867,7 @@ export function Pricing() {
                   data-testid="button-ai-brain-go"
                 >
                   <Brain className={`w-4 h-4 ${isRTL ? "ml-2" : "mr-2"}`} />
-                  {t(`${p}.plans.aiBrain.ctaUnlock`)}
+                  {t(`${p}.plans.aiBrain.ctaOpenBrain`)}
                 </Button>
               </Link>
             ) : aiBrainBasePlanEligible ? (
@@ -880,7 +880,7 @@ export function Pricing() {
                 {aiBrainAddonLoading ? (
                   <Loader2 className={`w-4 h-4 animate-spin ${isRTL ? "ml-2" : "mr-2"}`} />
                 ) : null}
-                {t(`${p}.plans.aiBrain.ctaUpgrade`)}
+                {isShopify ? t(`${p}.shopifyApproveAiBrain`) : t(`${p}.plans.aiBrain.ctaUnlock`)}
               </Button>
             ) : (
               <Button

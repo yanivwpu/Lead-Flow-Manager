@@ -332,6 +332,13 @@ function AIBrainContent() {
   };
 
   const handlePlanAIBundleCheckout = async (bundlePlan: "starter" | "pro") => {
+    if (isShopify) {
+      toast({
+        title: "Use Shopify to subscribe",
+        description: "Open Pricing in this app and approve Starter or Pro in Shopify, then add AI Brain there.",
+      });
+      return;
+    }
     setIsCheckingOut(true);
     try {
       const response = await fetch("/api/subscription/checkout/plan-ai-bundle", {
@@ -611,7 +618,7 @@ function AIBrainContent() {
   const assistBullets = assistPlanBullets(plan, showTrialFullSuite);
   const assistTier = assistTierLabel(plan, showTrialFullSuite);
   const showBrainUpgradeSection = hasAIAssist && !effectiveHasAIBrain;
-  const hidePaidBrainCta = isInTrial && trialIncludesAIBrain;
+  const hidePaidBrainCta = isInTrial && trialIncludesAIBrain && effectiveHasAIBrain;
   const starterOnly = isStarter && !isPro;
   const autoModeLocked = starterOnly;
 
@@ -724,9 +731,13 @@ function AIBrainContent() {
                       disabled={isCheckingOut}
                       data-testid="button-ai-brain-primary-cta"
                     >
-                      {isCheckingOut ? "Processing…" : "Unlock AI Brain"}
+                      {isCheckingOut ? "Processing…" : isShopify ? "Approve in Shopify" : "Unlock AI Brain"}
                     </Button>
-                    <p className="text-xs text-slate-500">From $29/mo · cancel anytime from billing</p>
+                    <p className="text-xs text-slate-500">
+                      {isShopify
+                        ? "You will approve the AI Brain add-on in your Shopify admin."
+                        : "From $29/mo · cancel anytime from billing"}
+                    </p>
                   </div>
                 </div>
               )}

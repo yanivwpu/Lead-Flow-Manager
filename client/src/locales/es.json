@@ -869,6 +869,7 @@
     "backHome": "Volver al Inicio",
     "backSettings": "Volver a Configuración",
     "trialBanner": "Todos los planes de pago incluyen una prueba gratuita de 14 días del plan Pro para que experimentes el sistema completo. Sin cargos durante la prueba.",
+    "shopifyApproveAiBrain": "Aprobar AI Brain en Shopify",
     "trialNote": "Prueba gratuita de 14 días del plan Pro incluida",
     "hero": {
       "title": "Precios simples y transparentes para conversaciones en crecimiento",
@@ -969,6 +970,7 @@
         "f5": "Funciona junto a Starter o Pro",
         "upsell": "Añade la capa de inteligencia premium AI Brain. Pro sigue incluyendo puntuación de leads y reorientación inteligente integradas.",
         "ctaUnlock": "Agregar AI Brain",
+        "ctaOpenBrain": "Abrir espacio de trabajo de IA",
         "ctaUpgrade": "Obtener Starter para desbloquear"
       }
     },

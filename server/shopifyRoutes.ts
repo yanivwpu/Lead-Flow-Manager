@@ -7,13 +7,16 @@ import {
   validateOAuthState,
   exchangeShopifyCode,
   createShopifyBillingCharge,
+  createShopifyRgeOneTimePurchase,
   getActiveShopifySubscription,
+  getAppPurchaseOneTimeStatus,
   cancelShopifySubscription,
   shopifySessionMiddleware,
   registerMandatoryWebhooks,
   SHOPIFY_BILLING_PLANS,
 } from './shopify';
 import { getAppOrigin } from './urlOrigins';
+import { ensureGrowthEnginePurchasedTask } from './growthEngineSetupService';
 
 const router = Router();
 
@@ -224,6 +227,52 @@ router.get('/callback', async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Shopify callback error:', error);
     res.status(500).json({ error: 'Installation failed' });
+  }
+});
+
+const RGE_TEMPLATE_ID = 'realtor-growth-engine';
+
+router.get('/billing/rge-onetime-callback', async (req: Request, res: Response) => {
+  const shop = typeof req.query.shop === 'string' ? req.query.shop.trim() : '';
+  const chargeRaw =
+    (typeof req.query.charge_id === 'string' && req.query.charge_id.trim()) ||
+    (typeof req.query.chargeId === 'string' && req.query.chargeId.trim()) ||
+    '';
+
+  if (!shop || !chargeRaw) {
+    return res.status(400).json({ error: 'Missing shop or charge id' });
+  }
+
+  try {
+    const user = await storage.getUserByShopifyShop(shop);
+    if (!user || !user.shopifyAccessToken) {
+      return res.status(404).json({ error: 'Shop not found' });
+    }
+
+    const st = await getAppPurchaseOneTimeStatus(shop, user.shopifyAccessToken, chargeRaw);
+    if ((st || '').toUpperCase() === 'ACTIVE') {
+      await storage.upsertTemplateEntitlement(user.id, RGE_TEMPLATE_ID, {
+        status: 'purchased',
+        purchasedAt: new Date(),
+      });
+      const existingInstall = await storage.getTemplateInstall(user.id, RGE_TEMPLATE_ID);
+      if (!existingInstall) {
+        await storage.createTemplateInstall({
+          userId: user.id,
+          templateId: RGE_TEMPLATE_ID,
+          installStatus: 'pending',
+        });
+      }
+      await ensureGrowthEnginePurchasedTask(user.id).catch((e) =>
+        console.error('[Shopify RGE callback] GE setup task:', e),
+      );
+      return res.redirect(`/app/templates/realtor-growth-engine/onboarding?shopify_rge=success`);
+    }
+
+    res.redirect(`/app/templates/realtor-growth-engine?shopify_rge=declined`);
+  } catch (error) {
+    console.error('[Shopify RGE callback] error:', error);
+    res.status(500).json({ error: 'RGE billing verification failed' });
   }
 });
 
