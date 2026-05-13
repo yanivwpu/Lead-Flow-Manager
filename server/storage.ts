@@ -60,6 +60,7 @@ import { deriveRetargetReEngagementApiFields } from "@shared/reEngagement";
 import { db } from "../drizzle/db";
 import { users, chats, registeredPhones, messageUsage, conversationWindows, teamMembers, workflows, workflowExecutions, recurringReminders, webhooks, webhookDeliveries, integrations, messageTemplates, templateCarouselMediaDefaults, templateSends, dripCampaigns, dripSteps, dripEnrollments, dripSends, chatbotFlows, chatbotSessions, salespeople, demoBookings, salesConversions, adminSettings, contacts, conversations, messages, activityEvents, channelSettings, supportTickets, partners, commissions, agreementAcceptances, contactNotes, appointments, flowJobs, noReplyJobs, automationTimerJobs, automationSendDedup, campaignEnrollments, type InsertConversationWindow, type ConversationWindow, growthEngineSetupTasks } from "@shared/schema";
 import { eq, and, lte, sql, isNotNull, isNull, asc, desc, gte, sum, gt, or, like, ilike, ne, inArray, notInArray, lt, count } from "drizzle-orm";
+import { getEffectiveTaskPayoutDollars, type TaskPayoutFields } from "./salespersonTaskPayout";
 
 /** Columns always present on legacy Neon `public.users`; avoids Drizzle hydrating rows when DB lacks newer schema columns (42703). */
 type UsersAuthCoreRow = {
@@ -467,7 +468,7 @@ export interface IStorage {
     updates: Partial<GrowthEngineSetupTask>,
   ): Promise<GrowthEngineSetupTask | undefined>;
   deleteGrowthEngineSetupTaskByUserTemplate(userId: string, templateId: string): Promise<void>;
-  incrementSalespersonSetupTasksCompleted(salespersonId: string): Promise<void>;
+  creditSalespersonSetupTaskCompletion(salespersonId: string, payoutProfile: TaskPayoutFields): Promise<void>;
 
   // Flow Job methods (durable Wait/delay scheduling)
   createFlowJob(job: InsertFlowJob): Promise<FlowJob>;
@@ -3545,10 +3546,16 @@ export class DbStorage implements IStorage {
       .where(and(eq(growthEngineSetupTasks.userId, userId), eq(growthEngineSetupTasks.templateId, templateId)));
   }
 
-  async incrementSalespersonSetupTasksCompleted(salespersonId: string): Promise<void> {
+  async creditSalespersonSetupTaskCompletion(salespersonId: string, payoutProfile: TaskPayoutFields): Promise<void> {
+    const dollars = getEffectiveTaskPayoutDollars(payoutProfile);
+    const add = dollars.toFixed(2);
     await db
       .update(salespeople)
-      .set({ setupTasksCompleted: sql`COALESCE(${salespeople.setupTasksCompleted}, 0) + 1` })
+      .set({
+        setupTasksCompleted: sql`COALESCE(${salespeople.setupTasksCompleted}, 0) + 1`,
+        totalEarnings: sql`COALESCE(${salespeople.totalEarnings}, 0) + ${add}`,
+        setupTaskEarningsTotal: sql`COALESCE(${salespeople.setupTaskEarningsTotal}, 0) + ${add}`,
+      })
       .where(eq(salespeople.id, salespersonId));
   }
 

@@ -192,13 +192,19 @@ function formatSalespersonRole(role: string | undefined): string {
   return labels[r] || r;
 }
 
-function effectiveTaskPayoutLabel(person: Salesperson): string {
-  const raw = person.taskPayoutAmount;
-  if (raw != null && String(raw).trim() !== "") {
-    const n = parseFloat(String(raw));
-    if (!Number.isNaN(n)) return `$${n.toFixed(2)}`;
-  }
-  return `$${ADMIN_DEFAULT_TASK_PAYOUT} (default)`;
+function SalespersonRolePayoutHint({ role }: { role: string }) {
+  const r = role === "demo" ? "sales" : role || "sales";
+  const text =
+    r === "sales"
+      ? "Demo conversion commission: 30% for 12 months."
+      : r === "setup"
+        ? `Setup task payout: $${ADMIN_DEFAULT_TASK_PAYOUT} default. Override below if needed.`
+        : `Demo commission: 30% for 12 months + setup task payout: $${ADMIN_DEFAULT_TASK_PAYOUT}. Override setup payout below if needed.`;
+  return (
+    <p className="mt-1.5 rounded-md border border-muted bg-muted/40 px-2.5 py-1.5 text-[11px] leading-snug text-muted-foreground">
+      {text}
+    </p>
+  );
 }
 
 function calendarLinkSnippet(link: string | null | undefined): string {
@@ -820,11 +826,10 @@ export function Admin() {
                     <TableHead>Phone</TableHead>
                     <TableHead>Calendar</TableHead>
                     <TableHead>Role</TableHead>
-                    <TableHead>Task payout</TableHead>
+                    <TableHead>Total payout</TableHead>
                     <TableHead>Setup done</TableHead>
                     <TableHead>Bookings</TableHead>
                     <TableHead>Conversions</TableHead>
-                    <TableHead>Earnings</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Actions</TableHead>
                   </TableRow>
@@ -832,7 +837,7 @@ export function Admin() {
                 <TableBody>
                   {salespeople.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={13} className="text-center py-8 text-gray-500">
+                      <TableCell colSpan={12} className="text-center py-8 text-gray-500">
                         No salespeople yet. Add your first salesperson to get started.
                       </TableCell>
                     </TableRow>
@@ -858,13 +863,15 @@ export function Admin() {
                             {formatSalespersonRole(person.role)}
                           </Badge>
                         </TableCell>
-                        <TableCell className="text-sm text-gray-800 whitespace-nowrap">
-                          {effectiveTaskPayoutLabel(person)}
+                        <TableCell
+                          className="text-sm font-medium text-gray-900 whitespace-nowrap"
+                          title="Demo conversion credits and subscription commissions, plus Growth Engine setup task payouts credited over time."
+                        >
+                          ${parseFloat(person.totalEarnings || "0").toFixed(2)}
                         </TableCell>
                         <TableCell>{person.setupTasksCompleted ?? 0}</TableCell>
                         <TableCell>{person.totalBookings || 0}</TableCell>
                         <TableCell>{person.totalConversions || 0}</TableCell>
-                        <TableCell>${parseFloat(person.totalEarnings || '0').toFixed(2)}</TableCell>
                         <TableCell>
                           <Badge variant={person.isActive ? "default" : "secondary"}>
                             {person.isActive ? 'Active' : 'Inactive'}
@@ -2048,6 +2055,7 @@ export function Admin() {
                 <option value="setup">Setup (Growth Engine concierge)</option>
                 <option value="both">Sales + setup</option>
               </select>
+              <SalespersonRolePayoutHint role={newPerson.role} />
             </div>
             <div>
               <Label htmlFor="new-payout" className="text-xs font-medium text-muted-foreground">
@@ -2169,6 +2177,7 @@ export function Admin() {
                   <option value="setup">Setup (Growth Engine concierge)</option>
                   <option value="both">Sales + setup</option>
                 </select>
+                <SalespersonRolePayoutHint role={editingPerson.role || "sales"} />
               </div>
               <div>
                 <Label htmlFor="edit-payout" className="text-xs font-medium text-muted-foreground">

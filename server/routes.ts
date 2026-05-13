@@ -7188,7 +7188,10 @@ export async function registerRoutes(
         prevStatus !== GE_SETUP_STATUS.setupCompleted &&
         updated?.salespersonId
       ) {
-        await storage.incrementSalespersonSetupTasksCompleted(updated.salespersonId);
+        const sp = await storage.getSalesperson(updated.salespersonId);
+        if (sp) {
+          await storage.creditSalespersonSetupTaskCompletion(sp.id, { taskPayoutAmount: sp.taskPayoutAmount });
+        }
       }
       res.json(updated);
     } catch (error: any) {
@@ -7944,6 +7947,19 @@ export async function registerRoutes(
     const effectiveTaskPayoutDollars = getEffectiveTaskPayoutDollars(salesperson);
     const hasCustomTaskPayout =
       salesperson.taskPayoutAmount != null && String(salesperson.taskPayoutAmount).trim() !== "";
+    const [convRows, commissionRows] = await Promise.all([
+      storage.getSalesConversionsBySalesperson(salesperson.id),
+      storage.getCommissionsBySalesperson(salesperson.id),
+    ]);
+    const demoConversionBonusesTotal = convRows.reduce(
+      (s, c) => s + parseFloat(String(c.amount ?? 0)),
+      0,
+    );
+    const subscriptionCommissionsTotal = commissionRows.reduce(
+      (s, c) => s + parseFloat(String(c.amount ?? 0)),
+      0,
+    );
+    const setupTaskPayoutsTotal = parseFloat(String(salesperson.setupTaskEarningsTotal ?? 0));
     res.json({
       totalBookings: salesperson.totalBookings || 0,
       totalConversions: salesperson.totalConversions || 0,
@@ -7953,6 +7969,9 @@ export async function registerRoutes(
       defaultTaskPayoutDollars: DEFAULT_SALES_TASK_PAYOUT_DOLLARS,
       effectiveTaskPayoutDollars,
       hasCustomTaskPayout,
+      demoConversionBonusesTotal: demoConversionBonusesTotal.toFixed(2),
+      subscriptionCommissionsTotal: subscriptionCommissionsTotal.toFixed(2),
+      setupTaskPayoutsTotal: setupTaskPayoutsTotal.toFixed(2),
     });
   });
 
@@ -8000,7 +8019,9 @@ export async function registerRoutes(
         completedAt: new Date(),
       });
       if (prevStatus !== GE_SETUP_STATUS.setupCompleted && updated?.salespersonId) {
-        await storage.incrementSalespersonSetupTasksCompleted(updated.salespersonId);
+        await storage.creditSalespersonSetupTaskCompletion(req.salesperson.id, {
+          taskPayoutAmount: req.salesperson.taskPayoutAmount,
+        });
       }
       res.json(updated);
     } catch (error) {
@@ -8043,6 +8064,17 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error fetching salesperson conversions:", error);
       res.status(500).json({ error: "Failed to fetch conversions" });
+    }
+  });
+
+  // Salesperson Portal: Subscription commission rows (Stripe invoice payouts; 30% / 12 months policy)
+  app.get("/api/sales-portal/commissions", requireSalesperson, async (req: any, res) => {
+    try {
+      const rows = await storage.getCommissionsBySalesperson(req.salesperson.id);
+      res.json(rows);
+    } catch (error) {
+      console.error("Error fetching salesperson commissions:", error);
+      res.status(500).json({ error: "Failed to fetch commissions" });
     }
   });
 

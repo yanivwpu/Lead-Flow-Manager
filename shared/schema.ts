@@ -761,6 +761,8 @@ export const salespeople = pgTable("salespeople", {
   totalConversions: integer("total_conversions").default(0),
   totalEarnings: numeric("total_earnings", { precision: 10, scale: 2 }).default("0"),
   setupTasksCompleted: integer("setup_tasks_completed").notNull().default(0),
+  /** Sum of fixed payouts credited for completed GE setup tasks (mirrors increments to total_earnings from setup). */
+  setupTaskEarningsTotal: numeric("setup_task_earnings_total", { precision: 10, scale: 2 }).notNull().default("0"),
   agreementAcceptedAt: timestamp("agreement_accepted_at"), // null = not accepted yet
   agreementVersion: text("agreement_version"), // version they accepted, e.g. "2026-01-03"
   createdAt: timestamp("created_at").defaultNow(),
@@ -875,6 +877,7 @@ export const insertSalespersonSchema = createInsertSchema(salespeople).omit({
   totalConversions: true,
   totalEarnings: true,
   setupTasksCompleted: true,
+  setupTaskEarningsTotal: true,
 });
 
 export const insertDemoBookingSchema = createInsertSchema(demoBookings).omit({

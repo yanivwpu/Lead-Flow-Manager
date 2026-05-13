@@ -37,6 +37,16 @@ interface Conversion {
   createdAt: string;
 }
 
+interface CommissionRow {
+  id: string;
+  amount: string;
+  status: string;
+  createdAt: string;
+  billingPeriod?: string | null;
+  invoiceId?: string | null;
+  paidAt?: string | null;
+}
+
 interface Stats {
   totalBookings: number;
   totalConversions: number;
@@ -46,6 +56,9 @@ interface Stats {
   defaultTaskPayoutDollars?: number;
   effectiveTaskPayoutDollars?: number;
   hasCustomTaskPayout?: boolean;
+  demoConversionBonusesTotal?: string;
+  subscriptionCommissionsTotal?: string;
+  setupTaskPayoutsTotal?: string;
 }
 
 interface SetupTaskRow {
@@ -93,13 +106,10 @@ Commission credit is based on recorded assignment at time of demo
 Management decisions on disputes are final
 
 4. Commission Structure & Payout Schedule
-Internal sales earn 30% of subscription revenue collected.
-Commission duration: up to twelve (12) months from first payment.
-Commissions apply to subscription fees only and exclude AI add-ons, messaging fees, and third-party costs.
-Commission applies only while the customer remains active and paying.
-Upgrades increase commission proportionally. Downgrades reduce commission.
-Commissions are calculated monthly based on payments collected during the previous calendar month and are paid on the first business day of each month.
-Commissions related to refunded, disputed, or failed payments are not payable and may be reversed.
+A) Demo-attributed subscriptions: internal sales earn 30% of subscription revenue collected (excluding AI add-ons, messaging fees, and third-party costs), for up to twelve (12) months from the customer’s first paid invoice, while the customer remains active and paying. Commissions are calculated from Stripe invoice payments and may be paid monthly on the first business day of the month.
+B) Growth Engine setup tasks: separately from subscription commission, eligible specialists may earn a fixed payout per completed internal setup task (default amount set by the company; admins may set a per-person override). Setup payouts are not subscription percentages.
+
+Commission duration and rates for (A) follow management-approved schedules. Upgrades increase commission proportionally; downgrades reduce commission. Commissions related to refunded, disputed, or failed payments are not payable and may be reversed.
 
 5. No Lifetime Commission Guarantee
 Sales commissions are not guaranteed for the lifetime of any customer.
@@ -107,10 +117,12 @@ Commission eligibility is limited to the duration defined by WhachatCRM (current
 WhachatCRM may modify, suspend, or terminate commission plans, rates, payout schedules, or eligibility criteria at any time. Commission plans do not create a vested or guaranteed right to future commissions.
 
 6. Exclusions
-No commission is paid for:
+No subscription commission is paid for:
 Organic signups with no demo involvement
 Partner-referred customers (unless explicitly approved)
 Non-paying or refunded accounts
+
+Fixed setup task payouts (4.B) only apply when an internal setup task is completed and credited under company policy.
 
 6. Payment Timing
 Commissions are calculated monthly
@@ -241,6 +253,11 @@ export function SalesPortal() {
     enabled: isLoggedIn,
   });
 
+  const { data: commissions = [] } = useQuery<CommissionRow[]>({
+    queryKey: ['/api/sales-portal/commissions'],
+    enabled: isLoggedIn,
+  });
+
   const { data: setupTasks = [] } = useQuery<SetupTaskRow[]>({
     queryKey: ['/api/sales-portal/setup-tasks'],
     enabled: isLoggedIn,
@@ -269,6 +286,15 @@ export function SalesPortal() {
       queryClient.invalidateQueries({ queryKey: ['/api/sales-portal/stats'] });
     }
   });
+
+  const demoBonusTotal = parseFloat(stats?.demoConversionBonusesTotal ?? '0');
+  const subscriptionCommissionsTotal = parseFloat(stats?.subscriptionCommissionsTotal ?? '0');
+  const setupTaskPayoutsLedger = parseFloat(stats?.setupTaskPayoutsTotal ?? '0');
+  const demoCommissionsCombined = demoBonusTotal + subscriptionCommissionsTotal;
+  const totalEarningsLedger = parseFloat(stats?.totalEarnings ?? '0');
+  const earningsBreakdownSum = demoCommissionsCombined + setupTaskPayoutsLedger;
+  const earningsBreakdownMismatch =
+    stats != null && Math.abs(earningsBreakdownSum - totalEarningsLedger) > 0.05;
 
   const pendingDemos = demos.filter(d => d.status === 'pending');
   const completedDemos = demos.filter(d => d.status !== 'pending');
@@ -516,8 +542,8 @@ export function SalesPortal() {
         </div>
 
         <p className="text-sm text-gray-600 mb-6 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
-          <span className="font-medium text-gray-900">Internal task payout</span> (for future completed demo / GE setup credits — separate
-          from subscription commissions):{" "}
+          <span className="font-medium text-gray-900">How you earn</span> Earnings include demo conversion commissions and
+          completed setup task payouts. Each completed Growth Engine setup task pays a fixed amount:{" "}
           <span className="font-semibold text-gray-900">
             ${(stats?.effectiveTaskPayoutDollars ?? stats?.defaultTaskPayoutDollars ?? 50).toFixed(2)}
           </span>
@@ -526,6 +552,8 @@ export function SalesPortal() {
           ) : (
             <span className="text-gray-600"> (default ${(stats?.defaultTaskPayoutDollars ?? 50).toFixed(2)})</span>
           )}
+          . Demo conversions can also earn one-time credits plus subscription-based commission (for example 30% for up to 12
+          months) when Stripe records a qualifying payment.
         </p>
 
         <Tabs defaultValue="pending" className="space-y-6">
@@ -754,46 +782,127 @@ export function SalesPortal() {
           <TabsContent value="earnings">
             <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
               <div className="p-4 border-b border-gray-200">
-                <h2 className="font-semibold text-gray-900">Commission History</h2>
-                <p className="text-sm text-gray-500">30% of subscription revenue for 12 months</p>
+                <h2 className="font-semibold text-gray-900">Earnings</h2>
+                <p className="text-sm text-gray-500 mt-1">
+                  Earnings include demo conversion commissions and completed setup task payouts.
+                </p>
               </div>
-              {conversions.length === 0 ? (
-                <div className="p-8 text-center text-gray-500">
-                  No conversions yet. Keep following up with your prospects!
+
+              <div className="grid gap-3 border-b border-gray-100 bg-slate-50/90 p-4 sm:grid-cols-3">
+                <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+                  <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Demo commissions</p>
+                  <p className="mt-1 text-2xl font-bold text-gray-900">${demoCommissionsCombined.toFixed(2)}</p>
+                  <p className="mt-2 text-[11px] leading-snug text-gray-500">
+                    Conversion credits ${demoBonusTotal.toFixed(2)} + subscription payouts $
+                    {subscriptionCommissionsTotal.toFixed(2)}
+                  </p>
                 </div>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Date</TableHead>
-                      <TableHead>Amount</TableHead>
-                      <TableHead>Payment Status</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {conversions.map((conv) => (
-                      <TableRow key={conv.id}>
-                        <TableCell>
-                          {new Date(conv.createdAt).toLocaleDateString()}
-                        </TableCell>
-                        <TableCell className="font-medium">
-                          ${parseFloat(conv.amount).toFixed(2)}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant={conv.paid ? 'default' : 'outline'}>
-                            {conv.paid ? 'Paid' : 'Pending'}
-                          </Badge>
-                          {conv.paid && conv.paidAt && (
-                            <span className="text-xs text-gray-500 ml-2">
-                              {new Date(conv.paidAt).toLocaleDateString()}
-                            </span>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+                  <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Setup task payouts</p>
+                  <p className="mt-1 text-2xl font-bold text-gray-900">${setupTaskPayoutsLedger.toFixed(2)}</p>
+                  <p className="mt-2 text-[11px] leading-snug text-gray-500">
+                    Fixed amount per completed internal Growth Engine setup (tracked separately from subscription commission).
+                  </p>
+                </div>
+                <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm sm:col-span-1">
+                  <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Total earnings</p>
+                  <p className="mt-1 text-2xl font-bold text-emerald-800">${totalEarningsLedger.toFixed(2)}</p>
+                  <p className="mt-2 text-[11px] leading-snug text-gray-500">Ledger total on your account (all credited sources).</p>
+                </div>
+              </div>
+
+              {earningsBreakdownMismatch && (
+                <div className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-900">
+                  The sum of the breakdown above may differ from total earnings for older activity recorded before setup payouts
+                  were tracked separately, or after manual adjustments.
+                </div>
               )}
+
+              <div className="divide-y divide-gray-100">
+                <div className="p-4">
+                  <h3 className="text-sm font-semibold text-gray-900">Demo conversion records</h3>
+                  <p className="text-xs text-gray-500 mt-0.5 mb-3">One-time credits when a booked demo converts.</p>
+                  {conversions.length === 0 ? (
+                    <div className="rounded-md border border-dashed border-gray-200 py-8 text-center text-sm text-gray-500">
+                      No conversion records yet.
+                    </div>
+                  ) : (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Date</TableHead>
+                          <TableHead>Amount</TableHead>
+                          <TableHead>Payment status</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {conversions.map((conv) => (
+                          <TableRow key={conv.id}>
+                            <TableCell>{new Date(conv.createdAt).toLocaleDateString()}</TableCell>
+                            <TableCell className="font-medium">${parseFloat(conv.amount).toFixed(2)}</TableCell>
+                            <TableCell>
+                              <Badge variant={conv.paid ? 'default' : 'outline'}>
+                                {conv.paid ? 'Paid' : 'Pending'}
+                              </Badge>
+                              {conv.paid && conv.paidAt && (
+                                <span className="ml-2 text-xs text-gray-500">
+                                  {new Date(conv.paidAt).toLocaleDateString()}
+                                </span>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  )}
+                </div>
+
+                <div className="p-4">
+                  <h3 className="text-sm font-semibold text-gray-900">Subscription commissions</h3>
+                  <p className="text-xs text-gray-500 mt-0.5 mb-3">
+                    Ongoing commission from paid subscription invoices (for example 30% for up to 12 months, per policy).
+                  </p>
+                  {commissions.length === 0 ? (
+                    <div className="rounded-md border border-dashed border-gray-200 py-8 text-center text-sm text-gray-500">
+                      No subscription commission rows yet.
+                    </div>
+                  ) : (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Billing period</TableHead>
+                          <TableHead>Amount</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead className="hidden sm:table-cell">Invoice</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {commissions.map((row) => (
+                          <TableRow key={row.id}>
+                            <TableCell>
+                              {row.billingPeriod
+                                ? new Date(row.billingPeriod).toLocaleDateString()
+                                : new Date(row.createdAt).toLocaleDateString()}
+                            </TableCell>
+                            <TableCell className="font-medium">${parseFloat(row.amount).toFixed(2)}</TableCell>
+                            <TableCell>
+                              <Badge variant={row.status === 'paid' ? 'default' : 'outline'}>{row.status}</Badge>
+                              {row.paidAt && (
+                                <span className="ml-2 text-xs text-gray-500">
+                                  Paid {new Date(row.paidAt).toLocaleDateString()}
+                                </span>
+                              )}
+                            </TableCell>
+                            <TableCell className="hidden max-w-[140px] truncate font-mono text-xs text-gray-600 sm:table-cell">
+                              {row.invoiceId || '—'}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  )}
+                </div>
+              </div>
             </div>
           </TabsContent>
         </Tabs>
