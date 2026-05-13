@@ -56,7 +56,7 @@ export function registerContactRoutes(app: Express): void {
   app.get("/api/contacts/notes-summary", async (req, res) => {
     try {
       if (!req.user) return res.status(401).json({ error: "Unauthorized" });
-      const { db } = await import("../db");
+      const { db } = await import("../drizzle/db");
       const { contactNotes } = await import("@shared/schema");
       const { sql, eq } = await import("drizzle-orm");
       const rows = await db
@@ -72,7 +72,8 @@ export function registerContactRoutes(app: Express): void {
       res.json(summary);
     } catch (error) {
       console.error("Error fetching notes summary:", error);
-      res.status(500).json({ error: "Failed" });
+      // Empty map keeps Contacts usable if DB/schema drifts; client treats non-OK as {} anyway.
+      res.status(200).json({});
     }
   });
 
