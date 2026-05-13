@@ -43,6 +43,9 @@ interface Stats {
   totalEarnings: string;
   pendingSetupTasks?: number;
   setupTasksCompleted?: number;
+  defaultTaskPayoutDollars?: number;
+  effectiveTaskPayoutDollars?: number;
+  hasCustomTaskPayout?: boolean;
 }
 
 interface SetupTaskRow {
@@ -511,6 +514,19 @@ export function SalesPortal() {
             <p className="text-3xl font-bold text-gray-900">{stats?.setupTasksCompleted ?? 0}</p>
           </div>
         </div>
+
+        <p className="text-sm text-gray-600 mb-6 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
+          <span className="font-medium text-gray-900">Internal task payout</span> (for future completed demo / GE setup credits — separate
+          from subscription commissions):{" "}
+          <span className="font-semibold text-gray-900">
+            ${(stats?.effectiveTaskPayoutDollars ?? stats?.defaultTaskPayoutDollars ?? 50).toFixed(2)}
+          </span>
+          {stats?.hasCustomTaskPayout ? (
+            <span className="text-gray-600"> (custom override)</span>
+          ) : (
+            <span className="text-gray-600"> (default ${(stats?.defaultTaskPayoutDollars ?? 50).toFixed(2)})</span>
+          )}
+        </p>
 
         <Tabs defaultValue="pending" className="space-y-6">
           <TabsList className="flex flex-wrap h-auto gap-1">

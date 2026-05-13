@@ -45,6 +45,16 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+/** Centered compact admin form dialogs (~520–600px; scroll inside body only). */
+const ADMIN_FORM_MODAL_CLASS =
+  "flex max-h-[90vh] w-[calc(100%-1.25rem)] max-w-[520px] flex-col gap-0 overflow-hidden p-0 sm:max-w-[600px]";
+const ADMIN_FORM_MODAL_HEADER =
+  "shrink-0 space-y-0 border-b px-4 pb-2 pt-3 text-left sm:px-5 sm:pb-2.5 sm:pt-4";
+const ADMIN_FORM_MODAL_BODY =
+  "min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-2.5 sm:px-5 sm:py-3";
+const ADMIN_FORM_MODAL_FOOTER =
+  "shrink-0 flex flex-row flex-wrap items-center justify-end gap-2 border-t px-4 py-2.5 sm:px-5 sm:py-3";
+
 interface Salesperson {
   id: string;
   loginCode: string;
@@ -53,6 +63,7 @@ interface Salesperson {
   phone?: string;
   calendarLink?: string | null;
   role?: string;
+  taskPayoutAmount?: string | null;
   setupTasksCompleted?: number;
   isActive: boolean;
   totalBookings: number;
@@ -169,6 +180,33 @@ interface Partner {
   createdAt: string;
 }
 
+const ADMIN_DEFAULT_TASK_PAYOUT = 50;
+
+function formatSalespersonRole(role: string | undefined): string {
+  const r = role === "demo" ? "sales" : role || "sales";
+  const labels: Record<string, string> = {
+    sales: "Sales",
+    setup: "Setup",
+    both: "Sales + setup",
+  };
+  return labels[r] || r;
+}
+
+function effectiveTaskPayoutLabel(person: Salesperson): string {
+  const raw = person.taskPayoutAmount;
+  if (raw != null && String(raw).trim() !== "") {
+    const n = parseFloat(String(raw));
+    if (!Number.isNaN(n)) return `$${n.toFixed(2)}`;
+  }
+  return `$${ADMIN_DEFAULT_TASK_PAYOUT} (default)`;
+}
+
+function calendarLinkSnippet(link: string | null | undefined): string {
+  if (!link?.trim()) return "—";
+  const t = link.trim();
+  return t.length > 36 ? `${t.slice(0, 36)}…` : t;
+}
+
 function formatGeSetupPipelineStatus(status: string): string {
   const labels: Record<string, string> = {
     purchased: "Purchased",
@@ -188,7 +226,14 @@ export function Admin() {
   const [showPassword, setShowPassword] = useState(false);
   const [editingPerson, setEditingPerson] = useState<Salesperson | null>(null);
   const [isAddingPerson, setIsAddingPerson] = useState(false);
-  const [newPerson, setNewPerson] = useState({ name: "", email: "", phone: "", calendarLink: "", role: "demo" as string });
+  const [newPerson, setNewPerson] = useState({
+    name: "",
+    email: "",
+    phone: "",
+    calendarLink: "",
+    role: "sales" as string,
+    taskPayoutAmount: "",
+  });
   const [addError, setAddError] = useState("");
   const [editingPartner, setEditingPartner] = useState<Partner | null>(null);
   const [isAddingPartner, setIsAddingPartner] = useState(false);
@@ -439,6 +484,7 @@ export function Admin() {
       phone?: string;
       calendarLink?: string;
       role?: string;
+      taskPayoutAmount?: string;
     }) => {
       const res = await adminFetch('/api/admin/salespeople', {
         method: 'POST',
@@ -446,7 +492,11 @@ export function Admin() {
         body: JSON.stringify({
           ...data,
           calendarLink: data.calendarLink?.trim() || undefined,
-          role: data.role || "demo",
+          role: data.role || "sales",
+          ...(data.taskPayoutAmount != null &&
+            String(data.taskPayoutAmount).trim() !== "" && {
+              taskPayoutAmount: Number(data.taskPayoutAmount),
+            }),
         })
       });
       if (!res.ok) {
@@ -458,7 +508,7 @@ export function Admin() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/admin/salespeople'] });
       setIsAddingPerson(false);
-      setNewPerson({ name: "", email: "", phone: "", calendarLink: "", role: "demo" });
+      setNewPerson({ name: "", email: "", phone: "", calendarLink: "", role: "sales", taskPayoutAmount: "" });
       setAddError("");
     },
     onError: (error: Error) => {
@@ -768,7 +818,9 @@ export function Admin() {
                     <TableHead>Login Code</TableHead>
                     <TableHead>Email</TableHead>
                     <TableHead>Phone</TableHead>
+                    <TableHead>Calendar</TableHead>
                     <TableHead>Role</TableHead>
+                    <TableHead>Task payout</TableHead>
                     <TableHead>Setup done</TableHead>
                     <TableHead>Bookings</TableHead>
                     <TableHead>Conversions</TableHead>
@@ -780,7 +832,7 @@ export function Admin() {
                 <TableBody>
                   {salespeople.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={11} className="text-center py-8 text-gray-500">
+                      <TableCell colSpan={13} className="text-center py-8 text-gray-500">
                         No salespeople yet. Add your first salesperson to get started.
                       </TableCell>
                     </TableRow>
@@ -795,10 +847,19 @@ export function Admin() {
                         </TableCell>
                         <TableCell>{person.email}</TableCell>
                         <TableCell>{person.phone || '-'}</TableCell>
+                        <TableCell
+                          className="max-w-[140px] truncate text-xs text-gray-600 font-mono"
+                          title={person.calendarLink?.trim() || undefined}
+                        >
+                          {calendarLinkSnippet(person.calendarLink)}
+                        </TableCell>
                         <TableCell>
                           <Badge variant="outline" className="text-xs font-normal">
-                            {person.role || "demo"}
+                            {formatSalespersonRole(person.role)}
                           </Badge>
+                        </TableCell>
+                        <TableCell className="text-sm text-gray-800 whitespace-nowrap">
+                          {effectiveTaskPayoutLabel(person)}
                         </TableCell>
                         <TableCell>{person.setupTasksCompleted ?? 0}</TableCell>
                         <TableCell>{person.totalBookings || 0}</TableCell>
@@ -1683,158 +1744,191 @@ export function Admin() {
         </Tabs>
       </main>
 
-      <Sheet open={isAddingPartner} onOpenChange={(open) => {
+      <Dialog
+        open={isAddingPartner}
+        onOpenChange={(open) => {
           setIsAddingPartner(open);
           if (!open) setAddPartnerError("");
-        }}>
-        <SheetContent side="bottom" className="rounded-t-xl pb-8">
-          <SheetHeader className="pb-4">
-            <SheetTitle>Add Partner</SheetTitle>
-          </SheetHeader>
-          {addPartnerError && (
-            <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-              {addPartnerError}
-            </div>
-          )}
-          <div className="space-y-4">
+        }}
+      >
+        <DialogContent className={cn(ADMIN_FORM_MODAL_CLASS)}>
+          <DialogHeader className={ADMIN_FORM_MODAL_HEADER}>
+            <DialogTitle>Add Partner</DialogTitle>
+          </DialogHeader>
+          <div className={cn(ADMIN_FORM_MODAL_BODY, "space-y-3")}>
+            {addPartnerError && (
+              <div className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800">
+                {addPartnerError}
+              </div>
+            )}
             <div>
-              <Label htmlFor="new-partner-name">Name</Label>
+              <Label htmlFor="new-partner-name" className="text-xs font-medium text-muted-foreground">
+                Name
+              </Label>
               <Input
                 id="new-partner-name"
                 value={newPartner.name}
                 onChange={(e) => setNewPartner({ ...newPartner, name: e.target.value })}
                 placeholder="Partner Name"
-                className="text-base"
+                className="mt-1 h-9"
                 data-testid="input-partner-name"
               />
             </div>
             <div>
-              <Label htmlFor="new-partner-email">Email</Label>
+              <Label htmlFor="new-partner-email" className="text-xs font-medium text-muted-foreground">
+                Email
+              </Label>
               <Input
                 id="new-partner-email"
                 type="email"
                 value={newPartner.email}
                 onChange={(e) => setNewPartner({ ...newPartner, email: e.target.value })}
                 placeholder="partner@example.com"
-                className="text-base"
+                className="mt-1 h-9"
                 data-testid="input-partner-email"
               />
             </div>
             <div>
-              <Label htmlFor="new-partner-password">Password</Label>
+              <Label htmlFor="new-partner-password" className="text-xs font-medium text-muted-foreground">
+                Password
+              </Label>
               <Input
                 id="new-partner-password"
                 type="password"
                 value={newPartner.password}
                 onChange={(e) => setNewPartner({ ...newPartner, password: e.target.value })}
-                placeholder="Set a password for portal access"
-                className="text-base"
+                placeholder="Portal access password"
+                className="mt-1 h-9"
                 data-testid="input-partner-password"
               />
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div>
-                <Label htmlFor="new-partner-rate">Commission Rate (%)</Label>
+                <Label htmlFor="new-partner-rate" className="text-xs font-medium text-muted-foreground">
+                  Commission rate (%)
+                </Label>
                 <Input
                   id="new-partner-rate"
                   value={newPartner.commissionRate}
                   onChange={(e) => setNewPartner({ ...newPartner, commissionRate: e.target.value })}
                   placeholder="20.00"
-                  className="text-base"
+                  className="mt-1 h-9"
                   data-testid="input-partner-rate"
                 />
               </div>
               <div>
-                <Label htmlFor="new-partner-duration">Duration (months)</Label>
+                <Label htmlFor="new-partner-duration" className="text-xs font-medium text-muted-foreground">
+                  Duration (months)
+                </Label>
                 <Input
                   id="new-partner-duration"
                   type="number"
                   value={newPartner.commissionDurationMonths}
-                  onChange={(e) => setNewPartner({ ...newPartner, commissionDurationMonths: parseInt(e.target.value) || 6 })}
+                  onChange={(e) =>
+                    setNewPartner({ ...newPartner, commissionDurationMonths: parseInt(e.target.value) || 6 })
+                  }
                   placeholder="6"
-                  className="text-base"
+                  className="mt-1 h-9"
                   data-testid="input-partner-duration"
                 />
               </div>
             </div>
           </div>
-          <SheetFooter className="pt-6">
+          <DialogFooter className={cn(ADMIN_FORM_MODAL_FOOTER, "sm:justify-end")}>
+            <Button type="button" variant="outline" size="sm" onClick={() => setIsAddingPartner(false)}>
+              Cancel
+            </Button>
             <Button
+              type="button"
+              size="sm"
               onClick={() => createPartner.mutate(newPartner)}
               disabled={createPartner.isPending}
-              className="w-full bg-brand-green hover:bg-brand-dark min-h-[48px]"
+              className="bg-brand-green hover:bg-brand-dark"
               data-testid="button-submit-partner"
             >
               {createPartner.isPending ? (
                 <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Creating...
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Creating…
                 </>
               ) : (
-                'Create Partner'
+                "Create Partner"
               )}
             </Button>
-          </SheetFooter>
-        </SheetContent>
-      </Sheet>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={!!editingPartner} onOpenChange={(open) => !open && setEditingPartner(null)}>
-        <DialogContent>
-          <DialogHeader>
+        <DialogContent className={cn(ADMIN_FORM_MODAL_CLASS)}>
+          <DialogHeader className={ADMIN_FORM_MODAL_HEADER}>
             <DialogTitle>Edit Partner</DialogTitle>
           </DialogHeader>
           {editingPartner && (
-            <div className="space-y-4">
+            <div className={cn(ADMIN_FORM_MODAL_BODY, "space-y-3")}>
               <div>
-                <Label>Name</Label>
+                <Label className="text-xs font-medium text-muted-foreground">Name</Label>
                 <Input
+                  className="mt-1 h-9"
                   value={editingPartner.name}
                   onChange={(e) => setEditingPartner({ ...editingPartner, name: e.target.value })}
                   data-testid="input-edit-partner-name"
                 />
               </div>
               <div>
-                <Label>Email</Label>
+                <Label className="text-xs font-medium text-muted-foreground">Email</Label>
                 <Input
+                  className="mt-1 h-9"
                   type="email"
                   value={editingPartner.email}
                   onChange={(e) => setEditingPartner({ ...editingPartner, email: e.target.value })}
                   data-testid="input-edit-partner-email"
                 />
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
-                  <Label>Commission Rate (%)</Label>
+                  <Label className="text-xs font-medium text-muted-foreground">Commission rate (%)</Label>
                   <Input
+                    className="mt-1 h-9"
                     value={editingPartner.commissionRate}
                     onChange={(e) => setEditingPartner({ ...editingPartner, commissionRate: e.target.value })}
                     data-testid="input-edit-partner-rate"
                   />
                 </div>
                 <div>
-                  <Label>Duration (months)</Label>
+                  <Label className="text-xs font-medium text-muted-foreground">Duration (months)</Label>
                   <Input
+                    className="mt-1 h-9"
                     type="number"
                     value={editingPartner.commissionDurationMonths}
-                    onChange={(e) => setEditingPartner({ ...editingPartner, commissionDurationMonths: parseInt(e.target.value) || 6 })}
+                    onChange={(e) =>
+                      setEditingPartner({
+                        ...editingPartner,
+                        commissionDurationMonths: parseInt(e.target.value) || 6,
+                      })
+                    }
                     data-testid="input-edit-partner-duration"
                   />
                 </div>
               </div>
               <div>
-                <Label>Status</Label>
-                <div className="flex gap-2 mt-2">
+                <Label className="text-xs font-medium text-muted-foreground">Status</Label>
+                <div className="mt-1.5 flex flex-wrap gap-2">
                   <Button
-                    variant={editingPartner.status === 'active' ? 'default' : 'outline'}
+                    variant={editingPartner.status === "active" ? "default" : "outline"}
                     size="sm"
-                    onClick={() => setEditingPartner({ ...editingPartner, status: 'active' })}
+                    type="button"
+                    className="h-8"
+                    onClick={() => setEditingPartner({ ...editingPartner, status: "active" })}
                   >
                     Active
                   </Button>
                   <Button
-                    variant={editingPartner.status === 'paused' ? 'default' : 'outline'}
+                    variant={editingPartner.status === "paused" ? "default" : "outline"}
                     size="sm"
-                    onClick={() => setEditingPartner({ ...editingPartner, status: 'paused' })}
+                    type="button"
+                    className="h-8"
+                    onClick={() => setEditingPartner({ ...editingPartner, status: "paused" })}
                   >
                     Paused
                   </Button>
@@ -1842,11 +1936,13 @@ export function Admin() {
               </div>
             </div>
           )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEditingPartner(null)}>
+          <DialogFooter className={cn(ADMIN_FORM_MODAL_FOOTER, "sm:justify-end")}>
+            <Button type="button" variant="outline" size="sm" onClick={() => setEditingPartner(null)}>
               Cancel
             </Button>
             <Button
+              type="button"
+              size="sm"
               onClick={() => {
                 if (editingPartner) {
                   updatePartner.mutate({
@@ -1863,199 +1959,292 @@ export function Admin() {
               className="bg-brand-green hover:bg-brand-dark"
               data-testid="button-save-partner"
             >
-              {updatePartner.isPending ? 'Saving...' : 'Save Changes'}
+              {updatePartner.isPending ? "Saving…" : "Save Changes"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <Sheet open={isAddingPerson} onOpenChange={(open) => {
+      <Dialog
+        open={isAddingPerson}
+        onOpenChange={(open) => {
           setIsAddingPerson(open);
           if (!open) setAddError("");
-        }}>
-        <SheetContent side="bottom" className="rounded-t-xl pb-8">
-          <SheetHeader className="pb-4">
-            <SheetTitle>Add Salesperson</SheetTitle>
-          </SheetHeader>
-          {addError && (
-            <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-              {addError}
-            </div>
-          )}
-          <div className="space-y-4">
+        }}
+      >
+        <DialogContent className={cn(ADMIN_FORM_MODAL_CLASS)}>
+          <DialogHeader className={ADMIN_FORM_MODAL_HEADER}>
+            <DialogTitle>Add Salesperson</DialogTitle>
+          </DialogHeader>
+          <div className={cn(ADMIN_FORM_MODAL_BODY, "space-y-3")}>
+            {addError && (
+              <div className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800">{addError}</div>
+            )}
             <div>
-              <Label htmlFor="new-name">Name</Label>
+              <Label htmlFor="new-name" className="text-xs font-medium text-muted-foreground">
+                Name
+              </Label>
               <Input
                 id="new-name"
                 value={newPerson.name}
                 onChange={(e) => setNewPerson({ ...newPerson, name: e.target.value })}
                 placeholder="John Smith"
-                className="text-base"
+                className="mt-1 h-9"
               />
             </div>
             <div>
-              <Label htmlFor="new-email">Email</Label>
+              <Label htmlFor="new-email" className="text-xs font-medium text-muted-foreground">
+                Email
+              </Label>
               <Input
                 id="new-email"
                 type="email"
                 value={newPerson.email}
                 onChange={(e) => setNewPerson({ ...newPerson, email: e.target.value })}
                 placeholder="john@company.com"
-                className="text-base"
+                className="mt-1 h-9"
               />
             </div>
             <div>
-              <Label htmlFor="new-phone">Phone (optional)</Label>
+              <Label htmlFor="new-phone" className="text-xs font-medium text-muted-foreground">
+                Phone <span className="font-normal text-muted-foreground">(optional)</span>
+              </Label>
               <Input
                 id="new-phone"
                 type="tel"
                 value={newPerson.phone}
                 onChange={(e) => setNewPerson({ ...newPerson, phone: e.target.value })}
                 placeholder="+1 (555) 123-4567"
-                className="text-base"
+                className="mt-1 h-9"
               />
             </div>
             <div>
-              <Label htmlFor="new-cal">Concierge calendar link (optional)</Label>
+              <Label htmlFor="new-cal" className="text-xs font-medium text-muted-foreground">
+                Concierge calendar link <span className="font-normal">(optional)</span>
+              </Label>
               <Input
                 id="new-cal"
                 type="url"
                 value={newPerson.calendarLink}
                 onChange={(e) => setNewPerson({ ...newPerson, calendarLink: e.target.value })}
-                placeholder="https://calendly.com/..."
-                className="text-base"
+                placeholder="https://calendly.com/…"
+                className="mt-1 h-9"
               />
-              <p className="text-xs text-gray-500 mt-1">Used for Growth Engine launch sessions when this person is assigned.</p>
+              <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
+                Used for Growth Engine launch sessions when this person is assigned.
+              </p>
             </div>
             <div>
-              <Label htmlFor="new-role">Role</Label>
+              <Label htmlFor="new-role" className="text-xs font-medium text-muted-foreground">
+                Role
+              </Label>
               <select
                 id="new-role"
-                className="w-full border rounded-md h-10 px-3 text-base bg-white"
-                value={newPerson.role}
+                className="mt-1 flex h-9 w-full rounded-md border border-input bg-white px-3 text-sm shadow-sm"
+                value={newPerson.role === "demo" ? "sales" : newPerson.role}
                 onChange={(e) => setNewPerson({ ...newPerson, role: e.target.value })}
               >
-                <option value="demo">Demo bookings only</option>
-                <option value="setup">Growth Engine setup only</option>
-                <option value="both">Demo + setup</option>
+                <option value="sales">Sales (demo bookings)</option>
+                <option value="setup">Setup (Growth Engine concierge)</option>
+                <option value="both">Sales + setup</option>
               </select>
             </div>
+            <div>
+              <Label htmlFor="new-payout" className="text-xs font-medium text-muted-foreground">
+                Task payout <span className="font-normal">($ / completed internal task)</span>
+              </Label>
+              <Input
+                id="new-payout"
+                type="number"
+                min={0}
+                step="0.01"
+                value={newPerson.taskPayoutAmount}
+                onChange={(e) => setNewPerson({ ...newPerson, taskPayoutAmount: e.target.value })}
+                placeholder={`Default ${ADMIN_DEFAULT_TASK_PAYOUT}`}
+                className="mt-1 h-9"
+              />
+              <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
+                Leave blank for default ${ADMIN_DEFAULT_TASK_PAYOUT}. For future task payouts; does not change subscription
+                commissions.
+              </p>
+            </div>
           </div>
-          <div className="flex flex-col gap-3 pt-6">
-            <button 
+          <DialogFooter className={cn(ADMIN_FORM_MODAL_FOOTER, "sm:justify-end")}>
+            <Button type="button" variant="outline" size="sm" onClick={() => setIsAddingPerson(false)}>
+              Cancel
+            </Button>
+            <Button
               type="button"
+              size="sm"
               disabled={!newPerson.name || !newPerson.email || createSalesperson.isPending}
+              className="bg-brand-green hover:bg-brand-dark"
+              data-testid="button-submit-salesperson"
               onClick={async () => {
                 try {
                   await createSalesperson.mutateAsync(newPerson);
-                } catch (err: any) {
-                  console.error('Create salesperson error:', err);
+                } catch (err: unknown) {
+                  console.error("Create salesperson error:", err);
                 }
               }}
-              className="bg-brand-green hover:bg-brand-dark text-white w-full min-h-[52px] text-base font-medium rounded-md disabled:opacity-50"
-              data-testid="button-submit-salesperson"
             >
-              {createSalesperson.isPending ? "Adding..." : "Add Salesperson"}
-            </button>
-            <button 
-              type="button"
-              onClick={() => setIsAddingPerson(false)}
-              className="border border-gray-300 bg-white w-full min-h-[52px] text-base font-medium rounded-md"
-            >
-              Cancel
-            </button>
-          </div>
-        </SheetContent>
-      </Sheet>
+              {createSalesperson.isPending ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Adding…
+                </>
+              ) : (
+                "Add Salesperson"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
-      <Dialog open={!!editingPerson} onOpenChange={() => setEditingPerson(null)}>
-        <DialogContent>
-          <DialogHeader>
+      <Dialog open={!!editingPerson} onOpenChange={(open) => { if (!open) setEditingPerson(null); }}>
+        <DialogContent className={cn(ADMIN_FORM_MODAL_CLASS)}>
+          <DialogHeader className={ADMIN_FORM_MODAL_HEADER}>
             <DialogTitle>Edit Salesperson</DialogTitle>
           </DialogHeader>
           {editingPerson && (
-            <div className="space-y-4">
+            <div className={cn(ADMIN_FORM_MODAL_BODY, "space-y-3")}>
               <div>
-                <Label htmlFor="edit-name">Name</Label>
+                <Label htmlFor="edit-name" className="text-xs font-medium text-muted-foreground">
+                  Name
+                </Label>
                 <Input
                   id="edit-name"
+                  className="mt-1 h-9"
                   value={editingPerson.name}
                   onChange={(e) => setEditingPerson({ ...editingPerson, name: e.target.value })}
                 />
               </div>
               <div>
-                <Label htmlFor="edit-email">Email</Label>
+                <Label htmlFor="edit-email" className="text-xs font-medium text-muted-foreground">
+                  Email
+                </Label>
                 <Input
                   id="edit-email"
+                  className="mt-1 h-9"
                   type="email"
                   value={editingPerson.email}
                   onChange={(e) => setEditingPerson({ ...editingPerson, email: e.target.value })}
                 />
               </div>
               <div>
-                <Label htmlFor="edit-phone">Phone</Label>
+                <Label htmlFor="edit-phone" className="text-xs font-medium text-muted-foreground">
+                  Phone
+                </Label>
                 <Input
                   id="edit-phone"
+                  className="mt-1 h-9"
                   type="tel"
-                  value={editingPerson.phone || ''}
+                  value={editingPerson.phone || ""}
                   onChange={(e) => setEditingPerson({ ...editingPerson, phone: e.target.value })}
                 />
               </div>
               <div>
-                <Label htmlFor="edit-cal">Concierge calendar link</Label>
+                <Label htmlFor="edit-cal" className="text-xs font-medium text-muted-foreground">
+                  Concierge calendar link
+                </Label>
                 <Input
                   id="edit-cal"
+                  className="mt-1 h-9"
                   type="url"
                   value={editingPerson.calendarLink || ""}
                   onChange={(e) => setEditingPerson({ ...editingPerson, calendarLink: e.target.value })}
-                  placeholder="https://calendly.com/..."
+                  placeholder="https://calendly.com/…"
                 />
               </div>
               <div>
-                <Label htmlFor="edit-role">Role</Label>
+                <Label htmlFor="edit-role" className="text-xs font-medium text-muted-foreground">
+                  Role
+                </Label>
                 <select
                   id="edit-role"
-                  className="w-full border rounded-md h-10 px-3 text-sm bg-white"
-                  value={editingPerson.role || "demo"}
+                  className="mt-1 flex h-9 w-full rounded-md border border-input bg-white px-3 text-sm shadow-sm"
+                  value={editingPerson.role === "demo" ? "sales" : editingPerson.role || "sales"}
                   onChange={(e) => setEditingPerson({ ...editingPerson, role: e.target.value })}
                 >
-                  <option value="demo">Demo bookings only</option>
-                  <option value="setup">Growth Engine setup only</option>
-                  <option value="both">Demo + setup</option>
+                  <option value="sales">Sales (demo bookings)</option>
+                  <option value="setup">Setup (Growth Engine concierge)</option>
+                  <option value="both">Sales + setup</option>
                 </select>
               </div>
-              <div className="flex items-center gap-2">
+              <div>
+                <Label htmlFor="edit-payout" className="text-xs font-medium text-muted-foreground">
+                  Task payout <span className="font-normal">($ / completed internal task)</span>
+                </Label>
+                <Input
+                  id="edit-payout"
+                  className="mt-1 h-9"
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={
+                    editingPerson.taskPayoutAmount != null && String(editingPerson.taskPayoutAmount).trim() !== ""
+                      ? String(editingPerson.taskPayoutAmount)
+                      : ""
+                  }
+                  onChange={(e) => setEditingPerson({ ...editingPerson, taskPayoutAmount: e.target.value || null })}
+                  placeholder={`Default $${ADMIN_DEFAULT_TASK_PAYOUT}`}
+                />
+                <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
+                  Clear to use default ${ADMIN_DEFAULT_TASK_PAYOUT}.
+                </p>
+              </div>
+              <div className="flex items-center gap-2 pt-0.5">
                 <input
                   type="checkbox"
                   id="edit-active"
+                  className="h-4 w-4 rounded border-gray-300"
                   checked={editingPerson.isActive}
                   onChange={(e) => setEditingPerson({ ...editingPerson, isActive: e.target.checked })}
                 />
-                <Label htmlFor="edit-active">Active</Label>
+                <Label htmlFor="edit-active" className="text-sm font-normal leading-none">
+                  Active
+                </Label>
               </div>
             </div>
           )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEditingPerson(null)}>
+          <DialogFooter className={cn(ADMIN_FORM_MODAL_FOOTER, "sm:justify-end")}>
+            <Button type="button" variant="outline" size="sm" onClick={() => setEditingPerson(null)}>
               Cancel
             </Button>
-            <Button 
+            <Button
+              type="button"
+              size="sm"
+              className="bg-brand-green hover:bg-brand-dark"
+              disabled={updateSalesperson.isPending}
               onClick={() => {
                 if (editingPerson) {
+                  const raw = (editingPerson.taskPayoutAmount ?? "").toString().trim();
+                  let taskPayoutAmount: string | null;
+                  if (raw === "") {
+                    taskPayoutAmount = null;
+                  } else {
+                    const n = Number(raw);
+                    if (!Number.isFinite(n) || n < 0) {
+                      window.alert("Enter a valid non-negative task payout, or leave blank for the default.");
+                      return;
+                    }
+                    taskPayoutAmount = n.toFixed(2);
+                  }
+                  const normalizedRole =
+                    editingPerson.role === "demo" ? "sales" : editingPerson.role || "sales";
                   updateSalesperson.mutate({
                     id: editingPerson.id,
                     name: editingPerson.name,
                     email: editingPerson.email,
                     phone: editingPerson.phone,
                     calendarLink: editingPerson.calendarLink?.trim() || null,
-                    role: editingPerson.role || "demo",
-                    isActive: editingPerson.isActive
+                    role: normalizedRole,
+                    taskPayoutAmount,
+                    isActive: editingPerson.isActive,
                   });
                 }
               }}
-              className="bg-brand-green hover:bg-brand-dark"
             >
-              Save Changes
+              {updateSalesperson.isPending ? "Saving…" : "Save Changes"}
             </Button>
           </DialogFooter>
         </DialogContent>

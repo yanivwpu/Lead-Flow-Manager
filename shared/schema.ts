@@ -752,8 +752,10 @@ export const salespeople = pgTable("salespeople", {
   phone: text("phone"),
   /** Public booking link for concierge / setup sessions (e.g. Calendly). */
   calendarLink: text("calendar_link"),
-  /** demo = demo bookings only; setup = Growth Engine onboarding tasks; both = eligible for both. */
-  role: text("role").notNull().default("demo"),
+  /** sales = demo bookings; setup = Growth Engine concierge tasks; both = both queues. */
+  role: text("role").notNull().default("sales"),
+  /** Fixed payout (USD) per completed internal demo/setup task when credited; null = app default ($50). */
+  taskPayoutAmount: numeric("task_payout_amount", { precision: 10, scale: 2 }),
   isActive: boolean("is_active").default(true),
   totalBookings: integer("total_bookings").default(0),
   totalConversions: integer("total_conversions").default(0),

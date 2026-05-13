@@ -103,6 +103,7 @@ import {
   RGE_TEMPLATE_ID,
   isCalendarMissingForSetupTask,
 } from "./growthEngineSetupService";
+import { DEFAULT_SALES_TASK_PAYOUT_DOLLARS, getEffectiveTaskPayoutDollars } from "./salespersonTaskPayout";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import shopifyRoutes from "./shopifyRoutes";
 import ghlRoutes from "./ghlRoutes";
@@ -6866,12 +6867,16 @@ export async function registerRoutes(
 
       // Get an active salesperson (round-robin style - pick the one with fewest bookings)
       const salespeople = await storage.getActiveSalespeople();
-      if (salespeople.length === 0) {
+      const demoEligible = salespeople.filter((p) => {
+        const r = (p.role || "sales") as string;
+        return r === "sales" || r === "both" || r === "demo";
+      });
+      if (demoEligible.length === 0) {
         return res.status(400).json({ error: "No salespeople available" });
       }
 
       // Pick salesperson with fewest bookings
-      const salesperson = salespeople.reduce((min, p) => 
+      const salesperson = demoEligible.reduce((min, p) => 
         (p.totalBookings || 0) < (min.totalBookings || 0) ? p : min
       );
 
@@ -7078,7 +7083,11 @@ export async function registerRoutes(
   // Admin: Create salesperson
   app.post("/api/admin/salespeople", requireAdmin, async (req, res) => {
     try {
-      const data = insertSalespersonSchema.parse(req.body);
+      const raw = { ...req.body } as Record<string, unknown>;
+      if (raw.role === "demo") raw.role = "sales";
+      if (raw.taskPayoutAmount === "" || raw.taskPayoutAmount === undefined) delete raw.taskPayoutAmount;
+      if (raw.calendarLink === "") raw.calendarLink = null;
+      const data = insertSalespersonSchema.parse(raw);
       const loginCode = await storage.generateUniqueLoginCode();
       const person = await storage.createSalesperson({ ...data, loginCode });
       
@@ -7101,11 +7110,24 @@ export async function registerRoutes(
   // Admin: Update salesperson
   app.patch("/api/admin/salespeople/:id", requireAdmin, async (req, res) => {
     try {
-      const { name, email, phone, isActive, calendarLink, role } = req.body as Record<string, unknown>;
+      const { name, email, phone, isActive, calendarLink, role, taskPayoutAmount } = req.body as Record<string, unknown>;
       if (role !== undefined && role !== null) {
         const r = String(role);
-        if (!["demo", "setup", "both"].includes(r)) {
-          return res.status(400).json({ error: "Invalid role (use demo, setup, or both)" });
+        const normalized = r === "demo" ? "sales" : r;
+        if (!["sales", "setup", "both"].includes(normalized)) {
+          return res.status(400).json({ error: "Invalid role (use sales, setup, or both)" });
+        }
+      }
+      let resolvedTaskPayout: string | null | undefined;
+      if (Object.prototype.hasOwnProperty.call(req.body, "taskPayoutAmount")) {
+        if (taskPayoutAmount === null || taskPayoutAmount === "" || taskPayoutAmount === undefined) {
+          resolvedTaskPayout = null;
+        } else {
+          const n = Number(taskPayoutAmount);
+          if (!Number.isFinite(n) || n < 0) {
+            return res.status(400).json({ error: "Invalid task payout amount" });
+          }
+          resolvedTaskPayout = n.toFixed(2);
         }
       }
       const person = await storage.updateSalesperson(req.params.id, {
@@ -7116,7 +7138,11 @@ export async function registerRoutes(
         ...(calendarLink !== undefined && {
           calendarLink: calendarLink === "" || calendarLink === null ? null : String(calendarLink),
         }),
-        ...(role !== undefined && role !== null && { role: String(role) as "demo" | "setup" | "both" }),
+        ...(role !== undefined &&
+          role !== null && {
+            role: (String(role) === "demo" ? "sales" : String(role)) as "sales" | "setup" | "both",
+          }),
+        ...(resolvedTaskPayout !== undefined && { taskPayoutAmount: resolvedTaskPayout }),
       });
       res.json(person);
     } catch (error) {
@@ -7831,15 +7857,22 @@ export async function registerRoutes(
     // Check if agreement needs to be accepted (version mismatch or never accepted)
     const currentVersion = AGREEMENT_VERSIONS.salesperson_commission;
     const agreementRequired = salesperson.agreementVersion !== currentVersion;
-    
+    const effectiveTaskPayoutDollars = getEffectiveTaskPayoutDollars(salesperson);
+    const hasCustomTaskPayout =
+      salesperson.taskPayoutAmount != null && String(salesperson.taskPayoutAmount).trim() !== "";
+
     res.json({ 
       authenticated: true,
       agreementRequired,
       currentAgreementVersion: currentVersion,
+      defaultTaskPayoutDollars: DEFAULT_SALES_TASK_PAYOUT_DOLLARS,
+      effectiveTaskPayoutDollars,
+      hasCustomTaskPayout,
       salesperson: {
         id: salesperson.id,
         name: salesperson.name,
-        email: salesperson.email
+        email: salesperson.email,
+        role: salesperson.role || "sales",
       }
     });
   });
@@ -7908,19 +7941,25 @@ export async function registerRoutes(
   app.get("/api/sales-portal/stats", requireSalesperson, async (req: any, res) => {
     const salesperson = req.salesperson;
     const pendingSetupTasks = await storage.countOpenGrowthEngineSetupTasksForSalesperson(salesperson.id);
+    const effectiveTaskPayoutDollars = getEffectiveTaskPayoutDollars(salesperson);
+    const hasCustomTaskPayout =
+      salesperson.taskPayoutAmount != null && String(salesperson.taskPayoutAmount).trim() !== "";
     res.json({
       totalBookings: salesperson.totalBookings || 0,
       totalConversions: salesperson.totalConversions || 0,
       totalEarnings: salesperson.totalEarnings || "0",
       pendingSetupTasks,
       setupTasksCompleted: salesperson.setupTasksCompleted ?? 0,
+      defaultTaskPayoutDollars: DEFAULT_SALES_TASK_PAYOUT_DOLLARS,
+      effectiveTaskPayoutDollars,
+      hasCustomTaskPayout,
     });
   });
 
   // Salesperson Portal: Growth Engine setup / concierge tasks (setup or both roles)
   app.get("/api/sales-portal/setup-tasks", requireSalesperson, async (req: any, res) => {
     try {
-      const role = req.salesperson.role || "demo";
+      const role = req.salesperson.role || "sales";
       if (role !== "setup" && role !== "both") {
         return res.json([]);
       }
@@ -7944,7 +7983,7 @@ export async function registerRoutes(
 
   app.patch("/api/sales-portal/setup-tasks/:id/complete", requireSalesperson, async (req: any, res) => {
     try {
-      const role = req.salesperson.role || "demo";
+      const role = req.salesperson.role || "sales";
       if (role !== "setup" && role !== "both") {
         return res.status(403).json({ error: "Not authorized for setup tasks" });
       }
