@@ -20,6 +20,7 @@ import {
   type Salesperson, type InsertSalesperson,
   type DemoBooking, type InsertDemoBooking,
   type SalesConversion, type InsertSalesConversion,
+  type GrowthEngineSetupTask, type InsertGrowthEngineSetupTask,
   type Contact, type InsertContact,
   type Conversation, type InsertConversation,
   type Message, type InsertMessage,
@@ -57,8 +58,8 @@ import { computeConversationReplyWindowStatus } from "@shared/conversationReplyW
 import type { RetargetEligibleContactRow } from "@shared/retargetEligibleContact";
 import { deriveRetargetReEngagementApiFields } from "@shared/reEngagement";
 import { db } from "../drizzle/db";
-import { users, chats, registeredPhones, messageUsage, conversationWindows, teamMembers, workflows, workflowExecutions, recurringReminders, webhooks, webhookDeliveries, integrations, messageTemplates, templateCarouselMediaDefaults, templateSends, dripCampaigns, dripSteps, dripEnrollments, dripSends, chatbotFlows, chatbotSessions, salespeople, demoBookings, salesConversions, adminSettings, contacts, conversations, messages, activityEvents, channelSettings, supportTickets, partners, commissions, agreementAcceptances, contactNotes, appointments, flowJobs, noReplyJobs, automationTimerJobs, automationSendDedup, campaignEnrollments, type InsertConversationWindow, type ConversationWindow } from "@shared/schema";
-import { eq, and, lte, sql, isNotNull, isNull, asc, desc, gte, sum, gt, or, like, ilike, ne, inArray, notInArray, lt } from "drizzle-orm";
+import { users, chats, registeredPhones, messageUsage, conversationWindows, teamMembers, workflows, workflowExecutions, recurringReminders, webhooks, webhookDeliveries, integrations, messageTemplates, templateCarouselMediaDefaults, templateSends, dripCampaigns, dripSteps, dripEnrollments, dripSends, chatbotFlows, chatbotSessions, salespeople, demoBookings, salesConversions, adminSettings, contacts, conversations, messages, activityEvents, channelSettings, supportTickets, partners, commissions, agreementAcceptances, contactNotes, appointments, flowJobs, noReplyJobs, automationTimerJobs, automationSendDedup, campaignEnrollments, type InsertConversationWindow, type ConversationWindow, growthEngineSetupTasks } from "@shared/schema";
+import { eq, and, lte, sql, isNotNull, isNull, asc, desc, gte, sum, gt, or, like, ilike, ne, inArray, notInArray, lt, count } from "drizzle-orm";
 
 /** Columns always present on legacy Neon `public.users`; avoids Drizzle hydrating rows when DB lacks newer schema columns (42703). */
 type UsersAuthCoreRow = {
@@ -452,6 +453,21 @@ export interface IStorage {
   upsertUserTemplateData(userId: string, templateId: string, assetType: string, assetKey: string, definition: any): Promise<UserTemplateData>;
   deleteUserTemplateDataForTemplate(userId: string, templateId: string): Promise<void>;
   resetTemplateForUser(userId: string, templateId: string): Promise<void>;
+
+  getGrowthEngineSetupTask(userId: string, templateId: string): Promise<GrowthEngineSetupTask | undefined>;
+  getGrowthEngineSetupTaskById(id: string): Promise<GrowthEngineSetupTask | undefined>;
+  listGrowthEngineSetupTasksForTemplate(templateId: string): Promise<GrowthEngineSetupTask[]>;
+  listGrowthEngineSetupTasksForSalesperson(salespersonId: string): Promise<GrowthEngineSetupTask[]>;
+  countOpenGrowthEngineSetupTasksForSalesperson(salespersonId: string): Promise<number>;
+  insertGrowthEngineSetupTask(data: InsertGrowthEngineSetupTask): Promise<GrowthEngineSetupTask>;
+  updateGrowthEngineSetupTask(id: string, updates: Partial<GrowthEngineSetupTask>): Promise<GrowthEngineSetupTask | undefined>;
+  updateGrowthEngineSetupTaskByUserTemplate(
+    userId: string,
+    templateId: string,
+    updates: Partial<GrowthEngineSetupTask>,
+  ): Promise<GrowthEngineSetupTask | undefined>;
+  deleteGrowthEngineSetupTaskByUserTemplate(userId: string, templateId: string): Promise<void>;
+  incrementSalespersonSetupTasksCompleted(salespersonId: string): Promise<void>;
 
   // Flow Job methods (durable Wait/delay scheduling)
   createFlowJob(job: InsertFlowJob): Promise<FlowJob>;
@@ -3442,12 +3458,98 @@ export class DbStorage implements IStorage {
     await db.delete(templateEntitlements).where(
       and(eq(templateEntitlements.userId, userId), eq(templateEntitlements.templateId, templateId))
     );
+    await db.delete(growthEngineSetupTasks).where(
+      and(eq(growthEngineSetupTasks.userId, userId), eq(growthEngineSetupTasks.templateId, templateId))
+    );
     await db.delete(workflows).where(
       and(
         eq(workflows.userId, userId),
         sql`description LIKE ${'Realtor Growth Engine%'}`
       )
     );
+  }
+
+  async getGrowthEngineSetupTask(userId: string, templateId: string): Promise<GrowthEngineSetupTask | undefined> {
+    const rows = await db
+      .select()
+      .from(growthEngineSetupTasks)
+      .where(and(eq(growthEngineSetupTasks.userId, userId), eq(growthEngineSetupTasks.templateId, templateId)))
+      .limit(1);
+    return rows[0];
+  }
+
+  async getGrowthEngineSetupTaskById(id: string): Promise<GrowthEngineSetupTask | undefined> {
+    const rows = await db.select().from(growthEngineSetupTasks).where(eq(growthEngineSetupTasks.id, id)).limit(1);
+    return rows[0];
+  }
+
+  async listGrowthEngineSetupTasksForTemplate(templateId: string): Promise<GrowthEngineSetupTask[]> {
+    return await db
+      .select()
+      .from(growthEngineSetupTasks)
+      .where(eq(growthEngineSetupTasks.templateId, templateId))
+      .orderBy(desc(growthEngineSetupTasks.createdAt));
+  }
+
+  async listGrowthEngineSetupTasksForSalesperson(salespersonId: string): Promise<GrowthEngineSetupTask[]> {
+    return await db
+      .select()
+      .from(growthEngineSetupTasks)
+      .where(eq(growthEngineSetupTasks.salespersonId, salespersonId))
+      .orderBy(desc(growthEngineSetupTasks.createdAt));
+  }
+
+  async countOpenGrowthEngineSetupTasksForSalesperson(salespersonId: string): Promise<number> {
+    const [row] = await db
+      .select({ n: count() })
+      .from(growthEngineSetupTasks)
+      .where(
+        and(eq(growthEngineSetupTasks.salespersonId, salespersonId), ne(growthEngineSetupTasks.status, "setup_completed")),
+      );
+    return Number(row?.n ?? 0);
+  }
+
+  async insertGrowthEngineSetupTask(data: InsertGrowthEngineSetupTask): Promise<GrowthEngineSetupTask> {
+    const [row] = await db.insert(growthEngineSetupTasks).values(data).returning();
+    return row;
+  }
+
+  async updateGrowthEngineSetupTask(
+    id: string,
+    updates: Partial<GrowthEngineSetupTask>,
+  ): Promise<GrowthEngineSetupTask | undefined> {
+    const [row] = await db
+      .update(growthEngineSetupTasks)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(growthEngineSetupTasks.id, id))
+      .returning();
+    return row;
+  }
+
+  async updateGrowthEngineSetupTaskByUserTemplate(
+    userId: string,
+    templateId: string,
+    updates: Partial<GrowthEngineSetupTask>,
+  ): Promise<GrowthEngineSetupTask | undefined> {
+    const [row] = await db
+      .update(growthEngineSetupTasks)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(and(eq(growthEngineSetupTasks.userId, userId), eq(growthEngineSetupTasks.templateId, templateId)))
+      .returning();
+    return row;
+  }
+
+  async deleteGrowthEngineSetupTaskByUserTemplate(userId: string, templateId: string): Promise<void> {
+    await db
+      .delete(growthEngineSetupTasks)
+      .where(and(eq(growthEngineSetupTasks.userId, userId), eq(growthEngineSetupTasks.templateId, templateId)));
+  }
+
+  async incrementSalespersonSetupTasksCompleted(salespersonId: string): Promise<void> {
+    await db
+      .update(salespeople)
+      .set({ setupTasksCompleted: sql`COALESCE(${salespeople.setupTasksCompleted}, 0) + 1` })
+      .where(eq(salespeople.id, salespersonId));
   }
 
   // ─── Flow Job methods ──────────────────────────────────────────────────────

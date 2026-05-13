@@ -13,7 +13,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { 
   Calendar, DollarSign, CheckCircle, Clock, LogOut, Loader2, 
   User, Phone, Mail, ExternalLink, FileText, AlertCircle,
-  Eye, EyeOff
+  Eye, EyeOff, ClipboardList
 } from "lucide-react";
 
 interface Demo {
@@ -41,6 +41,25 @@ interface Stats {
   totalBookings: number;
   totalConversions: number;
   totalEarnings: string;
+  pendingSetupTasks?: number;
+  setupTasksCompleted?: number;
+}
+
+interface SetupTaskRow {
+  id: string;
+  userId: string;
+  templateId: string;
+  salespersonId: string | null;
+  submissionId: string | null;
+  status: string;
+  onboardingSubmittedAt: string | null;
+  sessionBookedAt: string | null;
+  completedAt: string | null;
+  internalNotes: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+  userEmail: string | null;
+  userName: string | null;
 }
 
 interface SalespersonInfo {
@@ -219,6 +238,11 @@ export function SalesPortal() {
     enabled: isLoggedIn,
   });
 
+  const { data: setupTasks = [] } = useQuery<SetupTaskRow[]>({
+    queryKey: ['/api/sales-portal/setup-tasks'],
+    enabled: isLoggedIn,
+  });
+
   const markComplete = useMutation({
     mutationFn: async (id: string) => {
       const res = await fetch(`/api/sales-portal/demos/${id}/complete`, { method: 'PATCH' });
@@ -231,8 +255,33 @@ export function SalesPortal() {
     }
   });
 
+  const markSetupComplete = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetch(`/api/sales-portal/setup-tasks/${id}/complete`, { method: 'PATCH', credentials: 'include' });
+      if (!res.ok) throw new Error('Failed to mark setup complete');
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/sales-portal/setup-tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/sales-portal/stats'] });
+    }
+  });
+
   const pendingDemos = demos.filter(d => d.status === 'pending');
   const completedDemos = demos.filter(d => d.status !== 'pending');
+  const pendingSetup = setupTasks.filter(t => t.status !== 'setup_completed');
+  const completedSetup = setupTasks.filter(t => t.status === 'setup_completed');
+
+  function setupStatusLabel(s: string) {
+    const m: Record<string, string> = {
+      purchased: 'Purchased',
+      onboarding_submitted: 'Onboarding submitted',
+      session_pending: 'Session pending',
+      session_booked: 'Session booked',
+      setup_completed: 'Setup completed',
+    };
+    return m[s] || s;
+  }
 
   if (!isLoggedIn) {
     return (
@@ -415,7 +464,7 @@ export function SalesPortal() {
       </header>
 
       <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
           <div className="bg-white rounded-xl p-6 border border-gray-200">
             <div className="flex items-center gap-3 mb-2">
               <div className="h-10 w-10 bg-blue-100 rounded-lg flex items-center justify-center">
@@ -443,17 +492,43 @@ export function SalesPortal() {
             </div>
             <p className="text-3xl font-bold text-gray-900">${parseFloat(stats?.totalEarnings || '0').toFixed(2)}</p>
           </div>
+          <div className="bg-white rounded-xl p-6 border border-gray-200">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="h-10 w-10 bg-violet-100 rounded-lg flex items-center justify-center">
+                <ClipboardList className="h-5 w-5 text-violet-600" />
+              </div>
+              <span className="text-gray-600">GE setup open</span>
+            </div>
+            <p className="text-3xl font-bold text-gray-900">{stats?.pendingSetupTasks ?? 0}</p>
+          </div>
+          <div className="bg-white rounded-xl p-6 border border-gray-200">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="h-10 w-10 bg-slate-100 rounded-lg flex items-center justify-center">
+                <CheckCircle className="h-5 w-5 text-slate-600" />
+              </div>
+              <span className="text-gray-600">GE setups done</span>
+            </div>
+            <p className="text-3xl font-bold text-gray-900">{stats?.setupTasksCompleted ?? 0}</p>
+          </div>
         </div>
 
         <Tabs defaultValue="pending" className="space-y-6">
-          <TabsList>
+          <TabsList className="flex flex-wrap h-auto gap-1">
             <TabsTrigger value="pending" className="gap-2">
               <Clock className="h-4 w-4" />
               Pending Demos ({pendingDemos.length})
             </TabsTrigger>
             <TabsTrigger value="completed" className="gap-2">
               <CheckCircle className="h-4 w-4" />
-              Completed ({completedDemos.length})
+              Completed Demos ({completedDemos.length})
+            </TabsTrigger>
+            <TabsTrigger value="setup-pending" className="gap-2">
+              <ClipboardList className="h-4 w-4" />
+              GE Setup ({pendingSetup.length})
+            </TabsTrigger>
+            <TabsTrigger value="setup-done" className="gap-2">
+              <CheckCircle className="h-4 w-4" />
+              GE Done ({completedSetup.length})
             </TabsTrigger>
             <TabsTrigger value="earnings" className="gap-2">
               <DollarSign className="h-4 w-4" />
@@ -562,6 +637,95 @@ export function SalesPortal() {
                           <Badge variant={demo.status === 'converted' ? 'default' : 'secondary'}>
                             {demo.status}
                           </Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </div>
+          </TabsContent>
+
+          <TabsContent value="setup-pending">
+            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+              <div className="p-4 border-b border-gray-200">
+                <h2 className="font-semibold text-gray-900">Growth Engine — concierge / launch setup</h2>
+                <p className="text-sm text-gray-500">
+                  Tasks created after purchase and onboarding submission. Mark complete after the launch session is delivered.
+                </p>
+              </div>
+              {pendingSetup.length === 0 ? (
+                <div className="p-8 text-center text-gray-500">
+                  No open setup tasks. If you expect work here, ask an admin to set your role to &quot;setup&quot; or &quot;both&quot; and assign
+                  calendar links.
+                </div>
+              ) : (
+                <div className="divide-y divide-gray-100">
+                  {pendingSetup.map((task) => (
+                    <div key={task.id} className="p-4 hover:bg-gray-50">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div className="space-y-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h3 className="font-medium text-gray-900 truncate">
+                              {task.userName || task.userEmail || "Customer"}
+                            </h3>
+                            <Badge variant="outline" className="text-xs shrink-0">
+                              {setupStatusLabel(task.status)}
+                            </Badge>
+                          </div>
+                          <div className="text-sm text-gray-500 flex flex-wrap gap-3">
+                            <span className="flex items-center gap-1 min-w-0">
+                              <Mail className="h-3.5 w-3.5 shrink-0" />
+                              <span className="truncate">{task.userEmail || "—"}</span>
+                            </span>
+                          </div>
+                          <p className="text-xs text-gray-400 font-mono truncate">User ID: {task.userId}</p>
+                        </div>
+                        <Button
+                          onClick={() => markSetupComplete.mutate(task.id)}
+                          disabled={markSetupComplete.isPending || task.status === "setup_completed"}
+                          className="bg-brand-green hover:bg-brand-dark shrink-0"
+                        >
+                          {markSetupComplete.isPending ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <>
+                              <CheckCircle className="h-4 w-4 mr-1" />
+                              Mark setup complete
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </TabsContent>
+
+          <TabsContent value="setup-done">
+            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+              <div className="p-4 border-b border-gray-200">
+                <h2 className="font-semibold text-gray-900">Completed Growth Engine setups</h2>
+              </div>
+              {completedSetup.length === 0 ? (
+                <div className="p-8 text-center text-gray-500">No completed setup tasks yet.</div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Customer</TableHead>
+                      <TableHead>Email</TableHead>
+                      <TableHead>Completed</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {completedSetup.map((task) => (
+                      <TableRow key={task.id}>
+                        <TableCell className="font-medium">{task.userName || "—"}</TableCell>
+                        <TableCell>{task.userEmail || "—"}</TableCell>
+                        <TableCell>
+                          {task.completedAt ? new Date(task.completedAt).toLocaleString() : "—"}
                         </TableCell>
                       </TableRow>
                     ))}

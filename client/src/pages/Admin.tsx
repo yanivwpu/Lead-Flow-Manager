@@ -24,6 +24,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { 
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter 
 } from "@/components/ui/dialog";
@@ -50,6 +51,9 @@ interface Salesperson {
   name: string;
   email: string;
   phone?: string;
+  calendarLink?: string | null;
+  role?: string;
+  setupTasksCompleted?: number;
   isActive: boolean;
   totalBookings: number;
   totalConversions: number;
@@ -120,6 +124,17 @@ interface AdminUser {
   partnerName: string | null;
   salespersonId: string | null;
   salespersonName: string | null;
+  growthEngineSetup: {
+    id: string;
+    status: string;
+    salespersonId: string | null;
+    assignedSalespersonName: string | null;
+    onboardingSubmittedAt: string | null;
+    sessionBookedAt: string | null;
+    completedAt: string | null;
+    internalNotes: string | null;
+  } | null;
+  rgeConciergeCalendarWarning: boolean;
 }
 
 type UserStatusFilter = "all" | "trial" | "active" | "expired";
@@ -154,6 +169,17 @@ interface Partner {
   createdAt: string;
 }
 
+function formatGeSetupPipelineStatus(status: string): string {
+  const labels: Record<string, string> = {
+    purchased: "Purchased",
+    onboarding_submitted: "Onboarding submitted",
+    session_pending: "Session pending",
+    session_booked: "Session booked",
+    setup_completed: "Setup completed",
+  };
+  return labels[status] || status;
+}
+
 export function Admin() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [password, setPassword] = useState("");
@@ -162,7 +188,7 @@ export function Admin() {
   const [showPassword, setShowPassword] = useState(false);
   const [editingPerson, setEditingPerson] = useState<Salesperson | null>(null);
   const [isAddingPerson, setIsAddingPerson] = useState(false);
-  const [newPerson, setNewPerson] = useState({ name: "", email: "", phone: "" });
+  const [newPerson, setNewPerson] = useState({ name: "", email: "", phone: "", calendarLink: "", role: "demo" as string });
   const [addError, setAddError] = useState("");
   const [editingPartner, setEditingPartner] = useState<Partner | null>(null);
   const [isAddingPartner, setIsAddingPartner] = useState(false);
@@ -244,6 +270,12 @@ export function Admin() {
     enabled: isLoggedIn,
     retry: 1,
   });
+
+  useEffect(() => {
+    if (!selectedAdminUser) return;
+    const fresh = adminUsers.find((u) => u.id === selectedAdminUser.id);
+    if (fresh) setSelectedAdminUser(fresh);
+  }, [adminUsers]);
 
   const { data: partners = [] } = useQuery<Partner[]>({
     queryKey: ['/api/admin/partners'],
@@ -401,11 +433,21 @@ export function Admin() {
   });
 
   const createSalesperson = useMutation({
-    mutationFn: async (data: { name: string; email: string; phone?: string }) => {
+    mutationFn: async (data: {
+      name: string;
+      email: string;
+      phone?: string;
+      calendarLink?: string;
+      role?: string;
+    }) => {
       const res = await adminFetch('/api/admin/salespeople', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
+        body: JSON.stringify({
+          ...data,
+          calendarLink: data.calendarLink?.trim() || undefined,
+          role: data.role || "demo",
+        })
       });
       if (!res.ok) {
         const errorData = await res.text();
@@ -416,7 +458,7 @@ export function Admin() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/admin/salespeople'] });
       setIsAddingPerson(false);
-      setNewPerson({ name: "", email: "", phone: "" });
+      setNewPerson({ name: "", email: "", phone: "", calendarLink: "", role: "demo" });
       setAddError("");
     },
     onError: (error: Error) => {
@@ -438,6 +480,22 @@ export function Admin() {
       queryClient.invalidateQueries({ queryKey: ['/api/admin/salespeople'] });
       setEditingPerson(null);
     }
+  });
+
+  const patchGeSetupTask = useMutation({
+    mutationFn: async ({ id, body }: { id: string; body: Record<string, unknown> }) => {
+      const res = await adminFetch(`/api/admin/growth-engine-setup-tasks/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/users'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/salespeople'] });
+    },
   });
 
   const deleteSalesperson = useMutation({
@@ -710,6 +768,8 @@ export function Admin() {
                     <TableHead>Login Code</TableHead>
                     <TableHead>Email</TableHead>
                     <TableHead>Phone</TableHead>
+                    <TableHead>Role</TableHead>
+                    <TableHead>Setup done</TableHead>
                     <TableHead>Bookings</TableHead>
                     <TableHead>Conversions</TableHead>
                     <TableHead>Earnings</TableHead>
@@ -720,7 +780,7 @@ export function Admin() {
                 <TableBody>
                   {salespeople.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={9} className="text-center py-8 text-gray-500">
+                      <TableCell colSpan={11} className="text-center py-8 text-gray-500">
                         No salespeople yet. Add your first salesperson to get started.
                       </TableCell>
                     </TableRow>
@@ -735,6 +795,12 @@ export function Admin() {
                         </TableCell>
                         <TableCell>{person.email}</TableCell>
                         <TableCell>{person.phone || '-'}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="text-xs font-normal">
+                            {person.role || "demo"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>{person.setupTasksCompleted ?? 0}</TableCell>
                         <TableCell>{person.totalBookings || 0}</TableCell>
                         <TableCell>{person.totalConversions || 0}</TableCell>
                         <TableCell>${parseFloat(person.totalEarnings || '0').toFixed(2)}</TableCell>
@@ -1315,6 +1381,106 @@ export function Admin() {
                       </div>
                     </div>
 
+                    <div className="rounded-lg border p-3 space-y-3">
+                      <div className="text-sm font-semibold text-gray-900">Growth Engine — concierge / setup</div>
+                      {!selectedAdminUser.growthEngineSetup ? (
+                        <p className="text-sm text-gray-600">No internal setup task yet (creates after RGE purchase flow).</p>
+                      ) : (
+                        <>
+                          {selectedAdminUser.rgeConciergeCalendarWarning && (
+                            <div className="flex gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                              <AlertCircle className="h-5 w-5 shrink-0" />
+                              <span>
+                                No booking URL is configured for this customer&apos;s stage (assignee has no calendar link and{" "}
+                                <code className="text-xs">DEFAULT_RGE_SETUP_CALENDAR_URL</code> is unset). Install is not blocked; add a link on
+                                the assigned specialist or set the default env URL.
+                              </span>
+                            </div>
+                          )}
+                          <div className="text-sm text-gray-700 space-y-1">
+                            <div>
+                              Pipeline:{" "}
+                              <span className="font-medium">
+                                {formatGeSetupPipelineStatus(selectedAdminUser.growthEngineSetup.status)}
+                              </span>
+                            </div>
+                            <div>
+                              Assigned specialist:{" "}
+                              <span className="font-medium">
+                                {selectedAdminUser.growthEngineSetup.assignedSalespersonName || "—"}
+                              </span>
+                            </div>
+                            <div className="text-xs text-gray-500">
+                              Submitted:{" "}
+                              {selectedAdminUser.growthEngineSetup.onboardingSubmittedAt
+                                ? new Date(selectedAdminUser.growthEngineSetup.onboardingSubmittedAt).toLocaleString()
+                                : "—"}{" "}
+                              · Booked:{" "}
+                              {selectedAdminUser.growthEngineSetup.sessionBookedAt
+                                ? new Date(selectedAdminUser.growthEngineSetup.sessionBookedAt).toLocaleString()
+                                : "—"}{" "}
+                              · Completed:{" "}
+                              {selectedAdminUser.growthEngineSetup.completedAt
+                                ? new Date(selectedAdminUser.growthEngineSetup.completedAt).toLocaleString()
+                                : "—"}
+                            </div>
+                          </div>
+                          <div className="space-y-2">
+                            <Label className="text-xs text-gray-600">Internal notes</Label>
+                            <Textarea
+                              className="text-sm min-h-[72px]"
+                              defaultValue={selectedAdminUser.growthEngineSetup.internalNotes || ""}
+                              key={`${selectedAdminUser.id}-${selectedAdminUser.growthEngineSetup.id}-notes`}
+                              onBlur={(e) => {
+                                const v = e.target.value.trim();
+                                const cur = selectedAdminUser.growthEngineSetup?.internalNotes || "";
+                                if (v === cur) return;
+                                patchGeSetupTask.mutate({
+                                  id: selectedAdminUser.growthEngineSetup!.id,
+                                  body: { internalNotes: v || null },
+                                });
+                              }}
+                            />
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            {selectedAdminUser.growthEngineSetup.status !== "session_booked" &&
+                              selectedAdminUser.growthEngineSetup.status !== "setup_completed" && (
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  disabled={patchGeSetupTask.isPending}
+                                  onClick={() =>
+                                    patchGeSetupTask.mutate({
+                                      id: selectedAdminUser.growthEngineSetup!.id,
+                                      body: { status: "session_booked" },
+                                    })
+                                  }
+                                >
+                                  Mark session booked
+                                </Button>
+                              )}
+                            {selectedAdminUser.growthEngineSetup.status !== "setup_completed" && (
+                              <Button
+                                type="button"
+                                size="sm"
+                                className="bg-brand-green hover:bg-brand-dark"
+                                disabled={patchGeSetupTask.isPending}
+                                onClick={() =>
+                                  patchGeSetupTask.mutate({
+                                    id: selectedAdminUser.growthEngineSetup!.id,
+                                    body: { status: "setup_completed" },
+                                  })
+                                }
+                              >
+                                Mark setup completed
+                              </Button>
+                            )}
+                          </div>
+                        </>
+                      )}
+                    </div>
+
                     <div className="rounded-lg border p-3 space-y-2">
                       <div className="text-sm font-semibold text-gray-900">Stripe</div>
                       <div className="text-sm text-gray-700">
@@ -1749,6 +1915,31 @@ export function Admin() {
                 className="text-base"
               />
             </div>
+            <div>
+              <Label htmlFor="new-cal">Concierge calendar link (optional)</Label>
+              <Input
+                id="new-cal"
+                type="url"
+                value={newPerson.calendarLink}
+                onChange={(e) => setNewPerson({ ...newPerson, calendarLink: e.target.value })}
+                placeholder="https://calendly.com/..."
+                className="text-base"
+              />
+              <p className="text-xs text-gray-500 mt-1">Used for Growth Engine launch sessions when this person is assigned.</p>
+            </div>
+            <div>
+              <Label htmlFor="new-role">Role</Label>
+              <select
+                id="new-role"
+                className="w-full border rounded-md h-10 px-3 text-base bg-white"
+                value={newPerson.role}
+                onChange={(e) => setNewPerson({ ...newPerson, role: e.target.value })}
+              >
+                <option value="demo">Demo bookings only</option>
+                <option value="setup">Growth Engine setup only</option>
+                <option value="both">Demo + setup</option>
+              </select>
+            </div>
           </div>
           <div className="flex flex-col gap-3 pt-6">
             <button 
@@ -1810,6 +2001,29 @@ export function Admin() {
                   onChange={(e) => setEditingPerson({ ...editingPerson, phone: e.target.value })}
                 />
               </div>
+              <div>
+                <Label htmlFor="edit-cal">Concierge calendar link</Label>
+                <Input
+                  id="edit-cal"
+                  type="url"
+                  value={editingPerson.calendarLink || ""}
+                  onChange={(e) => setEditingPerson({ ...editingPerson, calendarLink: e.target.value })}
+                  placeholder="https://calendly.com/..."
+                />
+              </div>
+              <div>
+                <Label htmlFor="edit-role">Role</Label>
+                <select
+                  id="edit-role"
+                  className="w-full border rounded-md h-10 px-3 text-sm bg-white"
+                  value={editingPerson.role || "demo"}
+                  onChange={(e) => setEditingPerson({ ...editingPerson, role: e.target.value })}
+                >
+                  <option value="demo">Demo bookings only</option>
+                  <option value="setup">Growth Engine setup only</option>
+                  <option value="both">Demo + setup</option>
+                </select>
+              </div>
               <div className="flex items-center gap-2">
                 <input
                   type="checkbox"
@@ -1833,6 +2047,8 @@ export function Admin() {
                     name: editingPerson.name,
                     email: editingPerson.email,
                     phone: editingPerson.phone,
+                    calendarLink: editingPerson.calendarLink?.trim() || null,
+                    role: editingPerson.role || "demo",
                     isActive: editingPerson.isActive
                   });
                 }

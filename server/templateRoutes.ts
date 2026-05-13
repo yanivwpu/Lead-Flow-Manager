@@ -11,6 +11,12 @@ import { buildPostCheckoutSuccessUrl, buildStripeCancelUrl, sanitizeStripeReturn
 import { isUserCalendlyBookingConnected } from "./calendlyBookingConnected";
 import { evaluateGrowthEngineAccess } from "./growthEngineEntitlements";
 import { isUserWhatsAppConnectedForActivation } from "./whatsappService";
+import {
+  ensureGrowthEnginePurchasedTask,
+  onGrowthEngineSubmissionRecorded,
+  onGrowthEngineInstallSuccess,
+  resolveConciergeBookingUrlForUser,
+} from "./growthEngineSetupService";
 
 const TEMPLATE_ID = "realtor-growth-engine";
 const TEMPLATE_PRICE_CENTS = 19900;
@@ -31,6 +37,17 @@ export function registerTemplateRoutes(app: Express) {
     } catch (error: any) {
       console.error("[Template] Subscription check error:", error);
       res.status(500).json({ error: "Failed to check subscription" });
+    }
+  });
+
+  app.get("/api/templates/realtor-growth-engine/concierge-calendar", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      const resolved = await resolveConciergeBookingUrlForUser(userId);
+      res.json(resolved);
+    } catch (error: any) {
+      console.error("[Template] Concierge calendar error:", error);
+      res.status(500).json({ error: "Failed to resolve calendar link" });
     }
   });
 
@@ -130,6 +147,9 @@ export function registerTemplateRoutes(app: Express) {
         if (!existingInstall) {
           await storage.createTemplateInstall({ userId, templateId: TEMPLATE_ID, installStatus: "pending" });
         }
+        await ensureGrowthEnginePurchasedTask(userId).catch((e) =>
+          console.error("[Template] GE setup task (demo purchase):", e)
+        );
         return res.json({ success: true, demo: true });
       }
 
@@ -211,6 +231,10 @@ export function registerTemplateRoutes(app: Express) {
           console.error("[Template] Failed to send payment confirmation email:", err)
         );
       }
+
+      await ensureGrowthEnginePurchasedTask(userId).catch((e) =>
+        console.error("[Template] GE setup task (verify payment):", e)
+      );
 
       res.json({ success: true, entitlement });
     } catch (error: any) {
@@ -338,6 +362,10 @@ export function registerTemplateRoutes(app: Express) {
         normalized,
       });
 
+      await onGrowthEngineSubmissionRecorded(userId, submission.id).catch((e) =>
+        console.error("[Template] GE setup task (submission):", e)
+      );
+
       await storage.upsertTemplateEntitlement(userId, TEMPLATE_ID, {
         status: "submitted",
         onboardingSubmittedAt: new Date(),
@@ -350,6 +378,9 @@ export function registerTemplateRoutes(app: Express) {
       try {
         await installTemplateForUser(userId);
         await storage.upsertTemplateEntitlement(userId, TEMPLATE_ID, { status: "installed" });
+        await onGrowthEngineInstallSuccess(userId).catch((e) =>
+          console.error("[Template] GE setup task (install success):", e)
+        );
       } catch (installErr) {
         console.error("[Template] Install failed (non-blocking):", installErr);
       }

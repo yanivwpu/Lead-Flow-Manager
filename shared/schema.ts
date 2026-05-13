@@ -750,10 +750,15 @@ export const salespeople = pgTable("salespeople", {
   name: text("name").notNull(),
   email: text("email").notNull(),
   phone: text("phone"),
+  /** Public booking link for concierge / setup sessions (e.g. Calendly). */
+  calendarLink: text("calendar_link"),
+  /** demo = demo bookings only; setup = Growth Engine onboarding tasks; both = eligible for both. */
+  role: text("role").notNull().default("demo"),
   isActive: boolean("is_active").default(true),
   totalBookings: integer("total_bookings").default(0),
   totalConversions: integer("total_conversions").default(0),
   totalEarnings: numeric("total_earnings", { precision: 10, scale: 2 }).default("0"),
+  setupTasksCompleted: integer("setup_tasks_completed").notNull().default(0),
   agreementAcceptedAt: timestamp("agreement_accepted_at"), // null = not accepted yet
   agreementVersion: text("agreement_version"), // version they accepted, e.g. "2026-01-03"
   createdAt: timestamp("created_at").defaultNow(),
@@ -785,6 +790,22 @@ export const salesConversions = pgTable("sales_conversions", {
   paid: boolean("paid").default(false),
   paidAt: timestamp("paid_at"),
   createdAt: timestamp("created_at").defaultNow(),
+});
+
+/** Internal ops: Realtor Growth Engine concierge / setup pipeline (Sales Portal + Admin). */
+export const growthEngineSetupTasks = pgTable("growth_engine_setup_tasks", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  templateId: text("template_id").notNull().default("realtor-growth-engine"),
+  salespersonId: varchar("salesperson_id").references(() => salespeople.id, { onDelete: "set null" }),
+  submissionId: varchar("submission_id"),
+  status: text("status").notNull().default("purchased"),
+  onboardingSubmittedAt: timestamp("onboarding_submitted_at"),
+  sessionBookedAt: timestamp("session_booked_at"),
+  completedAt: timestamp("completed_at"),
+  internalNotes: text("internal_notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
 });
 
 // Admin settings (password protected admin area)
@@ -851,6 +872,7 @@ export const insertSalespersonSchema = createInsertSchema(salespeople).omit({
   totalBookings: true,
   totalConversions: true,
   totalEarnings: true,
+  setupTasksCompleted: true,
 });
 
 export const insertDemoBookingSchema = createInsertSchema(demoBookings).omit({
@@ -864,12 +886,20 @@ export const insertSalesConversionSchema = createInsertSchema(salesConversions).
   paidAt: true,
 });
 
+export const insertGrowthEngineSetupTaskSchema = createInsertSchema(growthEngineSetupTasks).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 export type InsertSalesperson = z.infer<typeof insertSalespersonSchema>;
 export type Salesperson = typeof salespeople.$inferSelect;
 export type InsertDemoBooking = z.infer<typeof insertDemoBookingSchema>;
 export type DemoBooking = typeof demoBookings.$inferSelect;
 export type InsertSalesConversion = z.infer<typeof insertSalesConversionSchema>;
 export type SalesConversion = typeof salesConversions.$inferSelect;
+export type GrowthEngineSetupTask = typeof growthEngineSetupTasks.$inferSelect;
+export type InsertGrowthEngineSetupTask = z.infer<typeof insertGrowthEngineSetupTaskSchema>;
 
 // Agreement acceptances - legal audit trail
 export const agreementAcceptances = pgTable("agreement_acceptances", {

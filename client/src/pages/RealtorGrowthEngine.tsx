@@ -106,7 +106,8 @@ import {
   Loader2,
   Lightbulb,
   TrendingUp,
-  PhoneOff
+  PhoneOff,
+  ExternalLink
 } from "lucide-react";
 import { useForm, type UseFormReturn } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -234,6 +235,16 @@ function RGEOnboardingWizard({
     queryKey: ["/api/templates/realtor-growth-engine/status"],
     enabled: status === "purchased" || status === "submitted",
     staleTime: 15_000,
+  });
+
+  const { data: conciergeBooking } = useQuery<{ calendarUrl: string | null; source: string }>({
+    queryKey: ["/api/templates/realtor-growth-engine/concierge-calendar"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/templates/realtor-growth-engine/concierge-calendar");
+      return res.json();
+    },
+    enabled: status === "submitted",
+    staleTime: 60_000,
   });
 
   const webchatConnected = !!channelSettings?.some((s) => s.channel === "webchat" && !!s.isConnected);
@@ -671,7 +682,20 @@ function RGEOnboardingWizard({
               fine-tune booking so everything is live with confidence.
             </p>
             <p className="text-xs text-muted-foreground">Watch your inbox for scheduling details.</p>
-            <Button className="bg-brand-green hover:bg-brand-green/90 mt-2" onClick={() => setLocation("/app/templates/realtor-growth-engine")}>
+            {conciergeBooking?.calendarUrl ? (
+              <Button className="bg-brand-green hover:bg-brand-green/90 mt-2" asChild>
+                <a href={conciergeBooking.calendarUrl} target="_blank" rel="noopener noreferrer">
+                  <ExternalLink className="w-4 h-4 mr-2 inline" />
+                  Book your concierge launch session
+                </a>
+              </Button>
+            ) : (
+              <p className="text-xs text-muted-foreground max-w-md mx-auto mt-2">
+                A self-serve scheduling link will appear here when your specialist or company default calendar is configured. Your team may
+                still reach out by email to coordinate.
+              </p>
+            )}
+            <Button variant="outline" className="mt-2" onClick={() => setLocation("/app/templates/realtor-growth-engine")}>
               Return to overview
             </Button>
           </CardContent>

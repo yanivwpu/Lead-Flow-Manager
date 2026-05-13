@@ -98,6 +98,11 @@ import { dispatchInboundMessagingAutomation } from "./automationEventDispatcher"
 import { evaluateChatbotInboundArbitration } from "./chatbotEngine";
 import { runW2QualificationEngine, runServiceRoutingEngine } from "./workflowEngine";
 import { evaluateGrowthEngineAccess, isGrowthEngineWorkflow } from "./growthEngineEntitlements";
+import {
+  GE_SETUP_STATUS,
+  RGE_TEMPLATE_ID,
+  isCalendarMissingForSetupTask,
+} from "./growthEngineSetupService";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import shopifyRoutes from "./shopifyRoutes";
 import ghlRoutes from "./ghlRoutes";
@@ -7096,17 +7101,73 @@ export async function registerRoutes(
   // Admin: Update salesperson
   app.patch("/api/admin/salespeople/:id", requireAdmin, async (req, res) => {
     try {
-      const { name, email, phone, isActive } = req.body;
+      const { name, email, phone, isActive, calendarLink, role } = req.body as Record<string, unknown>;
+      if (role !== undefined && role !== null) {
+        const r = String(role);
+        if (!["demo", "setup", "both"].includes(r)) {
+          return res.status(400).json({ error: "Invalid role (use demo, setup, or both)" });
+        }
+      }
       const person = await storage.updateSalesperson(req.params.id, {
-        ...(name !== undefined && { name }),
-        ...(email !== undefined && { email }),
-        ...(phone !== undefined && { phone }),
-        ...(isActive !== undefined && { isActive }),
+        ...(name !== undefined && { name: name as string }),
+        ...(email !== undefined && { email: email as string }),
+        ...(phone !== undefined && { phone: phone as string | null }),
+        ...(isActive !== undefined && { isActive: !!isActive }),
+        ...(calendarLink !== undefined && {
+          calendarLink: calendarLink === "" || calendarLink === null ? null : String(calendarLink),
+        }),
+        ...(role !== undefined && role !== null && { role: String(role) as "demo" | "setup" | "both" }),
       });
       res.json(person);
     } catch (error) {
       console.error("Error updating salesperson:", error);
       res.status(500).json({ error: "Failed to update salesperson" });
+    }
+  });
+
+  // Admin: Update Growth Engine concierge / setup task (internal ops)
+  app.patch("/api/admin/growth-engine-setup-tasks/:id", requireAdmin, async (req, res) => {
+    try {
+      const task = await storage.getGrowthEngineSetupTaskById(req.params.id);
+      if (!task) return res.status(404).json({ error: "Task not found" });
+      const prevStatus = task.status;
+      const { status, sessionBookedAt, salespersonId, internalNotes } = req.body as Record<string, unknown>;
+      const updates: Record<string, unknown> = {};
+      if (internalNotes !== undefined) {
+        updates.internalNotes = internalNotes === null || internalNotes === "" ? null : String(internalNotes);
+      }
+      if (salespersonId !== undefined) {
+        updates.salespersonId =
+          salespersonId === null || salespersonId === "" ? null : String(salespersonId);
+      }
+      if (sessionBookedAt !== undefined) {
+        updates.sessionBookedAt = sessionBookedAt ? new Date(String(sessionBookedAt)) : null;
+      }
+      if (status !== undefined) {
+        const s = String(status);
+        if (!Object.values(GE_SETUP_STATUS).includes(s as (typeof GE_SETUP_STATUS)[keyof typeof GE_SETUP_STATUS])) {
+          return res.status(400).json({ error: "Invalid status" });
+        }
+        updates.status = s;
+        if (s === GE_SETUP_STATUS.sessionBooked && (updates.sessionBookedAt == null || updates.sessionBookedAt === undefined)) {
+          updates.sessionBookedAt = new Date();
+        }
+        if (s === GE_SETUP_STATUS.setupCompleted) {
+          updates.completedAt = task.completedAt || new Date();
+        }
+      }
+      const updated = await storage.updateGrowthEngineSetupTask(task.id, updates as any);
+      if (
+        updates.status === GE_SETUP_STATUS.setupCompleted &&
+        prevStatus !== GE_SETUP_STATUS.setupCompleted &&
+        updated?.salespersonId
+      ) {
+        await storage.incrementSalespersonSetupTasksCompleted(updated.salespersonId);
+      }
+      res.json(updated);
+    } catch (error: any) {
+      console.error("Error updating GE setup task:", error);
+      res.status(500).json({ error: "Failed to update task" });
     }
   });
 
@@ -7366,6 +7427,10 @@ export async function registerRoutes(
       
       const allSalespeople = await storage.getSalespeople();
       console.log('[Admin Users] Salespeople:', allSalespeople.length);
+
+      const geTasks = await storage.listGrowthEngineSetupTasksForTemplate(RGE_TEMPLATE_ID);
+      const geByUserId = new Map(geTasks.map((t) => [t.userId, t]));
+      const salespersonCalendarById = new Map(allSalespeople.map((s) => [s.id, s.calendarLink]));
       
       // Build lookup maps
       const partnerMap = new Map(allPartners.map(p => [p.id, p.name]));
@@ -7419,6 +7484,7 @@ export async function registerRoutes(
       };
       
       const usersWithInfo = await Promise.all(allUsers.map(async user => {
+        const geTask = geByUserId.get(user.id);
         const userBookings = allBookings.filter(b => b.visitorEmail === user.email);
         const userTickets = allTickets.filter(t => t.userEmail === user.email || t.userId === user.id);
         const openTickets = userTickets.filter(t => t.status === 'open' || t.status === 'in_progress');
@@ -7492,6 +7558,26 @@ export async function registerRoutes(
           partnerName,
           salespersonId,
           salespersonName,
+          growthEngineSetup: geTask
+            ? {
+                id: geTask.id,
+                status: geTask.status,
+                salespersonId: geTask.salespersonId,
+                assignedSalespersonName: geTask.salespersonId
+                  ? salespersonMap.get(geTask.salespersonId) ?? null
+                  : null,
+                onboardingSubmittedAt: geTask.onboardingSubmittedAt,
+                sessionBookedAt: geTask.sessionBookedAt,
+                completedAt: geTask.completedAt,
+                internalNotes: geTask.internalNotes,
+              }
+            : null,
+          rgeConciergeCalendarWarning: geTask
+            ? isCalendarMissingForSetupTask(
+                geTask,
+                geTask.salespersonId ? salespersonCalendarById.get(geTask.salespersonId) ?? null : null,
+              )
+            : false,
         };
       }));
       
@@ -7683,12 +7769,16 @@ export async function registerRoutes(
             email: DEMO_SALES_EMAIL,
             loginCode: DEMO_SALES_CODE,
             isActive: true,
+            role: 'both',
           });
           console.log('[SALES] Demo salesperson created on-demand');
         } else if (salesperson.loginCode !== DEMO_SALES_CODE) {
           // Fix login code if wrong
           salesperson = await storage.updateSalesperson(salesperson.id, { loginCode: DEMO_SALES_CODE }) || salesperson;
           console.log('[SALES] Demo salesperson login code fixed on-demand');
+        } else if (salesperson.role !== "both") {
+          salesperson = await storage.updateSalesperson(salesperson.id, { role: "both" }) || salesperson;
+          console.log('[SALES] Demo salesperson role upgraded to both for portal testing');
         }
         
         (req.session as any).salespersonId = salesperson.id;
@@ -7817,11 +7907,67 @@ export async function registerRoutes(
   // Salesperson Portal: Get my stats
   app.get("/api/sales-portal/stats", requireSalesperson, async (req: any, res) => {
     const salesperson = req.salesperson;
+    const pendingSetupTasks = await storage.countOpenGrowthEngineSetupTasksForSalesperson(salesperson.id);
     res.json({
       totalBookings: salesperson.totalBookings || 0,
       totalConversions: salesperson.totalConversions || 0,
       totalEarnings: salesperson.totalEarnings || "0",
+      pendingSetupTasks,
+      setupTasksCompleted: salesperson.setupTasksCompleted ?? 0,
     });
+  });
+
+  // Salesperson Portal: Growth Engine setup / concierge tasks (setup or both roles)
+  app.get("/api/sales-portal/setup-tasks", requireSalesperson, async (req: any, res) => {
+    try {
+      const role = req.salesperson.role || "demo";
+      if (role !== "setup" && role !== "both") {
+        return res.json([]);
+      }
+      const tasks = await storage.listGrowthEngineSetupTasksForSalesperson(req.salesperson.id);
+      const enriched = await Promise.all(
+        tasks.map(async (t) => {
+          const u = await storage.getUser(t.userId);
+          return {
+            ...t,
+            userEmail: u?.email ?? null,
+            userName: u?.name ?? null,
+          };
+        }),
+      );
+      res.json(enriched);
+    } catch (error) {
+      console.error("Error fetching setup tasks:", error);
+      res.status(500).json({ error: "Failed to fetch setup tasks" });
+    }
+  });
+
+  app.patch("/api/sales-portal/setup-tasks/:id/complete", requireSalesperson, async (req: any, res) => {
+    try {
+      const role = req.salesperson.role || "demo";
+      if (role !== "setup" && role !== "both") {
+        return res.status(403).json({ error: "Not authorized for setup tasks" });
+      }
+      const task = await storage.getGrowthEngineSetupTaskById(req.params.id);
+      if (!task || task.salespersonId !== req.salesperson.id) {
+        return res.status(404).json({ error: "Task not found" });
+      }
+      if (task.status === GE_SETUP_STATUS.setupCompleted) {
+        return res.json(task);
+      }
+      const prevStatus = task.status;
+      const updated = await storage.updateGrowthEngineSetupTask(task.id, {
+        status: GE_SETUP_STATUS.setupCompleted,
+        completedAt: new Date(),
+      });
+      if (prevStatus !== GE_SETUP_STATUS.setupCompleted && updated?.salespersonId) {
+        await storage.incrementSalespersonSetupTasksCompleted(updated.salespersonId);
+      }
+      res.json(updated);
+    } catch (error) {
+      console.error("Error completing setup task:", error);
+      res.status(500).json({ error: "Failed to complete setup task" });
+    }
   });
 
   // Salesperson Portal: Get my demos
