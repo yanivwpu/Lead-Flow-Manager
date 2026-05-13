@@ -1,3 +1,4 @@
+import { isSalespersonSubscriptionCommissionActiveAt } from '@shared/salespersonSubscriptionCommissionWindow';
 import { getUncachableStripeClient } from './stripeClient';
 import { storage } from './storage';
 
@@ -227,19 +228,40 @@ export class WebhookHandlers {
       // Add this payment to the conversion's total revenue
       await storage.addConversionRevenue(user.id, amountPaid);
       console.log(`Added $${amountPaid} revenue to conversion for user ${user.id}`);
-      
-      // Create salesperson commission (30% rate)
-      const salespersonCommission = (amountPaid * 0.30).toFixed(2);
-      await storage.createCommission({
-        userId: user.id,
-        salespersonId: conversion.salespersonId,
-        partnerId: null,
-        amount: salespersonCommission,
-        invoiceId: stripePaymentId,
-        billingPeriod: new Date(),
-        status: 'pending',
-      });
-      console.log(`Created $${salespersonCommission} commission for salesperson ${conversion.salespersonId}`);
+
+      const conversionStarted = conversion.createdAt ? new Date(conversion.createdAt) : undefined;
+      const now = new Date();
+      const withinSalespersonCommissionWindow =
+        conversionStarted != null &&
+        !Number.isNaN(conversionStarted.getTime()) &&
+        isSalespersonSubscriptionCommissionActiveAt(conversionStarted, now);
+
+      if (withinSalespersonCommissionWindow) {
+        // Create salesperson commission (30% rate) only within 12 months of conversion.created_at
+        const salespersonCommission = (amountPaid * 0.30).toFixed(2);
+        await storage.createCommission({
+          userId: user.id,
+          salespersonId: conversion.salespersonId,
+          partnerId: null,
+          amount: salespersonCommission,
+          invoiceId: stripePaymentId,
+          billingPeriod: new Date(),
+          status: 'pending',
+        });
+        console.log(`Created $${salespersonCommission} commission for salesperson ${conversion.salespersonId}`);
+      } else {
+        const skipReason =
+          conversionStarted == null || Number.isNaN(conversionStarted.getTime())
+            ? 'invalid_or_missing_conversion_created_at'
+            : 'subscription_commission_window_expired';
+        safeLog('[Stripe Webhook] Skipped salesperson subscription commission', {
+          userId: user.id,
+          conversionId: conversion.id,
+          salespersonId: conversion.salespersonId,
+          conversionCreatedAt: conversion.createdAt,
+          reason: skipReason,
+        });
+      }
     }
 
     // Check if user has a partner referral

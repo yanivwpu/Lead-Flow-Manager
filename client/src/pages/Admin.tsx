@@ -44,6 +44,7 @@ import {
   Eye, EyeOff
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { isSalespersonSubscriptionCommissionActiveAt } from "@shared/salespersonSubscriptionCommissionWindow";
 
 /** Centered compact admin form dialogs (~520–600px; scroll inside body only). */
 const ADMIN_FORM_MODAL_CLASS =
@@ -93,6 +94,13 @@ interface Conversion {
   paid: boolean;
   paidAt?: string;
   createdAt: string;
+}
+
+function salespersonSubscriptionCommissionBadge(createdAt: string): { label: string; active: boolean } {
+  const d = new Date(createdAt);
+  if (Number.isNaN(d.getTime())) return { label: "Commission expired", active: false };
+  const active = isSalespersonSubscriptionCommissionActiveAt(d, new Date());
+  return { label: active ? "Commission active" : "Commission expired", active };
 }
 
 interface AdminUser {
@@ -994,13 +1002,14 @@ export function Admin() {
                     <TableHead>Amount</TableHead>
                     <TableHead>Date</TableHead>
                     <TableHead>Payment Status</TableHead>
+                    <TableHead>Subscription commission</TableHead>
                     <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {conversions.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={5} className="text-center py-8 text-gray-500">
+                      <TableCell colSpan={6} className="text-center py-8 text-gray-500">
                         No conversions yet.
                       </TableCell>
                     </TableRow>
@@ -1018,6 +1027,16 @@ export function Admin() {
                           <Badge variant={conversion.paid ? "default" : "outline"}>
                             {conversion.paid ? 'Paid' : 'Pending'}
                           </Badge>
+                        </TableCell>
+                        <TableCell>
+                          {(() => {
+                            const { label, active } = salespersonSubscriptionCommissionBadge(conversion.createdAt);
+                            return (
+                              <Badge variant={active ? "default" : "secondary"} className="whitespace-nowrap font-normal">
+                                {label}
+                              </Badge>
+                            );
+                          })()}
                         </TableCell>
                         <TableCell>
                           {!conversion.paid && (

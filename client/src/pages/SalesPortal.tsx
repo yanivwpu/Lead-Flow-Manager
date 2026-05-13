@@ -15,6 +15,7 @@ import {
   User, Phone, Mail, ExternalLink, FileText, AlertCircle,
   Eye, EyeOff, ClipboardList
 } from "lucide-react";
+import { isSalespersonSubscriptionCommissionActiveAt } from "@shared/salespersonSubscriptionCommissionWindow";
 
 interface Demo {
   id: string;
@@ -84,6 +85,13 @@ interface SalespersonInfo {
   email: string;
 }
 
+function subscriptionCommissionWindowBadge(createdAt: string): { label: string; active: boolean } {
+  const d = new Date(createdAt);
+  if (Number.isNaN(d.getTime())) return { label: "Commission expired", active: false };
+  const active = isSalespersonSubscriptionCommissionActiveAt(d, new Date());
+  return { label: active ? "Commission active" : "Commission expired", active };
+}
+
 const SALESPERSON_AGREEMENT_TEXT = `Internal Sales Commission Policy
 
 WhachatCRM Internal Sales Team
@@ -106,14 +114,14 @@ Commission credit is based on recorded assignment at time of demo
 Management decisions on disputes are final
 
 4. Commission Structure & Payout Schedule
-A) Demo-attributed subscriptions: internal sales earn 30% of subscription revenue collected (excluding AI add-ons, messaging fees, and third-party costs), for up to twelve (12) months from the customer’s first paid invoice, while the customer remains active and paying. Commissions are calculated from Stripe invoice payments and may be paid monthly on the first business day of the month.
+A) Demo-attributed subscriptions: internal sales earn 30% of subscription revenue collected (excluding AI add-ons, messaging fees, and third-party costs), for up to twelve (12) months from the sales conversion record date, while the customer remains active and paying. Commissions are calculated from Stripe invoice payments and may be paid monthly on the first business day of the month.
 B) Growth Engine setup tasks: separately from subscription commission, eligible specialists may earn a fixed payout per completed internal setup task (default amount set by the company; admins may set a per-person override). Setup payouts are not subscription percentages.
 
 Commission duration and rates for (A) follow management-approved schedules. Upgrades increase commission proportionally; downgrades reduce commission. Commissions related to refunded, disputed, or failed payments are not payable and may be reversed.
 
 5. No Lifetime Commission Guarantee
 Sales commissions are not guaranteed for the lifetime of any customer.
-Commission eligibility is limited to the duration defined by WhachatCRM (currently up to twelve (12) months from the customer’s first paid invoice).
+Commission eligibility is limited to the duration defined by WhachatCRM (currently up to twelve (12) months from the sales conversion record date).
 WhachatCRM may modify, suspend, or terminate commission plans, rates, payout schedules, or eligibility criteria at any time. Commission plans do not create a vested or guaranteed right to future commissions.
 
 6. Exclusions
@@ -833,25 +841,34 @@ export function SalesPortal() {
                           <TableHead>Date</TableHead>
                           <TableHead>Amount</TableHead>
                           <TableHead>Payment status</TableHead>
+                          <TableHead>Subscription commission</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {conversions.map((conv) => (
-                          <TableRow key={conv.id}>
-                            <TableCell>{new Date(conv.createdAt).toLocaleDateString()}</TableCell>
-                            <TableCell className="font-medium">${parseFloat(conv.amount).toFixed(2)}</TableCell>
-                            <TableCell>
-                              <Badge variant={conv.paid ? 'default' : 'outline'}>
-                                {conv.paid ? 'Paid' : 'Pending'}
-                              </Badge>
-                              {conv.paid && conv.paidAt && (
-                                <span className="ml-2 text-xs text-gray-500">
-                                  {new Date(conv.paidAt).toLocaleDateString()}
-                                </span>
-                              )}
-                            </TableCell>
-                          </TableRow>
-                        ))}
+                        {conversions.map((conv) => {
+                          const sub = subscriptionCommissionWindowBadge(conv.createdAt);
+                          return (
+                            <TableRow key={conv.id}>
+                              <TableCell>{new Date(conv.createdAt).toLocaleDateString()}</TableCell>
+                              <TableCell className="font-medium">${parseFloat(conv.amount).toFixed(2)}</TableCell>
+                              <TableCell>
+                                <Badge variant={conv.paid ? 'default' : 'outline'}>
+                                  {conv.paid ? 'Paid' : 'Pending'}
+                                </Badge>
+                                {conv.paid && conv.paidAt && (
+                                  <span className="ml-2 text-xs text-gray-500">
+                                    {new Date(conv.paidAt).toLocaleDateString()}
+                                  </span>
+                                )}
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant={sub.active ? 'default' : 'secondary'} className="whitespace-nowrap font-normal">
+                                  {sub.label}
+                                </Badge>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
                       </TableBody>
                     </Table>
                   )}
@@ -860,7 +877,8 @@ export function SalesPortal() {
                 <div className="p-4">
                   <h3 className="text-sm font-semibold text-gray-900">Subscription commissions</h3>
                   <p className="text-xs text-gray-500 mt-0.5 mb-3">
-                    Ongoing commission from paid subscription invoices (for example 30% for up to 12 months, per policy).
+                    Ongoing commission from paid subscription invoices (30% while active). New commission rows are created only
+                    within 12 months of the conversion record date; older rows below are unchanged.
                   </p>
                   {commissions.length === 0 ? (
                     <div className="rounded-md border border-dashed border-gray-200 py-8 text-center text-sm text-gray-500">
