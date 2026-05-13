@@ -56,8 +56,10 @@ function RealtorMark() {
   );
 }
 
-import { useLocation } from "wouter";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useLocation, Link } from "wouter";
+import { useQuery, useMutation, type UseMutationResult } from "@tanstack/react-query";
+import { settingsChannelsHref } from "@/lib/settingsChannelsNavigation";
+import type { ActivationStatusPayload } from "@/lib/activationStatus";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { getCheckoutReturnPaths } from "@/lib/checkoutReturnPaths";
 import { useToast } from "@/hooks/use-toast";
@@ -106,7 +108,7 @@ import {
   TrendingUp,
   PhoneOff
 } from "lucide-react";
-import { useForm } from "react-hook-form";
+import { useForm, type UseFormReturn } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -140,43 +142,544 @@ interface TemplateData {
 }
 
 const onboardingSchema = z.object({
-  // Step 1: Business Eligibility
-  isRegisteredEntity: z.enum(["yes", "no"]),
-  
-  // Step 2: Business Details
-  legalName: z.string().min(2, "Legal name is required"),
+  legalName: z.string().min(2, "Business name is required"),
   country: z.string().min(2, "Country is required"),
-  website: z.string().url("Valid website URL is required"),
-  
-  // Step 3: WhatsApp Setup
-  desiredNumber: z.string().min(8, "Valid phone number is required"),
-  isNumberActive: z.enum(["yes", "no"]),
-  willingToMigrate: z.enum(["yes", "no"]),
-  hasSmsAccess: z.enum(["yes", "no"]),
-  
-  // Step 4: Meta Business Manager
-  hasMetaBM: z.enum(["yes", "no"]),
-  bmEmail: z.string().email("Valid BM admin email is required"),
-  bmId: z.string().optional(),
-  
-  // Step 5: CRM & Team
+  website: z
+    .string()
+    .trim()
+    .optional()
+    .transform((v) => (v === undefined ? "" : v))
+    .refine((v) => v === "" || /^https?:\/\/.+/i.test(v), {
+      message: "Use a full link starting with https://",
+    }),
   teamType: z.enum(["solo", "team"]),
   estimatedSeats: z.string(),
   notificationsEnabled: z.boolean().default(true),
-  
-  // Step 6: Lead Sources & Goals
-  leadSources: z.string().min(5, "Please describe your lead sources"),
-  primaryGoal: z.string().min(5, "Please describe your primary goal"),
-  
-  // Step 7: Scheduling
-  timezone: z.string(),
-  preferredCallWindows: z.string().min(5, "Preferred call windows required"),
-  
-  // Step 8: Notes
+  leadSources: z.string().min(3, "Add a short note about where leads come from"),
+  primaryGoal: z.string().min(3, "Tell us what you want this system to do for you"),
+  timezone: z.string().min(2, "Select your timezone"),
+  conciergeLaunchAvailability: z.string().min(5, "Share a few times that work for your launch session"),
   additionalNotes: z.string().optional(),
 });
 
 type OnboardingValues = z.infer<typeof onboardingSchema>;
+
+type ChannelSettingRow = { channel: string; isConnected?: boolean | null };
+
+function ChannelStatusRow({
+  label,
+  ok,
+  href,
+  actionLabel,
+}: {
+  label: string;
+  ok: boolean;
+  href: string;
+  actionLabel: string;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-lg border border-gray-100 bg-white px-4 py-3">
+      <div className="flex items-center gap-2 min-w-0">
+        <span
+          className={cn(
+            "h-2 w-2 rounded-full shrink-0",
+            ok ? "bg-emerald-500" : "bg-amber-400",
+          )}
+        />
+        <span className="text-sm font-medium text-gray-900 truncate">{label}</span>
+      </div>
+      {ok ? (
+        <span className="text-xs font-medium text-emerald-700 shrink-0">Connected</span>
+      ) : (
+        <Button variant="outline" size="sm" className="shrink-0 text-xs h-8" asChild>
+          <Link href={href}>
+            <a>{actionLabel}</a>
+          </Link>
+        </Button>
+      )}
+    </div>
+  );
+}
+
+function RGEOnboardingWizard({
+  step,
+  setStep,
+  totalSteps,
+  form,
+  status,
+  submitOnboardingMutation,
+  setLocation,
+}: {
+  step: number;
+  setStep: React.Dispatch<React.SetStateAction<number>>;
+  totalSteps: number;
+  form: UseFormReturn<OnboardingValues>;
+  status: EntitlementStatus;
+  submitOnboardingMutation: UseMutationResult<any, Error, OnboardingValues, unknown>;
+  setLocation: (path: string) => void;
+}) {
+  const { data: activationStatus, refetch: refetchActivation } = useQuery<ActivationStatusPayload>({
+    queryKey: ["/api/activation-status"],
+    enabled: status === "purchased" || status === "submitted",
+    staleTime: 15_000,
+  });
+
+  const { data: channelSettings, refetch: refetchChannels } = useQuery<ChannelSettingRow[]>({
+    queryKey: ["/api/channels"],
+    enabled: status === "purchased" || status === "submitted",
+    staleTime: 15_000,
+  });
+
+  const { data: engineStatusData, refetch: refetchEngineStatus } = useQuery({
+    queryKey: ["/api/templates/realtor-growth-engine/status"],
+    enabled: status === "purchased" || status === "submitted",
+    staleTime: 15_000,
+  });
+
+  const webchatConnected = !!channelSettings?.some((s) => s.channel === "webchat" && !!s.isConnected);
+  const calendlyConnected = !!(engineStatusData as { calendlyConnected?: boolean } | undefined)?.calendlyConnected;
+  const whatsappReady = !!activationStatus?.whatsappConnected;
+
+  const refreshReadiness = () => {
+    void refetchActivation();
+    void refetchChannels();
+    void refetchEngineStatus();
+  };
+
+  const getFieldsForStep = (stepNum: number): string[] => {
+    const stepFields: Record<number, string[]> = {
+      1: [],
+      2: [],
+      3: ["legalName", "country", "website", "teamType", "estimatedSeats", "notificationsEnabled", "leadSources", "primaryGoal"],
+      4: ["timezone", "conciergeLaunchAvailability"],
+      5: [],
+    };
+    return stepFields[stepNum] || [];
+  };
+
+  const nextStep = async () => {
+    const fields = getFieldsForStep(step);
+    if (fields.length > 0) {
+      const result = await form.trigger(fields as any);
+      if (!result) return;
+    }
+    setStep((s) => Math.min(s + 1, totalSteps));
+  };
+
+  const prevStep = () => setStep((s) => Math.max(s - 1, 1));
+
+  const onSubmit = (values: OnboardingValues) => {
+    submitOnboardingMutation.mutate(values);
+  };
+
+  return (
+    <div className="max-w-3xl mx-auto px-4 py-8">
+      <div className="mb-6 flex items-center justify-between gap-3">
+        <Button variant="ghost" size="sm" className="text-gray-600" onClick={() => setLocation("/app/templates/realtor-growth-engine")}>
+          <ChevronLeft className="w-4 h-4 mr-1" /> Back
+        </Button>
+      </div>
+
+      {status === "purchased" && (
+        <div className="mb-8">
+          <div className="text-center mb-6">
+            <Badge className="mb-4 bg-brand-green/10 text-brand-green border-brand-green/20">
+              Step {step} of {totalSteps}
+            </Badge>
+            <h2 className="text-2xl font-bold text-gray-900 tracking-tight">Guided launch</h2>
+            <p className="text-sm text-muted-foreground mt-2 max-w-lg mx-auto">
+              A concise setup so we can install your Growth Engine, align channels, and book your concierge launch session.
+            </p>
+          </div>
+          <Progress value={(step / totalSteps) * 100} className="mb-8 h-1.5" />
+
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+              {step === 1 && (
+                <Card className="border-gray-200/80 shadow-sm">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-lg">Welcome</CardTitle>
+                    <CardDescription className="text-base leading-relaxed">
+                      The <RealtorMark /> Growth Engine configures your workspace for multi-channel conversations, AI qualification,
+                      automated follow-ups, and booking-ready flows, with a concierge-led launch to validate everything is live.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4 text-sm text-gray-600">
+                    <ul className="list-disc pl-5 space-y-2">
+                      <li>Channels wired for inbound leads (WhatsApp is required before activation)</li>
+                      <li>AI qualification and routing tuned for real estate conversations</li>
+                      <li>Automation sequences for speed-to-lead and nurture</li>
+                      <li>Optional calendar connection so prospects can self-book showings</li>
+                      <li>Concierge launch session to review setup and optimize performance</li>
+                    </ul>
+                  </CardContent>
+                </Card>
+              )}
+
+              {step === 2 && (
+                <Card className="border-gray-200/80 shadow-sm">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-lg">Channel readiness</CardTitle>
+                    <CardDescription>
+                      Connect what you use today. Only WhatsApp is required before we activate the template; everything else
+                      improves coverage and can be added anytime.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="flex justify-end">
+                      <Button type="button" variant="outline" size="sm" className="text-xs" onClick={refreshReadiness}>
+                        Refresh status
+                      </Button>
+                    </div>
+                    <div className="space-y-2">
+                      <ChannelStatusRow
+                        label="WhatsApp"
+                        ok={!!activationStatus?.whatsappConnected}
+                        href={settingsChannelsHref({ provider: "whatsapp" })}
+                        actionLabel="Connect WhatsApp"
+                      />
+                      <ChannelStatusRow
+                        label="Facebook"
+                        ok={!!activationStatus?.facebookConnected}
+                        href={settingsChannelsHref({ provider: "facebook" })}
+                        actionLabel="Connect Facebook"
+                      />
+                      <ChannelStatusRow
+                        label="Instagram"
+                        ok={!!activationStatus?.instagramConnected}
+                        href={settingsChannelsHref({ provider: "instagram" })}
+                        actionLabel="Connect Instagram"
+                      />
+                      <ChannelStatusRow
+                        label="Calendly"
+                        ok={calendlyConnected}
+                        href="/app/integrations"
+                        actionLabel="Connect Calendly"
+                      />
+                      <ChannelStatusRow
+                        label="Website chat widget"
+                        ok={webchatConnected}
+                        href="/app/settings?section=channels"
+                        actionLabel="Open web chat"
+                      />
+                    </div>
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      WhatsApp uses Meta&apos;s embedded signup from Settings (no manual API keys). Connect your booking calendar so
+                      leads can automatically schedule appointments and showings.
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
+
+              {step === 3 && (
+                <Card className="border-gray-200/80 shadow-sm">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-lg">Business profile</CardTitle>
+                    <CardDescription>Helps us tailor defaults and your concierge session.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <FormField
+                      control={form.control}
+                      name="legalName"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Business name</FormLabel>
+                          <FormControl>
+                            <Input placeholder="As you present it to clients" {...field} data-testid="input-legal-name" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <FormField
+                        control={form.control}
+                        name="country"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Country</FormLabel>
+                            <FormControl>
+                              <Input placeholder="United States" {...field} data-testid="input-country" />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="website"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Website (optional)</FormLabel>
+                            <FormControl>
+                              <Input placeholder="https://your-site.com" {...field} data-testid="input-website" />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                    <FormField
+                      control={form.control}
+                      name="teamType"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Team</FormLabel>
+                          <FormControl>
+                            <RadioGroup value={field.value} onValueChange={field.onChange} className="flex space-x-4 mt-2">
+                              <div className="flex items-center space-x-2">
+                                <RadioGroupItem value="solo" id="team-solo" data-testid="radio-team-solo" />
+                                <Label htmlFor="team-solo" className="font-normal cursor-pointer">
+                                  Solo
+                                </Label>
+                              </div>
+                              <div className="flex items-center space-x-2">
+                                <RadioGroupItem value="team" id="team-team" data-testid="radio-team-team" />
+                                <Label htmlFor="team-team" className="font-normal cursor-pointer">
+                                  Team
+                                </Label>
+                              </div>
+                            </RadioGroup>
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="estimatedSeats"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Seats</FormLabel>
+                          <FormControl>
+                            <Select value={field.value} onValueChange={field.onChange}>
+                              <SelectTrigger data-testid="select-estimated-seats">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="1">1</SelectItem>
+                                <SelectItem value="2-5">2-5</SelectItem>
+                                <SelectItem value="6-10">6-10</SelectItem>
+                                <SelectItem value="10+">10+</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="notificationsEnabled"
+                      render={({ field }) => (
+                        <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                          <div className="space-y-0.5">
+                            <FormLabel className="text-base">Notifications</FormLabel>
+                            <FormDescription>Alerts for high-intent leads and handoffs</FormDescription>
+                          </div>
+                          <FormControl>
+                            <Checkbox checked={field.value} onCheckedChange={field.onChange} data-testid="checkbox-notifications" />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="leadSources"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Lead sources</FormLabel>
+                          <FormControl>
+                            <Textarea
+                              placeholder="Ads, referrals, Zillow, open houses..."
+                              className="min-h-[88px]"
+                              {...field}
+                              data-testid="textarea-lead-sources"
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="primaryGoal"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Primary outcome</FormLabel>
+                          <FormControl>
+                            <Textarea
+                              placeholder="e.g. faster showings booked, cleaner handoffs to my ISA"
+                              className="min-h-[88px]"
+                              {...field}
+                              data-testid="textarea-primary-goal"
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </CardContent>
+                </Card>
+              )}
+
+              {step === 4 && (
+                <Card className="border-gray-200/80 shadow-sm">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-lg">Concierge launch session</CardTitle>
+                    <CardDescription className="text-base leading-relaxed">
+                      A focused working session (not generic tech support) to validate channels, confirm automation behavior,
+                      review qualification priorities, tighten booking flows, and make sure everything is live the way you work.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <FormField
+                      control={form.control}
+                      name="timezone"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Timezone</FormLabel>
+                          <FormControl>
+                            <Select value={field.value} onValueChange={field.onChange}>
+                              <SelectTrigger data-testid="select-timezone">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="America/New_York">Eastern</SelectItem>
+                                <SelectItem value="America/Chicago">Central</SelectItem>
+                                <SelectItem value="America/Denver">Mountain</SelectItem>
+                                <SelectItem value="America/Los_Angeles">Pacific</SelectItem>
+                                <SelectItem value="America/Anchorage">Alaska</SelectItem>
+                                <SelectItem value="Pacific/Honolulu">Hawaii</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="conciergeLaunchAvailability"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Availability for your session</FormLabel>
+                          <FormControl>
+                            <Textarea
+                              placeholder="e.g. Tue-Thu 2-5pm ET; avoid Friday mornings"
+                              className="min-h-[100px]"
+                              {...field}
+                              data-testid="textarea-concierge-availability"
+                            />
+                          </FormControl>
+                          <FormDescription>We&apos;ll reach out to schedule.</FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="additionalNotes"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Notes for your concierge (optional)</FormLabel>
+                          <FormControl>
+                            <Textarea
+                              placeholder="Markets, specialties, or anything you want emphasized in the session"
+                              className="min-h-[88px]"
+                              {...field}
+                              data-testid="textarea-additional-notes"
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </CardContent>
+                </Card>
+              )}
+
+              {step === 5 && (
+                <Card className="border-gray-200/80 shadow-sm">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-lg">Review and activate</CardTitle>
+                    <CardDescription>
+                      When you continue, we save your launch details and install the Growth Engine into your workspace.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="rounded-lg border border-gray-100 bg-gray-50/60 p-4 space-y-2 text-sm text-gray-700">
+                      <p className="font-medium text-gray-900">Before you finish</p>
+                      <p>
+                        WhatsApp must be connected so automations have a live channel.{" "}
+                        {whatsappReady ? (
+                          <span className="text-emerald-700 font-medium">You&apos;re connected. You can activate.</span>
+                        ) : (
+                          <span>
+                            <Link href={settingsChannelsHref({ provider: "whatsapp" })}>
+                              <a className="text-brand-green font-medium underline-offset-2 hover:underline">Connect WhatsApp</a>
+                            </Link>{" "}
+                            in Settings, then refresh status here.
+                          </span>
+                        )}
+                      </p>
+                      <Button type="button" variant="outline" size="sm" className="text-xs" onClick={refreshReadiness}>
+                        Refresh connection status
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              <div className="flex gap-3 justify-between pt-4">
+                <Button type="button" variant="outline" onClick={prevStep} disabled={step === 1} data-testid="button-prev-step">
+                  <ChevronLeft className="mr-1 w-4 h-4" /> Previous
+                </Button>
+                {step < totalSteps ? (
+                  <Button type="button" className="bg-brand-green hover:bg-brand-green/90" onClick={nextStep} data-testid="button-next-step">
+                    Next <ChevronRight className="ml-1 w-4 h-4" />
+                  </Button>
+                ) : (
+                  <Button
+                    type="submit"
+                    className="bg-brand-green hover:bg-brand-green/90"
+                    disabled={submitOnboardingMutation.isPending || !whatsappReady}
+                    data-testid="button-submit-onboarding"
+                  >
+                    {submitOnboardingMutation.isPending ? (
+                      <>
+                        <Loader2 className="mr-2 w-4 h-4 animate-spin" /> Activating...
+                      </>
+                    ) : (
+                      <>Activate Growth Engine</>
+                    )}
+                  </Button>
+                )}
+              </div>
+            </form>
+          </Form>
+        </div>
+      )}
+
+      {status === "submitted" && (
+        <Card className="border-emerald-100 bg-emerald-50/40 shadow-sm">
+          <CardContent className="py-10 text-center space-y-3">
+            <CheckCircle2 className="w-12 h-12 text-brand-green mx-auto" />
+            <h3 className="text-xl font-bold text-gray-900">You&apos;re scheduled for optimization</h3>
+            <p className="text-gray-600 max-w-md mx-auto text-sm leading-relaxed">
+              Your concierge team has your launch profile. Expect outreach to align on your session, validate automations, and
+              fine-tune booking so everything is live with confidence.
+            </p>
+            <p className="text-xs text-muted-foreground">Watch your inbox for scheduling details.</p>
+            <Button className="bg-brand-green hover:bg-brand-green/90 mt-2" onClick={() => setLocation("/app/templates/realtor-growth-engine")}>
+              Return to overview
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
 
 // --- Components ---
 
@@ -184,12 +687,12 @@ export function RealtorGrowthEngine() {
   const [location, setLocation] = useLocation();
   const { toast } = useToast();
   const [step, setStep] = useState(1);
-  const totalSteps = 8;
-  const [eligibilityOpen, setEligibilityOpen] = useState(false);
-  const [eligibilityAnswer, setEligibilityAnswer] = useState<string>("");
-  const [eligibilityBlocked, setEligibilityBlocked] = useState(false);
+  const totalSteps = 5;
+  const [purchaseIntroOpen, setPurchaseIntroOpen] = useState(false);
   const [subscriptionGate, setSubscriptionGate] = useState<{ show: boolean; hasPro: boolean; hasAI: boolean }>({ show: false, hasPro: true, hasAI: true });
   const [checkingSubscription, setCheckingSubscription] = useState(false);
+
+  const isOnboardingPath = location.includes("/realtor-growth-engine/onboarding");
 
   const { data: templateData, isLoading, isError, error: queryError } = useQuery<TemplateData>({
     queryKey: ["/api/templates/realtor-growth-engine", new URLSearchParams(window.location.search).get("bypass")],
@@ -215,7 +718,10 @@ export function RealtorGrowthEngine() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/templates/realtor-growth-engine"] });
-      toast({ title: "Payment confirmed", description: "Next step: complete your onboarding so we can activate your system." });
+      toast({
+        title: "Payment confirmed",
+        description: "Continue guided setup: align channels and book your concierge launch session.",
+      });
       const url = new URL(window.location.href);
       url.searchParams.delete("paid");
       url.searchParams.delete("session_id");
@@ -255,8 +761,8 @@ export function RealtorGrowthEngine() {
         window.location.href = data.url;
       } else {
         queryClient.invalidateQueries({ queryKey: ["/api/templates/realtor-growth-engine"] });
-        toast({ title: "Template Unlocked", description: "You can now proceed to onboarding." });
-        setEligibilityOpen(false);
+        toast({ title: "Template Unlocked", description: "Continue with your guided launch setup." });
+        setPurchaseIntroOpen(false);
       }
     }
   });
@@ -264,30 +770,53 @@ export function RealtorGrowthEngine() {
   const submitOnboardingMutation = useMutation({
     mutationFn: async (values: OnboardingValues) => {
       const res = await apiRequest("POST", "/api/templates/realtor-growth-engine/onboarding/submit", { payload: values });
-      return res.json();
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const msg = typeof body?.error === "string" ? body.error : "Activation failed";
+        throw new Error(msg);
+      }
+      return body;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/templates/realtor-growth-engine"] });
-      toast({ title: "Onboarding Submitted", description: "Our team will review your details shortly." });
-    }
+      queryClient.invalidateQueries({ queryKey: ["/api/activation-status"] });
+      toast({
+        title: "Growth Engine activated",
+        description: "Your concierge team will reach out to schedule your launch and optimization session.",
+      });
+    },
+    onError: (err: Error) => {
+      toast({
+        title: "Could not activate",
+        description: err.message,
+        variant: "destructive",
+      });
+    },
   });
 
   const form = useForm<OnboardingValues>({
     resolver: zodResolver(onboardingSchema),
     defaultValues: {
-      isRegisteredEntity: "yes",
-      isNumberActive: "no",
-      willingToMigrate: "yes",
-      hasSmsAccess: "yes",
-      hasMetaBM: "no",
+      website: "",
       teamType: "solo",
       estimatedSeats: "1",
       notificationsEnabled: true,
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-    }
+      leadSources: "",
+      primaryGoal: "",
+      conciergeLaunchAvailability: "",
+      additionalNotes: "",
+    },
   });
 
-  const status = templateData?.entitlement?.status || 'locked';
+  const status = templateData?.entitlement?.status || "locked";
+
+  React.useEffect(() => {
+    if (!isOnboardingPath) return;
+    if (status === "locked" || status === "installed") {
+      setLocation("/app/templates/realtor-growth-engine");
+    }
+  }, [isOnboardingPath, status, setLocation]);
 
   const { data: assetsData } = useQuery({
     queryKey: ["/api/templates/realtor-growth-engine/assets"],
@@ -361,38 +890,32 @@ export function RealtorGrowthEngine() {
   // --- Views ---
 
   const handlePrimaryCta = () => {
-    if (status === 'locked') {
-      setEligibilityAnswer("");
-      setEligibilityBlocked(false);
-      setEligibilityOpen(true);
+    if (status === "locked") {
+      setPurchaseIntroOpen(true);
     } else if (isPaused) {
       return;
-    } else if (status === 'purchased') {
+    } else if (status === "purchased") {
       setLocation("/app/templates/realtor-growth-engine/onboarding");
     }
   };
 
-  const handleEligibilityContinue = async () => {
-    if (eligibilityAnswer === "no") {
-      setEligibilityBlocked(true);
-      return;
-    }
-    if (eligibilityAnswer === "yes") {
-      setCheckingSubscription(true);
-      try {
-        const res = await apiRequest("GET", "/api/templates/realtor-growth-engine/check-subscription");
-        const data = await res.json();
-        if (!data.hasPro || !data.hasAI) {
-          setSubscriptionGate({ show: true, hasPro: data.hasPro, hasAI: data.hasAI });
-          setCheckingSubscription(false);
-          return;
-        }
+  const handlePurchaseContinue = async () => {
+    setCheckingSubscription(true);
+    try {
+      const res = await apiRequest("GET", "/api/templates/realtor-growth-engine/check-subscription");
+      const data = await res.json();
+      if (!data.hasPro || !data.hasAI) {
+        setPurchaseIntroOpen(false);
+        setSubscriptionGate({ show: true, hasPro: data.hasPro, hasAI: data.hasAI });
         setCheckingSubscription(false);
-        purchaseMutation.mutate();
-      } catch {
-        setCheckingSubscription(false);
-        toast({ title: "Error", description: "Could not verify your subscription. Please try again.", variant: "destructive" });
+        return;
       }
+      setCheckingSubscription(false);
+      setPurchaseIntroOpen(false);
+      purchaseMutation.mutate();
+    } catch {
+      setCheckingSubscription(false);
+      toast({ title: "Error", description: "Could not verify your subscription. Please try again.", variant: "destructive" });
     }
   };
 
@@ -500,20 +1023,20 @@ export function RealtorGrowthEngine() {
       {/* DONE-FOR-YOU SETUP SECTION */}
       <Card className="mb-8 border-green-100 bg-green-50/50">
         <CardHeader className="pb-2 pt-5 px-5">
-          <CardTitle className="text-xl font-bold text-gray-900">Fully Done-For-You Setup</CardTitle>
-          <CardDescription className="text-sm mt-1">No technical setup required. Live in days.</CardDescription>
+          <CardTitle className="text-xl font-bold text-gray-900">White-glove launch</CardTitle>
+          <CardDescription className="text-sm mt-1">Guided channel setup, template install, and concierge optimization.</CardDescription>
         </CardHeader>
         <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-3 px-5 pb-5">
           <div className="flex items-start space-x-3">
             <CheckCircle2 className="w-5 h-5 text-brand-green mt-0.5 shrink-0" />
             <div>
-              <p className="font-medium text-sm text-gray-900">WhatsApp Business API setup</p>
+              <p className="font-medium text-sm text-gray-900">Guided WhatsApp connection (embedded signup)</p>
             </div>
           </div>
           <div className="flex items-start space-x-3">
             <CheckCircle2 className="w-5 h-5 text-brand-green mt-0.5 shrink-0" />
             <div>
-              <p className="font-medium text-sm text-gray-900">Meta verification assistance</p>
+              <p className="font-medium text-sm text-gray-900">Channel readiness review (Meta, web chat, calendar)</p>
             </div>
           </div>
           <div className="flex items-start space-x-3">
@@ -531,7 +1054,7 @@ export function RealtorGrowthEngine() {
           <div className="flex items-start space-x-3 sm:col-span-2">
             <CheckCircle2 className="w-5 h-5 text-brand-green mt-0.5 shrink-0" />
             <div>
-              <p className="font-medium text-sm text-gray-900">Calendar integration included</p>
+              <p className="font-medium text-sm text-gray-900">Concierge launch session to validate and optimize</p>
             </div>
           </div>
         </CardContent>
@@ -758,505 +1281,6 @@ export function RealtorGrowthEngine() {
     </div>
   );
 
-  const OnboardingForm = () => {
-    const isEligibilityBlocked = step === 1 && form.watch("isRegisteredEntity") !== "yes";
-
-    const nextStep = async () => {
-      const fields = getFieldsForStep(step);
-      const result = await form.trigger(fields as any);
-      if (!result) return;
-      if (step === 1 && form.getValues("isRegisteredEntity") !== "yes") return;
-      setStep(s => Math.min(s + 1, totalSteps));
-    };
-
-    const prevStep = () => setStep(s => Math.max(s - 1, 1));
-
-    const getFieldsForStep = (stepNum: number): string[] => {
-      const stepFields: Record<number, string[]> = {
-        1: ["isRegisteredEntity"],
-        2: ["legalName", "country", "website"],
-        3: ["desiredNumber", "isNumberActive", "willingToMigrate", "hasSmsAccess"],
-        4: ["hasMetaBM", "bmEmail", "bmId"],
-        5: ["teamType", "estimatedSeats", "notificationsEnabled"],
-        6: ["leadSources", "primaryGoal"],
-        7: ["timezone", "preferredCallWindows"],
-        8: ["additionalNotes"],
-      };
-      return stepFields[stepNum] || [];
-    };
-
-    const onSubmit = (values: OnboardingValues) => {
-      submitOnboardingMutation.mutate(values);
-    };
-
-    const closeAndResetModal = () => {
-      setEligibilityOpen(false);
-      setEligibilityAnswer("");
-      setEligibilityBlocked(false);
-    };
-
-    return (
-      <div className="max-w-3xl mx-auto px-4 py-8">
-        {status === 'purchased' && (
-          <div className="mb-8">
-            <div className="text-center mb-6">
-              <Badge className="mb-4 bg-brand-green/10 text-brand-green border-brand-green/20">Step {step} of {totalSteps}</Badge>
-              <h2 className="text-2xl font-bold text-gray-900">Complete Your Onboarding</h2>
-            </div>
-            <Progress value={(step / totalSteps) * 100} className="mb-8" />
-
-            <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-                {step === 1 && (
-                  <Card>
-                    <CardHeader><CardTitle>Business Eligibility</CardTitle></CardHeader>
-                    <CardContent className="space-y-4">
-                      <FormField
-                        control={form.control}
-                        name="isRegisteredEntity"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Is your real estate business a registered legal entity?</FormLabel>
-                            <FormControl>
-                              <RadioGroup value={field.value} onValueChange={field.onChange} className="flex flex-col space-y-2 mt-2">
-                                <div className="flex items-center space-x-3">
-                                  <RadioGroupItem value="yes" id="reg-yes" data-testid="radio-registered-yes" />
-                                  <Label htmlFor="reg-yes" className="font-normal cursor-pointer">Yes, registered (LLC / Corp / Ltd)</Label>
-                                </div>
-                                <div className="flex items-center space-x-3">
-                                  <RadioGroupItem value="no" id="reg-no" data-testid="radio-registered-no" />
-                                  <Label htmlFor="reg-no" className="font-normal cursor-pointer">No, I operate as an individual</Label>
-                                </div>
-                              </RadioGroup>
-                            </FormControl>
-                            <FormDescription>Required for WhatsApp Business API approval with Meta.</FormDescription>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    </CardContent>
-                  </Card>
-                )}
-
-                {step === 2 && (
-                  <Card>
-                    <CardHeader><CardTitle>Business Details</CardTitle></CardHeader>
-                    <CardContent className="space-y-4">
-                      <FormField
-                        control={form.control}
-                        name="legalName"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Legal Business Name</FormLabel>
-                            <FormControl>
-                              <Input placeholder="Your business legal name" {...field} data-testid="input-legal-name" />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={form.control}
-                        name="country"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Country</FormLabel>
-                            <FormControl>
-                              <Input placeholder="Your country" {...field} data-testid="input-country" />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={form.control}
-                        name="website"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Business Website</FormLabel>
-                            <FormControl>
-                              <Input placeholder="https://yourwebsite.com" {...field} data-testid="input-website" />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    </CardContent>
-                  </Card>
-                )}
-
-                {step === 3 && (
-                  <Card>
-                    <CardHeader><CardTitle>WhatsApp Setup</CardTitle></CardHeader>
-                    <CardContent className="space-y-4">
-                      <FormField
-                        control={form.control}
-                        name="desiredNumber"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Desired WhatsApp Number</FormLabel>
-                            <FormControl>
-                              <Input placeholder="+1 (555) 123-4567" {...field} data-testid="input-desired-number" />
-                            </FormControl>
-                            <FormDescription>The phone number you want to use for WhatsApp Business</FormDescription>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={form.control}
-                        name="isNumberActive"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Is this number currently active on WhatsApp?</FormLabel>
-                            <FormControl>
-                              <RadioGroup value={field.value} onValueChange={field.onChange} className="flex space-x-4 mt-2">
-                                <div className="flex items-center space-x-2">
-                                  <RadioGroupItem value="yes" id="num-active-yes" data-testid="radio-num-active-yes" />
-                                  <Label htmlFor="num-active-yes" className="font-normal cursor-pointer">Yes</Label>
-                                </div>
-                                <div className="flex items-center space-x-2">
-                                  <RadioGroupItem value="no" id="num-active-no" data-testid="radio-num-active-no" />
-                                  <Label htmlFor="num-active-no" className="font-normal cursor-pointer">No</Label>
-                                </div>
-                              </RadioGroup>
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={form.control}
-                        name="willingToMigrate"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Are you willing to migrate your WhatsApp business account?</FormLabel>
-                            <FormControl>
-                              <RadioGroup value={field.value} onValueChange={field.onChange} className="flex space-x-4 mt-2">
-                                <div className="flex items-center space-x-2">
-                                  <RadioGroupItem value="yes" id="migrate-yes" data-testid="radio-migrate-yes" />
-                                  <Label htmlFor="migrate-yes" className="font-normal cursor-pointer">Yes</Label>
-                                </div>
-                                <div className="flex items-center space-x-2">
-                                  <RadioGroupItem value="no" id="migrate-no" data-testid="radio-migrate-no" />
-                                  <Label htmlFor="migrate-no" className="font-normal cursor-pointer">No</Label>
-                                </div>
-                              </RadioGroup>
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={form.control}
-                        name="hasSmsAccess"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Do you have access to SMS for this number?</FormLabel>
-                            <FormControl>
-                              <RadioGroup value={field.value} onValueChange={field.onChange} className="flex space-x-4 mt-2">
-                                <div className="flex items-center space-x-2">
-                                  <RadioGroupItem value="yes" id="sms-yes" data-testid="radio-sms-yes" />
-                                  <Label htmlFor="sms-yes" className="font-normal cursor-pointer">Yes</Label>
-                                </div>
-                                <div className="flex items-center space-x-2">
-                                  <RadioGroupItem value="no" id="sms-no" data-testid="radio-sms-no" />
-                                  <Label htmlFor="sms-no" className="font-normal cursor-pointer">No</Label>
-                                </div>
-                              </RadioGroup>
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    </CardContent>
-                  </Card>
-                )}
-
-                {step === 4 && (
-                  <Card>
-                    <CardHeader><CardTitle>Meta Business Manager</CardTitle></CardHeader>
-                    <CardContent className="space-y-4">
-                      <FormField
-                        control={form.control}
-                        name="hasMetaBM"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Do you have a Meta Business Manager account?</FormLabel>
-                            <FormControl>
-                              <RadioGroup value={field.value} onValueChange={field.onChange} className="flex space-x-4 mt-2">
-                                <div className="flex items-center space-x-2">
-                                  <RadioGroupItem value="yes" id="bm-yes" data-testid="radio-bm-yes" />
-                                  <Label htmlFor="bm-yes" className="font-normal cursor-pointer">Yes</Label>
-                                </div>
-                                <div className="flex items-center space-x-2">
-                                  <RadioGroupItem value="no" id="bm-no" data-testid="radio-bm-no" />
-                                  <Label htmlFor="bm-no" className="font-normal cursor-pointer">No</Label>
-                                </div>
-                              </RadioGroup>
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={form.control}
-                        name="bmEmail"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>BM Admin Email</FormLabel>
-                            <FormControl>
-                              <Input type="email" placeholder="admin@example.com" {...field} data-testid="input-bm-email" />
-                            </FormControl>
-                            <FormDescription>Primary email with Business Manager admin access</FormDescription>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={form.control}
-                        name="bmId"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Business Manager ID (optional)</FormLabel>
-                            <FormControl>
-                              <Input placeholder="Your BM ID if you know it" {...field} data-testid="input-bm-id" />
-                            </FormControl>
-                            <FormDescription>Found in Business Manager settings, not required</FormDescription>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    </CardContent>
-                  </Card>
-                )}
-
-                {step === 5 && (
-                  <Card>
-                    <CardHeader><CardTitle>CRM & Team</CardTitle></CardHeader>
-                    <CardContent className="space-y-4">
-                      <FormField
-                        control={form.control}
-                        name="teamType"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Team Structure</FormLabel>
-                            <FormControl>
-                              <RadioGroup value={field.value} onValueChange={field.onChange} className="flex space-x-4 mt-2">
-                                <div className="flex items-center space-x-2">
-                                  <RadioGroupItem value="solo" id="team-solo" data-testid="radio-team-solo" />
-                                  <Label htmlFor="team-solo" className="font-normal cursor-pointer">Solo agent</Label>
-                                </div>
-                                <div className="flex items-center space-x-2">
-                                  <RadioGroupItem value="team" id="team-team" data-testid="radio-team-team" />
-                                  <Label htmlFor="team-team" className="font-normal cursor-pointer">Team</Label>
-                                </div>
-                              </RadioGroup>
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={form.control}
-                        name="estimatedSeats"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Estimated Team Seats</FormLabel>
-                            <FormControl>
-                              <Select value={field.value} onValueChange={field.onChange}>
-                                <SelectTrigger data-testid="select-estimated-seats">
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="1">1</SelectItem>
-                                  <SelectItem value="2-5">2-5</SelectItem>
-                                  <SelectItem value="6-10">6-10</SelectItem>
-                                  <SelectItem value="10+">10+</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={form.control}
-                        name="notificationsEnabled"
-                        render={({ field }) => (
-                          <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
-                            <div className="space-y-0.5">
-                              <FormLabel className="text-base">Enable notifications</FormLabel>
-                              <FormDescription>Receive alerts about important leads and activity</FormDescription>
-                            </div>
-                            <FormControl>
-                              <Checkbox checked={field.value} onCheckedChange={field.onChange} data-testid="checkbox-notifications" />
-                            </FormControl>
-                          </FormItem>
-                        )}
-                      />
-                    </CardContent>
-                  </Card>
-                )}
-
-                {step === 6 && (
-                  <Card>
-                    <CardHeader><CardTitle>Lead Sources & Goals</CardTitle></CardHeader>
-                    <CardContent className="space-y-4">
-                      <FormField
-                        control={form.control}
-                        name="leadSources"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Where do your leads come from?</FormLabel>
-                            <FormControl>
-                              <Textarea placeholder="e.g., Facebook ads, referrals, website inquiries, directory listings..." {...field} data-testid="textarea-lead-sources" />
-                            </FormControl>
-                            <FormDescription>Help us understand your lead generation channels</FormDescription>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={form.control}
-                        name="primaryGoal"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>What's your primary goal with this system?</FormLabel>
-                            <FormControl>
-                              <Textarea placeholder="e.g., Sell more listings, qualify leads faster, reduce response time..." {...field} data-testid="textarea-primary-goal" />
-                            </FormControl>
-                            <FormDescription>What would success look like for you?</FormDescription>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    </CardContent>
-                  </Card>
-                )}
-
-                {step === 7 && (
-                  <Card>
-                    <CardHeader><CardTitle>Scheduling & Availability</CardTitle></CardHeader>
-                    <CardContent className="space-y-4">
-                      <FormField
-                        control={form.control}
-                        name="timezone"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Your Timezone</FormLabel>
-                            <FormControl>
-                              <Select value={field.value} onValueChange={field.onChange}>
-                                <SelectTrigger data-testid="select-timezone">
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="America/New_York">Eastern Time</SelectItem>
-                                  <SelectItem value="America/Chicago">Central Time</SelectItem>
-                                  <SelectItem value="America/Denver">Mountain Time</SelectItem>
-                                  <SelectItem value="America/Los_Angeles">Pacific Time</SelectItem>
-                                  <SelectItem value="America/Anchorage">Alaska Time</SelectItem>
-                                  <SelectItem value="Pacific/Honolulu">Hawaii Time</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={form.control}
-                        name="preferredCallWindows"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Preferred Call/Video Windows</FormLabel>
-                            <FormControl>
-                              <Textarea placeholder="e.g., Mon-Fri 2-4 PM, Saturday 10 AM-1 PM..." {...field} data-testid="textarea-call-windows" />
-                            </FormControl>
-                            <FormDescription>When can our team reach you for setup?</FormDescription>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    </CardContent>
-                  </Card>
-                )}
-
-                {step === 8 && (
-                  <Card>
-                    <CardHeader><CardTitle>Additional Notes</CardTitle></CardHeader>
-                    <CardContent className="space-y-4">
-                      <FormField
-                        control={form.control}
-                        name="additionalNotes"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Anything else we should know?</FormLabel>
-                            <FormControl>
-                              <Textarea placeholder="Special requests, questions, or context..." {...field} data-testid="textarea-additional-notes" />
-                            </FormControl>
-                            <FormDescription>Optional — anything to help us set you up for success</FormDescription>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    </CardContent>
-                  </Card>
-                )}
-
-                <div className="flex gap-3 justify-between pt-4">
-                  <Button 
-                    type="button"
-                    variant="outline" 
-                    onClick={prevStep}
-                    disabled={step === 1}
-                    data-testid="button-prev-step"
-                  >
-                    <ChevronLeft className="mr-1 w-4 h-4" /> Previous
-                  </Button>
-                  {step < totalSteps ? (
-                    <Button 
-                      type="button"
-                      className="bg-brand-green hover:bg-brand-green/90"
-                      onClick={nextStep}
-                      data-testid="button-next-step"
-                    >
-                      Next <ChevronRight className="ml-1 w-4 h-4" />
-                    </Button>
-                  ) : (
-                    <Button 
-                      type="submit"
-                      className="bg-brand-green hover:bg-brand-green/90"
-                      disabled={submitOnboardingMutation.isPending}
-                      data-testid="button-submit-onboarding"
-                    >
-                      {submitOnboardingMutation.isPending ? (
-                        <><Loader2 className="mr-2 w-4 h-4 animate-spin" /> Submitting...</>
-                      ) : (
-                        <>Submit Onboarding</>
-                      )}
-                    </Button>
-                  )}
-                </div>
-              </form>
-            </Form>
-          </div>
-        )}
-
-        {status === 'submitted' && (
-          <Card className="border-green-200 bg-green-50">
-            <CardContent className="py-8 text-center">
-              <CheckCircle2 className="w-12 h-12 text-brand-green mx-auto mb-4" />
-              <h3 className="text-xl font-bold text-gray-900 mb-2">Onboarding Submitted!</h3>
-              <p className="text-gray-600 mb-4">Our team will review your details and set up a call within 24 hours.</p>
-              <p className="text-sm text-gray-500">Check your email for next steps.</p>
-            </CardContent>
-          </Card>
-        )}
-      </div>
-    );
-  };
-
   const SubscriptionGateDialog = () => (
     <Dialog open={subscriptionGate.show} onOpenChange={(open) => { if (!open) setSubscriptionGate({ ...subscriptionGate, show: false }); }}>
       <DialogContent className="max-w-sm" data-testid="dialog-subscription-gate">
@@ -1319,75 +1343,43 @@ export function RealtorGrowthEngine() {
     </Dialog>
   );
 
-  const EligibilityDialog = () => {
-    const closeAndResetModal = () => {
-      setEligibilityOpen(false);
-      setEligibilityAnswer("");
-      setEligibilityBlocked(false);
-    };
-
-    return (
-      <Dialog open={eligibilityOpen} onOpenChange={(open) => { if (!open) closeAndResetModal(); }} data-testid="dialog-eligibility">
-        {subscriptionGate.show ? (
-          <SubscriptionGateDialog />
-        ) : !eligibilityBlocked ? (
-          <DialogContent data-testid="dialog-eligibility-check">
-            <DialogHeader>
-              <DialogTitle>Quick Eligibility Check</DialogTitle>
-              <DialogDescription>
-                Is your real estate business a registered legal entity (LLC / Corp / Ltd)?
-              </DialogDescription>
-              <p className="text-xs text-muted-foreground pt-1">Required for WhatsApp Business API approval with Meta.</p>
-            </DialogHeader>
-            <RadioGroup value={eligibilityAnswer} onValueChange={setEligibilityAnswer} className="flex flex-col space-y-2 py-2">
-              <div className="flex items-center space-x-3">
-                <RadioGroupItem value="yes" id="elig-yes" data-testid="radio-eligible-yes" />
-                <Label htmlFor="elig-yes" className="font-normal cursor-pointer">Yes, I have a registered business entity</Label>
-              </div>
-              <div className="flex items-center space-x-3">
-                <RadioGroupItem value="no" id="elig-no" data-testid="radio-eligible-no" />
-                <Label htmlFor="elig-no" className="font-normal cursor-pointer">No, I operate as an individual</Label>
-              </div>
-            </RadioGroup>
-            <DialogFooter>
-              <Button variant="outline" onClick={closeAndResetModal} data-testid="button-eligibility-cancel">Cancel</Button>
-              <Button
-                className="bg-brand-green hover:bg-brand-green/90"
-                onClick={handleEligibilityContinue}
-                disabled={!eligibilityAnswer || purchaseMutation.isPending || checkingSubscription}
-                data-testid="button-eligibility-continue"
-              >
-                {checkingSubscription ? "Checking..." : purchaseMutation.isPending ? "Processing..." : "Continue"}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        ) : (
-          <DialogContent data-testid="dialog-eligibility-blocked">
-            <DialogHeader>
-              <DialogTitle>Business Eligibility Required</DialogTitle>
-            </DialogHeader>
-            <div className="py-2 space-y-3">
-              <p className="text-sm text-muted-foreground">
-                To activate WhatsApp Business API, Meta requires a registered business entity (LLC / Corp / Ltd).
-              </p>
-              <p className="text-sm text-muted-foreground">
-                Once your business is registered, come back here and we'll complete your setup.
-              </p>
-            </div>
-            <DialogFooter>
-              <Button
-                variant="outline"
-                onClick={closeAndResetModal}
-                data-testid="button-eligibility-dismiss"
-              >
-                Got it — I'll return after registering
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        )}
-      </Dialog>
-    );
-  };
+  const PurchaseIntroDialog = () => (
+    <Dialog
+      open={purchaseIntroOpen}
+      onOpenChange={(open) => {
+        if (!open) setPurchaseIntroOpen(false);
+      }}
+      data-testid="dialog-purchase-intro"
+    >
+      <DialogContent data-testid="dialog-purchase-intro-content">
+        <DialogHeader>
+          <DialogTitle>Realtor Growth Engine</DialogTitle>
+          <DialogDescription className="text-base leading-relaxed">
+            Add the premium real estate automation pack to your workspace. You will complete a short guided launch after checkout
+            (channels, profile, concierge session).
+          </DialogDescription>
+        </DialogHeader>
+        <ul className="text-sm text-gray-600 space-y-2 py-2">
+          <li>Requires WhachatCRM Pro and AI Brain (unchanged billing rules)</li>
+          <li>One-time template license at checkout</li>
+          <li>WhatsApp connects via embedded signup before activation</li>
+        </ul>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setPurchaseIntroOpen(false)} data-testid="button-purchase-intro-cancel">
+            Cancel
+          </Button>
+          <Button
+            className="bg-brand-green hover:bg-brand-green/90"
+            onClick={handlePurchaseContinue}
+            disabled={purchaseMutation.isPending || checkingSubscription}
+            data-testid="button-purchase-intro-continue"
+          >
+            {checkingSubscription ? "Checking..." : purchaseMutation.isPending ? "Processing..." : "Continue"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
 
   const WORKFLOW_DESCRIPTIONS: Record<string, { summary: string; triggers: string; timing: string; qualificationLogic?: string }> = {
     W1: {
@@ -2200,8 +2192,23 @@ export function RealtorGrowthEngine() {
   return (
     <RealtorEngineErrorBoundary>
       <>
-        {status === 'installed' ? <DashboardView /> : <DetailPage />}
-        <EligibilityDialog />
+        {status === "installed" ? (
+          <DashboardView />
+        ) : isOnboardingPath ? (
+          <RGEOnboardingWizard
+            step={step}
+            setStep={setStep}
+            totalSteps={totalSteps}
+            form={form}
+            status={status}
+            submitOnboardingMutation={submitOnboardingMutation}
+            setLocation={setLocation}
+          />
+        ) : (
+          <DetailPage />
+        )}
+        <PurchaseIntroDialog />
+        <SubscriptionGateDialog />
       </>
     </RealtorEngineErrorBoundary>
   );

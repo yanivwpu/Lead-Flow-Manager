@@ -703,12 +703,12 @@ export async function sendRealtorPaymentConfirmationEmail(name: string, email: s
               <a href="${onboardingUrl}" style="display:inline-block;background:#059669;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:600;font-size:15px;">Complete Onboarding</a>
             </div>
             <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:20px;margin:24px 0 0;">
-              <p style="color:#166534;font-weight:600;font-size:14px;margin:0 0 12px;">What to have ready:</p>
+              <p style="color:#166534;font-weight:600;font-size:14px;margin:0 0 12px;">Before you start (2 minutes):</p>
               <table style="width:100%;border-collapse:collapse;">
-                <tr><td style="padding:6px 0;color:#475569;font-size:13px;vertical-align:top;">1.</td><td style="padding:6px 0 6px 8px;color:#475569;font-size:13px;"><strong>Meta Business Manager</strong> — your BM ID and admin email (create one at <a href="https://business.facebook.com" style="color:#059669;">business.facebook.com</a> if you don't have it)</td></tr>
-                <tr><td style="padding:6px 0;color:#475569;font-size:13px;vertical-align:top;">2.</td><td style="padding:6px 0 6px 8px;color:#475569;font-size:13px;"><strong>WhatsApp phone number</strong> — the number you want to use for your business (can be new or existing)</td></tr>
-                <tr><td style="padding:6px 0;color:#475569;font-size:13px;vertical-align:top;">3.</td><td style="padding:6px 0 6px 8px;color:#475569;font-size:13px;"><strong>SMS access</strong> — ability to receive a verification code on that number</td></tr>
-                <tr><td style="padding:6px 0;color:#475569;font-size:13px;vertical-align:top;">4.</td><td style="padding:6px 0 6px 8px;color:#475569;font-size:13px;"><strong>Business details</strong> — legal name, country, and website (if available)</td></tr>
+                <tr><td style="padding:6px 0;color:#475569;font-size:13px;vertical-align:top;">1.</td><td style="padding:6px 0 6px 8px;color:#475569;font-size:13px;"><strong>Pro + AI Brain</strong> — active on your account (required for the Growth Engine)</td></tr>
+                <tr><td style="padding:6px 0;color:#475569;font-size:13px;vertical-align:top;">2.</td><td style="padding:6px 0 6px 8px;color:#475569;font-size:13px;"><strong>WhatsApp</strong> — connect in Settings with the guided embedded signup (needed before activation)</td></tr>
+                <tr><td style="padding:6px 0;color:#475569;font-size:13px;vertical-align:top;">3.</td><td style="padding:6px 0 6px 8px;color:#475569;font-size:13px;"><strong>Business basics</strong> — name, country, and optional website for your launch profile</td></tr>
+                <tr><td style="padding:6px 0;color:#475569;font-size:13px;vertical-align:top;">4.</td><td style="padding:6px 0 6px 8px;color:#475569;font-size:13px;"><strong>Calendar (optional)</strong> — connect Calendly so leads can self-book showings</td></tr>
               </table>
             </div>
             <p style="color:#94a3b8;font-size:12px;margin:20px 0 0;">If you have any questions, reply to this email or contact <a href="mailto:support@whachatcrm.com" style="color:#059669;">support@whachatcrm.com</a>.</p>

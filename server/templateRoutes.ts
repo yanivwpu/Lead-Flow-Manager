@@ -10,6 +10,7 @@ import { getAppOrigin } from "./urlOrigins";
 import { buildPostCheckoutSuccessUrl, buildStripeCancelUrl, sanitizeStripeReturnPath } from "./checkoutReturnPath";
 import { isUserCalendlyBookingConnected } from "./calendlyBookingConnected";
 import { evaluateGrowthEngineAccess } from "./growthEngineEntitlements";
+import { isUserWhatsAppConnectedForActivation } from "./whatsappService";
 
 const TEMPLATE_ID = "realtor-growth-engine";
 const TEMPLATE_PRICE_CENTS = 19900;
@@ -251,9 +252,24 @@ export function registerTemplateRoutes(app: Express) {
       }
 
       const onboardingSchema = z.object({
-        isRegisteredEntity: z.enum(["yes", "no"]),
         legalName: z.string().min(2),
         country: z.string().min(2),
+        website: z
+          .string()
+          .trim()
+          .optional()
+          .transform((v) => (v === undefined ? "" : v))
+          .refine((v) => v === "" || /^https?:\/\/.+/i.test(v), {
+            message: "Website must be a full URL starting with https://",
+          }),
+        teamType: z.enum(["solo", "team"]),
+        estimatedSeats: z.string().min(1),
+        notificationsEnabled: z.boolean().optional(),
+        leadSources: z.string().min(3),
+        primaryGoal: z.string().min(3),
+        timezone: z.string().min(2),
+        conciergeLaunchAvailability: z.string().min(5),
+        additionalNotes: z.string().optional(),
       });
 
       const validation = onboardingSchema.safeParse(payload);
@@ -261,41 +277,58 @@ export function registerTemplateRoutes(app: Express) {
         return res.status(400).json({ error: "Invalid form data", details: validation.error.issues });
       }
 
-      if (payload.isRegisteredEntity === "no") {
-        return res.status(400).json({ error: "A registered business entity is required for this template. Meta requires business verification for WhatsApp API access." });
+      const p = validation.data;
+      const waLine =
+        user?.metaDisplayPhoneNumber ||
+        user?.twilioWhatsappNumber ||
+        (user?.email !== "demo@whachat.com" ? "Not on file" : "demo");
+
+      if (user?.email !== "demo@whachat.com") {
+        const whatsappOk = await isUserWhatsAppConnectedForActivation(userId);
+        if (!whatsappOk) {
+          return res.status(400).json({
+            error:
+              "Connect WhatsApp in Settings → Channels (guided setup) before completing activation. Optional channels can be added anytime.",
+            code: "whatsapp_required",
+          });
+        }
       }
 
       const normalized = {
         fullName: user?.name || "N/A",
         email: user?.email || "N/A",
-        mobile: payload.desiredNumber || "N/A",
-        legalBusinessName: payload.legalName,
-        country: payload.country,
-        website: payload.website || null,
-        desiredWhatsappNumber: payload.desiredNumber || null,
-        bmEmail: payload.bmEmail || null,
-        timezone: payload.timezone || null,
-        preferredCallWindows: payload.preferredCallWindows || null,
+        mobile: waLine,
+        legalBusinessName: p.legalName,
+        country: p.country,
+        website: p.website || null,
+        desiredWhatsappNumber: waLine,
+        bmEmail: null,
+        timezone: p.timezone || null,
+        preferredCallWindows: p.conciergeLaunchAvailability || null,
       };
 
       const fullPayload = {
-        ...payload,
+        onboardingFlowVersion: "guided_v2",
+        ...p,
         fullName: user?.name,
         email: user?.email,
-        hasRegisteredEntity: payload.isRegisteredEntity,
-        legalBusinessName: payload.legalName,
-        desiredWhatsappNumber: payload.desiredNumber,
-        numberActiveOnWhatsapp: payload.isNumberActive,
-        migrateOrNew: payload.willingToMigrate === "yes" ? "migrate" : "new",
-        smsAccess: payload.hasSmsAccess,
+        hasRegisteredEntity: "yes",
+        legalBusinessName: p.legalName,
+        desiredWhatsappNumber: waLine,
+        numberActiveOnWhatsapp: "connected_in_app",
+        migrateOrNew: "embedded_guided",
+        smsAccess: "not_collected",
         numberOwnership: "owner",
-        hasBM: payload.hasMetaBM,
-        teamSize: payload.teamType,
-        seats: payload.estimatedSeats,
-        notifications: payload.notificationsEnabled ? "enabled" : "disabled",
-        leadSources: payload.leadSources,
-        goals: payload.primaryGoal,
-        notes: payload.additionalNotes,
+        hasBM: "managed_via_embedded_signup",
+        bmEmail: null,
+        bmId: null,
+        teamSize: p.teamType,
+        seats: p.estimatedSeats,
+        notifications: p.notificationsEnabled !== false ? "enabled" : "disabled",
+        leadSources: p.leadSources,
+        goals: p.primaryGoal,
+        notes: p.additionalNotes,
+        preferredCallWindows: p.conciergeLaunchAvailability,
       };
 
       const submission = await storage.createRealtorOnboardingSubmission({
@@ -316,6 +349,7 @@ export function registerTemplateRoutes(app: Express) {
 
       try {
         await installTemplateForUser(userId);
+        await storage.upsertTemplateEntitlement(userId, TEMPLATE_ID, { status: "installed" });
       } catch (installErr) {
         console.error("[Template] Install failed (non-blocking):", installErr);
       }
@@ -346,6 +380,14 @@ export function registerTemplateRoutes(app: Express) {
             hasPro: ge.hasProTier,
             hasAI: ge.hasAIBrainAddon,
             workflowsEnabled: ge.workflowsEnabled,
+          });
+        }
+        const whatsappOk = await isUserWhatsAppConnectedForActivation(userId);
+        if (!whatsappOk) {
+          return res.status(400).json({
+            error:
+              "WhatsApp must be connected before the Growth Engine can be installed. Open Settings → Channels and complete the guided WhatsApp setup.",
+            code: "whatsapp_required",
           });
         }
       }

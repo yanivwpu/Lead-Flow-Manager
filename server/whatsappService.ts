@@ -319,3 +319,16 @@ export async function getProviderStatus(userId: string): Promise<ProviderStatus>
     },
   };
 }
+
+/**
+ * Whether WhatsApp is connected for this user — aligned with GET /api/activation-status `whatsappConnected`
+ * (canonical Meta/Twilio flags plus synced channel_settings row).
+ */
+export async function isUserWhatsAppConnectedForActivation(userId: string): Promise<boolean> {
+  await syncWhatsAppChannelRowFromCanonicalMeta(userId);
+  const user = await storage.getUserForSession(userId);
+  const settings = await storage.getChannelSettings(userId);
+  const legacyAfterSync = settings.some((s) => s.channel === "whatsapp" && !!s.isConnected);
+  const canonicalWa = user ? isCanonicalWhatsAppFullyConnected(user) : false;
+  return canonicalWa || legacyAfterSync;
+}
