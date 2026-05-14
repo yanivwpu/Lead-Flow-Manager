@@ -359,6 +359,120 @@ function reEngagementHeaderKindLabel(template: MessageTemplate): string | null {
   return `${ht.charAt(0).toUpperCase()}${ht.slice(1)} header`;
 }
 
+/** Re-engagement row: controlled menu closes before opening the send dialog (Radix `onSelect` + `preventDefault` keeps menu open). */
+function ReEngagementTemplatePicker({
+  chat,
+  approvedTemplates,
+  triggerClass,
+  placeholder,
+  testId,
+  buttonVariant = "outline",
+  onPickTemplate,
+}: {
+  chat: RetargetableChat;
+  approvedTemplates: MessageTemplate[];
+  triggerClass: string;
+  placeholder: string;
+  testId: string;
+  buttonVariant?: "outline" | "default";
+  onPickTemplate: (template: MessageTemplate, chat: RetargetableChat) => void;
+}) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const pickInFlightRef = useRef(false);
+
+  return (
+    <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
+      <DropdownMenuTrigger asChild>
+        <Button
+          type="button"
+          variant={buttonVariant}
+          className={cn(
+            "w-full justify-between gap-2 whitespace-normal sm:w-[220px]",
+            "min-h-[40px] shrink-0 py-2 text-left font-medium",
+            triggerClass
+          )}
+          data-testid={testId}
+        >
+          <span className="truncate">{placeholder}</span>
+          <ChevronDown className="h-4 w-4 shrink-0 opacity-70" aria-hidden />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        align="end"
+        className="z-[100] w-[min(100vw-1.5rem,380px)] max-h-[min(55vh,420px)] overflow-y-auto overscroll-contain border border-gray-200 bg-white p-1 shadow-lg"
+      >
+        {approvedTemplates.length === 0 ? (
+          <div className="px-2 py-3 text-xs text-gray-500 text-center leading-snug">
+            No approved WhatsApp templates found.
+            <br />
+            Sync templates from your WhatsApp provider, then try again.
+          </div>
+        ) : (
+          approvedTemplates.map((template) => {
+            const support = getReEngagementTemplateRowSupport(template);
+            const cat = (template.category || "").toLowerCase();
+            const catClass = CATEGORY_BADGE_CLASS[cat] ?? "bg-gray-50 text-gray-700 border-gray-200";
+            const headerKind = reEngagementHeaderKindLabel(template);
+            const btnCount = Array.isArray(template.buttons) ? template.buttons.length : 0;
+            let layoutBadge: string | null = null;
+            if (support.shape === "carousel") layoutBadge = "Carousel";
+            else if (support.shape === "media_header") layoutBadge = headerKind || "Media header";
+            else if (support.shape === "buttons") layoutBadge = btnCount > 0 ? `Buttons · ${btnCount}` : "Buttons";
+            else if (support.shape === "text_header") layoutBadge = "Text header";
+            else if (support.shape === "mixed") layoutBadge = "Mixed layout";
+            else if (btnCount > 0) layoutBadge = `Buttons · ${btnCount}`;
+            return (
+              <DropdownMenuItem
+                key={template.id}
+                disabled={!support.selectable}
+                className="flex cursor-pointer flex-col items-start gap-1 rounded-sm px-2 py-2 text-left focus:bg-gray-100 data-[disabled]:cursor-not-allowed data-[disabled]:opacity-60"
+                onSelect={() => {
+                  if (!support.selectable) return;
+                  if (pickInFlightRef.current) return;
+                  pickInFlightRef.current = true;
+                  setMenuOpen(false);
+                  queueMicrotask(() => {
+                    try {
+                      onPickTemplate(template, chat);
+                    } finally {
+                      pickInFlightRef.current = false;
+                    }
+                  });
+                }}
+              >
+                <div className="flex w-full min-w-0 flex-wrap items-center gap-1">
+                  <span className="truncate text-sm font-medium text-gray-900">{template.name}</span>
+                  <Badge variant="outline" className={cn("text-[9px] font-normal px-1.5 py-0", catClass)}>
+                    {formatCategoryBadgeLabel(template.category)}
+                  </Badge>
+                  {layoutBadge ? (
+                    <Badge
+                      variant="outline"
+                      className="text-[9px] font-normal border-indigo-100/90 bg-indigo-50/50 px-1.5 py-0 text-indigo-900/80"
+                    >
+                      {layoutBadge}
+                    </Badge>
+                  ) : null}
+                  <span className="ml-auto shrink-0 font-mono text-[9px] text-gray-400">
+                    {formatLanguageCode(template.language)}
+                  </span>
+                </div>
+                {!support.selectable && support.disabledReason ? (
+                  <p className="text-[10px] leading-snug text-amber-900">{support.disabledReason}</p>
+                ) : libraryQuickSendMeta(template).blocked ? (
+                  <p className="text-[10px] leading-snug text-gray-500">
+                    Opens send preview — add any required media, button URLs, or variables before sending.
+                  </p>
+                ) : null}
+              </DropdownMenuItem>
+            );
+          })
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 /** WhatsApp media headers (image | video | document) support per-send runtime upload unless explicitly disabled. */
 function templateHasDynamicMediaHeader(template: MessageTemplate): boolean {
   if (template.mediaRuntimeRequired === false) return false;
@@ -1650,7 +1764,7 @@ export function Templates() {
                   </div>
                 ) : (
                   <TooltipProvider delayDuration={200}>
-                  <div className="space-y-2 max-h-[min(420px,55vh)] md:max-h-[480px] overflow-y-auto pr-1 md:pr-2 overscroll-contain" style={{ scrollbarWidth: 'thin' }}>
+                  <div className="space-y-2 pr-1 md:pr-2">
                     {retargetableChats.map((chat) => {
                       const ch = (chat.channel || "").toLowerCase();
                       const badge = RE_ENGAGEMENT_CHANNEL_BADGE[ch] ?? RE_ENGAGEMENT_CHANNEL_BADGE.whatsapp;
@@ -1680,98 +1794,6 @@ export function Templates() {
                         .filter((t) => t && typeof t === "object" && typeof t.id === "string" && isApprovedTemplateStatus(t.status))
                         .slice()
                         .sort((a, b) => a.name.localeCompare(b.name));
-
-                      const templatePicker = (
-                        triggerClass: string,
-                        placeholder: string,
-                        testId: string,
-                        buttonVariant: "outline" | "default" = "outline"
-                      ) => (
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button
-                              type="button"
-                              variant={buttonVariant}
-                              className={cn(
-                                "w-full justify-between gap-2 whitespace-normal sm:w-[220px]",
-                                "min-h-[40px] shrink-0 py-2 text-left font-medium",
-                                triggerClass
-                              )}
-                              data-testid={testId}
-                            >
-                              <span className="truncate">{placeholder}</span>
-                              <ChevronDown className="h-4 w-4 shrink-0 opacity-70" aria-hidden />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent
-                            align="end"
-                            className="z-[100] w-[min(100vw-1.5rem,380px)] max-h-[min(55vh,420px)] overflow-y-auto overscroll-contain border border-gray-200 bg-white p-1 shadow-lg"
-                          >
-                            {approvedReEngagementTemplates.length === 0 ? (
-                              <div className="px-2 py-3 text-xs text-gray-500 text-center leading-snug">
-                                No approved WhatsApp templates found.
-                                <br />
-                                Sync templates from your WhatsApp provider, then try again.
-                              </div>
-                            ) : (
-                              approvedReEngagementTemplates.map((template) => {
-                                const support = getReEngagementTemplateRowSupport(template);
-                                const cat = (template.category || "").toLowerCase();
-                                const catClass = CATEGORY_BADGE_CLASS[cat] ?? "bg-gray-50 text-gray-700 border-gray-200";
-                                const headerKind = reEngagementHeaderKindLabel(template);
-                                const btnCount = Array.isArray(template.buttons) ? template.buttons.length : 0;
-                                let layoutBadge: string | null = null;
-                                if (support.shape === "carousel") layoutBadge = "Carousel";
-                                else if (support.shape === "media_header") layoutBadge = headerKind || "Media header";
-                                else if (support.shape === "buttons") layoutBadge = btnCount > 0 ? `Buttons · ${btnCount}` : "Buttons";
-                                else if (support.shape === "text_header") layoutBadge = "Text header";
-                                else if (support.shape === "mixed") layoutBadge = "Mixed layout";
-                                else if (btnCount > 0) layoutBadge = `Buttons · ${btnCount}`;
-                                return (
-                                  <DropdownMenuItem
-                                    key={template.id}
-                                    disabled={!support.selectable}
-                                    className="flex cursor-pointer flex-col items-start gap-1 rounded-sm px-2 py-2 text-left focus:bg-gray-100 data-[disabled]:cursor-not-allowed data-[disabled]:opacity-60"
-                                    onSelect={(ev) => {
-                                      ev.preventDefault();
-                                      if (!support.selectable) return;
-                                      handleSendTemplate(template, chat, "campaign");
-                                    }}
-                                  >
-                                    <div className="flex w-full min-w-0 flex-wrap items-center gap-1">
-                                      <span className="truncate text-sm font-medium text-gray-900">{template.name}</span>
-                                      <Badge
-                                        variant="outline"
-                                        className={cn("text-[9px] font-normal px-1.5 py-0", catClass)}
-                                      >
-                                        {formatCategoryBadgeLabel(template.category)}
-                                      </Badge>
-                                      {layoutBadge ? (
-                                        <Badge
-                                          variant="outline"
-                                          className="text-[9px] font-normal border-indigo-100/90 bg-indigo-50/50 px-1.5 py-0 text-indigo-900/80"
-                                        >
-                                          {layoutBadge}
-                                        </Badge>
-                                      ) : null}
-                                      <span className="ml-auto shrink-0 font-mono text-[9px] text-gray-400">
-                                        {formatLanguageCode(template.language)}
-                                      </span>
-                                    </div>
-                                    {!support.selectable && support.disabledReason ? (
-                                      <p className="text-[10px] leading-snug text-amber-900">{support.disabledReason}</p>
-                                    ) : libraryQuickSendMeta(template).blocked ? (
-                                      <p className="text-[10px] leading-snug text-gray-500">
-                                        Opens send preview — add any required media, button URLs, or variables before sending.
-                                      </p>
-                                    ) : null}
-                                  </DropdownMenuItem>
-                                );
-                              })
-                            )}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      );
 
                       return (
                         <div
@@ -1883,30 +1905,39 @@ export function Templates() {
                                 </p>
                               ) : null}
 
-                              {isWhatsApp && awaitingReply && !lastMatchedTemplate
-                                ? templatePicker(
-                                    "w-full sm:w-[220px] min-h-[40px] shrink-0 border-gray-300",
-                                    "Choose template",
-                                    `select-template-fallback-${chat.id}`
-                                  )
-                                : null}
+                              {isWhatsApp && awaitingReply && !lastMatchedTemplate ? (
+                                <ReEngagementTemplatePicker
+                                  chat={chat}
+                                  approvedTemplates={approvedReEngagementTemplates}
+                                  triggerClass="w-full sm:w-[220px] min-h-[40px] shrink-0 border-gray-300"
+                                  placeholder="Choose template"
+                                  testId={`select-template-fallback-${chat.id}`}
+                                  onPickTemplate={(template, c) => handleSendTemplate(template, c, "campaign")}
+                                />
+                              ) : null}
 
-                              {isWhatsApp && failedWa
-                                ? templatePicker(
-                                    "w-full sm:w-[220px] min-h-[40px] shrink-0 border-amber-300 bg-amber-50/50",
-                                    "Retry with template",
-                                    `retry-template-${chat.id}`
-                                  )
-                                : null}
+                              {isWhatsApp && failedWa ? (
+                                <ReEngagementTemplatePicker
+                                  chat={chat}
+                                  approvedTemplates={approvedReEngagementTemplates}
+                                  triggerClass="w-full sm:w-[220px] min-h-[40px] shrink-0 border-amber-300 bg-amber-50/50"
+                                  placeholder="Retry with template"
+                                  testId={`retry-template-${chat.id}`}
+                                  onPickTemplate={(template, c) => handleSendTemplate(template, c, "campaign")}
+                                />
+                              ) : null}
 
-                              {isWhatsApp && !awaitingReply && !failedWa
-                                ? templatePicker(
-                                    "w-full sm:w-[220px] min-h-[40px] shrink-0 bg-brand-green hover:bg-brand-green/90 text-white border-0 shadow-sm",
-                                    "Send WhatsApp template",
-                                    `select-template-${chat.id}`,
-                                    "default"
-                                  )
-                                : null}
+                              {isWhatsApp && !awaitingReply && !failedWa ? (
+                                <ReEngagementTemplatePicker
+                                  chat={chat}
+                                  approvedTemplates={approvedReEngagementTemplates}
+                                  triggerClass="w-full sm:w-[220px] min-h-[40px] shrink-0 bg-brand-green hover:bg-brand-green/90 text-white border-0 shadow-sm"
+                                  placeholder="Send WhatsApp template"
+                                  testId={`select-template-${chat.id}`}
+                                  buttonVariant="default"
+                                  onPickTemplate={(template, c) => handleSendTemplate(template, c, "campaign")}
+                                />
+                              ) : null}
 
                               {ch === "facebook" ? (
                                 <Button
