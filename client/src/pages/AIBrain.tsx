@@ -94,6 +94,46 @@ const INDUSTRY_OPTIONS = [
   { value: "other", label: "Other" },
 ] as const;
 
+/** Scan API or legacy rows may return structured JSON; the preview textarea must always receive plain text. */
+function websiteKnowledgePreviewToString(raw: unknown): string {
+  if (raw == null) return "";
+  if (typeof raw === "string") {
+    const t = raw.trim();
+    if (!t) return "";
+    if (t.startsWith("{") || t.startsWith("[")) {
+      try {
+        return websiteKnowledgePreviewToString(JSON.parse(t));
+      } catch {
+        return t;
+      }
+    }
+    return t;
+  }
+  if (typeof raw === "number" || typeof raw === "boolean") return String(raw);
+  if (Array.isArray(raw)) {
+    return raw
+      .map((item) => websiteKnowledgePreviewToString(item))
+      .filter((s) => s.length > 0)
+      .join("\n\n")
+      .trim();
+  }
+  if (typeof raw === "object") {
+    const o = raw as Record<string, unknown>;
+    const keys = ["previewSummary", "summary", "text", "content", "body", "message", "result", "output"] as const;
+    for (const k of keys) {
+      if (k in o && o[k] != null) {
+        const inner = websiteKnowledgePreviewToString(o[k]);
+        if (inner) return inner;
+      }
+    }
+    if ("data" in o && o.data != null) {
+      const inner = websiteKnowledgePreviewToString(o.data);
+      if (inner) return inner;
+    }
+  }
+  return "";
+}
+
 type QualifyingQuestion = { key: string; label: string; question: string; required: boolean };
 
 const INDUSTRY_QUALIFY_TEMPLATES: Record<string, QualifyingQuestion[]> = {
@@ -432,7 +472,7 @@ function AIBrainContent() {
     if (wkPhase === "scanning" || wkPhase === "scanned" || wkPhase === "failed") return;
     const k = businessKnowledge as BusinessKnowledge;
     setWkUrl(k.websiteKnowledgeUrl || "");
-    setWkPreview(k.websiteKnowledgeSummary || "");
+    setWkPreview(websiteKnowledgePreviewToString(k.websiteKnowledgeSummary));
     setWkSources(
       Array.isArray(k.websiteKnowledgeSourceUrls)
         ? k.websiteKnowledgeSourceUrls.filter((x): x is string => typeof x === "string")
@@ -488,7 +528,7 @@ function AIBrainContent() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(typeof data.error === "string" ? data.error : "Scan failed");
-      return data as { scanId: string; previewSummary: string; sourceUrls: string[] };
+      return data as { scanId: string; previewSummary: unknown; sourceUrls: string[] };
     },
     onMutate: () => {
       setWkErr("");
@@ -496,7 +536,7 @@ function AIBrainContent() {
     },
     onSuccess: (data) => {
       setWkScanId(data.scanId);
-      setWkPreview(data.previewSummary || "");
+      setWkPreview(websiteKnowledgePreviewToString(data.previewSummary));
       setWkSources(Array.isArray(data.sourceUrls) ? data.sourceUrls : []);
       setWkPhase("scanned");
     },
@@ -1217,27 +1257,6 @@ function AIBrainContent() {
                     Delete
                   </Button>
                 </div>
-
-                <Collapsible>
-                  <CollapsibleTrigger asChild>
-                    <button
-                      type="button"
-                      className="flex w-full items-center justify-between rounded-lg border border-dashed border-violet-200/60 bg-violet-50/25 px-3 py-2 text-left text-xs font-medium text-violet-900 hover:bg-violet-50/50"
-                    >
-                      <span>Coming later (roadmap)</span>
-                      <ChevronRight className="h-3.5 w-3.5 shrink-0 text-violet-600" />
-                    </button>
-                  </CollapsibleTrigger>
-                  <CollapsibleContent className="pt-2">
-                    <ul className="list-disc space-y-1 pl-5 text-xs text-slate-600">
-                      <li>Shopify product sync</li>
-                      <li>Uploaded files</li>
-                      <li>CSV import</li>
-                      <li>Vector search / RAG</li>
-                      <li>Full knowledge base</li>
-                    </ul>
-                  </CollapsibleContent>
-                </Collapsible>
               </CardContent>
             </Card>
 

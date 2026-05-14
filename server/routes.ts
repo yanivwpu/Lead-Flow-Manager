@@ -99,6 +99,7 @@ import {
   WebsiteKnowledgeScrapeError,
 } from "./websiteKnowledgeScraper";
 import { putWebsiteKnowledgeDraft, takeWebsiteKnowledgeDraft } from "./websiteKnowledgeDraftCache";
+import { finalizeWebsiteKnowledgeSummaryText } from "./websiteKnowledgeSummaryNormalize";
 import { getUncachableStripeClient } from "./stripeClient";
 import { sanitizeStripeReturnPath } from "./checkoutReturnPath";
 import { resolveStripeCheckoutRedirectOrigin } from "./stripeCheckoutRedirectBase";
@@ -8956,7 +8957,8 @@ export async function registerRoutes(
 
       const combined = combineScrapedText(pages);
       const { aiService } = await import("./aiService");
-      const summary = await aiService.summarizeWebsiteKnowledgeForBrain(combined);
+      const summaryRaw = await aiService.summarizeWebsiteKnowledgeForBrain(combined);
+      const summary = finalizeWebsiteKnowledgeSummaryText(summaryRaw);
       const scanId = putWebsiteKnowledgeDraft({
         userId: req.user.id,
         url: pages[0]?.url || url.trim(),
@@ -8996,11 +8998,11 @@ export async function registerRoutes(
         });
       }
 
-      let summaryText = draft.summary;
+      let summaryText = finalizeWebsiteKnowledgeSummaryText(draft.summary);
       if (typeof summaryOverride === "string" && summaryOverride.trim()) {
-        summaryText = summaryOverride.trim().slice(0, 8000);
+        summaryText = finalizeWebsiteKnowledgeSummaryText(summaryOverride.trim()).slice(0, 8000);
       } else {
-        summaryText = draft.summary.slice(0, 8000);
+        summaryText = summaryText.slice(0, 8000);
       }
 
       await storage.upsertAiBusinessKnowledge(req.user.id, {

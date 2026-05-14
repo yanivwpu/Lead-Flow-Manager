@@ -1,4 +1,5 @@
 import { aiProvider } from "./aiProvider";
+import { extractWebsiteKnowledgeSummaryText } from "./websiteKnowledgeSummaryNormalize";
 import { storage } from "./storage";
 import { 
   LEAD_INTENT_KEYWORDS, 
@@ -374,11 +375,26 @@ Return JSON only: { "summary": "..." }`;
           { role: "system", content: "You return only valid JSON." },
           { role: "user", content: `${prompt}\n\n--- EXTRACTED TEXT ---\n${body}` },
         ],
-        { jsonMode: true },
+        { jsonMode: true, maxTokens: 2000 },
       );
-      const result = JSON.parse(response || "{}");
-      const s = String(result.summary || "").trim();
-      return s.slice(0, 4000) || "Unable to summarize this website content.";
+      const trimmed = (response || "").trim();
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(trimmed || "{}");
+      } catch {
+        return (
+          extractWebsiteKnowledgeSummaryText(trimmed).slice(0, 4000) ||
+          trimmed.slice(0, 4000) ||
+          "Unable to summarize this website content."
+        );
+      }
+      const s = extractWebsiteKnowledgeSummaryText(parsed).trim();
+      return (
+        s.slice(0, 4000) ||
+        extractWebsiteKnowledgeSummaryText(trimmed).slice(0, 4000) ||
+        trimmed.slice(0, 4000) ||
+        "Unable to summarize this website content."
+      );
     } catch (e) {
       console.error("[AI] website knowledge summarize failed", e);
       return body.slice(0, 4000);
