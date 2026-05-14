@@ -116,6 +116,12 @@ export const users = pgTable("users", {
   // Admin override plan (takes precedence if enabled)
   planOverride: text("plan_override"),
   planOverrideEnabled: boolean("plan_override_enabled").default(false),
+  /** Admin-only: force AI Brain access on/off regardless of Stripe/Shopify (does not cancel billing). */
+  aiBrainEntitlementOverrideEnabled: boolean("ai_brain_entitlement_override_enabled").default(false),
+  aiBrainEntitlementOverrideGrant: boolean("ai_brain_entitlement_override_grant").default(false),
+  /** Admin-only: force Growth Engine eligibility on/off (access only; does not change subscriptions). */
+  growthEngineEntitlementOverrideEnabled: boolean("growth_engine_entitlement_override_enabled").default(false),
+  growthEngineEntitlementOverrideGrant: boolean("growth_engine_entitlement_override_grant").default(false),
   stripeCustomerId: text("stripe_customer_id"),
   stripeSubscriptionId: text("stripe_subscription_id"),
   subscriptionStatus: text("subscription_status").default("active"), // active, canceled, past_due

@@ -21,7 +21,7 @@ export type StripeCheckoutRedirectOpts = {
   cancelReturnPath?: string;
 };
 
-export type AIBrainSource = "none" | "stripe" | "shopify" | "manual" | "demo" | "trial";
+export type AIBrainSource = "none" | "stripe" | "shopify" | "manual" | "demo" | "trial" | "admin";
 
 /** Shown when user tries AI Brain add-on checkout on Free (effective plan). */
 export const AI_BRAIN_REQUIRES_PAID_PLAN_MESSAGE =
@@ -58,8 +58,11 @@ export interface UserLimits {
   aiBrainSource: AIBrainSource;
   /** Same as hasAIBrainAddon — alias for API/clarity (trial + paid addons). */
   effectiveHasAIBrain: boolean;
-  /** Realtor Growth Engine: requires effective Pro plan plus AI Brain entitlement. */
+  /** Realtor Growth Engine: requires effective Pro plan plus AI Brain entitlement (unless admin override). */
   growthEngineEligible: boolean;
+  /** When true, admin has toggled Growth Engine override; use with growthEngineEntitlementOverrideGrant. */
+  growthEngineEntitlementOverrideEnabled?: boolean;
+  growthEngineEntitlementOverrideGrant?: boolean;
   /** Starter or Pro effective plan — required before AI Brain add-on can apply. */
   aiBrainBasePlanEligible: boolean;
 }
@@ -122,10 +125,18 @@ class SubscriptionService {
       effectivePlan === "starter" || effectivePlan === "pro";
 
     const aiEntitlement = await this.resolveAIBrainEntitlement(user);
-    const hasAIBrainAddon =
-      aiBrainBasePlanEligible && aiEntitlement.has;
-    const aiBrainSource = aiEntitlement.source;
-    const growthEngineEligible = effectivePlan === "pro" && hasAIBrainAddon;
+    let hasAIBrainAddon = aiBrainBasePlanEligible && aiEntitlement.has;
+    let aiBrainSource: AIBrainSource = aiEntitlement.source;
+
+    if (user.aiBrainEntitlementOverrideEnabled) {
+      hasAIBrainAddon = !!user.aiBrainEntitlementOverrideGrant;
+      aiBrainSource = user.aiBrainEntitlementOverrideGrant ? "admin" : "none";
+    }
+
+    let growthEngineEligible = effectivePlan === "pro" && hasAIBrainAddon;
+    if (user.growthEngineEntitlementOverrideEnabled) {
+      growthEngineEligible = !!user.growthEngineEntitlementOverrideGrant;
+    }
 
     return {
       plan: effectivePlan,
@@ -157,6 +168,8 @@ class SubscriptionService {
       effectiveHasAIBrain: hasAIBrainAddon,
       aiBrainSource,
       growthEngineEligible,
+      growthEngineEntitlementOverrideEnabled: !!user.growthEngineEntitlementOverrideEnabled,
+      growthEngineEntitlementOverrideGrant: !!user.growthEngineEntitlementOverrideGrant,
       aiBrainBasePlanEligible,
     };
   }

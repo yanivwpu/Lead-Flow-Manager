@@ -113,7 +113,11 @@ interface AdminUser {
   billingPlan: string;
   planOverride: string | null;
   planOverrideEnabled: boolean;
-  /** Legacy column kept for reference (admin PATCH still syncs this). */
+  aiBrainEntitlementOverrideEnabled?: boolean;
+  aiBrainEntitlementOverrideGrant?: boolean;
+  growthEngineEntitlementOverrideEnabled?: boolean;
+  growthEngineEntitlementOverrideGrant?: boolean;
+  /** Legacy `subscription_plan` column from the database (display only). */
   subscriptionPlanLegacy: string | null;
   subscriptionStatus: string | null;
   trialEndsAt: string | null;
@@ -232,6 +236,129 @@ function formatGeSetupPipelineStatus(status: string): string {
   return labels[status] || status;
 }
 
+type EntitlementTriState = "inherit" | "on" | "off";
+
+function AdminAccessOverridesForm({ user, onApplied }: { user: AdminUser; onApplied: () => void }) {
+  const queryClient = useQueryClient();
+  const [planMode, setPlanMode] = useState<"inherit" | "free" | "starter" | "pro">(
+    !user.planOverrideEnabled ? "inherit" : ((user.planOverride || "free") as "free" | "starter" | "pro"),
+  );
+  const [aiMode, setAiMode] = useState<EntitlementTriState>(
+    !user.aiBrainEntitlementOverrideEnabled ? "inherit" : user.aiBrainEntitlementOverrideGrant ? "on" : "off",
+  );
+  const [geMode, setGeMode] = useState<EntitlementTriState>(
+    !user.growthEngineEntitlementOverrideEnabled ? "inherit" : user.growthEngineEntitlementOverrideGrant ? "on" : "off",
+  );
+
+  useEffect(() => {
+    setPlanMode(!user.planOverrideEnabled ? "inherit" : ((user.planOverride || "free") as "free" | "starter" | "pro"));
+    setAiMode(!user.aiBrainEntitlementOverrideEnabled ? "inherit" : user.aiBrainEntitlementOverrideGrant ? "on" : "off");
+    setGeMode(!user.growthEngineEntitlementOverrideEnabled ? "inherit" : user.growthEngineEntitlementOverrideGrant ? "on" : "off");
+  }, [
+    user.id,
+    user.planOverrideEnabled,
+    user.planOverride,
+    user.aiBrainEntitlementOverrideEnabled,
+    user.aiBrainEntitlementOverrideGrant,
+    user.growthEngineEntitlementOverrideEnabled,
+    user.growthEngineEntitlementOverrideGrant,
+  ]);
+
+  const patchMutation = useMutation({
+    mutationFn: async () => {
+      const body: Record<string, unknown> = {};
+      if (planMode === "inherit") body.clearPlanOverride = true;
+      else body.planOverride = planMode;
+      body.aiBrainEntitlementOverride = aiMode;
+      body.growthEngineEntitlementOverride = geMode;
+      const res = await adminFetch(`/api/admin/users/${user.id}/access-overrides`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error((await res.text()) || "Failed to save overrides");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/users'] });
+      onApplied();
+    },
+  });
+
+  return (
+    <div className="rounded-lg border-2 border-dashed border-violet-200 bg-violet-50/50 p-4 space-y-4">
+      <div>
+        <div className="text-sm font-semibold text-violet-950">Admin access overrides</div>
+        <p className="text-xs text-violet-900/80 mt-1 leading-snug">
+          Overrides affect in-app access and limits only. They do not cancel or change Stripe or Shopify subscriptions.
+        </p>
+      </div>
+
+      <div className="space-y-2">
+        <Label className="text-xs text-gray-600">Plan override (effective tier)</Label>
+        <select
+          className="w-full h-9 rounded-md border border-input bg-white px-2 text-sm"
+          value={planMode}
+          onChange={(e) => setPlanMode(e.target.value as typeof planMode)}
+          aria-label="Plan override"
+        >
+          <option value="inherit">Use billing / trial (no plan override)</option>
+          <option value="free">Force Free</option>
+          <option value="starter">Force Starter</option>
+          <option value="pro">Force Pro</option>
+        </select>
+      </div>
+
+      <div className="space-y-2">
+        <Label className="text-xs text-gray-600">AI Brain access override</Label>
+        <select
+          className="w-full h-9 rounded-md border border-input bg-white px-2 text-sm"
+          value={aiMode}
+          onChange={(e) => setAiMode(e.target.value as EntitlementTriState)}
+          aria-label="AI Brain override"
+        >
+          <option value="inherit">Use billing / trial / Shopify flag (no override)</option>
+          <option value="on">Force AI Brain on</option>
+          <option value="off">Force AI Brain off</option>
+        </select>
+      </div>
+
+      <div className="space-y-2">
+        <Label className="text-xs text-gray-600">Growth Engine access override</Label>
+        <select
+          className="w-full h-9 rounded-md border border-input bg-white px-2 text-sm"
+          value={geMode}
+          onChange={(e) => setGeMode(e.target.value as EntitlementTriState)}
+          aria-label="Growth Engine override"
+        >
+          <option value="inherit">Use product rules (Pro + AI Brain + automations)</option>
+          <option value="on">Force Growth Engine access on</option>
+          <option value="off">Force Growth Engine access off</option>
+        </select>
+      </div>
+
+      <Button
+        type="button"
+        className="w-full"
+        disabled={patchMutation.isPending}
+        onClick={() => patchMutation.mutate()}
+      >
+        {patchMutation.isPending ? (
+          <>
+            <Loader2 className="h-4 w-4 mr-2 animate-spin inline" />
+            Saving…
+          </>
+        ) : (
+          "Save access overrides"
+        )}
+      </Button>
+      {patchMutation.isError && (
+        <p className="text-xs text-destructive">{(patchMutation.error as Error)?.message || "Save failed"}</p>
+      )}
+    </div>
+  );
+}
+
 export function Admin() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [password, setPassword] = useState("");
@@ -253,8 +380,6 @@ export function Admin() {
   const [isAddingPartner, setIsAddingPartner] = useState(false);
   const [newPartner, setNewPartner] = useState({ name: "", email: "", password: "", commissionRate: "50.00", commissionDurationMonths: 6 });
   const [addPartnerError, setAddPartnerError] = useState("");
-  const [editingUserPlan, setEditingUserPlan] = useState<{ userId: string; plan: string } | null>(null);
-  
   const queryClient = useQueryClient();
 
   useEffect(() => {
@@ -399,7 +524,11 @@ export function Admin() {
       })
       .filter((u) => {
         if (overrideFilter === "all") return true;
-        return !!u.planOverrideEnabled;
+        return (
+          !!u.planOverrideEnabled ||
+          !!u.aiBrainEntitlementOverrideEnabled ||
+          !!u.growthEngineEntitlementOverrideEnabled
+        );
       })
       .filter((u) => {
         if (aiFilter === "all") return true;
@@ -611,7 +740,6 @@ export function Admin() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/admin/users'] });
-      setEditingUserPlan(null);
     }
   });
 
@@ -1241,7 +1369,9 @@ export function Admin() {
                                 >
                                   {planLabel}
                                 </Badge>
-                                {u.planOverrideEnabled && (
+                                {(u.planOverrideEnabled ||
+                                  u.aiBrainEntitlementOverrideEnabled ||
+                                  u.growthEngineEntitlementOverrideEnabled) && (
                                   <Badge variant="outline" className="text-[10px] border-indigo-300 text-indigo-700">
                                     Override
                                   </Badge>
@@ -1369,9 +1499,29 @@ export function Admin() {
                         <div className="font-medium text-gray-900">{selectedAdminUser.billingPlan}</div>
                       </div>
                       <div className="rounded-lg border p-3">
-                        <div className="text-xs text-gray-500">Override</div>
+                        <div className="text-xs text-gray-500">Plan override</div>
                         <div className="font-medium text-gray-900">
-                          {selectedAdminUser.planOverrideEnabled ? (selectedAdminUser.planOverride || "—") : "disabled"}
+                          {selectedAdminUser.planOverrideEnabled ? (selectedAdminUser.planOverride || "—") : "off (use billing / trial)"}
+                        </div>
+                      </div>
+                      <div className="rounded-lg border p-3">
+                        <div className="text-xs text-gray-500">AI Brain override</div>
+                        <div className="font-medium text-gray-900">
+                          {!selectedAdminUser.aiBrainEntitlementOverrideEnabled
+                            ? "off"
+                            : selectedAdminUser.aiBrainEntitlementOverrideGrant
+                              ? "force on"
+                              : "force off"}
+                        </div>
+                      </div>
+                      <div className="rounded-lg border p-3">
+                        <div className="text-xs text-gray-500">Growth Engine override</div>
+                        <div className="font-medium text-gray-900">
+                          {!selectedAdminUser.growthEngineEntitlementOverrideEnabled
+                            ? "off"
+                            : selectedAdminUser.growthEngineEntitlementOverrideGrant
+                              ? "force on"
+                              : "force off"}
                         </div>
                       </div>
                       <div className="rounded-lg border p-3">
@@ -1379,6 +1529,13 @@ export function Admin() {
                         <div className="font-medium text-gray-900">{selectedAdminUser.subscriptionPlanLegacy || "—"}</div>
                       </div>
                     </div>
+
+                    <AdminAccessOverridesForm
+                      user={selectedAdminUser}
+                      onApplied={() => {
+                        void refetchUsers();
+                      }}
+                    />
 
                     <div className="rounded-lg border p-3 space-y-2">
                       <div className="flex items-center justify-between">

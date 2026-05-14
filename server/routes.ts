@@ -7542,6 +7542,10 @@ export async function registerRoutes(
           billingPlan: user.billingPlan || "free",
           planOverride: user.planOverride ?? null,
           planOverrideEnabled: !!user.planOverrideEnabled,
+          aiBrainEntitlementOverrideEnabled: !!user.aiBrainEntitlementOverrideEnabled,
+          aiBrainEntitlementOverrideGrant: !!user.aiBrainEntitlementOverrideGrant,
+          growthEngineEntitlementOverrideEnabled: !!user.growthEngineEntitlementOverrideEnabled,
+          growthEngineEntitlementOverrideGrant: !!user.growthEngineEntitlementOverrideGrant,
           subscriptionPlanLegacy: user.subscriptionPlan,
           subscriptionStatus: user.subscriptionStatus,
           trialEndsAt: user.trialEndsAt,
@@ -7625,19 +7629,96 @@ export async function registerRoutes(
       }
 
       await storage.updateUser(userId, {
-        // keep legacy field in sync for admin UI display
-        subscriptionPlan,
         planOverride: subscriptionPlan,
         planOverrideEnabled: true,
       });
       
       const updated = await storage.getUser(userId);
-      console.log(`[Admin] Updated user ${user.email} plan to ${subscriptionPlan}`);
+      console.log(
+        JSON.stringify({
+          tag: "ADMIN_PLAN_OVERRIDE_SET",
+          targetUserId: userId,
+          targetEmail: user.email,
+          planOverride: subscriptionPlan,
+        }),
+      );
       
-      res.json({ success: true, plan: updated?.subscriptionPlan });
+      res.json({ success: true, planOverride: updated?.planOverride, planOverrideEnabled: updated?.planOverrideEnabled });
     } catch (error: any) {
       console.error("Error updating user plan:", error?.message || error);
       res.status(500).json({ error: `Failed to update plan: ${error?.message || 'Unknown error'}` });
+    }
+  });
+
+  // Admin: internal access overrides (plan / AI Brain / Growth Engine) — does not modify Stripe or Shopify billing.
+  app.patch("/api/admin/users/:userId/access-overrides", requireAdmin, async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const body = (req.body || {}) as Record<string, unknown>;
+
+      const existing = await storage.getUserForSession(userId);
+      if (!existing) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      const updates: Record<string, unknown> = {};
+
+      if (body.clearPlanOverride === true) {
+        updates.planOverrideEnabled = false;
+      } else if (typeof body.planOverride === "string" && ["free", "starter", "pro"].includes(body.planOverride)) {
+        updates.planOverride = body.planOverride;
+        updates.planOverrideEnabled = true;
+      }
+
+      if (typeof body.aiBrainEntitlementOverride === "string") {
+        const aiMode = body.aiBrainEntitlementOverride;
+        if (aiMode === "inherit") {
+          updates.aiBrainEntitlementOverrideEnabled = false;
+          updates.aiBrainEntitlementOverrideGrant = false;
+        } else if (aiMode === "on") {
+          updates.aiBrainEntitlementOverrideEnabled = true;
+          updates.aiBrainEntitlementOverrideGrant = true;
+        } else if (aiMode === "off") {
+          updates.aiBrainEntitlementOverrideEnabled = true;
+          updates.aiBrainEntitlementOverrideGrant = false;
+        }
+      }
+
+      if (typeof body.growthEngineEntitlementOverride === "string") {
+        const geMode = body.growthEngineEntitlementOverride;
+        if (geMode === "inherit") {
+          updates.growthEngineEntitlementOverrideEnabled = false;
+          updates.growthEngineEntitlementOverrideGrant = false;
+        } else if (geMode === "on") {
+          updates.growthEngineEntitlementOverrideEnabled = true;
+          updates.growthEngineEntitlementOverrideGrant = true;
+        } else if (geMode === "off") {
+          updates.growthEngineEntitlementOverrideEnabled = true;
+          updates.growthEngineEntitlementOverrideGrant = false;
+        }
+      }
+
+      if (Object.keys(updates).length === 0) {
+        return res.status(400).json({
+          error:
+            "No valid fields. Send clearPlanOverride and/or planOverride, aiBrainEntitlementOverride, growthEngineEntitlementOverride.",
+        });
+      }
+
+      await storage.updateUser(userId, updates as any);
+      console.log(
+        JSON.stringify({
+          tag: "ADMIN_ACCESS_OVERRIDES_PATCH",
+          targetUserId: userId,
+          targetEmail: existing.email,
+          updates,
+        }),
+      );
+
+      res.json({ ok: true, userId });
+    } catch (error: any) {
+      console.error("Error patching access overrides:", error?.message || error);
+      res.status(500).json({ error: error?.message || "Failed to update overrides" });
     }
   });
 

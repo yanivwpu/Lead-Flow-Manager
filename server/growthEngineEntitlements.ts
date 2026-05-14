@@ -8,7 +8,8 @@ export type GrowthEngineDenialReason =
   | "limits_unavailable"
   | "automations_not_in_plan"
   | "pro_plan_required"
-  | "ai_brain_required";
+  | "ai_brain_required"
+  | "admin_override_disabled";
 
 export type GrowthEngineAccessResult =
   | { ok: true; limits: UserLimits }
@@ -65,6 +66,21 @@ export async function evaluateGrowthEngineAccess(userId: string): Promise<Growth
   const hasProTier = limits.plan === "pro" || limits.plan === "scale";
   const hasAIBrainAddon = !!limits.hasAIBrainAddon;
   const workflowsEnabled = !!limits.workflowsEnabled;
+
+  if (limits.growthEngineEntitlementOverrideEnabled) {
+    if (limits.growthEngineEntitlementOverrideGrant) {
+      return { ok: true, limits };
+    }
+    return {
+      ok: false,
+      reason: "admin_override_disabled",
+      message: "Growth Engine is disabled by an administrator override for this account.",
+      limits,
+      hasProTier,
+      hasAIBrainAddon,
+      workflowsEnabled,
+    };
+  }
 
   if (!workflowsEnabled) {
     return {
