@@ -1,5 +1,7 @@
 import type { Express } from "express";
-import { CHANNELS } from "@shared/schema";
+import { sql, eq } from "drizzle-orm";
+import { CHANNELS, contactNotes } from "@shared/schema";
+import { db } from "../../drizzle/db";
 import { storage } from "../storage";
 import { channelService } from "../channelService";
 import { scheduleHubSpotAutoSync, contactPatchAffectsHubSpot } from "../hubspotAutoSync";
@@ -56,9 +58,6 @@ export function registerContactRoutes(app: Express): void {
   app.get("/api/contacts/notes-summary", async (req, res) => {
     try {
       if (!req.user) return res.status(401).json({ error: "Unauthorized" });
-      const { db } = await import("../drizzle/db");
-      const { contactNotes } = await import("@shared/schema");
-      const { sql, eq } = await import("drizzle-orm");
       const rows = await db
         .select({
           contactId: contactNotes.contactId,

@@ -1,5 +1,8 @@
 import twilio from "twilio";
 import crypto from "crypto";
+import { eq, and } from "drizzle-orm";
+import { db } from "../drizzle/db";
+import { users, registeredPhones, chats } from "@shared/schema";
 import { storage } from "./storage";
 import type { User, Chat } from "@shared/schema";
 
@@ -317,10 +320,6 @@ export async function findUserByTwilioCredentials(
   accountSid: string,
   twilioPhone: string
 ): Promise<{ user: User; matchedPhone: string } | undefined> {
-  const { db } = await import("../drizzle/db");
-  const { users, registeredPhones } = await import("@shared/schema");
-  const { eq, and } = await import("drizzle-orm");
-
   const normalizedPhone = twilioPhone.replace(/[^\d+]/g, "");
 
   // 1. Check primary number in users table
@@ -382,10 +381,6 @@ export async function findOrCreateChatByPhone(
   phone: string,
   name: string
 ): Promise<Chat> {
-  const { db } = await import("../drizzle/db");
-  const { chats } = await import("@shared/schema");
-  const { eq, and } = await import("drizzle-orm");
-
   const existing = await db.select().from(chats).where(
     and(eq(chats.userId, userId), eq(chats.whatsappPhone, phone))
   );

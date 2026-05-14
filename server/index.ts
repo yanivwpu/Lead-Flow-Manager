@@ -16,6 +16,9 @@ import "./worker";
 import oidcRouter from "./oidc";
 import bcrypt from "bcryptjs";
 import { storage } from "./storage";
+import { db } from "../drizzle/db";
+import { contacts, conversations } from "@shared/schema";
+import { eq, and, inArray, sql, asc } from "drizzle-orm";
 import { seedRealtorTemplate } from "./seedRealtorTemplate";
 import { createBullBoard } from "@bull-board/api";
 import { BullMQAdapter } from "@bull-board/api/bullMQAdapter";
@@ -61,10 +64,6 @@ async function runStartupGhlCleanup() {
   const mode = process.env.GHL_CLEANUP_MODE || 'no_messages';
   console.log(`[GHL Startup Cleanup] Running cleanup for user ${targetUserId}, mode=${mode}`);
   try {
-    const { db } = await import('../drizzle/db');
-    const { contacts, conversations } = await import('../shared/schema');
-    const { eq, and, inArray } = await import('drizzle-orm');
-
     const userIntegrations = await storage.getIntegrations(targetUserId);
     const ghlIntegrations = userIntegrations.filter((i: any) => i.type === 'gohighlevel');
     let disabledCount = 0;
@@ -384,10 +383,6 @@ app.use((req, res, next) => {
   // One-time deduplication: merge contacts that share the same normalised WhatsApp/phone number.
   // Safe to run on every startup — no-ops immediately when no duplicates exist.
   try {
-    const { db } = await import("../drizzle/db");
-    const { contacts, conversations } = await import("@shared/schema");
-    const { eq, and, sql: rawSql, asc } = await import("drizzle-orm");
-
     const allContacts = await db.select().from(contacts);
     const groups = new Map<string, typeof allContacts>();
     for (const c of allContacts) {
@@ -405,7 +400,7 @@ app.use((req, res, next) => {
 
       // Count messages per contact
       const counts = await Promise.all(group.map(async (c) => {
-        const rows = await db.execute(rawSql`
+        const rows = await db.execute(sql`
           SELECT COUNT(*) as cnt FROM messages m
           JOIN conversations cv ON m.conversation_id = cv.id
           WHERE cv.contact_id = ${c.id}
@@ -434,20 +429,20 @@ app.use((req, res, next) => {
         const loserConvs = await db.select().from(conversations).where(eq(conversations.contactId, loser.id));
         for (const lc of loserConvs) {
           if (winnerConv) {
-            await db.execute(rawSql`UPDATE messages SET conversation_id = ${winnerConv.id}, contact_id = ${winner.id} WHERE conversation_id = ${lc.id}`);
-            await db.execute(rawSql`DELETE FROM conversations WHERE id = ${lc.id}`);
+            await db.execute(sql`UPDATE messages SET conversation_id = ${winnerConv.id}, contact_id = ${winner.id} WHERE conversation_id = ${lc.id}`);
+            await db.execute(sql`DELETE FROM conversations WHERE id = ${lc.id}`);
           } else {
-            await db.execute(rawSql`UPDATE conversations SET contact_id = ${winner.id} WHERE id = ${lc.id}`);
-            await db.execute(rawSql`UPDATE messages SET contact_id = ${winner.id} WHERE conversation_id = ${lc.id}`);
+            await db.execute(sql`UPDATE conversations SET contact_id = ${winner.id} WHERE id = ${lc.id}`);
+            await db.execute(sql`UPDATE messages SET contact_id = ${winner.id} WHERE conversation_id = ${lc.id}`);
           }
         }
-        await db.execute(rawSql`UPDATE activity_events SET contact_id = ${winner.id} WHERE contact_id = ${loser.id}`);
-        await db.execute(rawSql`DELETE FROM contacts WHERE id = ${loser.id}`);
+        await db.execute(sql`UPDATE activity_events SET contact_id = ${winner.id} WHERE contact_id = ${loser.id}`);
+        await db.execute(sql`DELETE FROM contacts WHERE id = ${loser.id}`);
         console.log(`[Dedup] Merged duplicate contact ${loser.id} (${loser.name}) into ${winner.id} (${winner.name}) [${key}]`);
       }
 
       // Normalise winner phone/whatsapp_id to digits-only
-      await db.execute(rawSql`UPDATE contacts SET phone = ${normalizedPhone}, whatsapp_id = ${normalizedPhone} WHERE id = ${winner.id}`);
+      await db.execute(sql`UPDATE contacts SET phone = ${normalizedPhone}, whatsapp_id = ${normalizedPhone} WHERE id = ${winner.id}`);
     }
   } catch (dedupErr: any) {
     console.error('[Dedup] Contact deduplication error (non-fatal):', dedupErr.message);

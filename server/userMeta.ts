@@ -1,4 +1,7 @@
 import crypto from "crypto";
+import { eq } from "drizzle-orm";
+import { db } from "../drizzle/db";
+import { users } from "@shared/schema";
 import { storage } from "./storage";
 import type { User, Chat } from "@shared/schema";
 import { getMetaGraphApiBase } from "./metaGraphVersion";
@@ -994,10 +997,6 @@ export function parseMetaStatusWebhook(body: any): {
 }
 
 export async function findUserByMetaPhoneNumberId(phoneNumberId: string): Promise<User | undefined> {
-  const { db } = await import("../drizzle/db");
-  const { users } = await import("@shared/schema");
-  const { eq } = await import("drizzle-orm");
-
   const result = await db
     .select()
     .from(users)

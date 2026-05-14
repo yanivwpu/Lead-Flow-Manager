@@ -2,8 +2,14 @@ import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import crypto from "crypto";
 import { db } from "../drizzle/db";
-import { messages as messagesTable, contacts as contactsTable } from "@shared/schema";
-import { eq, and, or, isNotNull, ilike, desc } from "drizzle-orm";
+import {
+  messages as messagesTable,
+  contacts as contactsTable,
+  users,
+  channelSettings,
+  conversations,
+} from "@shared/schema";
+import { eq, and, or, isNotNull, ilike, desc, sql } from "drizzle-orm";
 import { registerContactRoutes } from "./routes/contacts";
 import { registerConversationRoutes } from "./routes/conversations";
 import { registerChannelRoutes } from "./routes/channels";
@@ -2429,10 +2435,6 @@ export async function registerRoutes(
 
       if (mode === "subscribe") {
         // Check 1: users table (WhatsApp Meta connections)
-        const { db } = await import("../drizzle/db");
-        const { users, channelSettings: csTable } = await import("@shared/schema");
-        const { eq } = await import("drizzle-orm");
-
         const allUsers = await db.select().from(users).where(eq(users.metaConnected, true));
         const matchingUser = allUsers.find(u => u.metaWebhookVerifyToken === token);
         if (matchingUser) {
@@ -2441,8 +2443,8 @@ export async function registerRoutes(
         }
 
         // Check 2: channelSettings.config.webhookVerifyToken (Facebook/Instagram connections)
-        const allChannelSettings = await db.select().from(csTable)
-          .where(eq(csTable.isConnected, true));
+        const allChannelSettings = await db.select().from(channelSettings)
+          .where(eq(channelSettings.isConnected, true));
         const matchingChannel = allChannelSettings.find(s => {
           const cfg = s.config as any;
           return cfg?.webhookVerifyToken === token;
@@ -2600,12 +2602,8 @@ export async function registerRoutes(
         if (!signatureValid && entry?.messaging) {
           const recipientId = entry.messaging[0]?.recipient?.id;
           if (recipientId) {
-            const { db: database } = await import("../drizzle/db");
-            const { channelSettings: csTable } = await import("@shared/schema");
-            const { eq: eqOp } = await import("drizzle-orm");
-
-            const allConnected = await database.select().from(csTable)
-              .where(eqOp(csTable.isConnected, true));
+            const allConnected = await db.select().from(channelSettings)
+              .where(eq(channelSettings.isConnected, true));
 
             for (const setting of allConnected) {
               const config = setting.config as any;
@@ -2735,14 +2733,10 @@ export async function registerRoutes(
 
             if (senderId && hasContent) {
               const recipientId = event.recipient?.id;
-              const { db: database } = await import("../drizzle/db");
-              const { channelSettings: channelSettingsTable } = await import("@shared/schema");
-              const { eq: eqOp, and: andOp } = await import("drizzle-orm");
-
-              const allSettings = await database.select().from(channelSettingsTable)
-                .where(andOp(
-                  eqOp(channelSettingsTable.channel, 'instagram'),
-                  eqOp(channelSettingsTable.isConnected, true)
+              const allSettings = await db.select().from(channelSettings)
+                .where(and(
+                  eq(channelSettings.channel, 'instagram'),
+                  eq(channelSettings.isConnected, true)
                 ));
 
               devLog(`[Meta Webhook] [Stage 3-IG] Found ${allSettings.length} connected instagram channelSettings — looking for recipientId=${recipientId}`);
@@ -2859,14 +2853,10 @@ export async function registerRoutes(
               continue;
             }
 
-            const { db: database } = await import("../drizzle/db");
-            const { channelSettings: channelSettingsTable } = await import("@shared/schema");
-            const { eq: eqOp, and: andOp } = await import("drizzle-orm");
-
-            const allSettings = await database.select().from(channelSettingsTable)
-              .where(andOp(
-                eqOp(channelSettingsTable.channel, 'facebook'),
-                eqOp(channelSettingsTable.isConnected, true)
+            const allSettings = await db.select().from(channelSettings)
+              .where(and(
+                eq(channelSettings.channel, 'facebook'),
+                eq(channelSettings.isConnected, true)
               ));
 
             devLog(`[Meta Webhook] [Stage 3-FB] Found ${allSettings.length} connected facebook channelSettings — looking for recipientId=${recipientId} or pageId=${fbPageId}`);
@@ -4430,13 +4420,10 @@ export async function registerRoutes(
   // Uses the stored page access token to call /me to discover the real Facebook Page ID.
   async function backfillInstagramPageId() {
     try {
-      const { db: database } = await import("../drizzle/db");
-      const { channelSettings: csTable } = await import("@shared/schema");
-      const { eq: eqOp } = await import("drizzle-orm");
-      const allIgSettings = await database
+      const allIgSettings = await db
         .select()
-        .from(csTable)
-        .where(eqOp(csTable.channel, 'instagram'));
+        .from(channelSettings)
+        .where(eq(channelSettings.channel, 'instagram'));
 
       let fixed = 0;
       for (const row of allIgSettings) {
@@ -4464,7 +4451,7 @@ export async function registerRoutes(
           }
           // Update the stored config with the correct Facebook Page ID
           const updatedConfig = { ...cfg, pageId: realPageId };
-          await database.update(csTable).set({ config: updatedConfig }).where(eqOp(csTable.id, row.id));
+          await db.update(channelSettings).set({ config: updatedConfig }).where(eq(channelSettings.id, row.id));
           console.log(`[Backfill:PageId] Fixed Instagram channelSettings for userId=${row.userId}: pageId ${pageId} → ${realPageId}`);
           fixed++;
         } catch (e: any) {
@@ -6825,11 +6812,6 @@ export async function registerRoutes(
         return res.status(401).json({ error: "Unauthorized" });
       }
       
-      const { db } = await import("../drizzle/db");
-      const { users, messageUsage } = await import("@shared/schema");
-      const { sql } = await import("drizzle-orm");
-      
-      // Get usage summary per user
       const result = await db.execute(sql`
         SELECT 
           u.id as user_id,
@@ -7290,15 +7272,11 @@ export async function registerRoutes(
   // Admin: Merge duplicate contacts that share the same WhatsApp/phone number
   app.post("/api/admin/merge-duplicate-contacts", requireAdmin, async (req, res) => {
     try {
-      const { db } = await import("../drizzle/db");
-      const { contacts, conversations } = await import("@shared/schema");
-      const { eq, and, sql: rawSql } = await import("drizzle-orm");
-
       const dryRun = req.body.dryRun === true;
       const filterUserId = req.body.userId as string | undefined;
 
       // Fetch all contacts with a phone or whatsapp_id set
-      const allContacts = await db.select().from(contacts);
+      const allContacts = await db.select().from(contactsTable);
 
       // Group contacts by (userId, normalised phone digits)
       const groups = new Map<string, typeof allContacts>();
@@ -7320,7 +7298,7 @@ export async function registerRoutes(
 
         // Get message counts per contact
         const counts = await Promise.all(group.map(async (c) => {
-          const rows = await db.execute(rawSql`
+          const rows = await db.execute(sql`
             SELECT COUNT(*) as cnt FROM messages m
             JOIN conversations cv ON m.conversation_id = cv.id
             WHERE cv.contact_id = ${c.id}
@@ -7369,42 +7347,42 @@ export async function registerRoutes(
           for (const lc of loserConvs) {
             if (winnerConv && lc.channel === winnerConv.channel) {
               // Re-point messages to winner's conversation
-              await db.execute(rawSql`
+              await db.execute(sql`
                 UPDATE messages SET conversation_id = ${winnerConv.id}, contact_id = ${winner.id}
                 WHERE conversation_id = ${lc.id}
               `);
               // Delete the now-empty loser conversation
-              await db.execute(rawSql`DELETE FROM conversations WHERE id = ${lc.id}`);
+              await db.execute(sql`DELETE FROM conversations WHERE id = ${lc.id}`);
             } else if (!winnerConv) {
               // No winner conversation yet — re-parent the loser conversation to the winner contact
-              await db.execute(rawSql`
+              await db.execute(sql`
                 UPDATE conversations SET contact_id = ${winner.id} WHERE id = ${lc.id}
               `);
-              await db.execute(rawSql`
+              await db.execute(sql`
                 UPDATE messages SET contact_id = ${winner.id} WHERE conversation_id = ${lc.id}
               `);
             } else {
               // Different channel — just re-parent to winner contact
-              await db.execute(rawSql`
+              await db.execute(sql`
                 UPDATE conversations SET contact_id = ${winner.id} WHERE id = ${lc.id}
               `);
-              await db.execute(rawSql`
+              await db.execute(sql`
                 UPDATE messages SET contact_id = ${winner.id} WHERE conversation_id = ${lc.id}
               `);
             }
           }
 
           // Re-point activity_events
-          await db.execute(rawSql`UPDATE activity_events SET contact_id = ${winner.id} WHERE contact_id = ${loser.id}`);
+          await db.execute(sql`UPDATE activity_events SET contact_id = ${winner.id} WHERE contact_id = ${loser.id}`);
 
           // Delete the loser contact
-          await db.execute(rawSql`DELETE FROM contacts WHERE id = ${loser.id}`);
+          await db.execute(sql`DELETE FROM contacts WHERE id = ${loser.id}`);
           console.log(`[MergeDuplicates] Deleted loser contact ${loser.id} (${loser.name}) — merged into ${winner.id} (${winner.name})`);
         }
 
         // Normalise winner phone and whatsapp_id to digits-only
         if (!dryRun) {
-          await db.execute(rawSql`
+          await db.execute(sql`
             UPDATE contacts SET phone = ${normalizedPhone}, whatsapp_id = ${normalizedPhone}
             WHERE id = ${winner.id}
           `);

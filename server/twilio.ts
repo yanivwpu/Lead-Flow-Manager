@@ -1,4 +1,7 @@
 import twilio from "twilio";
+import { eq, and } from "drizzle-orm";
+import { db } from "../drizzle/db";
+import { chats } from "@shared/schema";
 import { storage } from "./storage";
 import type { User, Chat } from "@shared/schema";
 
@@ -129,10 +132,6 @@ export async function findOrCreateChatByPhone(
   phone: string,
   name: string
 ): Promise<Chat> {
-  const { db } = await import("../drizzle/db");
-  const { chats } = await import("@shared/schema");
-  const { eq, and } = await import("drizzle-orm");
-  
   const existing = await db.select().from(chats).where(
     and(eq(chats.userId, userId), eq(chats.whatsappPhone, phone))
   );
