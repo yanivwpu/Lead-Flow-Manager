@@ -1835,11 +1835,16 @@ export function registerTemplateRoutes(app: Express): void {
           ? sendSource.trim()
           : "unknown";
 
-      /** Inbox + Campaign: quick-send only. Library flows: full Meta template shapes. */
+      /**
+       * Inbox picker: quick-send (body-only shortcut).
+       * Templates page library + re-engagement composer: full Meta shapes (media headers, buttons, carousel, variables).
+       */
       let metaSendPath: "library_full" | "quick_send" =
-        sendSourceTag === "templates_library" || sendSourceTag === "templates_page"
+        sendSourceTag === "templates_library" ||
+        sendSourceTag === "templates_page" ||
+        sendSourceTag === "templates_campaign"
           ? "library_full"
-          : sendSourceTag === "inbox_picker" || sendSourceTag === "templates_campaign"
+          : sendSourceTag === "inbox_picker"
             ? "quick_send"
             : "quick_send";
       if (!templateId || (!chatId && !contactId)) {

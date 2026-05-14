@@ -38,7 +38,7 @@ import {
   AlertCircle, Image, LayoutGrid,
   Users, Target, Sparkles, Rocket, Crown, Bot, MessageSquare, CalendarCheck, ArrowRight,
   Search, MessageCircle, Facebook, Instagram,
-  Pencil, Pause, Play, Copy, Trash2, MoreVertical,
+  Pencil, Pause, Play, Copy, Trash2, MoreVertical, ChevronDown,
 } from "lucide-react";
 import {
   WhatsAppTemplateRichPreview,
@@ -55,6 +55,7 @@ import {
   getCarouselImageHeaderCardIndices,
   getInboxTemplateSendBlockReason,
   getLibraryTemplateSendStructureBlockReason,
+  inferMetaTemplateShape,
   isLibraryPlainTextOnlyTemplate,
   isLibraryRichTemplateWithNoTextVariables,
   normalizeTemplateVariableMap,
@@ -68,6 +69,7 @@ import {
 import { getPresetCampaignStepCount } from "@shared/campaignPlaceholders";
 import { getSavedCampaignSourceLabel } from "@shared/localizedTemplates";
 import { apiRequest } from "@/lib/queryClient";
+import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
 import { useTranslation } from "react-i18next";
@@ -318,6 +320,45 @@ function libraryQuickSendMeta(template: MessageTemplate) {
   });
 }
 
+/** Re-engagement uses the full send dialog + `templates_campaign` → server `library_full`; do not use inbox quick-send rules. */
+function getReEngagementTemplateRowSupport(template: MessageTemplate): {
+  selectable: boolean;
+  disabledReason?: string;
+  shape: ReturnType<typeof inferMetaTemplateShape>;
+} {
+  const shape = inferMetaTemplateShape({
+    name: template.name,
+    bodyText: template.bodyText,
+    headerType: template.headerType,
+    headerContent: template.headerContent,
+    buttons: template.buttons,
+    templateType: template.templateType,
+    carouselCards: template.carouselCards,
+    category: template.category,
+  });
+  if (shape === "carousel") {
+    const n = Array.isArray(template.carouselCards) ? template.carouselCards.length : 0;
+    if (n === 0) {
+      return {
+        selectable: false,
+        disabledReason: "Unsupported in re-engagement: carousel has no card data — run Sync templates.",
+        shape,
+      };
+    }
+  }
+  return { selectable: true, shape };
+}
+
+function reEngagementHeaderKindLabel(template: MessageTemplate): string | null {
+  const ht = (template.headerType || "").toLowerCase().trim();
+  if (!ht) return null;
+  if (ht === "text") return "Text header";
+  if (ht === "image") return "Image header";
+  if (ht === "video") return "Video header";
+  if (ht === "document") return "Document header";
+  return `${ht.charAt(0).toUpperCase()}${ht.slice(1)} header`;
+}
+
 /** WhatsApp media headers (image | video | document) support per-send runtime upload unless explicitly disabled. */
 function templateHasDynamicMediaHeader(template: MessageTemplate): boolean {
   if (template.mediaRuntimeRequired === false) return false;
@@ -326,7 +367,7 @@ function templateHasDynamicMediaHeader(template: MessageTemplate): boolean {
 }
 
 const ADVANCED_QUICK_SEND_NOTE =
-  "This template includes media, buttons, or a carousel. It can't be sent from Inbox quick-send or campaign shortcuts — use Continue to send and fill any required variables.";
+  "This template includes media, buttons, or a carousel. It can't be sent from Inbox quick-send — use Templates → Continue to send and fill any required variables.";
 
 /** Media / rich template chip — calm indigo tint (not warning orange). */
 const MEDIA_TEMPLATE_KIND_BADGE_CLASS =
@@ -1585,7 +1626,13 @@ export function Templates() {
                   Outside the reply window
                 </CardTitle>
                 <CardDescription className="text-sm leading-snug">
-                  WhatsApp: send an approved template to reopen the thread when allowed. Messenger &amp; Instagram don&apos;t use WhatsApp templates — continue in Inbox. Meta may still block sends outside policy.
+                  <span className="block">
+                    <strong>WhatsApp:</strong> send an approved template to reopen the thread when allowed. Meta may still block
+                    sends outside policy.
+                  </span>
+                  <span className="mt-1.5 block text-gray-600">
+                    <strong>Messenger &amp; Instagram:</strong> continue in Inbox — those channels do not use WhatsApp templates here.
+                  </span>
                 </CardDescription>
               </CardHeader>
               <CardContent className="px-3 pb-3 md:px-4 md:pb-4">
@@ -1629,50 +1676,101 @@ export function Templates() {
 
                       const resendCooldown = isResendCoolingDown(chat.lastTemplateSentAt);
 
-                      const approvedQuickTemplates = templates.filter(
-                        (t) => isApprovedTemplateStatus(t.status) && !libraryQuickSendMeta(t).blocked
-                      );
+                      const approvedReEngagementTemplates = templates
+                        .filter((t) => t && typeof t === "object" && typeof t.id === "string" && isApprovedTemplateStatus(t.status))
+                        .slice()
+                        .sort((a, b) => a.name.localeCompare(b.name));
 
-                      const templateSelect = (
+                      const templatePicker = (
                         triggerClass: string,
                         placeholder: string,
-                        testId: string
+                        testId: string,
+                        buttonVariant: "outline" | "default" = "outline"
                       ) => (
-                        <Select
-                          onValueChange={(templateId) => {
-                            const template = templates.find((t) => t.id === templateId);
-                            if (template && !libraryQuickSendMeta(template).blocked) {
-                              handleSendTemplate(template, chat, "campaign");
-                            }
-                          }}
-                        >
-                          <SelectTrigger
-                            className={triggerClass}
-                            data-testid={testId}
-                          >
-                            <SelectValue placeholder={placeholder} />
-                          </SelectTrigger>
-                          <SelectContent
-                            position="popper"
-                            side="bottom"
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              type="button"
+                              variant={buttonVariant}
+                              className={cn(
+                                "w-full justify-between gap-2 whitespace-normal sm:w-[220px]",
+                                "min-h-[40px] shrink-0 py-2 text-left font-medium",
+                                triggerClass
+                              )}
+                              data-testid={testId}
+                            >
+                              <span className="truncate">{placeholder}</span>
+                              <ChevronDown className="h-4 w-4 shrink-0 opacity-70" aria-hidden />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent
                             align="end"
-                            className="z-[100] w-[240px] max-h-[300px] overflow-y-auto bg-white border border-gray-200 shadow-lg"
+                            className="z-[100] w-[min(100vw-1.5rem,380px)] max-h-[min(55vh,420px)] overflow-y-auto overscroll-contain border border-gray-200 bg-white p-1 shadow-lg"
                           >
-                            {approvedQuickTemplates.length > 0 ? (
-                              approvedQuickTemplates.map((template) => (
-                                <SelectItem key={template.id} value={template.id} className="cursor-pointer hover:bg-gray-100">
-                                  {template.name}
-                                </SelectItem>
-                              ))
-                            ) : (
-                              <div className="p-2 text-xs text-gray-500 text-center">
-                                No quick-send templates available.
+                            {approvedReEngagementTemplates.length === 0 ? (
+                              <div className="px-2 py-3 text-xs text-gray-500 text-center leading-snug">
+                                No approved WhatsApp templates found.
                                 <br />
-                                Sync approved body-only templates or use the library tab.
+                                Sync templates from your WhatsApp provider, then try again.
                               </div>
+                            ) : (
+                              approvedReEngagementTemplates.map((template) => {
+                                const support = getReEngagementTemplateRowSupport(template);
+                                const cat = (template.category || "").toLowerCase();
+                                const catClass = CATEGORY_BADGE_CLASS[cat] ?? "bg-gray-50 text-gray-700 border-gray-200";
+                                const headerKind = reEngagementHeaderKindLabel(template);
+                                const btnCount = Array.isArray(template.buttons) ? template.buttons.length : 0;
+                                let layoutBadge: string | null = null;
+                                if (support.shape === "carousel") layoutBadge = "Carousel";
+                                else if (support.shape === "media_header") layoutBadge = headerKind || "Media header";
+                                else if (support.shape === "buttons") layoutBadge = btnCount > 0 ? `Buttons · ${btnCount}` : "Buttons";
+                                else if (support.shape === "text_header") layoutBadge = "Text header";
+                                else if (support.shape === "mixed") layoutBadge = "Mixed layout";
+                                else if (btnCount > 0) layoutBadge = `Buttons · ${btnCount}`;
+                                return (
+                                  <DropdownMenuItem
+                                    key={template.id}
+                                    disabled={!support.selectable}
+                                    className="flex cursor-pointer flex-col items-start gap-1 rounded-sm px-2 py-2 text-left focus:bg-gray-100 data-[disabled]:cursor-not-allowed data-[disabled]:opacity-60"
+                                    onSelect={(ev) => {
+                                      ev.preventDefault();
+                                      if (!support.selectable) return;
+                                      handleSendTemplate(template, chat, "campaign");
+                                    }}
+                                  >
+                                    <div className="flex w-full min-w-0 flex-wrap items-center gap-1">
+                                      <span className="truncate text-sm font-medium text-gray-900">{template.name}</span>
+                                      <Badge
+                                        variant="outline"
+                                        className={cn("text-[9px] font-normal px-1.5 py-0", catClass)}
+                                      >
+                                        {formatCategoryBadgeLabel(template.category)}
+                                      </Badge>
+                                      {layoutBadge ? (
+                                        <Badge
+                                          variant="outline"
+                                          className="text-[9px] font-normal border-indigo-100/90 bg-indigo-50/50 px-1.5 py-0 text-indigo-900/80"
+                                        >
+                                          {layoutBadge}
+                                        </Badge>
+                                      ) : null}
+                                      <span className="ml-auto shrink-0 font-mono text-[9px] text-gray-400">
+                                        {formatLanguageCode(template.language)}
+                                      </span>
+                                    </div>
+                                    {!support.selectable && support.disabledReason ? (
+                                      <p className="text-[10px] leading-snug text-amber-900">{support.disabledReason}</p>
+                                    ) : libraryQuickSendMeta(template).blocked ? (
+                                      <p className="text-[10px] leading-snug text-gray-500">
+                                        Opens send preview — add any required media, button URLs, or variables before sending.
+                                      </p>
+                                    ) : null}
+                                  </DropdownMenuItem>
+                                );
+                              })
                             )}
-                          </SelectContent>
-                        </Select>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       );
 
                       return (
@@ -1764,10 +1862,7 @@ export function Templates() {
                                         disabled={resendCooldown || !lastMatchedTemplate}
                                         data-testid={`resend-template-${chat.conversationId}`}
                                         onClick={() => {
-                                          if (
-                                            lastMatchedTemplate &&
-                                            !libraryQuickSendMeta(lastMatchedTemplate).blocked
-                                          ) {
+                                          if (lastMatchedTemplate) {
                                             handleSendTemplate(lastMatchedTemplate, chat, "campaign");
                                           }
                                         }}
@@ -1789,7 +1884,7 @@ export function Templates() {
                               ) : null}
 
                               {isWhatsApp && awaitingReply && !lastMatchedTemplate
-                                ? templateSelect(
+                                ? templatePicker(
                                     "w-full sm:w-[220px] min-h-[40px] shrink-0 border-gray-300",
                                     "Choose template",
                                     `select-template-fallback-${chat.id}`
@@ -1797,7 +1892,7 @@ export function Templates() {
                                 : null}
 
                               {isWhatsApp && failedWa
-                                ? templateSelect(
+                                ? templatePicker(
                                     "w-full sm:w-[220px] min-h-[40px] shrink-0 border-amber-300 bg-amber-50/50",
                                     "Retry with template",
                                     `retry-template-${chat.id}`
@@ -1805,10 +1900,11 @@ export function Templates() {
                                 : null}
 
                               {isWhatsApp && !awaitingReply && !failedWa
-                                ? templateSelect(
-                                    "w-full sm:w-[220px] min-h-[40px] shrink-0 bg-brand-green hover:bg-brand-green/90 text-white font-medium border-0 shadow-sm data-[placeholder]:text-white/90 [&>svg]:text-white/90",
+                                ? templatePicker(
+                                    "w-full sm:w-[220px] min-h-[40px] shrink-0 bg-brand-green hover:bg-brand-green/90 text-white border-0 shadow-sm",
                                     "Send WhatsApp template",
-                                    `select-template-${chat.id}`
+                                    `select-template-${chat.id}`,
+                                    "default"
                                   )
                                 : null}
 
