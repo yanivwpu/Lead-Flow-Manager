@@ -111,6 +111,7 @@ export class AIService {
 Do not infer, guess, or fill in missing details. If a field is not clearly stated, return null.
 
 Business context: ${businessKnowledge?.businessName || "Unknown business"} - ${businessKnowledge?.industry || "General"}
+${(businessKnowledge as any)?.websiteKnowledgeSummary ? `\nPublic website context (may be incomplete): ${String((businessKnowledge as any).websiteKnowledgeSummary).slice(0, 2000)}` : ""}
 
 Conversation:
 ${limitedHistory.map(m => `${m.role}: ${m.content}`).join("\n")}
@@ -246,6 +247,7 @@ Return JSON with:
 - Current status/next steps
 
 Business: ${businessKnowledge?.businessName || "Unknown"}
+${(businessKnowledge as any)?.websiteKnowledgeSummary ? `\nWebsite context (may be incomplete): ${String((businessKnowledge as any).websiteKnowledgeSummary).slice(0, 2000)}` : ""}
 
 Conversation:
 ${conversationHistory.map(m => `${m.role}: ${m.content}`).join("\n")}
@@ -348,6 +350,41 @@ Write a short natural summary of what this lead wants.`;
     return { shouldHandoff: false };
   }
 
+  /** Turn noisy extracted site text into a bounded summary for CRM / Copilot context. */
+  async summarizeWebsiteKnowledgeForBrain(combinedPlainText: string): Promise<string> {
+    const body = combinedPlainText.trim().slice(0, 88_000);
+    if (!body) return "No readable content was extracted from the provided pages.";
+
+    const prompt = `You are building a concise CRM knowledge note from text extracted from a business website (HTML removed; may contain navigation noise).
+
+Output requirements:
+- Use short paragraphs or bullet lists.
+- Include concrete facts about products, services, pricing cues, FAQs, shipping, returns, contact methods — only if supported by the text.
+- Do NOT invent policies, prices, or guarantees not explicitly supported by the text.
+- If the content is mostly marketing fluff with few facts, say that briefly.
+- Maximum length 4000 characters.
+- Use the same dominant language as the source when obvious; otherwise English.
+
+Return JSON only: { "summary": "..." }`;
+
+    try {
+      const response = await aiProvider.complete(
+        "summarization",
+        [
+          { role: "system", content: "You return only valid JSON." },
+          { role: "user", content: `${prompt}\n\n--- EXTRACTED TEXT ---\n${body}` },
+        ],
+        { jsonMode: true },
+      );
+      const result = JSON.parse(response || "{}");
+      const s = String(result.summary || "").trim();
+      return s.slice(0, 4000) || "Unable to summarize this website content.";
+    } catch (e) {
+      console.error("[AI] website knowledge summarize failed", e);
+      return body.slice(0, 4000);
+    }
+  }
+
   private buildSystemPrompt(
     businessKnowledge?: AiBusinessKnowledge, 
     settings?: AiSettings,
@@ -396,7 +433,15 @@ BUSINESS CONTEXT:
 - Services/Products: ${businessKnowledge?.servicesProducts || "Not specified"}
 - Location: ${businessKnowledge?.locations || "Available online"}
 - Hours: ${businessKnowledge?.businessHours || "Standard hours"}${businessKnowledge?.bookingLink ? `\n- Booking: ${businessKnowledge.bookingLink}` : ""}
+${(() => {
+  const wk = (businessKnowledge as any)?.websiteKnowledgeSummary as string | undefined | null;
+  if (!wk || !String(wk).trim()) return "";
+  const cap = String(wk).trim().slice(0, 3500);
+  return `
 
+WEBSITE KNOWLEDGE (from the merchant's public site — may be incomplete; verify critical facts with the customer when unsure):
+${cap}`;
+})()}
 ${contactContext ? `LEAD CRM CONTEXT (use this to personalize your reply):
 ${contactContext.name ? `- Lead name: ${contactContext.name}` : ''}
 ${contactContext.pipelineStage ? `- Pipeline stage: ${contactContext.pipelineStage}` : ''}

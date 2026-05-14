@@ -87,6 +87,12 @@ import {
   shouldBypassAutoGuardsForInbound,
   type ChatTurn,
 } from "./aiAutoSendGate";
+import {
+  scrapeWebsiteKnowledgePages,
+  combineScrapedText,
+  WebsiteKnowledgeScrapeError,
+} from "./websiteKnowledgeScraper";
+import { putWebsiteKnowledgeDraft, takeWebsiteKnowledgeDraft } from "./websiteKnowledgeDraftCache";
 import { getUncachableStripeClient } from "./stripeClient";
 import { sanitizeStripeReturnPath } from "./checkoutReturnPath";
 import { resolveStripeCheckoutRedirectOrigin } from "./stripeCheckoutRedirectBase";
@@ -8849,6 +8855,168 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Business knowledge update error:", error);
       res.status(500).json({ error: "Failed to update business knowledge" });
+    }
+  });
+
+  async function requireAiBrainPremium(req: Request, res: Response): Promise<boolean> {
+    const limits = await subscriptionService.getUserLimits(req.user!.id);
+    if (!limits?.effectiveHasAIBrain) {
+      res.status(403).json({
+        error: "AI Brain add-on is required for website knowledge.",
+        needsUpgrade: true,
+        code: "AI_BRAIN_REQUIRED",
+      });
+      return false;
+    }
+    return true;
+  }
+
+  app.post("/api/ai/website-knowledge/scan", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+      if (!(await requireAiBrainPremium(req, res))) return;
+
+      const { url } = (req.body || {}) as { url?: string };
+      if (!url || typeof url !== "string" || !url.trim()) {
+        return res.status(400).json({ error: "url is required" });
+      }
+
+      let pages;
+      try {
+        pages = await scrapeWebsiteKnowledgePages(url.trim());
+      } catch (e: unknown) {
+        if (e instanceof WebsiteKnowledgeScrapeError) {
+          return res.status(400).json({ error: e.message, code: e.code });
+        }
+        if (e instanceof Error && e.name === "AbortError") {
+          return res.status(408).json({ error: "Request timed out", code: "TIMEOUT" });
+        }
+        console.error("[WebsiteKnowledge] scan error:", e);
+        return res.status(500).json({ error: "Scan failed" });
+      }
+
+      const combined = combineScrapedText(pages);
+      const { aiService } = await import("./aiService");
+      const summary = await aiService.summarizeWebsiteKnowledgeForBrain(combined);
+      const scanId = putWebsiteKnowledgeDraft({
+        userId: req.user.id,
+        url: pages[0]?.url || url.trim(),
+        summary,
+        sourceUrls: pages.map((p) => p.url),
+      });
+
+      res.json({
+        scanId,
+        previewSummary: summary,
+        sourceUrls: pages.map((p) => p.url),
+      });
+    } catch (error) {
+      console.error("Website knowledge scan error:", error);
+      res.status(500).json({ error: "Scan failed" });
+    }
+  });
+
+  app.post("/api/ai/website-knowledge/save", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+      if (!(await requireAiBrainPremium(req, res))) return;
+
+      const { scanId, summaryOverride } = (req.body || {}) as {
+        scanId?: string;
+        summaryOverride?: string;
+      };
+      if (!scanId || typeof scanId !== "string") {
+        return res.status(400).json({ error: "scanId is required" });
+      }
+
+      const draft = takeWebsiteKnowledgeDraft(scanId, req.user.id);
+      if (!draft) {
+        return res.status(410).json({
+          error: "This scan has expired or was already saved. Please run Scan again.",
+          code: "SCAN_EXPIRED",
+        });
+      }
+
+      let summaryText = draft.summary;
+      if (typeof summaryOverride === "string" && summaryOverride.trim()) {
+        summaryText = summaryOverride.trim().slice(0, 8000);
+      } else {
+        summaryText = draft.summary.slice(0, 8000);
+      }
+
+      await storage.upsertAiBusinessKnowledge(req.user.id, {
+        websiteKnowledgeUrl: draft.url,
+        websiteKnowledgeSummary: summaryText,
+        websiteKnowledgeSourceUrls: draft.sourceUrls,
+        websiteKnowledgeUpdatedAt: new Date(),
+      });
+
+      const row = await storage.getAiBusinessKnowledge(req.user.id);
+      res.json({
+        ok: true,
+        websiteKnowledgeUrl: row?.websiteKnowledgeUrl ?? null,
+        websiteKnowledgeSummary: row?.websiteKnowledgeSummary ?? null,
+        websiteKnowledgeSourceUrls: row?.websiteKnowledgeSourceUrls ?? [],
+        websiteKnowledgeUpdatedAt: row?.websiteKnowledgeUpdatedAt ?? null,
+      });
+    } catch (error) {
+      console.error("Website knowledge save error:", error);
+      res.status(500).json({ error: "Failed to save" });
+    }
+  });
+
+  app.patch("/api/ai/website-knowledge", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+      if (!(await requireAiBrainPremium(req, res))) return;
+
+      const { summary } = (req.body || {}) as { summary?: string };
+      if (typeof summary !== "string" || !summary.trim()) {
+        return res.status(400).json({ error: "summary is required" });
+      }
+      const s = summary.trim().slice(0, 8000);
+
+      const existing = await storage.getAiBusinessKnowledge(req.user.id);
+      if (!existing?.websiteKnowledgeUrl && !existing?.websiteKnowledgeSummary) {
+        return res.status(400).json({
+          error: "Nothing to edit yet. Scan a website and save it first.",
+          code: "NO_WEBSITE_KNOWLEDGE",
+        });
+      }
+
+      await storage.upsertAiBusinessKnowledge(req.user.id, {
+        websiteKnowledgeSummary: s,
+        websiteKnowledgeUpdatedAt: new Date(),
+      });
+
+      const row = await storage.getAiBusinessKnowledge(req.user.id);
+      res.json({
+        ok: true,
+        websiteKnowledgeSummary: row?.websiteKnowledgeSummary ?? null,
+        websiteKnowledgeUpdatedAt: row?.websiteKnowledgeUpdatedAt ?? null,
+      });
+    } catch (error) {
+      console.error("Website knowledge patch error:", error);
+      res.status(500).json({ error: "Failed to update" });
+    }
+  });
+
+  app.delete("/api/ai/website-knowledge", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+      if (!(await requireAiBrainPremium(req, res))) return;
+
+      await storage.upsertAiBusinessKnowledge(req.user.id, {
+        websiteKnowledgeUrl: null,
+        websiteKnowledgeSummary: null,
+        websiteKnowledgeSourceUrls: [],
+        websiteKnowledgeUpdatedAt: null,
+      });
+
+      res.json({ ok: true });
+    } catch (error) {
+      console.error("Website knowledge delete error:", error);
+      res.status(500).json({ error: "Failed to delete" });
     }
   });
 

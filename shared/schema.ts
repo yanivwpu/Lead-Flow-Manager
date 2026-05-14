@@ -1269,6 +1269,14 @@ export const aiBusinessKnowledge = pgTable("ai_business_knowledge", {
   salesGoals: text("sales_goals"), // book_call, get_phone, collect_deposit, etc.
   customInstructions: text("custom_instructions"), // Additional AI instructions
   qualifyingQuestions: jsonb("qualifying_questions").default(sql`'[]'::jsonb`), // Industry-specific questions
+  /** Canonical URL last saved for Website Knowledge (V1). */
+  websiteKnowledgeUrl: text("website_knowledge_url"),
+  /** Concise summary from scan + AI; injected into Copilot / Auto prompts (capped). */
+  websiteKnowledgeSummary: text("website_knowledge_summary"),
+  /** URLs actually fetched during last successful save. */
+  websiteKnowledgeSourceUrls: jsonb("website_knowledge_source_urls").default(sql`'[]'::jsonb`),
+  /** When website knowledge summary was last saved. */
+  websiteKnowledgeUpdatedAt: timestamp("website_knowledge_updated_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
