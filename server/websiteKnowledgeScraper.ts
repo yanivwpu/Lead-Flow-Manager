@@ -1,16 +1,13 @@
 /**
- * V1 public website fetch + text extraction for AI Brain "Website Knowledge".
- * Not a crawler — bounded pages, SSRF-safe URL rules, size/time limits.
+ * AI Brain "Website Knowledge" — guided URLs only (no crawling).
+ * Fetches each user-provided page independently with SSRF-safe rules, size/time limits,
+ * and truncates oversized bodies instead of failing the whole scan.
  */
 
 const FETCH_TIMEOUT_MS = 12_000;
 const MAX_BYTES_PER_PAGE = 512 * 1024;
-const MAX_PAGES = 5;
 const MAX_COMBINED_TEXT = 95_000;
 const MAX_REDIRECTS = 4;
-
-const PATH_HINTS =
-  /(products?|services?|faq|shipping|returns?|return-policy|contact|support)(\/|$)/i;
 
 const USER_AGENT = "WhachatCRM-WebsiteKnowledge/1.0 (+https://whachatcrm.com)";
 
@@ -93,29 +90,39 @@ function stripHtmlToText(html: string, maxLen: number): string {
   return s.slice(0, maxLen);
 }
 
-async function readBodyWithCap(res: Response, maxBytes: number): Promise<Buffer> {
+/** Read up to maxBytes then stop; never throws for oversized streams. */
+async function readBodyTruncating(res: Response, maxBytes: number): Promise<{ buf: Buffer; truncated: boolean }> {
   const reader = res.body?.getReader();
   if (!reader) throw new WebsiteKnowledgeScrapeError("Empty response", "EMPTY");
   const chunks: Uint8Array[] = [];
   let total = 0;
+  let truncated = false;
   for (;;) {
     const { done, value } = await reader.read();
     if (done) break;
-    if (value) {
-      total += value.byteLength;
-      if (total > maxBytes) {
-        reader.cancel().catch(() => {});
-        throw new WebsiteKnowledgeScrapeError("Page too large", "TOO_LARGE");
-      }
+    if (!value) continue;
+    const vb = value.byteLength;
+    if (total + vb <= maxBytes) {
       chunks.push(value);
+      total += vb;
+      continue;
     }
+    const allowed = maxBytes - total;
+    if (allowed > 0) chunks.push(value.slice(0, allowed));
+    truncated = true;
+    reader.cancel().catch(() => {});
+    break;
   }
-  return Buffer.concat(chunks.map((c) => Buffer.from(c)));
+  return { buf: Buffer.concat(chunks.map((c) => Buffer.from(c))), truncated };
 }
 
-async function fetchHtmlWithSafeRedirects(start: URL, signal: AbortSignal): Promise<{ url: string; html: string }> {
+async function fetchHtmlWithSafeRedirects(
+  start: URL,
+  signal: AbortSignal,
+): Promise<{ url: string; html: string; truncated: boolean }> {
   let current = assertSafePublicHttpUrl(start.href);
   let redirects = 0;
+  let truncated = false;
 
   for (;;) {
     const res = await fetch(current.href, {
@@ -147,7 +154,8 @@ async function fetchHtmlWithSafeRedirects(start: URL, signal: AbortSignal): Prom
       throw new WebsiteKnowledgeScrapeError("Response is not HTML", "NOT_HTML");
     }
 
-    const buf = await readBodyWithCap(res, MAX_BYTES_PER_PAGE);
+    const { buf, truncated: bodyTruncated } = await readBodyTruncating(res, MAX_BYTES_PER_PAGE);
+    truncated = bodyTruncated;
     const charsetMatch = /charset=([^;"\s]+)/i.exec(ct);
     const charset = charsetMatch?.[1]?.replace(/['"]/g, "") || "utf-8";
     let html: string;
@@ -159,90 +167,147 @@ async function fetchHtmlWithSafeRedirects(start: URL, signal: AbortSignal): Prom
     } catch {
       html = buf.toString("utf-8");
     }
-    return { url: current.href, html };
+    return { url: current.href, html, truncated };
   }
 }
 
-async function fetchTextPage(url: URL, signal: AbortSignal): Promise<{ url: string; text: string }> {
-  const { url: finalUrl, html } = await fetchHtmlWithSafeRedirects(url, signal);
-  return { url: finalUrl, text: stripHtmlToText(html, 50_000) };
+async function fetchSingleKnowledgePage(
+  startHref: string,
+  signal: AbortSignal,
+): Promise<{ finalUrl: string; text: string; truncated: boolean }> {
+  const root = assertSafePublicHttpUrl(startHref);
+  root.hash = "";
+  const { url: finalUrl, html, truncated } = await fetchHtmlWithSafeRedirects(root, signal);
+  const text = stripHtmlToText(html, 50_000);
+  return { finalUrl, text, truncated };
 }
 
-function extractSameOriginHintLinks(base: URL, html: string): string[] {
-  const out: string[] = [];
-  const re = /href\s*=\s*["']([^"'#]+)["']/gi;
-  let m: RegExpExecArray | null;
-  const seen = new Set<string>();
-  while ((m = re.exec(html))) {
-    let href = m[1].trim();
-    if (!href || href.startsWith("javascript:") || href.startsWith("mailto:")) continue;
-    let abs: URL;
-    try {
-      abs = new URL(href, base);
-    } catch {
+export type ScrapedPage = {
+  url: string;
+  text: string;
+  key?: string;
+  label?: string;
+  truncated?: boolean;
+};
+
+export type GuidedPageStatus = "scanned" | "skipped" | "failed";
+
+export type GuidedPageResult = {
+  key: string;
+  label: string;
+  url: string;
+  status: GuidedPageStatus;
+  reason?: string;
+  finalUrl?: string;
+  truncated?: boolean;
+};
+
+export type GuidedKnowledgeSlot = {
+  key: string;
+  label: string;
+  urlRaw: string;
+};
+
+/**
+ * Fetch each slot URL independently. Failures and oversize bodies do not stop other pages.
+ * Duplicate URLs (after normalization) are skipped after the first successful fetch.
+ */
+export async function scrapeGuidedWebsiteKnowledgePages(
+  slots: GuidedKnowledgeSlot[],
+): Promise<{ pages: ScrapedPage[]; results: GuidedPageResult[] }> {
+  const results: GuidedPageResult[] = [];
+  const pages: ScrapedPage[] = [];
+  const seenHref = new Set<string>();
+
+  for (const slot of slots) {
+    const raw = slot.urlRaw.trim();
+    if (!raw) {
+      results.push({
+        key: slot.key,
+        label: slot.label,
+        url: "",
+        status: "skipped",
+        reason: "No URL provided",
+      });
       continue;
     }
-    if (abs.protocol !== "http:" && abs.protocol !== "https:") continue;
-    if (abs.hostname.toLowerCase() !== base.hostname.toLowerCase()) continue;
-    if (isBlockedHostname(abs.hostname)) continue;
-    abs.hash = "";
-    const path = abs.pathname + (abs.search || "");
-    if (!PATH_HINTS.test(path)) continue;
-    const key = abs.href;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(abs.href);
-  }
-  return out;
-}
 
-export type ScrapedPage = { url: string; text: string };
-
-export async function scrapeWebsiteKnowledgePages(startUrl: string): Promise<ScrapedPage[]> {
-  const root = assertSafePublicHttpUrl(startUrl);
-  root.hash = "";
-
-  const controller = new AbortController();
-  const tid = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-  try {
-    const { url: firstUrl, html } = await fetchHtmlWithSafeRedirects(root, controller.signal);
-    const firstParsed = new URL(firstUrl);
-    const mainText = stripHtmlToText(html, 50_000);
-    const pages: ScrapedPage[] = [{ url: firstUrl, text: mainText }];
-
-    const extra = extractSameOriginHintLinks(firstParsed, html);
-    const toVisit: string[] = [];
-    for (const u of extra) {
-      if (toVisit.length >= MAX_PAGES - 1) break;
-      if (u === firstUrl) continue;
-      toVisit.push(u);
+    let normalized: string;
+    try {
+      const u = assertSafePublicHttpUrl(raw);
+      normalized = u.href.toLowerCase();
+    } catch (e) {
+      const msg = e instanceof WebsiteKnowledgeScrapeError ? e.message : "Invalid URL";
+      results.push({
+        key: slot.key,
+        label: slot.label,
+        url: raw,
+        status: "failed",
+        reason: msg,
+      });
+      continue;
     }
 
-    for (const href of toVisit) {
-      if (pages.length >= MAX_PAGES) break;
-      const u = assertSafePublicHttpUrl(href);
-      const c2 = new AbortController();
-      const t2 = setTimeout(() => c2.abort(), FETCH_TIMEOUT_MS);
-      try {
-        const p = await fetchTextPage(u, c2.signal);
-        pages.push(p);
-      } catch {
-        /* skip failed auxiliary pages */
-      } finally {
-        clearTimeout(t2);
-      }
+    if (seenHref.has(normalized)) {
+      results.push({
+        key: slot.key,
+        label: slot.label,
+        url: raw,
+        status: "skipped",
+        reason: "Duplicate URL (already scanned)",
+      });
+      continue;
     }
 
-    return pages;
-  } finally {
-    clearTimeout(tid);
+    const controller = new AbortController();
+    const tid = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+    try {
+      const { finalUrl, text, truncated } = await fetchSingleKnowledgePage(raw, controller.signal);
+      seenHref.add(normalized);
+      pages.push({
+        url: finalUrl,
+        text,
+        key: slot.key,
+        label: slot.label,
+        truncated,
+      });
+      results.push({
+        key: slot.key,
+        label: slot.label,
+        url: raw,
+        status: "scanned",
+        finalUrl,
+        truncated,
+      });
+    } catch (e) {
+      const msg =
+        e instanceof Error && e.name === "AbortError"
+          ? "Request timed out"
+          : e instanceof WebsiteKnowledgeScrapeError
+            ? e.message
+            : e instanceof Error
+              ? e.message
+              : "Fetch failed";
+      results.push({
+        key: slot.key,
+        label: slot.label,
+        url: raw,
+        status: "failed",
+        reason: msg,
+      });
+    } finally {
+      clearTimeout(tid);
+    }
   }
+
+  return { pages, results };
 }
 
 export function combineScrapedText(pages: ScrapedPage[]): string {
   let combined = "";
   for (const p of pages) {
-    combined += `\n\n--- ${p.url} ---\n${p.text}`;
+    const header = p.label ? `${p.label} — ${p.url}` : p.url;
+    combined += `\n\n--- ${header} ---\n${p.text}`;
     if (combined.length >= MAX_COMBINED_TEXT) return combined.slice(0, MAX_COMBINED_TEXT).trim();
   }
   return combined.trim();

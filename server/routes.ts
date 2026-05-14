@@ -94,7 +94,7 @@ import {
   type ChatTurn,
 } from "./aiAutoSendGate";
 import {
-  scrapeWebsiteKnowledgePages,
+  scrapeGuidedWebsiteKnowledgePages,
   combineScrapedText,
   WebsiteKnowledgeScrapeError,
 } from "./websiteKnowledgeScraper";
@@ -8936,14 +8936,39 @@ export async function registerRoutes(
       if (!req.user) return res.status(401).json({ error: "Unauthorized" });
       if (!(await requireAiBrainPremium(req, res))) return;
 
-      const { url } = (req.body || {}) as { url?: string };
-      if (!url || typeof url !== "string" || !url.trim()) {
-        return res.status(400).json({ error: "url is required" });
+      const body = (req.body || {}) as Record<string, unknown>;
+      const slotDefs = [
+        { key: "homepage", label: "Homepage", bodyKey: "homepageUrl" },
+        { key: "productServices", label: "Product / Services", bodyKey: "productServicesUrl" },
+        { key: "about", label: "About", bodyKey: "aboutUrl" },
+        { key: "faq", label: "FAQ", bodyKey: "faqUrl" },
+        { key: "shippingPolicy", label: "Shipping policy", bodyKey: "shippingPolicyUrl" },
+        { key: "returnPolicy", label: "Return policy", bodyKey: "returnPolicyUrl" },
+        { key: "terms", label: "Terms", bodyKey: "termsUrl" },
+        { key: "privacy", label: "Privacy policy", bodyKey: "privacyPolicyUrl" },
+        { key: "other", label: "Other", bodyKey: "otherUrl" },
+      ] as const;
+
+      const slots = slotDefs.map((def) => ({
+        key: def.key,
+        label: def.label,
+        urlRaw: typeof body[def.bodyKey] === "string" ? (body[def.bodyKey] as string) : "",
+      }));
+
+      const anyProvided = slots.some((s) => s.urlRaw.trim());
+      if (!anyProvided) {
+        return res.status(400).json({
+          error: "Provide at least one URL to scan.",
+          code: "NO_URLS",
+        });
       }
 
-      let pages;
+      let pages: Awaited<ReturnType<typeof scrapeGuidedWebsiteKnowledgePages>>["pages"];
+      let pageResults: Awaited<ReturnType<typeof scrapeGuidedWebsiteKnowledgePages>>["results"];
       try {
-        pages = await scrapeWebsiteKnowledgePages(url.trim());
+        const out = await scrapeGuidedWebsiteKnowledgePages(slots);
+        pages = out.pages;
+        pageResults = out.results;
       } catch (e: unknown) {
         if (e instanceof WebsiteKnowledgeScrapeError) {
           return res.status(400).json({ error: e.message, code: e.code });
@@ -8955,13 +8980,26 @@ export async function registerRoutes(
         return res.status(500).json({ error: "Scan failed" });
       }
 
+      if (pages.length === 0) {
+        return res.status(400).json({
+          error:
+            "Could not fetch any of the provided pages. Check the URLs and try again.",
+          code: "NO_PAGES_FETCHED",
+          pageResults,
+        });
+      }
+
       const combined = combineScrapedText(pages);
       const { aiService } = await import("./aiService");
       const summaryRaw = await aiService.summarizeWebsiteKnowledgeForBrain(combined);
       const summary = finalizeWebsiteKnowledgeSummaryText(summaryRaw);
+
+      const homepageScanned = pageResults.find((r) => r.key === "homepage" && r.status === "scanned");
+      const primaryUrl = homepageScanned?.finalUrl ?? pages[0]?.url ?? "";
+
       const scanId = putWebsiteKnowledgeDraft({
         userId: req.user.id,
-        url: pages[0]?.url || url.trim(),
+        url: primaryUrl,
         summary,
         sourceUrls: pages.map((p) => p.url),
       });
@@ -8970,6 +9008,7 @@ export async function registerRoutes(
         scanId,
         previewSummary: summary,
         sourceUrls: pages.map((p) => p.url),
+        pageResults,
       });
     } catch (error) {
       console.error("Website knowledge scan error:", error);
