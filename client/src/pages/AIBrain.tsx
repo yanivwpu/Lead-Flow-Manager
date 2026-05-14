@@ -597,8 +597,29 @@ function AIBrainContent() {
     if (snapshot === lastKnowledgeSentRef.current) return;
     debouncedPersistKnowledge(knowledge);
   }, [knowledge, effectiveHasAIBrain, knowledgeLoading, debouncedPersistKnowledge]);
-  
-  
+
+  /** Must run before any conditional return — same hook order on every render (React #310). */
+  const websiteKnowledgeSaved = useMemo(() => {
+    if (!businessKnowledge || typeof businessKnowledge !== "object") return null;
+    const k = businessKnowledge as BusinessKnowledge;
+    const summary = typeof k.websiteKnowledgeSummary === "string" ? k.websiteKnowledgeSummary.trim() : "";
+    const url = typeof k.websiteKnowledgeUrl === "string" ? k.websiteKnowledgeUrl.trim() : "";
+    const sourceUrlsRaw = k.websiteKnowledgeSourceUrls;
+    const sourceUrls = Array.isArray(sourceUrlsRaw)
+      ? sourceUrlsRaw.filter((x): x is string => typeof x === "string")
+      : [];
+    if (!summary && !url) return null;
+    return { summary, url, sourceUrls, updatedAt: k.websiteKnowledgeUpdatedAt ?? null };
+  }, [businessKnowledge]);
+
+  const websiteKnowledgeLastScannedLabel = useMemo(() => {
+    const t = websiteKnowledgeSaved?.updatedAt;
+    if (t == null || t === "") return null;
+    const d = new Date(t as string | number | Date);
+    if (Number.isNaN(d.getTime())) return null;
+    return d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+  }, [websiteKnowledgeSaved]);
+
   const handleAddKeyword = () => {
     if (newKeyword && !settings.handoffKeywords.includes(newKeyword)) {
       const handoffKeywords = [...settings.handoffKeywords, newKeyword];
@@ -744,22 +765,6 @@ function AIBrainContent() {
   const hidePaidBrainCta = isInTrial && trialIncludesAIBrain && effectiveHasAIBrain;
   const starterOnly = isStarter && !isPro;
   const autoModeLocked = starterOnly;
-
-  const websiteKnowledgeSaved = useMemo(() => {
-    if (!businessKnowledge || typeof businessKnowledge !== "object") return null;
-    const k = businessKnowledge as BusinessKnowledge;
-    const summary = (k.websiteKnowledgeSummary || "").trim();
-    const url = (k.websiteKnowledgeUrl || "").trim();
-    if (!summary && !url) return null;
-    return { summary, url, updatedAt: k.websiteKnowledgeUpdatedAt };
-  }, [businessKnowledge]);
-
-  const websiteKnowledgeLastScannedLabel = useMemo(() => {
-    if (!websiteKnowledgeSaved?.updatedAt) return null;
-    const d = new Date(websiteKnowledgeSaved.updatedAt as string);
-    if (Number.isNaN(d.getTime())) return null;
-    return d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
-  }, [websiteKnowledgeSaved?.updatedAt]);
 
   return (
     <div className="h-full overflow-y-auto overflow-x-hidden bg-gradient-to-b from-violet-50/50 via-slate-50/95 to-white">
