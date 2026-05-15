@@ -587,11 +587,11 @@ function GrowthEngineGalleryCard({
           </div>
         )}
       </div>
-      <CardContent className="flex flex-1 flex-col gap-3.5 p-5 pt-4">
-        <div className="space-y-1.5">
+      <CardContent className="flex flex-1 flex-col gap-4 p-5 pt-4">
+        <div className="space-y-2">
           <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">{engine.industry}</p>
           <h3
-            className="line-clamp-2 min-h-[2.5rem] text-base font-semibold leading-snug tracking-tight text-gray-900"
+            className="text-base font-semibold leading-snug tracking-tight text-gray-900 text-pretty"
             data-testid={engine.slug === "realtor-growth-engine" ? "text-engine-title" : undefined}
           >
             {showRealtorMark ? (
@@ -603,7 +603,7 @@ function GrowthEngineGalleryCard({
             )}
           </h3>
         </div>
-        <p className="line-clamp-2 min-h-[2.75rem] text-sm leading-snug text-gray-600">{engine.summary}</p>
+        <p className="text-sm leading-relaxed text-gray-600 text-pretty [overflow-wrap:anywhere]">{engine.summary}</p>
         {(() => {
           const mode =
             engine.galleryPricingMode ??
@@ -611,38 +611,37 @@ function GrowthEngineGalleryCard({
           if (mode === "hidden") return null;
           if (mode === "coming_soon") {
             return (
-              <div className="rounded-lg border border-gray-200/80 bg-gray-50/80 px-3 py-2 text-xs text-gray-600">
+              <div className="rounded-lg border border-gray-200/80 bg-gray-50/80 px-3 py-2 text-sm text-gray-600">
                 Pricing coming soon
               </div>
             );
           }
           return (
-            <div className="space-y-1 rounded-lg border border-emerald-100/90 bg-gradient-to-br from-emerald-50/70 to-violet-50/40 px-3 py-2.5 text-xs shadow-sm">
+            <div className="rounded-lg border border-emerald-100/90 bg-gradient-to-br from-emerald-50/70 to-violet-50/40 px-3 py-2 shadow-sm">
               {engine.oneTimePrice ? (
-                <p className="font-semibold tabular-nums text-gray-900">{engine.oneTimePrice} one-time license</p>
-              ) : null}
-              {engine.subscriptionRequirementShort ? (
-                <p className="leading-snug text-gray-700">{engine.subscriptionRequirementShort}</p>
+                <p className="text-sm font-semibold tabular-nums leading-snug text-gray-900">
+                  {engine.oneTimePrice} one-time license
+                </p>
               ) : null}
             </div>
           );
         })()}
-        <div className="flex min-h-[1.75rem] flex-wrap gap-1.5">
+        <div className="flex flex-wrap gap-1.5">
           {engine.badges.map((b) => (
             <Badge
               key={b}
               variant="outline"
-              className="border-violet-200/80 bg-violet-50/60 text-[10px] font-medium text-violet-900/80 shadow-none"
+              className="border-violet-200/80 bg-violet-50/60 text-[11px] font-medium text-violet-900/80 shadow-none"
             >
               {b}
             </Badge>
           ))}
         </div>
-        <ul className="min-h-[4.75rem] flex-1 space-y-2 text-sm text-gray-700">
+        <ul className="flex flex-1 flex-col gap-2.5 text-sm leading-relaxed text-gray-700">
           {engine.benefits.slice(0, 3).map((b) => (
             <li key={b} className="flex gap-2.5">
-              <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-emerald-500" />
-              <span className="leading-snug">{b}</span>
+              <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-emerald-500" aria-hidden />
+              <span className="min-w-0 flex-1 text-pretty [overflow-wrap:anywhere]">{b}</span>
             </li>
           ))}
         </ul>

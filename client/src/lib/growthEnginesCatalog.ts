@@ -31,7 +31,7 @@ export interface GrowthEngineCardModel {
   placeholderKey?: "wellness" | "capital" | "trades" | "property";
   /** Displayed on gallery as “$199 one-time license” when set */
   oneTimePrice?: string | null;
-  /** e.g. “Requires Pro + AI Brain” under the one-time line on the gallery card */
+  /** Shown on the RGE detail “Pricing & access” block (not on the gallery pricing strip). */
   subscriptionRequirementShort?: string | null;
   /** Detail page: headline monthly bundle, e.g. “$78/mo Pro + AI Brain” */
   monthlyRequirementLabel?: string | null;
@@ -86,9 +86,9 @@ export const GROWTH_ENGINE_CARDS: GrowthEngineCardModel[] = [
     summary:
       "Automate tenant communication, leasing follow-ups, maintenance requests, and more — directly through WhatsApp.",
     benefits: [
-      "Tenant and owner message routing",
+      "Property-aware AI context for every conversation",
       "Maintenance and lease renewal follow-ups",
-      "Portfolio-aware conversation context",
+      "System that runs part of their business",
     ],
     status: "coming_soon",
     ctaLabel: "Coming soon",
