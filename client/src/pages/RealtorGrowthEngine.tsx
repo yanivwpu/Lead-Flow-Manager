@@ -1067,7 +1067,7 @@ export function RealtorGrowthEngine() {
 
     const whatItDoesLines = [
       "Captures new real estate leads the moment they message you.",
-      "Replies instantly on WhatsApp with context-aware conversation.",
+      "Replies instantly across connected messaging channels with context-aware conversation.",
       "Qualifies buyers and sellers using structured signals (financing, budget, timeline).",
       "Detects booking intent and moves the thread toward a showing or call.",
       "Schedules showings or calls when your calendar is connected.",
@@ -1120,7 +1120,9 @@ export function RealtorGrowthEngine() {
               <h1 className="mb-3 text-4xl font-bold tracking-tight md:text-5xl lg:text-6xl">
                 <RealtorMark /> Growth Engine
               </h1>
-              <p className="mb-2 text-xl font-medium text-emerald-100/90 md:text-2xl">AI-powered WhatsApp automation for real estate</p>
+              <p className="mb-2 text-xl font-medium text-emerald-100/90 md:text-2xl">
+                AI-powered messaging automation across connected channels for real estate
+              </p>
               <p className="text-base text-gray-300/80">
                 Convert inquiries into qualified buyers &amp; booked showings — automatically.
               </p>
@@ -1483,7 +1485,7 @@ export function RealtorGrowthEngine() {
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="text-xs font-semibold text-gray-800">New inquiry received</p>
-                  <p className="text-[10px] text-gray-500">Lead messages via WhatsApp</p>
+                  <p className="text-[10px] text-gray-500">Inbound messages from connected channels</p>
                 </div>
               </div>
               <div className="ml-4 h-3 w-px bg-gray-200" />
@@ -1931,7 +1933,7 @@ export function RealtorGrowthEngine() {
 
   const WORKFLOW_DESCRIPTIONS: Record<string, { summary: string; triggers: string; timing: string; qualificationLogic?: string }> = {
     W1: {
-      summary: "Instantly replies to every new WhatsApp inquiry with a personalized greeting. Creates a lead record, tags as 'New', sets pipeline to 'New Lead', and creates a review task.",
+      summary: "Instantly replies to every new inquiry with a personalized greeting. Creates a lead record, tags as 'New', sets pipeline to 'New Lead', and creates a review task.",
       triggers: "New chat / first message from an unknown number",
       timing: "Immediate (within seconds of first message)",
     },
