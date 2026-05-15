@@ -438,6 +438,11 @@ Return JSON only: { "summary": "..." }`;
     };
     const toneDesc = tone ? (toneGuide[tone] || "warm and direct") : (personaGuide[persona] || "warm and direct");
 
+    const bookingUrl = String(businessKnowledge?.bookingLink || "").trim();
+    const bookingContextLine = bookingUrl
+      ? `\n- Self-scheduling (Calendly): ${bookingUrl}`
+      : "\n- Self-scheduling: not configured (no public booking URL for this workspace).";
+
     let prompt = `You are a conversion-focused sales assistant replying on behalf of the agent at ${businessKnowledge?.businessName || "a business"} (${businessKnowledge?.industry || "general industry"}).
 
 LANGUAGE: ${langInstruction}
@@ -448,7 +453,7 @@ YOUR GOAL: ${businessKnowledge?.salesGoals || "Move the lead forward toward qual
 BUSINESS CONTEXT:
 - Services/Products: ${businessKnowledge?.servicesProducts || "Not specified"}
 - Location: ${businessKnowledge?.locations || "Available online"}
-- Hours: ${businessKnowledge?.businessHours || "Standard hours"}${businessKnowledge?.bookingLink ? `\n- Booking: ${businessKnowledge.bookingLink}` : ""}
+- Hours: ${businessKnowledge?.businessHours || "Standard hours"}${bookingContextLine}
 ${(() => {
   const wk = (businessKnowledge as any)?.websiteKnowledgeSummary as string | undefined | null;
   if (!wk || !String(wk).trim()) return "";
@@ -498,7 +503,19 @@ FIRST MESSAGE RULE: This is the very start of the conversation. The lead has jus
 - Respond with a warm, natural acknowledgment of what they said.
 - Ask ONE simple, open-ended question to understand why they reached out.
 - Example: if they said "hi" or something vague, reply warmly and ask what brings them here today.
-- Never cold-open with qualification questions on a first message.` : ''}`;
+- Never cold-open with qualification questions on a first message.` : ""}
+
+${bookingUrl ? `SCHEDULING LINK (Calendly — only when the customer asks to book, schedule, pick a time, or clearly wants a meeting):
+- You may share the scheduling URL at most once in this conversation when appropriate.
+- Use a short intro line, then a blank line, then the URL alone on its own line (no brackets, no placeholder tokens). Example shape:
+  Sure — you can pick a time here:
+
+  ${bookingUrl}
+
+  I'll make sure we have the right details ready.
+- Never invent or alter the URL; copy it exactly as given above.` : `SCHEDULING / BOOKING:
+- No self-service scheduling URL is configured. Do NOT invent, guess, or paste booking URLs (including Google Calendar links).
+- If they want to book, acknowledge and say your team will follow up with times, or ask what times work — do not claim they can self-book online unless a link was already shared earlier in this thread.`}`;
 
     if (isRealEstate) {
       prompt += `

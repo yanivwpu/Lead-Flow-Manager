@@ -20,6 +20,19 @@ export async function getCalendlyPublicSchedulingUrl(userId: string): Promise<st
 }
 
 /** Append UTM params so Calendly webhooks can resolve the originating CRM contact. */
+/**
+ * Knowledge passed into AI prompts: scheduling URL comes **only** from the connected Calendly integration
+ * (`calendlyPrimarySchedulingUrl`). Stale `ai_business_knowledge.booking_link` is never used for AI output.
+ */
+export async function applyCalendlyBookingLinkForAi<T extends { bookingLink?: string | null }>(
+  userId: string,
+  knowledge: T | undefined
+): Promise<T | undefined> {
+  if (!knowledge) return undefined;
+  const calUrl = await getCalendlyPublicSchedulingUrl(userId);
+  return { ...knowledge, bookingLink: calUrl || "" } as T;
+}
+
 export function appendCalendlyW3TrackingParams(schedulingUrl: string, contactId: string): string {
   const raw = (schedulingUrl || "").trim();
   if (!raw || !contactId) return raw;

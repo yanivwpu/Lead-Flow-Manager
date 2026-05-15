@@ -12,6 +12,7 @@ import {
   Trash2,
   ListChecks,
   Globe,
+  CheckCircle2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,6 +21,7 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   Dialog,
@@ -45,6 +47,8 @@ interface BusinessKnowledge {
   industry: string;
   servicesProducts: string;
   bookingLink: string;
+  /** From GET /api/ai/business-knowledge — Calendly integration with primary scheduling URL. */
+  calendlyBookingConnected?: boolean;
   customInstructions: string;
   qualifyingQuestions: Array<{ key: string; label: string; question: string; required: boolean }>;
   websiteKnowledgeUrl?: string | null;
@@ -366,6 +370,7 @@ function AIBrainContent() {
     industry: "",
     servicesProducts: "",
     bookingLink: "",
+    calendlyBookingConnected: false,
     customInstructions: "",
     qualifyingQuestions: [],
   });
@@ -504,7 +509,8 @@ function AIBrainContent() {
         businessName: k.businessName || "",
         industry: k.industry || "",
         servicesProducts: k.servicesProducts || "",
-        bookingLink: k.bookingLink || "",
+        bookingLink: "",
+        calendlyBookingConnected: typeof k.calendlyBookingConnected === "boolean" ? k.calendlyBookingConnected : false,
         customInstructions: k.customInstructions || "",
         qualifyingQuestions: (k.qualifyingQuestions || []).map((q: any, i: number) => ({
           key: q.key || `q_${i}`,
@@ -701,11 +707,18 @@ function AIBrainContent() {
   const debouncedPersistKnowledge = useMemo(
     () =>
       debounce((payload: BusinessKnowledge) => {
-        saveKnowledgeMutation.mutate(payload, {
-          onSuccess: () => {
-            lastKnowledgeSentRef.current = JSON.stringify(payload);
-          },
-        });
+        const { bookingLink: _b, calendlyBookingConnected: _c, ...persistable } = payload;
+        saveKnowledgeMutation.mutate(
+          { ...persistable, bookingLink: "" },
+          {
+            onSuccess: () => {
+              lastKnowledgeSentRef.current = JSON.stringify({
+                ...payload,
+                bookingLink: "",
+              });
+            },
+          }
+        );
       }, 750),
     [saveKnowledgeMutation],
   );
@@ -1547,26 +1560,52 @@ function AIBrainContent() {
               </CardContent>
             </Card>
 
-            {/* Section 4: Booking */}
+            {/* Section 4: Booking — Calendly via Integrations only */}
             <Card className="rounded-2xl border-0 bg-white/95 shadow-md shadow-slate-900/[0.03] ring-1 ring-violet-100/50">
               <CardHeader className="pb-3">
-                <CardTitle className="text-base font-semibold text-slate-900">Booking &amp; next steps</CardTitle>
-                <CardDescription className="text-slate-600">Used when AI suggests scheduling or follow-ups</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-1.5 sm:max-w-xl">
-                  <Label htmlFor="booking" className="text-xs font-medium text-muted-foreground">
-                    Booking link
-                  </Label>
-                  <Input
-                    id="booking"
-                    className="h-9 text-sm"
-                    value={knowledge.bookingLink}
-                    onChange={(e) => setKnowledge((prev) => ({ ...prev, bookingLink: e.target.value }))}
-                    placeholder="https://…"
-                    data-testid="input-booking-link"
-                  />
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0 space-y-1">
+                    <CardTitle className="text-base font-semibold text-slate-900">Booking &amp; next steps</CardTitle>
+                    <CardDescription className="text-slate-600">
+                      Used when AI suggests scheduling or follow-ups.
+                    </CardDescription>
+                  </div>
+                  <div className="shrink-0 sm:pt-0.5">
+                    {knowledge.calendlyBookingConnected ? (
+                      <Badge className="border border-emerald-200/90 bg-emerald-50 text-emerald-900 text-xs font-medium gap-1 pr-2">
+                        <CheckCircle2 className="h-3.5 w-3.5" aria-hidden />
+                        Connected
+                      </Badge>
+                    ) : (
+                      <Badge
+                        variant="secondary"
+                        className="border border-amber-200/90 bg-amber-50/90 text-amber-950 text-xs font-medium"
+                      >
+                        Not connected
+                      </Badge>
+                    )}
+                  </div>
                 </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <p className="text-sm leading-relaxed text-slate-700">
+                  Connect Calendly in Integrations so AI can send your booking link and sync confirmed meetings
+                  automatically.
+                </p>
+                <Link href="/app/integrations" className="inline-flex w-full sm:w-auto">
+                  <Button
+                    type="button"
+                    variant={knowledge.calendlyBookingConnected ? "outline" : "default"}
+                    className={
+                      knowledge.calendlyBookingConnected
+                        ? "w-full border-violet-200 text-violet-900 hover:bg-violet-50"
+                        : "w-full bg-brand-green hover:bg-brand-green/90 text-white"
+                    }
+                  >
+                    {knowledge.calendlyBookingConnected ? "Manage integration" : "Connect Calendly"}
+                    <ChevronRight className="ml-1 h-4 w-4" />
+                  </Button>
+                </Link>
               </CardContent>
             </Card>
           </>

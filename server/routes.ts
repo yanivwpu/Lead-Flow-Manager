@@ -142,7 +142,7 @@ import {
   calendlyGetCurrentUser,
   calendlyListEventTypes,
 } from "./calendlyApi";
-import { isUserCalendlyBookingConnected } from "./calendlyBookingConnected";
+import { isUserCalendlyBookingConnected, applyCalendlyBookingLinkForAi } from "./calendlyBookingConnected";
 import { hubspotValidatePrivateAppToken } from "./hubspotApi";
 import { pushLeadsToHubSpot } from "./hubspotSync";
 
@@ -8932,11 +8932,12 @@ export async function registerRoutes(
         qualifyingQuestions: [],
       };
       const base = knowledge || defaults;
-      if (await isUserCalendlyBookingConnected(userId)) {
-        res.json({ ...base, bookingLink: "" });
-      } else {
-        res.json(base);
-      }
+      const calendlyBookingConnected = await isUserCalendlyBookingConnected(userId);
+      res.json({
+        ...base,
+        bookingLink: "",
+        calendlyBookingConnected,
+      });
     } catch (error) {
       console.error("Business knowledge fetch error:", error);
       res.status(500).json({ error: "Failed to fetch business knowledge" });
@@ -8958,10 +8959,9 @@ export async function registerRoutes(
           code: "AI_BRAIN_REQUIRED",
         });
       }
-      const body =
-        (await isUserCalendlyBookingConnected(userId))
-          ? { ...req.body, bookingLink: "" }
-          : req.body;
+      const raw = (req.body || {}) as Record<string, unknown>;
+      const { bookingLink: _ignoredBookingLink, ...bodyWithoutManualBooking } = raw;
+      const body = { ...bodyWithoutManualBooking, bookingLink: "" };
       const knowledge = await storage.upsertAiBusinessKnowledge(userId, body);
       res.json(knowledge);
     } catch (error) {
@@ -9227,9 +9227,7 @@ export async function registerRoutes(
 
       const { aiService } = await import("./aiService");
       const knowledgeRaw = await storage.getAiBusinessKnowledge(userId);
-      const calBook = await isUserCalendlyBookingConnected(userId);
-      const knowledge =
-        knowledgeRaw && calBook ? { ...knowledgeRaw, bookingLink: "" as const } : knowledgeRaw;
+      const knowledge = await applyCalendlyBookingLinkForAi(userId, knowledgeRaw);
       const workflow = await aiService.generateAutomation(prompt, knowledge || undefined);
       
       // Track usage
@@ -9347,11 +9345,7 @@ export async function registerRoutes(
 
       const { aiService } = await import("./aiService");
       const knowledgeRaw = await storage.getAiBusinessKnowledge(userId);
-      const calendlyBookingConnected = await isUserCalendlyBookingConnected(userId);
-      const knowledge =
-        knowledgeRaw && calendlyBookingConnected
-          ? { ...knowledgeRaw, bookingLink: "" as const }
-          : knowledgeRaw;
+      const knowledge = await applyCalendlyBookingLinkForAi(userId, knowledgeRaw);
       const settings = await storage.getAiSettings(userId);
 
       // ── Human handoff: hard block AI reply generation/autosend ──────────────
@@ -9600,8 +9594,9 @@ export async function registerRoutes(
       }
 
       const { aiService } = await import("./aiService");
-      const knowledge = await storage.getAiBusinessKnowledge(userId);
-      
+      const knowledgeRaw = await storage.getAiBusinessKnowledge(userId);
+      const knowledge = await applyCalendlyBookingLinkForAi(userId, knowledgeRaw);
+
       const leadData = await aiService.extractLeadData(conversationHistory, knowledge || undefined);
       
       // Save lead score if chatId provided
