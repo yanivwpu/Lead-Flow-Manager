@@ -81,14 +81,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { 
   CheckCircle2, 
-  ChevronRight, 
-  ChevronDown,
-  ChevronLeft, 
-  Lock, 
+  ChevronRight,
+  ChevronLeft,
+  ArrowLeft, 
   Rocket, 
   ClipboardCheck, 
-  Zap, 
+  Zap,
   MessageSquare,
+  MessageCircle,
   Bot,
   Sparkles,
   Send,
@@ -112,7 +112,22 @@ import {
   Lightbulb,
   TrendingUp,
   PhoneOff,
-  ExternalLink
+  ExternalLink,
+  Check,
+  Home,
+  Filter,
+  Timer,
+  UserCheck,
+  ClipboardList,
+  Paperclip,
+  Smile,
+  Phone,
+  Bell,
+  Search,
+  Plus,
+  FileText,
+  ArrowRight,
+  MoreVertical,
 } from "lucide-react";
 import { useForm, type UseFormReturn } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -993,40 +1008,49 @@ export function RealtorGrowthEngine() {
     }
   };
 
-  const renderStepper = () => (
-    <div className="flex items-center justify-center space-x-4 mb-5">
-      <div className="flex flex-col items-center">
-        <div className={cn(
-          "w-9 h-9 rounded-full flex items-center justify-center border-2 text-sm",
-          status !== 'locked' ? "bg-brand-green border-brand-green text-white" : "border-gray-300 text-gray-400"
-        )}>
-          {status !== 'locked' ? <CheckCircle2 className="w-5 h-5" /> : "1"}
+  const renderStepper = () => {
+    const s1 = status !== "locked";
+    const s2 = status === "submitted" || status === "installed";
+    const s3 = status === "installed";
+    const s2Active = status === "purchased";
+
+    const circle = (done: boolean, activeRing: boolean) =>
+      cn(
+        "flex h-10 w-10 items-center justify-center rounded-full border-2 text-sm font-semibold transition-all",
+        done && "border-emerald-600 bg-emerald-600 text-white shadow-lg shadow-emerald-600/30",
+        !done && activeRing && "border-emerald-600 bg-white text-emerald-600 shadow-md",
+        !done && !activeRing && "border-gray-200 bg-white text-gray-400",
+      );
+
+    return (
+      <div className="flex flex-wrap items-center justify-center gap-2 md:gap-4">
+        <div className="flex flex-col items-center gap-1.5">
+          <div className={circle(s1, false)}>{s1 ? <Check className="h-5 w-5" /> : "1"}</div>
+          <span className={cn("text-xs font-medium", s1 ? "text-emerald-600" : "text-gray-400")}>Activate</span>
         </div>
-        <span className="text-xs mt-1.5 font-medium">Activate</span>
-      </div>
-      <div className="w-10 h-0.5 bg-gray-200" />
-      <div className="flex flex-col items-center">
-        <div className={cn(
-          "w-9 h-9 rounded-full flex items-center justify-center border-2 text-sm",
-          status === 'submitted' || status === 'installed' ? "bg-brand-green border-brand-green text-white" : 
-          status === 'purchased' ? "border-brand-green text-brand-green" : "border-gray-300 text-gray-400"
-        )}>
-          {status === 'submitted' || status === 'installed' ? <CheckCircle2 className="w-5 h-5" /> : "2"}
+        <div
+          className={cn(
+            "hidden h-0.5 w-10 shrink-0 -translate-y-3 sm:block md:w-16",
+            s1 ? "bg-gradient-to-r from-emerald-600 to-gray-200" : "bg-gray-200",
+          )}
+        />
+        <div className="flex flex-col items-center gap-1.5">
+          <div className={circle(s2, s2Active && !s2)}>{s2 ? <Check className="h-5 w-5" /> : "2"}</div>
+          <span className={cn("text-xs font-medium", s2 || s2Active ? "text-emerald-600" : "text-gray-400")}>Setup</span>
         </div>
-        <span className="text-xs mt-1.5 font-medium">Setup</span>
-      </div>
-      <div className="w-10 h-0.5 bg-gray-200" />
-      <div className="flex flex-col items-center">
-        <div className={cn(
-          "w-9 h-9 rounded-full flex items-center justify-center border-2 text-sm",
-          status === 'installed' ? "bg-brand-green border-brand-green text-white" : "border-gray-300 text-gray-400"
-        )}>
-          {status === 'installed' ? <CheckCircle2 className="w-5 h-5" /> : "3"}
+        <div
+          className={cn(
+            "hidden h-0.5 w-10 shrink-0 -translate-y-3 sm:block md:w-16",
+            s2 ? "bg-gradient-to-r from-emerald-600 to-gray-200" : "bg-gray-200",
+          )}
+        />
+        <div className="flex flex-col items-center gap-1.5">
+          <div className={circle(s3, false)}>{s3 ? <Check className="h-5 w-5" /> : "3"}</div>
+          <span className={cn("text-xs font-medium", s3 ? "text-emerald-600" : "text-gray-400")}>Go Live</span>
         </div>
-        <span className="text-xs mt-1.5 font-medium">Go Live</span>
       </div>
-    </div>
-  );
+    );
+  };
 
   const DetailPage = () => {
     const includedItems: { Icon: typeof Sparkles; t: string; d: string }[] = [
@@ -1040,13 +1064,6 @@ export function RealtorGrowthEngine() {
       { Icon: Handshake, t: "Concierge launch session", d: "White-glove validation session before you go live on real traffic." },
     ];
 
-    const trunkNodes = [
-      { key: "inquiry", label: "New inquiry received", box: "border-gray-200/90 bg-white text-gray-900 shadow-sm" },
-      { key: "ai", label: "Instant AI response", box: "border-emerald-200/80 bg-emerald-50/90 text-emerald-950 shadow-sm" },
-      { key: "qual", label: "Qualification questions", box: "border-gray-200/90 bg-white text-gray-900 shadow-sm" },
-      { key: "score", label: "Hot lead scoring", box: "border-violet-200/80 bg-violet-50/80 text-violet-950 shadow-sm" },
-    ];
-
     const whatItDoesLines = [
       "Captures new real estate leads the moment they message you.",
       "Replies instantly on WhatsApp with context-aware conversation.",
@@ -1058,47 +1075,58 @@ export function RealtorGrowthEngine() {
     ];
 
     return (
-      <div className="mx-auto w-full max-w-6xl px-4 py-6 pb-20 sm:px-6 lg:max-w-7xl">
-        <div className="mb-6 flex justify-end">
+      <div className="min-h-full bg-[#f8f9fa] pb-20">
+        <header className="mb-2 flex items-center justify-end border-b border-gray-200/80 bg-white/90 px-4 py-3 sm:px-6">
           <Button
             variant="ghost"
             size="sm"
-            className="h-9 text-gray-600 hover:text-gray-900"
+            className="h-9 gap-1.5 text-sm font-medium text-gray-700 hover:text-gray-900"
             onClick={() => setLocation("/app/templates")}
           >
-            <ChevronLeft className="mr-1 h-4 w-4" />
+            <ChevronLeft className="h-4 w-4" />
             Back to Growth Engines
           </Button>
-        </div>
+        </header>
 
-        <section className="relative mb-12 overflow-hidden rounded-2xl border border-gray-900/10 shadow-lg ring-1 ring-black/5">
-          <div className="relative min-h-[240px] sm:min-h-[300px] md:min-h-[340px]">
-            <img
-              src="/og/og-realtor-growth-engine.png"
-              alt=""
-              className="absolute inset-0 h-full w-full object-cover object-[center_22%]"
+        <main className="mx-auto max-w-6xl px-4 pb-6 sm:px-6">
+          <section className="relative mb-6 overflow-hidden rounded-3xl border border-emerald-900/20 bg-gradient-to-br from-[#0a1f17] via-[#0f2920] to-[#143d2e] p-8 text-white shadow-2xl md:p-10">
+            <div className="absolute right-0 top-0 h-96 w-96 rounded-full bg-emerald-500/10 blur-3xl" />
+            <div className="absolute bottom-0 left-0 h-72 w-72 rounded-full bg-teal-500/10 blur-3xl" />
+            <div className="absolute inset-0 bg-gradient-to-br from-white/[0.03] to-transparent" />
+            <div
+              className="absolute inset-0 opacity-60 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:32px_32px]"
+              aria-hidden
             />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/45 to-black/30" />
-            <div className="absolute right-4 top-4 z-10 sm:right-6 sm:top-6">
-              <Badge className="border border-white/25 bg-black/45 px-3 py-1 text-[10px] font-medium uppercase tracking-wide text-white backdrop-blur-md">
-                Premium Growth Engine
-              </Badge>
-            </div>
-            <div className="relative z-[1] flex min-h-[240px] flex-col items-center justify-center px-6 py-14 text-center sm:min-h-[300px] md:min-h-[340px] md:px-12">
-              <h1 className="max-w-4xl text-3xl font-bold tracking-tight text-white sm:text-4xl md:text-5xl">
+
+            <div className="relative">
+              <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="rounded-xl border border-white/10 bg-white/10 p-3 shadow-lg shadow-black/10 backdrop-blur-md">
+                    <Home className="h-5 w-5 text-emerald-300" aria-hidden />
+                  </div>
+                  <div className="rounded-xl border border-white/10 bg-white/10 p-3 shadow-lg shadow-black/10 backdrop-blur-md">
+                    <MessageSquare className="h-5 w-5 text-emerald-300" aria-hidden />
+                  </div>
+                  <div className="rounded-xl border border-white/10 bg-white/10 p-3 shadow-lg shadow-black/10 backdrop-blur-md">
+                    <Bot className="h-5 w-5 text-emerald-300" aria-hidden />
+                  </div>
+                </div>
+                <Badge className="border border-emerald-400/30 bg-emerald-500/20 px-4 py-1.5 font-medium text-emerald-100 shadow-lg backdrop-blur-md hover:bg-emerald-500/30">
+                  Premium Growth Engine
+                </Badge>
+              </div>
+
+              <h1 className="mb-3 text-4xl font-bold tracking-tight md:text-5xl lg:text-6xl">
                 <RealtorMark /> Growth Engine
               </h1>
-              <p className="mt-3 max-w-2xl text-base font-medium text-white/95 sm:text-lg md:text-xl">
-                AI-powered WhatsApp automation for real estate
-              </p>
-              <p className="mt-3 max-w-2xl text-sm leading-relaxed text-white/80 sm:text-base">
-                Convert inquiries into qualified buyers and booked showings — automatically.
+              <p className="mb-2 text-xl font-medium text-emerald-100/90 md:text-2xl">AI-powered WhatsApp automation for real estate</p>
+              <p className="text-base text-gray-300/80">
+                Convert inquiries into qualified buyers &amp; booked showings — automatically.
               </p>
             </div>
-          </div>
-        </section>
+          </section>
 
-        <div className="mb-12 flex justify-center">{renderStepper()}</div>
+          <div className="mb-8 flex justify-center">{renderStepper()}</div>
 
         {isPaused && (
           <Card className="mb-10 border-amber-300 bg-amber-50" data-testid="banner-subscription-paused">
@@ -1146,157 +1174,558 @@ export function RealtorGrowthEngine() {
           </Card>
         )}
 
-        <Card className="mb-10 border-gray-200/80 shadow-sm">
-          <CardContent className="grid gap-10 p-6 sm:p-8 lg:grid-cols-2 lg:gap-12 lg:p-10">
-            <div className="min-w-0 space-y-5">
-              <div>
-                <h2 className="text-xl font-semibold tracking-tight text-gray-900 sm:text-2xl">What it does</h2>
-                <p className="mt-2 text-sm leading-relaxed text-gray-600 sm:text-base">
-                  A coordinated automation layer that runs alongside your inbox and CRM — built for real estate speed-to-lead.
-                </p>
-              </div>
-              <ul className="space-y-3 text-sm leading-relaxed text-gray-800 sm:text-[15px]">
-                {whatItDoesLines.map((line) => (
-                  <li key={line} className="flex gap-3">
-                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-brand-green" aria-hidden />
-                    <span>{line}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-            <div className="min-w-0">
-              <div className="rounded-2xl border border-gray-200/90 bg-gradient-to-b from-gray-50 to-white p-4 shadow-inner sm:p-5">
-                <div className="flex items-center gap-2 border-b border-gray-200/80 pb-3">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-500/15 ring-1 ring-emerald-500/25">
-                    <MessageSquare className="h-4 w-4 text-emerald-700" />
-                  </div>
-                  <div className="text-left">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Preview</p>
-                    <p className="text-sm font-medium text-gray-900">New lead · WhatsApp</p>
-                  </div>
-                </div>
-                <div className="mt-4 space-y-3">
-                  <div className="rounded-xl rounded-tl-sm border border-gray-200 bg-white px-3 py-2.5 text-left text-xs leading-relaxed text-gray-800 shadow-sm">
-                    Hi — we&apos;re looking for a 3bd under $800k near the lake. Is this still available?
-                  </div>
-                  <div className="ml-4 flex gap-2 rounded-xl rounded-tr-sm border border-emerald-600/25 bg-emerald-600 px-3 py-2.5 text-left text-xs leading-relaxed text-white shadow-sm">
-                    <Bot className="mt-0.5 h-3.5 w-3.5 shrink-0 opacity-90" aria-hidden />
-                    <span>
-                      Thanks for reaching out. Are you pre-approved or still exploring financing? That helps me route you to the right listings.
-                    </span>
-                  </div>
-                  <div className="rounded-xl rounded-tl-sm border border-gray-200 bg-white px-3 py-2.5 text-left text-xs leading-relaxed text-gray-800 shadow-sm">
-                    Pre-approved with our lender — can we tour this weekend?
-                  </div>
-                  <div className="ml-4 flex gap-2 rounded-xl rounded-tr-sm border border-emerald-600/25 bg-emerald-600 px-3 py-2.5 text-left text-xs leading-relaxed text-white shadow-sm">
-                    <Bot className="mt-0.5 h-3.5 w-3.5 shrink-0 opacity-90" aria-hidden />
-                    <span>Perfect. I flagged you as a hot buyer and sent a booking link — pick a time that works.</span>
-                  </div>
-                  <p className="pt-1 text-center text-[11px] text-gray-500">Illustrative conversation — your copy and rules are configured at install.</p>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        <section className="mb-6 rounded-2xl border border-gray-200/80 bg-white p-6 shadow-sm md:p-8">
+          <h2 className="mb-1 text-xl font-bold text-gray-900 md:text-2xl">What it does</h2>
+          <p className="mb-6 text-sm text-gray-500">
+            A coordinated automation engine that runs alongside your inbox and CRM — built for real estate speed-to-lead.
+          </p>
 
-        <section id="rge-whats-included" className="mb-10 scroll-mt-24">
-          <div className="mb-5">
-            <h2 className="text-xl font-semibold tracking-tight text-gray-900 sm:text-2xl">What&apos;s included</h2>
-            <p className="mt-2 max-w-3xl text-sm leading-relaxed text-gray-600 sm:text-base">
-              Everything installed as a system — not a loose pile of message templates.
-            </p>
+          <div className="grid gap-8 lg:grid-cols-2">
+            <div className="space-y-3">
+              {whatItDoesLines.map((line) => (
+                <div key={line} className="group flex items-start gap-3">
+                  <div className="mt-0.5 flex-shrink-0">
+                    <div className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-100 transition-colors group-hover:bg-emerald-200">
+                      <Check className="h-3 w-3 text-emerald-600" aria-hidden />
+                    </div>
+                  </div>
+                  <span className="text-sm leading-relaxed text-gray-600">{line}</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="relative flex justify-center lg:justify-end">
+              <div className="relative">
+                <div className="w-[280px] rounded-[2.5rem] bg-gradient-to-b from-gray-200 to-gray-100 p-2.5 shadow-2xl">
+                  <div className="overflow-hidden rounded-[2rem] bg-white shadow-inner">
+                    <div className="bg-[#075e54] px-3 py-2.5">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2.5">
+                          <ArrowLeft className="h-4 w-4 text-white/80" aria-hidden />
+                          <div className="relative">
+                            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 shadow-md">
+                              <span className="text-xs font-bold text-white">SM</span>
+                            </div>
+                            <div className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-[#075e54] bg-green-400" />
+                          </div>
+                          <div>
+                            <p className="text-xs font-semibold text-white">Sarah Mitchell</p>
+                            <p className="flex items-center gap-1 text-[10px] text-emerald-200">
+                              <span className="h-1.5 w-1.5 rounded-full bg-green-400" />
+                              online
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <Video className="h-4 w-4 text-white/80" aria-hidden />
+                          <Phone className="h-4 w-4 text-white/80" aria-hidden />
+                          <MoreVertical className="h-4 w-4 text-white/80" aria-hidden />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="border-b border-emerald-100 bg-gradient-to-r from-emerald-50 to-teal-50 px-3 py-1.5">
+                      <div className="flex items-center gap-2">
+                        <div className="flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500">
+                          <Sparkles className="h-2.5 w-2.5 text-white" aria-hidden />
+                        </div>
+                        <span className="text-[10px] font-medium text-emerald-700">AI Copilot Active</span>
+                        <Badge className="ml-auto border-0 bg-emerald-100 px-1.5 py-0 text-[8px] text-emerald-700">New Lead</Badge>
+                      </div>
+                    </div>
+
+                    <div className="min-h-[260px] space-y-2 bg-[#efeae2] p-3">
+                      <div className="flex justify-center">
+                        <span className="rounded-full bg-white/80 px-2.5 py-0.5 text-[9px] text-gray-500 shadow-sm">Today</span>
+                      </div>
+                      <div className="flex justify-start">
+                        <div className="max-w-[85%] rounded-xl rounded-tl-sm bg-white px-3 py-2 shadow-sm">
+                          <p className="text-[11px] leading-relaxed text-gray-800">Hi! I&apos;m looking for a 3 bedroom house in Miami.</p>
+                          <span className="float-right ml-2 mt-0.5 text-[9px] text-gray-400">10:24 AM</span>
+                        </div>
+                      </div>
+                      <div className="flex justify-end">
+                        <div className="relative max-w-[85%] rounded-xl rounded-tr-sm bg-[#d9fdd3] px-3 py-2 shadow-sm">
+                          <div className="absolute -left-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500 shadow-md">
+                            <Sparkles className="h-2 w-2 text-white" aria-hidden />
+                          </div>
+                          <p className="text-[11px] leading-relaxed text-gray-800">Great! I can help you find the perfect home. What&apos;s your budget range?</p>
+                          <div className="mt-0.5 flex items-center justify-end gap-1">
+                            <span className="text-[9px] text-gray-500">10:24 AM</span>
+                            <CheckCircle2 className="h-2.5 w-2.5 text-blue-500" aria-hidden />
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex justify-start">
+                        <div className="max-w-[85%] rounded-xl rounded-tl-sm bg-white px-3 py-2 shadow-sm">
+                          <p className="text-[11px] leading-relaxed text-gray-800">Around $600k - $800k</p>
+                          <span className="float-right ml-2 mt-0.5 text-[9px] text-gray-400">10:25 AM</span>
+                        </div>
+                      </div>
+                      <div className="flex justify-end">
+                        <div className="relative max-w-[85%] rounded-xl rounded-tr-sm bg-[#d9fdd3] px-3 py-2 shadow-sm">
+                          <div className="absolute -left-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500 shadow-md">
+                            <Sparkles className="h-2 w-2 text-white" aria-hidden />
+                          </div>
+                          <p className="text-[11px] leading-relaxed text-gray-800">Perfect! I have 3 great options in Coral Gables.</p>
+                          <div className="mt-1.5 flex items-center justify-center gap-1.5 rounded-lg bg-emerald-600 px-2.5 py-1.5 text-[10px] font-medium text-white">
+                            <Calendar className="h-3 w-3" aria-hidden />
+                            Schedule Showing
+                          </div>
+                          <div className="mt-1 flex items-center justify-end gap-1">
+                            <span className="text-[9px] text-gray-500">10:25 AM</span>
+                            <CheckCircle2 className="h-2.5 w-2.5 text-blue-500" aria-hidden />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 bg-[#f0f0f0] px-2 py-1.5">
+                      <Smile className="h-5 w-5 text-gray-500" aria-hidden />
+                      <div className="flex-1 rounded-full bg-white px-3 py-1.5 text-[11px] text-gray-400 shadow-sm">Type a message</div>
+                      <Paperclip className="h-4 w-4 text-gray-500" aria-hidden />
+                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500 shadow-md">
+                        <Send className="ml-0.5 h-3.5 w-3.5 text-white" aria-hidden />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="absolute -right-2 top-16 w-40 rounded-xl border border-gray-100 bg-white p-3 shadow-xl lg:-right-6">
+                  <div className="mb-2 flex items-center gap-2">
+                    <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-100">
+                      <Target className="h-3.5 w-3.5 text-emerald-600" aria-hidden />
+                    </div>
+                    <span className="text-[10px] font-semibold text-gray-700">Lead Score</span>
+                  </div>
+                  <div className="flex items-end gap-1.5">
+                    <span className="text-2xl font-bold text-emerald-600">87</span>
+                    <span className="mb-1 text-[10px] text-gray-400">/100</span>
+                  </div>
+                  <div className="mt-1.5 h-1 w-full rounded-full bg-gray-100">
+                    <div className="h-1 w-[87%] rounded-full bg-emerald-500" />
+                  </div>
+                  <div className="mt-2 space-y-1">
+                    <div className="flex items-center gap-1.5 text-[9px]">
+                      <CheckCircle2 className="h-2.5 w-2.5 text-emerald-500" aria-hidden />
+                      <span className="text-gray-600">Budget qualified</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-[9px]">
+                      <CheckCircle2 className="h-2.5 w-2.5 text-emerald-500" aria-hidden />
+                      <span className="text-gray-600">Timeline: 2 months</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-[9px]">
+                      <AlertCircle className="h-2.5 w-2.5 text-amber-500" aria-hidden />
+                      <span className="text-gray-600">Financing TBD</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        </section>
+
+        <section id="rge-whats-included" className="mb-6 scroll-mt-24 rounded-2xl border border-gray-200/80 bg-white p-6 shadow-sm md:p-8">
+          <h2 className="mb-1 text-xl font-bold text-gray-900 md:text-2xl">What&apos;s included</h2>
+          <p className="mb-6 text-sm text-gray-500">Everything installed as a system — not a loose pile of message templates.</p>
+
+          <div className="grid gap-4 md:grid-cols-3">
             {includedItems.map(({ Icon, t, d }) => (
-              <Card key={t} className="border-gray-200/80 bg-white shadow-sm transition-shadow hover:shadow-md">
-                <CardHeader className="flex flex-row items-start gap-3 space-y-0 p-5 pb-2">
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-violet-50 ring-1 ring-violet-100">
-                    <Icon className="h-4 w-4 text-violet-700" aria-hidden />
-                  </div>
-                  <div className="min-w-0">
-                    <CardTitle className="text-sm font-semibold leading-snug text-gray-900">{t}</CardTitle>
-                  </div>
-                </CardHeader>
-                <CardContent className="px-5 pb-5 pt-0 text-xs leading-relaxed text-gray-600 sm:text-sm">{d}</CardContent>
-              </Card>
+              <div
+                key={t}
+                className="group flex cursor-default items-start gap-3 rounded-xl p-3 transition-colors hover:bg-gray-50"
+              >
+                <div className="flex-shrink-0 rounded-lg bg-gray-100 p-2 text-gray-600 transition-colors group-hover:bg-emerald-50 group-hover:text-emerald-600">
+                  <Icon className="h-4 w-4" aria-hidden />
+                </div>
+                <div>
+                  <h3 className="mb-0.5 text-sm font-semibold text-gray-900">{t}</h3>
+                  <p className="text-xs leading-relaxed text-gray-500">{d}</p>
+                </div>
+              </div>
             ))}
           </div>
         </section>
 
-        <Card className="mb-10 border-gray-200/80 shadow-sm" id="rge-architecture">
-          <CardHeader className="px-6 pt-6 pb-2 sm:px-8">
-            <CardTitle className="text-xl font-semibold text-gray-900 sm:text-2xl">Automation architecture</CardTitle>
-            <CardDescription className="text-sm sm:text-base">
-              How inbound messages, timers, and CRM updates connect — a real system, not a single static template.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="px-4 pb-6 sm:px-8 sm:pb-8">
-            <div className="rounded-2xl border border-gray-200/90 bg-gradient-to-br from-gray-50/90 via-white to-gray-50/50 p-5 sm:p-8">
-              <div className="flex flex-col items-stretch gap-2 md:flex-row md:flex-wrap md:items-center md:justify-center md:gap-0">
-                {trunkNodes.map((node, i) => (
-                  <React.Fragment key={node.key}>
-                    {i > 0 && (
-                      <ChevronRight className="mx-1 hidden h-5 w-5 shrink-0 self-center text-gray-300 md:block" aria-hidden />
-                    )}
-                    {i > 0 && <ChevronDown className="my-1 h-4 w-4 shrink-0 self-center text-gray-300 md:hidden" aria-hidden />}
-                    <div
-                      className={cn(
-                        "min-h-[3.25rem] flex-1 rounded-xl border px-3 py-3 text-center text-xs font-semibold leading-snug sm:min-w-0 sm:flex-none sm:px-4 sm:text-sm md:max-w-[200px]",
-                        node.box,
-                      )}
-                    >
-                      {node.label}
-                    </div>
-                  </React.Fragment>
-                ))}
-              </div>
+        <section className="mb-6 rounded-2xl border border-gray-200/80 bg-white p-6 shadow-sm md:p-8" id="rge-architecture">
+          <h2 className="mb-1 text-xl font-bold text-gray-900 md:text-2xl">Automation architecture</h2>
+          <p className="mb-6 text-sm text-gray-500">
+            How inbound messages, timers, and CRM updates connect — a real system, not a single static template.
+          </p>
 
-              <div className="mt-8 grid gap-4 lg:grid-cols-3">
-                <div className="rounded-xl border border-gray-200/90 bg-white p-5 shadow-sm">
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Branch</p>
-                  <p className="mt-1 text-sm font-semibold text-gray-900">Booking / showing intent</p>
-                  <p className="mt-2 text-xs leading-relaxed text-gray-600">
-                    Calendar or handoff path when the lead signals tours, calls, or availability checks.
-                  </p>
-                </div>
-                <div className="rounded-xl border border-gray-200/90 bg-white p-5 shadow-sm">
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Branch</p>
-                  <p className="mt-1 text-sm font-semibold text-gray-900">No-reply follow-up</p>
-                  <p className="mt-2 text-xs leading-relaxed text-gray-600">
-                    24h → 72h → 7d nurture ladder until the lead re-engages or is marked cold.
-                  </p>
-                </div>
-                <div className="rounded-xl border border-gray-200/90 bg-white p-5 shadow-sm">
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Branch</p>
-                  <p className="mt-1 text-sm font-semibold text-gray-900">Human handoff</p>
-                  <p className="mt-2 text-xs leading-relaxed text-gray-600">
-                    High-intent or sensitive threads surface as tasks with full transcript context.
-                  </p>
+          <div className="relative rounded-xl border border-gray-200 bg-gray-50 p-4 md:p-6">
+            <div className="hidden items-center justify-between gap-2 lg:flex">
+              <div className="max-w-[100px] flex-1">
+                <div className="rounded-xl border border-gray-200 bg-white p-2.5 shadow-sm">
+                  <div className="mx-auto mb-1.5 flex h-7 w-7 items-center justify-center rounded-lg border border-gray-200 bg-gray-100">
+                    <MessageCircle className="h-3.5 w-3.5 text-gray-600" aria-hidden />
+                  </div>
+                  <p className="text-center text-[10px] font-semibold text-gray-800">New inquiry</p>
                 </div>
               </div>
-
-              <div className="mt-6 flex flex-col items-center gap-2">
-                <ChevronDown className="h-4 w-4 text-gray-300" aria-hidden />
-                <div className="w-full max-w-xl rounded-xl border border-gray-900/15 bg-gray-900 px-4 py-3.5 text-center text-sm font-semibold text-white shadow-md">
-                  CRM update: stage · tag · score · next action
+              <ArrowRight className="h-4 w-4 shrink-0 text-gray-300" aria-hidden />
+              <div className="max-w-[100px] flex-1">
+                <div className="rounded-xl border border-gray-200 bg-white p-2.5 shadow-sm">
+                  <div className="mx-auto mb-1.5 flex h-7 w-7 items-center justify-center rounded-lg border border-emerald-200 bg-emerald-50">
+                    <Sparkles className="h-3.5 w-3.5 text-emerald-600" aria-hidden />
+                  </div>
+                  <p className="text-center text-[10px] font-semibold text-gray-800">AI reply</p>
                 </div>
               </div>
-
-              <div className="mt-5 flex items-start justify-center gap-2 text-center text-xs text-gray-600 sm:text-sm">
-                <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-brand-green" aria-hidden />
-                <span>Every path keeps your pipeline accurate — stages and scores update as the conversation evolves.</span>
+              <ArrowRight className="h-4 w-4 shrink-0 text-gray-300" aria-hidden />
+              <div className="max-w-[100px] flex-1">
+                <div className="rounded-xl border border-gray-200 bg-white p-2.5 shadow-sm">
+                  <div className="mx-auto mb-1.5 flex h-7 w-7 items-center justify-center rounded-lg border border-gray-200 bg-gray-100">
+                    <Filter className="h-3.5 w-3.5 text-gray-600" aria-hidden />
+                  </div>
+                  <p className="text-center text-[10px] font-semibold text-gray-800">Qualify</p>
+                </div>
+              </div>
+              <ArrowRight className="h-4 w-4 shrink-0 text-gray-300" aria-hidden />
+              <div className="max-w-[100px] flex-1">
+                <div className="rounded-xl border border-gray-200 bg-white p-2.5 shadow-sm">
+                  <div className="mx-auto mb-1.5 flex h-7 w-7 items-center justify-center rounded-lg border border-gray-200 bg-gray-100">
+                    <Target className="h-3.5 w-3.5 text-gray-600" aria-hidden />
+                  </div>
+                  <p className="text-center text-[10px] font-semibold text-gray-800">Intent score</p>
+                </div>
+              </div>
+              <ArrowRight className="h-4 w-4 shrink-0 text-gray-300" aria-hidden />
+              <div className="flex shrink-0 flex-col gap-1">
+                <div className="flex items-center gap-1.5 rounded border border-emerald-200/60 bg-emerald-50/70 px-2 py-1">
+                  <Calendar className="h-3 w-3 text-emerald-600" aria-hidden />
+                  <span className="text-[9px] font-medium text-gray-700">Booking</span>
+                </div>
+                <div className="flex items-center gap-1.5 rounded border border-gray-200 bg-white px-2 py-1">
+                  <Timer className="h-3 w-3 text-gray-500" aria-hidden />
+                  <span className="text-[9px] font-medium text-gray-600">Follow-up</span>
+                </div>
+                <div className="flex items-center gap-1.5 rounded border border-gray-200 bg-white px-2 py-1">
+                  <UserCheck className="h-3 w-3 text-gray-500" aria-hidden />
+                  <span className="text-[9px] font-medium text-gray-600">Handoff</span>
+                </div>
+              </div>
+              <ArrowRight className="h-4 w-4 shrink-0 text-gray-300" aria-hidden />
+              <div className="max-w-[110px] flex-1">
+                <div className="rounded-xl border-2 border-emerald-200 bg-white p-2.5 shadow-sm">
+                  <div className="mx-auto mb-1.5 flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-600">
+                    <ClipboardList className="h-3.5 w-3.5 text-white" aria-hidden />
+                  </div>
+                  <p className="text-center text-[10px] font-semibold text-gray-800">CRM update</p>
+                  <div className="mt-1 flex justify-center gap-0.5">
+                    <Badge className="border-0 bg-gray-100 px-1 py-0 text-[7px] text-gray-600">stage</Badge>
+                    <Badge className="border-0 bg-gray-100 px-1 py-0 text-[7px] text-gray-600">tag</Badge>
+                  </div>
+                </div>
               </div>
             </div>
-          </CardContent>
-        </Card>
 
-        <div className="mb-12 grid gap-6 lg:grid-cols-2">
-          <Card className="border-gray-200/80 shadow-sm" id="rge-requirements">
-            <CardHeader className="px-6 pt-6 pb-2">
-              <CardTitle className="text-lg font-semibold text-gray-900 sm:text-xl">Requirements</CardTitle>
-              <CardDescription className="text-sm">Before this engine can run end-to-end in your account.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3 px-6 pb-6">
+            <div className="mt-2 hidden flex-wrap items-center justify-center gap-3 md:flex lg:hidden">
+              <div className="flex items-center gap-2">
+                <div className="w-[80px] rounded-lg border border-gray-200 bg-white p-2 shadow-sm">
+                  <div className="mx-auto mb-1 flex h-6 w-6 items-center justify-center rounded border border-gray-200 bg-gray-100">
+                    <MessageCircle className="h-3 w-3 text-gray-600" aria-hidden />
+                  </div>
+                  <p className="text-center text-[9px] font-semibold text-gray-800">Inquiry</p>
+                </div>
+                <ArrowRight className="h-3 w-3 text-gray-300" aria-hidden />
+                <div className="w-[80px] rounded-lg border border-gray-200 bg-white p-2 shadow-sm">
+                  <div className="mx-auto mb-1 flex h-6 w-6 items-center justify-center rounded border border-emerald-200 bg-emerald-50">
+                    <Sparkles className="h-3 w-3 text-emerald-600" aria-hidden />
+                  </div>
+                  <p className="text-center text-[9px] font-semibold text-gray-800">AI reply</p>
+                </div>
+                <ArrowRight className="h-3 w-3 text-gray-300" aria-hidden />
+                <div className="w-[80px] rounded-lg border border-gray-200 bg-white p-2 shadow-sm">
+                  <div className="mx-auto mb-1 flex h-6 w-6 items-center justify-center rounded border border-gray-200 bg-gray-100">
+                    <Filter className="h-3 w-3 text-gray-600" aria-hidden />
+                  </div>
+                  <p className="text-center text-[9px] font-semibold text-gray-800">Qualify</p>
+                </div>
+                <ArrowRight className="h-3 w-3 text-gray-300" aria-hidden />
+                <div className="w-[80px] rounded-lg border border-gray-200 bg-white p-2 shadow-sm">
+                  <div className="mx-auto mb-1 flex h-6 w-6 items-center justify-center rounded border border-gray-200 bg-gray-100">
+                    <Target className="h-3 w-3 text-gray-600" aria-hidden />
+                  </div>
+                  <p className="text-center text-[9px] font-semibold text-gray-800">Score</p>
+                </div>
+              </div>
+              <div className="mt-2 flex w-full items-center justify-center gap-3">
+                <div className="flex gap-1.5">
+                  <div className="flex items-center gap-1 rounded border border-emerald-200/60 bg-emerald-50/70 px-2 py-1">
+                    <Calendar className="h-2.5 w-2.5 text-emerald-600" aria-hidden />
+                    <span className="text-[8px] font-medium text-gray-700">Book</span>
+                  </div>
+                  <div className="flex items-center gap-1 rounded border border-gray-200 bg-white px-2 py-1">
+                    <Timer className="h-2.5 w-2.5 text-gray-500" aria-hidden />
+                    <span className="text-[8px] text-gray-600">Nurture</span>
+                  </div>
+                  <div className="flex items-center gap-1 rounded border border-gray-200 bg-white px-2 py-1">
+                    <UserCheck className="h-2.5 w-2.5 text-gray-500" aria-hidden />
+                    <span className="text-[8px] text-gray-600">Human</span>
+                  </div>
+                </div>
+                <ArrowRight className="h-3 w-3 text-gray-300" aria-hidden />
+                <div className="w-[90px] rounded-lg border-2 border-emerald-200 bg-white p-2 shadow-sm">
+                  <div className="mx-auto mb-1 flex h-6 w-6 items-center justify-center rounded bg-emerald-600">
+                    <ClipboardList className="h-3 w-3 text-white" aria-hidden />
+                  </div>
+                  <p className="text-center text-[9px] font-semibold text-gray-800">CRM</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-3 md:hidden">
+              <div className="flex items-center gap-3">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-gray-100">
+                  <MessageCircle className="h-4 w-4 text-gray-600" aria-hidden />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-semibold text-gray-800">New inquiry received</p>
+                  <p className="text-[10px] text-gray-500">Lead messages via WhatsApp</p>
+                </div>
+              </div>
+              <div className="ml-4 h-3 w-px bg-gray-200" />
+              <div className="flex items-center gap-3">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-emerald-200 bg-emerald-50">
+                  <Sparkles className="h-4 w-4 text-emerald-600" aria-hidden />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-semibold text-gray-800">Instant AI reply</p>
+                  <p className="text-[10px] text-gray-500">Context-aware response</p>
+                </div>
+              </div>
+              <div className="ml-4 h-3 w-px bg-gray-200" />
+              <div className="flex items-center gap-3">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-gray-100">
+                  <Filter className="h-4 w-4 text-gray-600" aria-hidden />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-semibold text-gray-800">Qualification</p>
+                  <p className="text-[10px] text-gray-500">Budget, timeline, readiness</p>
+                </div>
+              </div>
+              <div className="ml-4 h-3 w-px bg-gray-200" />
+              <div className="flex items-center gap-3">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-gray-100">
+                  <Target className="h-4 w-4 text-gray-600" aria-hidden />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-semibold text-gray-800">Intent scoring</p>
+                  <p className="text-[10px] text-gray-500">Lead qualification score</p>
+                </div>
+              </div>
+              <div className="ml-4 h-3 w-px bg-gray-200" />
+              <div className="ml-11 flex flex-wrap gap-2">
+                <div className="flex items-center gap-1.5 rounded border border-emerald-200/60 bg-emerald-50/70 px-2.5 py-1.5">
+                  <Calendar className="h-3 w-3 text-emerald-600" aria-hidden />
+                  <span className="text-[10px] font-medium text-gray-700">Booking</span>
+                </div>
+                <div className="flex items-center gap-1.5 rounded border border-gray-200 bg-white px-2.5 py-1.5">
+                  <Timer className="h-3 w-3 text-gray-500" aria-hidden />
+                  <span className="text-[10px] text-gray-600">Follow-up</span>
+                </div>
+                <div className="flex items-center gap-1.5 rounded border border-gray-200 bg-white px-2.5 py-1.5">
+                  <UserCheck className="h-3 w-3 text-gray-500" aria-hidden />
+                  <span className="text-[10px] text-gray-600">Handoff</span>
+                </div>
+              </div>
+              <div className="ml-4 h-3 w-px bg-gray-200" />
+              <div className="flex items-center gap-3">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-600">
+                  <ClipboardList className="h-4 w-4 text-white" aria-hidden />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-semibold text-gray-800">CRM update</p>
+                  <div className="mt-0.5 flex gap-1">
+                    <Badge className="border-0 bg-gray-100 px-1.5 py-0 text-[8px] text-gray-600">stage</Badge>
+                    <Badge className="border-0 bg-gray-100 px-1.5 py-0 text-[8px] text-gray-600">tag</Badge>
+                    <Badge className="border-0 bg-gray-100 px-1.5 py-0 text-[8px] text-gray-600">score</Badge>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-4 flex items-center gap-2 rounded-lg bg-emerald-50/50 px-4 py-2.5 text-sm text-gray-600">
+            <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" aria-hidden />
+            <span className="text-xs">All paths update your CRM so your pipeline stays accurate in real time.</span>
+          </div>
+        </section>
+
+        <section className="mb-6 rounded-2xl border border-gray-200/80 bg-white p-6 shadow-sm md:p-8">
+          <h2 className="mb-1 text-xl font-bold text-gray-900 md:text-2xl">Inside your workspace</h2>
+          <p className="mb-6 text-sm text-gray-500">
+            Representative surfaces this engine uses — from inbox to automations and pipeline.
+          </p>
+
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            <div className="group">
+              <div className="mb-3 overflow-hidden rounded-xl border border-gray-200 bg-white transition-all hover:border-emerald-200 hover:shadow-md">
+                <div className="flex items-center justify-between bg-gray-800 px-3 py-2">
+                  <span className="text-[10px] font-semibold text-white">Inbox</span>
+                  <div className="flex items-center gap-1.5">
+                    <Search className="h-3 w-3 text-white/60" aria-hidden />
+                    <Bell className="h-3 w-3 text-white/60" aria-hidden />
+                  </div>
+                </div>
+                <div className="space-y-1.5 p-2">
+                  <div className="flex items-center gap-2 rounded-lg border border-emerald-100 bg-emerald-50/60 p-2">
+                    <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gray-200">
+                      <span className="text-[8px] font-bold text-gray-600">SM</span>
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-[9px] font-semibold text-gray-800">Sarah Mitchell</p>
+                      <p className="truncate text-[8px] text-gray-500">3BR in Miami...</p>
+                    </div>
+                    <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-[8px] text-white">3</span>
+                  </div>
+                  <div className="flex items-center gap-2 rounded-lg p-2">
+                    <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gray-200">
+                      <span className="text-[8px] font-bold text-gray-600">JD</span>
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-[9px] font-semibold text-gray-800">John Davis</p>
+                      <p className="truncate text-[8px] text-gray-500">Property viewing?</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="border-t border-gray-100 bg-gray-50 p-2">
+                  <div className="flex items-center gap-1.5">
+                    <Sparkles className="h-3 w-3 text-emerald-600" aria-hidden />
+                    <span className="text-[9px] font-medium text-gray-600">AI: Reply with times</span>
+                  </div>
+                </div>
+              </div>
+              <h3 className="mb-0.5 text-sm font-semibold text-gray-900">Inbox + Copilot</h3>
+              <p className="text-xs leading-relaxed text-gray-500">AI drafts and smart replies inside your unified inbox.</p>
+            </div>
+
+            <div className="group">
+              <div className="mb-3 overflow-hidden rounded-xl border border-gray-200 bg-white transition-all hover:border-emerald-200 hover:shadow-md">
+                <div className="flex items-center justify-between bg-gray-800 px-3 py-2">
+                  <span className="text-[10px] font-semibold text-white">Automations</span>
+                  <Plus className="h-3 w-3 text-white/60" aria-hidden />
+                </div>
+                <div className="bg-gray-50 p-3">
+                  <div className="flex flex-col items-center gap-1">
+                    <div className="flex items-center gap-1 rounded border border-gray-200 bg-white px-2 py-1 text-[8px] font-medium text-gray-700">
+                      <Zap className="h-2.5 w-2.5 text-gray-500" aria-hidden /> New Lead
+                    </div>
+                    <div className="h-2 w-px bg-gray-300" />
+                    <div className="flex items-center gap-1 rounded border border-emerald-200 bg-emerald-50 px-2 py-1 text-[8px] font-medium text-emerald-700">
+                      <Sparkles className="h-2.5 w-2.5" aria-hidden /> AI Qualify
+                    </div>
+                    <div className="h-2 w-px bg-gray-300" />
+                    <div className="flex items-center gap-1.5">
+                      <div className="rounded border border-gray-200 bg-white px-1.5 py-0.5 text-[7px] font-medium text-gray-600">Wait</div>
+                      <div className="rounded border border-gray-200 bg-white px-1.5 py-0.5 text-[7px] font-medium text-gray-600">If reply</div>
+                    </div>
+                    <div className="h-2 w-px bg-gray-300" />
+                    <div className="flex items-center gap-1 rounded border border-gray-200 bg-white px-2 py-1 text-[8px] font-medium text-gray-700">
+                      <Calendar className="h-2.5 w-2.5 text-gray-500" aria-hidden /> Book
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between border-t border-gray-100 px-3 py-2">
+                  <span className="text-[8px] text-gray-500">Lead Nurture</span>
+                  <Badge className="border-0 bg-emerald-100 px-1.5 py-0 text-[7px] text-emerald-700">Active</Badge>
+                </div>
+              </div>
+              <h3 className="mb-0.5 text-sm font-semibold text-gray-900">Flow automation</h3>
+              <p className="text-xs leading-relaxed text-gray-500">Visual flows that run so you never miss a lead.</p>
+            </div>
+
+            <div className="group">
+              <div className="mb-3 overflow-hidden rounded-xl border border-gray-200 bg-white transition-all hover:border-emerald-200 hover:shadow-md">
+                <div className="flex items-center justify-between bg-gray-800 px-3 py-2">
+                  <span className="text-[10px] font-semibold text-white">Pipeline</span>
+                  <Filter className="h-3 w-3 text-white/60" aria-hidden />
+                </div>
+                <div className="flex gap-1.5 overflow-hidden p-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="mb-1 px-0.5 text-[7px] font-medium text-gray-500">NEW</div>
+                    <div className="space-y-1 rounded bg-gray-50 p-1">
+                      <div className="rounded border border-gray-100 bg-white p-1.5 shadow-sm">
+                        <p className="text-[8px] font-medium text-gray-800">Sarah M.</p>
+                        <span className="text-[7px] text-emerald-600">$600k</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="mb-1 px-0.5 text-[7px] font-medium text-gray-500">QUAL</div>
+                    <div className="space-y-1 rounded bg-emerald-50/50 p-1">
+                      <div className="rounded border border-gray-100 bg-white p-1.5 shadow-sm">
+                        <p className="text-[8px] font-medium text-gray-800">John D.</p>
+                        <span className="text-[7px] text-gray-600">$800k</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="mb-1 px-0.5 text-[7px] font-medium text-gray-500">SHOW</div>
+                    <div className="rounded bg-gray-50 p-1">
+                      <div className="rounded border border-gray-100 bg-white p-1.5 shadow-sm">
+                        <p className="text-[8px] font-medium text-gray-800">Mike R.</p>
+                        <span className="text-[7px] text-gray-500">Tmrw</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between border-t border-gray-100 px-3 py-2">
+                  <span className="text-[8px] text-gray-500">12 leads</span>
+                  <span className="text-[8px] font-medium text-emerald-600">$4.2M</span>
+                </div>
+              </div>
+              <h3 className="mb-0.5 text-sm font-semibold text-gray-900">Pipeline / Tasks</h3>
+              <p className="text-xs leading-relaxed text-gray-500">Leads move stages automatically.</p>
+            </div>
+
+            <div className="group">
+              <div className="mb-3 overflow-hidden rounded-xl border border-gray-200 bg-white transition-all hover:border-emerald-200 hover:shadow-md">
+                <div className="flex items-center justify-between bg-gray-800 px-3 py-2">
+                  <span className="text-[10px] font-semibold text-white">Templates</span>
+                  <Settings className="h-3 w-3 text-white/60" aria-hidden />
+                </div>
+                <div className="space-y-1.5 p-2">
+                  <div className="rounded-lg border border-gray-100 bg-gray-50 p-2">
+                    <div className="mb-0.5 flex items-center justify-between">
+                      <span className="text-[9px] font-semibold text-gray-800">24h Follow-up</span>
+                      <Badge className="border-0 bg-emerald-100 px-1 py-0 text-[7px] text-emerald-700">Approved</Badge>
+                    </div>
+                    <p className="text-[8px] text-gray-500">
+                      Hi {"{name}"}, following up on...
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-gray-100 bg-white p-2">
+                    <div className="mb-0.5 flex items-center justify-between">
+                      <span className="text-[9px] font-semibold text-gray-800">Showing Reminder</span>
+                      <Badge className="border-0 bg-emerald-100 px-1 py-0 text-[7px] text-emerald-700">Approved</Badge>
+                    </div>
+                    <p className="text-[8px] text-gray-500">Reminder: Showing on {"{date}"}...</p>
+                  </div>
+                  <div className="rounded-lg border border-gray-100 bg-white p-2">
+                    <div className="mb-0.5 flex items-center justify-between">
+                      <span className="text-[9px] font-semibold text-gray-800">Re-engagement</span>
+                      <Badge className="border-0 bg-gray-100 px-1 py-0 text-[7px] text-gray-600">Pending</Badge>
+                    </div>
+                    <p className="text-[8px] text-gray-500">New listings that match...</p>
+                  </div>
+                </div>
+              </div>
+              <h3 className="mb-0.5 text-sm font-semibold text-gray-900">Template follow-up</h3>
+              <p className="text-xs leading-relaxed text-gray-500">Approved templates with rule-based timing.</p>
+            </div>
+          </div>
+        </section>
+
+        <div className="mb-6 grid gap-4 md:grid-cols-2">
+          <section
+            className="rounded-2xl border border-gray-200/80 bg-white p-6 shadow-sm"
+            id="rge-requirements"
+          >
+            <h2 className="mb-1 text-lg font-bold text-gray-900">Requirements</h2>
+            <p className="mb-4 text-xs text-gray-500">Before this engine can run end-to-end in your account.</p>
+            <div className="space-y-2.5">
               {[
                 "Requires Pro plan",
                 "Requires AI Brain",
@@ -1304,23 +1733,23 @@ export function RealtorGrowthEngine() {
                 "Approved templates may be needed for re-engagement outside the customer service window",
                 "Concierge onboarding included with purchase",
               ].map((line) => (
-                <div key={line} className="flex gap-3 text-sm text-gray-800">
-                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-brand-green" />
-                  <span className="leading-snug">{line}</span>
+                <div key={line} className="flex items-start gap-2.5">
+                  <div className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-emerald-100">
+                    <Check className="h-2.5 w-2.5 text-emerald-600" aria-hidden />
+                  </div>
+                  <span className="text-sm text-gray-600">{line}</span>
                 </div>
               ))}
-              <p className="border-t border-gray-100 pt-4 text-xs leading-relaxed text-gray-500">
-                WhatsApp messaging fees are billed by Meta. Premium add-ons follow your billing provider&apos;s checkout rules (including Shopify confirmation flows where applicable).
-              </p>
-            </CardContent>
-          </Card>
+            </div>
+            <p className="mt-4 text-[10px] leading-relaxed text-gray-400">
+              WhatsApp messaging fees are billed by Meta. Premium add-ons follow your billing provider&apos;s checkout rules (including Shopify confirmation flows where applicable).
+            </p>
+          </section>
 
-          <Card className="border-emerald-100/90 bg-emerald-50/30 shadow-sm">
-            <CardHeader className="px-6 pt-6 pb-2">
-              <CardTitle className="text-lg font-semibold text-gray-900 sm:text-xl">Premium onboarding &amp; concierge</CardTitle>
-              <CardDescription className="text-sm">We stay with you until the system is live — not a generic help article.</CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-3 px-6 pb-6">
+          <section className="rounded-2xl border border-gray-200/80 bg-white p-6 shadow-sm">
+            <h2 className="mb-1 text-lg font-bold text-gray-900">Premium onboarding &amp; concierge</h2>
+            <p className="mb-4 text-xs text-gray-500">We stay with you until the system is live — not a generic help article.</p>
+            <div className="space-y-2.5">
               {[
                 "White-glove setup with a launch specialist",
                 "Channel validation (WhatsApp, Meta surfaces, web chat where used)",
@@ -1328,54 +1757,72 @@ export function RealtorGrowthEngine() {
                 "Launch optimization session to tune qualification and booking paths",
                 "Go-live checklist so automations match how you actually work",
               ].map((line) => (
-                <div key={line} className="flex gap-3 text-sm text-gray-800">
-                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
-                  <span className="leading-snug">{line}</span>
+                <div key={line} className="flex items-start gap-2.5">
+                  <div className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-emerald-100">
+                    <Check className="h-2.5 w-2.5 text-emerald-600" aria-hidden />
+                  </div>
+                  <span className="text-sm text-gray-600">{line}</span>
                 </div>
               ))}
-            </CardContent>
-          </Card>
+            </div>
+          </section>
         </div>
 
-        <section className="rounded-2xl border border-emerald-200/60 bg-emerald-50/50 px-6 py-10 text-center shadow-sm sm:px-10 sm:py-12">
-          <h3 className="text-2xl font-semibold tracking-tight text-gray-900 sm:text-3xl">Ready to run this in your workspace?</h3>
-          <p className="mx-auto mt-3 max-w-2xl text-sm leading-relaxed text-gray-600 sm:text-base">
-            {status === "locked" && "Activate the Realtor Growth Engine to unlock checkout and guided concierge onboarding."}
-            {status === "purchased" && "Finish channel alignment and your launch profile so we can install and validate everything."}
-            {status === "submitted" && "Your concierge team is aligning on install and session scheduling — watch your inbox for next steps."}
-          </p>
-          <Button
-            size="lg"
-            className={cn(
-              "mt-8 min-w-[200px] bg-brand-green px-8 text-base font-semibold text-white shadow-sm hover:bg-brand-green/90",
-              (primaryMarketingCta.disabled || purchaseMutation.isPending) && "pointer-events-none opacity-50",
-            )}
-            onClick={handlePrimaryCta}
-            disabled={purchaseMutation.isPending || primaryMarketingCta.disabled}
-            data-testid="button-bottom-cta"
-          >
-            {checkingSubscription && status === "locked" ? (
-              <>
-                <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                Checking…
-              </>
-            ) : purchaseMutation.isPending && status === "locked" ? (
-              <>
-                <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                Redirecting…
-              </>
-            ) : (
-              <>
-                {primaryMarketingCta.label}
-                {!primaryMarketingCta.disabled && <ChevronRight className="ml-2 h-5 w-5" />}
-              </>
-            )}
-          </Button>
-          <p className="mx-auto mt-4 flex max-w-xl flex-wrap items-center justify-center gap-x-1 gap-y-1 text-xs text-gray-500">
-            <Lock className="h-3.5 w-3.5 shrink-0 text-gray-400" aria-hidden />
-            <span>One-time template license · Requires Pro + AI Brain · WhatsApp connects before activation</span>
-          </p>
+        <section className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#0a1f17] via-[#0f2920] to-[#143d2e] px-6 py-10 text-center md:px-10 md:py-12">
+          <div className="absolute left-1/2 top-0 h-48 w-96 -translate-x-1/2 rounded-full bg-emerald-500/20 blur-3xl" aria-hidden />
+          <div className="relative">
+            <h2 className="mb-2 text-2xl font-bold text-white md:text-3xl">Ready to run this in your workspace?</h2>
+            <p className="mx-auto mb-6 max-w-md text-sm text-emerald-100/80">
+              {isPaused && "Your plan must be active for this engine to run. Reactivate Pro and AI above, then continue."}
+              {!isPaused && status === "locked" && "Activate the Realtor Growth Engine to unlock checkout and guided concierge onboarding."}
+              {!isPaused && status === "purchased" && "Finish channel alignment and your launch profile so we can install and validate everything."}
+              {!isPaused && status === "submitted" && "Your concierge team is aligning on install and session scheduling — watch your inbox for next steps."}
+              {!isPaused && status === "installed" && "Your Growth Engine is installed — keep Pro and AI active for full automation."}
+            </p>
+            <Button
+              size="lg"
+              className={cn(
+                "mt-2 min-w-[200px] rounded-xl bg-emerald-500 px-8 py-5 text-base font-semibold text-white shadow-lg shadow-emerald-900/30 transition-all hover:bg-emerald-400 hover:shadow-emerald-500/20",
+                (primaryMarketingCta.disabled || purchaseMutation.isPending) && "pointer-events-none opacity-50",
+              )}
+              onClick={handlePrimaryCta}
+              disabled={purchaseMutation.isPending || primaryMarketingCta.disabled}
+              data-testid="button-bottom-cta"
+            >
+              {checkingSubscription && status === "locked" ? (
+                <>
+                  <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                  Checking…
+                </>
+              ) : purchaseMutation.isPending && status === "locked" ? (
+                <>
+                  <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                  Redirecting…
+                </>
+              ) : (
+                <>
+                  {primaryMarketingCta.label}
+                  {!primaryMarketingCta.disabled && <ChevronRight className="ml-1.5 h-5 w-5" />}
+                </>
+              )}
+            </Button>
+            <div className="mt-6 flex flex-wrap items-center justify-center gap-3 text-xs text-emerald-200/70">
+              <span className="flex items-center gap-1.5">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" aria-hidden />
+                One-time template license
+              </span>
+              <span className="hidden text-emerald-200/30 sm:inline" aria-hidden>
+                •
+              </span>
+              <span>Requires Pro + AI Brain</span>
+              <span className="hidden text-emerald-200/30 sm:inline" aria-hidden>
+                •
+              </span>
+              <span>WhatsApp connects before activation</span>
+            </div>
+          </div>
         </section>
+      </main>
       </div>
     );
   };
