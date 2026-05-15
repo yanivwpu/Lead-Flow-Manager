@@ -36,7 +36,7 @@ import { Link } from "wouter";
 import { 
   FileText, RefreshCw, Lock, Zap, Send, Clock, CheckCircle2, XCircle, Eye,
   AlertCircle, Image, LayoutGrid,
-  Users, Target, Sparkles, Rocket, Crown, Bot, MessageSquare, CalendarCheck, ArrowRight,
+  Users, Target, Sparkles, Rocket, ArrowRight,
   Search, MessageCircle, Facebook, Instagram,
   Pencil, Pause, Play, Copy, Trash2, MoreVertical, ChevronDown,
 } from "lucide-react";
@@ -70,6 +70,7 @@ import { getPresetCampaignStepCount } from "@shared/campaignPlaceholders";
 import { getSavedCampaignSourceLabel } from "@shared/localizedTemplates";
 import { apiRequest } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
+import { GROWTH_ENGINE_CARDS, type GrowthEngineCardModel } from "@/lib/growthEnginesCatalog";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
 import { useTranslation } from "react-i18next";
@@ -496,89 +497,123 @@ const STATUS_ICONS: Record<string, any> = {
   rejected: { icon: XCircle, color: "text-red-500" },
 };
 
-function GrowthEnginesTab() {
-  const [, setLocation] = useLocation();
-  const { t } = useTranslation();
-
-  const features = [
-    { icon: MessageSquare, text: t("templates.growthEngines.feature1") },
-    { icon: Bot, text: t("templates.growthEngines.feature2") },
-    { icon: Clock, text: t("templates.growthEngines.feature3") },
-    { icon: Target, text: t("templates.growthEngines.feature4") },
-    { icon: CalendarCheck, text: t("templates.growthEngines.feature5") },
-  ];
+function GrowthEngineGalleryCard({
+  engine,
+  setLocation,
+}: {
+  engine: GrowthEngineCardModel;
+  setLocation: (path: string, opts?: { replace?: boolean }) => void;
+}) {
+  const isComingSoon = engine.status === "coming_soon";
+  const showRealtorMark = engine.slug === "realtor-growth-engine";
 
   return (
-    <div className="space-y-3 md:space-y-4">
-      <div className="space-y-0.5">
-        <h2 className="text-base md:text-lg font-semibold text-gray-900">Growth Engines</h2>
-        <p className="text-sm text-gray-500">
-          Install full industry playbooks powered by templates, automations, and AI.
+    <Card
+      className={cn(
+        "flex flex-col overflow-hidden border border-gray-200/90 bg-white shadow-sm",
+        isComingSoon ? "opacity-[0.97]" : "transition-shadow hover:shadow-md hover:border-gray-300/90",
+      )}
+      data-testid={engine.slug === "realtor-growth-engine" ? "card-realtor-growth-engine" : `card-engine-${engine.slug}`}
+    >
+      <div className="relative aspect-[16/10] w-full overflow-hidden bg-gray-100">
+        {engine.image ? (
+          <img src={engine.image} alt="" className="h-full w-full object-cover object-top" loading="lazy" />
+        ) : (
+          <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-gradient-to-br from-slate-50 via-gray-50 to-slate-100 text-gray-400">
+            <LayoutGrid className="h-8 w-8 opacity-40" aria-hidden />
+            <span className="text-[11px] font-medium uppercase tracking-wide text-gray-500">Artwork soon</span>
+          </div>
+        )}
+        {isComingSoon && (
+          <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/35 via-transparent to-transparent" />
+        )}
+        {isComingSoon && (
+          <div className="absolute right-3 top-3">
+            <Badge className="border border-white/25 bg-black/55 text-[10px] font-medium text-white backdrop-blur-sm">
+              Coming soon
+            </Badge>
+          </div>
+        )}
+      </div>
+      <CardContent className="flex flex-1 flex-col gap-3 p-4">
+        <div className="space-y-1">
+          <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">{engine.industry}</p>
+          <h3
+            className="text-base font-semibold leading-snug text-gray-900"
+            data-testid={engine.slug === "realtor-growth-engine" ? "text-engine-title" : undefined}
+          >
+            {showRealtorMark ? (
+              <>
+                <RealtorMark /> Growth Engine
+              </>
+            ) : (
+              engine.title
+            )}
+          </h3>
+        </div>
+        <p className="text-sm leading-snug text-gray-600">{engine.summary}</p>
+        <div className="flex flex-wrap gap-1.5">
+          {engine.badges.map((b) => (
+            <Badge
+              key={b}
+              variant="outline"
+              className="border-violet-100/90 bg-violet-50/50 text-[10px] font-normal text-violet-900/75 shadow-none"
+            >
+              {b}
+            </Badge>
+          ))}
+        </div>
+        <ul className="space-y-1.5 text-sm text-gray-700">
+          {engine.benefits.slice(0, 3).map((b) => (
+            <li key={b} className="flex gap-2.5">
+              <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-emerald-500" />
+              <span className="leading-snug">{b}</span>
+            </li>
+          ))}
+        </ul>
+        <div className="mt-auto pt-1">
+          {isComingSoon ? (
+            <Button variant="outline" className="w-full cursor-not-allowed border-dashed text-gray-500" disabled aria-disabled>
+              <Lock className="mr-2 h-3.5 w-3.5 shrink-0 opacity-70" />
+              Coming soon
+            </Button>
+          ) : (
+            <Button
+              className="w-full bg-gray-900 text-white hover:bg-gray-800"
+              onClick={() => engine.detailHref && setLocation(engine.detailHref)}
+              data-testid={engine.slug === "realtor-growth-engine" ? "button-view-activate-engine" : undefined}
+            >
+              {engine.ctaLabel}
+              <ArrowRight className="ml-2 h-4 w-4 shrink-0" />
+            </Button>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function GrowthEnginesTab() {
+  const [, setLocation] = useLocation();
+
+  return (
+    <div className="space-y-6 md:space-y-8">
+      <div className="max-w-3xl space-y-3">
+        <h2 className="text-base font-semibold tracking-tight text-gray-900 md:text-lg">Growth Engines</h2>
+        <p className="text-sm leading-relaxed text-gray-600">
+          Growth Engines are industry-specific automation systems powered by templates, workflows, AI qualification, and CRM
+          follow-up logic.
+        </p>
+        <p className="text-xs leading-relaxed text-gray-500">
+          Premium engines require Pro + AI Brain because they use advanced automation and intelligence capacity.
         </p>
       </div>
 
-      <Card className="overflow-hidden border-purple-200/50 shadow-sm" data-testid="card-realtor-growth-engine">
-        <div className="flex flex-col lg:flex-row">
-          <div className="flex-1 p-5 lg:p-6 min-w-0">
-            <div className="flex items-start justify-between mb-3 gap-2">
-              <div className="min-w-0">
-                <div className="flex items-center gap-2 mb-1">
-                  <Badge className="bg-gradient-to-r from-violet-600 to-purple-600 text-white border-0 text-[10px] px-2 py-0">Premium</Badge>
-                </div>
-                <h3 className="text-lg font-bold text-gray-900" data-testid="text-engine-title"><RealtorMark /> Growth Engine</h3>
-              </div>
-              <div className="hidden sm:flex items-center justify-center w-10 h-10 rounded-lg bg-purple-50 shrink-0">
-                <Rocket className="h-5 w-5 text-purple-600" />
-              </div>
-            </div>
-
-            <p className="text-sm text-gray-600 mb-4 leading-relaxed">
-              Convert more WhatsApp inquiries into qualified buyers & booked showings — automatically.
-            </p>
-
-            <div className="space-y-2 mb-2">
-              {features.map((f, i) => (
-                <div key={i} className="flex items-center gap-2.5 text-sm text-gray-700">
-                  <div className="flex items-center justify-center w-5 h-5 rounded-full bg-purple-50 shrink-0">
-                    <f.icon className="h-3 w-3 text-purple-600" />
-                  </div>
-                  <span>{f.text}</span>
-                </div>
-              ))}
-            </div>
-            <p className="text-[11px] text-gray-400 mb-4">Includes onboarding + live setup call + system configuration</p>
-
-            <Button
-              className="bg-purple-600 hover:bg-purple-700 text-white w-full sm:w-auto"
-              onClick={() => setLocation("/app/templates/realtor-growth-engine")}
-              data-testid="button-view-activate-engine"
-            >
-              View & Activate
-              <ArrowRight className="ml-2 h-4 w-4" />
-            </Button>
-          </div>
-
-          <div className="lg:w-56 border-t lg:border-t-0 lg:border-l border-gray-100 bg-gray-50/50 p-5 lg:p-6 flex flex-col justify-center">
-            <div className="text-center lg:text-left">
-              <div className="flex items-baseline gap-1 justify-center lg:justify-start">
-                <span className="text-2xl font-bold text-gray-900">$199</span>
-              </div>
-              <p className="text-xs text-gray-500 mt-0.5">one-time template license</p>
-
-              <div className="mt-4 pt-3 border-t border-gray-200">
-                <div className="flex items-center gap-1.5 text-xs text-gray-600">
-                  <Crown className="h-3.5 w-3.5 text-amber-500 shrink-0" />
-                  <span>Requires Pro + AI plan</span>
-                </div>
-              </div>
-
-              <p className="text-[10px] text-gray-400 mt-3 leading-snug">
-                WhatsApp conversation fees billed separately by Meta
-              </p>
-            </div>
-          </div>
-        </div>
-      </Card>
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        {GROWTH_ENGINE_CARDS.map((engine) => (
+          <GrowthEngineGalleryCard key={engine.slug} engine={engine} setLocation={setLocation} />
+        ))}
+      </div>
     </div>
   );
 }
