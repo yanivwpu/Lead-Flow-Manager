@@ -36,7 +36,7 @@ import { Link } from "wouter";
 import { 
   FileText, RefreshCw, Lock, Zap, Send, Clock, CheckCircle2, XCircle, Eye,
   AlertCircle, Image, LayoutGrid,
-  Users, Target, Sparkles, Rocket, ArrowRight,
+  Users, Target, Sparkles, Rocket, ArrowRight, TrendingUp, Wrench,
   Search, MessageCircle, Facebook, Instagram,
   Pencil, Pause, Play, Copy, Trash2, MoreVertical, ChevronDown,
 } from "lucide-react";
@@ -497,6 +497,24 @@ const STATUS_ICONS: Record<string, any> = {
   rejected: { icon: XCircle, color: "text-red-500" },
 };
 
+const GROWTH_ENGINE_PLACEHOLDER: Record<
+  NonNullable<GrowthEngineCardModel["placeholderKey"]>,
+  { gradient: string; icon: typeof Sparkles }
+> = {
+  wellness: {
+    gradient: "from-rose-100/95 via-fuchsia-50/70 to-slate-100",
+    icon: Sparkles,
+  },
+  capital: {
+    gradient: "from-slate-200/90 via-indigo-50/90 to-sky-50/80",
+    icon: TrendingUp,
+  },
+  trades: {
+    gradient: "from-amber-50 via-orange-50/95 to-stone-100/90",
+    icon: Wrench,
+  },
+};
+
 function GrowthEngineGalleryCard({
   engine,
   setLocation,
@@ -506,40 +524,70 @@ function GrowthEngineGalleryCard({
 }) {
   const isComingSoon = engine.status === "coming_soon";
   const showRealtorMark = engine.slug === "realtor-growth-engine";
+  const phKey = engine.placeholderKey ?? "wellness";
+  const ph = GROWTH_ENGINE_PLACEHOLDER[phKey];
+  const PhIcon = ph.icon;
 
   return (
     <Card
       className={cn(
-        "flex flex-col overflow-hidden border border-gray-200/90 bg-white shadow-sm",
-        isComingSoon ? "opacity-[0.97]" : "transition-shadow hover:shadow-md hover:border-gray-300/90",
+        "flex h-full min-h-0 flex-col overflow-hidden rounded-xl border bg-white shadow-sm transition-[box-shadow,border-color,transform] duration-200",
+        isComingSoon
+          ? "border-gray-200/75 text-gray-800 hover:border-gray-200"
+          : "border-gray-200/90 hover:-translate-y-0.5 hover:border-gray-300/90 hover:shadow-lg",
       )}
       data-testid={engine.slug === "realtor-growth-engine" ? "card-realtor-growth-engine" : `card-engine-${engine.slug}`}
     >
-      <div className="relative aspect-[16/10] w-full overflow-hidden bg-gray-100">
+      <div className="relative h-40 w-full shrink-0 overflow-hidden bg-gray-100 sm:h-44">
         {engine.image ? (
-          <img src={engine.image} alt="" className="h-full w-full object-cover object-top" loading="lazy" />
+          <>
+            <img src={engine.image} alt="" className="h-full w-full object-cover object-[center_22%]" loading="lazy" />
+            {!isComingSoon && (
+              <div className="absolute left-3 top-3 z-10">
+                <Badge className="border border-emerald-400/30 bg-emerald-600/95 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white shadow-sm backdrop-blur-[2px]">
+                  Live
+                </Badge>
+              </div>
+            )}
+          </>
         ) : (
-          <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-gradient-to-br from-slate-50 via-gray-50 to-slate-100 text-gray-400">
-            <LayoutGrid className="h-8 w-8 opacity-40" aria-hidden />
-            <span className="text-[11px] font-medium uppercase tracking-wide text-gray-500">Artwork soon</span>
+          <div
+            className={cn(
+              "relative flex h-full w-full flex-col items-center justify-center overflow-hidden bg-gradient-to-br",
+              ph.gradient,
+            )}
+          >
+            <div
+              className="pointer-events-none absolute inset-0 opacity-50"
+              style={{
+                backgroundImage:
+                  "radial-gradient(ellipse 80% 60% at 20% 15%, rgba(255,255,255,0.75), transparent 55%), radial-gradient(ellipse 70% 50% at 85% 80%, rgba(255,255,255,0.45), transparent 50%)",
+              }}
+            />
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black/[0.06] to-transparent" />
+            <div className="relative z-[1] flex flex-col items-center gap-2.5 px-4 text-center">
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-white/70 bg-white/75 shadow-md ring-1 ring-black/[0.04] backdrop-blur-sm">
+                <PhIcon className="h-7 w-7 text-gray-700/85" strokeWidth={1.5} aria-hidden />
+              </div>
+              <p className="max-w-[12rem] text-[10px] font-semibold uppercase tracking-[0.12em] text-gray-600/90">
+                {engine.industry}
+              </p>
+            </div>
           </div>
         )}
         {isComingSoon && (
-          <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/35 via-transparent to-transparent" />
-        )}
-        {isComingSoon && (
-          <div className="absolute right-3 top-3">
-            <Badge className="border border-white/25 bg-black/55 text-[10px] font-medium text-white backdrop-blur-sm">
+          <div className="absolute right-2.5 top-2.5 z-10 sm:right-3 sm:top-3">
+            <Badge className="border border-white/30 bg-gray-900/80 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white shadow-sm backdrop-blur-sm">
               Coming soon
             </Badge>
           </div>
         )}
       </div>
-      <CardContent className="flex flex-1 flex-col gap-3 p-4">
-        <div className="space-y-1">
-          <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">{engine.industry}</p>
+      <CardContent className="flex flex-1 flex-col gap-3.5 p-5 pt-4">
+        <div className="space-y-1.5">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">{engine.industry}</p>
           <h3
-            className="text-base font-semibold leading-snug text-gray-900"
+            className="line-clamp-2 min-h-[2.5rem] text-base font-semibold leading-snug tracking-tight text-gray-900"
             data-testid={engine.slug === "realtor-growth-engine" ? "text-engine-title" : undefined}
           >
             {showRealtorMark ? (
@@ -551,19 +599,19 @@ function GrowthEngineGalleryCard({
             )}
           </h3>
         </div>
-        <p className="text-sm leading-snug text-gray-600">{engine.summary}</p>
-        <div className="flex flex-wrap gap-1.5">
+        <p className="line-clamp-2 min-h-[2.75rem] text-sm leading-snug text-gray-600">{engine.summary}</p>
+        <div className="flex min-h-[1.75rem] flex-wrap gap-1.5">
           {engine.badges.map((b) => (
             <Badge
               key={b}
               variant="outline"
-              className="border-violet-100/90 bg-violet-50/50 text-[10px] font-normal text-violet-900/75 shadow-none"
+              className="border-violet-200/80 bg-violet-50/60 text-[10px] font-medium text-violet-900/80 shadow-none"
             >
               {b}
             </Badge>
           ))}
         </div>
-        <ul className="space-y-1.5 text-sm text-gray-700">
+        <ul className="min-h-[4.75rem] flex-1 space-y-2 text-sm text-gray-700">
           {engine.benefits.slice(0, 3).map((b) => (
             <li key={b} className="flex gap-2.5">
               <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-emerald-500" />
@@ -571,15 +619,20 @@ function GrowthEngineGalleryCard({
             </li>
           ))}
         </ul>
-        <div className="mt-auto pt-1">
+        <div className="mt-auto border-t border-gray-100 pt-4">
           {isComingSoon ? (
-            <Button variant="outline" className="w-full cursor-not-allowed border-dashed text-gray-500" disabled aria-disabled>
-              <Lock className="mr-2 h-3.5 w-3.5 shrink-0 opacity-70" />
+            <Button
+              variant="outline"
+              className="w-full cursor-not-allowed border-gray-200 bg-gray-50/80 text-gray-500 hover:bg-gray-50/80"
+              disabled
+              aria-disabled
+            >
+              <Lock className="mr-2 h-3.5 w-3.5 shrink-0 opacity-60" />
               Coming soon
             </Button>
           ) : (
             <Button
-              className="w-full bg-gray-900 text-white hover:bg-gray-800"
+              className="w-full bg-gray-900 text-white shadow-sm hover:bg-gray-800"
               onClick={() => engine.detailHref && setLocation(engine.detailHref)}
               data-testid={engine.slug === "realtor-growth-engine" ? "button-view-activate-engine" : undefined}
             >
@@ -597,22 +650,24 @@ function GrowthEnginesTab() {
   const [, setLocation] = useLocation();
 
   return (
-    <div className="space-y-6 md:space-y-8">
-      <div className="max-w-3xl space-y-3">
-        <h2 className="text-base font-semibold tracking-tight text-gray-900 md:text-lg">Growth Engines</h2>
-        <p className="text-sm leading-relaxed text-gray-600">
+    <div className="space-y-8 md:space-y-10">
+      <div className="max-w-2xl space-y-2.5">
+        <h2 className="text-lg font-semibold tracking-tight text-gray-900 md:text-xl">Growth Engines</h2>
+        <p className="text-sm leading-relaxed text-gray-600 md:text-[15px]">
           Growth Engines are industry-specific automation systems powered by templates, workflows, AI qualification, and CRM
           follow-up logic.
         </p>
-        <p className="text-xs leading-relaxed text-gray-500">
+        <p className="text-xs leading-relaxed text-gray-500 md:text-sm">
           Premium engines require Pro + AI Brain because they use advanced automation and intelligence capacity.
         </p>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        {GROWTH_ENGINE_CARDS.map((engine) => (
-          <GrowthEngineGalleryCard key={engine.slug} engine={engine} setLocation={setLocation} />
-        ))}
+      <div className="rounded-2xl border border-gray-200/70 bg-gray-50/40 p-4 shadow-sm sm:p-5 md:p-6">
+        <div className="grid auto-rows-fr gap-5 sm:grid-cols-2 sm:gap-6 xl:grid-cols-3">
+          {GROWTH_ENGINE_CARDS.map((engine) => (
+            <GrowthEngineGalleryCard key={engine.slug} engine={engine} setLocation={setLocation} />
+          ))}
+        </div>
       </div>
     </div>
   );

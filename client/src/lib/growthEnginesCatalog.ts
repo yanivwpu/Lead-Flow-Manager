@@ -20,6 +20,10 @@ export interface GrowthEngineCardModel {
   detailHref?: string;
   /** Primary gallery CTA label */
   ctaLabel: string;
+  /**
+   * When `status === "coming_soon"` and no `image`, picks gradient + icon for the media area.
+   */
+  placeholderKey?: "wellness" | "capital" | "trades";
 }
 
 export const GROWTH_ENGINE_CARDS: GrowthEngineCardModel[] = [
@@ -48,6 +52,7 @@ export const GROWTH_ENGINE_CARDS: GrowthEngineCardModel[] = [
     benefits: ["Lead capture across channels", "Treatment-intent scoring", "Retention sequences"],
     status: "coming_soon",
     ctaLabel: "Coming soon",
+    placeholderKey: "wellness",
   },
   {
     slug: "investor-capital-engine",
@@ -58,6 +63,7 @@ export const GROWTH_ENGINE_CARDS: GrowthEngineCardModel[] = [
     benefits: ["Investor qualification", "Document / call scheduling", "Long-cycle nurture"],
     status: "coming_soon",
     ctaLabel: "Coming soon",
+    placeholderKey: "capital",
   },
   {
     slug: "home-services-engine",
@@ -68,5 +74,6 @@ export const GROWTH_ENGINE_CARDS: GrowthEngineCardModel[] = [
     benefits: ["Job triage and routing", "Estimate booking", "Review / upsell follow-ups"],
     status: "coming_soon",
     ctaLabel: "Coming soon",
+    placeholderKey: "trades",
   },
 ];
