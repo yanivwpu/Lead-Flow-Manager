@@ -37,7 +37,7 @@ import {
   FileText, RefreshCw, Lock, Zap, Send, Clock, CheckCircle2, XCircle, Eye,
   AlertCircle, Image, LayoutGrid,
   Users, Target, Sparkles, Rocket, ArrowRight, TrendingUp, Wrench,
-  Search, MessageCircle, Facebook, Instagram,
+  Search, MessageCircle, Facebook, Instagram, Building2,
   Pencil, Pause, Play, Copy, Trash2, MoreVertical, ChevronDown,
 } from "lucide-react";
 import {
@@ -70,9 +70,9 @@ import { getPresetCampaignStepCount } from "@shared/campaignPlaceholders";
 import { getSavedCampaignSourceLabel } from "@shared/localizedTemplates";
 import { apiRequest } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
-import { GROWTH_ENGINE_CARDS, type GrowthEngineCardModel } from "@/lib/growthEnginesCatalog";
+import { GROWTH_ENGINE_CARDS, sortGrowthEnginesCatalog, type GrowthEngineCardModel } from "@/lib/growthEnginesCatalog";
 import { useToast } from "@/hooks/use-toast";
-import { useLocation } from "wouter";
+import { useLocation, useSearch } from "wouter";
 import { useTranslation } from "react-i18next";
 import { formatDistanceToNow, format } from "date-fns";
 import { isResendCoolingDown } from "@shared/reEngagement";
@@ -513,6 +513,10 @@ const GROWTH_ENGINE_PLACEHOLDER: Record<
     gradient: "from-amber-50 via-orange-50/95 to-stone-100/90",
     icon: Wrench,
   },
+  property: {
+    gradient: "from-teal-100/95 via-emerald-50/85 to-slate-100/90",
+    icon: Building2,
+  },
 };
 
 function GrowthEngineGalleryCard({
@@ -600,6 +604,29 @@ function GrowthEngineGalleryCard({
           </h3>
         </div>
         <p className="line-clamp-2 min-h-[2.75rem] text-sm leading-snug text-gray-600">{engine.summary}</p>
+        {(() => {
+          const mode =
+            engine.galleryPricingMode ??
+            (engine.oneTimePrice ? "show" : engine.status === "coming_soon" ? "coming_soon" : "hidden");
+          if (mode === "hidden") return null;
+          if (mode === "coming_soon") {
+            return (
+              <div className="rounded-lg border border-gray-200/80 bg-gray-50/80 px-3 py-2 text-xs text-gray-600">
+                Pricing coming soon
+              </div>
+            );
+          }
+          return (
+            <div className="space-y-1 rounded-lg border border-emerald-100/90 bg-gradient-to-br from-emerald-50/70 to-violet-50/40 px-3 py-2.5 text-xs shadow-sm">
+              {engine.oneTimePrice ? (
+                <p className="font-semibold tabular-nums text-gray-900">{engine.oneTimePrice} one-time license</p>
+              ) : null}
+              {engine.subscriptionRequirementShort ? (
+                <p className="leading-snug text-gray-700">{engine.subscriptionRequirementShort}</p>
+              ) : null}
+            </div>
+          );
+        })()}
         <div className="flex min-h-[1.75rem] flex-wrap gap-1.5">
           {engine.badges.map((b) => (
             <Badge
@@ -632,7 +659,7 @@ function GrowthEngineGalleryCard({
             </Button>
           ) : (
             <Button
-              className="w-full bg-gray-900 text-white shadow-sm hover:bg-gray-800"
+              className="w-full bg-brand-green text-white shadow-md shadow-emerald-900/10 ring-1 ring-emerald-600/20 hover:bg-brand-green/90"
               onClick={() => engine.detailHref && setLocation(engine.detailHref)}
               data-testid={engine.slug === "realtor-growth-engine" ? "button-view-activate-engine" : undefined}
             >
@@ -664,7 +691,7 @@ function GrowthEnginesTab() {
 
       <div className="rounded-2xl border border-gray-200/70 bg-gray-50/40 p-4 shadow-sm sm:p-5 md:p-6">
         <div className="grid auto-rows-fr gap-5 sm:grid-cols-2 sm:gap-6 xl:grid-cols-3">
-          {GROWTH_ENGINE_CARDS.map((engine) => (
+          {sortGrowthEnginesCatalog(GROWTH_ENGINE_CARDS).map((engine) => (
             <GrowthEngineGalleryCard key={engine.slug} engine={engine} setLocation={setLocation} />
           ))}
         </div>
@@ -675,6 +702,21 @@ function GrowthEnginesTab() {
 
 export function Templates() {
   const [, setLocation] = useLocation();
+  const searchString = useSearch();
+  const templatesMainTabValue = useMemo(() => {
+    const p = new URLSearchParams(searchString).get("tab");
+    const allowed = ["presets", "templates", "re-engagement", "growth-engines"] as const;
+    return (allowed as readonly string[]).includes(p || "") ? (p as (typeof allowed)[number]) : "presets";
+  }, [searchString]);
+
+  const handleTemplatesMainTabChange = (next: string) => {
+    const sp = new URLSearchParams(searchString);
+    if (next === "presets") sp.delete("tab");
+    else sp.set("tab", next);
+    const q = sp.toString();
+    setLocation(q ? `/app/templates?${q}` : "/app/templates");
+  };
+
   const { user } = useAuth();
   const { data: subscription, isLoading: subLoading } = useSubscription();
   const queryClient = useQueryClient();
@@ -1379,7 +1421,7 @@ export function Templates() {
 
       <div className="flex-1 min-h-0 overflow-y-auto px-4 md:px-6 py-2 md:py-3 pb-24 md:pb-6 overscroll-y-contain">
         <div className="max-w-5xl mx-auto">
-          <Tabs defaultValue="presets" className="space-y-2 md:space-y-4">
+          <Tabs value={templatesMainTabValue} onValueChange={handleTemplatesMainTabChange} className="space-y-2 md:space-y-4">
           <TabsList className="grid w-full grid-cols-4 h-auto gap-0.5 p-0.5 sticky top-0 z-10 bg-muted/95 backdrop-blur-sm rounded-lg border border-gray-100/80 shadow-sm">
             <TabsTrigger value="presets" data-testid="tab-presets" className="text-[11px] sm:text-sm py-1.5 px-1 sm:px-2 md:px-3 flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1 rounded-md leading-tight">
               <Sparkles className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0 sm:mr-0" />
