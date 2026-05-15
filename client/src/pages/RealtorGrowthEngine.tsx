@@ -88,7 +88,10 @@ import {
   Rocket, 
   ClipboardCheck, 
   Zap, 
-  MessageSquare, 
+  MessageSquare,
+  Bot,
+  Sparkles,
+  Send,
   Users, 
   Clock, 
   Target,
@@ -714,7 +717,6 @@ export function RealtorGrowthEngine() {
   const { toast } = useToast();
   const [step, setStep] = useState(1);
   const totalSteps = 5;
-  const [purchaseIntroOpen, setPurchaseIntroOpen] = useState(false);
   const [subscriptionGate, setSubscriptionGate] = useState<{ show: boolean; hasPro: boolean; hasAI: boolean }>({ show: false, hasPro: true, hasAI: true });
   const [checkingSubscription, setCheckingSubscription] = useState(false);
   const [shopifyGateLoading, setShopifyGateLoading] = useState(false);
@@ -818,7 +820,6 @@ export function RealtorGrowthEngine() {
       } else {
         queryClient.invalidateQueries({ queryKey: ["/api/templates/realtor-growth-engine"] });
         toast({ title: "Template Unlocked", description: "Continue with your guided launch setup." });
-        setPurchaseIntroOpen(false);
       }
     }
   });
@@ -908,7 +909,10 @@ export function RealtorGrowthEngine() {
       return { label: "Resume when your plan is active", disabled: true as const };
     }
     if (status === "locked") {
-      return { label: "Activate", disabled: purchaseMutation.isPending };
+      return {
+        label: "Activate Engine",
+        disabled: purchaseMutation.isPending || checkingSubscription,
+      };
     }
     if (status === "purchased") {
       return { label: "Continue setup", disabled: purchaseMutation.isPending };
@@ -916,8 +920,8 @@ export function RealtorGrowthEngine() {
     if (status === "submitted") {
       return { label: "Launch in progress", disabled: true as const };
     }
-    return { label: "Activate", disabled: true as const };
-  }, [isPaused, status, purchaseMutation.isPending]);
+    return { label: "Activate Engine", disabled: true as const };
+  }, [isPaused, status, purchaseMutation.isPending, checkingSubscription]);
 
   React.useEffect(() => {
     if (subscriptionActive && sessionStorage.getItem("rge_reactivating")) {
@@ -961,33 +965,31 @@ export function RealtorGrowthEngine() {
 
   // --- Views ---
 
-  const handlePrimaryCta = () => {
-    if (status === "locked") {
-      setPurchaseIntroOpen(true);
-    } else if (isPaused) {
-      return;
-    } else if (status === "purchased") {
-      setLocation("/app/templates/realtor-growth-engine/onboarding");
-    }
-  };
-
   const handlePurchaseContinue = async () => {
     setCheckingSubscription(true);
     try {
       const res = await apiRequest("GET", "/api/templates/realtor-growth-engine/check-subscription");
       const data = await res.json();
       if (!data.hasPro || !data.hasAI) {
-        setPurchaseIntroOpen(false);
         setSubscriptionGate({ show: true, hasPro: data.hasPro, hasAI: data.hasAI });
         setCheckingSubscription(false);
         return;
       }
       setCheckingSubscription(false);
-      setPurchaseIntroOpen(false);
       purchaseMutation.mutate();
     } catch {
       setCheckingSubscription(false);
       toast({ title: "Error", description: "Could not verify your subscription. Please try again.", variant: "destructive" });
+    }
+  };
+
+  const handlePrimaryCta = () => {
+    if (status === "locked") {
+      void handlePurchaseContinue();
+    } else if (isPaused) {
+      return;
+    } else if (status === "purchased") {
+      setLocation("/app/templates/realtor-growth-engine/onboarding");
     }
   };
 
@@ -1026,283 +1028,357 @@ export function RealtorGrowthEngine() {
     </div>
   );
 
-  const scrollToRgeSection = (id: string) => {
-    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
-  };
+  const DetailPage = () => {
+    const includedItems: { Icon: typeof Sparkles; t: string; d: string }[] = [
+      { Icon: Sparkles, t: "AI lead qualification", d: "Inbound messages are interpreted, scored, and routed with guardrails." },
+      { Icon: Target, t: "Buyer / seller scoring", d: "Intent and readiness signals update automatically as the thread evolves." },
+      { Icon: Calendar, t: "Booking intent detection", d: "Tour and call language triggers the right next action and handoff." },
+      { Icon: Clock, t: "No-reply nurture sequence", d: "Timed follow-ups re-engage quiet leads without manual chasing." },
+      { Icon: Send, t: "WhatsApp template follow-up", d: "Structured sends when the channel requires templates outside the reply window." },
+      { Icon: LayoutGrid, t: "Pipeline stages + tags", d: "Stages, tags, and context stay aligned with automation outcomes." },
+      { Icon: ClipboardCheck, t: "Tasks + follow-up creation", d: "Hot handoffs and exceptions become actionable work for your team." },
+      { Icon: Handshake, t: "Concierge launch session", d: "White-glove validation session before you go live on real traffic." },
+    ];
 
-  const DetailPage = () => (
-    <div className="max-w-5xl mx-auto px-4 py-8 pb-14">
-      <section className="mb-10 overflow-hidden rounded-2xl border border-gray-200/90 bg-white shadow-sm">
-        <div className="relative aspect-[21/9] w-full min-h-[120px] overflow-hidden bg-gray-100 sm:min-h-[160px]">
-          <img
-            src="/og/og-realtor-growth-engine.png"
-            alt=""
-            className="h-full w-full object-cover object-[center_18%]"
-          />
+    const trunkNodes = [
+      { key: "inquiry", label: "New inquiry received", box: "border-gray-200/90 bg-white text-gray-900 shadow-sm" },
+      { key: "ai", label: "Instant AI response", box: "border-emerald-200/80 bg-emerald-50/90 text-emerald-950 shadow-sm" },
+      { key: "qual", label: "Qualification questions", box: "border-gray-200/90 bg-white text-gray-900 shadow-sm" },
+      { key: "score", label: "Hot lead scoring", box: "border-violet-200/80 bg-violet-50/80 text-violet-950 shadow-sm" },
+    ];
+
+    const whatItDoesLines = [
+      "Captures new real estate leads the moment they message you.",
+      "Replies instantly on WhatsApp with context-aware conversation.",
+      "Qualifies buyers and sellers using structured signals (financing, budget, timeline).",
+      "Detects booking intent and moves the thread toward a showing or call.",
+      "Schedules showings or calls when your calendar is connected.",
+      "Follows up automatically when leads go cold on a 24h / 72h / 7d cadence.",
+      "Updates CRM stage, score, tags, and next step so your pipeline stays honest.",
+    ];
+
+    return (
+      <div className="mx-auto w-full max-w-6xl px-4 py-6 pb-20 sm:px-6 lg:max-w-7xl">
+        <div className="mb-6 flex justify-end">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-9 text-gray-600 hover:text-gray-900"
+            onClick={() => setLocation("/app/templates")}
+          >
+            <ChevronLeft className="mr-1 h-4 w-4" />
+            Back to Growth Engines
+          </Button>
         </div>
-        <div className="flex flex-col gap-5 border-t border-gray-100 p-5 md:flex-row md:items-end md:justify-between md:gap-8 md:p-8">
-          <div className="min-w-0 space-y-2 text-center md:text-left">
-            <Badge variant="outline" className="text-[10px] font-normal text-gray-600">
-              Premium Growth Engine
-            </Badge>
-            <h1 className="text-2xl font-bold tracking-tight text-gray-900 sm:text-3xl md:text-4xl">
-              <RealtorMark /> Growth Engine
-            </h1>
-            <p className="text-base text-gray-600 md:text-lg">AI-powered WhatsApp automation for real estate</p>
-          </div>
-          <div className="flex w-full flex-col gap-2 sm:flex-row sm:justify-center md:w-auto md:flex-shrink-0 md:justify-end">
-            <Button
-              className={cn(
-                "bg-brand-green text-white hover:bg-brand-green/90",
-                (primaryMarketingCta.disabled || purchaseMutation.isPending) && "opacity-50 cursor-not-allowed",
-              )}
-              onClick={handlePrimaryCta}
-              disabled={purchaseMutation.isPending || primaryMarketingCta.disabled}
-              data-testid="button-hero-cta"
-            >
-              {primaryMarketingCta.label}
-              {!primaryMarketingCta.disabled && <ChevronRight className="ml-2 h-4 w-4" />}
-            </Button>
-            <Button variant="outline" onClick={() => scrollToRgeSection("rge-whats-included")} data-testid="button-see-how">
-              What&apos;s included
-            </Button>
-          </div>
-        </div>
-      </section>
 
-      <div className="mb-10">{renderStepper()}</div>
-
-      {isPaused && (
-        <Card className="border-amber-300 bg-amber-50 mb-8" data-testid="banner-subscription-paused">
-          <CardContent className="flex items-start gap-3 py-4 px-5">
-            <PauseCircle className="w-5 h-5 text-amber-600 mt-0.5 shrink-0" />
-            <div className="flex-1">
-              <p className="font-semibold text-amber-900 text-sm">Growth Engine Paused</p>
-              <p className="text-xs text-amber-800 mt-0.5">
-                Your <RealtorMark /> Growth Engine requires an active Pro + AI plan to run automations and handle conversations.
-                Reactivate your plan to resume your system instantly.
+        <section className="relative mb-12 overflow-hidden rounded-2xl border border-gray-900/10 shadow-lg ring-1 ring-black/5">
+          <div className="relative min-h-[240px] sm:min-h-[300px] md:min-h-[340px]">
+            <img
+              src="/og/og-realtor-growth-engine.png"
+              alt=""
+              className="absolute inset-0 h-full w-full object-cover object-[center_22%]"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/45 to-black/30" />
+            <div className="absolute right-4 top-4 z-10 sm:right-6 sm:top-6">
+              <Badge className="border border-white/25 bg-black/45 px-3 py-1 text-[10px] font-medium uppercase tracking-wide text-white backdrop-blur-md">
+                Premium Growth Engine
+              </Badge>
+            </div>
+            <div className="relative z-[1] flex min-h-[240px] flex-col items-center justify-center px-6 py-14 text-center sm:min-h-[300px] md:min-h-[340px] md:px-12">
+              <h1 className="max-w-4xl text-3xl font-bold tracking-tight text-white sm:text-4xl md:text-5xl">
+                <RealtorMark /> Growth Engine
+              </h1>
+              <p className="mt-3 max-w-2xl text-base font-medium text-white/95 sm:text-lg md:text-xl">
+                AI-powered WhatsApp automation for real estate
               </p>
-              <p className="text-[11px] text-amber-700 mt-1">Your purchase and configuration are saved — nothing is lost.</p>
-              <div className="flex gap-2 mt-2.5">
-                {!templateData?.subscription?.hasPro && (
-                  <Button size="sm" variant="outline" className="text-xs border-amber-400 text-amber-900 hover:bg-amber-100" onClick={() => { sessionStorage.setItem("rge_reactivating", "1"); setLocation("/app/settings"); }} data-testid="button-reactivate-pro">
-                    Reactivate Pro
-                  </Button>
-                )}
-                {!templateData?.subscription?.hasAI && (
-                  <Button size="sm" variant="outline" className="text-xs border-amber-400 text-amber-900 hover:bg-amber-100" onClick={() => { sessionStorage.setItem("rge_reactivating", "1"); setLocation("/app/ai-brain"); }} data-testid="button-reactivate-ai">
-                    Enable AI
-                  </Button>
-                )}
+              <p className="mt-3 max-w-2xl text-sm leading-relaxed text-white/80 sm:text-base">
+                Convert inquiries into qualified buyers and booked showings — automatically.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <div className="mb-12 flex justify-center">{renderStepper()}</div>
+
+        {isPaused && (
+          <Card className="mb-10 border-amber-300 bg-amber-50" data-testid="banner-subscription-paused">
+            <CardContent className="flex items-start gap-3 px-5 py-4 sm:px-6">
+              <PauseCircle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-amber-900">Growth Engine Paused</p>
+                <p className="mt-0.5 text-xs text-amber-800">
+                  Your <RealtorMark /> Growth Engine requires an active Pro + AI plan to run automations and handle conversations.
+                  Reactivate your plan to resume your system instantly.
+                </p>
+                <p className="mt-1 text-[11px] text-amber-700">Your purchase and configuration are saved — nothing is lost.</p>
+                <div className="mt-2.5 flex flex-wrap gap-2">
+                  {!templateData?.subscription?.hasPro && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="text-xs border-amber-400 text-amber-900 hover:bg-amber-100"
+                      onClick={() => {
+                        sessionStorage.setItem("rge_reactivating", "1");
+                        setLocation("/app/settings");
+                      }}
+                      data-testid="button-reactivate-pro"
+                    >
+                      Reactivate Pro
+                    </Button>
+                  )}
+                  {!templateData?.subscription?.hasAI && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="text-xs border-amber-400 text-amber-900 hover:bg-amber-100"
+                      onClick={() => {
+                        sessionStorage.setItem("rge_reactivating", "1");
+                        setLocation("/app/ai-brain");
+                      }}
+                      data-testid="button-reactivate-ai"
+                    >
+                      Enable AI
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        <Card className="mb-10 border-gray-200/80 shadow-sm">
+          <CardContent className="grid gap-10 p-6 sm:p-8 lg:grid-cols-2 lg:gap-12 lg:p-10">
+            <div className="min-w-0 space-y-5">
+              <div>
+                <h2 className="text-xl font-semibold tracking-tight text-gray-900 sm:text-2xl">What it does</h2>
+                <p className="mt-2 text-sm leading-relaxed text-gray-600 sm:text-base">
+                  A coordinated automation layer that runs alongside your inbox and CRM — built for real estate speed-to-lead.
+                </p>
+              </div>
+              <ul className="space-y-3 text-sm leading-relaxed text-gray-800 sm:text-[15px]">
+                {whatItDoesLines.map((line) => (
+                  <li key={line} className="flex gap-3">
+                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-brand-green" aria-hidden />
+                    <span>{line}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div className="min-w-0">
+              <div className="rounded-2xl border border-gray-200/90 bg-gradient-to-b from-gray-50 to-white p-4 shadow-inner sm:p-5">
+                <div className="flex items-center gap-2 border-b border-gray-200/80 pb-3">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-500/15 ring-1 ring-emerald-500/25">
+                    <MessageSquare className="h-4 w-4 text-emerald-700" />
+                  </div>
+                  <div className="text-left">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Preview</p>
+                    <p className="text-sm font-medium text-gray-900">New lead · WhatsApp</p>
+                  </div>
+                </div>
+                <div className="mt-4 space-y-3">
+                  <div className="rounded-xl rounded-tl-sm border border-gray-200 bg-white px-3 py-2.5 text-left text-xs leading-relaxed text-gray-800 shadow-sm">
+                    Hi — we&apos;re looking for a 3bd under $800k near the lake. Is this still available?
+                  </div>
+                  <div className="ml-4 flex gap-2 rounded-xl rounded-tr-sm border border-emerald-600/25 bg-emerald-600 px-3 py-2.5 text-left text-xs leading-relaxed text-white shadow-sm">
+                    <Bot className="mt-0.5 h-3.5 w-3.5 shrink-0 opacity-90" aria-hidden />
+                    <span>
+                      Thanks for reaching out. Are you pre-approved or still exploring financing? That helps me route you to the right listings.
+                    </span>
+                  </div>
+                  <div className="rounded-xl rounded-tl-sm border border-gray-200 bg-white px-3 py-2.5 text-left text-xs leading-relaxed text-gray-800 shadow-sm">
+                    Pre-approved with our lender — can we tour this weekend?
+                  </div>
+                  <div className="ml-4 flex gap-2 rounded-xl rounded-tr-sm border border-emerald-600/25 bg-emerald-600 px-3 py-2.5 text-left text-xs leading-relaxed text-white shadow-sm">
+                    <Bot className="mt-0.5 h-3.5 w-3.5 shrink-0 opacity-90" aria-hidden />
+                    <span>Perfect. I flagged you as a hot buyer and sent a booking link — pick a time that works.</span>
+                  </div>
+                  <p className="pt-1 text-center text-[11px] text-gray-500">Illustrative conversation — your copy and rules are configured at install.</p>
+                </div>
               </div>
             </div>
           </CardContent>
         </Card>
-      )}
 
-      <Card className="mb-8 border-gray-200/80 shadow-sm">
-        <CardHeader className="px-5 pt-5 pb-2">
-          <CardTitle className="text-lg font-semibold text-gray-900 md:text-xl">What it does</CardTitle>
-          <CardDescription className="text-sm leading-relaxed">
-            A coordinated automation layer that runs alongside your inbox and CRM — built for real estate speed-to-lead.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3 px-5 pb-5 text-sm text-gray-700 leading-relaxed">
-          <ul className="list-disc space-y-2 pl-5">
-            <li>Captures new real estate leads the moment they message you.</li>
-            <li>Replies instantly on WhatsApp with context-aware conversation.</li>
-            <li>Qualifies buyers and sellers using structured signals (financing, budget, timeline).</li>
-            <li>Detects booking intent and moves the thread toward a showing or call.</li>
-            <li>Schedules showings or calls when your calendar is connected.</li>
-            <li>Follows up automatically when leads go cold on a 24h / 72h / 7d cadence.</li>
-            <li>Updates CRM stage, score, tags, and next step so your pipeline stays honest.</li>
-          </ul>
-        </CardContent>
-      </Card>
-
-      <section id="rge-whats-included" className="mb-8 scroll-mt-24">
-        <div className="mb-4">
-          <h2 className="text-lg font-semibold text-gray-900 md:text-xl">What&apos;s included</h2>
-          <p className="text-sm text-gray-600 mt-1">Everything installed as a system — not a loose pile of message templates.</p>
-        </div>
-        <div className="grid gap-3 sm:grid-cols-2">
-          {[
-            { t: "AI lead qualification", d: "Inbound messages are interpreted, scored, and routed with guardrails." },
-            { t: "Buyer / seller scoring", d: "Intent and readiness signals update automatically as the thread evolves." },
-            { t: "Booking intent detection", d: "Tour and call language triggers the right next action and handoff." },
-            { t: "No-reply nurture sequence", d: "Timed follow-ups re-engage quiet leads without manual chasing." },
-            { t: "WhatsApp template follow-up", d: "Structured sends when the channel requires templates outside the reply window." },
-            { t: "Pipeline stages + tags", d: "Stages, tags, and context stay aligned with automation outcomes." },
-            { t: "Tasks + follow-up creation", d: "Hot handoffs and exceptions become actionable work for your team." },
-            { t: "Concierge launch session", d: "White-glove validation session before you go live on real traffic." },
-          ].map((x) => (
-            <Card key={x.t} className="border-gray-200/80 bg-gray-50/30 shadow-none">
-              <CardHeader className="p-4 pb-2">
-                <CardTitle className="text-sm font-semibold text-gray-900">{x.t}</CardTitle>
-              </CardHeader>
-              <CardContent className="p-4 pt-0 text-xs text-gray-600 leading-relaxed">{x.d}</CardContent>
-            </Card>
-          ))}
-        </div>
-      </section>
-
-      <Card className="mb-8 border-gray-200/80 shadow-sm" id="rge-architecture">
-        <CardHeader className="px-5 pt-5 pb-2">
-          <CardTitle className="text-lg font-semibold text-gray-900 md:text-xl">Automation architecture</CardTitle>
-          <CardDescription className="text-sm">Static map of how messages, timers, and CRM updates connect in this engine.</CardDescription>
-        </CardHeader>
-        <CardContent className="px-5 pb-5">
-          <div className="rounded-xl border border-gray-200 bg-white p-4 md:p-6">
-            <div className="flex flex-col items-center gap-2">
-              <div className="w-full max-w-md rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-center text-sm font-medium text-gray-900">
-                New inquiry received
-              </div>
-              <ChevronDown className="h-4 w-4 text-gray-300" aria-hidden />
-              <div className="w-full max-w-md rounded-lg border border-emerald-200/80 bg-emerald-50/40 px-4 py-3 text-center text-sm font-medium text-emerald-950">
-                Instant AI response
-              </div>
-              <ChevronDown className="h-4 w-4 text-gray-300" aria-hidden />
-              <div className="w-full max-w-md rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-center text-sm font-medium text-gray-900">
-                Qualification questions
-              </div>
-              <ChevronDown className="h-4 w-4 text-gray-300" aria-hidden />
-              <div className="w-full max-w-md rounded-lg border border-violet-200/80 bg-violet-50/50 px-4 py-3 text-center text-sm font-medium text-violet-950">
-                Hot lead scoring
-              </div>
-            </div>
-
-            <div className="mt-6 grid gap-4 md:grid-cols-3">
-              <div className="rounded-lg border border-gray-200 bg-white p-4">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Branch</p>
-                <p className="mt-1 text-sm font-medium text-gray-900">Booking / showing intent</p>
-                <p className="mt-2 text-xs text-gray-600 leading-relaxed">Calendar or handoff path when the lead signals tours, calls, or availability checks.</p>
-              </div>
-              <div className="rounded-lg border border-gray-200 bg-white p-4">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Branch</p>
-                <p className="mt-1 text-sm font-medium text-gray-900">No-reply follow-up</p>
-                <p className="mt-2 text-xs text-gray-600 leading-relaxed">24h → 72h → 7d nurture ladder until the lead re-engages or is marked cold.</p>
-              </div>
-              <div className="rounded-lg border border-gray-200 bg-white p-4">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Branch</p>
-                <p className="mt-1 text-sm font-medium text-gray-900">Human handoff</p>
-                <p className="mt-2 text-xs text-gray-600 leading-relaxed">High-intent or sensitive threads surface as tasks with full transcript context.</p>
-              </div>
-            </div>
-
-            <div className="mt-4 flex justify-center">
-              <ChevronDown className="h-4 w-4 text-gray-300" aria-hidden />
-            </div>
-            <div className="mx-auto w-full max-w-md rounded-lg border border-gray-900/10 bg-gray-900 px-4 py-3 text-center text-sm font-medium text-white">
-              CRM update: stage · tag · score · next action
-            </div>
+        <section id="rge-whats-included" className="mb-10 scroll-mt-24">
+          <div className="mb-5">
+            <h2 className="text-xl font-semibold tracking-tight text-gray-900 sm:text-2xl">What&apos;s included</h2>
+            <p className="mt-2 max-w-3xl text-sm leading-relaxed text-gray-600 sm:text-base">
+              Everything installed as a system — not a loose pile of message templates.
+            </p>
           </div>
-        </CardContent>
-      </Card>
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {includedItems.map(({ Icon, t, d }) => (
+              <Card key={t} className="border-gray-200/80 bg-white shadow-sm transition-shadow hover:shadow-md">
+                <CardHeader className="flex flex-row items-start gap-3 space-y-0 p-5 pb-2">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-violet-50 ring-1 ring-violet-100">
+                    <Icon className="h-4 w-4 text-violet-700" aria-hidden />
+                  </div>
+                  <div className="min-w-0">
+                    <CardTitle className="text-sm font-semibold leading-snug text-gray-900">{t}</CardTitle>
+                  </div>
+                </CardHeader>
+                <CardContent className="px-5 pb-5 pt-0 text-xs leading-relaxed text-gray-600 sm:text-sm">{d}</CardContent>
+              </Card>
+            ))}
+          </div>
+        </section>
 
-      <section className="mb-8">
-        <div className="mb-4">
-          <h2 className="text-lg font-semibold text-gray-900 md:text-xl">Inside your workspace</h2>
-          <p className="text-sm text-gray-600 mt-1">Representative surfaces this engine uses — shown as layout previews.</p>
-        </div>
-        <div className="grid gap-3 sm:grid-cols-2">
-          {[
-            { title: "Inbox + Copilot", bars: 4 },
-            { title: "Flow automation", bars: 5 },
-            { title: "Pipeline / tasks", bars: 3 },
-            { title: "Template follow-up", bars: 4 },
-          ].map((p) => (
-            <Card key={p.title} className="overflow-hidden border-gray-200/80 shadow-sm">
-              <CardHeader className="border-b border-gray-100 bg-gray-50/80 px-4 py-3">
-                <CardTitle className="text-xs font-semibold uppercase tracking-wide text-gray-600">{p.title}</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2 p-4">
-                <div className="h-2 w-2/3 rounded bg-gray-200" />
-                {Array.from({ length: p.bars }).map((_, i) => (
-                  <div
-                    key={i}
-                    className={cn(
-                      "h-2 rounded bg-gray-100",
-                      i % 3 === 0 && "w-[88%]",
-                      i % 3 === 1 && "w-[96%]",
-                      i % 3 === 2 && "w-[76%]",
+        <Card className="mb-10 border-gray-200/80 shadow-sm" id="rge-architecture">
+          <CardHeader className="px-6 pt-6 pb-2 sm:px-8">
+            <CardTitle className="text-xl font-semibold text-gray-900 sm:text-2xl">Automation architecture</CardTitle>
+            <CardDescription className="text-sm sm:text-base">
+              How inbound messages, timers, and CRM updates connect — a real system, not a single static template.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="px-4 pb-6 sm:px-8 sm:pb-8">
+            <div className="rounded-2xl border border-gray-200/90 bg-gradient-to-br from-gray-50/90 via-white to-gray-50/50 p-5 sm:p-8">
+              <div className="flex flex-col items-stretch gap-2 md:flex-row md:flex-wrap md:items-center md:justify-center md:gap-0">
+                {trunkNodes.map((node, i) => (
+                  <React.Fragment key={node.key}>
+                    {i > 0 && (
+                      <ChevronRight className="mx-1 hidden h-5 w-5 shrink-0 self-center text-gray-300 md:block" aria-hidden />
                     )}
-                  />
+                    {i > 0 && <ChevronDown className="my-1 h-4 w-4 shrink-0 self-center text-gray-300 md:hidden" aria-hidden />}
+                    <div
+                      className={cn(
+                        "min-h-[3.25rem] flex-1 rounded-xl border px-3 py-3 text-center text-xs font-semibold leading-snug sm:min-w-0 sm:flex-none sm:px-4 sm:text-sm md:max-w-[200px]",
+                        node.box,
+                      )}
+                    >
+                      {node.label}
+                    </div>
+                  </React.Fragment>
                 ))}
-                <div className="mt-3 grid grid-cols-3 gap-2">
-                  <div className="h-10 rounded-md border border-gray-100 bg-white" />
-                  <div className="h-10 rounded-md border border-gray-100 bg-white" />
-                  <div className="h-10 rounded-md border border-gray-100 bg-white" />
+              </div>
+
+              <div className="mt-8 grid gap-4 lg:grid-cols-3">
+                <div className="rounded-xl border border-gray-200/90 bg-white p-5 shadow-sm">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Branch</p>
+                  <p className="mt-1 text-sm font-semibold text-gray-900">Booking / showing intent</p>
+                  <p className="mt-2 text-xs leading-relaxed text-gray-600">
+                    Calendar or handoff path when the lead signals tours, calls, or availability checks.
+                  </p>
                 </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      </section>
+                <div className="rounded-xl border border-gray-200/90 bg-white p-5 shadow-sm">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Branch</p>
+                  <p className="mt-1 text-sm font-semibold text-gray-900">No-reply follow-up</p>
+                  <p className="mt-2 text-xs leading-relaxed text-gray-600">
+                    24h → 72h → 7d nurture ladder until the lead re-engages or is marked cold.
+                  </p>
+                </div>
+                <div className="rounded-xl border border-gray-200/90 bg-white p-5 shadow-sm">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Branch</p>
+                  <p className="mt-1 text-sm font-semibold text-gray-900">Human handoff</p>
+                  <p className="mt-2 text-xs leading-relaxed text-gray-600">
+                    High-intent or sensitive threads surface as tasks with full transcript context.
+                  </p>
+                </div>
+              </div>
 
-      <Card className="mb-8 border-gray-200/80 shadow-sm" id="rge-requirements">
-        <CardHeader className="px-5 pt-5 pb-2">
-          <CardTitle className="text-lg font-semibold text-gray-900 md:text-xl">Requirements</CardTitle>
-          <CardDescription className="text-sm">What must be true before this engine can run end-to-end in your account.</CardDescription>
-        </CardHeader>
-        <CardContent className="px-5 pb-5">
-          <ul className="list-disc space-y-2 pl-5 text-sm text-gray-700">
-            <li>Requires Pro plan</li>
-            <li>Requires AI Brain</li>
-            <li>WhatsApp Business connected for live automations</li>
-            <li>Approved templates may be needed for re-engagement outside the customer service window</li>
-            <li>Concierge onboarding included with purchase</li>
-          </ul>
-          <p className="mt-4 text-xs text-gray-500 leading-relaxed">
-            WhatsApp messaging fees are billed by Meta. Premium add-ons follow your billing provider&apos;s checkout rules (including Shopify confirmation flows where applicable).
-          </p>
-        </CardContent>
-      </Card>
+              <div className="mt-6 flex flex-col items-center gap-2">
+                <ChevronDown className="h-4 w-4 text-gray-300" aria-hidden />
+                <div className="w-full max-w-xl rounded-xl border border-gray-900/15 bg-gray-900 px-4 py-3.5 text-center text-sm font-semibold text-white shadow-md">
+                  CRM update: stage · tag · score · next action
+                </div>
+              </div>
 
-      <Card className="mb-10 border-emerald-100/80 bg-emerald-50/25 shadow-sm">
-        <CardHeader className="px-5 pt-5 pb-2">
-          <CardTitle className="text-lg font-semibold text-gray-900 md:text-xl">Premium onboarding &amp; concierge</CardTitle>
-          <CardDescription className="text-sm">We stay with you until the system is live — not a generic help article.</CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-3 px-5 pb-5 sm:grid-cols-2">
-          {[
-            "White-glove setup with a launch specialist",
-            "Channel validation (WhatsApp, Meta surfaces, web chat where used)",
-            "Workflow review against your market and offer",
-            "Launch optimization session to tune qualification and booking paths",
-            "Go-live checklist so automations match how you actually work",
-          ].map((line) => (
-            <div key={line} className="flex gap-3 text-sm text-gray-800">
-              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
-              <span className="leading-snug">{line}</span>
+              <div className="mt-5 flex items-start justify-center gap-2 text-center text-xs text-gray-600 sm:text-sm">
+                <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-brand-green" aria-hidden />
+                <span>Every path keeps your pipeline accurate — stages and scores update as the conversation evolves.</span>
+              </div>
             </div>
-          ))}
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
 
-      <Card className="border border-gray-200/90 bg-gray-50/40 shadow-sm">
-        <CardContent className="px-5 py-8 text-center">
-          <h3 className="text-xl font-semibold text-gray-900 md:text-2xl">Ready to run this in your workspace?</h3>
-          <p className="mx-auto mt-2 max-w-xl text-sm text-gray-600">
+        <div className="mb-12 grid gap-6 lg:grid-cols-2">
+          <Card className="border-gray-200/80 shadow-sm" id="rge-requirements">
+            <CardHeader className="px-6 pt-6 pb-2">
+              <CardTitle className="text-lg font-semibold text-gray-900 sm:text-xl">Requirements</CardTitle>
+              <CardDescription className="text-sm">Before this engine can run end-to-end in your account.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3 px-6 pb-6">
+              {[
+                "Requires Pro plan",
+                "Requires AI Brain",
+                "WhatsApp Business connected for live automations",
+                "Approved templates may be needed for re-engagement outside the customer service window",
+                "Concierge onboarding included with purchase",
+              ].map((line) => (
+                <div key={line} className="flex gap-3 text-sm text-gray-800">
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-brand-green" />
+                  <span className="leading-snug">{line}</span>
+                </div>
+              ))}
+              <p className="border-t border-gray-100 pt-4 text-xs leading-relaxed text-gray-500">
+                WhatsApp messaging fees are billed by Meta. Premium add-ons follow your billing provider&apos;s checkout rules (including Shopify confirmation flows where applicable).
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="border-emerald-100/90 bg-emerald-50/30 shadow-sm">
+            <CardHeader className="px-6 pt-6 pb-2">
+              <CardTitle className="text-lg font-semibold text-gray-900 sm:text-xl">Premium onboarding &amp; concierge</CardTitle>
+              <CardDescription className="text-sm">We stay with you until the system is live — not a generic help article.</CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-3 px-6 pb-6">
+              {[
+                "White-glove setup with a launch specialist",
+                "Channel validation (WhatsApp, Meta surfaces, web chat where used)",
+                "Workflow review against your market and offer",
+                "Launch optimization session to tune qualification and booking paths",
+                "Go-live checklist so automations match how you actually work",
+              ].map((line) => (
+                <div key={line} className="flex gap-3 text-sm text-gray-800">
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
+                  <span className="leading-snug">{line}</span>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        </div>
+
+        <section className="rounded-2xl border border-emerald-200/60 bg-emerald-50/50 px-6 py-10 text-center shadow-sm sm:px-10 sm:py-12">
+          <h3 className="text-2xl font-semibold tracking-tight text-gray-900 sm:text-3xl">Ready to run this in your workspace?</h3>
+          <p className="mx-auto mt-3 max-w-2xl text-sm leading-relaxed text-gray-600 sm:text-base">
             {status === "locked" && "Activate the Realtor Growth Engine to unlock checkout and guided concierge onboarding."}
             {status === "purchased" && "Finish channel alignment and your launch profile so we can install and validate everything."}
             {status === "submitted" && "Your concierge team is aligning on install and session scheduling — watch your inbox for next steps."}
           </p>
           <Button
+            size="lg"
             className={cn(
-              "mt-6 bg-brand-green text-white hover:bg-brand-green/90",
-              (primaryMarketingCta.disabled || purchaseMutation.isPending) && "opacity-50 cursor-not-allowed",
+              "mt-8 min-w-[200px] bg-brand-green px-8 text-base font-semibold text-white shadow-sm hover:bg-brand-green/90",
+              (primaryMarketingCta.disabled || purchaseMutation.isPending) && "pointer-events-none opacity-50",
             )}
             onClick={handlePrimaryCta}
             disabled={purchaseMutation.isPending || primaryMarketingCta.disabled}
             data-testid="button-bottom-cta"
           >
-            {primaryMarketingCta.label}
-            {!primaryMarketingCta.disabled && <ChevronRight className="ml-2 w-5 h-5" />}
+            {checkingSubscription && status === "locked" ? (
+              <>
+                <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                Checking…
+              </>
+            ) : purchaseMutation.isPending && status === "locked" ? (
+              <>
+                <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                Redirecting…
+              </>
+            ) : (
+              <>
+                {primaryMarketingCta.label}
+                {!primaryMarketingCta.disabled && <ChevronRight className="ml-2 h-5 w-5" />}
+              </>
+            )}
           </Button>
-        </CardContent>
-      </Card>
-    </div>
-  );
+          <p className="mx-auto mt-4 flex max-w-xl flex-wrap items-center justify-center gap-x-1 gap-y-1 text-xs text-gray-500">
+            <Lock className="h-3.5 w-3.5 shrink-0 text-gray-400" aria-hidden />
+            <span>One-time template license · Requires Pro + AI Brain · WhatsApp connects before activation</span>
+          </p>
+        </section>
+      </div>
+    );
+  };
   const SubscriptionGateDialog = () => (
     <Dialog open={subscriptionGate.show} onOpenChange={(open) => { if (!open) setSubscriptionGate({ ...subscriptionGate, show: false }); }}>
       <DialogContent className="max-w-sm" data-testid="dialog-subscription-gate">
@@ -1399,44 +1475,6 @@ export function RealtorGrowthEngine() {
                 : !subscriptionGate.hasPro
                   ? "Upgrade to Pro + AI"
                   : "Enable AI Add-on"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-
-  const PurchaseIntroDialog = () => (
-    <Dialog
-      open={purchaseIntroOpen}
-      onOpenChange={(open) => {
-        if (!open) setPurchaseIntroOpen(false);
-      }}
-      data-testid="dialog-purchase-intro"
-    >
-      <DialogContent data-testid="dialog-purchase-intro-content">
-        <DialogHeader>
-          <DialogTitle>Realtor Growth Engine</DialogTitle>
-          <DialogDescription className="text-base leading-relaxed">
-            Add the premium real estate automation pack to your workspace. You will complete a short guided launch after checkout
-            (channels, profile, concierge session).
-          </DialogDescription>
-        </DialogHeader>
-        <ul className="text-sm text-gray-600 space-y-2 py-2">
-          <li>Requires WhachatCRM Pro and AI Brain (unchanged billing rules)</li>
-          <li>One-time template license at checkout</li>
-          <li>WhatsApp connects via embedded signup before activation</li>
-        </ul>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => setPurchaseIntroOpen(false)} data-testid="button-purchase-intro-cancel">
-            Cancel
-          </Button>
-          <Button
-            className="bg-brand-green hover:bg-brand-green/90"
-            onClick={handlePurchaseContinue}
-            disabled={purchaseMutation.isPending || checkingSubscription}
-            data-testid="button-purchase-intro-continue"
-          >
-            {checkingSubscription ? "Checking..." : purchaseMutation.isPending ? "Processing..." : "Continue"}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -2269,7 +2307,6 @@ export function RealtorGrowthEngine() {
         ) : (
           <DetailPage />
         )}
-        <PurchaseIntroDialog />
         <SubscriptionGateDialog />
       </>
     </RealtorEngineErrorBoundary>
