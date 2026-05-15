@@ -61,7 +61,7 @@ import { useQuery, useMutation, type UseMutationResult } from "@tanstack/react-q
 import { settingsChannelsHref } from "@/lib/settingsChannelsNavigation";
 import type { ActivationStatusPayload } from "@/lib/activationStatus";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { TEMPLATES_GROWTH_ENGINES_TAB_PATH, getGrowthEngineBySlug } from "@/lib/growthEnginesCatalog";
+import { TEMPLATES_GROWTH_ENGINES_TAB_PATH } from "@/lib/growthEnginesCatalog";
 import { getCheckoutReturnPaths } from "@/lib/checkoutReturnPaths";
 import { getSubscriptionApiUrl, useShopifyShopHint } from "@/lib/shopifyBillingHint";
 import { useToast } from "@/hooks/use-toast";
@@ -1054,7 +1054,6 @@ export function RealtorGrowthEngine() {
   };
 
   const DetailPage = () => {
-    const rgeCatalogEntry = getGrowthEngineBySlug("realtor-growth-engine");
     const includedItems: { Icon: typeof Sparkles; t: string; d: string }[] = [
       { Icon: Sparkles, t: "AI lead qualification", d: "Inbound messages are interpreted, scored, and routed with guardrails." },
       { Icon: Target, t: "Buyer / seller scoring", d: "Intent and readiness signals update automatically as the thread evolves." },
@@ -1128,47 +1127,7 @@ export function RealtorGrowthEngine() {
             </div>
           </section>
 
-          <div className="mb-8 flex justify-center">{renderStepper()}</div>
-
-          {rgeCatalogEntry && (rgeCatalogEntry.oneTimePrice || rgeCatalogEntry.monthlyRequirementLabel) ? (
-            <section
-              className="mb-6 rounded-2xl border border-gray-200/80 bg-white p-5 shadow-sm md:p-6"
-              aria-labelledby="rge-pricing-heading"
-            >
-              <h2 id="rge-pricing-heading" className="text-base font-bold text-gray-900 md:text-lg">
-                Pricing &amp; access
-              </h2>
-              <div className="mt-3 space-y-3 text-sm text-gray-700">
-                {rgeCatalogEntry.oneTimePrice ? (
-                  <p>
-                    <span className="font-semibold tabular-nums text-gray-900">{rgeCatalogEntry.oneTimePrice}</span>{" "}
-                    one-time license fee
-                  </p>
-                ) : null}
-                {rgeCatalogEntry.subscriptionRequirementShort ? (
-                  <p className="font-medium text-gray-900">{rgeCatalogEntry.subscriptionRequirementShort}</p>
-                ) : null}
-                {rgeCatalogEntry.monthlyRequirementLabel ? (
-                  <div className="rounded-lg border border-violet-100/90 bg-gradient-to-br from-violet-50/60 to-emerald-50/40 px-3 py-2.5">
-                    <p className="font-semibold text-gray-900">Ongoing: {rgeCatalogEntry.monthlyRequirementLabel}</p>
-                    {rgeCatalogEntry.monthlyRequirementBreakdown ? (
-                      <p className="mt-1 text-xs text-gray-600">{rgeCatalogEntry.monthlyRequirementBreakdown}</p>
-                    ) : null}
-                  </div>
-                ) : null}
-                {rgeCatalogEntry.requirements && rgeCatalogEntry.requirements.length > 0 ? (
-                  <ul className="list-disc space-y-1 pl-5 text-sm text-gray-700">
-                    {rgeCatalogEntry.requirements.map((req) => (
-                      <li key={req}>{req}</li>
-                    ))}
-                  </ul>
-                ) : null}
-                {rgeCatalogEntry.metaFeesNote ? (
-                  <p className="border-t border-gray-100 pt-3 text-xs leading-relaxed text-gray-500">{rgeCatalogEntry.metaFeesNote}</p>
-                ) : null}
-              </div>
-            </section>
-          ) : null}
+          <div className="mb-6 flex justify-center">{renderStepper()}</div>
 
         {isPaused && (
           <Card className="mb-10 border-amber-300 bg-amber-50" data-testid="banner-subscription-paused">
