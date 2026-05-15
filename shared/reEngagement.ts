@@ -20,6 +20,9 @@ export type ConversationReEngagement = {
   lastTemplateSentAt?: string | null;
   lastTemplateName?: string | null;
   lastTemplateStatus?: ReEngagementLastTemplateStatus | null;
+  /** Meta / WhatsApp status webhook failure (e.g. 131049) after Graph accepted the send */
+  lastDeliveryErrorCode?: string | null;
+  lastDeliveryErrorHint?: string | null;
   replyWindowReopenedAt?: string | null;
   /** Future: link to preset campaign enrollment */
   campaignEnrollmentId?: string | null;
@@ -52,6 +55,10 @@ export function parseConversationReEngagement(raw: unknown): ConversationReEngag
       o.lastTemplateStatus === "sent" || o.lastTemplateStatus === "failed"
         ? o.lastTemplateStatus
         : null,
+    lastDeliveryErrorCode:
+      typeof o.lastDeliveryErrorCode === "string" ? o.lastDeliveryErrorCode : null,
+    lastDeliveryErrorHint:
+      typeof o.lastDeliveryErrorHint === "string" ? o.lastDeliveryErrorHint : null,
     replyWindowReopenedAt:
       typeof o.replyWindowReopenedAt === "string" ? o.replyWindowReopenedAt : null,
     campaignEnrollmentId:
@@ -76,6 +83,8 @@ export function buildReEngagementAfterSuccessfulSend(
     lastTemplateSentAt: new Date().toISOString(),
     lastTemplateName: templateName,
     lastTemplateStatus: "sent",
+    lastDeliveryErrorCode: null,
+    lastDeliveryErrorHint: null,
     replyWindowReopenedAt: null,
   };
 }
@@ -93,11 +102,34 @@ export function buildReEngagementAfterFailedSend(
   };
 }
 
+/** After Meta reports `failed` on an outbound template (webhook), while we were awaiting a reply. */
+export function buildReEngagementAfterMetaDeliveryFailure(
+  prev: ConversationReEngagement,
+  opts: {
+    errorCode?: string | number | null;
+    userHint: string;
+  }
+): ConversationReEngagement {
+  const code =
+    opts.errorCode != null && String(opts.errorCode).trim() !== ""
+      ? String(opts.errorCode).trim()
+      : null;
+  return {
+    ...prev,
+    state: "failed",
+    lastTemplateStatus: "failed",
+    lastDeliveryErrorCode: code,
+    lastDeliveryErrorHint: opts.userHint,
+  };
+}
+
 export type RetargetReEngagementApiFields = {
   reEngagementState: ReEngagementState;
   lastTemplateSentAt: string | null;
   lastTemplateName: string | null;
   lastTemplateStatus: string | null;
+  lastDeliveryErrorCode: string | null;
+  lastDeliveryErrorHint: string | null;
   replyWindowReopenedAt: string | null;
 };
 
@@ -112,6 +144,8 @@ export function deriveRetargetReEngagementApiFields(
     lastTemplateSentAt: null,
     lastTemplateName: null,
     lastTemplateStatus: null,
+    lastDeliveryErrorCode: null,
+    lastDeliveryErrorHint: null,
     replyWindowReopenedAt: null,
   };
   if (ch !== "whatsapp") {
@@ -125,6 +159,8 @@ export function deriveRetargetReEngagementApiFields(
     lastTemplateSentAt: parsed.lastTemplateSentAt ?? null,
     lastTemplateName: parsed.lastTemplateName ?? null,
     lastTemplateStatus: parsed.lastTemplateStatus ?? null,
+    lastDeliveryErrorCode: parsed.lastDeliveryErrorCode ?? null,
+    lastDeliveryErrorHint: parsed.lastDeliveryErrorHint ?? null,
     replyWindowReopenedAt: parsed.replyWindowReopenedAt ?? null,
   };
 }

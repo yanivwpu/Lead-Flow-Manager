@@ -23,5 +23,8 @@ export type RetargetEligibleContactRow = {
   lastTemplateSentAt: string | null;
   lastTemplateName: string | null;
   lastTemplateStatus: string | null;
+  /** Present when Meta later rejected delivery (status webhook), e.g. 131049 */
+  lastDeliveryErrorCode: string | null;
+  lastDeliveryErrorHint: string | null;
   replyWindowReopenedAt: string | null;
 };

@@ -1442,6 +1442,8 @@ export function registerTemplateRoutes(app: Express): void {
         lastTemplateSentAt: r.lastTemplateSentAt,
         lastTemplateName: r.lastTemplateName,
         lastTemplateStatus: r.lastTemplateStatus,
+        lastDeliveryErrorCode: r.lastDeliveryErrorCode,
+        lastDeliveryErrorHint: r.lastDeliveryErrorHint,
         replyWindowReopenedAt: r.replyWindowReopenedAt,
       }));
 

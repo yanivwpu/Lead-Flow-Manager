@@ -125,6 +125,8 @@ interface RetargetableChat {
   lastTemplateSentAt: string | null;
   lastTemplateName: string | null;
   lastTemplateStatus: string | null;
+  lastDeliveryErrorCode: string | null;
+  lastDeliveryErrorHint: string | null;
   replyWindowReopenedAt: string | null;
 }
 
@@ -173,7 +175,7 @@ function ReEngagementStatusChip({ chat }: { chat: RetargetableChat }) {
   if (chat.reEngagementState === "failed" || chat.lastTemplateStatus === "failed") {
     return (
       <Badge variant="destructive" className="text-[10px] font-normal shrink-0">
-        Template failed
+        Failed to deliver
       </Badge>
     );
   }
@@ -360,6 +362,21 @@ function reEngagementHeaderKindLabel(template: MessageTemplate): string | null {
   return `${ht.charAt(0).toUpperCase()}${ht.slice(1)} header`;
 }
 
+/** After Meta blocks one template, surface other choices first — same template stays selectable at the end. */
+function orderTemplatesForRecoveryAttempt(
+  templates: MessageTemplate[],
+  lastFailedName: string | null | undefined
+): MessageTemplate[] {
+  const name = (lastFailedName || "").trim();
+  if (!name) return templates;
+  return [...templates].sort((a, b) => {
+    const aFail = a.name === name ? 1 : 0;
+    const bFail = b.name === name ? 1 : 0;
+    if (aFail !== bFail) return aFail - bFail;
+    return a.name.localeCompare(b.name);
+  });
+}
+
 /** Re-engagement row: controlled menu closes before opening the send dialog (Radix `onSelect` + `preventDefault` keeps menu open). */
 function ReEngagementTemplatePicker({
   chat,
@@ -368,6 +385,8 @@ function ReEngagementTemplatePicker({
   placeholder,
   testId,
   buttonVariant = "outline",
+  recoveryMode = false,
+  lastFailedTemplateName = null,
   onPickTemplate,
 }: {
   chat: RetargetableChat;
@@ -376,25 +395,35 @@ function ReEngagementTemplatePicker({
   placeholder: string;
   testId: string;
   buttonVariant?: "outline" | "default";
+  /** Stronger CTA + deprioritized “last failed” row hint — still opens the unified library send preview. */
+  recoveryMode?: boolean;
+  lastFailedTemplateName?: string | null;
   onPickTemplate: (template: MessageTemplate, chat: RetargetableChat) => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const pickInFlightRef = useRef(false);
+  const triggerLabel = recoveryMode ? "Try another template" : placeholder;
 
   return (
     <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
       <DropdownMenuTrigger asChild>
         <Button
           type="button"
-          variant={buttonVariant}
+          variant={recoveryMode ? "default" : buttonVariant}
           className={cn(
             "w-full justify-between gap-2 whitespace-normal sm:w-[220px]",
             "min-h-[40px] shrink-0 py-2 text-left font-medium",
+            recoveryMode
+              ? "bg-brand-green hover:bg-brand-green/90 text-white border-0 shadow-sm"
+              : null,
             triggerClass
           )}
           data-testid={testId}
+          aria-haspopup="menu"
+          aria-expanded={menuOpen}
+          aria-label={recoveryMode ? "Try another template — choose an approved template" : placeholder}
         >
-          <span className="truncate">{placeholder}</span>
+          <span className="truncate">{triggerLabel}</span>
           <ChevronDown className="h-4 w-4 shrink-0 opacity-70" aria-hidden />
         </Button>
       </DropdownMenuTrigger>
@@ -458,6 +487,14 @@ function ReEngagementTemplatePicker({
                     {formatLanguageCode(template.language)}
                   </span>
                 </div>
+                {recoveryMode &&
+                lastFailedTemplateName &&
+                template.name.trim() === lastFailedTemplateName.trim() ? (
+                  <p className="text-[10px] leading-snug text-amber-900/95">
+                    Last attempt — WhatsApp blocked delivery. You can still pick this template after others if you
+                    intentionally retry.
+                  </p>
+                ) : null}
                 {!support.selectable && support.disabledReason ? (
                   <p className="text-[10px] leading-snug text-amber-900">{support.disabledReason}</p>
                 ) : libraryQuickSendMeta(template).blocked ? (
@@ -1979,9 +2016,38 @@ export function Templates() {
                                   </div>
                                 )}
                                 {isWhatsApp && failedWa && (
-                                  <p className="text-xs text-red-600 pt-0.5">
-                                    Template failed — review the error in your provider logs, then retry.
-                                  </p>
+                                  <div className="text-xs text-red-700 space-y-1 pt-0.5 border-l-2 border-red-200 pl-2">
+                                    <p className="font-medium text-red-900">Failed to deliver</p>
+                                    {chat.lastDeliveryErrorCode ? (
+                                      <p className="text-red-800">
+                                        Error code{" "}
+                                        <span className="font-mono text-[11px]">{chat.lastDeliveryErrorCode}</span>
+                                      </p>
+                                    ) : null}
+                                    {chat.lastDeliveryErrorHint ? (
+                                      <p className="text-red-800/95 leading-snug">{chat.lastDeliveryErrorHint}</p>
+                                    ) : (
+                                      <p className="text-red-700">
+                                        WhatsApp rejected this template message. Check the error in Inbox or try another
+                                        approved template.
+                                      </p>
+                                    )}
+                                    {chat.lastDeliveryErrorCode === "131049" ? (
+                                      <p className="text-[11px] text-amber-950/95 leading-snug pt-0.5">
+                                        <span className="font-medium">Recovery:</span> Meta often blocks the same or
+                                        aggressive template again. Prefer a softer, <strong>different</strong> approved
+                                        template — use <strong>Try another template</strong> on the right, then confirm
+                                        in the preview dialog (nothing sends until you confirm).
+                                      </p>
+                                    ) : (
+                                      <p className="text-[11px] text-gray-800 leading-snug pt-0.5">
+                                        <span className="font-medium">Next step:</span> use{" "}
+                                        <strong>Try another template</strong> for the full send preview (same as
+                                        Library). The failed template is not resent automatically; pick any approved
+                                        template, including the same one only if you choose it again after preview.
+                                      </p>
+                                    )}
+                                  </div>
                                 )}
                                 {(ch === "facebook" || ch === "instagram") && (
                                   <p className="text-xs text-gray-600 pt-0.5">
@@ -2048,14 +2114,26 @@ export function Templates() {
                               ) : null}
 
                               {isWhatsApp && failedWa ? (
-                                <ReEngagementTemplatePicker
-                                  chat={chat}
-                                  approvedTemplates={approvedReEngagementTemplates}
-                                  triggerClass="w-full sm:w-[220px] min-h-[40px] shrink-0 border-amber-300 bg-amber-50/50"
-                                  placeholder="Retry with template"
-                                  testId={`retry-template-${chat.id}`}
-                                  onPickTemplate={(template, c) => handleSendTemplate(template, c, "campaign")}
-                                />
+                                <div className="flex flex-col gap-1.5 items-stretch sm:items-end w-full">
+                                  <ReEngagementTemplatePicker
+                                    chat={chat}
+                                    approvedTemplates={orderTemplatesForRecoveryAttempt(
+                                      approvedReEngagementTemplates,
+                                      chat.lastTemplateName
+                                    )}
+                                    recoveryMode
+                                    lastFailedTemplateName={chat.lastTemplateName}
+                                    triggerClass="w-full sm:w-[min(100%,260px)] min-h-[44px] shrink-0"
+                                    placeholder="Choose an approved template"
+                                    testId={`try-another-template-${chat.conversationId}`}
+                                    onPickTemplate={(template, c) => handleSendTemplate(template, c, "campaign")}
+                                  />
+                                  <p className="text-[10px] text-gray-500 leading-snug text-right max-w-[280px]">
+                                    Opens the unified send preview (variables, media, buttons, carousel). Other
+                                    templates are listed first; your last attempt appears at the bottom if you
+                                    intentionally retry it.
+                                  </p>
+                                </div>
                               ) : null}
 
                               {isWhatsApp && !awaitingReply && !failedWa ? (
@@ -2150,6 +2228,12 @@ export function Templates() {
                           <> ({selectedChat.whatsappPhone})</>
                         ) : null}
                         .
+                        {"conversationId" in selectedChat ? (
+                          <span className="mt-1 block text-muted-foreground">
+                            Same full preview and WhatsApp send path as <strong className="text-foreground">Library</strong>{" "}
+                            — nothing is delivered until you confirm here.
+                          </span>
+                        ) : null}
                       </>
                     ) : (
                       <>

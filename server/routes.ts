@@ -37,8 +37,17 @@ import {
   PLAN_LIMITS,
   type Message,
   type SubscriptionPlan,
+  type Conversation,
 } from "@shared/schema";
 import { isConversationHandoffActive } from "@shared/handoffActivity";
+import {
+  parseConversationReEngagement,
+  buildReEngagementAfterMetaDeliveryFailure,
+} from "@shared/reEngagement";
+import {
+  formatMetaTemplateDeliveryFailureLine,
+  reEngagementTemplateDeliveryFailureHint,
+} from "./waMetaDeliveryHints";
 import {
   WA_OUTBOUND_UPLOAD_MULTER_MAX_BYTES,
   waUploadFileSizeCheck,
@@ -3112,7 +3121,6 @@ export async function registerRoutes(
               const cur = (row.status || "pending").toLowerCase();
 
               if (incoming === "failed") {
-                const { formatMetaTemplateDeliveryFailureLine } = await import("./waMetaDeliveryHints");
                 const errLine = formatMetaTemplateDeliveryFailureLine({
                   errorTitle: statusUpdate.errorTitle,
                   errorDetail: statusUpdate.errorDetail,
@@ -3130,6 +3138,33 @@ export async function registerRoutes(
                   errorMessage: errLine,
                   errorCode: statusUpdate.errorCode != null ? String(statusUpdate.errorCode) : undefined,
                 });
+
+                const contentType = String(row.contentType || "").toLowerCase();
+                const isOutboundTemplate =
+                  row.direction === "outbound" && contentType === "template";
+                if (isOutboundTemplate) {
+                  try {
+                    const conv = await storage.getConversation(row.conversationId);
+                    if (conv && conv.userId === owner.id) {
+                      const re = parseConversationReEngagement(conv.reEngagement);
+                      if (re?.state === "template_sent_awaiting_reply") {
+                        const hint = reEngagementTemplateDeliveryFailureHint({
+                          errorTitle: statusUpdate.errorTitle,
+                          errorDetail: statusUpdate.errorDetail,
+                          errorCode: statusUpdate.errorCode,
+                        });
+                        await storage.updateConversation(row.conversationId, {
+                          reEngagement: buildReEngagementAfterMetaDeliveryFailure(re, {
+                            errorCode: statusUpdate.errorCode,
+                            userHint: hint,
+                          }) as Conversation["reEngagement"],
+                        });
+                      }
+                    }
+                  } catch (reErr) {
+                    console.error("[Meta WA Status] re-engagement sync after template failure", reErr);
+                  }
+                }
                 return;
               }
 

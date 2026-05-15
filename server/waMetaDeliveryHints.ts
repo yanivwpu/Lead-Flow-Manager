@@ -6,6 +6,8 @@
 export function waMetaWebhookFailureHint(errorCode: string | number | null | undefined): string {
   const c = errorCode == null ? "" : String(errorCode).trim();
   switch (c) {
+    case "131049":
+      return "WhatsApp blocked this send due to Meta engagement limits. Try another approved template or wait before retrying.";
     case "131053":
       return "Media URL or format rejected by WhatsApp — re-upload to your public bucket as JPEG (images) or H.264+AAC MP4 (video), avoid Meta/WA CDN links.";
     case "131052":
@@ -26,8 +28,37 @@ export function formatMetaTemplateDeliveryFailureLine(opts: {
   errorDetail?: string | null;
   errorCode?: string | number | null;
 }): string {
+  const code = opts.errorCode != null ? String(opts.errorCode).trim() : "";
+  if (code === "131049") {
+    return waMetaWebhookFailureHint("131049");
+  }
   const hint = waMetaWebhookFailureHint(opts.errorCode);
-  const parts = [opts.errorTitle, opts.errorDetail].filter((x) => typeof x === "string" && x.trim()) as string[];
-  const base = parts.length ? parts.join(" — ") : "Delivery failed";
-  return `${base}\n${hint}`;
+  const title = typeof opts.errorTitle === "string" ? opts.errorTitle.trim() : "";
+  const detail = typeof opts.errorDetail === "string" ? opts.errorDetail.trim() : "";
+  const metaParts = [title, detail].filter((x, i, a) => x && a.indexOf(x) === i);
+  const metaLine = metaParts.length ? metaParts.join(" — ") : "";
+  if (!metaLine) return hint;
+  if (code && metaLine.includes(code)) {
+    const stripped = hint.replace(new RegExp(`^WhatsApp reported error code\\s*${code}\\.?\\s*`, "i"), "").trim();
+    if (stripped) return `${metaLine}\n${stripped}`;
+    return metaLine;
+  }
+  return `${metaLine}\n${hint}`;
+}
+
+/** Single user-facing explanation for re-engagement / CRM (code shown separately in UI when available). */
+export function reEngagementTemplateDeliveryFailureHint(opts: {
+  errorTitle?: string | null;
+  errorDetail?: string | null;
+  errorCode?: string | number | null;
+}): string {
+  const code = opts.errorCode != null ? String(opts.errorCode).trim() : "";
+  if (code === "131049") {
+    return waMetaWebhookFailureHint("131049");
+  }
+  const title = typeof opts.errorTitle === "string" ? opts.errorTitle.trim() : "";
+  const detail = typeof opts.errorDetail === "string" ? opts.errorDetail.trim() : "";
+  const metaLine = [title, detail].filter((x, i, a) => x && a.indexOf(x) === i).join(" — ");
+  if (metaLine) return metaLine;
+  return waMetaWebhookFailureHint(opts.errorCode);
 }
