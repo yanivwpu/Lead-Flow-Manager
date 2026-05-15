@@ -43,6 +43,8 @@ import { isConversationHandoffActive } from "@shared/handoffActivity";
 import {
   parseConversationReEngagement,
   buildReEngagementAfterMetaDeliveryFailure,
+  retargetTemplateNameFromOutboundMessage,
+  type ConversationReEngagement,
 } from "@shared/reEngagement";
 import {
   formatMetaTemplateDeliveryFailureLine,
@@ -3146,19 +3148,34 @@ export async function registerRoutes(
                   try {
                     const conv = await storage.getConversation(row.conversationId);
                     if (conv && conv.userId === owner.id) {
-                      const re = parseConversationReEngagement(conv.reEngagement);
-                      if (re?.state === "template_sent_awaiting_reply") {
-                        const hint = reEngagementTemplateDeliveryFailureHint({
-                          errorTitle: statusUpdate.errorTitle,
-                          errorDetail: statusUpdate.errorDetail,
-                          errorCode: statusUpdate.errorCode,
-                        });
-                        await storage.updateConversation(row.conversationId, {
-                          reEngagement: buildReEngagementAfterMetaDeliveryFailure(re, {
+                      const ch = (conv.channel || "").toLowerCase();
+                      if (ch === "whatsapp") {
+                        const re = parseConversationReEngagement(conv.reEngagement);
+                        if (re?.state !== "blocked") {
+                          const hint = reEngagementTemplateDeliveryFailureHint({
+                            errorTitle: statusUpdate.errorTitle,
+                            errorDetail: statusUpdate.errorDetail,
                             errorCode: statusUpdate.errorCode,
-                            userHint: hint,
-                          }) as Conversation["reEngagement"],
-                        });
+                          });
+                          const prev: ConversationReEngagement =
+                            re ??
+                            ({
+                              state: "template_sent_awaiting_reply",
+                              lastTemplateName: retargetTemplateNameFromOutboundMessage(row) ?? undefined,
+                              lastTemplateSentAt: row.sentAt
+                                ? new Date(row.sentAt).toISOString()
+                                : row.createdAt
+                                  ? new Date(row.createdAt).toISOString()
+                                  : new Date().toISOString(),
+                              lastTemplateStatus: "sent",
+                            } as ConversationReEngagement);
+                          await storage.updateConversation(row.conversationId, {
+                            reEngagement: buildReEngagementAfterMetaDeliveryFailure(prev, {
+                              errorCode: statusUpdate.errorCode,
+                              userHint: hint,
+                            }) as Conversation["reEngagement"],
+                          });
+                        }
                       }
                     }
                   } catch (reErr) {

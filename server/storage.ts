@@ -56,7 +56,16 @@ import {
 } from "@shared/schema";
 import { computeConversationReplyWindowStatus } from "@shared/conversationReplyWindow";
 import type { RetargetEligibleContactRow } from "@shared/retargetEligibleContact";
-import { deriveRetargetReEngagementApiFields } from "@shared/reEngagement";
+import {
+  buildReEngagementAfterMetaDeliveryFailure,
+  deriveRetargetReEngagementApiFields,
+  parseConversationReEngagement,
+  reconcileRetargetApiFieldsWithLatestOutboundTemplate,
+  reEngagementUserHintFromMessageError,
+  retargetTemplateNameFromOutboundMessage,
+  shouldRepairReEngagementJsonFromLatestFailedTemplate,
+  type ConversationReEngagement,
+} from "@shared/reEngagement";
 import { db } from "../drizzle/db";
 import { users, chats, registeredPhones, messageUsage, conversationWindows, teamMembers, workflows, workflowExecutions, recurringReminders, webhooks, webhookDeliveries, integrations, messageTemplates, templateCarouselMediaDefaults, templateSends, dripCampaigns, dripSteps, dripEnrollments, dripSends, chatbotFlows, chatbotSessions, salespeople, demoBookings, salesConversions, adminSettings, contacts, conversations, messages, activityEvents, channelSettings, supportTickets, partners, commissions, agreementAcceptances, contactNotes, appointments, flowJobs, noReplyJobs, automationTimerJobs, automationSendDedup, campaignEnrollments, type InsertConversationWindow, type ConversationWindow, growthEngineSetupTasks } from "@shared/schema";
 import { eq, and, lte, sql, isNotNull, isNull, asc, desc, gte, sum, gt, or, like, ilike, ne, inArray, notInArray, lt, count } from "drizzle-orm";
@@ -500,6 +509,76 @@ export interface IStorage {
   // Automation outbound send idempotency
   tryAcquireAutomationSendDedup(dedupKey: string, userId: string, contactId?: string | null): Promise<boolean>;
   completeAutomationSendDedup(dedupKey: string, status: "completed" | "skipped"): Promise<void>;
+}
+
+type LatestOutboundTemplateSnapshotRow = {
+  status: string;
+  errorCode: string | null;
+  errorMessage: string | null;
+  templateVariables: unknown;
+  content: string | null;
+  sentAt: Date | null;
+  createdAt: Date | null;
+};
+
+function coercePgDate(v: unknown): Date | null {
+  if (v == null) return null;
+  if (v instanceof Date && !Number.isNaN(v.getTime())) return v;
+  const d = new Date(String(v));
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/** Latest outbound template row per conversation (by `created_at`) — used to reconcile stale `re_engagement`. */
+async function loadLatestOutboundTemplateSnapshotsByConversationIds(
+  userId: string,
+  conversationIds: string[]
+): Promise<Map<string, LatestOutboundTemplateSnapshotRow>> {
+  const out = new Map<string, LatestOutboundTemplateSnapshotRow>();
+  if (conversationIds.length === 0) return out;
+  const CHUNK = 120;
+  for (let i = 0; i < conversationIds.length; i += CHUNK) {
+    const chunk = conversationIds.slice(i, i + CHUNK);
+    if (chunk.length === 0) continue;
+    try {
+      const result = await db.execute(sql`
+        SELECT DISTINCT ON (m.conversation_id)
+          m.conversation_id AS "conversationId",
+          m.status AS status,
+          m.error_code AS "errorCode",
+          m.error_message AS "errorMessage",
+          m.template_variables AS "templateVariables",
+          m.content AS content,
+          m.sent_at AS "sentAt",
+          m.created_at AS "createdAt"
+        FROM messages m
+        WHERE m.user_id = ${userId}
+          AND m.direction = 'outbound'
+          AND lower(trim(m.content_type)) = 'template'
+          AND m.conversation_id IN (${sql.join(
+            chunk.map((id) => sql`${id}`),
+            sql`, `
+          )})
+        ORDER BY m.conversation_id, m.created_at DESC
+      `);
+      const rows = (result as { rows: Record<string, unknown>[] }).rows ?? [];
+      for (const r of rows) {
+        const cid = String(r.conversationId ?? "");
+        if (!cid) continue;
+        out.set(cid, {
+          status: String(r.status ?? ""),
+          errorCode: r.errorCode != null ? String(r.errorCode) : null,
+          errorMessage: r.errorMessage != null ? String(r.errorMessage) : null,
+          templateVariables: r.templateVariables,
+          content: r.content != null ? String(r.content) : null,
+          sentAt: coercePgDate(r.sentAt),
+          createdAt: coercePgDate(r.createdAt),
+        });
+      }
+    } catch (e) {
+      console.error("[loadLatestOutboundTemplateSnapshotsByConversationIds] chunk failed", e);
+    }
+  }
+  return out;
 }
 
 export class DbStorage implements IStorage {
@@ -1422,7 +1501,14 @@ export class DbStorage implements IStorage {
       .where(and(eq(conversations.userId, userId), inArray(conversations.channel, [...metaChannels])))
       .limit(10000);
 
-    const out: RetargetEligibleContactRow[] = [];
+    type Staged = {
+      conv: Conversation;
+      contact: Contact;
+      displayHandle: string;
+      whatsappPhone: string;
+      daysSinceLastMessage: number;
+    };
+    const staged: Staged[] = [];
     const seenConversation = new Set<string>();
 
     for (const { conv, contact } of convRows) {
@@ -1509,7 +1595,88 @@ export class DbStorage implements IStorage {
         ? Math.floor((now.getTime() - lastAt.getTime()) / (24 * 60 * 60 * 1000))
         : 0;
 
-      const reFields = deriveRetargetReEngagementApiFields(conv.channel, conv.reEngagement);
+      staged.push({
+        conv,
+        contact,
+        displayHandle,
+        whatsappPhone,
+        daysSinceLastMessage: daysSince,
+      });
+    }
+
+    const waConvIds = staged
+      .filter((s) => (s.conv.channel || "").toLowerCase() === "whatsapp")
+      .map((s) => s.conv.id);
+    const latestTplByConv = await loadLatestOutboundTemplateSnapshotsByConversationIds(userId, waConvIds);
+
+    const out: RetargetEligibleContactRow[] = [];
+    const repairs: Promise<unknown>[] = [];
+
+    for (const { conv, contact, displayHandle, whatsappPhone, daysSinceLastMessage } of staged) {
+      const ch = (conv.channel || "").toLowerCase();
+      let reFields = deriveRetargetReEngagementApiFields(conv.channel, conv.reEngagement);
+
+      if (ch === "whatsapp") {
+        const snap = latestTplByConv.get(conv.id);
+        const forReconcile =
+          snap != null
+            ? {
+                status: snap.status,
+                errorCode: snap.errorCode,
+                errorMessage: snap.errorMessage,
+              }
+            : null;
+        reFields = reconcileRetargetApiFieldsWithLatestOutboundTemplate(
+          conv.channel,
+          conv.reEngagement,
+          forReconcile
+        );
+
+        if (
+          snap &&
+          String(snap.status || "").toLowerCase() === "failed" &&
+          shouldRepairReEngagementJsonFromLatestFailedTemplate(conv.reEngagement, forReconcile)
+        ) {
+          const parsed = parseConversationReEngagement(conv.reEngagement);
+          const tName =
+            (parsed?.lastTemplateName && parsed.lastTemplateName.trim()) ||
+            retargetTemplateNameFromOutboundMessage({
+              templateVariables: snap.templateVariables,
+              content: snap.content,
+            }) ||
+            undefined;
+          const sentIso = snap.sentAt
+            ? snap.sentAt.toISOString()
+            : snap.createdAt
+              ? snap.createdAt.toISOString()
+              : new Date().toISOString();
+          const prev: ConversationReEngagement =
+            parsed ??
+            ({
+              state: "template_sent_awaiting_reply",
+              lastTemplateName: tName,
+              lastTemplateSentAt: sentIso,
+              lastTemplateStatus: "sent",
+            } as ConversationReEngagement);
+          const hint = reEngagementUserHintFromMessageError({
+            errorCode: snap.errorCode,
+            errorMessage: snap.errorMessage,
+          });
+          repairs.push(
+            this.updateConversation(conv.id, {
+              reEngagement: buildReEngagementAfterMetaDeliveryFailure(prev, {
+                errorCode: snap.errorCode,
+                userHint: hint,
+              }) as Conversation["reEngagement"],
+            }).catch((err) => {
+              console.error(
+                `[RETARGET_RE_ENGAGEMENT_REPAIR] conversation=${conv.id} user=${userId}`,
+                err instanceof Error ? err.message : err
+              );
+            })
+          );
+        }
+      }
 
       out.push({
         conversationId: conv.id,
@@ -1522,9 +1689,13 @@ export class DbStorage implements IStorage {
         windowExpiresAt: conv.windowExpiresAt ? new Date(conv.windowExpiresAt).toISOString() : null,
         lastMessagePreview: conv.lastMessagePreview ?? null,
         lastMessageAt: conv.lastMessageAt ? new Date(conv.lastMessageAt).toISOString() : null,
-        daysSinceLastMessage: daysSince,
+        daysSinceLastMessage,
         ...reFields,
       });
+    }
+
+    if (repairs.length > 0) {
+      await Promise.allSettled(repairs);
     }
 
     out.sort((a, b) => {

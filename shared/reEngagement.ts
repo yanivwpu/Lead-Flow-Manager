@@ -133,6 +133,98 @@ export type RetargetReEngagementApiFields = {
   replyWindowReopenedAt: string | null;
 };
 
+/** Template display name from persisted `template_variables` (Meta send) or leading `Template:` line in `content`. */
+export function retargetTemplateNameFromOutboundMessage(row: {
+  templateVariables?: unknown;
+  content?: string | null;
+}): string | null {
+  const tv = row.templateVariables;
+  if (tv && typeof tv === "object" && !Array.isArray(tv)) {
+    const n = (tv as Record<string, unknown>).templateName;
+    if (typeof n === "string" && n.trim()) return n.trim();
+  }
+  const c = (row.content || "").trim();
+  const m = /^Template:\s*(.+)/i.exec(c);
+  if (m?.[1]) return m[1].split("\n")[0].trim();
+  return null;
+}
+
+/** User-facing hint for re-engagement list / repair — shared so GET reconcile matches inbox copy (incl. 131049). */
+export function reEngagementUserHintFromMessageError(opts: {
+  errorCode?: string | null;
+  errorMessage?: string | null;
+}): string {
+  const code = opts.errorCode != null ? String(opts.errorCode).trim() : "";
+  if (code === "131049") {
+    return "WhatsApp blocked this send due to Meta engagement limits. Try another approved template or wait before retrying.";
+  }
+  const em = (opts.errorMessage || "").trim();
+  if (em) {
+    const first = em.split("\n")[0].trim();
+    return first.length > 600 ? `${first.slice(0, 597)}…` : first;
+  }
+  return code
+    ? `WhatsApp reported error code ${code}. Check template approval and recipient eligibility.`
+    : "WhatsApp delivery failed for the last template send.";
+}
+
+/**
+ * When the **latest** outbound WhatsApp template message is `failed`, the retargeting API must reflect delivery
+ * failure even if `conversations.re_engagement` is stale (pre-webhook-fix or `{}`).
+ */
+export function reconcileRetargetApiFieldsWithLatestOutboundTemplate(
+  channel: string,
+  reEngagementRaw: unknown,
+  latest: {
+    status: string;
+    errorCode?: string | null;
+    errorMessage?: string | null;
+  } | null
+): RetargetReEngagementApiFields {
+  const base = deriveRetargetReEngagementApiFields(channel, reEngagementRaw);
+  if ((channel || "").toLowerCase() !== "whatsapp" || !latest) return base;
+  const st = String(latest.status || "").toLowerCase();
+  if (st !== "failed") return base;
+  const code =
+    latest.errorCode != null && String(latest.errorCode).trim() !== ""
+      ? String(latest.errorCode).trim()
+      : null;
+  const hint = reEngagementUserHintFromMessageError({
+    errorCode: code,
+    errorMessage: latest.errorMessage ?? null,
+  });
+  return {
+    ...base,
+    reEngagementState: "failed",
+    lastTemplateStatus: "failed",
+    lastDeliveryErrorCode: code ?? base.lastDeliveryErrorCode,
+    lastDeliveryErrorHint: hint || base.lastDeliveryErrorHint,
+  };
+}
+
+/** True when we should persist `re_engagement` from the latest failed outbound template row (stale or missing). */
+export function shouldRepairReEngagementJsonFromLatestFailedTemplate(
+  storedRaw: unknown,
+  latest: { status: string; errorCode?: string | null; errorMessage?: string | null } | null
+): boolean {
+  if (!latest || String(latest.status || "").toLowerCase() !== "failed") return false;
+  const parsed = parseConversationReEngagement(storedRaw);
+  if (parsed?.state === "blocked") return false;
+  if (!parsed) return true;
+  if (parsed.state === "template_sent_awaiting_reply" && parsed.lastTemplateStatus === "sent") return true;
+  if (parsed.lastTemplateStatus !== "failed" && parsed.state !== "failed") return true;
+  const msgCode = latest.errorCode != null ? String(latest.errorCode).trim() : "";
+  const storedCode = (parsed.lastDeliveryErrorCode || "").trim();
+  if (msgCode && (!storedCode || storedCode !== msgCode)) return true;
+  const hint = (parsed.lastDeliveryErrorHint || "").trim();
+  const msgHint = reEngagementUserHintFromMessageError({
+    errorCode: latest.errorCode ?? null,
+    errorMessage: latest.errorMessage ?? null,
+  });
+  if (!hint && msgHint) return true;
+  return false;
+}
+
 export function deriveRetargetReEngagementApiFields(
   channel: string,
   raw: unknown
