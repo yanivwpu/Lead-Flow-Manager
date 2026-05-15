@@ -579,18 +579,9 @@ function GrowthEngineGalleryCard({
       )}
       data-testid={engine.slug === "realtor-growth-engine" ? "card-realtor-growth-engine" : `card-engine-${engine.slug}`}
     >
-      <div className="relative h-40 w-full shrink-0 overflow-hidden bg-gray-100 sm:h-44">
+      <div className="relative isolate h-40 w-full shrink-0 overflow-hidden rounded-t-xl bg-gray-100 sm:h-44">
         {engine.image ? (
-          <>
-            <img src={engine.image} alt="" className="h-full w-full object-cover object-[center_22%]" loading="lazy" />
-            {!isComingSoon && (
-              <div className="absolute left-3 top-3 z-10">
-                <Badge className="border border-emerald-400/30 bg-emerald-600/95 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white shadow-sm backdrop-blur-[2px]">
-                  Live
-                </Badge>
-              </div>
-            )}
-          </>
+          <img src={engine.image} alt="" className="h-full w-full object-cover object-[center_22%]" loading="lazy" />
         ) : (
           <div
             className={cn(
@@ -616,13 +607,20 @@ function GrowthEngineGalleryCard({
             </div>
           </div>
         )}
-        {isComingSoon && (
-          <div className="absolute right-2.5 top-2.5 z-10 sm:right-3 sm:top-3">
+        {!isComingSoon && engine.image ? (
+          <div className="pointer-events-none absolute left-4 top-4 z-[1]">
+            <Badge className="border border-emerald-400/30 bg-emerald-600/95 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white shadow-sm backdrop-blur-[2px]">
+              Live
+            </Badge>
+          </div>
+        ) : null}
+        {isComingSoon ? (
+          <div className="pointer-events-none absolute right-4 top-4 z-[1]">
             <Badge className="border border-white/30 bg-gray-900/80 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white shadow-sm backdrop-blur-sm">
               Coming soon
             </Badge>
           </div>
-        )}
+        ) : null}
       </div>
       <CardContent className="flex flex-1 flex-col gap-4 p-5 pt-4">
         <div className="space-y-2">
@@ -1458,7 +1456,7 @@ export function Templates() {
       <div className="flex-1 min-h-0 overflow-y-auto px-4 md:px-6 py-2 md:py-3 pb-24 md:pb-6 overscroll-y-contain">
         <div className="max-w-5xl mx-auto">
           <Tabs value={templatesMainTabValue} onValueChange={handleTemplatesMainTabChange} className="space-y-2 md:space-y-4">
-          <TabsList className="grid w-full grid-cols-4 h-auto gap-0.5 p-0.5 sticky top-0 z-10 bg-muted/95 backdrop-blur-sm rounded-lg border border-gray-100/80 shadow-sm">
+          <TabsList className="grid w-full grid-cols-4 h-auto gap-0.5 p-0.5 sticky top-0 z-20 bg-muted/95 backdrop-blur-sm rounded-lg border border-gray-100/80 shadow-sm">
             <TabsTrigger value="presets" data-testid="tab-presets" className="text-[11px] sm:text-sm py-1.5 px-1 sm:px-2 md:px-3 flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1 rounded-md leading-tight">
               <Sparkles className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0 sm:mr-0" />
               <span>Presets</span>
