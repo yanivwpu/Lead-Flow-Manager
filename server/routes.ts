@@ -28,6 +28,7 @@ import {
   type WhatsAppProvider,
 } from "./whatsappService";
 import { storage } from "./storage";
+import { evaluateAutomationSendGuard } from "./automationSendGuard";
 import { devLog } from "./devLog";
 import {
   insertChatSchema,
@@ -9807,6 +9808,21 @@ export async function registerRoutes(
           });
           autoSendAllowed = gate.allowed;
           autoSendReason = gate.reason;
+          if (autoSendAllowed && chatId && contactIdForLog) {
+            const conv = await storage.getConversation(chatId);
+            const guard = await evaluateAutomationSendGuard({
+              userId,
+              contactId: contactIdForLog,
+              conversationId: chatId,
+              channel: conv?.channel || undefined,
+              source: "ai_auto",
+              idempotencyKey: `ai_auto:${userId}:${chatId}:${String(suggestion.suggestion || "").slice(0, 160)}`,
+            });
+            if (!guard.ok) {
+              autoSendAllowed = false;
+              autoSendReason = `automation_send_guard:${guard.reason}`;
+            }
+          }
         }
 
         console.info("[AI-AUTO-ARBITRATION]", {

@@ -273,9 +273,15 @@ async function executeSendMessageTemplateAction(params: {
     );
     return false;
   }
-  const { withAutomationSendDedup } = await import("./automationSendGuard");
   const dedupKey = `wf_msg_tpl:${workflow.id}:${templateKey}:${contact.id}:${content.slice(0, 80)}`;
-  const out = await withAutomationSendDedup(dedupKey, workflow.userId, contact.id, async () => {
+  const { withAutomationSendGuard } = await import("./automationSendGuard");
+  const out = await withAutomationSendGuard({
+    userId: workflow.userId,
+    contactId: contact.id,
+    conversationId,
+    source: "workflow",
+    idempotencyKey: dedupKey,
+  }, async () => {
     let forceChannel: Channel | undefined;
     const conv = await storage.getConversation(conversationId);
     if (conv?.channel && conv.channel !== "calendly") {
@@ -291,7 +297,7 @@ async function executeSendMessageTemplateAction(params: {
     });
   });
   if (!out.ok) {
-    console.log(JSON.stringify({ tag: "[WorkflowAction]", event: "send_message_template_deduped", templateKey }));
+    console.log(JSON.stringify({ tag: "[WorkflowAction]", event: "send_message_template_guarded_skip", templateKey, reason: out.reason }));
     return false;
   }
   if (!out.result.success) {
@@ -756,9 +762,16 @@ async function executeW3CalendlyKeywordResponse(
         forceChannel = conv.channel as Channel;
       }
     }
-    const { withAutomationSendDedup } = await import("./automationSendGuard");
     const dedupKey = `w3cal_send:${workflow.userId}:${contact.id}:${body.slice(0, 120)}`;
-    const sendOutcome = await withAutomationSendDedup(dedupKey, workflow.userId, contact.id, async () =>
+    const { withAutomationSendGuard } = await import("./automationSendGuard");
+    const sendOutcome = await withAutomationSendGuard({
+      userId: workflow.userId,
+      contactId: contact.id,
+      conversationId,
+      channel: forceChannel,
+      source: "booking_flow",
+      idempotencyKey: dedupKey,
+    }, async () =>
       channelService.sendMessage({
         userId: workflow.userId,
         contactId: contact.id,
@@ -771,7 +784,7 @@ async function executeW3CalendlyKeywordResponse(
     if (sendOutcome.ok && sendOutcome.result.success) {
       sent = true;
     } else if (!sendOutcome.ok) {
-      console.log(JSON.stringify({ tag: "[W3+Calendly]", deduped: true, contactId: contact.id }));
+      console.log(JSON.stringify({ tag: "[W3+Calendly]", guardedSkip: true, reason: sendOutcome.reason, contactId: contact.id }));
     } else {
       console.warn(`[W3+Calendly] channelService.sendMessage failed contact=${contact.id}: ${sendOutcome.result.error}`);
     }
@@ -780,9 +793,18 @@ async function executeW3CalendlyKeywordResponse(
     const digits = raw.replace(/\D/g, "");
     if (digits.length >= 10) {
       try {
-        const { withAutomationSendDedup } = await import("./automationSendGuard");
+        const { withAutomationSendGuard } = await import("./automationSendGuard");
         const dedupKey = `w3cal_fallback:${workflow.userId}:${digits}:${body.slice(0, 120)}`;
-        const out = await withAutomationSendDedup(dedupKey, workflow.userId, contact?.id ?? null, async () => {
+        if (!contact?.id) {
+          throw new Error("no_contact_for_guarded_w3_fallback");
+        }
+        const out = await withAutomationSendGuard({
+          userId: workflow.userId,
+          contactId: contact.id,
+          source: "booking_flow",
+          channel: "whatsapp",
+          idempotencyKey: dedupKey,
+        }, async () => {
           const user = await storage.getUser(workflow.userId);
           if (user?.whatsappProvider === "meta") {
             await sendMetaWhatsAppMessage(workflow.userId, digits, body);
@@ -793,7 +815,7 @@ async function executeW3CalendlyKeywordResponse(
         if (out.ok) {
           sent = true;
         } else {
-          console.log(JSON.stringify({ tag: "[W3+Calendly]", deduped: true, digits }));
+          console.log(JSON.stringify({ tag: "[W3+Calendly]", guardedSkip: true, reason: out.reason, digits }));
         }
       } catch (e: any) {
         console.warn(`[W3+Calendly] WhatsApp fallback send failed: ${e?.message || e}`);

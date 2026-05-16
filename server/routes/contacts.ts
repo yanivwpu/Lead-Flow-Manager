@@ -5,6 +5,7 @@ import { db } from "../../drizzle/db";
 import { storage } from "../storage";
 import { channelService } from "../channelService";
 import { scheduleHubSpotAutoSync, contactPatchAffectsHubSpot } from "../hubspotAutoSync";
+import { withAutomationSendGuard, type AutomationSendGuardSource } from "../automationSendGuard";
 import OpenAI from "openai";
 
 const openai = new OpenAI({
@@ -416,7 +417,7 @@ export function registerContactRoutes(app: Express): void {
       if (!req.user) {
         return res.status(401).json({ error: "Unauthorized" });
       }
-      const { content, contentType, mediaUrl, mediaType, mediaFilename, channel, source } = req.body;
+      const { content, contentType, mediaUrl, mediaType, mediaFilename, channel, source, idempotencyKey } = req.body;
       if (!content?.trim() && !mediaUrl) {
         return res.status(400).json({ error: "Message must have content or a media attachment" });
       }
@@ -449,19 +450,46 @@ export function registerContactRoutes(app: Express): void {
           })),
         });
       }
-      const { channelService } = await import("../channelService");
-      const result = await channelService.sendMessage({
-        userId: req.user.id,
-        contactId: req.params.id,
-        content: content || '',
-        contentType: contentType || mediaType || (mediaUrl ? 'image' : 'text'),
-        mediaUrl,
-        mediaType,
-        mediaFilename,
-        forceChannel: requested,
-        suppressFallback: !!requested,
-        enforceWhatsAppCustomerServiceWindow: true,
-      });
+      const guardedSources = new Set(["ai_auto", "workflow", "delayed_job", "template", "broadcast", "follow_up", "booking_flow", "chatbot", "campaign"]);
+      const sourceString = typeof source === "string" ? source.trim() : "";
+      const guardedSource = guardedSources.has(sourceString) ? (sourceString as AutomationSendGuardSource) : null;
+      const send = async () =>
+        channelService.sendMessage({
+          userId: req.user.id,
+          contactId: req.params.id,
+          content: content || '',
+          contentType: contentType || mediaType || (mediaUrl ? 'image' : 'text'),
+          mediaUrl,
+          mediaType,
+          mediaFilename,
+          forceChannel: requested,
+          suppressFallback: !!requested,
+          enforceWhatsAppCustomerServiceWindow: true,
+        });
+      const guarded = guardedSource
+        ? await withAutomationSendGuard(
+            {
+              userId: req.user.id,
+              contactId: req.params.id,
+              channel: requested,
+              source: guardedSource,
+              idempotencyKey:
+                typeof idempotencyKey === "string" && idempotencyKey.trim()
+                  ? idempotencyKey.trim()
+                  : `${guardedSource}:${req.user.id}:${req.params.id}:${String(content || "").slice(0, 160)}:${Math.floor(Date.now() / 60_000)}`,
+            },
+            send
+          )
+        : null;
+      if (guarded && !guarded.ok) {
+        return res.status(guarded.reason === "duplicate" ? 409 : 403).json({
+          success: false,
+          error: "Send blocked by automation safety checks",
+          reason: guarded.reason,
+          detail: guarded.detail,
+        });
+      }
+      const result = guarded ? guarded.result : await send();
       if (result.success) {
         res.json(result);
       } else {

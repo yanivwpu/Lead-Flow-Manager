@@ -1,10 +1,11 @@
 import { storage } from "./storage";
-import { type ChatbotFlow } from "@shared/schema";
+import { type Channel, type ChatbotFlow } from "@shared/schema";
 import { buildMetaCloudTemplateSendComponents, normalizeTemplateVariableMap } from "@shared/metaTemplateSend";
 import { prepareMetaTemplateComponentsForGraph } from "./metaTemplateMediaPipeline";
 import { sendMetaWhatsAppTemplate } from "./userMeta";
 import { getUserTwilioClient } from "./userTwilio";
 import { scheduleHubSpotAutoSync } from "./hubspotAutoSync";
+import { withAutomationSendGuard } from "./automationSendGuard";
 
 // ─── Button types ──────────────────────────────────────────────────────────
 
@@ -247,12 +248,25 @@ async function sendChatbotReply(
 ): Promise<void> {
   try {
     const { channelService } = await import("./channelService");
-    await channelService.sendMessage({
+    const guarded = await withAutomationSendGuard({
       userId: ctx.userId,
       contactId: ctx.contactId,
-      content,
-      contentType: "text",
-    });
+      conversationId: ctx.conversationId,
+      channel: ctx.channel as Channel,
+      source: "chatbot",
+      idempotencyKey: `chatbot:text:${ctx.conversationId}:${content.slice(0, 160)}`,
+    }, async () =>
+      channelService.sendMessage({
+        userId: ctx.userId,
+        contactId: ctx.contactId,
+        content,
+        contentType: "text",
+      })
+    );
+    if (!guarded.ok) {
+      console.warn(`[Chatbot] Text reply blocked by send guard — contactId: ${ctx.contactId}, reason: ${guarded.reason}`);
+      return;
+    }
     console.log(
       `[Chatbot] ✅ Text reply sent — contactId: ${ctx.contactId}, channel: ${ctx.channel}, preview: "${content.substring(0, 80)}"`
     );
@@ -289,13 +303,27 @@ async function sendChatbotMedia(
     console.log(
       `[Chatbot] 🚀 Attempting outbound media send — contactId: ${ctx.contactId}, channel: ${ctx.channel}, contentType: ${normalisedType}`
     );
-    const result = await channelService.sendMessage({
+    const guarded = await withAutomationSendGuard({
       userId: ctx.userId,
       contactId: ctx.contactId,
-      content: caption || "",
-      contentType: normalisedType,
-      mediaUrl,
-    });
+      conversationId: ctx.conversationId,
+      channel: ctx.channel as Channel,
+      source: "chatbot",
+      idempotencyKey: `chatbot:media:${ctx.conversationId}:${normalisedType}:${mediaUrl}`,
+    }, async () =>
+      channelService.sendMessage({
+        userId: ctx.userId,
+        contactId: ctx.contactId,
+        content: caption || "",
+        contentType: normalisedType,
+        mediaUrl,
+      })
+    );
+    if (!guarded.ok) {
+      console.warn(`[Chatbot] Media reply blocked by send guard — contactId: ${ctx.contactId}, reason: ${guarded.reason}`);
+      return;
+    }
+    const result = guarded.result;
     if (result.success) {
       console.log(
         `[Chatbot] ✅ Media reply sent — contactId: ${ctx.contactId}, channel: ${ctx.channel}, contentType: ${normalisedType}, externalId: ${result.externalMessageId}`
@@ -359,12 +387,26 @@ async function sendChatbotButtonsMeta(
     );
 
     const phone = contact.phone.startsWith("+") ? contact.phone : `+${contact.phone}`;
-    const result = await sendMetaInteractiveMessage(
-      ctx.userId,
-      phone,
-      "button",
-      interactive
+    const guarded = await withAutomationSendGuard({
+      userId: ctx.userId,
+      contactId: ctx.contactId,
+      conversationId: ctx.conversationId,
+      channel: "whatsapp",
+      source: "chatbot",
+      idempotencyKey: `chatbot:meta_buttons:${ctx.conversationId}:${promptText.slice(0, 160)}`,
+    }, async () =>
+      sendMetaInteractiveMessage(
+        ctx.userId,
+        phone,
+        "button",
+        interactive
+      )
     );
+    if (!guarded.ok) {
+      console.warn(`[Chatbot] Meta interactive buttons blocked by send guard — contactId: ${ctx.contactId}, reason: ${guarded.reason}`);
+      return false;
+    }
+    const result = guarded.result;
 
     // Store message in DB manually (Meta interactive doesn't go through channelService)
     const conversation = await storage.getConversationByContactAndChannel(ctx.contactId, "whatsapp");
@@ -414,13 +456,27 @@ async function sendChatbotButtonsWebchat(
   }
   try {
     const { channelService } = await import("./channelService");
-    const result = await channelService.sendMessage({
+    const guarded = await withAutomationSendGuard({
       userId: ctx.userId,
       contactId: ctx.contactId,
-      content: promptText,
-      contentType: "buttons",
-      templateVariables: { chatbotButtons: buttons },
-    });
+      conversationId: ctx.conversationId,
+      channel: ctx.channel as Channel,
+      source: "chatbot",
+      idempotencyKey: `chatbot:webchat_buttons:${ctx.conversationId}:${promptText.slice(0, 160)}`,
+    }, async () =>
+      channelService.sendMessage({
+        userId: ctx.userId,
+        contactId: ctx.contactId,
+        content: promptText,
+        contentType: "buttons",
+        templateVariables: { chatbotButtons: buttons },
+      })
+    );
+    if (!guarded.ok) {
+      console.warn(`[Chatbot] WebChat buttons blocked by send guard — contactId: ${ctx.contactId}, reason: ${guarded.reason}`);
+      return;
+    }
+    const result = guarded.result;
     if (result.success) {
       console.log(
         `[Chatbot] ✅ WebChat interactive buttons sent — contactId: ${ctx.contactId}, options: [${buttons.map(b => b.label).join(", ")}]`
@@ -631,13 +687,26 @@ async function sendFlowTemplate(
     }
     const finalComponents = pipe.components as any[] | undefined;
 
-    const result = await sendMetaWhatsAppTemplate(
-      ctx.userId,
-      recipientPhone,
-      template.name,
-      templateLang,
-      finalComponents && finalComponents.length > 0 ? finalComponents : undefined
+    const guarded = await withAutomationSendGuard({
+      userId: ctx.userId,
+      contactId: ctx.contactId,
+      conversationId: ctx.conversationId,
+      channel: "whatsapp",
+      source: "template",
+      idempotencyKey: `chatbot:template:${ctx.conversationId}:${template.id}:${JSON.stringify(templateVariables).slice(0, 160)}`,
+    }, async () =>
+      sendMetaWhatsAppTemplate(
+        ctx.userId,
+        recipientPhone,
+        template.name,
+        templateLang,
+        finalComponents && finalComponents.length > 0 ? finalComponents : undefined
+      )
     );
+    if (!guarded.ok) {
+      throw new Error(`Template send blocked by automation guard: ${guarded.reason}`);
+    }
+    const result = guarded.result;
 
     console.log(`[Chatbot] ✅ Meta template sent — messageId=${result.messageId} status=${result.status}`);
 
@@ -667,7 +736,18 @@ async function sendFlowTemplate(
       msgOptions.contentVariables = JSON.stringify(templateVariables);
     }
 
-    const msg = await (twilioClient as any).messages.create(msgOptions);
+    const guarded = await withAutomationSendGuard({
+      userId: ctx.userId,
+      contactId: ctx.contactId,
+      conversationId: ctx.conversationId,
+      channel: "whatsapp",
+      source: "template",
+      idempotencyKey: `chatbot:template:${ctx.conversationId}:${template.id}:${JSON.stringify(templateVariables).slice(0, 160)}`,
+    }, async () => (twilioClient as any).messages.create(msgOptions));
+    if (!guarded.ok) {
+      throw new Error(`Template send blocked by automation guard: ${guarded.reason}`);
+    }
+    const msg = guarded.result;
     console.log(`[Chatbot] ✅ Twilio template sent — sid=${msg.sid} status=${msg.status}`);
   }
 }

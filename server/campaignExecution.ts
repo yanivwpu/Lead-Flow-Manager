@@ -28,6 +28,7 @@ import { subscriptionService } from "./subscriptionService";
 import { getWhatsAppAvailability } from "./whatsappService";
 import { sendMetaWhatsAppTemplate } from "./userMeta";
 import { prepareMetaTemplateComponentsForGraph } from "./metaTemplateMediaPipeline";
+import { withAutomationSendGuard } from "./automationSendGuard";
 
 const WHATSAPP_CSW_BUFFER_MS = 60 * 60 * 1000;
 
@@ -337,25 +338,6 @@ export async function processCampaignEnrollmentStep(enrollmentId: string): Promi
     return;
   }
 
-  const gate = contactBlocksCampaignSends(contact);
-  if (gate.blocked) {
-    await storage.createCampaignStepEvent({
-      enrollmentId: enrollment.id,
-      campaignId: campaign.id,
-      contactId: contact.id,
-      stepIndex: enrollment.currentStepIndex,
-      status: "skipped",
-      scheduledFor: new Date(),
-      errorMessage: gate.reason,
-    });
-    await storage.updateCampaignEnrollment(enrollment.id, {
-      status: "cancelled",
-      nextRunAt: null,
-      lastRunAt: new Date(),
-    });
-    return;
-  }
-
   const messages = parsePresetCampaignMessagesArray(campaign.messages) as CampaignMessageStep[];
   if (messages.length === 0) {
     await storage.updateCampaignEnrollment(enrollment.id, { status: "completed", nextRunAt: null });
@@ -403,23 +385,48 @@ export async function processCampaignEnrollmentStep(enrollmentId: string): Promi
 
   let sendResult: { ok: true; externalMessageId?: string } | { ok: false; error: string };
 
-  if ((campaign.channel || "whatsapp") === "whatsapp") {
-    sendResult = await sendCampaignWhatsApp({
+  const guardedSend = await withAutomationSendGuard(
+    {
       userId: enrollment.userId,
       contactId: contact.id,
-      contact,
-      campaign,
-      body,
-      step,
+      channel: (campaign.channel || "whatsapp") as Channel,
+      source: "campaign",
+      idempotencyKey: `campaign:${enrollment.id}:step:${idx}`,
+    },
+    async () => {
+      if ((campaign.channel || "whatsapp") === "whatsapp") {
+        return sendCampaignWhatsApp({
+          userId: enrollment.userId,
+          contactId: contact.id,
+          contact,
+          campaign,
+          body,
+          step,
+        });
+      }
+      return sendCampaignChannelMessage({
+        userId: enrollment.userId,
+        contactId: contact.id,
+        campaign,
+        body,
+      });
+    }
+  );
+
+  if (!guardedSend.ok) {
+    await storage.updateCampaignStepEvent(pendingEvent.id, {
+      status: "skipped",
+      errorMessage: `Automation send blocked: ${guardedSend.reason}${guardedSend.detail ? ` (${guardedSend.detail})` : ""}`,
+      sentAt: null,
     });
-  } else {
-    sendResult = await sendCampaignChannelMessage({
-      userId: enrollment.userId,
-      contactId: contact.id,
-      campaign,
-      body,
+    await storage.updateCampaignEnrollment(enrollment.id, {
+      status: guardedSend.reason === "duplicate" ? "active" : "cancelled",
+      nextRunAt: null,
+      lastRunAt: new Date(),
     });
+    return;
   }
+  sendResult = guardedSend.result;
 
   if (!sendResult.ok) {
     const ch = (campaign.channel || "whatsapp") as Channel;

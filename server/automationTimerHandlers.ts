@@ -2,7 +2,7 @@ import type { AutomationTimerJob } from "@shared/schema";
 import { storage } from "./storage";
 import { sendUserWhatsAppMessage } from "./userTwilio";
 import { sendMetaWhatsAppMessage } from "./userMeta";
-import { withAutomationSendDedup } from "./automationSendGuard";
+import { withAutomationSendGuard } from "./automationSendGuard";
 
 type W2QualPayload = {
   userId: string;
@@ -30,7 +30,10 @@ export async function scheduleW2FollowUpTimers(params: {
   snapshotInboundAt: Date | null;
 }): Promise<void> {
   const { userId, contactId, qualificationText, routingText, twilioDigits, metaFrom, snapshotInboundAt } = params;
-  await storage.cancelPendingAutomationTimerJobsForUserKinds(userId, ["w2_qualification", "w2_routing"]);
+  await storage.cancelPendingAutomationTimerJobsForUserContactKinds(userId, contactId, [
+    "w2_qualification",
+    "w2_routing",
+  ]);
 
   const baseKey = `${userId}:${contactId}:${Date.now()}`;
 
@@ -84,7 +87,13 @@ export async function scheduleW2FollowUpTimers(params: {
 
 async function sendW2Outbound(payload: W2QualPayload | W2RoutePayload, dedupKind: string): Promise<void> {
   const dedupKey = `${dedupKind}:${payload.userId}:${payload.contactId}:${payload.text.slice(0, 120)}`;
-  const res = await withAutomationSendDedup(dedupKey, payload.userId, payload.contactId, async () => {
+  const res = await withAutomationSendGuard({
+    userId: payload.userId,
+    contactId: payload.contactId,
+    channel: "whatsapp",
+    source: "delayed_job",
+    idempotencyKey: dedupKey,
+  }, async () => {
     if (payload.metaFrom) {
       await sendMetaWhatsAppMessage(payload.userId, payload.metaFrom, payload.text);
     } else if (payload.twilioDigits) {
@@ -94,7 +103,7 @@ async function sendW2Outbound(payload: W2QualPayload | W2RoutePayload, dedupKind
     }
   });
   if (!res.ok) {
-    console.log(JSON.stringify({ tag: "[W2Timer]", skipped: true, dedupKey }));
+    console.log(JSON.stringify({ tag: "[W2Timer]", skipped: true, dedupKey, reason: res.reason }));
   }
 }
 

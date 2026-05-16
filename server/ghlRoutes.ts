@@ -16,6 +16,24 @@ const GHL_CLIENT_SECRET = process.env.GHL_CLIENT_SECRET || '';
 const GHL_REDIRECT_URI =
   process.env.GHL_REDIRECT_URI || `${getAppOrigin()}/api/ext/callback`;
 
+function isUniqueExternalMessageViolation(err: unknown): boolean {
+  const e = err as { code?: string; constraint?: string; message?: string; detail?: string };
+  if (e?.code !== "23505") return false;
+  const joined = `${e.constraint || ""} ${e.message || ""} ${e.detail || ""}`;
+  return joined.includes("messages_user_external_message_id_uq") || joined.includes("external_message_id");
+}
+
+function logGhlDuplicateIgnored(externalMessageId: string): void {
+  console.log(
+    JSON.stringify({
+      tag: "[InboundDedup]",
+      event: "duplicate_ignored",
+      provider: "gohighlevel",
+      external_message_id: externalMessageId,
+    })
+  );
+}
+
 router.get('/callback', async (req: Request, res: Response) => {
   try {
     console.log("[GHL Callback] Host:", {
@@ -330,9 +348,9 @@ router.post('/webhook', async (req: Request, res: Response) => {
           // back as OutboundMessage events or retry InboundMessage events. Skip
           // creation if this exact message ID has already been stored.
           if (msg.messageId) {
-            const existing = await storage.getMessageByExternalId(msg.messageId);
+            const existing = await storage.getMessageByUserExternalId(userId, msg.messageId);
             if (existing) {
-              console.log(`[LeadConnector Webhook] ${timestamp} | Duplicate message skipped (externalId: ${msg.messageId})`);
+              logGhlDuplicateIgnored(msg.messageId);
               break;
             }
           }
@@ -348,15 +366,23 @@ router.post('/webhook', async (req: Request, res: Response) => {
             });
           }
 
-          await storage.createMessage({
-            conversationId: conversation.id,
-            contactId: contact.id,
-            userId,
-            direction: 'inbound',
-            content: msg.content || msg.messageText || '',
-            contentType: msg.contentType || 'text',
-            externalMessageId: msg.messageId,
-          });
+          try {
+            await storage.createMessage({
+              conversationId: conversation.id,
+              contactId: contact.id,
+              userId,
+              direction: 'inbound',
+              content: msg.content || msg.messageText || '',
+              contentType: msg.contentType || 'text',
+              externalMessageId: msg.messageId,
+            });
+          } catch (err: unknown) {
+            if (msg.messageId && isUniqueExternalMessageViolation(err)) {
+              logGhlDuplicateIgnored(msg.messageId);
+              break;
+            }
+            throw err;
+          }
           
           console.log(`[LeadConnector Webhook] ${timestamp} | Created message for contact: ${ghlContactId}`);
           scheduleHubSpotAutoSync(userId, contact.id);

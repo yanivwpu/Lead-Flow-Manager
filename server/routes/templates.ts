@@ -28,6 +28,7 @@ import { WA_TEMPLATE_MEDIA_NEEDS_CONVERSION_MESSAGE } from "../waTemplateMediaUs
 import { isPersistableWhatsAppTemplateDefaultUrl } from "../templateMediaPersistPolicy";
 import { getUserTwilioClient } from "../userTwilio";
 import { subscriptionService } from "../subscriptionService";
+import { withAutomationSendGuard } from "../automationSendGuard";
 import {
   extractPlaceholderKeysFromCampaignMessages,
   getPresetCampaignStepCount,
@@ -1796,6 +1797,7 @@ export function registerTemplateRoutes(app: Express): void {
         contactId,
         variables,
         sendSource,
+        idempotencyKey,
         optionalHeaderMediaUrl: optionalHeaderMediaBody,
         optionalHeaderMediaFilename: optionalHeaderMediaFilenameBody,
         optionalHeaderMediaMimeType: optionalHeaderMediaMimeTypeBody,
@@ -1807,6 +1809,7 @@ export function registerTemplateRoutes(app: Express): void {
         contactId?: string;
         variables?: Record<string, string>;
         sendSource?: string;
+        idempotencyKey?: string;
         /** Direct https URL when synced header media is empty (upload / library pick). */
         optionalHeaderMediaUrl?: string;
         /** Original filename for document-header sends (Meta `document.filename`). */
@@ -1931,6 +1934,44 @@ export function registerTemplateRoutes(app: Express): void {
       if (crmContactId) {
         const ensured = await ensureWhatsAppConversationForContact(req.user.id, crmContactId);
         waConversationIdForReEngagement = ensured.conversationId;
+      }
+
+      if (!crmContactId) {
+        console.warn(
+          `[SEND_ROUTE_EARLY_EXIT] ${sendRouteId} status=400 reason=contact_required_for_guarded_template userId=${req.user.id}`
+        );
+        return reply(
+          400,
+          { error: "Template sends require a CRM contact so automation safety checks can run." },
+          "contact_required_for_guarded_template"
+        );
+      }
+
+      const templateGuardKey =
+        typeof idempotencyKey === "string" && idempotencyKey.trim()
+          ? idempotencyKey.trim()
+          : `template:${sendSourceTag}:${req.user.id}:${crmContactId}:${template.id}:${JSON.stringify(variables || {}).slice(0, 240)}:${Math.floor(Date.now() / 60_000)}`;
+      const templateGuard = await withAutomationSendGuard({
+        userId: req.user.id,
+        contactId: crmContactId,
+        conversationId: waConversationIdForReEngagement,
+        channel: "whatsapp",
+        source: "template",
+        idempotencyKey: templateGuardKey,
+      }, async () => true);
+      if (!templateGuard.ok) {
+        console.warn(
+          `[SEND_ROUTE_EARLY_EXIT] ${sendRouteId} status=409 reason=automation_send_guard_blocked guardReason=${templateGuard.reason}`
+        );
+        return reply(
+          templateGuard.reason === "duplicate" ? 409 : 403,
+          {
+            error: "Template send blocked by automation safety checks.",
+            reason: templateGuard.reason,
+            detail: templateGuard.detail,
+          },
+          "automation_send_guard_blocked"
+        );
       }
 
       const persistReEngagementSuccess = async () => {

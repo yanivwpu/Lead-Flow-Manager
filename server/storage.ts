@@ -366,6 +366,7 @@ export interface IStorage {
   getMessages(conversationId: string, limit?: number, offset?: number): Promise<Message[]>;
   getMessage(id: string): Promise<Message | undefined>;
   getMessageByExternalId(externalMessageId: string): Promise<Message | undefined>;
+  getMessageByUserExternalId(userId: string, externalMessageId: string): Promise<Message | undefined>;
   createMessage(message: InsertMessage): Promise<Message>;
   updateMessage(id: string, updates: Partial<Message>): Promise<Message | undefined>;
   
@@ -499,7 +500,7 @@ export interface IStorage {
 
   // Durable automation timers (e.g. W2 qualification / routing)
   createAutomationTimerJob(job: InsertAutomationTimerJob): Promise<AutomationTimerJob>;
-  cancelPendingAutomationTimerJobsForUserKinds(userId: string, kinds: string[]): Promise<number>;
+  cancelPendingAutomationTimerJobsForUserContactKinds(userId: string, contactId: string, kinds: string[]): Promise<number>;
   recoverStuckAutomationTimerJobs(): Promise<{ requeued: number; failedTerminal: number }>;
   claimPendingAutomationTimerJobs(limit?: number): Promise<AutomationTimerJob[]>;
   markAutomationTimerJobCompleted(id: string): Promise<void>;
@@ -2577,6 +2578,13 @@ export class DbStorage implements IStorage {
     return result[0];
   }
 
+  async getMessageByUserExternalId(userId: string, externalMessageId: string): Promise<Message | undefined> {
+    const result = await db.select().from(messages)
+      .where(and(eq(messages.userId, userId), eq(messages.externalMessageId, externalMessageId)))
+      .limit(1);
+    return result[0];
+  }
+
   async createMessage(message: InsertMessage): Promise<Message> {
     const result = await db.insert(messages).values(message).returning();
     return result[0];
@@ -4004,7 +4012,11 @@ export class DbStorage implements IStorage {
     return row;
   }
 
-  async cancelPendingAutomationTimerJobsForUserKinds(userId: string, kinds: string[]): Promise<number> {
+  async cancelPendingAutomationTimerJobsForUserContactKinds(
+    userId: string,
+    contactId: string,
+    kinds: string[]
+  ): Promise<number> {
     if (!kinds.length) return 0;
     const updated = await db
       .update(automationTimerJobs)
@@ -4013,7 +4025,8 @@ export class DbStorage implements IStorage {
         and(
           eq(automationTimerJobs.userId, userId),
           eq(automationTimerJobs.status, "pending"),
-          inArray(automationTimerJobs.kind, kinds)
+          inArray(automationTimerJobs.kind, kinds),
+          sql`${automationTimerJobs.payload}->>'contactId' = ${contactId}`
         )
       )
       .returning({ id: automationTimerJobs.id });

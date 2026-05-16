@@ -15,6 +15,12 @@ import { eq, sql } from "drizzle-orm";
 import { scheduleHubSpotAutoSync } from "./hubspotAutoSync";
 import { parseConversationReEngagement } from "@shared/reEngagement";
 import {
+  isAlreadyCanonicalPermanentUrl,
+  persistInboundMedia,
+  type PersistInboundMediaAuth,
+} from "./mediaStorageService";
+import { decryptCredential, isEncrypted } from "./userTwilio";
+import {
   coerceReplyWindowErrorToUserMessage,
   errorLooksLikeReplyWindowOrTemplateBlock,
   isMetaReplyWindowExpiredError,
@@ -76,6 +82,24 @@ async function countMessagesInConversation(conversationId: string): Promise<numb
     .from(messagesTbl)
     .where(eq(messagesTbl.conversationId, conversationId));
   return Number(row?.c ?? 0);
+}
+
+function isUniqueExternalMessageViolation(err: unknown): boolean {
+  const e = err as { code?: string; constraint?: string; message?: string; detail?: string };
+  if (e?.code !== "23505") return false;
+  const joined = `${e.constraint || ""} ${e.message || ""} ${e.detail || ""}`;
+  return joined.includes("messages_user_external_message_id_uq") || joined.includes("external_message_id");
+}
+
+function logInboundDuplicateIgnored(provider: string, externalMessageId: string): void {
+  console.log(
+    JSON.stringify({
+      tag: "[InboundDedup]",
+      event: "duplicate_ignored",
+      provider,
+      external_message_id: externalMessageId,
+    })
+  );
 }
 
 /** Inbox WhatsApp free-form: enforce ~23h from last inbound when DB stores a 24h ceiling (1h safety margin). */
@@ -599,10 +623,7 @@ class ChannelService {
     };
   }
 
-  /**
-   * Inbound media is persisted using the provider URL as-is (no separate storage module in this build).
-   */
-  private async persistInboundMediaIfNeeded(_p: {
+  private async persistInboundMediaIfNeeded(p: {
     userId: string;
     channel: Channel;
     contentType: string;
@@ -621,7 +642,106 @@ class ChannelService {
     mediaStoredAt?: Date | null;
     mediaType?: string | null;
   }> {
-    return {};
+    const rawMediaUrl = p.mediaUrl?.trim() || "";
+    const rawProviderMediaId = p.platformMediaId?.trim() || "";
+    const hasMedia = !!rawMediaUrl || !!rawProviderMediaId || !!p.telegramMedia?.fileId;
+    if (!hasMedia || p.contentType === "text") {
+      return {};
+    }
+
+    const mediaType =
+      p.contentType === "image" ||
+      p.contentType === "video" ||
+      p.contentType === "audio" ||
+      p.contentType === "document" ||
+      p.contentType === "sticker"
+        ? p.contentType
+        : "document";
+
+    if (rawMediaUrl && isAlreadyCanonicalPermanentUrl(rawMediaUrl)) {
+      return {
+        mediaUrl: rawMediaUrl,
+        mediaFilename: p.mediaFilename,
+        providerMediaUrl: null,
+        providerMediaId: rawProviderMediaId || null,
+        mediaType,
+      };
+    }
+
+    let auth: PersistInboundMediaAuth = { kind: "public" };
+    if (p.channel === "whatsapp" && rawProviderMediaId) {
+      auth = { kind: "meta-whatsapp-user", userId: p.userId };
+    } else if (p.channel === "facebook" || p.channel === "instagram") {
+      const setting = await storage.getChannelSetting(p.userId, p.channel);
+      const token = (setting?.config as { accessToken?: string } | null | undefined)?.accessToken;
+      auth = token ? { kind: "meta-page-bearer", accessToken: token } : { kind: "public" };
+    } else if (p.telegramMedia?.botToken && p.telegramMedia.fileId) {
+      auth = { kind: "telegram", botToken: p.telegramMedia.botToken, fileId: p.telegramMedia.fileId };
+    } else if ((p.channel === "whatsapp" || p.channel === "sms") && rawMediaUrl && /twilio\.com/i.test(rawMediaUrl)) {
+      const user = await storage.getUser(p.userId);
+      if (user?.twilioAccountSid && user?.twilioAuthToken) {
+        auth = {
+          kind: "twilio-basic",
+          accountSid: user.twilioAccountSid,
+          authToken: isEncrypted(user.twilioAuthToken) ? decryptCredential(user.twilioAuthToken) : user.twilioAuthToken,
+        };
+      }
+    }
+
+    const persisted = await persistInboundMedia({
+      userId: p.userId,
+      channel: p.channel,
+      providerMediaUrl: rawMediaUrl || null,
+      providerMediaId: rawProviderMediaId || p.telegramMedia?.fileId || null,
+      mediaType,
+      filename: p.mediaFilename || null,
+      auth,
+    });
+
+    if (!persisted) {
+      console.warn(
+        JSON.stringify({
+          tag: "[InboundMediaPersist]",
+          event: "failed",
+          userId: p.userId,
+          channel: p.channel,
+          hasProviderUrl: !!rawMediaUrl,
+          hasProviderMediaId: !!rawProviderMediaId,
+        })
+      );
+      return rawMediaUrl
+        ? {
+            mediaUrl: rawMediaUrl,
+            mediaFilename: p.mediaFilename,
+            providerMediaUrl: rawMediaUrl,
+            providerMediaId: rawProviderMediaId || null,
+            mediaType,
+          }
+        : {};
+    }
+
+    console.log(
+      JSON.stringify({
+        tag: "[InboundMediaPersist]",
+        event: "stored",
+        userId: p.userId,
+        channel: p.channel,
+        mediaStorageKey: persisted.mediaStorageKey,
+        providerMediaId: persisted.providerMediaId,
+      })
+    );
+
+    return {
+      mediaUrl: persisted.mediaUrl,
+      mediaFilename: persisted.mediaFilename ?? p.mediaFilename,
+      providerMediaUrl: persisted.providerMediaUrl,
+      providerMediaId: persisted.providerMediaId,
+      mediaMimeType: persisted.mediaMimeType,
+      mediaSize: persisted.mediaSize,
+      mediaStorageKey: persisted.mediaStorageKey,
+      mediaStoredAt: persisted.mediaStoredAt,
+      mediaType,
+    };
   }
 
   async processIncomingMessage(params: {
@@ -675,9 +795,9 @@ class ChannelService {
 
     // Deduplicate: skip if this external message ID was already processed
     if (externalMessageId) {
-      const existing = await storage.getMessageByExternalId(externalMessageId);
+      const existing = await storage.getMessageByUserExternalId(userId, externalMessageId);
       if (existing) {
-        console.log(`[Inbound] Duplicate — skipping already-processed messageId: ${externalMessageId}`);
+        logInboundDuplicateIgnored(channel, externalMessageId);
         // Return existing data so callers can still ACK 200 safely
         const conv = await storage.getConversation(existing.conversationId);
         const cont = await storage.getContact(existing.contactId);
@@ -818,26 +938,46 @@ class ChannelService {
     const finalMediaUrl = persisted.mediaUrl ?? mediaUrl;
     const finalMediaFilename = persisted.mediaFilename ?? mediaFilename;
 
-    const message = await storage.createMessage({
-      conversationId: conversation.id,
-      contactId: contact.id,
-      userId,
-      direction: "inbound",
-      content,
-      contentType,
-      mediaUrl: finalMediaUrl,
-      mediaFilename: finalMediaFilename,
-      platformMediaId,
-      mediaType: persisted.mediaType ?? attachmentType ?? undefined,
-      providerMediaUrl: persisted.providerMediaUrl ?? undefined,
-      providerMediaId: persisted.providerMediaId ?? undefined,
-      mediaMimeType: persisted.mediaMimeType ?? undefined,
-      mediaSize: persisted.mediaSize ?? undefined,
-      mediaStorageKey: persisted.mediaStorageKey ?? undefined,
-      mediaStoredAt: persisted.mediaStoredAt ?? undefined,
-      status: "delivered",
-      externalMessageId,
-    });
+    let message: Message;
+    try {
+      message = await storage.createMessage({
+        conversationId: conversation.id,
+        contactId: contact.id,
+        userId,
+        direction: "inbound",
+        content,
+        contentType,
+        mediaUrl: finalMediaUrl,
+        mediaFilename: finalMediaFilename,
+        platformMediaId,
+        mediaType: persisted.mediaType ?? attachmentType ?? undefined,
+        providerMediaUrl: persisted.providerMediaUrl ?? undefined,
+        providerMediaId: persisted.providerMediaId ?? undefined,
+        mediaMimeType: persisted.mediaMimeType ?? undefined,
+        mediaSize: persisted.mediaSize ?? undefined,
+        mediaStorageKey: persisted.mediaStorageKey ?? undefined,
+        mediaStoredAt: persisted.mediaStoredAt ?? undefined,
+        status: "delivered",
+        externalMessageId,
+      });
+    } catch (err: unknown) {
+      if (externalMessageId && isUniqueExternalMessageViolation(err)) {
+        logInboundDuplicateIgnored(channel, externalMessageId);
+        const existing = await storage.getMessageByUserExternalId(userId, externalMessageId);
+        if (existing) {
+          const existingConversation = (await storage.getConversation(existing.conversationId)) || conversation;
+          const existingContact = (await storage.getContact(existing.contactId)) || contact;
+          return {
+            contact: existingContact,
+            conversation: existingConversation,
+            message: existing,
+            isNewConversation: false,
+            chatbotWillFire: false,
+          };
+        }
+      }
+      throw err;
+    }
 
     console.log(`[Inbound] DB write success — messageId: ${message.id}, conversationId: ${conversation.id}, contactId: ${contact.id}, preview: "${content.substring(0, 80)}"`);
 

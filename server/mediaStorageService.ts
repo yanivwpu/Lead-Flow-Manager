@@ -229,7 +229,7 @@ export async function persistInboundMedia(input: PersistInboundMediaInput): Prom
   let downloadUrl: string | null = input.providerMediaUrl?.trim() || null;
   let buffer: Buffer | null = null;
   let resolvedMime = inputMime?.split(";")[0].trim() || "";
-  const providerMediaUrlOut = downloadUrl;
+  let providerMediaUrlOut = downloadUrl;
   const providerMediaIdOut = input.providerMediaId?.trim() || null;
 
   // --- Telegram: resolve file_path from file_id ---
@@ -253,6 +253,7 @@ export async function persistInboundMedia(input: PersistInboundMediaInput): Prom
       console.warn("[mediaStorage] WhatsApp getMediaUrl returned null", { providerMediaId: providerMediaIdOut });
       return null;
     }
+    providerMediaUrlOut = fresh;
     const buf = await downloadMedia(auth.userId, fresh);
     if (!buf || buf.length === 0) return null;
     buffer = buf;
