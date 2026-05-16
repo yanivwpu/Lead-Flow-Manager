@@ -2541,6 +2541,77 @@ export async function registerRoutes(
         })}`
       );
 
+      const configuredMetaAppId = (process.env.META_APP_ID || "").trim();
+      const webhookObjectType = req.body.object as string | undefined;
+      if (webhookObjectType === "instagram" || webhookObjectType === "page") {
+        try {
+          const recipientIds = new Set(
+            inboundPreview.messagingRecipientIds
+              .map((x) => String(x || "").trim())
+              .filter(Boolean)
+          );
+          const entryIds = new Set(
+            inboundPreview.entryIds
+              .map((x) => String(x || "").trim())
+              .filter(Boolean)
+          );
+          const allConnected = await db.select().from(channelSettings)
+            .where(eq(channelSettings.isConnected, true));
+          const matches = allConnected
+            .map((setting) => {
+              const config = (setting.config || {}) as Record<string, unknown>;
+              const pageId = typeof config.pageId === "string" ? config.pageId : null;
+              const instagramAccountId =
+                typeof config.instagramAccountId === "string"
+                  ? config.instagramAccountId
+                  : typeof config.instagramId === "string"
+                    ? config.instagramId
+                    : null;
+              const storedMetaAppId =
+                typeof config.metaAppId === "string"
+                  ? config.metaAppId
+                  : typeof config.appId === "string"
+                    ? config.appId
+                    : null;
+              const matchedBy =
+                (pageId && (recipientIds.has(pageId) || entryIds.has(pageId)))
+                  ? "pageId"
+                  : (instagramAccountId && (recipientIds.has(instagramAccountId) || entryIds.has(instagramAccountId)))
+                    ? "instagramAccountId"
+                    : null;
+              if (!matchedBy) return null;
+              return {
+                settingId: setting.id,
+                userId: setting.userId,
+                channel: setting.channel,
+                matchedBy,
+                pageId,
+                instagramAccountId,
+                storedMetaAppId,
+                configuredMetaAppId: configuredMetaAppId || null,
+                storedMatchesConfigured:
+                  !!storedMetaAppId && !!configuredMetaAppId && storedMetaAppId === configuredMetaAppId,
+                configHasAppSecret: !!config.appSecret,
+              };
+            })
+            .filter(Boolean);
+
+          console.info(
+            `[Meta Webhook] app ownership diagnostics ${JSON.stringify({
+              object: webhookObjectType,
+              configuredMetaAppId: configuredMetaAppId || null,
+              entryIds: inboundPreview.entryIds,
+              messagingRecipientIds: inboundPreview.messagingRecipientIds,
+              matchedChannelSettings: matches,
+              note:
+                "Incoming webhooks are signed by the Meta app that owns the subscribed_apps webhook. Signature verification uses META_APP_SECRET only for page/instagram.",
+            })}`
+          );
+        } catch (e) {
+          console.warn("[Meta Webhook] app ownership diagnostics failed", e);
+        }
+      }
+
       // Environment mode — drives strict vs. permissive behaviour throughout this handler
       const isProduction = process.env.NODE_ENV === "production";
 
@@ -2567,7 +2638,6 @@ export async function registerRoutes(
         : null;
       const rawBody = rawBodyBuffer?.toString("utf8") || JSON.stringify(req.body);
       const verificationPayload = rawBodyBuffer ?? Buffer.from(rawBody, "utf8");
-      const webhookObjectType = req.body.object as string | undefined;
 
       // Extra diagnostics for Instagram DMs: log the raw bytes (truncated) so we can
       // confirm which object type and entry shape Meta is sending in production.
@@ -2620,15 +2690,18 @@ export async function registerRoutes(
         signatureValid = verifyMetaWebhookSignature(verificationPayload, signature, globalAppSecret);
         devLog(`[Meta Webhook] Global META_APP_SECRET check: ${signatureValid ? "PASSED" : "failed"}`);
       } else {
-        devLog("[Meta Webhook] No global META_APP_SECRET — trying user-level secrets");
+        devLog("[Meta Webhook] No global META_APP_SECRET — WhatsApp may try user-level secrets; Facebook/Instagram will not");
       }
 
-      // If global secret didn't verify, try user-level secrets
+      // If global secret didn't verify, try legacy user-level secrets only for WhatsApp payloads.
+      // Facebook/Instagram webhooks are app-owned page subscriptions and must verify with META_APP_SECRET;
+      // otherwise an old per-user/legacy app secret could accidentally mask that the page is subscribed
+      // to the wrong Meta app.
       if (!signatureValid) {
         const entry = req.body.entry?.[0];
         const phoneNumberId = entry?.changes?.[0]?.value?.metadata?.phone_number_id;
 
-        if (phoneNumberId) {
+        if (webhookObjectType === "whatsapp_business_account" && phoneNumberId) {
           const user = await findUserByMetaPhoneNumberId(phoneNumberId);
           if (user?.metaAppSecret) {
             hasSecretToVerify = true;
@@ -2644,33 +2717,10 @@ export async function registerRoutes(
           }
         }
 
-        // Instagram/Facebook: lookup by recipient page/IG account ID
-        if (!signatureValid && entry?.messaging) {
-          const recipientId = entry.messaging[0]?.recipient?.id;
-          if (recipientId) {
-            const allConnected = await db.select().from(channelSettings)
-              .where(eq(channelSettings.isConnected, true));
-
-            for (const setting of allConnected) {
-              const config = setting.config as any;
-              if (config?.pageId === recipientId || config?.instagramAccountId === recipientId) {
-                if (config?.appSecret) {
-                  hasSecretToVerify = true;
-                  signatureValid = verifyMetaWebhookSignature(verificationPayload, signature, String(config.appSecret).trim());
-                  if (signatureValid) break;
-                }
-                const settingUser = await storage.getUser(setting.userId);
-                if (settingUser?.metaAppSecret) {
-                  hasSecretToVerify = true;
-                  const userSecret = isMetaEncrypted(settingUser.metaAppSecret)
-                    ? decryptMetaCredential(settingUser.metaAppSecret)
-                    : settingUser.metaAppSecret;
-                  signatureValid = verifyMetaWebhookSignature(verificationPayload, signature, userSecret.trim());
-                  if (signatureValid) break;
-                }
-              }
-            }
-          }
+        if (!signatureValid && (webhookObjectType === "instagram" || webhookObjectType === "page")) {
+          console.info(
+            `[Meta Webhook] No fallback app secret attempted for ${webhookObjectType}; page/IG signatures must match global META_APP_SECRET for META_APP_ID=${configuredMetaAppId || "(unset)"}`
+          );
         }
       }
 
@@ -4796,6 +4846,9 @@ export async function registerRoutes(
         pageName: result.pageName || page.name,
         webhookVerifyToken: verifyTokenRaw,
       };
+      if (process.env.META_APP_ID?.trim()) {
+        channelConfig.metaAppId = process.env.META_APP_ID.trim();
+      }
       if (channel === "instagram" && result.instagramAccountId) {
         channelConfig.instagramAccountId = result.instagramAccountId;
         if (result.instagramUsername) channelConfig.instagramUsername = result.instagramUsername;
@@ -4822,6 +4875,9 @@ export async function registerRoutes(
         pageName: result.pageName || page.name,
         webhookVerifyToken: verifyTokenRaw,
       };
+      if (process.env.META_APP_ID?.trim()) {
+        integrationConfig.metaAppId = process.env.META_APP_ID.trim();
+      }
       if (channel === "instagram" && result.instagramAccountId) {
         integrationConfig.instagramId = result.instagramAccountId;
         if (result.instagramUsername) integrationConfig.instagramUsername = result.instagramUsername;
@@ -5247,7 +5303,20 @@ export async function registerRoutes(
       console.log("[Meta Debug] GET subscribed_apps", { channel, pageId });
       const subResp = await fetch(subUrl);
       const subData = (await subResp.json().catch(() => ({}))) as any;
-      responsePayload.subscribedApps = { httpOk: subResp.ok, status: subResp.status, body: subData };
+      const subscribedAppIds = Array.isArray(subData?.data)
+        ? subData.data
+            .map((x: any) => String(x?.id ?? x?.app_id ?? "").trim())
+            .filter(Boolean)
+        : [];
+      const configuredMetaAppId = (process.env.META_APP_ID || "").trim();
+      responsePayload.subscribedApps = {
+        httpOk: subResp.ok,
+        status: subResp.status,
+        body: subData,
+        appIds: subscribedAppIds,
+        configuredMetaAppId: configuredMetaAppId || null,
+        hasConfiguredMetaAppId: !!configuredMetaAppId && subscribedAppIds.includes(configuredMetaAppId),
+      };
       if (!subResp.ok) {
         responsePayload.subscribedAppsError = subData?.error ?? subData ?? `HTTP ${subResp.status}`;
         console.warn("[Meta Debug] subscribed_apps GET failed", {
@@ -5321,6 +5390,9 @@ export async function registerRoutes(
           : null,
         subscribedAppsHttpOk: responsePayload.subscribedApps?.httpOk ?? null,
         subscribedAppsStatus: responsePayload.subscribedApps?.status ?? null,
+        subscribedAppIds,
+        configuredMetaAppId: configuredMetaAppId || null,
+        hasConfiguredMetaAppId: responsePayload.subscribedApps?.hasConfiguredMetaAppId ?? null,
       });
 
       return res.json(responsePayload);
