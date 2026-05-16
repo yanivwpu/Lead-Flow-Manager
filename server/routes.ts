@@ -6652,28 +6652,23 @@ export async function registerRoutes(
         }
 
         const webhookUrl = `https://app.whachatcrm.com/api/webhooks/calendly/${req.user.id}`;
+        const calendlyWebhookEvents = ["invitee.created", "invitee.canceled"];
         const webhookPayload: {
           url: string;
           events: string[];
           organization: string;
           scope: string;
-          signing_key?: string;
         } = {
           url: webhookUrl,
-          events: ["invitee.created", "invitee.canceled", "invitee.rescheduled"],
+          // Calendly represents reschedules as invitee.canceled (rescheduled=true) + invitee.created.
+          events: calendlyWebhookEvents,
           organization: orgUri,
           scope: "organization",
         };
-        const providedSigningKey = String(config.webhookSigningKey || process.env.CALENDLY_WEBHOOK_SIGNING_KEY || "").trim();
-        if (providedSigningKey) {
-          webhookPayload.signing_key = providedSigningKey;
-        }
         logCalendlyConnect("webhook_subscription_payload", {
           callbackUrlUsed: webhookUrl,
-          webhookSubscriptionPayload: {
-            ...webhookPayload,
-            signing_key: webhookPayload.signing_key ? "[provided]" : undefined,
-          },
+          scopeValue: webhookPayload.scope,
+          webhookSubscriptionPayload: webhookPayload,
         });
 
         logCalendlyConnect("endpoint_test", { endpoint: "POST /webhook_subscriptions", organizationUri: orgUri });
@@ -6683,10 +6678,11 @@ export async function registerRoutes(
           status: sub.status,
           callbackUrlUsed: webhookUrl,
           calendlyResponseBody: sub.data,
+          calendlyRawErrorResponse: sub.ok ? undefined : sub.rawBody,
         });
 
         const resource = sub.data?.resource;
-        const signingKey = resource?.signing_key || webhookPayload.signing_key || "";
+        const signingKey = resource?.signing_key || String(process.env.CALENDLY_WEBHOOK_SIGNING_KEY || "").trim();
         const webhookUri = resource?.uri || "";
         const webhookRegistrationError = !sub.ok
           ? calendlyErrorMessage(sub.data as any, "Calendly webhook registration failed.")
@@ -7043,27 +7039,27 @@ export async function registerRoutes(
         }
 
         const webhookUrl = `https://app.whachatcrm.com/api/webhooks/calendly/${req.user.id}`;
+        const calendlyWebhookEvents = ["invitee.created", "invitee.canceled"];
         const payload: {
           url: string;
           events: string[];
           organization: string;
           scope: string;
-          signing_key?: string;
         } = {
           url: webhookUrl,
-          events: ["invitee.created", "invitee.canceled", "invitee.rescheduled"],
+          // Calendly represents reschedules as invitee.canceled (rescheduled=true) + invitee.created.
+          events: calendlyWebhookEvents,
           organization: orgUri,
           scope: "organization",
         };
-        const providedSigningKey = String(config.webhookSigningKey || process.env.CALENDLY_WEBHOOK_SIGNING_KEY || "").trim();
-        if (providedSigningKey) payload.signing_key = providedSigningKey;
         console.log(
           JSON.stringify({
             tag: "[CalendlyConnect]",
             event: "webhook_retry_payload",
             userId: req.user.id,
             callbackUrlUsed: webhookUrl,
-            webhookPostPayload: { ...payload, signing_key: payload.signing_key ? "[provided]" : undefined },
+            scopeValue: payload.scope,
+            webhookPostPayload: payload,
           })
         );
         const sub = await calendlyCreateWebhookSubscription(token, payload);
@@ -7074,7 +7070,8 @@ export async function registerRoutes(
             userId: req.user.id,
             ok: sub.ok,
             status: sub.status,
-            calendlyRawErrorResponse: sub.ok ? undefined : sub.data,
+            calendlyResponseBody: sub.data,
+            calendlyRawErrorResponse: sub.ok ? undefined : sub.rawBody,
           })
         );
         const resource = sub.data?.resource;
@@ -7105,7 +7102,8 @@ export async function registerRoutes(
           lastSyncAt: new Date(),
           config: encryptIntegrationConfig({
             ...config,
-            webhookSigningKey: resource.signing_key || payload.signing_key || config.webhookSigningKey,
+            webhookSigningKey:
+              resource.signing_key || String(process.env.CALENDLY_WEBHOOK_SIGNING_KEY || "").trim() || config.webhookSigningKey,
             calendlyWebhookSubscriptionUri: resource.uri,
             calendlyWebhookCallbackUrl: webhookUrl,
             calendlyWebhookStatus: "connected",

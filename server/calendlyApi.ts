@@ -4,7 +4,7 @@ async function calendlyJson<T>(
   path: string,
   token: string,
   init?: RequestInit
-): Promise<{ ok: boolean; status: number; data: T }> {
+): Promise<{ ok: boolean; status: number; data: T; rawBody: string }> {
   const res = await fetch(`${CALENDLY_API}${path}`, {
     ...init,
     headers: {
@@ -13,8 +13,17 @@ async function calendlyJson<T>(
       ...(init?.headers || {}),
     },
   });
-  const data = (await res.json().catch(() => ({}))) as T;
-  return { ok: res.ok, status: res.status, data };
+  const rawBody = await res.text().catch(() => "");
+  const data = (rawBody
+    ? (() => {
+        try {
+          return JSON.parse(rawBody);
+        } catch {
+          return {};
+        }
+      })()
+    : {}) as T;
+  return { ok: res.ok, status: res.status, data, rawBody };
 }
 
 export type CalendlyWebhookSubscriptionPayload = {
@@ -22,7 +31,7 @@ export type CalendlyWebhookSubscriptionPayload = {
   events: string[];
   organization: string;
   scope: string;
-  signing_key?: string;
+  user?: string;
 };
 
 export async function calendlyGetCurrentUser(token: string) {
@@ -34,7 +43,7 @@ export async function calendlyGetCurrentUser(token: string) {
 export async function calendlyGetOrganization(token: string, organizationUri: string) {
   const uuid = calendlyResourceUuid(organizationUri);
   if (!uuid) {
-    return { ok: false, status: 0, data: {} as { resource?: { uri?: string; name?: string }; message?: string } };
+    return { ok: false, status: 0, data: {} as { resource?: { uri?: string; name?: string }; message?: string }, rawBody: "" };
   }
   return calendlyJson<{
     resource?: { uri?: string; name?: string };
@@ -68,7 +77,7 @@ export function calendlyResourceUuid(uri: string): string | undefined {
 
 export async function calendlyDeleteWebhookSubscription(token: string, subscriptionUri: string) {
   const uuid = calendlyResourceUuid(subscriptionUri);
-  if (!uuid) return { ok: false, status: 0, data: {} as { message?: string } };
+  if (!uuid) return { ok: false, status: 0, data: {} as { message?: string }, rawBody: "" };
   return calendlyJson<{ message?: string }>(`/webhook_subscriptions/${uuid}`, token, {
     method: "DELETE",
   });
