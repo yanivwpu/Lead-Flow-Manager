@@ -36,7 +36,13 @@ export type CalendlyWebhookSubscriptionPayload = {
 
 export async function calendlyGetCurrentUser(token: string) {
   return calendlyJson<{
-    resource?: { uri?: string; current_organization?: string; scheduling_url?: string };
+    resource?: {
+      uri?: string;
+      current_organization?: string;
+      scheduling_url?: string;
+      email?: string;
+      name?: string;
+    };
   }>("/users/me", token);
 }
 

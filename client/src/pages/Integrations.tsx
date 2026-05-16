@@ -511,6 +511,7 @@ export function Integrations() {
   const wooStoreUrlInputRef = useRef<HTMLInputElement>(null);
   const [checkingLcConnection, setCheckingLcConnection] = useState(false);
   const [manageIntegrationId, setManageIntegrationId] = useState<string | null>(null);
+  const [pendingDisconnectType, setPendingDisconnectType] = useState<string | null>(null);
   const [leadManageOpen, setLeadManageOpen] = useState(false);
 
   const integrationsEnabled = subscription?.limits?.integrationsEnabled;
@@ -655,7 +656,23 @@ export function Integrations() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/integrations"] });
       queryClient.invalidateQueries({ queryKey: ["/api/templates/realtor-growth-engine/status"] });
+      toast({
+        title: pendingDisconnectType === "calendly" ? "Calendly disconnected" : "Integration disconnected",
+        description:
+          pendingDisconnectType === "calendly"
+            ? "Calendly token, booking link state, and webhook connection were removed."
+            : "The integration has been removed.",
+      });
       setManageIntegrationId(null);
+      setPendingDisconnectType(null);
+    },
+    onError: (err: Error) => {
+      toast({
+        title: "Disconnect failed",
+        description: err.message || "Could not disconnect integration.",
+        variant: "destructive",
+      });
+      setPendingDisconnectType(null);
     },
   });
 
@@ -844,6 +861,17 @@ export function Integrations() {
     }
   };
 
+  const handleDisconnectIntegration = (integrationId: string, integrationName: string, integrationType: string) => {
+    const confirmed = window.confirm(
+      integrationType === "calendly"
+        ? "Disconnect Calendly? This removes the saved token, clears the booking link connection, and attempts to remove the Calendly webhook subscription."
+        : `Disconnect ${integrationName}? This removes the saved integration credentials.`
+    );
+    if (!confirmed) return;
+    setPendingDisconnectType(integrationType);
+    deleteIntegrationMutation.mutate(integrationId);
+  };
+
   const getConnectedIntegration = (type: string) => {
     if (type === "leadconnector") {
       return integrations.find((i) => i.type === "gohighlevel");
@@ -955,10 +983,9 @@ export function Integrations() {
                         primaryTestId = "button-woocommerce-connected";
                         primaryAction = () => {};
                       } else if (calendlyConnected) {
-                        primaryLabel = "Connected";
-                        primaryDisabled = true;
+                        primaryLabel = "Manage";
                         primaryTestId = "button-calendly-connected";
-                        primaryAction = () => {};
+                        primaryAction = () => setManageIntegrationId(integration.id);
                       } else if (connected) {
                         primaryLabel = "Manage";
                         primaryTestId = `button-manage-${integration.id}`;
@@ -1018,7 +1045,7 @@ export function Integrations() {
                                   <RefreshCw className="h-3.5 w-3.5 animate-spin text-gray-400" />
                                   Loading…
                                 </span>
-                              ) : wooConnected || calendlyConnected ? (
+                              ) : wooConnected ? (
                                 <span className="inline-flex items-center justify-center gap-1.5 text-emerald-800">
                                   <Check className="h-3.5 w-3.5" aria-hidden />
                                   Connected
@@ -1027,14 +1054,14 @@ export function Integrations() {
                                 primaryLabel
                               )}
                             </Button>
-                            {wooConnected && (
+                            {(wooConnected || calendlyConnected) && (
                               <Button
                                 type="button"
                                 variant="ghost"
                                 size="sm"
                                 className="h-auto w-full py-1 text-xs text-gray-600 hover:text-gray-900"
                                 onClick={() => setManageIntegrationId(integration.id)}
-                                data-testid="button-woocommerce-manage"
+                                data-testid={`button-${integration.id}-manage`}
                               >
                                 Manage integration
                               </Button>
@@ -1732,6 +1759,18 @@ export function Integrations() {
                         typeof cfg.calendlyPrimarySchedulingUrl === "string" ? cfg.calendlyPrimarySchedulingUrl : "";
                       const webhookStatus = String(cfg.calendlyWebhookStatus || "unknown");
                       const webhookFailed = webhookStatus === "failed";
+                      const accountEmail =
+                        typeof cfg.calendlyUserEmail === "string" && cfg.calendlyUserEmail.trim()
+                          ? cfg.calendlyUserEmail.trim()
+                          : "";
+                      const accountName =
+                        typeof cfg.calendlyUserName === "string" && cfg.calendlyUserName.trim()
+                          ? cfg.calendlyUserName.trim()
+                          : "";
+                      const userUri =
+                        typeof cfg.calendlyUserUri === "string" && cfg.calendlyUserUri.trim()
+                          ? cfg.calendlyUserUri.trim()
+                          : "";
                       return (
                         <div
                           className={cn(
@@ -1754,6 +1793,22 @@ export function Integrations() {
                             >
                               Webhook {webhookFailed ? "needs retry" : "connected"}
                             </Badge>
+                          </div>
+                          <div className="mt-2 space-y-1">
+                            <div className="flex items-start justify-between gap-3">
+                              <span className={webhookFailed ? "text-amber-800" : "text-emerald-800"}>
+                                Calendly account
+                              </span>
+                              <span className="min-w-0 truncate text-right font-medium">
+                                {accountEmail || accountName || userUri || "Connected account"}
+                              </span>
+                            </div>
+                            <div className="flex items-start justify-between gap-3">
+                              <span className={webhookFailed ? "text-amber-800" : "text-emerald-800"}>
+                                Webhook status
+                              </span>
+                              <span className="font-medium capitalize">{webhookStatus.replace(/_/g, " ")}</span>
+                            </div>
                           </div>
                           {bookingLink ? (
                             <a
@@ -1806,16 +1861,21 @@ export function Integrations() {
                       {managingIntegration.id === "calendly" &&
                       (managingConnected.config as Record<string, unknown>)?.calendlyWebhookStatus === "failed"
                         ? "Retry webhook"
+                        : managingIntegration.id === "calendly"
+                          ? "Refresh booking link"
                         : "Sync now"}
                     </Button>
                     <Button
                       variant="outline"
                       size="sm"
                       className="border-gray-200 text-gray-700 hover:bg-red-50 hover:text-red-600"
-                      onClick={() => deleteIntegrationMutation.mutate(managingConnected.id)}
+                      onClick={() =>
+                        handleDisconnectIntegration(managingConnected.id, managingIntegration.name, managingIntegration.id)
+                      }
+                      disabled={deleteIntegrationMutation.isPending}
                       data-testid={`button-disconnect-${managingIntegration.id}`}
                     >
-                      Disconnect
+                      {managingIntegration.id === "calendly" ? "Disconnect Calendly" : "Disconnect"}
                     </Button>
                   </div>
                 </div>

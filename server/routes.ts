@@ -6697,6 +6697,8 @@ export async function registerRoutes(
           ...(webhookUri ? { calendlyWebhookSubscriptionUri: webhookUri } : {}),
           calendlyOrganizationUri: orgUri,
           calendlyUserUri: meResource?.uri,
+          calendlyUserEmail: meResource?.email || "",
+          calendlyUserName: meResource?.name || "",
           calendlyWebhookCallbackUrl: webhookUrl,
           calendlyWebhookStatus: webhookRegistrationError ? "failed" : "connected",
           ...(webhookRegistrationError ? { calendlyWebhookError: webhookRegistrationError } : {}),
@@ -7020,7 +7022,7 @@ export async function registerRoutes(
         console.log(`Google Sheets sync: ${rows.length} leads ready for user ${req.user.id}`);
       } else if (integration.type === "calendly") {
         const token = String(config.accessToken || "").trim();
-        const orgUri = String(config.calendlyOrganizationUri || "").trim();
+        let orgUri = String(config.calendlyOrganizationUri || "").trim();
         if (!token) {
           return res.status(400).json({
             success: false,
@@ -7029,6 +7031,23 @@ export async function registerRoutes(
             details: "",
           });
         }
+
+        const me = await calendlyGetCurrentUser(token);
+        const meResource = me.data?.resource;
+        if (!me.ok) {
+          return res.status(400).json({
+            success: false,
+            error:
+              me.status === 401
+                ? "Invalid Calendly token. Reconnect Calendly with a valid personal access token."
+                : "Could not refresh Calendly account details. Reconnect Calendly if this continues.",
+            message: "Calendly refresh failed",
+            details: "",
+          });
+        }
+        if (!orgUri && meResource?.current_organization) {
+          orgUri = meResource.current_organization;
+        }
         if (!orgUri) {
           return res.status(400).json({
             success: false,
@@ -7036,6 +7055,21 @@ export async function registerRoutes(
             message: "Calendly webhook retry failed",
             details: "",
           });
+        }
+
+        let refreshedBookingUrl =
+          typeof meResource?.scheduling_url === "string" && /^https?:\/\//i.test(meResource.scheduling_url)
+            ? meResource.scheduling_url.trim()
+            : String(config.calendlyPrimarySchedulingUrl || "").trim();
+        const eventTypes = await calendlyListEventTypes(token, orgUri);
+        const eventTypeRows = eventTypes.data?.collection;
+        if (eventTypes.ok && Array.isArray(eventTypeRows)) {
+          const fromEventType = eventTypeRows
+            .map((x) => x.scheduling_url)
+            .find((u) => typeof u === "string" && /^https?:\/\//i.test(u));
+          if (!refreshedBookingUrl && fromEventType) {
+            refreshedBookingUrl = fromEventType.trim();
+          }
         }
 
         const webhookUrl = `https://app.whachatcrm.com/api/webhooks/calendly/${req.user.id}`;
@@ -7086,6 +7120,11 @@ export async function registerRoutes(
             lastSyncAt: new Date(),
             config: encryptIntegrationConfig({
               ...config,
+              calendlyOrganizationUri: orgUri,
+              calendlyUserUri: meResource?.uri || config.calendlyUserUri,
+              calendlyUserEmail: meResource?.email || config.calendlyUserEmail || "",
+              calendlyUserName: meResource?.name || config.calendlyUserName || "",
+              calendlyPrimarySchedulingUrl: refreshedBookingUrl,
               calendlyWebhookStatus: "failed",
               calendlyWebhookError: errMsg,
               calendlyWebhookCallbackUrl: webhookUrl,
@@ -7102,6 +7141,11 @@ export async function registerRoutes(
           lastSyncAt: new Date(),
           config: encryptIntegrationConfig({
             ...config,
+            calendlyOrganizationUri: orgUri,
+            calendlyUserUri: meResource?.uri || config.calendlyUserUri,
+            calendlyUserEmail: meResource?.email || config.calendlyUserEmail || "",
+            calendlyUserName: meResource?.name || config.calendlyUserName || "",
+            calendlyPrimarySchedulingUrl: refreshedBookingUrl,
             webhookSigningKey:
               resource.signing_key || String(process.env.CALENDLY_WEBHOOK_SIGNING_KEY || "").trim() || config.webhookSigningKey,
             calendlyWebhookSubscriptionUri: resource.uri,
@@ -7113,8 +7157,8 @@ export async function registerRoutes(
         });
         return res.json({
           success: true,
-          message: "Calendly webhook registered",
-          details: "Webhook subscription is active for booking confirmations, cancellations, and reschedules.",
+          message: "Calendly refreshed",
+          details: "Booking link was refreshed and webhook subscription is active for booking confirmations and cancellations.",
         });
       } else if (integration.type === "hubspot") {
         if (config.connectionStatus !== "connected") {
