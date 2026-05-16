@@ -545,7 +545,16 @@ export function Integrations() {
       setIntegrationForm({});
       setSelectedSyncOptions([]);
       const types = data?.calendlyEventTypes as string[] | undefined;
-      if (Array.isArray(types) && types.length > 0) {
+      if (data?.type === "calendly" && data?.calendlyWebhookStatus === "failed") {
+        toast({
+          title: "Calendly connected",
+          description:
+            typeof data?.calendlyWebhookError === "string"
+              ? `Booking link is connected, but webhook registration failed: ${data.calendlyWebhookError}`
+              : "Booking link is connected, but webhook registration failed. Use Manage > Sync now to retry.",
+          variant: "destructive",
+        });
+      } else if (Array.isArray(types) && types.length > 0) {
         toast({
           title: "Calendly connected",
           description: `Event types: ${types.slice(0, 5).join(", ")}${types.length > 5 ? "…" : ""}`,
@@ -1660,6 +1669,21 @@ export function Integrations() {
                       <p className="text-xs text-amber-800">
                         Reconnect with a valid token to enable contact sync.
                       </p>
+                    )}
+                  {managingIntegration.id === "calendly" &&
+                    (managingConnected.config as Record<string, unknown>)?.calendlyWebhookStatus === "failed" && (
+                      <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+                        <p className="font-medium">Webhook registration failed</p>
+                        <p className="mt-1">
+                          Booking links are connected, but booking confirmations may not sync until webhook setup succeeds.
+                          Use Sync now to retry.
+                        </p>
+                        {typeof (managingConnected.config as Record<string, unknown>)?.calendlyWebhookError === "string" && (
+                          <p className="mt-1 text-amber-800">
+                            {(managingConnected.config as Record<string, string>).calendlyWebhookError}
+                          </p>
+                        )}
+                      </div>
                     )}
                   {managingIntegration.id === "hubspot" && (
                     <p className="text-xs text-gray-400 leading-snug">

@@ -17,17 +17,43 @@ async function calendlyJson<T>(
   return { ok: res.ok, status: res.status, data };
 }
 
+export type CalendlyWebhookSubscriptionPayload = {
+  url: string;
+  events: string[];
+  organization: string;
+  scope: string;
+  signing_key?: string;
+};
+
 export async function calendlyGetCurrentUser(token: string) {
   return calendlyJson<{
     resource?: { uri?: string; current_organization?: string; scheduling_url?: string };
   }>("/users/me", token);
 }
 
+export async function calendlyGetOrganization(token: string, organizationUri: string) {
+  const uuid = calendlyResourceUuid(organizationUri);
+  if (!uuid) {
+    return { ok: false, status: 0, data: {} as { resource?: { uri?: string; name?: string }; message?: string } };
+  }
+  return calendlyJson<{
+    resource?: { uri?: string; name?: string };
+    message?: string;
+    title?: string;
+    details?: { message?: string }[];
+  }>(`/organizations/${uuid}`, token);
+}
+
 export async function calendlyCreateWebhookSubscription(
   token: string,
-  body: { url: string; events: string[]; organization: string; scope: string }
+  body: CalendlyWebhookSubscriptionPayload
 ) {
-  return calendlyJson<{ resource?: { uri?: string; signing_key?: string; state?: string } }>(
+  return calendlyJson<{
+    resource?: { uri?: string; signing_key?: string; state?: string };
+    message?: string;
+    title?: string;
+    details?: { message?: string }[];
+  }>(
     "/webhook_subscriptions",
     token,
     { method: "POST", body: JSON.stringify(body) }

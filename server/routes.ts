@@ -143,6 +143,7 @@ import {
   calendlyCreateWebhookSubscription,
   calendlyDeleteWebhookSubscription,
   calendlyGetCurrentUser,
+  calendlyGetOrganization,
   calendlyListEventTypes,
 } from "./calendlyApi";
 import { isUserCalendlyBookingConnected, applyCalendlyBookingLinkForAi } from "./calendlyBookingConnected";
@@ -6525,79 +6526,196 @@ export async function registerRoutes(
       }
 
       let finalConfig: Record<string, any> = { ...config };
-      let calendlyExtra: { calendlyEventTypes?: string[] } = {};
+      let calendlyExtra: {
+        calendlyEventTypes?: string[];
+        calendlyWebhookStatus?: string;
+        calendlyWebhookError?: string;
+      } = {};
 
       if (type === "calendly") {
         const token = String(config.accessToken || "").trim();
+        const logCalendlyConnect = (event: string, payload: Record<string, unknown>) => {
+          console.log(
+            JSON.stringify({
+              tag: "[CalendlyConnect]",
+              event,
+              userId: req.user!.id,
+              ...payload,
+            })
+          );
+        };
+        const calendlyErrorMessage = (
+          data: { message?: string; title?: string; details?: { message?: string }[] } | undefined,
+          fallback: string
+        ) =>
+          data?.message ||
+          data?.title ||
+          (Array.isArray(data?.details) && data.details[0]?.message) ||
+          fallback;
+
         if (!token) {
-          return res.status(400).json({ error: "Personal access token is required" });
+          return res.status(400).json({
+            error: "Enter a Calendly personal access token.",
+            errorCode: "invalid_token",
+          });
         }
+
+        logCalendlyConnect("endpoint_test", { endpoint: "GET /users/me" });
         const me = await calendlyGetCurrentUser(token);
-        if (me.status === 401 || !me.ok) {
-          const msg =
-            me.status === 401
-              ? "Invalid Calendly token"
-              : (me.data as { message?: string })?.message || "Could not validate Calendly token";
-          return res.status(400).json({ error: msg });
+        const meResource = me.data?.resource;
+        logCalendlyConnect("pat_validation_result", {
+          ok: me.ok,
+          status: me.status,
+          resolvedUserUri: meResource?.uri || null,
+          resolvedOrganizationUri: meResource?.current_organization || null,
+          calendlyResponseBody: me.ok ? { hasResource: !!meResource } : me.data,
+        });
+        if (me.status === 401) {
+          return res.status(400).json({
+            error: "Invalid Calendly token. Check that you copied the full personal access token.",
+            errorCode: "invalid_token",
+          });
         }
-        const orgUri = me.data?.resource?.current_organization;
+        if (me.status === 403) {
+          return res.status(400).json({
+            error: "Calendly token is missing required scopes. Create a new personal access token with webhook and event type access.",
+            errorCode: "missing_scopes",
+          });
+        }
+        if (!me.ok) {
+          return res.status(400).json({
+            error: calendlyErrorMessage(me.data as any, "Could not validate Calendly token."),
+            errorCode: "invalid_token",
+          });
+        }
+
+        const orgUri = meResource?.current_organization;
         if (!orgUri) {
-          return res.status(400).json({ error: "Calendly account has no organization URI" });
+          logCalendlyConnect("organization_not_found", { resolvedUserUri: meResource?.uri || null });
+          return res.status(400).json({
+            error: "Calendly organization not found for this token.",
+            errorCode: "organization_not_found",
+          });
         }
-        const base = (getAppOrigin() || "").replace(/\/+$/, "");
-        if (!base) {
-          return res.status(500).json({ error: "APP_URL is not configured — cannot register webhook" });
+
+        logCalendlyConnect("endpoint_test", { endpoint: "GET /organizations/:uuid", organizationUri: orgUri });
+        const org = await calendlyGetOrganization(token, orgUri);
+        logCalendlyConnect("organization_lookup_result", {
+          ok: org.ok,
+          status: org.status,
+          organizationUri: org.data?.resource?.uri || orgUri,
+          calendlyResponseBody: org.ok ? { hasResource: !!org.data?.resource } : org.data,
+        });
+        if (org.status === 403) {
+          return res.status(400).json({
+            error: "Calendly token is missing organization access. Create a new personal access token with organization access.",
+            errorCode: "missing_scopes",
+          });
         }
-        const webhookUrl = `${base}/api/webhooks/calendly/${req.user.id}`;
-        const sub = await calendlyCreateWebhookSubscription(token, {
+        if (!org.ok || !org.data?.resource?.uri) {
+          return res.status(400).json({
+            error: "Calendly organization not found for this token.",
+            errorCode: "organization_not_found",
+          });
+        }
+
+        let eventNames: string[] | undefined;
+        const userScheduling = meResource?.scheduling_url;
+        let calendlyPrimarySchedulingUrl =
+          typeof userScheduling === "string" && /^https?:\/\//i.test(userScheduling) ? userScheduling.trim() : "";
+
+        logCalendlyConnect("endpoint_test", { endpoint: "GET /event_types", organizationUri: orgUri });
+        const et = await calendlyListEventTypes(token, orgUri);
+        const coll = (et.data as { collection?: { name?: string; scheduling_url?: string }[] })?.collection;
+        const schedulingUrls = Array.isArray(coll)
+          ? coll.map((x) => x.scheduling_url).filter((u): u is string => typeof u === "string" && /^https?:\/\//i.test(u))
+          : [];
+        logCalendlyConnect("event_types_result", {
+          ok: et.ok,
+          status: et.status,
+          detectedSchedulingUrlCount: schedulingUrls.length,
+          calendlyResponseBody: et.ok
+            ? { eventTypeCount: Array.isArray(coll) ? coll.length : 0 }
+            : et.data,
+        });
+        if (et.status === 403) {
+          return res.status(400).json({
+            error: "Calendly token is missing event type access. Create a new personal access token with event type access.",
+            errorCode: "missing_scopes",
+          });
+        }
+        if (et.ok && Array.isArray(coll)) {
+          eventNames = coll.map((x) => x.name).filter(Boolean).slice(0, 20) as string[];
+          if (!calendlyPrimarySchedulingUrl && schedulingUrls[0]) {
+            calendlyPrimarySchedulingUrl = schedulingUrls[0].trim();
+          }
+        }
+
+        const webhookUrl = `https://app.whachatcrm.com/api/webhooks/calendly/${req.user.id}`;
+        const webhookPayload: {
+          url: string;
+          events: string[];
+          organization: string;
+          scope: string;
+          signing_key?: string;
+        } = {
           url: webhookUrl,
           events: ["invitee.created", "invitee.canceled", "invitee.rescheduled"],
           organization: orgUri,
           scope: "organization",
+        };
+        const providedSigningKey = String(config.webhookSigningKey || process.env.CALENDLY_WEBHOOK_SIGNING_KEY || "").trim();
+        if (providedSigningKey) {
+          webhookPayload.signing_key = providedSigningKey;
+        }
+        logCalendlyConnect("webhook_subscription_payload", {
+          callbackUrlUsed: webhookUrl,
+          webhookSubscriptionPayload: {
+            ...webhookPayload,
+            signing_key: webhookPayload.signing_key ? "[provided]" : undefined,
+          },
         });
-        if (!sub.ok) {
-          const d = sub.data as { message?: string; title?: string; details?: { message?: string }[] };
-          const msg =
-            d?.message ||
-            d?.title ||
-            (Array.isArray(d?.details) && d.details[0]?.message) ||
-            "Calendly webhook registration failed";
-          return res.status(400).json({ error: msg });
-        }
-        const resource = (sub.data as { resource?: { uri?: string; signing_key?: string } })?.resource;
-        const signingKey = resource?.signing_key;
-        const webhookUri = resource?.uri;
-        if (!signingKey || !webhookUri) {
-          return res.status(400).json({ error: "Calendly did not return webhook URI or signing key" });
-        }
-        let eventNames: string[] | undefined;
-        const userScheduling = me.data?.resource?.scheduling_url;
-        let calendlyPrimarySchedulingUrl =
-          typeof userScheduling === "string" && /^https?:\/\//i.test(userScheduling) ? userScheduling.trim() : "";
-        const et = await calendlyListEventTypes(token, orgUri);
-        if (et.ok) {
-          const coll = (et.data as { collection?: { name?: string; scheduling_url?: string }[] })?.collection;
-          if (Array.isArray(coll)) {
-            eventNames = coll.map((x) => x.name).filter(Boolean).slice(0, 20) as string[];
-            if (!calendlyPrimarySchedulingUrl) {
-              const fromEt = coll
-                .map((x) => x.scheduling_url)
-                .find((u) => typeof u === "string" && /^https?:\/\//i.test(u));
-              if (fromEt) calendlyPrimarySchedulingUrl = fromEt.trim();
-            }
-          }
-        }
+
+        logCalendlyConnect("endpoint_test", { endpoint: "POST /webhook_subscriptions", organizationUri: orgUri });
+        const sub = await calendlyCreateWebhookSubscription(token, webhookPayload);
+        logCalendlyConnect("webhook_subscription_result", {
+          ok: sub.ok,
+          status: sub.status,
+          callbackUrlUsed: webhookUrl,
+          calendlyResponseBody: sub.data,
+        });
+
+        const resource = sub.data?.resource;
+        const signingKey = resource?.signing_key || webhookPayload.signing_key || "";
+        const webhookUri = resource?.uri || "";
+        const webhookRegistrationError = !sub.ok
+          ? calendlyErrorMessage(sub.data as any, "Calendly webhook registration failed.")
+          : !webhookUri
+            ? "Calendly webhook registration did not return a subscription URI."
+            : "";
+
         finalConfig = {
           ...config,
           accessToken: token,
-          webhookSigningKey: signingKey,
-          calendlyWebhookSubscriptionUri: webhookUri,
+          ...(signingKey ? { webhookSigningKey: signingKey } : {}),
+          ...(webhookUri ? { calendlyWebhookSubscriptionUri: webhookUri } : {}),
           calendlyOrganizationUri: orgUri,
-          calendlyUserUri: me.data?.resource?.uri,
+          calendlyUserUri: meResource?.uri,
+          calendlyWebhookCallbackUrl: webhookUrl,
+          calendlyWebhookStatus: webhookRegistrationError ? "failed" : "connected",
+          ...(webhookRegistrationError ? { calendlyWebhookError: webhookRegistrationError } : {}),
           connectionStatus: "connected",
           calendlyPrimarySchedulingUrl,
         };
-        calendlyExtra = { calendlyEventTypes: eventNames };
+        calendlyExtra = {
+          calendlyEventTypes: eventNames,
+          ...(webhookRegistrationError
+            ? {
+                calendlyWebhookStatus: "failed",
+                calendlyWebhookError: webhookRegistrationError,
+              }
+            : { calendlyWebhookStatus: "connected" }),
+        };
       }
 
       if (type === "hubspot") {
@@ -6904,6 +7022,102 @@ export async function registerRoutes(
         
         syncResult.details = `Prepared ${rows.length} leads for export. Configure Google Sheets API to enable automatic sync.`;
         console.log(`Google Sheets sync: ${rows.length} leads ready for user ${req.user.id}`);
+      } else if (integration.type === "calendly") {
+        const token = String(config.accessToken || "").trim();
+        const orgUri = String(config.calendlyOrganizationUri || "").trim();
+        if (!token) {
+          return res.status(400).json({
+            success: false,
+            error: "Invalid Calendly token. Reconnect Calendly with a valid personal access token.",
+            message: "Calendly webhook retry failed",
+            details: "",
+          });
+        }
+        if (!orgUri) {
+          return res.status(400).json({
+            success: false,
+            error: "Calendly organization not found. Reconnect Calendly to resolve the organization.",
+            message: "Calendly webhook retry failed",
+            details: "",
+          });
+        }
+
+        const webhookUrl = `https://app.whachatcrm.com/api/webhooks/calendly/${req.user.id}`;
+        const payload: {
+          url: string;
+          events: string[];
+          organization: string;
+          scope: string;
+          signing_key?: string;
+        } = {
+          url: webhookUrl,
+          events: ["invitee.created", "invitee.canceled", "invitee.rescheduled"],
+          organization: orgUri,
+          scope: "organization",
+        };
+        const providedSigningKey = String(config.webhookSigningKey || process.env.CALENDLY_WEBHOOK_SIGNING_KEY || "").trim();
+        if (providedSigningKey) payload.signing_key = providedSigningKey;
+        console.log(
+          JSON.stringify({
+            tag: "[CalendlyConnect]",
+            event: "webhook_retry_payload",
+            userId: req.user.id,
+            callbackUrlUsed: webhookUrl,
+            webhookPostPayload: { ...payload, signing_key: payload.signing_key ? "[provided]" : undefined },
+          })
+        );
+        const sub = await calendlyCreateWebhookSubscription(token, payload);
+        console.log(
+          JSON.stringify({
+            tag: "[CalendlyConnect]",
+            event: "webhook_retry_result",
+            userId: req.user.id,
+            ok: sub.ok,
+            status: sub.status,
+            calendlyRawErrorResponse: sub.ok ? undefined : sub.data,
+          })
+        );
+        const resource = sub.data?.resource;
+        if (!sub.ok || !resource?.uri) {
+          const d = sub.data as { message?: string; title?: string; details?: { message?: string }[] };
+          const errMsg =
+            d?.message ||
+            d?.title ||
+            (Array.isArray(d?.details) && d.details[0]?.message) ||
+            "Calendly webhook registration failed.";
+          await storage.updateIntegration(req.params.id, {
+            lastSyncAt: new Date(),
+            config: encryptIntegrationConfig({
+              ...config,
+              calendlyWebhookStatus: "failed",
+              calendlyWebhookError: errMsg,
+              calendlyWebhookCallbackUrl: webhookUrl,
+            }),
+          });
+          return res.status(400).json({
+            success: false,
+            error: `Webhook registration failed: ${errMsg}`,
+            message: "Calendly webhook retry failed",
+            details: "Your Calendly booking link remains connected. Retry webhook registration after checking token scopes.",
+          });
+        }
+        await storage.updateIntegration(req.params.id, {
+          lastSyncAt: new Date(),
+          config: encryptIntegrationConfig({
+            ...config,
+            webhookSigningKey: resource.signing_key || payload.signing_key || config.webhookSigningKey,
+            calendlyWebhookSubscriptionUri: resource.uri,
+            calendlyWebhookCallbackUrl: webhookUrl,
+            calendlyWebhookStatus: "connected",
+            calendlyWebhookError: null,
+            connectionStatus: "connected",
+          }),
+        });
+        return res.json({
+          success: true,
+          message: "Calendly webhook registered",
+          details: "Webhook subscription is active for booking confirmations, cancellations, and reschedules.",
+        });
       } else if (integration.type === "hubspot") {
         if (config.connectionStatus !== "connected") {
           return res.status(400).json({
