@@ -593,7 +593,12 @@ export function Integrations() {
       setIntegrationForm({});
       setSelectedSyncOptions([]);
       const types = data?.calendlyEventTypes as string[] | undefined;
-      if (data?.type === "calendly" && data?.calendlyWebhookStatus === "failed") {
+      if (data?.type === "calendly" && data?.message === "Existing Calendly webhook found and linked.") {
+        toast({
+          title: "Existing Calendly webhook linked",
+          description: "Existing Calendly webhook found and linked.",
+        });
+      } else if (data?.type === "calendly" && data?.calendlyWebhookStatus === "failed") {
         toast({
           title: "Calendly connected",
           description:
@@ -698,8 +703,14 @@ export function Integrations() {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/integrations"] });
       const partial = data.success === false;
-      const title = partial ? "Sync finished with issues" : "Sync complete";
+      const linkedExistingCalendlyWebhook = data.message === "Existing Calendly webhook found and linked.";
+      const title = linkedExistingCalendlyWebhook
+        ? "Existing Calendly webhook linked"
+        : partial
+          ? "Sync finished with issues"
+          : "Sync complete";
       const description =
+        (linkedExistingCalendlyWebhook && typeof data.message === "string" ? data.message : "") ||
         (typeof data.details === "string" && data.details) ||
         (typeof data.message === "string" && data.message) ||
         "Integration sync finished.";

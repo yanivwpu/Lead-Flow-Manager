@@ -143,6 +143,7 @@ import {
   calendlyCreateWebhookSubscription,
   calendlyDeleteWebhookSubscription,
   calendlyGetCurrentUser,
+  calendlyGetWebhookSubscription,
   calendlyGetOrganization,
   calendlyListEventTypes,
   calendlyListWebhookSubscriptions,
@@ -4823,6 +4824,122 @@ export async function registerRoutes(
     return masked;
   }
 
+  function calendlyErrorMessage(
+    data: { message?: string; title?: string; details?: { message?: string }[] } | undefined,
+    fallback: string
+  ): string {
+    return data?.message || data?.title || (Array.isArray(data?.details) && data.details[0]?.message) || fallback;
+  }
+
+  function isCalendlyExistingHookError(data: unknown, rawBody = ""): boolean {
+    const text = `${JSON.stringify(data || {})} ${rawBody}`.toLowerCase();
+    return text.includes("hook with this url already exists") || (text.includes("hook") && text.includes("url already exists"));
+  }
+
+  function maskCalendlyWebhookResponse(data: any) {
+    if (!data?.resource || typeof data.resource !== "object") return data;
+    return {
+      ...data,
+      resource: {
+        ...data.resource,
+        signing_key: data.resource.signing_key ? "[present]" : undefined,
+      },
+    };
+  }
+
+  async function resolveCalendlyExistingHook(params: {
+    token: string;
+    orgUri: string;
+    webhookUrl: string;
+    requestedSigningKey: string;
+    log: (event: string, payload: Record<string, unknown>) => void;
+  }): Promise<
+    | { ok: true; uri: string; signingKey: string; events: string[]; recreated: boolean; message: string }
+    | { ok: false; error: string }
+  > {
+    const requiredEvents = ["invitee.created", "invitee.canceled"];
+    const listed = await calendlyListWebhookSubscriptions(params.token, params.orgUri);
+    const hooks = listed.data?.collection || [];
+    const existing = hooks.find((h) => h.callback_url === params.webhookUrl);
+    params.log("existing_hook_found", {
+      ok: listed.ok,
+      status: listed.status,
+      count: hooks.length,
+      callbackUrlUsed: params.webhookUrl,
+      found: Boolean(existing),
+      existingEvents: existing?.events || [],
+      hasInviteeCreated: existing?.events?.includes("invitee.created") || false,
+      hasInviteeCanceled: existing?.events?.includes("invitee.canceled") || false,
+      hasInviteeRescheduled: existing?.events?.includes("invitee.rescheduled") || false,
+    });
+    if (!listed.ok || !existing?.uri) {
+      return { ok: false, error: "Calendly says the webhook exists, but it could not be listed. Check token webhook scopes." };
+    }
+
+    const existingEvents = Array.isArray(existing.events) ? existing.events : [];
+    const hasRequiredEvents = requiredEvents.every((e) => existingEvents.includes(e));
+    const detailed = await calendlyGetWebhookSubscription(params.token, existing.uri);
+    const detailedSigningKey = detailed.data?.resource?.signing_key || "";
+
+    if (hasRequiredEvents && detailedSigningKey) {
+      params.log("existing_hook_linked", {
+        uri: existing.uri,
+        events: existingEvents,
+        signingKeyRecovered: true,
+        hasInviteeRescheduled: existingEvents.includes("invitee.rescheduled"),
+      });
+      return {
+        ok: true,
+        uri: existing.uri,
+        signingKey: detailedSigningKey,
+        events: existingEvents,
+        recreated: false,
+        message: "Existing Calendly webhook found and linked.",
+      };
+    }
+
+    const reason = !hasRequiredEvents ? "missing_required_events" : "missing_signing_key";
+    const del = await calendlyDeleteWebhookSubscription(params.token, existing.uri);
+    params.log("existing_hook_recreated_if_needed", {
+      oldUri: existing.uri,
+      reason,
+      deleteOk: del.ok,
+      deleteStatus: del.status,
+    });
+    if (!del.ok) {
+      return {
+        ok: false,
+        error: "Existing Calendly webhook needs repair, but Calendly did not allow deleting it. Remove the webhook in Calendly or reconnect Calendly.",
+      };
+    }
+
+    const recreated = await calendlyCreateWebhookSubscription(params.token, {
+      url: params.webhookUrl,
+      events: requiredEvents,
+      organization: params.orgUri,
+      scope: "organization",
+      signing_key: params.requestedSigningKey,
+    });
+    params.log("existing_hook_recreated_if_needed", {
+      recreateOk: recreated.ok,
+      recreateStatus: recreated.status,
+      callbackUrlUsed: params.webhookUrl,
+      events: requiredEvents,
+      response: maskCalendlyWebhookResponse(recreated.data),
+    });
+    if (!recreated.ok || !recreated.data?.resource?.uri) {
+      return { ok: false, error: calendlyErrorMessage(recreated.data as any, "Calendly webhook recreation failed.") };
+    }
+    return {
+      ok: true,
+      uri: recreated.data.resource.uri,
+      signingKey: recreated.data.resource.signing_key || params.requestedSigningKey,
+      events: requiredEvents,
+      recreated: true,
+      message: "Existing Calendly webhook found and linked.",
+    };
+  }
+
   // Get user's integrations
   app.get("/api/integrations", async (req, res) => {
     try {
@@ -6531,6 +6648,7 @@ export async function registerRoutes(
         calendlyEventTypes?: string[];
         calendlyWebhookStatus?: string;
         calendlyWebhookError?: string;
+        message?: string;
       } = {};
 
       if (type === "calendly") {
@@ -6545,25 +6663,6 @@ export async function registerRoutes(
             })
           );
         };
-        const maskCalendlyWebhookResponse = (data: any) => {
-          if (!data?.resource || typeof data.resource !== "object") return data;
-          return {
-            ...data,
-            resource: {
-              ...data.resource,
-              signing_key: data.resource.signing_key ? "[present]" : undefined,
-            },
-          };
-        };
-        const calendlyErrorMessage = (
-          data: { message?: string; title?: string; details?: { message?: string }[] } | undefined,
-          fallback: string
-        ) =>
-          data?.message ||
-          data?.title ||
-          (Array.isArray(data?.details) && data.details[0]?.message) ||
-          fallback;
-
         if (!token) {
           return res.status(400).json({
             error: "Enter a Calendly personal access token.",
@@ -6699,13 +6798,32 @@ export async function registerRoutes(
         });
 
         const resource = sub.data?.resource;
-        const signingKey = resource?.signing_key || requestedSigningKey;
-        const webhookUri = resource?.uri || "";
-        const webhookRegistrationError = !sub.ok
+        let signingKey = resource?.signing_key || requestedSigningKey;
+        let webhookUri = resource?.uri || "";
+        let webhookRegistrationError = !sub.ok
           ? calendlyErrorMessage(sub.data as any, "Calendly webhook registration failed.")
           : !webhookUri
             ? "Calendly webhook registration did not return a subscription URI."
             : "";
+        let webhookLinkedMessage = "";
+
+        if (!sub.ok && isCalendlyExistingHookError(sub.data, sub.rawBody)) {
+          const resolved = await resolveCalendlyExistingHook({
+            token,
+            orgUri,
+            webhookUrl,
+            requestedSigningKey,
+            log: logCalendlyConnect,
+          });
+          if (resolved.ok) {
+            signingKey = resolved.signingKey;
+            webhookUri = resolved.uri;
+            webhookRegistrationError = "";
+            webhookLinkedMessage = resolved.message;
+          } else {
+            webhookRegistrationError = resolved.error;
+          }
+        }
 
         finalConfig = {
           ...config,
@@ -6718,12 +6836,13 @@ export async function registerRoutes(
           calendlyUserName: meResource?.name || "",
           calendlyWebhookCallbackUrl: webhookUrl,
           calendlyWebhookStatus: webhookRegistrationError ? "failed" : "connected",
-          ...(webhookRegistrationError ? { calendlyWebhookError: webhookRegistrationError } : {}),
+          ...(webhookRegistrationError ? { calendlyWebhookError: webhookRegistrationError } : { calendlyWebhookError: null }),
           connectionStatus: "connected",
           calendlyPrimarySchedulingUrl,
         };
         calendlyExtra = {
           calendlyEventTypes: eventNames,
+          ...(webhookLinkedMessage ? { message: webhookLinkedMessage } : {}),
           ...(webhookRegistrationError
             ? {
                 calendlyWebhookStatus: "failed",
@@ -7206,6 +7325,48 @@ export async function registerRoutes(
         );
         const resource = sub.data?.resource;
         if (!sub.ok || !resource?.uri) {
+          if (!sub.ok && isCalendlyExistingHookError(sub.data, sub.rawBody)) {
+            const resolved = await resolveCalendlyExistingHook({
+              token,
+              orgUri,
+              webhookUrl,
+              requestedSigningKey,
+              log: (event, payload) => {
+                console.log(
+                  JSON.stringify({
+                    tag: "[CalendlyConnect]",
+                    event,
+                    userId: req.user!.id,
+                    ...payload,
+                  })
+                );
+              },
+            });
+            if (resolved.ok) {
+              await storage.updateIntegration(req.params.id, {
+                lastSyncAt: new Date(),
+                config: encryptIntegrationConfig({
+                  ...config,
+                  calendlyOrganizationUri: orgUri,
+                  calendlyUserUri: meResource?.uri || config.calendlyUserUri,
+                  calendlyUserEmail: meResource?.email || config.calendlyUserEmail || "",
+                  calendlyUserName: meResource?.name || config.calendlyUserName || "",
+                  calendlyPrimarySchedulingUrl: refreshedBookingUrl,
+                  webhookSigningKey: resolved.signingKey,
+                  calendlyWebhookSubscriptionUri: resolved.uri,
+                  calendlyWebhookCallbackUrl: webhookUrl,
+                  calendlyWebhookStatus: "connected",
+                  calendlyWebhookError: null,
+                  connectionStatus: "connected",
+                }),
+              });
+              return res.json({
+                success: true,
+                message: "Existing Calendly webhook found and linked.",
+                details: "Booking sync is active for booking confirmations and cancellations.",
+              });
+            }
+          }
           const d = sub.data as { message?: string; title?: string; details?: { message?: string }[] };
           const errMsg =
             d?.message ||
