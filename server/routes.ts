@@ -38,6 +38,7 @@ import {
   type Message,
   type SubscriptionPlan,
   type Conversation,
+  type Contact,
 } from "@shared/schema";
 import { isConversationHandoffActive } from "@shared/handoffActivity";
 import {
@@ -294,6 +295,114 @@ function summarizeMetaWebhookInbound(body: unknown): {
     messagingEventKinds: [...new Set(messagingEventKinds)],
     messagingRecipientIds: [...new Set(messagingRecipientIds)],
   };
+}
+
+type InstagramSenderProfile = {
+  displayName: string;
+  username: string | null;
+  name: string | null;
+  profilePic: string | null;
+  fieldsReturned: string[];
+};
+
+function isRawNumericId(value: string | null | undefined): boolean {
+  return !!value && /^\d{8,}$/.test(value.trim());
+}
+
+function normalizeInstagramDisplayName(profile: {
+  username?: unknown;
+  name?: unknown;
+}): { displayName: string; username: string | null; name: string | null } {
+  const username = typeof profile.username === "string" && profile.username.trim()
+    ? profile.username.trim().replace(/^@+/, "")
+    : null;
+  const name = typeof profile.name === "string" && profile.name.trim()
+    ? profile.name.trim()
+    : null;
+  return {
+    displayName: username ? `@${username}` : name || "Instagram User",
+    username,
+    name,
+  };
+}
+
+async function fetchInstagramSenderProfile(
+  senderId: string,
+  accessToken: string
+): Promise<InstagramSenderProfile | null> {
+  const token = (accessToken || "").trim();
+  if (!senderId || !token) return null;
+  console.info("[Meta Webhook] [IG PROFILE] fetch attempted", {
+    senderId,
+    fields: ["id", "username", "name", "profile_pic"],
+  });
+  try {
+    const resp = await fetch(
+      `https://graph.facebook.com/v19.0/${encodeURIComponent(senderId)}?fields=${encodeURIComponent("id,username,name,profile_pic")}&access_token=${encodeURIComponent(token)}`,
+      { signal: AbortSignal.timeout(8000) }
+    );
+    const data = (await resp.json().catch(() => ({}))) as Record<string, unknown>;
+    const returned = ["id", "username", "name", "profile_pic"].filter((f) => data[f] != null);
+    if (!resp.ok) {
+      console.warn("[Meta Webhook] [IG PROFILE] fetch failed", {
+        senderId,
+        status: resp.status,
+        errorCode: (data.error as any)?.code ?? null,
+        errorSubcode: (data.error as any)?.error_subcode ?? null,
+        errorType: (data.error as any)?.type ?? null,
+        fieldsReturned: returned,
+      });
+      return null;
+    }
+    const display = normalizeInstagramDisplayName(data);
+    const profilePic =
+      typeof data.profile_pic === "string" && data.profile_pic.trim()
+        ? data.profile_pic.trim()
+        : null;
+    console.info("[Meta Webhook] [IG PROFILE] fetch success", {
+      senderId,
+      fieldsReturned: returned,
+      hasUsername: !!display.username,
+      hasName: !!display.name,
+      hasProfilePic: !!profilePic,
+    });
+    return {
+      ...display,
+      profilePic,
+      fieldsReturned: returned,
+    };
+  } catch (err: unknown) {
+    console.warn("[Meta Webhook] [IG PROFILE] fetch failed", {
+      senderId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return null;
+  }
+}
+
+function buildInstagramContactPatchFromProfile(
+  contact: Contact,
+  senderId: string,
+  profile: InstagramSenderProfile | null
+): Partial<Contact> {
+  const patch: Partial<Contact> = {
+    instagramId: senderId,
+    source: "instagram",
+    primaryChannel: "instagram",
+    lastIncomingChannel: "instagram",
+  };
+  const displayName = profile?.displayName || "Instagram User";
+  const currentName = (contact.name || "").trim();
+  if (!currentName || currentName === senderId || isRawNumericId(currentName) || currentName === "Instagram User") {
+    patch.name = displayName;
+  }
+  if (profile?.profilePic) {
+    patch.avatar = profile.profilePic;
+    patch.avatarFetchedAt = new Date();
+  } else if (!contact.avatarFetchedAt) {
+    patch.avatarFetchedAt = new Date();
+  }
+  return patch;
 }
 
 export async function registerRoutes(
@@ -2913,12 +3022,16 @@ export async function registerRoutes(
                 devLog(`[Inbound] [Stage 4-IG] content="${content.substring(0, 60)}", contentType=${contentType}, hasMedia=${!!attachmentMediaUrl}, attachmentType=${attachmentType}`);
 
                 const igAccessToken: string = (matchSetting.config as any)?.accessToken ?? '';
+                const igProfile = igAccessToken
+                  ? await fetchInstagramSenderProfile(senderId, igAccessToken)
+                  : null;
+                const igContactName = igProfile?.displayName || "Instagram User";
                 directJobs.push(
                   metaCs.processIncomingMessage({
                     userId: matchSetting.userId,
                     channel: 'instagram',
                     channelContactId: senderId,
-                    contactName: event.sender?.username || senderId,
+                    contactName: igContactName,
                     content,
                     contentType,
                     mediaUrl: attachmentMediaUrl,
@@ -2926,8 +3039,18 @@ export async function registerRoutes(
                     externalMessageId: messageId,
                   }).then(async (result) => {
                     devLog(`[Inbound] [Stage 10-IG] Pipeline complete — channel: instagram, messageId: ${messageId}, contactId: ${result.contact.id}, conversationId: ${result.conversation.id}, messageId_db: ${result.message.id}, isNewConversation: ${result.isNewConversation}`);
-                    // Fire-and-forget avatar fetch
-                    if (igAccessToken) {
+                    const profilePatch = buildInstagramContactPatchFromProfile(result.contact, senderId, igProfile);
+                    if (Object.keys(profilePatch).length > 0) {
+                      await storage.updateContact(result.contact.id, profilePatch).catch((err) => {
+                        console.warn("[Meta Webhook] [IG PROFILE] contact profile update failed", {
+                          contactId: result.contact.id,
+                          senderId,
+                          error: err instanceof Error ? err.message : String(err),
+                        });
+                      });
+                    }
+                    // Fallback avatar-only refresh if profile fetch returned no picture and the cached avatar is stale.
+                    if (igAccessToken && !igProfile?.profilePic) {
                       const { shouldRefreshAvatar, fetchInstagramAvatar } = await import("./avatarService");
                       if (shouldRefreshAvatar(result.contact)) {
                         fetchInstagramAvatar(result.contact.id, senderId, igAccessToken).catch(() => {});
