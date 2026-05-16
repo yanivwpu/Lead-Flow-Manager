@@ -225,7 +225,16 @@ app.use((req: Request, _res: Response, next: NextFunction) => {
   }
   return globalJsonParser(req, _res, next);
 });
-app.use(express.urlencoded({ extended: false }));
+const globalUrlencodedParser = express.urlencoded({ extended: false });
+app.use((req: Request, _res: Response, next: NextFunction) => {
+  if (req.path.startsWith("/api/webhook/meta")) {
+    return next();
+  }
+  if (req.path.startsWith("/api/webhooks/calendly")) {
+    return next();
+  }
+  return globalUrlencodedParser(req, _res, next);
+});
 app.use(cookieParser());
 
 // OIDC provider for LeadConnector SSO (must be before auth middleware)

@@ -83,6 +83,7 @@ import {
   findUserByMetaPhoneNumberId,
   getMetaMessageTemplates,
   markMessageAsRead,
+  computeMetaWebhookSignature,
   verifyMetaWebhookSignature,
   decryptCredential as decryptMetaCredential,
   isEncrypted as isMetaEncrypted,
@@ -2559,9 +2560,13 @@ export async function registerRoutes(
       // Use the captured raw body buffer for signature verification.
       // JSON.stringify(req.body) would re-serialize a parsed object and may differ
       // from the original bytes that Meta signed (whitespace, key order), causing
-      // every webhook to fail verification. rawBody is set by the express.json verify
+      // webhooks to fail verification. rawBody is set by the express.json verify
       // callback registered in index.ts for /api/webhook/meta.
-      const rawBody = (req as any).rawBody?.toString() || JSON.stringify(req.body);
+      const rawBodyBuffer = Buffer.isBuffer((req as any).rawBody)
+        ? ((req as any).rawBody as Buffer)
+        : null;
+      const rawBody = rawBodyBuffer?.toString("utf8") || JSON.stringify(req.body);
+      const verificationPayload = rawBodyBuffer ?? Buffer.from(rawBody, "utf8");
       const webhookObjectType = req.body.object as string | undefined;
 
       // Extra diagnostics for Instagram DMs: log the raw bytes (truncated) so we can
@@ -2577,13 +2582,42 @@ export async function registerRoutes(
       // In production: !signatureValid → 403 regardless of hasSecretToVerify
       // In dev:        !signatureValid + !hasSecretToVerify → warn + allow
       //                !signatureValid + hasSecretToVerify  → warn + allow (HMAC mismatch)
-      const globalAppSecret = process.env.META_APP_SECRET;
+      const globalAppSecretRaw = process.env.META_APP_SECRET;
+      const globalAppSecret = globalAppSecretRaw?.trim();
+      const receivedSignatureHash =
+        typeof signature === "string" ? signature.replace(/^sha256=/, "") : "";
       let signatureValid = false;
       let hasSecretToVerify = false;
 
+      let globalComputedSignaturePrefix: string | null = null;
+      if (globalAppSecret) {
+        try {
+          globalComputedSignaturePrefix = computeMetaWebhookSignature(
+            verificationPayload,
+            globalAppSecret
+          ).slice(0, 12);
+        } catch {
+          globalComputedSignaturePrefix = null;
+        }
+      }
+
+      console.info(
+        `[Meta Webhook] signature diagnostics ${JSON.stringify({
+          metaAppSecretExists: !!globalAppSecretRaw,
+          metaAppSecretLength: globalAppSecretRaw?.length ?? 0,
+          metaAppSecretTrimmedLength: globalAppSecret?.length ?? 0,
+          rawBodyExists: !!rawBodyBuffer,
+          rawBodyByteLength: rawBodyBuffer?.length ?? 0,
+          xHubSignature256Exists: !!signature,
+          computedSignaturePrefix: globalComputedSignaturePrefix,
+          receivedSignaturePrefix: receivedSignatureHash.slice(0, 12) || null,
+          bodySource: rawBodyBuffer ? "rawBody buffer" : "JSON.stringify fallback",
+        })}`
+      );
+
       if (globalAppSecret) {
         hasSecretToVerify = true;
-        signatureValid = verifyMetaWebhookSignature(rawBody, signature, globalAppSecret);
+        signatureValid = verifyMetaWebhookSignature(verificationPayload, signature, globalAppSecret);
         devLog(`[Meta Webhook] Global META_APP_SECRET check: ${signatureValid ? "PASSED" : "failed"}`);
       } else {
         devLog("[Meta Webhook] No global META_APP_SECRET — trying user-level secrets");
@@ -2601,7 +2635,7 @@ export async function registerRoutes(
             const userSecret = isMetaEncrypted(user.metaAppSecret)
               ? decryptMetaCredential(user.metaAppSecret)
               : user.metaAppSecret;
-            signatureValid = verifyMetaWebhookSignature(rawBody, signature, userSecret);
+            signatureValid = verifyMetaWebhookSignature(verificationPayload, signature, userSecret.trim());
             devLog(`[Meta Webhook] User (${user.id}) app secret check for phoneNumberId ${phoneNumberId}: ${signatureValid ? "PASSED" : "failed"}`);
           } else if (user) {
             console.warn(`[Meta Webhook] User ${user.id} matched but has no metaAppSecret stored`);
@@ -2622,7 +2656,7 @@ export async function registerRoutes(
               if (config?.pageId === recipientId || config?.instagramAccountId === recipientId) {
                 if (config?.appSecret) {
                   hasSecretToVerify = true;
-                  signatureValid = verifyMetaWebhookSignature(rawBody, signature, config.appSecret);
+                  signatureValid = verifyMetaWebhookSignature(verificationPayload, signature, String(config.appSecret).trim());
                   if (signatureValid) break;
                 }
                 const settingUser = await storage.getUser(setting.userId);
@@ -2631,7 +2665,7 @@ export async function registerRoutes(
                   const userSecret = isMetaEncrypted(settingUser.metaAppSecret)
                     ? decryptMetaCredential(settingUser.metaAppSecret)
                     : settingUser.metaAppSecret;
-                  signatureValid = verifyMetaWebhookSignature(rawBody, signature, userSecret);
+                  signatureValid = verifyMetaWebhookSignature(verificationPayload, signature, userSecret.trim());
                   if (signatureValid) break;
                 }
               }
@@ -2646,7 +2680,9 @@ export async function registerRoutes(
           if (!hasSecretToVerify) {
             console.error(`[Meta Webhook] REJECTED (production): No app secret configured — cannot verify signature. Set META_APP_SECRET env var or store metaAppSecret on user account.`);
           } else {
-            console.error(`[Meta Webhook] REJECTED (production): Signature verification failed. Signature: ${signature.substring(0, 30)}... Body source: ${(req as any).rawBody ? "rawBody buffer" : "JSON.stringify fallback"}`);
+            console.error(
+              `[Meta Webhook] REJECTED (production): Signature verification failed. Signature prefix: ${receivedSignatureHash.slice(0, 12) || "missing"}... Body source: ${rawBodyBuffer ? "rawBody buffer" : "JSON.stringify fallback"}`
+            );
           }
           return res.status(403).send("Invalid signature");
         } else {

@@ -1056,19 +1056,29 @@ export async function downloadMedia(
   }
 }
 
+export function computeMetaWebhookSignature(
+  payload: Buffer | string,
+  appSecret: string
+): string {
+  return crypto
+    .createHmac("sha256", appSecret)
+    .update(payload)
+    .digest("hex");
+}
+
 export function verifyMetaWebhookSignature(
-  payload: string,
+  payload: Buffer | string,
   signature: string,
   appSecret: string
 ): boolean {
   try {
-    const expectedSignature = crypto
-      .createHmac("sha256", appSecret)
-      .update(payload)
-      .digest("hex");
-    
+    const expectedSignature = computeMetaWebhookSignature(payload, appSecret);
     const signatureHash = signature.replace("sha256=", "");
-    
+
+    if (expectedSignature.length !== signatureHash.length) {
+      return false;
+    }
+
     return crypto.timingSafeEqual(
       Buffer.from(expectedSignature),
       Buffer.from(signatureHash)
