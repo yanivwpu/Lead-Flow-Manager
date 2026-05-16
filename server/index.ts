@@ -64,6 +64,7 @@ console.log(
 );
 console.log("[Meta] App env snapshot", {
   META_APP_ID: process.env.META_APP_ID || null,
+  INSTAGRAM_APP_ID: process.env.INSTAGRAM_APP_ID || null,
   META_CLIENT_SECRET: process.env.META_CLIENT_SECRET
     ? { length: process.env.META_CLIENT_SECRET.length, prefix: process.env.META_CLIENT_SECRET.slice(0, 4) }
     : null,

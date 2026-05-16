@@ -2600,11 +2600,12 @@ export async function registerRoutes(
             `[Meta Webhook] app ownership diagnostics ${JSON.stringify({
               object: webhookObjectType,
               configuredMetaAppId: configuredMetaAppId || null,
+              configuredInstagramAppId: process.env.INSTAGRAM_APP_ID?.trim() || null,
               entryIds: inboundPreview.entryIds,
               messagingRecipientIds: inboundPreview.messagingRecipientIds,
               matchedChannelSettings: matches,
               note:
-                "Incoming webhooks are signed by the Meta app that owns the subscribed_apps webhook. Signature verification uses META_APP_SECRET only for page/instagram.",
+                "Incoming webhooks are signed by the app that owns the webhook product/subscription. Instagram object payloads try META_APP_SECRET first, then optional INSTAGRAM_APP_SECRET.",
             })}`
           );
         } catch (e) {
@@ -2654,10 +2655,13 @@ export async function registerRoutes(
       //                !signatureValid + hasSecretToVerify  → warn + allow (HMAC mismatch)
       const globalAppSecretRaw = process.env.META_APP_SECRET;
       const globalAppSecret = globalAppSecretRaw?.trim();
+      const instagramAppSecretRaw = process.env.INSTAGRAM_APP_SECRET;
+      const instagramAppSecret = instagramAppSecretRaw?.trim();
       const receivedSignatureHash =
         typeof signature === "string" ? signature.replace(/^sha256=/, "") : "";
       let signatureValid = false;
       let hasSecretToVerify = false;
+      let matchedSecretSource: string | null = null;
 
       let globalComputedSignaturePrefix: string | null = null;
       if (globalAppSecret) {
@@ -2670,16 +2674,33 @@ export async function registerRoutes(
           globalComputedSignaturePrefix = null;
         }
       }
+      let instagramComputedSignaturePrefix: string | null = null;
+      if (webhookObjectType === "instagram" && instagramAppSecret) {
+        try {
+          instagramComputedSignaturePrefix = computeMetaWebhookSignature(
+            verificationPayload,
+            instagramAppSecret
+          ).slice(0, 12);
+        } catch {
+          instagramComputedSignaturePrefix = null;
+        }
+      }
 
       console.info(
         `[Meta Webhook] signature diagnostics ${JSON.stringify({
+          object: webhookObjectType ?? null,
           metaAppSecretExists: !!globalAppSecretRaw,
           metaAppSecretLength: globalAppSecretRaw?.length ?? 0,
           metaAppSecretTrimmedLength: globalAppSecret?.length ?? 0,
+          instagramAppSecretExists: !!instagramAppSecretRaw,
+          instagramAppSecretLength: instagramAppSecretRaw?.length ?? 0,
+          instagramAppSecretTrimmedLength: instagramAppSecret?.length ?? 0,
           rawBodyExists: !!rawBodyBuffer,
           rawBodyByteLength: rawBodyBuffer?.length ?? 0,
           xHubSignature256Exists: !!signature,
           computedSignaturePrefix: globalComputedSignaturePrefix,
+          metaAppSecretComputedSignaturePrefix: globalComputedSignaturePrefix,
+          instagramAppSecretComputedSignaturePrefix: instagramComputedSignaturePrefix,
           receivedSignaturePrefix: receivedSignatureHash.slice(0, 12) || null,
           bodySource: rawBodyBuffer ? "rawBody buffer" : "JSON.stringify fallback",
         })}`
@@ -2688,15 +2709,41 @@ export async function registerRoutes(
       if (globalAppSecret) {
         hasSecretToVerify = true;
         signatureValid = verifyMetaWebhookSignature(verificationPayload, signature, globalAppSecret);
+        if (signatureValid) matchedSecretSource = "META_APP_SECRET";
         devLog(`[Meta Webhook] Global META_APP_SECRET check: ${signatureValid ? "PASSED" : "failed"}`);
       } else {
         devLog("[Meta Webhook] No global META_APP_SECRET — WhatsApp may try user-level secrets; Facebook/Instagram will not");
       }
 
-      // If global secret didn't verify, try legacy user-level secrets only for WhatsApp payloads.
-      // Facebook/Instagram webhooks are app-owned page subscriptions and must verify with META_APP_SECRET;
-      // otherwise an old per-user/legacy app secret could accidentally mask that the page is subscribed
-      // to the wrong Meta app.
+      if (!signatureValid && webhookObjectType === "instagram" && instagramAppSecret) {
+        hasSecretToVerify = true;
+        signatureValid = verifyMetaWebhookSignature(verificationPayload, signature, instagramAppSecret);
+        if (signatureValid) matchedSecretSource = "INSTAGRAM_APP_SECRET";
+        console.info(
+          `[Meta Webhook] Instagram secret check ${JSON.stringify({
+            secretSource: "INSTAGRAM_APP_SECRET",
+            length: instagramAppSecretRaw?.length ?? 0,
+            trimmedLength: instagramAppSecret.length,
+            computedSignaturePrefix: instagramComputedSignaturePrefix,
+            matched: signatureValid,
+          })}`
+        );
+      } else if (!signatureValid && webhookObjectType === "instagram") {
+        console.info(
+          `[Meta Webhook] Instagram secret check skipped ${JSON.stringify({
+            secretSource: "INSTAGRAM_APP_SECRET",
+            exists: !!instagramAppSecretRaw,
+            length: instagramAppSecretRaw?.length ?? 0,
+          })}`
+        );
+      }
+
+      // If app-level secrets didn't verify, try legacy user-level secrets only for WhatsApp payloads.
+      // Facebook/Instagram webhooks are app-owned subscriptions:
+      // - page object uses META_APP_SECRET
+      // - instagram object may use the Instagram API product's INSTAGRAM_APP_SECRET
+      // We intentionally do not try per-user/per-channel fallback secrets for page/IG because that
+      // could mask that the webhook belongs to the wrong Meta app.
       if (!signatureValid) {
         const entry = req.body.entry?.[0];
         const phoneNumberId = entry?.changes?.[0]?.value?.metadata?.phone_number_id;
@@ -2719,7 +2766,7 @@ export async function registerRoutes(
 
         if (!signatureValid && (webhookObjectType === "instagram" || webhookObjectType === "page")) {
           console.info(
-            `[Meta Webhook] No fallback app secret attempted for ${webhookObjectType}; page/IG signatures must match global META_APP_SECRET for META_APP_ID=${configuredMetaAppId || "(unset)"}`
+            `[Meta Webhook] No per-user fallback app secret attempted for ${webhookObjectType}; page signatures must match META_APP_SECRET and instagram signatures may match INSTAGRAM_APP_SECRET. META_APP_ID=${configuredMetaAppId || "(unset)"} INSTAGRAM_APP_ID=${process.env.INSTAGRAM_APP_ID?.trim() || "(unset)"}`
           );
         }
       }
@@ -2744,7 +2791,11 @@ export async function registerRoutes(
           }
         }
       } else {
-        devLog("[Meta Webhook] Signature verification: PASSED ✓");
+        console.info(
+          `[Meta Webhook] Signature verification: PASSED ${JSON.stringify({
+            secretSource: matchedSecretSource || "unknown",
+          })}`
+        );
       }
 
       const incomingMessage = parseMetaIncomingWebhook(req.body);
