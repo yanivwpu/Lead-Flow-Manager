@@ -32,6 +32,7 @@ export type CalendlyWebhookSubscriptionPayload = {
   organization: string;
   scope: string;
   user?: string;
+  signing_key?: string;
 };
 
 export async function calendlyGetCurrentUser(token: string) {
@@ -87,6 +88,43 @@ export async function calendlyDeleteWebhookSubscription(token: string, subscript
   return calendlyJson<{ message?: string }>(`/webhook_subscriptions/${uuid}`, token, {
     method: "DELETE",
   });
+}
+
+export async function calendlyGetWebhookSubscription(token: string, subscriptionUri: string) {
+  const uuid = calendlyResourceUuid(subscriptionUri);
+  if (!uuid) {
+    return {
+      ok: false,
+      status: 0,
+      data: {} as {
+        resource?: {
+          uri?: string;
+          callback_url?: string;
+          events?: string[];
+          organization?: string;
+          scope?: string;
+          state?: string;
+          signing_key?: string;
+        };
+        message?: string;
+      },
+      rawBody: "",
+    };
+  }
+  return calendlyJson<{
+    resource?: {
+      uri?: string;
+      callback_url?: string;
+      events?: string[];
+      organization?: string;
+      scope?: string;
+      state?: string;
+      signing_key?: string;
+    };
+    message?: string;
+    title?: string;
+    details?: { message?: string }[];
+  }>(`/webhook_subscriptions/${uuid}`, token);
 }
 
 export async function calendlyListWebhookSubscriptions(token: string, organizationUri: string) {

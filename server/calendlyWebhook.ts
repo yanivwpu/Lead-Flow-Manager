@@ -14,6 +14,8 @@ import { storage } from "./storage";
 import { dispatchInboundMessagingAutomation } from "./automationEventDispatcher";
 import { subscriptionService } from "./subscriptionService";
 import { notifyUser } from "./presence";
+import { calendlyGetWebhookSubscription } from "./calendlyApi";
+import { encryptIntegrationConfig } from "./integrationConfigCrypto";
 
 const DECRYPT_KEYS = [
   "accessToken",
@@ -39,6 +41,44 @@ function decryptIntegrationConfigLocal(config: Record<string, unknown>): Record<
   return out;
 }
 
+function parseCalendlyWebhookSignature(signatureHeader: string | undefined): { timestamp: string; v1s: string[] } {
+  let t = "";
+  const v1s: string[] = [];
+  if (!signatureHeader) return { timestamp: t, v1s };
+  for (const part of signatureHeader.split(",")) {
+    const p = part.trim();
+    if (p.startsWith("t=")) t = p.slice(2);
+    else if (p.startsWith("v1=")) v1s.push(p.slice(3));
+  }
+  return { timestamp: t, v1s };
+}
+
+function computeCalendlyWebhookSignature(rawBody: Buffer, signingKey: string, timestamp: string): string {
+  const payload = Buffer.from(`${timestamp}.${rawBody.toString("utf8")}`, "utf8");
+  return crypto.createHmac("sha256", signingKey).update(payload).digest("hex");
+}
+
+function calendlySignatureDiagnostics(
+  rawBody: Buffer | undefined,
+  signingKey: string,
+  signatureHeader: string | undefined
+): {
+  signatureTimestampExists: boolean;
+  receivedSignaturePrefix: string | null;
+  computedSignaturePrefix: string | null;
+} {
+  const { timestamp, v1s } = parseCalendlyWebhookSignature(signatureHeader);
+  const received = v1s[0] || "";
+  const computed = rawBody?.length && signingKey && timestamp
+    ? computeCalendlyWebhookSignature(rawBody, signingKey, timestamp)
+    : "";
+  return {
+    signatureTimestampExists: Boolean(timestamp),
+    receivedSignaturePrefix: received ? received.slice(0, 12) : null,
+    computedSignaturePrefix: computed ? computed.slice(0, 12) : null,
+  };
+}
+
 /** Calendly sends `Calendly-Webhook-Signature: t=TIMESTAMP,v1=HEX` — HMAC-SHA256 of `t + '.' + rawBody`. */
 export function verifyCalendlyWebhookSignature(
   rawBody: Buffer,
@@ -46,16 +86,9 @@ export function verifyCalendlyWebhookSignature(
   signingKey: string
 ): boolean {
   if (!signatureHeader || !signingKey || !rawBody?.length) return false;
-  let t = "";
-  const v1s: string[] = [];
-  for (const part of signatureHeader.split(",")) {
-    const p = part.trim();
-    if (p.startsWith("t=")) t = p.slice(2);
-    else if (p.startsWith("v1=")) v1s.push(p.slice(3));
-  }
-  if (!t || v1s.length === 0) return false;
-  const payload = Buffer.from(`${t}.${rawBody.toString("utf8")}`, "utf8");
-  const expectedHex = crypto.createHmac("sha256", signingKey).update(payload).digest("hex");
+  const { timestamp, v1s } = parseCalendlyWebhookSignature(signatureHeader);
+  if (!timestamp || v1s.length === 0) return false;
+  const expectedHex = computeCalendlyWebhookSignature(rawBody, signingKey, timestamp);
   const expectedBuf = Buffer.from(expectedHex, "hex");
   for (const v1 of v1s) {
     try {
@@ -176,6 +209,47 @@ function extractCalendlyBookingPayload(body: Record<string, unknown>): {
     utmContactId,
     meetingLink,
   };
+}
+
+async function recoverCalendlySigningKeyFromSubscription(params: {
+  userId: string;
+  integrationId: string;
+  config: Record<string, unknown>;
+}): Promise<string> {
+  const token = typeof params.config.accessToken === "string" ? params.config.accessToken.trim() : "";
+  const subscriptionUri =
+    typeof params.config.calendlyWebhookSubscriptionUri === "string"
+      ? params.config.calendlyWebhookSubscriptionUri.trim()
+      : "";
+  if (!token || !subscriptionUri) {
+    logCalendlyWebhook("signing_key_recovery_skipped", {
+      userId: params.userId,
+      integrationId: params.integrationId,
+      tokenExists: Boolean(token),
+      subscriptionUriExists: Boolean(subscriptionUri),
+    });
+    return "";
+  }
+
+  const sub = await calendlyGetWebhookSubscription(token, subscriptionUri);
+  const signingKey = sub.data?.resource?.signing_key || "";
+  logCalendlyWebhook("signing_key_recovery_result", {
+    userId: params.userId,
+    integrationId: params.integrationId,
+    status: sub.status,
+    ok: sub.ok,
+    signingKeyRecovered: Boolean(signingKey),
+    subscriptionState: sub.data?.resource?.state || null,
+  });
+  if (!signingKey) return "";
+
+  await storage.updateIntegration(params.integrationId, {
+    config: encryptIntegrationConfig({
+      ...params.config,
+      webhookSigningKey: signingKey,
+    }) as any,
+  });
+  return signingKey;
 }
 
 function appendContactNote(existing: string | null | undefined, line: string): string {
@@ -686,13 +760,14 @@ export async function handleCalendlyWebhook(req: Request, res: Response): Promis
   }
 
   const rawBody = (req as { rawBody?: Buffer }).rawBody;
-  const sigHeader = req.headers["calendly-webhook-signature"] as string | undefined;
+  const sigHeader = req.get("calendly-webhook-signature") || undefined;
   logCalendlyWebhook("http_received", {
     userId,
     method: req.method,
     path: req.originalUrl || req.url,
     rawBodyBytes: rawBody?.length || 0,
     signatureHeaderExists: Boolean(sigHeader),
+    sessionAuthenticated: typeof req.isAuthenticated === "function" ? req.isAuthenticated() : false,
   });
 
   const integration = await storage.getIntegrationByUserAndType(userId, "calendly");
@@ -707,7 +782,7 @@ export async function handleCalendlyWebhook(req: Request, res: Response): Promis
   }
 
   const cfg = decryptIntegrationConfigLocal((integration.config || {}) as Record<string, unknown>);
-  const signingKey = String(cfg.webhookSigningKey || "").trim();
+  let signingKey = String(cfg.webhookSigningKey || "").trim();
   logCalendlyWebhook("integration_loaded", {
     userId,
     integrationId: integration.id,
@@ -717,35 +792,69 @@ export async function handleCalendlyWebhook(req: Request, res: Response): Promis
     subscriptionUriExists: Boolean(cfg.calendlyWebhookSubscriptionUri),
   });
 
-  if (!signingKey || !rawBody) {
-    logCalendlyWebhook("signature_prerequisite_failed", {
+  if (!signingKey) {
+    signingKey = await recoverCalendlySigningKeyFromSubscription({
       userId,
-      signingKeyExists: Boolean(signingKey),
-      rawBodyExists: Boolean(rawBody),
-      rawBodyBytes: rawBody?.length || 0,
+      integrationId: integration.id,
+      config: cfg,
     });
-    res.status(401).json({ error: "Unauthorized" });
-    return;
   }
-  if (!verifyCalendlyWebhookSignature(rawBody, sigHeader, signingKey)) {
-    logCalendlyWebhook("signature_invalid", {
+
+  const expectedCallbackUrl = `https://app.whachatcrm.com/api/webhooks/calendly/${userId}`;
+  const unsignedFallbackAccepted =
+    !sigHeader &&
+    process.env.CALENDLY_ALLOW_UNSIGNED_WEBHOOKS === "true" &&
+    typeof cfg.calendlyWebhookSubscriptionUri === "string" &&
+    Boolean(cfg.calendlyWebhookSubscriptionUri) &&
+    cfg.calendlyWebhookCallbackUrl === expectedCallbackUrl &&
+    cfg.calendlyWebhookStatus === "connected";
+  const signatureDiag = calendlySignatureDiagnostics(rawBody, signingKey, sigHeader);
+
+  if (unsignedFallbackAccepted) {
+    logCalendlyWebhook("unsigned_fallback_accepted", {
       userId,
-      rawBodyBytes: rawBody.length,
-      signatureHeaderExists: Boolean(sigHeader),
+      integrationId: integration.id,
+      expectedCallbackUrl,
+      subscriptionUriExists: Boolean(cfg.calendlyWebhookSubscriptionUri),
     });
-    res.status(401).json({ error: "Invalid signature" });
-    return;
+  } else {
+    if (!signingKey || !rawBody || !sigHeader) {
+      logCalendlyWebhook("signature_prerequisite_failed", {
+        userId,
+        signingKeyExists: Boolean(signingKey),
+        rawBodyExists: Boolean(rawBody),
+        rawBodyBytes: rawBody?.length || 0,
+        signatureHeaderExists: Boolean(sigHeader),
+        ...signatureDiag,
+      });
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+
+    if (!verifyCalendlyWebhookSignature(rawBody, sigHeader, signingKey)) {
+      logCalendlyWebhook("signature_invalid", {
+        userId,
+        rawBodyBytes: rawBody.length,
+        signatureHeaderExists: Boolean(sigHeader),
+        ...signatureDiag,
+      });
+      res.status(401).json({ error: "Invalid signature" });
+      return;
+    }
   }
 
   const body = req.body as Record<string, unknown>;
   const parsed = extractCalendlyBookingPayload(body);
-  logCalendlyWebhook("signature_valid", {
+  logCalendlyWebhook("auth_passed", {
     userId,
+    signatureVerified: !unsignedFallbackAccepted,
+    unsignedFallbackAccepted,
     calendlyEvent: String(body.event || ""),
     inviteeEmail: parsed?.email || null,
     inviteeName: parsed?.name || null,
     startTime: parsed?.startTime || null,
     scheduledEventUri: parsed?.scheduledEventUri || null,
+    ...signatureDiag,
   });
 
   res.status(200).json({ ok: true });

@@ -231,6 +231,7 @@ app.use('/api/webhook/meta', express.json({
 
 // Calendly CRM webhooks — raw body required for HMAC signature verification
 app.use('/api/webhooks/calendly', express.json({
+  type: "*/*",
   verify: (req: any, _res, buf) => {
     req.rawBody = buf;
   }
