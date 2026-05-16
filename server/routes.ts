@@ -145,6 +145,7 @@ import {
   calendlyGetCurrentUser,
   calendlyGetOrganization,
   calendlyListEventTypes,
+  calendlyListWebhookSubscriptions,
 } from "./calendlyApi";
 import { isUserCalendlyBookingConnected, applyCalendlyBookingLinkForAi } from "./calendlyBookingConnected";
 import { hubspotValidatePrivateAppToken } from "./hubspotApi";
@@ -6914,6 +6915,70 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error disconnecting Facebook Messenger:", error);
       return res.status(500).json({ error: "Failed to disconnect Facebook Messenger" });
+    }
+  });
+
+  app.get("/api/integrations/:id/calendly-webhooks", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const integration = await storage.getIntegration(req.params.id);
+      if (!integration || integration.userId !== req.user.id || integration.type !== "calendly") {
+        return res.status(404).json({ error: "Calendly integration not found" });
+      }
+
+      const config = decryptIntegrationConfig((integration.config || {}) as Record<string, any>);
+      const token = typeof config.accessToken === "string" ? config.accessToken.trim() : "";
+      const organizationUri =
+        typeof config.calendlyOrganizationUri === "string" ? config.calendlyOrganizationUri.trim() : "";
+      if (!token || !organizationUri) {
+        return res.status(400).json({
+          error: "Calendly token or organization is missing. Reconnect Calendly, then sync again.",
+        });
+      }
+
+      const listed = await calendlyListWebhookSubscriptions(token, organizationUri);
+      const callbackUrl = `https://app.whachatcrm.com/api/webhooks/calendly/${req.user.id}`;
+      const subscriptions = (listed.data?.collection || []).map((s) => ({
+        uri: s.uri || "",
+        callbackUrl: s.callback_url || "",
+        events: Array.isArray(s.events) ? s.events : [],
+        organization: s.organization || "",
+        scope: s.scope || "",
+        state: s.state || "",
+        createdAt: s.created_at || null,
+        updatedAt: s.updated_at || null,
+        matchesProductionCallback: s.callback_url === callbackUrl,
+        includesInviteeCreated: Array.isArray(s.events) && s.events.includes("invitee.created"),
+      }));
+
+      console.log(
+        JSON.stringify({
+          tag: "[CalendlyWebhookSubscriptions]",
+          userId: req.user.id,
+          integrationId: integration.id,
+          status: listed.status,
+          ok: listed.ok,
+          count: subscriptions.length,
+          expectedCallbackUrl: callbackUrl,
+          hasMatchingInviteeCreated: subscriptions.some(
+            (s) => s.matchesProductionCallback && s.includesInviteeCreated
+          ),
+        })
+      );
+
+      return res.status(listed.ok ? 200 : 502).json({
+        ok: listed.ok,
+        status: listed.status,
+        expectedCallbackUrl: callbackUrl,
+        subscriptions,
+        error: listed.ok ? undefined : calendlyErrorMessage(listed.data as any, "Could not list Calendly webhooks."),
+      });
+    } catch (error) {
+      console.error("Error listing Calendly webhook subscriptions:", error);
+      return res.status(500).json({ error: "Failed to list Calendly webhook subscriptions" });
     }
   });
 

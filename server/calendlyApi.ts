@@ -89,6 +89,25 @@ export async function calendlyDeleteWebhookSubscription(token: string, subscript
   });
 }
 
+export async function calendlyListWebhookSubscriptions(token: string, organizationUri: string) {
+  const q = encodeURIComponent(organizationUri);
+  return calendlyJson<{
+    collection?: Array<{
+      uri?: string;
+      callback_url?: string;
+      events?: string[];
+      organization?: string;
+      scope?: string;
+      state?: string;
+      created_at?: string;
+      updated_at?: string;
+    }>;
+    message?: string;
+    title?: string;
+    details?: { message?: string }[];
+  }>(`/webhook_subscriptions?organization=${q}&scope=organization`, token);
+}
+
 export async function calendlyListEventTypes(token: string, organizationUri: string) {
   const q = encodeURIComponent(organizationUri);
   return calendlyJson<{

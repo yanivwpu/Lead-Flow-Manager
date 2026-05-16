@@ -84,6 +84,10 @@ function formatBookingTime(iso: string | undefined): string {
   }
 }
 
+function logCalendlyWebhook(event: string, data: Record<string, unknown>): void {
+  console.log(JSON.stringify({ tag: "[CalendlyWebhook]", event, ...data }));
+}
+
 function readTrackingUtmContactId(tracking: unknown): string | undefined {
   if (!tracking || typeof tracking !== "object") return undefined;
   const t = tracking as Record<string, unknown>;
@@ -102,6 +106,7 @@ function extractCalendlyBookingPayload(body: Record<string, unknown>): {
   scheduledEventUri?: string;
   externalMessageId: string;
   utmContactId?: string;
+  meetingLink?: string;
 } | null {
   const payload = (body.payload as Record<string, unknown>) || body;
   const invitee = (payload.invitee as Record<string, unknown>) || payload;
@@ -137,6 +142,14 @@ function extractCalendlyBookingPayload(body: Record<string, unknown>): {
         ? payload.uri
         : undefined;
   const scheduledEventUri = typeof scheduled?.uri === "string" ? scheduled.uri : undefined;
+  const location = (scheduled?.location as Record<string, unknown>) || (payload.location as Record<string, unknown>);
+  const meetingLink =
+    (typeof location?.join_url === "string" && location.join_url) ||
+    (typeof location?.url === "string" && location.url) ||
+    (typeof payload.join_url === "string" && payload.join_url) ||
+    (typeof payload.reschedule_url === "string" && payload.reschedule_url) ||
+    inviteeUri ||
+    scheduledEventUri;
 
   const tracking =
     (payload.tracking as Record<string, unknown>) ||
@@ -161,6 +174,7 @@ function extractCalendlyBookingPayload(body: Record<string, unknown>): {
     scheduledEventUri,
     externalMessageId: String(externalMessageId).slice(0, 500),
     utmContactId,
+    meetingLink,
   };
 }
 
@@ -208,11 +222,15 @@ async function applyCalendlyConfirmedBookingCrmEffects(params: {
   startIso: string;
   eventTypeName: string;
   scheduledEventUri?: string;
+  meetingLink?: string;
 }): Promise<void> {
-  const { userId, contactId, conversationId, appointmentId, title, startIso, eventTypeName, scheduledEventUri } =
+  const { userId, contactId, conversationId, appointmentId, title, startIso, eventTypeName, scheduledEventUri, meetingLink } =
     params;
   const contact = await storage.getContact(contactId);
-  if (!contact) return;
+  if (!contact) {
+    logCalendlyWebhook("booking_effects_contact_missing", { userId, contactId, appointmentId });
+    return;
+  }
 
   const patch: Record<string, unknown> = {};
   if (contact.tag !== "Appointment Booked") {
@@ -233,26 +251,65 @@ async function applyCalendlyConfirmedBookingCrmEffects(params: {
     startTime: startIso,
     eventTypeName,
     scheduledEventUri: scheduledEventUri || null,
+    meetingLink: meetingLink || null,
     bookedAt: new Date().toISOString(),
     source: "calendly",
   };
   patch.customFields = nextCf;
 
   if (Object.keys(patch).length > 0) {
-    await storage.updateContact(contactId, patch as any, { skipAutomationHooks: true }).catch(() => {});
+    await storage.updateContact(contactId, patch as any, { skipAutomationHooks: true });
   }
 
-  const { channelService } = await import("./channelService");
-  await channelService
-    .logActivity(userId, contactId, conversationId, "calendly_booking", {
+  const activity = await storage.createActivityEvent({
+    userId,
+    contactId,
+    conversationId: conversationId ?? null,
+    eventType: "calendly_booking",
+    eventData: {
       appointmentId,
       title,
       startTime: startIso,
       eventType: eventTypeName,
       scheduledEventUri: scheduledEventUri || null,
+      meetingLink: meetingLink || null,
       source: "calendly",
-    })
-    .catch(() => {});
+    },
+    actorType: "system",
+  });
+
+  logCalendlyWebhook("booking_effects_created", {
+    userId,
+    contactId,
+    conversationId: conversationId || null,
+    appointmentId,
+    activityEventId: activity.id,
+    title,
+    startTime: startIso,
+    meetingLinkExists: Boolean(meetingLink),
+  });
+}
+
+async function writeCalendlyConversationActivity(params: {
+  userId: string;
+  email: string;
+  name: string;
+  content: string;
+  externalMessageId: string;
+  preferredContactId?: string;
+}): Promise<{ contactId: string; conversationId: string }> {
+  const { channelService } = await import("./channelService");
+  const { contact, conversation } = await channelService.processIncomingMessage({
+    userId: params.userId,
+    channel: "calendly",
+    channelContactId: params.email,
+    contactName: params.name,
+    content: params.content,
+    contentType: "text",
+    externalMessageId: params.externalMessageId.slice(0, 500),
+    preferredContactId: params.preferredContactId,
+  });
+  return { contactId: contact.id, conversationId: conversation.id };
 }
 
 async function handleInviteeCreated(userId: string, body: Record<string, unknown>): Promise<void> {
@@ -271,23 +328,45 @@ async function handleInviteeCreated(userId: string, body: Record<string, unknown
     scheduledEventUri,
     externalMessageId,
     utmContactId,
+    meetingLink,
   } = parsed;
+
+  logCalendlyWebhook("invitee_created_parsed", {
+    userId,
+    email,
+    name,
+    eventTypeName,
+    startTime: startTime || null,
+    scheduledEventUri: scheduledEventUri || null,
+    inviteeUri: inviteeUri || null,
+    utmContactId: utmContactId || null,
+    meetingLinkExists: Boolean(meetingLink),
+  });
 
   const stableDedupeKey = (scheduledEventUri || inviteeUri || externalMessageId).trim();
   if (stableDedupeKey) {
     const existingAppt = await storage.getAppointmentByCalendlyScheduledEventUri(userId, stableDedupeKey);
     if (existingAppt) {
-      console.log(
-        `[Calendly] invitee.created — duplicate scheduled event, skipping (${stableDedupeKey.slice(0, 80)})`
-      );
+      logCalendlyWebhook("invitee_created_duplicate_appointment", {
+        userId,
+        email,
+        appointmentId: existingAppt.id,
+        scheduledEventKey: stableDedupeKey.slice(0, 120),
+      });
       return;
     }
   }
 
   const preferredContactId = await resolvePreferredCalendlyContactId(userId, email, utmContactId);
+  logCalendlyWebhook("invitee_created_contact_resolution", {
+    userId,
+    email,
+    utmContactId: utmContactId || null,
+    preferredContactId: preferredContactId || null,
+  });
 
   const timeLabel = formatBookingTime(startTime);
-  const content = `Calendly booked: ${eventTypeName} at ${timeLabel}`;
+  const content = `Calendly booked: ${eventTypeName} at ${timeLabel}${meetingLink ? `\n${meetingLink}` : ""}`;
 
   const chatKey = legacyCalendlyChatStorageKey(email);
   const chat = await findOrCreateLegacyCalendlyWorkflowChat(userId, email, name);
@@ -321,11 +400,24 @@ async function handleInviteeCreated(userId: string, body: Record<string, unknown
     externalMessageId: String(externalMessageId).slice(0, 500),
     preferredContactId,
   });
+  logCalendlyWebhook("invitee_created_message_processed", {
+    userId,
+    email,
+    contactId: contact.id,
+    conversationId: conversation.id,
+    chatbotWillFire,
+  });
 
   if (stableDedupeKey) {
     const raceDup = await storage.getAppointmentByCalendlyScheduledEventUri(userId, stableDedupeKey);
     if (raceDup) {
-      console.log("[Calendly] invitee.created — race duplicate appointment row, skipping CRM appointment insert");
+      logCalendlyWebhook("invitee_created_race_duplicate_appointment", {
+        userId,
+        email,
+        contactId: contact.id,
+        conversationId: conversation.id,
+        appointmentId: raceDup.id,
+      });
       return;
     }
   }
@@ -352,9 +444,24 @@ async function handleInviteeCreated(userId: string, body: Record<string, unknown
       calendlyInviteeUri: inviteeUri || null,
     });
     appointmentId = appt.id;
+    logCalendlyWebhook("invitee_created_appointment_created", {
+      userId,
+      email,
+      contactId: contact.id,
+      conversationId: conversation.id,
+      appointmentId,
+      title,
+      startTime: startDate.toISOString(),
+    });
   } catch (err) {
     if (isUniqueViolation(err)) {
-      console.log("[Calendly] invitee.created — unique constraint on Calendly URI (handled)");
+      logCalendlyWebhook("invitee_created_appointment_unique_duplicate", {
+        userId,
+        email,
+        contactId: contact.id,
+        conversationId: conversation.id,
+        scheduledEventKey: stableDedupeKey.slice(0, 120),
+      });
       return;
     }
     console.error("[Calendly] createAppointment failed:", err);
@@ -370,6 +477,7 @@ async function handleInviteeCreated(userId: string, body: Record<string, unknown
     startIso: startDate.toISOString(),
     eventTypeName,
     scheduledEventUri: stableDedupeKey || undefined,
+    meetingLink,
   });
 
   notifyUser(userId, {
@@ -399,20 +507,51 @@ async function handleInviteeCreated(userId: string, body: Record<string, unknown
 
 async function handleInviteeCanceled(userId: string, body: Record<string, unknown>): Promise<void> {
   const parsed = extractCalendlyBookingPayload(body);
-  if (!parsed) return;
-  const contact = await storage.getContactByChannelId(userId, "calendly", parsed.email);
+  if (!parsed) {
+    logCalendlyWebhook("invitee_canceled_unparsed", { userId });
+    return;
+  }
+  logCalendlyWebhook("invitee_canceled_parsed", {
+    userId,
+    email: parsed.email,
+    name: parsed.name,
+    eventTypeName: parsed.eventTypeName,
+    startTime: parsed.startTime || null,
+  });
+  const preferredContactId = await resolvePreferredCalendlyContactId(userId, parsed.email, parsed.utmContactId);
+  const contact =
+    (preferredContactId ? await storage.getContact(preferredContactId) : undefined) ??
+    (await storage.getContactByChannelId(userId, "calendly", parsed.email));
   if (!contact) {
     console.log(`[Calendly] cancel — no contact for ${parsed.email}`);
     return;
   }
-  const line = `Booking canceled (${new Date().toISOString()})`;
+  const timeLabel = formatBookingTime(parsed.startTime);
+  const content = `Calendly canceled: ${parsed.eventTypeName} at ${timeLabel}${parsed.meetingLink ? `\n${parsed.meetingLink}` : ""}`;
+  const written = await writeCalendlyConversationActivity({
+    userId,
+    email: parsed.email,
+    name: parsed.name,
+    content,
+    externalMessageId: `calendly-canceled:${parsed.externalMessageId}`,
+    preferredContactId: contact.id,
+  });
+  const line = `Booking canceled: ${parsed.eventTypeName} at ${timeLabel}`;
   await storage.updateContact(contact.id, {
     notes: appendContactNote(contact.notes, line),
   });
   const { channelService } = await import("./channelService");
-  await channelService.logActivity(userId, contact.id, undefined, "calendly_booking_canceled", {
+  await channelService.logActivity(userId, contact.id, written.conversationId, "calendly_booking_canceled", {
     email: parsed.email,
     eventType: parsed.eventTypeName,
+    startTime: parsed.startTime || null,
+    meetingLink: parsed.meetingLink || null,
+  });
+  logCalendlyWebhook("invitee_canceled_activity_created", {
+    userId,
+    email: parsed.email,
+    contactId: contact.id,
+    conversationId: written.conversationId,
   });
   const chatKey = legacyCalendlyChatStorageKey(parsed.email);
   const chatRows = await db
@@ -435,26 +574,92 @@ async function handleInviteeCanceled(userId: string, body: Record<string, unknow
 
 async function handleInviteeRescheduled(userId: string, body: Record<string, unknown>): Promise<void> {
   const parsed = extractCalendlyBookingPayload(body);
-  if (!parsed) return;
-  const contact = await storage.getContactByChannelId(userId, "calendly", parsed.email);
+  if (!parsed) {
+    logCalendlyWebhook("invitee_rescheduled_unparsed", { userId });
+    return;
+  }
+  logCalendlyWebhook("invitee_rescheduled_parsed", {
+    userId,
+    email: parsed.email,
+    name: parsed.name,
+    eventTypeName: parsed.eventTypeName,
+    startTime: parsed.startTime || null,
+  });
+  const preferredContactId = await resolvePreferredCalendlyContactId(userId, parsed.email, parsed.utmContactId);
+  const contact =
+    (preferredContactId ? await storage.getContact(preferredContactId) : undefined) ??
+    (await storage.getContactByChannelId(userId, "calendly", parsed.email));
   const timeLabel = formatBookingTime(parsed.startTime);
-  const line = `Rescheduled to ${timeLabel} (${parsed.eventTypeName})`;
   if (contact) {
+    const content = `Calendly rescheduled: ${parsed.eventTypeName} to ${timeLabel}${parsed.meetingLink ? `\n${parsed.meetingLink}` : ""}`;
+    const written = await writeCalendlyConversationActivity({
+      userId,
+      email: parsed.email,
+      name: parsed.name,
+      content,
+      externalMessageId: `calendly-rescheduled:${parsed.externalMessageId}`,
+      preferredContactId: contact.id,
+    });
+    const line = `Rescheduled to ${timeLabel} (${parsed.eventTypeName})`;
     await storage.updateContact(contact.id, {
       notes: appendContactNote(contact.notes, line),
     });
-    const conv = await storage.getConversationByContactAndChannel(contact.id, "calendly");
     const { channelService } = await import("./channelService");
-    await channelService.logActivity(userId, contact.id, conv?.id, "calendly_rescheduled", {
+    await channelService.logActivity(userId, contact.id, written.conversationId, "calendly_rescheduled", {
       email: parsed.email,
       newTime: parsed.startTime,
       eventType: parsed.eventTypeName,
+      meetingLink: parsed.meetingLink || null,
+    });
+    logCalendlyWebhook("invitee_rescheduled_activity_created", {
+      userId,
+      email: parsed.email,
+      contactId: contact.id,
+      conversationId: written.conversationId,
     });
   }
 }
 
+async function handleInviteeNoShowCreated(userId: string, body: Record<string, unknown>): Promise<void> {
+  const parsed = extractCalendlyBookingPayload(body);
+  if (!parsed) {
+    logCalendlyWebhook("invitee_no_show_unparsed", { userId });
+    return;
+  }
+  logCalendlyWebhook("invitee_no_show_parsed", {
+    userId,
+    email: parsed.email,
+    name: parsed.name,
+    eventTypeName: parsed.eventTypeName,
+    startTime: parsed.startTime || null,
+  });
+  const preferredContactId = await resolvePreferredCalendlyContactId(userId, parsed.email, parsed.utmContactId);
+  const written = await writeCalendlyConversationActivity({
+    userId,
+    email: parsed.email,
+    name: parsed.name,
+    content: `Calendly no-show: ${parsed.eventTypeName} at ${formatBookingTime(parsed.startTime)}${parsed.meetingLink ? `\n${parsed.meetingLink}` : ""}`,
+    externalMessageId: `calendly-no-show:${parsed.externalMessageId}`,
+    preferredContactId,
+  });
+  const { channelService } = await import("./channelService");
+  await channelService.logActivity(userId, written.contactId, written.conversationId, "calendly_no_show", {
+    email: parsed.email,
+    eventType: parsed.eventTypeName,
+    startTime: parsed.startTime || null,
+    meetingLink: parsed.meetingLink || null,
+  });
+  logCalendlyWebhook("invitee_no_show_activity_created", {
+    userId,
+    email: parsed.email,
+    contactId: written.contactId,
+    conversationId: written.conversationId,
+  });
+}
+
 async function processCalendlyPayload(userId: string, body: Record<string, unknown>): Promise<void> {
   const event = String(body.event || "");
+  logCalendlyWebhook("processing_started", { userId, calendlyEvent: event });
   switch (event) {
     case "invitee.created":
       await handleInviteeCreated(userId, body);
@@ -465,8 +670,11 @@ async function processCalendlyPayload(userId: string, body: Record<string, unkno
     case "invitee.rescheduled":
       await handleInviteeRescheduled(userId, body);
       break;
+    case "invitee_no_show.created":
+      await handleInviteeNoShowCreated(userId, body);
+      break;
     default:
-      console.log(`[Calendly] Ignoring event: ${event}`);
+      logCalendlyWebhook("ignored_event", { userId, calendlyEvent: event });
   }
 }
 
@@ -477,34 +685,86 @@ export async function handleCalendlyWebhook(req: Request, res: Response): Promis
     return;
   }
 
+  const rawBody = (req as { rawBody?: Buffer }).rawBody;
+  const sigHeader = req.headers["calendly-webhook-signature"] as string | undefined;
+  logCalendlyWebhook("http_received", {
+    userId,
+    method: req.method,
+    path: req.originalUrl || req.url,
+    rawBodyBytes: rawBody?.length || 0,
+    signatureHeaderExists: Boolean(sigHeader),
+  });
+
   const integration = await storage.getIntegrationByUserAndType(userId, "calendly");
   if (!integration?.isActive) {
-    console.warn("[Calendly] No active integration — acknowledging without processing");
+    logCalendlyWebhook("inactive_integration_ignored", {
+      userId,
+      integrationExists: Boolean(integration),
+      integrationActive: Boolean(integration?.isActive),
+    });
     res.status(200).json({ ok: true, ignored: true });
     return;
   }
 
   const cfg = decryptIntegrationConfigLocal((integration.config || {}) as Record<string, unknown>);
   const signingKey = String(cfg.webhookSigningKey || "").trim();
-  const rawBody = (req as { rawBody?: Buffer }).rawBody;
-  const sigHeader = req.headers["calendly-webhook-signature"] as string | undefined;
+  logCalendlyWebhook("integration_loaded", {
+    userId,
+    integrationId: integration.id,
+    webhookStatus: typeof cfg.calendlyWebhookStatus === "string" ? cfg.calendlyWebhookStatus : "unknown",
+    signingKeyExists: Boolean(signingKey),
+    callbackUrl: typeof cfg.calendlyWebhookCallbackUrl === "string" ? cfg.calendlyWebhookCallbackUrl : null,
+    subscriptionUriExists: Boolean(cfg.calendlyWebhookSubscriptionUri),
+  });
 
   if (!signingKey || !rawBody) {
-    console.warn("[Calendly] Missing signing key or raw body — cannot verify");
+    logCalendlyWebhook("signature_prerequisite_failed", {
+      userId,
+      signingKeyExists: Boolean(signingKey),
+      rawBodyExists: Boolean(rawBody),
+      rawBodyBytes: rawBody?.length || 0,
+    });
     res.status(401).json({ error: "Unauthorized" });
     return;
   }
   if (!verifyCalendlyWebhookSignature(rawBody, sigHeader, signingKey)) {
+    logCalendlyWebhook("signature_invalid", {
+      userId,
+      rawBodyBytes: rawBody.length,
+      signatureHeaderExists: Boolean(sigHeader),
+    });
     res.status(401).json({ error: "Invalid signature" });
     return;
   }
 
+  const body = req.body as Record<string, unknown>;
+  const parsed = extractCalendlyBookingPayload(body);
+  logCalendlyWebhook("signature_valid", {
+    userId,
+    calendlyEvent: String(body.event || ""),
+    inviteeEmail: parsed?.email || null,
+    inviteeName: parsed?.name || null,
+    startTime: parsed?.startTime || null,
+    scheduledEventUri: parsed?.scheduledEventUri || null,
+  });
+
   res.status(200).json({ ok: true });
 
-  const body = req.body as Record<string, unknown>;
   setImmediate(() => {
-    processCalendlyPayload(userId, body).catch((err) =>
-      console.error("[Calendly] Async processing error:", err)
-    );
+    processCalendlyPayload(userId, body)
+      .then(() => {
+        logCalendlyWebhook("async_processing_complete", {
+          userId,
+          calendlyEvent: String(body.event || ""),
+        });
+      })
+      .catch((err) => {
+        console.error("[Calendly] Async processing error:", err);
+        logCalendlyWebhook("async_processing_failed", {
+          userId,
+          calendlyEvent: String(body.event || ""),
+          error: err instanceof Error ? err.message : String(err),
+        });
+      });
   });
 }
