@@ -104,6 +104,45 @@ function IntegrationBrandLogo({
   );
 }
 
+function CalendlyTokenInstructions() {
+  return (
+    <div className="rounded-lg border border-blue-100 bg-blue-50/70 p-4 text-sm text-blue-950">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="font-medium">How to create your Calendly token</p>
+          <p className="mt-1 text-xs leading-relaxed text-blue-900/90">
+            Open Calendly, create a Personal Access Token, select the required scopes, then paste the token below.
+          </p>
+        </div>
+        <Button asChild variant="outline" size="sm" className="h-8 shrink-0 border-blue-200 bg-white text-blue-700">
+          <a href={CALENDLY_PAT_URL} target="_blank" rel="noreferrer">
+            Open Calendly
+            <ExternalLink className="ml-1 h-3 w-3" />
+          </a>
+        </Button>
+      </div>
+      <ol className="mt-3 list-decimal space-y-1.5 pl-4 text-xs leading-relaxed text-blue-900">
+        <li>Go to Calendly → Integrations & Apps → API and webhooks.</li>
+        <li>Create a Personal Access Token.</li>
+        <li>Select required scopes before copying the token.</li>
+      </ol>
+      <div className="mt-3 rounded-md bg-white/80 p-3">
+        <p className="text-xs font-medium text-blue-950">Required scopes</p>
+        <ul className="mt-1 list-disc space-y-1 pl-4 text-xs text-blue-900">
+          <li>Scheduling scopes</li>
+          <li>Webhook scopes</li>
+          <li>
+            <code className="rounded bg-blue-100 px-1 py-0.5">organizations:read</code>
+          </li>
+        </ul>
+      </div>
+      <p className="mt-3 text-xs leading-relaxed text-blue-900/90">
+        WhachatCRM will validate the token, read your organization and event types, then register the booking webhook automatically.
+      </p>
+    </div>
+  );
+}
+
 const WEBHOOK_EVENTS = [
   { id: "new_chat", label: "New Conversation", description: "When a new chat is created" },
   { id: "message_received", label: "Message Received", description: "When an inbound message arrives" },
@@ -158,6 +197,8 @@ const VITE_SHOPIFY_MANUAL_INSTALL_URL =
   typeof import.meta.env.VITE_SHOPIFY_MANUAL_INSTALL_URL === "string"
     ? import.meta.env.VITE_SHOPIFY_MANUAL_INSTALL_URL.trim()
     : "";
+
+const CALENDLY_PAT_URL = "https://calendly.com/integrations/api_webhooks";
 
 const NATIVE_INTEGRATIONS: IntegrationConfig[] = [
   { 
@@ -299,7 +340,13 @@ const NATIVE_INTEGRATIONS: IntegrationConfig[] = [
     category: "scheduling",
     tagline: "Meetings booked, cancellations & reschedules",
     fields: [
-      { key: "accessToken", label: "Personal Access Token", placeholder: "eyJraWQiOiIxY...", type: "password", helpText: "Create at calendly.com/integrations/api_webhooks — we register the CRM webhook automatically" },
+      {
+        key: "accessToken",
+        label: "Personal Access Token",
+        placeholder: "eyJraWQiOiIxY...",
+        type: "password",
+        helpText: "Create this in Calendly from Integrations & Apps > API and webhooks. Select scheduling, webhook, and organizations:read scopes.",
+      },
     ],
     syncOptions: [
       { id: "new_bookings", label: "New Bookings", description: "Create a chat when someone books a meeting" },
@@ -572,8 +619,16 @@ export function Integrations() {
       const brace = description.indexOf("{");
       if (brace >= 0) {
         try {
-          const parsed = JSON.parse(description.slice(brace)) as { error?: string };
+          const parsed = JSON.parse(description.slice(brace)) as { error?: string; errorCode?: string };
           if (typeof parsed.error === "string") description = parsed.error;
+          if (parsed.errorCode === "missing_scopes") {
+            description =
+              "Your Calendly token is missing required scopes. Create a new token with scheduling scopes, webhook scopes, and organizations:read.";
+          } else if (parsed.errorCode === "invalid_token") {
+            description = "Calendly could not validate this token. Copy a fresh Personal Access Token from Calendly.";
+          } else if (parsed.errorCode === "organization_not_found") {
+            description = "Calendly validated the token, but no organization was found. Make sure organizations:read is selected.";
+          }
         } catch {
           /* keep full message */
         }
@@ -1671,20 +1726,63 @@ export function Integrations() {
                       </p>
                     )}
                   {managingIntegration.id === "calendly" &&
-                    (managingConnected.config as Record<string, unknown>)?.calendlyWebhookStatus === "failed" && (
-                      <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
-                        <p className="font-medium">Webhook registration failed</p>
-                        <p className="mt-1">
-                          Booking links are connected, but booking confirmations may not sync until webhook setup succeeds.
-                          Use Sync now to retry.
-                        </p>
-                        {typeof (managingConnected.config as Record<string, unknown>)?.calendlyWebhookError === "string" && (
-                          <p className="mt-1 text-amber-800">
-                            {(managingConnected.config as Record<string, string>).calendlyWebhookError}
-                          </p>
-                        )}
-                      </div>
-                    )}
+                    (() => {
+                      const cfg = managingConnected.config as Record<string, unknown>;
+                      const bookingLink =
+                        typeof cfg.calendlyPrimarySchedulingUrl === "string" ? cfg.calendlyPrimarySchedulingUrl : "";
+                      const webhookStatus = String(cfg.calendlyWebhookStatus || "unknown");
+                      const webhookFailed = webhookStatus === "failed";
+                      return (
+                        <div
+                          className={cn(
+                            "rounded-md border p-3 text-xs",
+                            webhookFailed
+                              ? "border-amber-200 bg-amber-50 text-amber-900"
+                              : "border-emerald-100 bg-emerald-50/80 text-emerald-900",
+                          )}
+                        >
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <p className="font-medium">Booking link connected</p>
+                            <Badge
+                              variant={webhookFailed ? "secondary" : "default"}
+                              className={cn(
+                                "text-[10px]",
+                                webhookFailed
+                                  ? "bg-amber-100 text-amber-800"
+                                  : "bg-emerald-600 text-white",
+                              )}
+                            >
+                              Webhook {webhookFailed ? "needs retry" : "connected"}
+                            </Badge>
+                          </div>
+                          {bookingLink ? (
+                            <a
+                              href={bookingLink}
+                              target="_blank"
+                              rel="noreferrer"
+                              className={cn(
+                                "mt-1 block truncate underline",
+                                webhookFailed ? "text-amber-800" : "text-emerald-800",
+                              )}
+                            >
+                              {bookingLink}
+                            </a>
+                          ) : (
+                            <p className="mt-1">Calendly is connected, but no public booking link was detected.</p>
+                          )}
+                          {webhookFailed && (
+                            <>
+                              <p className="mt-2">
+                                Booking links can be sent, but booking confirmations may not sync until webhook setup succeeds.
+                              </p>
+                              {typeof cfg.calendlyWebhookError === "string" && (
+                                <p className="mt-1 text-amber-800">{cfg.calendlyWebhookError}</p>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      );
+                    })()}
                   {managingIntegration.id === "hubspot" && (
                     <p className="text-xs text-gray-400 leading-snug">
                       More advanced HubSpot features will be added in future updates.
@@ -1705,7 +1803,10 @@ export function Integrations() {
                       <RefreshCw
                         className={`h-3 w-3 mr-1 ${syncIntegrationMutation.isPending ? "animate-spin" : ""}`}
                       />
-                      Sync now
+                      {managingIntegration.id === "calendly" &&
+                      (managingConnected.config as Record<string, unknown>)?.calendlyWebhookStatus === "failed"
+                        ? "Retry webhook"
+                        : "Sync now"}
                     </Button>
                     <Button
                       variant="outline"
@@ -1750,6 +1851,8 @@ export function Integrations() {
                   </div>
                 </DialogHeader>
                 <div className="flex-1 overflow-y-auto space-y-4 p-6 pt-2">
+                  {connectingIntegration.id === "calendly" && <CalendlyTokenInstructions />}
+
                   {connectingIntegration.fields.map((field) => (
                     <div key={field.key} className="space-y-2">
                       <Label htmlFor={`field-${field.key}`}>{field.label}</Label>
