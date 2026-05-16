@@ -227,6 +227,15 @@ async function applyCalendlyConfirmedBookingCrmEffects(params: {
   const prevCf = ((contact.customFields as Record<string, unknown> | null) || {}) as Record<string, unknown>;
   const nextCf = { ...prevCf };
   delete nextCf._w3CalendlyAwaitBooking;
+  nextCf.calendlyLastBooking = {
+    appointmentId,
+    title,
+    startTime: startIso,
+    eventTypeName,
+    scheduledEventUri: scheduledEventUri || null,
+    bookedAt: new Date().toISOString(),
+    source: "calendly",
+  };
   patch.customFields = nextCf;
 
   if (Object.keys(patch).length > 0) {
@@ -242,23 +251,6 @@ async function applyCalendlyConfirmedBookingCrmEffects(params: {
       eventType: eventTypeName,
       scheduledEventUri: scheduledEventUri || null,
       source: "calendly",
-    })
-    .catch(() => {});
-
-  await storage
-    .createActivityEvent({
-      userId,
-      contactId,
-      conversationId: conversationId ?? null,
-      eventType: "note",
-      eventData: {
-        kind: "calendly_booking_confirmed",
-        content: `Calendly booking confirmed: ${title}`,
-        appointmentId,
-        eventTypeName,
-        scheduledEventUri: scheduledEventUri || null,
-      },
-      actorType: "system",
     })
     .catch(() => {});
 }
@@ -295,7 +287,7 @@ async function handleInviteeCreated(userId: string, body: Record<string, unknown
   const preferredContactId = await resolvePreferredCalendlyContactId(userId, email, utmContactId);
 
   const timeLabel = formatBookingTime(startTime);
-  const content = `Booked: ${eventTypeName} at ${timeLabel}`;
+  const content = `Calendly booked: ${eventTypeName} at ${timeLabel}`;
 
   const chatKey = legacyCalendlyChatStorageKey(email);
   const chat = await findOrCreateLegacyCalendlyWorkflowChat(userId, email, name);

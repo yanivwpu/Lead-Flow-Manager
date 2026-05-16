@@ -518,6 +518,14 @@ type CampaignEnrollmentRow = {
   totalSteps?: number | null;
 };
 
+type ContactActivityEvent = {
+  id: string;
+  eventType: string;
+  eventData: Record<string, unknown>;
+  actorType: string;
+  createdAt: string;
+};
+
 function formatCampaignEnrollmentSubtitle(e: CampaignEnrollmentRow): string {
   const total = typeof e.totalSteps === "number" ? e.totalSteps : 0;
   const idx = e.currentStepIndex;
@@ -538,6 +546,61 @@ function formatCampaignEnrollmentSubtitle(e: CampaignEnrollmentRow): string {
     default:
       return e.status;
   }
+}
+
+function formatContactActivity(event: ContactActivityEvent): { title: string; detail: string; tone: "green" | "amber" | "gray" } {
+  const data = event.eventData || {};
+  const title = typeof data.title === "string" ? data.title : "";
+  const eventType = typeof data.eventType === "string" ? data.eventType : "";
+  const content = typeof data.content === "string" ? data.content : "";
+  const startTime =
+    typeof data.startTime === "string"
+      ? data.startTime
+      : typeof data.newTime === "string"
+        ? data.newTime
+        : "";
+  const when = startTime ? formatFollowUpDisplay(startTime) : "";
+
+  if (event.eventType === "calendly_booking") {
+    return {
+      title: "Calendly meeting booked",
+      detail: [title || eventType || "Meeting", when].filter(Boolean).join(" · "),
+      tone: "green",
+    };
+  }
+  if (event.eventType === "calendly_booking_canceled") {
+    return {
+      title: "Calendly booking canceled",
+      detail: [eventType || "Meeting", when].filter(Boolean).join(" · "),
+      tone: "amber",
+    };
+  }
+  if (event.eventType === "calendly_rescheduled") {
+    return {
+      title: "Calendly meeting rescheduled",
+      detail: [eventType || "Meeting", when].filter(Boolean).join(" · "),
+      tone: "green",
+    };
+  }
+  if (event.eventType === "note" && data.kind === "calendly_booking_confirmed") {
+    return {
+      title: "Calendly meeting booked",
+      detail: [content || title || "Meeting", when].filter(Boolean).join(" · "),
+      tone: "green",
+    };
+  }
+  if (event.eventType === "message") {
+    return {
+      title: "Message activity",
+      detail: typeof data.content === "string" ? data.content : "Conversation updated",
+      tone: "gray",
+    };
+  }
+  return {
+    title: event.eventType.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+    detail: content || title || "CRM activity recorded",
+    tone: "gray",
+  };
 }
 
 export function InboxLeadDetailsPanel({
@@ -770,6 +833,16 @@ export function InboxLeadDetailsPanel({
     status: string;
   }>>({
     queryKey: [`/api/contacts/${contact.id}/appointments`],
+    enabled: !!contact.id,
+  });
+
+  const { data: contactActivity = [] } = useQuery<ContactActivityEvent[]>({
+    queryKey: [`/api/contacts/${contact.id}/timeline?limit=8`],
+    queryFn: async () => {
+      const r = await fetch(`/api/contacts/${contact.id}/timeline?limit=8`, { credentials: "include" });
+      if (!r.ok) throw new Error("Failed to load contact activity");
+      return r.json();
+    },
     enabled: !!contact.id,
   });
 
@@ -2263,6 +2336,69 @@ export function InboxLeadDetailsPanel({
               </button>
             ) : (
               <p className="mt-1 text-[11px] text-gray-400 italic">Not set</p>
+            )}
+          </div>
+
+          {contactAppointments.length > 0 && (
+            <div>
+              <RowLabel>Booked meetings</RowLabel>
+              <div className="mt-1 space-y-1.5">
+                {contactAppointments.slice(0, 3).map((a) => (
+                  <div
+                    key={a.id}
+                    className="rounded-lg border border-emerald-100 bg-emerald-50/70 px-2 py-1.5"
+                    data-testid={`booked-meeting-${a.id}`}
+                  >
+                    <div className="flex items-start gap-1.5">
+                      <CalendarIcon className="mt-0.5 h-3 w-3 shrink-0 text-emerald-600" />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-[11px] font-semibold text-emerald-900">
+                          {a.title || a.appointmentType || "Calendly meeting"}
+                        </p>
+                        <p className="text-[10px] text-emerald-700">
+                          {format(new Date(a.appointmentDate), "MMM d 'at' h:mm a")}
+                          {a.status ? ` · ${a.status}` : ""}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div>
+            <RowLabel>Recent activity</RowLabel>
+            {contactActivity.length === 0 ? (
+              <p className="mt-1 text-[11px] text-gray-400 italic">No recent CRM activity yet.</p>
+            ) : (
+              <div className="mt-1 space-y-1.5">
+                {contactActivity.slice(0, 4).map((event) => {
+                  const formatted = formatContactActivity(event);
+                  const dotClass =
+                    formatted.tone === "green"
+                      ? "bg-emerald-500"
+                      : formatted.tone === "amber"
+                        ? "bg-amber-500"
+                        : "bg-gray-300";
+                  return (
+                    <div
+                      key={event.id}
+                      className="rounded-lg border border-gray-100 bg-gray-50/80 px-2 py-1.5"
+                      data-testid={`contact-activity-${event.id}`}
+                    >
+                      <div className="flex items-start gap-1.5">
+                        <span className={cn("mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full", dotClass)} />
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-[11px] font-semibold text-gray-800">{formatted.title}</p>
+                          <p className="line-clamp-2 text-[10px] leading-snug text-gray-500">{formatted.detail}</p>
+                          <p className="mt-0.5 text-[10px] text-gray-400">{formatRelativeTime(event.createdAt)}</p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             )}
           </div>
 

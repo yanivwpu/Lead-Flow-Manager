@@ -1054,7 +1054,7 @@ export function Integrations() {
                                 primaryLabel
                               )}
                             </Button>
-                            {(wooConnected || calendlyConnected) && (
+                            {wooConnected && (
                               <Button
                                 type="button"
                                 variant="ghost"
@@ -1635,16 +1635,16 @@ export function Integrations() {
 
         {/* Native integration — manage connected account */}
         <Dialog open={manageIntegrationId !== null} onOpenChange={(open) => !open && setManageIntegrationId(null)}>
-          <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogContent className="w-[calc(100vw-1.5rem)] max-w-2xl max-h-[88vh] overflow-y-auto p-4 sm:p-6">
             {managingIntegration && managingConnected && (
               <>
                 <DialogHeader>
-                  <div className="flex items-center gap-3">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                     <IntegrationBrandLogo
                       name={managingIntegration.name}
                       logoUrl={INTEGRATION_LOGO_BY_ID[managingIntegration.id]}
                     />
-                    <div>
+                    <div className="min-w-0">
                       <DialogTitle>{managingIntegration.name}</DialogTitle>
                       <DialogDescription>{managingIntegration.description}</DialogDescription>
                       {managingIntegration.id === "woocommerce" &&
@@ -1774,14 +1774,14 @@ export function Integrations() {
                       return (
                         <div
                           className={cn(
-                            "rounded-md border p-3 text-xs",
+                            "rounded-lg border p-4 text-sm",
                             webhookFailed
                               ? "border-amber-200 bg-amber-50 text-amber-900"
                               : "border-emerald-100 bg-emerald-50/80 text-emerald-900",
                           )}
                         >
                           <div className="flex flex-wrap items-center justify-between gap-2">
-                            <p className="font-medium">Booking link connected</p>
+                            <p className="font-semibold">Calendly connected</p>
                             <Badge
                               variant={webhookFailed ? "secondary" : "default"}
                               className={cn(
@@ -1791,23 +1791,23 @@ export function Integrations() {
                                   : "bg-emerald-600 text-white",
                               )}
                             >
-                              Webhook {webhookFailed ? "needs retry" : "connected"}
+                              {webhookFailed ? "Booking sync needs retry" : "Booking sync active"}
                             </Badge>
                           </div>
-                          <div className="mt-2 space-y-1">
-                            <div className="flex items-start justify-between gap-3">
+                          <div className="mt-3 space-y-2 text-xs sm:text-sm">
+                            <div className="grid gap-1 sm:grid-cols-[150px_minmax(0,1fr)] sm:items-start">
                               <span className={webhookFailed ? "text-amber-800" : "text-emerald-800"}>
                                 Calendly account
                               </span>
-                              <span className="min-w-0 truncate text-right font-medium">
+                              <span className="min-w-0 break-words font-medium sm:text-right">
                                 {accountEmail || accountName || userUri || "Connected account"}
                               </span>
                             </div>
-                            <div className="flex items-start justify-between gap-3">
+                            <div className="grid gap-1 sm:grid-cols-[150px_minmax(0,1fr)] sm:items-start">
                               <span className={webhookFailed ? "text-amber-800" : "text-emerald-800"}>
-                                Webhook status
+                                Booking sync status
                               </span>
-                              <span className="font-medium capitalize">{webhookStatus.replace(/_/g, " ")}</span>
+                              <span className="font-medium capitalize sm:text-right">{webhookStatus.replace(/_/g, " ")}</span>
                             </div>
                           </div>
                           {bookingLink ? (
@@ -1816,7 +1816,7 @@ export function Integrations() {
                               target="_blank"
                               rel="noreferrer"
                               className={cn(
-                                "mt-1 block truncate underline",
+                                "mt-3 block break-all text-xs underline sm:text-sm",
                                 webhookFailed ? "text-amber-800" : "text-emerald-800",
                               )}
                             >
@@ -1862,7 +1862,7 @@ export function Integrations() {
                       (managingConnected.config as Record<string, unknown>)?.calendlyWebhookStatus === "failed"
                         ? "Retry webhook"
                         : managingIntegration.id === "calendly"
-                          ? "Refresh booking link"
+                          ? "Sync Calendly"
                         : "Sync now"}
                     </Button>
                     <Button
