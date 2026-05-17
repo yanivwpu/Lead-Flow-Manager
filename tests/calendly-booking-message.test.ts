@@ -14,7 +14,7 @@ const trackedUrl =
 const formatted = formatBookingMessage(trackedUrl);
 assert.equal(
   formatted,
-  "Sure — you can pick a time here:\nhttps://calendly.com/yaniv-whachatcrm\n\nI'll make sure we have the right details ready."
+  "Sure — you can pick a time here:\nhttps://calendly.com/yaniv-whachatcrm\n\nI’ll make sure we have the right details ready."
 );
 assert.equal(containsInternalCalendlyTracking(formatted), false);
 assert.equal(formatted.includes(contactId), false);
@@ -30,7 +30,7 @@ assert.equal(sanitized.content.includes(contactId), false);
 assert.equal(sanitized.content.includes(conversationId), false);
 assert.equal(
   sanitized.content,
-  "Sure — you can pick a time here:\nhttps://calendly.com/yaniv-whachatcrm\n\nI'll make sure we have the right details ready."
+  "Sure — you can pick a time here:\nhttps://calendly.com/yaniv-whachatcrm\n\nI’ll make sure we have the right details ready."
 );
 assert.deepEqual(sanitized.calendlyUrls, ["https://calendly.com/yaniv-whachatcrm"]);
 

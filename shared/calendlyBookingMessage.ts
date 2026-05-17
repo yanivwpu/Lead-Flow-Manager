@@ -33,8 +33,8 @@ export function sanitizeCalendlyBookingLinks(content: string): { content: string
   });
   return {
     content: next.replace(
-      /(https?:\/\/[^\s<>"')]*calendly\.com[^\s<>"')]*)\s+(I'll make sure we have the right details ready\.)/i,
-      "$1\n\n$2"
+      /(https?:\/\/[^\s<>"')]*calendly\.com[^\s<>"')]*)\s+((?:I['’]ll) make sure we have the right details ready\.)/i,
+      "$1\n\nI’ll make sure we have the right details ready."
     ),
     calendlyUrls,
   };
@@ -42,7 +42,7 @@ export function sanitizeCalendlyBookingLinks(content: string): { content: string
 
 export function formatBookingMessage(calendlyUrl: string): string {
   const cleanUrl = stripInternalCalendlyParams(calendlyUrl.trim());
-  return `Sure — you can pick a time here:\n${cleanUrl}\n\nI'll make sure we have the right details ready.`;
+  return `Sure — you can pick a time here:\n${cleanUrl}\n\nI’ll make sure we have the right details ready.`;
 }
 
 export function containsInternalCalendlyTracking(value: string): boolean {

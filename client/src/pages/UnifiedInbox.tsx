@@ -158,6 +158,39 @@ interface Message {
   errorCode?: string | null;
 }
 
+type CalendlyEventMessage = {
+  type?: string;
+  kind?: "booked" | "canceled" | "rescheduled" | "no_show";
+  title?: string;
+  eventName?: string;
+  startTime?: string | null;
+  timeLabel?: string;
+  cardTimeLabel?: string;
+  meetingLink?: string | null;
+};
+
+function parseCalendlyEventMessage(msg: Message): CalendlyEventMessage | null {
+  if (msg.contentType !== "calendly_event") return null;
+  try {
+    const parsed = JSON.parse(msg.content || "{}") as CalendlyEventMessage;
+    return parsed?.type === "calendly_booking" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function formatCalendlyEventCardTime(event: CalendlyEventMessage): string {
+  if (event.cardTimeLabel) return event.cardTimeLabel;
+  if (event.startTime) {
+    try {
+      return format(new Date(event.startTime), "EEE, MMM d, h:mm a");
+    } catch {
+      // Fall back to the server-rendered label below.
+    }
+  }
+  return event.timeLabel || "Time TBD";
+}
+
 /** Prefer direct <img src> for permanent URLs (R2, app uploads); never use expiring provider CDNs. */
 function isClientRenderableMediaUrl(url: string): boolean {
   if (!url) return false;
@@ -2141,12 +2174,12 @@ export function UnifiedInbox() {
               style={{ backgroundImage: 'url("https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png")', backgroundRepeat: 'repeat', backgroundSize: '400px' }}
             >
               <div className="absolute inset-0 bg-[#efeae2]/90 pointer-events-none" />
-              <div ref={messagesInnerRef} className="relative z-10 flex flex-col gap-1.5 p-3">
+              <div ref={messagesInnerRef} className="relative z-10 flex min-w-0 flex-col gap-1.5 p-2 sm:p-3">
                 {messagesLoading && messages.length === 0 ? (
                   <div className="flex flex-col gap-3 pb-4">
                     {[80, 55, 120, 45, 90].map((w, i) => (
-                      <div key={i} className={`flex ${i % 2 === 0 ? 'justify-start' : 'justify-end'}`}>
-                        <div className={`h-8 bg-white/70 rounded-lg animate-pulse`} style={{ width: `${w}%`, maxWidth: '65%' }} />
+                      <div key={i} className={`flex min-w-0 ${i % 2 === 0 ? 'justify-start' : 'justify-end'}`}>
+                        <div className="h-8 max-w-[min(82vw,100%)] rounded-lg bg-white/70 animate-pulse sm:max-w-[70%]" style={{ width: `${w}%` }} />
                       </div>
                     ))}
                   </div>
@@ -2157,6 +2190,51 @@ export function UnifiedInbox() {
                   </div>
                 ) : (
                   messages.map((msg, i) => {
+                    const calendlyEvent = parseCalendlyEventMessage(msg);
+                    if (calendlyEvent) {
+                      const title =
+                        calendlyEvent.kind === "booked"
+                          ? "Meeting booked"
+                          : calendlyEvent.kind === "canceled"
+                            ? "Meeting canceled"
+                            : calendlyEvent.kind === "rescheduled"
+                              ? "Meeting rescheduled"
+                              : calendlyEvent.title || "Calendly activity";
+                      const bookingUrl =
+                        typeof calendlyEvent.meetingLink === "string" &&
+                        /^https?:\/\//i.test(calendlyEvent.meetingLink)
+                          ? calendlyEvent.meetingLink
+                          : "";
+                      return (
+                        <div key={msg.id || i} className="flex min-w-0 justify-center px-1 py-1.5 animate-msg-in">
+                          <div className="w-full min-w-0 max-w-[min(82vw,100%)] rounded-2xl border border-emerald-200 bg-white/95 px-3 py-2.5 text-sm shadow-sm sm:max-w-sm sm:px-3.5 sm:py-3">
+                            <div className="flex min-w-0 items-start gap-2.5 sm:gap-3">
+                              <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald-700">
+                                <Calendar className="h-4 w-4" aria-hidden />
+                              </div>
+                              <div className="min-w-0 flex-1 [overflow-wrap:anywhere] break-words">
+                                <p className="text-sm font-semibold text-gray-900 [overflow-wrap:anywhere] break-words">{title}</p>
+                                <p className="mt-0.5 whitespace-pre-wrap text-sm text-gray-700 [overflow-wrap:anywhere] break-words">
+                                  {calendlyEvent.eventName || "Calendly meeting"}
+                                </p>
+                                <p className="mt-1 text-xs font-medium text-gray-500 [overflow-wrap:anywhere] break-words">
+                                  {formatCalendlyEventCardTime(calendlyEvent)}
+                                </p>
+                                {bookingUrl ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => window.open(bookingUrl, "_blank", "noopener,noreferrer")}
+                                    className="mt-2 max-w-full whitespace-normal text-left text-xs font-semibold text-emerald-700 underline-offset-2 [overflow-wrap:anywhere] break-words hover:underline"
+                                  >
+                                    {calendlyEvent.kind === "rescheduled" ? "View booking" : "View / Reschedule"}
+                                  </button>
+                                ) : null}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    }
                     const isOut = msg.direction === 'outbound';
                     const isSending = msg.status === 'sending';
                     const errBubbleText = (msg.errorMessage || "").trim();
@@ -2177,16 +2255,17 @@ export function UnifiedInbox() {
                     const isWaTightTemplateBubble =
                       msg.contentType === "template" && !isWaCarouselChatBubble;
                     return (
-                      <div key={msg.id || i} className={cn("flex animate-msg-in", isOut ? "justify-end" : "justify-start")}>
+                      <div key={msg.id || i} className={cn("flex min-w-0 animate-msg-in", isOut ? "justify-end" : "justify-start")}>
                         <div className={cn(
-                          "max-w-[75%] rounded-lg text-sm shadow-sm relative",
+                          "relative flex min-w-0 max-w-[min(82vw,100%)] flex-col rounded-lg text-sm shadow-sm sm:max-w-[70%]",
                           isWaCarouselChatBubble || isWaTightTemplateBubble
                             ? "px-1.5 pt-0.5 pb-1"
-                            : "px-3 py-1.5",
+                            : "px-2.5 py-1.5 sm:px-3",
                           isOut ? "bg-[#d9fdd3] text-gray-900 rounded-tr-none" : "bg-white text-gray-900 rounded-tl-none",
                           isSending && "opacity-75"
                         )}>
-                          {(() => {
+                          <div className="min-w-0 max-w-full [overflow-wrap:anywhere] break-words">
+                            {(() => {
                             if (
                               isOut &&
                               msg.status === "failed" &&
@@ -2194,7 +2273,7 @@ export function UnifiedInbox() {
                               msg.deliveryFailureInline
                             ) {
                               return (
-                                <p className="leading-snug text-sm text-gray-800">
+                                <p className="whitespace-pre-wrap text-sm leading-snug text-gray-800 [overflow-wrap:anywhere] break-words">
                                   {msg.deliveryFailureInline}
                                 </p>
                               );
@@ -2246,10 +2325,10 @@ export function UnifiedInbox() {
                                     <p className="text-[10px] font-semibold uppercase tracking-wide text-rose-900/85">
                                       Template not sent
                                     </p>
-                                    <p className="text-sm text-rose-950 whitespace-pre-wrap">
+                                    <p className="whitespace-pre-wrap text-sm text-rose-950 [overflow-wrap:anywhere] break-words">
                                       {msg.errorMessage.trim()}
                                     </p>
-                                    <p className="text-xs font-semibold text-gray-900">{tmplName || "Template"}</p>
+                                    <p className="text-xs font-semibold text-gray-900 [overflow-wrap:anywhere] break-words">{tmplName || "Template"}</p>
                                     {langBadge ? (
                                       <p className="text-[10px] text-gray-500">{langBadge}</p>
                                     ) : null}
@@ -2293,7 +2372,7 @@ export function UnifiedInbox() {
                                   };
                                 });
                                 return (
-                                  <div className="overflow-hidden rounded-lg border border-emerald-100/90 bg-emerald-50/40 leading-snug">
+                                  <div className="min-w-0 max-w-full overflow-hidden rounded-lg border border-emerald-100/90 bg-emerald-50/40 leading-snug">
                                     <WhatsAppTemplateRichPreview
                                       template={{
                                         name: tmplName || "Template",
@@ -2418,7 +2497,7 @@ export function UnifiedInbox() {
                                   mediaKind === "document");
 
                               return (
-                                <div className="overflow-hidden rounded-lg border border-emerald-100/90 bg-emerald-50/40 leading-snug">
+                                <div className="min-w-0 max-w-full overflow-hidden rounded-lg border border-emerald-100/90 bg-emerald-50/40 leading-snug">
                                   {effectiveMediaUrl && mediaKind === "image" ? (
                                     <div className="min-w-0">
                                       <img
@@ -2517,7 +2596,7 @@ export function UnifiedInbox() {
                                     ) : null}
                                   </div>
                                   {bodyPart ? (
-                                    <p className="whitespace-pre-wrap px-1.5 pb-1 pt-0.5 text-sm leading-snug text-gray-800">
+                                    <p className="whitespace-pre-wrap px-1.5 pb-1 pt-0.5 text-sm leading-snug text-gray-800 [overflow-wrap:anywhere] break-words">
                                       {bodyPart}
                                     </p>
                                   ) : null}
@@ -2529,11 +2608,11 @@ export function UnifiedInbox() {
                             const isAudio = ct === 'audio' || msg.mediaType?.startsWith('audio');
                             const isDoc = ct === 'document' || msg.mediaType === 'document';
                             if (hasMedia && isImage) return (
-                              <div>
+                              <div className="min-w-0 max-w-full">
                                 <img
                                   src={imageSrc}
                                   alt="Image"
-                                  className="max-w-full rounded cursor-pointer max-h-64 object-cover"
+                                  className="max-h-64 max-w-full rounded object-cover cursor-pointer"
                                   onClick={() => window.open(imageSrc, '_blank')}
                                   onLoad={() => {
                                     // ResizeObserver handles the re-scroll for most cases.
@@ -2551,14 +2630,14 @@ export function UnifiedInbox() {
                                     }
                                   }}
                                 />
-                                {msg.content && <p className="leading-snug mt-1 text-sm">{msg.content}</p>}
+                                {msg.content && <p className="mt-1 whitespace-pre-wrap text-sm leading-snug [overflow-wrap:anywhere] break-words">{msg.content}</p>}
                               </div>
                             );
                             if (hasMedia && isVideo) return (
                               <video
                                 src={mediaDisplayUrl}
                                 controls
-                                className="max-w-full rounded max-h-64"
+                                className="max-h-64 max-w-full rounded"
                                 onLoadedMetadata={() => {
                                   if (shouldPinRef.current || justSentRef.current) {
                                     scrollToBottom();
@@ -2571,16 +2650,17 @@ export function UnifiedInbox() {
                               <audio src={mediaDisplayUrl} controls className="max-w-full" />
                             );
                             if (hasMedia && isDoc) return (
-                              <a href={mediaDisplayUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-blue-600 underline">
+                              <a href={mediaDisplayUrl} target="_blank" rel="noopener noreferrer" className="flex min-w-0 items-center gap-2 text-blue-600 underline">
                                 <FileText className="w-4 h-4 flex-shrink-0" />
-                                <span>{msg.mediaFilename || msg.content || 'Document'}</span>
+                                <span className="min-w-0 whitespace-pre-wrap [overflow-wrap:anywhere] break-words">{msg.mediaFilename || msg.content || 'Document'}</span>
                               </a>
                             );
-                            return <p className="leading-snug">{msg.content || (ct === 'sticker' ? 'Sticker received' : '')}</p>;
-                          })()}
-                          <div className="flex items-center justify-end gap-1 mt-0.5">
+                            return <p className="whitespace-pre-wrap leading-snug [overflow-wrap:anywhere] break-words">{msg.content || (ct === 'sticker' ? 'Sticker received' : '')}</p>;
+                            })()}
+                          </div>
+                          <div className="mt-1 flex min-w-0 shrink-0 flex-wrap items-center justify-end gap-x-1 gap-y-0.5 self-end">
                             {msg.sentViaFallback && (
-                              <span className="text-[10px] text-amber-600">via {msg.fallbackChannel}</span>
+                              <span className="text-[10px] text-amber-600 [overflow-wrap:anywhere] break-words">via {msg.fallbackChannel}</span>
                             )}
                             <span className="text-[10px] text-gray-400">{format(new Date(msg.createdAt), 'h:mm a')}</span>
                             {isOut && (
@@ -2609,17 +2689,17 @@ export function UnifiedInbox() {
                               )}
                             >
                               {showReplyWindowFailureUi ? (
-                                <p className="text-[11px] leading-snug text-rose-900/90">
+                                <p className="whitespace-pre-wrap text-[11px] leading-snug text-rose-900/90 [overflow-wrap:anywhere] break-words">
                                   {userFacingReplyWindowBlockedMessageInbox(
                                     (primaryConversation?.channel || activeChannel || "whatsapp") as string
                                   )}
                                 </p>
                               ) : showSpecificNonReplyFailure ? (
-                                <p className="whitespace-pre-wrap text-[11px] font-medium leading-snug text-red-600">
+                                <p className="whitespace-pre-wrap text-[11px] font-medium leading-snug text-red-600 [overflow-wrap:anywhere] break-words">
                                   {errBubbleText}
                                 </p>
                               ) : (
-                                <p className="text-[11px] leading-snug text-gray-600">
+                                <p className="whitespace-pre-wrap text-[11px] leading-snug text-gray-600 [overflow-wrap:anywhere] break-words">
                                   Couldn&apos;t send this message. Check your connection or try again.
                                 </p>
                               )}

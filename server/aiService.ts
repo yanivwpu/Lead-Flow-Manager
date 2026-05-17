@@ -512,7 +512,7 @@ ${bookingUrl ? `SCHEDULING LINK (Calendly — only when the customer asks to boo
 
   ${bookingUrl}
 
-  I'll make sure we have the right details ready.
+  I’ll make sure we have the right details ready.
 - Never invent or alter the URL; copy it exactly as given above.` : `SCHEDULING / BOOKING:
 - No self-service scheduling URL is configured. Do NOT invent, guess, or paste booking URLs (including Google Calendar links).
 - If they want to book, acknowledge and say your team will follow up with times, or ask what times work — do not claim they can self-book online unless a link was already shared earlier in this thread.`}`;

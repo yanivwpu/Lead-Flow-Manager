@@ -1,7 +1,7 @@
 import crypto from "crypto";
 import type { Request, Response } from "express";
 import { eq, and } from "drizzle-orm";
-import { appointments, chats } from "@shared/schema";
+import { appointments, chats, users } from "@shared/schema";
 import { db } from "../drizzle/db";
 import {
   decryptCredential,
@@ -101,20 +101,97 @@ export function verifyCalendlyWebhookSignature(
   return false;
 }
 
-function formatBookingTime(iso: string | undefined): string {
+async function getUserTimezone(userId: string): Promise<string | undefined> {
+  try {
+    const rows = await db
+      .select({ timezone: users.timezone })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+    const tz = rows[0]?.timezone?.trim();
+    return tz || undefined;
+  } catch (err) {
+    logCalendlyWebhook("timezone_lookup_failed", {
+      userId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return undefined;
+  }
+}
+
+function formatBookingTime(iso: string | undefined, timeZone?: string): string {
   if (!iso) return "TBD";
+  try {
+    return new Date(iso).toLocaleString("en-US", {
+      weekday: "long",
+      month: "long",
+      day: "numeric",
+      ...(timeZone ? { timeZone } : {}),
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  } catch {
+    return iso;
+  }
+}
+
+function formatBookingCardTime(iso: string | undefined, timeZone?: string): string {
+  if (!iso) return "Time TBD";
   try {
     return new Date(iso).toLocaleString("en-US", {
       weekday: "short",
       month: "short",
       day: "numeric",
+      ...(timeZone ? { timeZone } : {}),
       hour: "numeric",
       minute: "2-digit",
-      timeZoneName: "short",
     });
   } catch {
     return iso;
   }
+}
+
+function safeBookedConfirmationCopy(eventTypeName: string, startTime: string | undefined, timeZone?: string): string {
+  const meetingName = (eventTypeName || "meeting")
+    .replace(/^(\d+)\s+minute\s+meeting$/i, "$1-minute meeting")
+    .toLowerCase();
+  return `Great, your ${meetingName.toLowerCase()} is booked for ${formatBookingTime(startTime, timeZone)}. We'll follow up with any next steps.`;
+}
+
+function buildCalendlyConversationEvent(params: {
+  kind: "booked" | "canceled" | "rescheduled" | "no_show";
+  title: string;
+  eventName: string;
+  startTime?: string;
+  meetingLink?: string;
+  timeZone?: string;
+  inviteeName?: string;
+  inviteeEmail?: string;
+}): { content: string; preview: string } {
+  const preview =
+    params.kind === "booked"
+      ? `Meeting booked: ${params.eventName}`
+      : params.kind === "canceled"
+        ? `Meeting canceled: ${params.eventName}`
+        : params.kind === "rescheduled"
+          ? `Meeting rescheduled: ${params.eventName}`
+          : `Calendly no-show: ${params.eventName}`;
+  return {
+    preview,
+    content: JSON.stringify({
+      type: "calendly_booking",
+      kind: params.kind,
+      title: params.title,
+      eventName: params.eventName,
+      startTime: params.startTime || null,
+      timeLabel: formatBookingTime(params.startTime, params.timeZone),
+      cardTimeLabel: formatBookingCardTime(params.startTime, params.timeZone),
+      meetingLink: params.meetingLink || null,
+      inviteeName: params.inviteeName || null,
+      inviteeEmail: params.inviteeEmail || null,
+      source: "calendly",
+    }),
+  };
 }
 
 function logCalendlyWebhook(event: string, data: Record<string, unknown>): void {
@@ -482,6 +559,8 @@ async function writeCalendlyConversationActivity(params: {
   email: string;
   name: string;
   content: string;
+  preview?: string;
+  contentType?: string;
   externalMessageId: string;
   preferredContactId?: string;
   preferredConversationId?: string;
@@ -496,13 +575,13 @@ async function writeCalendlyConversationActivity(params: {
         userId: params.userId,
         direction: "inbound",
         content: params.content,
-        contentType: "text",
+        contentType: params.contentType || "text",
         externalMessageId: params.externalMessageId.slice(0, 500),
         status: "delivered",
       } as any);
       await storage.updateConversation(conversation.id, {
         lastMessageAt: new Date(),
-        lastMessagePreview: params.content.split("\n")[0].slice(0, 100),
+        lastMessagePreview: (params.preview || params.content.split("\n")[0]).slice(0, 100),
         lastMessageDirection: "inbound",
       });
       logCalendlyWebhook("conversation_booking_event_created", {
@@ -522,10 +601,15 @@ async function writeCalendlyConversationActivity(params: {
     channelContactId: params.email,
     contactName: params.name,
     content: params.content,
-    contentType: "text",
+    contentType: params.contentType || "text",
     externalMessageId: params.externalMessageId.slice(0, 500),
     preferredContactId: params.preferredContactId,
   });
+  if (params.preview) {
+    await storage.updateConversation(conversation.id, {
+      lastMessagePreview: params.preview.slice(0, 100),
+    });
+  }
   return { contactId: contact.id, conversationId: conversation.id };
 }
 
@@ -583,8 +667,19 @@ async function handleInviteeCreated(userId: string, body: Record<string, unknown
     matchReason: bookingMatch?.reason || null,
   });
 
-  const timeLabel = formatBookingTime(startTime);
-  const content = `Calendly booked: ${eventTypeName} at ${timeLabel}${meetingLink ? `\n${meetingLink}` : ""}`;
+  const timeZone = await getUserTimezone(userId);
+  const timeLabel = formatBookingTime(startTime, timeZone);
+  const bookingEvent = buildCalendlyConversationEvent({
+    kind: "booked",
+    title: "Meeting booked",
+    eventName: eventTypeName,
+    startTime,
+    meetingLink,
+    timeZone,
+    inviteeName: name,
+    inviteeEmail: email,
+  });
+  const safeConfirmationCopy = safeBookedConfirmationCopy(eventTypeName, startTime, timeZone);
   const stableDedupeKey = (scheduledEventUri || inviteeUri || externalMessageId).trim();
   if (stableDedupeKey) {
     const existingAppt = await storage.getAppointmentByCalendlyScheduledEventUri(userId, stableDedupeKey);
@@ -612,7 +707,9 @@ async function handleInviteeCreated(userId: string, body: Record<string, unknown
           userId,
           email,
           name,
-          content,
+          content: bookingEvent.content,
+          preview: bookingEvent.preview,
+          contentType: "calendly_event",
           externalMessageId: `${String(externalMessageId).slice(0, 420)}:repair`,
           preferredContactId: bookingMatch.contactId,
           preferredConversationId: bookingMatch.conversationId,
@@ -651,7 +748,7 @@ async function handleInviteeCreated(userId: string, body: Record<string, unknown
 
     const newLegacy: WhatsAppMessage = {
       id: String(externalMessageId || `cal-${Date.now()}`).slice(0, 120),
-      text: content,
+      text: safeConfirmationCopy,
       time: new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
       sent: false,
       sender: "them",
@@ -661,7 +758,7 @@ async function handleInviteeCreated(userId: string, body: Record<string, unknown
     isNewChat = messages.length === 1;
     await storage.updateChat(legacyChat.id, {
       messages,
-      lastMessage: content,
+      lastMessage: bookingEvent.preview,
       time: newLegacy.time,
       unread: (legacyChat.unread || 0) + 1,
     });
@@ -671,7 +768,9 @@ async function handleInviteeCreated(userId: string, body: Record<string, unknown
     userId,
     email,
     name,
-    content,
+    content: bookingEvent.content,
+    preview: bookingEvent.preview,
+    contentType: "calendly_event",
     externalMessageId: String(externalMessageId).slice(0, 500),
     preferredContactId,
     preferredConversationId: bookingMatch?.conversationId,
@@ -782,7 +881,7 @@ async function handleInviteeCreated(userId: string, body: Record<string, unknown
       userId,
       isNewChat,
       updatedChat,
-      messageBody: content,
+      messageBody: safeConfirmationCopy,
       contact,
       conversationId: conversation.id,
       skipKeywordWorkflows: chatbotWillFire,
@@ -811,13 +910,25 @@ async function handleInviteeCanceled(userId: string, body: Record<string, unknow
     console.log(`[Calendly] cancel — no contact for ${parsed.email}`);
     return;
   }
-  const timeLabel = formatBookingTime(parsed.startTime);
-  const content = `Calendly canceled: ${parsed.eventTypeName} at ${timeLabel}${parsed.meetingLink ? `\n${parsed.meetingLink}` : ""}`;
+  const timeZone = await getUserTimezone(userId);
+  const timeLabel = formatBookingTime(parsed.startTime, timeZone);
+  const bookingEvent = buildCalendlyConversationEvent({
+    kind: "canceled",
+    title: "Meeting canceled",
+    eventName: parsed.eventTypeName,
+    startTime: parsed.startTime,
+    meetingLink: parsed.meetingLink,
+    timeZone,
+    inviteeName: parsed.name,
+    inviteeEmail: parsed.email,
+  });
   const written = await writeCalendlyConversationActivity({
     userId,
     email: parsed.email,
     name: parsed.name,
-    content,
+    content: bookingEvent.content,
+    preview: bookingEvent.preview,
+    contentType: "calendly_event",
     externalMessageId: `calendly-canceled:${parsed.externalMessageId}`,
     preferredContactId: contact.id,
   });
@@ -874,14 +985,26 @@ async function handleInviteeRescheduled(userId: string, body: Record<string, unk
   const contact =
     (preferredContactId ? await storage.getContact(preferredContactId) : undefined) ??
     (await storage.getContactByChannelId(userId, "calendly", parsed.email));
-  const timeLabel = formatBookingTime(parsed.startTime);
+  const timeZone = await getUserTimezone(userId);
+  const timeLabel = formatBookingTime(parsed.startTime, timeZone);
   if (contact) {
-    const content = `Calendly rescheduled: ${parsed.eventTypeName} to ${timeLabel}${parsed.meetingLink ? `\n${parsed.meetingLink}` : ""}`;
+    const bookingEvent = buildCalendlyConversationEvent({
+      kind: "rescheduled",
+      title: "Meeting rescheduled",
+      eventName: parsed.eventTypeName,
+      startTime: parsed.startTime,
+      meetingLink: parsed.meetingLink,
+      timeZone,
+      inviteeName: parsed.name,
+      inviteeEmail: parsed.email,
+    });
     const written = await writeCalendlyConversationActivity({
       userId,
       email: parsed.email,
       name: parsed.name,
-      content,
+      content: bookingEvent.content,
+      preview: bookingEvent.preview,
+      contentType: "calendly_event",
       externalMessageId: `calendly-rescheduled:${parsed.externalMessageId}`,
       preferredContactId: contact.id,
     });
@@ -919,11 +1042,24 @@ async function handleInviteeNoShowCreated(userId: string, body: Record<string, u
     startTime: parsed.startTime || null,
   });
   const preferredContactId = await resolvePreferredCalendlyContactId(userId, parsed.email, parsed.utmContactId);
+  const timeZone = await getUserTimezone(userId);
+  const bookingEvent = buildCalendlyConversationEvent({
+    kind: "no_show",
+    title: "Calendly no-show",
+    eventName: parsed.eventTypeName,
+    startTime: parsed.startTime,
+    meetingLink: parsed.meetingLink,
+    timeZone,
+    inviteeName: parsed.name,
+    inviteeEmail: parsed.email,
+  });
   const written = await writeCalendlyConversationActivity({
     userId,
     email: parsed.email,
     name: parsed.name,
-    content: `Calendly no-show: ${parsed.eventTypeName} at ${formatBookingTime(parsed.startTime)}${parsed.meetingLink ? `\n${parsed.meetingLink}` : ""}`,
+    content: bookingEvent.content,
+    preview: bookingEvent.preview,
+    contentType: "calendly_event",
     externalMessageId: `calendly-no-show:${parsed.externalMessageId}`,
     preferredContactId,
   });
