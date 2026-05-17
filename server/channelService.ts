@@ -20,6 +20,7 @@ import {
   persistInboundMedia,
   type PersistInboundMediaAuth,
 } from "./mediaStorageService";
+import { sanitizeCalendlyBookingLinks } from "@shared/calendlyBookingMessage";
 import { decryptCredential, isEncrypted } from "./userTwilio";
 import {
   coerceReplyWindowErrorToUserMessage,
@@ -120,54 +121,15 @@ function mediaPreviewLabel(contentType?: string): string {
   }
 }
 
-function addCalendlyTrackingToUrl(rawUrl: string, context: {
-  contactId: string;
-  conversationId: string;
-  channel: Channel;
-  token: string;
-}): string {
-  try {
-    const url = new URL(rawUrl);
-    const host = url.hostname.toLowerCase();
-    if (!host.includes("calendly.com")) return rawUrl;
-    url.searchParams.set("utm_source", "whachatcrm");
-    url.searchParams.set("utm_medium", context.channel);
-    url.searchParams.set("utm_content", context.contactId);
-    url.searchParams.set("utm_campaign", context.conversationId);
-    url.searchParams.set("utm_term", context.token);
-    return url.toString();
-  } catch {
-    return rawUrl;
-  }
-}
-
-function withTrackedCalendlyLinks(content: string, context: {
-  contactId: string;
-  conversationId: string;
-  channel: Channel;
-  token: string;
-}): { content: string; trackedUrls: string[] } {
-  if (!content || !/calendly\.com/i.test(content)) return { content, trackedUrls: [] };
-  const trackedUrls: string[] = [];
-  const next = content.replace(/https?:\/\/[^\s<>"')]+/gi, (raw) => {
-    const trailing = raw.match(/[.,!?;:]+$/)?.[0] || "";
-    const url = trailing ? raw.slice(0, -trailing.length) : raw;
-    const tracked = addCalendlyTrackingToUrl(url, context);
-    if (tracked !== url) trackedUrls.push(tracked);
-    return `${tracked}${trailing}`;
-  });
-  return { content: next, trackedUrls };
-}
-
 async function rememberCalendlyBookingContext(contact: Contact, context: {
   userId: string;
   contactId: string;
   conversationId: string;
   channel: Channel;
   token: string;
-  trackedUrls: string[];
+  calendlyUrls: string[];
 }): Promise<void> {
-  if (context.trackedUrls.length === 0) return;
+  if (context.calendlyUrls.length === 0) return;
   const now = new Date();
   const customFields = ((contact.customFields as Record<string, unknown> | null) || {}) as Record<string, unknown>;
   const existing = Array.isArray(customFields._calendlyBookingContexts)
@@ -182,9 +144,10 @@ async function rememberCalendlyBookingContext(contact: Contact, context: {
     contactId: context.contactId,
     conversationId: context.conversationId,
     channel: context.channel,
+    eventTypeUri: context.calendlyUrls[0] || null,
     trackingToken: context.token,
     bookingLinkSentAt: now.toISOString(),
-    calendlyUrls: context.trackedUrls.slice(0, 3),
+    calendlyUrls: context.calendlyUrls.slice(0, 3),
   };
   await storage.updateContact(
     context.contactId,
@@ -203,7 +166,7 @@ async function rememberCalendlyBookingContext(contact: Contact, context: {
     contactId: context.contactId,
     conversationId: context.conversationId,
     channel: context.channel,
-    trackedUrlCount: context.trackedUrls.length,
+    calendlyUrlCount: context.calendlyUrls.length,
   }));
 }
 
@@ -499,21 +462,16 @@ class ChannelService {
     }
 
     const bookingContextToken = crypto.randomBytes(12).toString("hex");
-    const trackedCalendly = withTrackedCalendlyLinks(content, {
-      contactId,
-      conversationId: conversation.id,
-      channel: targetChannel,
-      token: bookingContextToken,
-    });
-    if (trackedCalendly.trackedUrls.length > 0) {
-      content = trackedCalendly.content;
+    const calendlyLinks = sanitizeCalendlyBookingLinks(content);
+    if (calendlyLinks.calendlyUrls.length > 0) {
+      content = calendlyLinks.content;
       await rememberCalendlyBookingContext(contact, {
         userId,
         contactId,
         conversationId: conversation.id,
         channel: targetChannel,
         token: bookingContextToken,
-        trackedUrls: trackedCalendly.trackedUrls,
+        calendlyUrls: calendlyLinks.calendlyUrls,
       }).catch((err) =>
         console.warn(`[CalendlyBookingContext] store failed contactId=${contactId}: ${err instanceof Error ? err.message : String(err)}`)
       );

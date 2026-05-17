@@ -365,18 +365,24 @@ async function resolveCalendlyBookingMatch(params: {
   }
 
   const contacts = await storage.getContacts(params.userId, 5000);
-  for (const contact of contacts) {
-    const ctx = getRecentCalendlyContexts(contact).find(
-      (x) => !params.utmTrackingToken || x.trackingToken === params.utmTrackingToken
-    );
-    if (ctx) {
-      return {
-        contactId: contact.id,
-        conversationId: typeof ctx.conversationId === "string" ? ctx.conversationId : undefined,
-        channel: typeof ctx.channel === "string" ? ctx.channel : undefined,
-        reason: "recent_context",
-      };
-    }
+  const candidates = contacts.flatMap((contact) =>
+    getRecentCalendlyContexts(contact)
+      .filter((ctx) => !params.utmTrackingToken || ctx.trackingToken === params.utmTrackingToken)
+      .map((ctx) => ({ contact, ctx }))
+  );
+  candidates.sort((a, b) => {
+    const at = typeof a.ctx.bookingLinkSentAt === "string" ? Date.parse(a.ctx.bookingLinkSentAt) : 0;
+    const bt = typeof b.ctx.bookingLinkSentAt === "string" ? Date.parse(b.ctx.bookingLinkSentAt) : 0;
+    return bt - at;
+  });
+  const best = candidates[0];
+  if (best) {
+    return {
+      contactId: best.contact.id,
+      conversationId: typeof best.ctx.conversationId === "string" ? best.ctx.conversationId : undefined,
+      channel: typeof best.ctx.channel === "string" ? best.ctx.channel : undefined,
+      reason: "recent_context",
+    };
   }
 
   return undefined;
