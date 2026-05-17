@@ -2439,12 +2439,7 @@ export async function registerRoutes(
         return "document";
       };
       const hasTwilioMedia = !!parsed.mediaUrl && parsed.numMedia > 0;
-      const {
-        isNewConversation: inboxIsNewConv,
-        chatbotWillFire: inboxChatbotWillFire,
-        contact: inboxContact,
-        conversation: inboxConversation,
-      } = await cs.processIncomingMessage({
+      const inboxResult = await cs.processIncomingMessage({
         userId,
         channel,
         channelContactId: normalizedFrom,
@@ -2456,6 +2451,20 @@ export async function registerRoutes(
         mediaFilename: hasTwilioMedia ? `mms-${parsed.messageSid}` : undefined,
         externalMessageId: parsed.messageSid,
       });
+      const {
+        isNewConversation: inboxIsNewConv,
+        chatbotWillFire: inboxChatbotWillFire,
+        contact: inboxContact,
+        conversation: inboxConversation,
+      } = inboxResult;
+      if (!inboxResult.success || !inboxContact || !inboxConversation) {
+        console.error("[inbound-processing] Twilio processing returned incomplete state", {
+          messageSid: parsed.messageSid,
+          userId,
+          errors: inboxResult.errors,
+        });
+        return res.status(200).send("");
+      }
       console.log(`[Inbound] Webhook returned 200 — channel: ${channel}, messageSid: ${parsed.messageSid}, userId: ${userId}`);
 
       // Trigger workflow automations (Pro feature) — centralized dispatcher
@@ -2963,7 +2972,14 @@ export async function registerRoutes(
             }).then((result) => {
               metaInboxResult = { chatbotWillFire: result.chatbotWillFire, isNewConversation: result.isNewConversation };
               metaInboxContact = result.contact;
-              metaInboxConversationId = result.conversation.id;
+              metaInboxConversationId = result.conversation?.id ?? null;
+              if (!result.success || !result.contact || !result.conversation) {
+                console.error("[inbound-processing] Meta WhatsApp processing returned incomplete state", {
+                  messageId: incomingMessage.messageId,
+                  userId: user.id,
+                  errors: result.errors,
+                });
+              }
               devLog(`[Inbound] Webhook returned 200 — channel: whatsapp, messageId: ${incomingMessage.messageId}, userId: ${user.id}`);
             })
           );
@@ -3042,12 +3058,23 @@ export async function registerRoutes(
                     attachmentType,
                     externalMessageId: messageId,
                   }).then(async (result) => {
-                    devLog(`[Inbound] [Stage 10-IG] Pipeline complete — channel: instagram, messageId: ${messageId}, contactId: ${result.contact.id}, conversationId: ${result.conversation.id}, messageId_db: ${result.message.id}, isNewConversation: ${result.isNewConversation}`);
-                    const profilePatch = buildInstagramContactPatchFromProfile(result.contact, senderId, igProfile);
+                    if (!result.success || !result.contact || !result.conversation || !result.message) {
+                      console.error("[inbound-processing] Instagram processing returned incomplete state", {
+                        messageId,
+                        userId: matchSetting.userId,
+                        errors: result.errors,
+                      });
+                      return;
+                    }
+                    const contact = result.contact;
+                    const conversation = result.conversation;
+                    const message = result.message;
+                    devLog(`[Inbound] [Stage 10-IG] Pipeline complete — channel: instagram, messageId: ${messageId}, contactId: ${contact.id}, conversationId: ${conversation.id}, messageId_db: ${message.id}, isNewConversation: ${result.isNewConversation}`);
+                    const profilePatch = buildInstagramContactPatchFromProfile(contact, senderId, igProfile);
                     if (Object.keys(profilePatch).length > 0) {
-                      await storage.updateContact(result.contact.id, profilePatch).catch((err) => {
+                      await storage.updateContact(contact.id, profilePatch).catch((err) => {
                         console.warn("[Meta Webhook] [IG PROFILE] contact profile update failed", {
-                          contactId: result.contact.id,
+                          contactId: contact.id,
                           senderId,
                           error: err instanceof Error ? err.message : String(err),
                         });
@@ -3056,8 +3083,8 @@ export async function registerRoutes(
                     // Fallback avatar-only refresh if profile fetch returned no picture and the cached avatar is stale.
                     if (igAccessToken && !igProfile?.profilePic) {
                       const { shouldRefreshAvatar, fetchInstagramAvatar } = await import("./avatarService");
-                      if (shouldRefreshAvatar(result.contact)) {
-                        fetchInstagramAvatar(result.contact.id, senderId, igAccessToken).catch(() => {});
+                      if (shouldRefreshAvatar(contact)) {
+                        fetchInstagramAvatar(contact.id, senderId, igAccessToken).catch(() => {});
                       }
                     }
                   })
@@ -3197,6 +3224,14 @@ export async function registerRoutes(
                 attachmentType: firstAttachment?.type,
                 externalMessageId: messageId,
               }).then(async (result) => {
+                if (!result.success || !result.contact || !result.conversation || !result.message) {
+                  console.error("[inbound-processing] Facebook processing returned incomplete state", {
+                    messageId,
+                    userId: matchSetting.userId,
+                    errors: result.errors,
+                  });
+                  return;
+                }
                 devLog(`[FB-WEBHOOK] message saved contactId=${result.contact.id} conversationId=${result.conversation.id} dbMessageId=${result.message.id}`);
                 devLog(`[Inbound] [Stage 10-FB] Pipeline complete — channel: facebook, mid=${messageId}, contactId=${result.contact.id}, conversationId=${result.conversation.id}, dbMessageId=${result.message.id}, isNew=${result.isNewConversation}`);
                 // Update avatar if we got one from the Graph API call and it's due for refresh

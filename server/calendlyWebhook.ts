@@ -233,6 +233,7 @@ function extractCalendlyBookingPayload(body: Record<string, unknown>): {
   oldInviteeUri?: string;
   oldScheduledEventUri?: string;
   rescheduleUrl?: string;
+  isRescheduleCancellation?: boolean;
   externalMessageId: string;
   utmContactId?: string;
   utmConversationId?: string;
@@ -292,7 +293,13 @@ function extractCalendlyBookingPayload(body: Record<string, unknown>): {
     readString(payload.old_scheduled_event_uri) ||
     readString(payload.oldScheduledEventUri);
   const location = (scheduled?.location as Record<string, unknown>) || (payload.location as Record<string, unknown>);
+  const cancellation = readObject(payload.cancellation) || readObject(invitee.cancellation);
   const rescheduleUrl = readString(payload.reschedule_url) || readString(invitee.reschedule_url);
+  const isRescheduleCancellation =
+    payload.rescheduled === true ||
+    invitee.rescheduled === true ||
+    cancellation?.rescheduled === true ||
+    readString(payload.cancel_reason)?.toLowerCase().includes("reschedul") === true;
   const meetingLink =
     (typeof location?.join_url === "string" && location.join_url) ||
     (typeof location?.url === "string" && location.url) ||
@@ -327,6 +334,7 @@ function extractCalendlyBookingPayload(body: Record<string, unknown>): {
     oldInviteeUri,
     oldScheduledEventUri,
     rescheduleUrl,
+    isRescheduleCancellation,
     externalMessageId: String(externalMessageId).slice(0, 500),
     utmContactId,
     utmConversationId,
@@ -707,7 +715,7 @@ async function writeCalendlyConversationActivity(params: {
   }
 
   const { channelService } = await import("./channelService");
-  const { contact, conversation } = await channelService.processIncomingMessage({
+  const result = await channelService.processIncomingMessage({
     userId: params.userId,
     channel: "calendly",
     channelContactId: params.email,
@@ -717,6 +725,12 @@ async function writeCalendlyConversationActivity(params: {
     externalMessageId: params.externalMessageId.slice(0, 500),
     preferredContactId: params.preferredContactId,
   });
+  const { contact, conversation } = result;
+  if (!result.success || !contact || !conversation) {
+    throw new Error(
+      `Calendly conversation activity missing inbound state: ${result.errors.map((e: { code: string }) => e.code).join(",") || "unknown"}`
+    );
+  }
   if (params.preview) {
     await storage.updateConversation(conversation.id, {
       lastMessagePreview: params.preview.slice(0, 100),
@@ -962,6 +976,24 @@ async function handleInviteeCreated(userId: string, body: Record<string, unknown
     throw err;
   }
 
+  const retiredAppointmentIds = await retireOtherActiveCalendlyAppointments({
+    userId,
+    contactId: contact.id,
+    keepAppointmentId: appointmentId!,
+  });
+  logCalendlyLifecycle({
+    event: "booking_created_single_active_enforced",
+    userId,
+    contactId: contact.id,
+    conversationId: conversation.id,
+    oldAppointmentId: retiredAppointmentIds[0] || null,
+    newAppointmentId: appointmentId,
+    retiredAppointmentIds,
+    statusTransition: retiredAppointmentIds.length > 0 ? "scheduled->rescheduled; new->scheduled" : "none->scheduled",
+    followUpUpdated: true,
+    copilotUpdated: true,
+  });
+
   await applyCalendlyConfirmedBookingCrmEffects({
     userId,
     contactId: contact.id,
@@ -1053,15 +1085,20 @@ async function handleInviteeCanceled(userId: string, body: Record<string, unknow
     oldInviteeUri: parsed.oldInviteeUri,
   });
   if (appointment) {
-    await db.update(appointments).set({ status: "cancelled" }).where(eq(appointments.id, appointment.id));
+    await db
+      .update(appointments)
+      .set({ status: parsed.isRescheduleCancellation ? "rescheduled" : "cancelled" })
+      .where(eq(appointments.id, appointment.id));
   }
-  const line = `Booking canceled: ${parsed.eventTypeName} at ${timeLabel}`;
+  const line = parsed.isRescheduleCancellation
+    ? `Booking rescheduled from ${timeLabel} (${parsed.eventTypeName})`
+    : `Booking canceled: ${parsed.eventTypeName} at ${timeLabel}`;
   const prevCf = ((contact.customFields as Record<string, unknown> | null) || {}) as Record<string, unknown>;
   const lastBooking = (prevCf.calendlyLastBooking && typeof prevCf.calendlyLastBooking === "object")
     ? (prevCf.calendlyLastBooking as Record<string, unknown>)
     : null;
   const patch: Record<string, unknown> = { notes: appendContactNote(contact.notes, line) };
-  if (!lastBooking || !appointment || lastBooking.appointmentId === appointment.id) {
+  if (!parsed.isRescheduleCancellation && (!lastBooking || !appointment || lastBooking.appointmentId === appointment.id)) {
     patch.followUp = "";
     patch.followUpDate = null;
     patch.customFields = {
@@ -1092,14 +1129,14 @@ async function handleInviteeCanceled(userId: string, body: Record<string, unknow
       source: "calendly",
     });
     logCalendlyLifecycle({
-      event: "cancel_applied",
+      event: parsed.isRescheduleCancellation ? "reschedule_cancel_leg_applied" : "cancel_applied",
       userId,
       contactId: contact.id,
       conversationId: written.conversationId,
       oldAppointmentId: appointment.id,
       newAppointmentId: null,
-      statusTransition: `${appointment.status}->cancelled`,
-      followUpUpdated: true,
+      statusTransition: `${appointment.status}->${parsed.isRescheduleCancellation ? "rescheduled" : "cancelled"}`,
+      followUpUpdated: !parsed.isRescheduleCancellation,
       copilotUpdated: true,
     });
   }

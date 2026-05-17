@@ -93,7 +93,13 @@ export function registerWebhookRoutes(app: Express): void {
 
         // Fire-and-forget avatar fetch — only if due for refresh
         const { shouldRefreshAvatar, fetchTelegramAvatar } = await import("../avatarService");
-        if (shouldRefreshAvatar(result.contact)) {
+        if (!result.success || !result.contact) {
+          console.error("[inbound-processing] Telegram processing returned incomplete state", {
+            messageId: message.message_id,
+            userId,
+            errors: result.errors,
+          });
+        } else if (shouldRefreshAvatar(result.contact)) {
           const tgSetting = await storage.getChannelSetting(userId, 'telegram');
           const botToken: string | undefined = (tgSetting?.config as any)?.botToken;
           if (botToken) {

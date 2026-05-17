@@ -28,6 +28,11 @@ import {
   isMetaReplyWindowExpiredError,
   userFacingReplyWindowBlockedMessageInbox,
 } from "@shared/metaReplyWindowError";
+import {
+  inboundProcessingLog,
+  type InboundProcessingResult,
+  type InboundProcessingSubState,
+} from "@shared/inboundProcessing";
 
 type ForceChannelInput = Channel | string | undefined;
 
@@ -102,6 +107,63 @@ function logInboundDuplicateIgnored(provider: string, externalMessageId: string)
       external_message_id: externalMessageId,
     })
   );
+}
+
+function buildInboundResult(params: {
+  success: boolean;
+  contact: Contact | null;
+  conversation: Conversation | null;
+  message: Message | null;
+  workflowState?: InboundProcessingSubState;
+  chatbotState?: InboundProcessingSubState & { willFire: boolean };
+  automationState?: InboundProcessingSubState;
+  created?: Partial<InboundProcessingResult["created"]>;
+  updated?: Partial<InboundProcessingResult["updated"]>;
+  deduped?: boolean;
+  channel: Channel;
+  sourceEventId?: string | null;
+  errors?: InboundProcessingResult["errors"];
+  isNewConversation?: boolean;
+  chatbotWillFire?: boolean;
+}): InboundProcessingResult {
+  const chatbotWillFire = params.chatbotWillFire ?? params.chatbotState?.willFire ?? false;
+  const result: InboundProcessingResult = {
+    success: params.success,
+    contact: params.contact,
+    conversation: params.conversation,
+    message: params.message,
+    workflowState: params.workflowState || { status: "skipped", reason: "not_evaluated" },
+    chatbotState: params.chatbotState || { status: "skipped", reason: "not_evaluated", willFire: chatbotWillFire },
+    automationState: params.automationState || { status: "skipped", reason: "not_evaluated" },
+    created: {
+      contact: Boolean(params.created?.contact),
+      conversation: Boolean(params.created?.conversation),
+      message: Boolean(params.created?.message),
+    },
+    updated: {
+      contact: Boolean(params.updated?.contact),
+      conversation: Boolean(params.updated?.conversation),
+      message: Boolean(params.updated?.message),
+    },
+    deduped: Boolean(params.deduped),
+    channel: params.channel,
+    sourceEventId: params.sourceEventId || null,
+    errors: params.errors || [],
+    isNewConversation: Boolean(params.isNewConversation),
+    chatbotWillFire,
+  };
+  if (!result.contact) inboundProcessingLog("missing_contact", { channel: params.channel, sourceEventId: result.sourceEventId });
+  if (!result.conversation) inboundProcessingLog("missing_conversation", { channel: params.channel, sourceEventId: result.sourceEventId });
+  if (!result.workflowState || !result.chatbotState || !result.automationState) {
+    inboundProcessingLog("missing_state", { channel: params.channel, sourceEventId: result.sourceEventId });
+  }
+  if (result.workflowState.status === "skipped") {
+    inboundProcessingLog("workflow_skipped", { channel: params.channel, sourceEventId: result.sourceEventId, reason: result.workflowState.reason || null });
+  }
+  if (result.automationState.status === "skipped") {
+    inboundProcessingLog("automation_skipped", { channel: params.channel, sourceEventId: result.sourceEventId, reason: result.automationState.reason || null });
+  }
+  return result;
 }
 
 /** Inbox WhatsApp free-form: enforce ~23h from last inbound when DB stores a 24h ceiling (1h safety margin). */
@@ -833,7 +895,7 @@ class ChannelService {
      * instead of creating a duplicate Calendly-only contact.
      */
     preferredContactId?: string;
-  }): Promise<{ contact: Contact; conversation: Conversation; message: Message; isNewConversation: boolean; chatbotWillFire: boolean }> {
+  }): Promise<InboundProcessingResult> {
     const {
       userId,
       channel,
@@ -849,6 +911,7 @@ class ChannelService {
       preferredContactId,
     } = params;
     let { channelContactId, contactName } = params;
+    const inboundErrors: InboundProcessingResult["errors"] = [];
 
     // Normalise phone-based identifiers to digits-only so "+923364127888" and
     // "923364127888" always resolve to the same contact record.
@@ -869,13 +932,26 @@ class ChannelService {
         // Return existing data so callers can still ACK 200 safely
         const conv = await storage.getConversation(existing.conversationId);
         const cont = await storage.getContact(existing.contactId);
-        return { contact: cont!, conversation: conv!, message: existing, isNewConversation: false, chatbotWillFire: false };
+        return buildInboundResult({
+          success: Boolean(cont && conv),
+          contact: cont || null,
+          conversation: conv || null,
+          message: existing,
+          workflowState: { status: "skipped", reason: "deduped" },
+          chatbotState: { status: "skipped", reason: "deduped", willFire: false },
+          automationState: { status: "skipped", reason: "deduped" },
+          deduped: true,
+          channel,
+          sourceEventId: externalMessageId,
+          errors: cont && conv ? [] : [{ code: "dedupe_state_missing", message: "Existing message was found but contact or conversation could not be reloaded.", recoverable: true, stage: "dedupe" }],
+        });
       }
     }
 
     console.log(`[Inbound] Channel identified: ${channel} — starting processIncomingMessage`);
 
     let contact: Contact | undefined;
+    let contactCreated = false;
 
     if (channel === "calendly" && preferredContactId) {
       const pc = await storage.getContact(preferredContactId);
@@ -921,6 +997,7 @@ class ChannelService {
         lastIncomingAt: new Date(),
         source: channel,
       });
+      contactCreated = true;
       console.log(`[Inbox Worker] Contact created — contactId: ${contact.id}, name: "${contact.name}"`);
 
       await this.logActivity(userId, contact.id, undefined, 'lead_created', {
@@ -998,7 +1075,14 @@ class ChannelService {
         telegramMedia,
       });
     } catch (err: unknown) {
-      console.warn("[Inbound] persistInboundMediaIfNeeded error:", (err as Error)?.message || err);
+      const messageText = (err as Error)?.message || String(err);
+      console.warn("[Inbound] persistInboundMediaIfNeeded error:", messageText);
+      inboundErrors.push({
+        code: "media_persistence_failed",
+        message: messageText,
+        recoverable: true,
+        stage: "media_persistence",
+      });
     }
 
     const priorMessageCount = await countMessagesInConversation(conversation.id);
@@ -1035,13 +1119,19 @@ class ChannelService {
         if (existing) {
           const existingConversation = (await storage.getConversation(existing.conversationId)) || conversation;
           const existingContact = (await storage.getContact(existing.contactId)) || contact;
-          return {
-            contact: existingContact,
-            conversation: existingConversation,
+          return buildInboundResult({
+            success: Boolean(existingContact && existingConversation),
+            contact: existingContact || null,
+            conversation: existingConversation || null,
             message: existing,
-            isNewConversation: false,
-            chatbotWillFire: false,
-          };
+            workflowState: { status: "skipped", reason: "deduped_unique_race" },
+            chatbotState: { status: "skipped", reason: "deduped_unique_race", willFire: false },
+            automationState: { status: "skipped", reason: "deduped_unique_race" },
+            deduped: true,
+            channel,
+            sourceEventId: externalMessageId,
+            errors: existingContact && existingConversation ? [] : [{ code: "dedupe_state_missing", message: "Unique conflict resolved to an existing message, but contact or conversation could not be reloaded.", recoverable: true, stage: "dedupe_unique" }],
+          });
         }
       }
       throw err;
@@ -1111,13 +1201,22 @@ class ChannelService {
         onInboundMessageForNoReplyTimers(contact.id).catch(() => {})
       );
       scheduleHubSpotAutoSync(userId, contact.id);
-      return {
+      return buildInboundResult({
+        success: true,
         contact,
         conversation,
         message,
+        workflowState: { status: "skipped", reason: "handoff_triggered" },
+        chatbotState: { status: "skipped", reason: "handoff_triggered", willFire: false },
+        automationState: { status: "skipped", reason: "handoff_triggered" },
+        created: { contact: contactCreated, conversation: isNewConversation, message: true },
+        updated: { contact: true, conversation: true, message: false },
+        channel,
+        sourceEventId: externalMessageId || null,
+        errors: inboundErrors,
         isNewConversation,
         chatbotWillFire: false,
-      };
+      });
     }
 
     await this.resolveHandoffIfActive(
@@ -1180,6 +1279,30 @@ class ChannelService {
     );
 
     scheduleHubSpotAutoSync(userId, contact.id);
+    return buildInboundResult({
+      success: true,
+      contact,
+      conversation,
+      message,
+      workflowState: { status: "processed", reason: isNewConversation ? "new_conversation_and_keyword_dispatchers_available" : "keyword_dispatcher_available" },
+      chatbotState: { status: "processed", reason: chatbotArb.reason, willFire: chatbotWillFire },
+      automationState: {
+        status: "processed",
+        reason: chatbotWillFire ? "chatbot_matched_auto_reply_suppressed" : "auto_reply_and_no_reply_timer_evaluated",
+        details: {
+          noReplyTimersNotified: true,
+          hubspotSyncScheduled: true,
+          mediaPersistenceFailed: inboundErrors.some((e) => e.code === "media_persistence_failed"),
+        },
+      },
+      created: { contact: contactCreated, conversation: isNewConversation, message: true },
+      updated: { contact: true, conversation: true, message: false },
+      channel,
+      sourceEventId: externalMessageId || null,
+      errors: inboundErrors,
+      isNewConversation,
+      chatbotWillFire,
+    });
   }
 
   private async _scheduleAutoReply(params: {
