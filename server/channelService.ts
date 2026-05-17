@@ -1,6 +1,7 @@
 import { storage } from "./storage";
 import { subscriptionService } from "./subscriptionService";
 import { notifyUser } from "./presence";
+import crypto from "crypto";
 import {
   type Contact, type Conversation, type Message, type Channel,
   CHANNEL_INFO, CHANNELS,
@@ -106,6 +107,7 @@ function logInboundDuplicateIgnored(provider: string, externalMessageId: string)
 const WHATSAPP_INBOX_CSW_BUFFER_MS = 60 * 60 * 1000;
 
 const WHATSAPP_WINDOW_EXPIRED_MSG = userFacingReplyWindowBlockedMessageInbox("whatsapp");
+const CALENDLY_CONTEXT_RETENTION_MS = 14 * 24 * 60 * 60 * 1000;
 
 /** Human-readable last-message preview for media messages. */
 function mediaPreviewLabel(contentType?: string): string {
@@ -116,6 +118,93 @@ function mediaPreviewLabel(contentType?: string): string {
     case 'document': return 'Document';
     default:         return 'Media';
   }
+}
+
+function addCalendlyTrackingToUrl(rawUrl: string, context: {
+  contactId: string;
+  conversationId: string;
+  channel: Channel;
+  token: string;
+}): string {
+  try {
+    const url = new URL(rawUrl);
+    const host = url.hostname.toLowerCase();
+    if (!host.includes("calendly.com")) return rawUrl;
+    url.searchParams.set("utm_source", "whachatcrm");
+    url.searchParams.set("utm_medium", context.channel);
+    url.searchParams.set("utm_content", context.contactId);
+    url.searchParams.set("utm_campaign", context.conversationId);
+    url.searchParams.set("utm_term", context.token);
+    return url.toString();
+  } catch {
+    return rawUrl;
+  }
+}
+
+function withTrackedCalendlyLinks(content: string, context: {
+  contactId: string;
+  conversationId: string;
+  channel: Channel;
+  token: string;
+}): { content: string; trackedUrls: string[] } {
+  if (!content || !/calendly\.com/i.test(content)) return { content, trackedUrls: [] };
+  const trackedUrls: string[] = [];
+  const next = content.replace(/https?:\/\/[^\s<>"')]+/gi, (raw) => {
+    const trailing = raw.match(/[.,!?;:]+$/)?.[0] || "";
+    const url = trailing ? raw.slice(0, -trailing.length) : raw;
+    const tracked = addCalendlyTrackingToUrl(url, context);
+    if (tracked !== url) trackedUrls.push(tracked);
+    return `${tracked}${trailing}`;
+  });
+  return { content: next, trackedUrls };
+}
+
+async function rememberCalendlyBookingContext(contact: Contact, context: {
+  userId: string;
+  contactId: string;
+  conversationId: string;
+  channel: Channel;
+  token: string;
+  trackedUrls: string[];
+}): Promise<void> {
+  if (context.trackedUrls.length === 0) return;
+  const now = new Date();
+  const customFields = ((contact.customFields as Record<string, unknown> | null) || {}) as Record<string, unknown>;
+  const existing = Array.isArray(customFields._calendlyBookingContexts)
+    ? customFields._calendlyBookingContexts.filter((raw) => {
+        const item = raw as Record<string, unknown>;
+        const sentAt = typeof item.bookingLinkSentAt === "string" ? Date.parse(item.bookingLinkSentAt) : 0;
+        return sentAt > Date.now() - CALENDLY_CONTEXT_RETENTION_MS;
+      })
+    : [];
+  const nextContext = {
+    userId: context.userId,
+    contactId: context.contactId,
+    conversationId: context.conversationId,
+    channel: context.channel,
+    trackingToken: context.token,
+    bookingLinkSentAt: now.toISOString(),
+    calendlyUrls: context.trackedUrls.slice(0, 3),
+  };
+  await storage.updateContact(
+    context.contactId,
+    {
+      customFields: {
+        ...customFields,
+        _calendlyBookingContexts: [nextContext, ...existing].slice(0, 10),
+      },
+    } as any,
+    { skipAutomationHooks: true }
+  );
+  console.log(JSON.stringify({
+    tag: "[CalendlyBookingContext]",
+    event: "outbound_context_stored",
+    userId: context.userId,
+    contactId: context.contactId,
+    conversationId: context.conversationId,
+    channel: context.channel,
+    trackedUrlCount: context.trackedUrls.length,
+  }));
 }
 
 export interface SendMessageResult {
@@ -316,7 +405,7 @@ class ChannelService {
       enforceWhatsAppCustomerServiceWindow,
       templateVariables,
     } = params;
-    const content = params.content ?? '';
+    let content = params.content ?? '';
 
     if (!content && !mediaUrl) {
       return { success: false, channel: 'whatsapp', error: 'Message must have content or media' };
@@ -407,6 +496,27 @@ class ChannelService {
           messageId: failed.id,
         };
       }
+    }
+
+    const bookingContextToken = crypto.randomBytes(12).toString("hex");
+    const trackedCalendly = withTrackedCalendlyLinks(content, {
+      contactId,
+      conversationId: conversation.id,
+      channel: targetChannel,
+      token: bookingContextToken,
+    });
+    if (trackedCalendly.trackedUrls.length > 0) {
+      content = trackedCalendly.content;
+      await rememberCalendlyBookingContext(contact, {
+        userId,
+        contactId,
+        conversationId: conversation.id,
+        channel: targetChannel,
+        token: bookingContextToken,
+        trackedUrls: trackedCalendly.trackedUrls,
+      }).catch((err) =>
+        console.warn(`[CalendlyBookingContext] store failed contactId=${contactId}: ${err instanceof Error ? err.message : String(err)}`)
+      );
     }
 
     const message = await storage.createMessage({

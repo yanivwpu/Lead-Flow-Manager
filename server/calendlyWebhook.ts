@@ -1,7 +1,7 @@
 import crypto from "crypto";
 import type { Request, Response } from "express";
 import { eq, and } from "drizzle-orm";
-import { chats } from "@shared/schema";
+import { appointments, chats } from "@shared/schema";
 import { db } from "../drizzle/db";
 import {
   decryptCredential,
@@ -129,6 +129,14 @@ function readTrackingUtmContactId(tracking: unknown): string | undefined {
   return raw.trim();
 }
 
+function readTrackingString(tracking: unknown, snakeKey: string, camelKey: string): string | undefined {
+  if (!tracking || typeof tracking !== "object") return undefined;
+  const t = tracking as Record<string, unknown>;
+  const raw = t[snakeKey] ?? t[camelKey];
+  if (typeof raw !== "string" || !raw.trim()) return undefined;
+  return raw.trim();
+}
+
 function extractCalendlyBookingPayload(body: Record<string, unknown>): {
   email: string;
   name: string;
@@ -139,6 +147,8 @@ function extractCalendlyBookingPayload(body: Record<string, unknown>): {
   scheduledEventUri?: string;
   externalMessageId: string;
   utmContactId?: string;
+  utmConversationId?: string;
+  utmTrackingToken?: string;
   meetingLink?: string;
 } | null {
   const payload = (body.payload as Record<string, unknown>) || body;
@@ -189,6 +199,8 @@ function extractCalendlyBookingPayload(body: Record<string, unknown>): {
     (invitee.tracking as Record<string, unknown>) ||
     (scheduled?.tracking as Record<string, unknown>);
   const utmContactId = readTrackingUtmContactId(tracking);
+  const utmConversationId = readTrackingString(tracking, "utm_campaign", "utmCampaign");
+  const utmTrackingToken = readTrackingString(tracking, "utm_term", "utmTerm");
 
   const externalMessageId =
     (scheduledEventUri as string | undefined) ||
@@ -207,6 +219,8 @@ function extractCalendlyBookingPayload(body: Record<string, unknown>): {
     scheduledEventUri,
     externalMessageId: String(externalMessageId).slice(0, 500),
     utmContactId,
+    utmConversationId,
+    utmTrackingToken,
     meetingLink,
   };
 }
@@ -287,6 +301,87 @@ async function resolvePreferredCalendlyContactId(
   return byEmail.id;
 }
 
+type CalendlyBookingMatch = {
+  contactId: string;
+  conversationId?: string;
+  channel?: string;
+  reason: "tracking" | "email" | "recent_context";
+};
+
+function getRecentCalendlyContexts(contact: { customFields?: unknown }): Array<Record<string, unknown>> {
+  const customFields = ((contact.customFields as Record<string, unknown> | null) || {}) as Record<string, unknown>;
+  const rows = Array.isArray(customFields._calendlyBookingContexts) ? customFields._calendlyBookingContexts : [];
+  const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  return rows
+    .map((x) => (x && typeof x === "object" ? (x as Record<string, unknown>) : null))
+    .filter((x): x is Record<string, unknown> => {
+      if (!x) return false;
+      const sentAt = typeof x.bookingLinkSentAt === "string" ? Date.parse(x.bookingLinkSentAt) : 0;
+      return sentAt >= cutoff;
+    })
+    .sort((a, b) => {
+      const at = typeof a.bookingLinkSentAt === "string" ? Date.parse(a.bookingLinkSentAt) : 0;
+      const bt = typeof b.bookingLinkSentAt === "string" ? Date.parse(b.bookingLinkSentAt) : 0;
+      return bt - at;
+    });
+}
+
+async function resolveCalendlyBookingMatch(params: {
+  userId: string;
+  inviteeEmail: string;
+  utmContactId?: string;
+  utmConversationId?: string;
+  utmTrackingToken?: string;
+}): Promise<CalendlyBookingMatch | undefined> {
+  if (params.utmContactId) {
+    const contact = await storage.getContact(params.utmContactId);
+    if (contact?.userId === params.userId) {
+      let conversationId = params.utmConversationId;
+      if (conversationId) {
+        const conv = await storage.getConversation(conversationId);
+        if (!conv || conv.userId !== params.userId || conv.contactId !== contact.id) {
+          conversationId = undefined;
+        }
+      }
+      if (!conversationId && params.utmTrackingToken) {
+        const ctx = getRecentCalendlyContexts(contact).find(
+          (x) => x.trackingToken === params.utmTrackingToken
+        );
+        conversationId = typeof ctx?.conversationId === "string" ? ctx.conversationId : undefined;
+      }
+      return { contactId: contact.id, conversationId, reason: "tracking" };
+    }
+  }
+
+  const byEmail = await storage.getContactByChannelId(params.userId, "calendly", params.inviteeEmail);
+  if (byEmail) {
+    const ctx = getRecentCalendlyContexts(byEmail)[0];
+    return {
+      contactId: byEmail.id,
+      conversationId: typeof ctx?.conversationId === "string" ? ctx.conversationId : undefined,
+      channel: typeof ctx?.channel === "string" ? ctx.channel : undefined,
+      reason: "email",
+    };
+  }
+
+  const contacts = await storage.getContacts(params.userId, 5000);
+  for (const contact of contacts) {
+    const ctx = getRecentCalendlyContexts(contact).find(
+      (x) => !params.utmTrackingToken || x.trackingToken === params.utmTrackingToken
+    );
+    if (ctx) {
+      return {
+        contactId: contact.id,
+        conversationId: typeof ctx.conversationId === "string" ? ctx.conversationId : undefined,
+        channel: typeof ctx.channel === "string" ? ctx.channel : undefined,
+        reason: "recent_context",
+      };
+    }
+  }
+
+  return undefined;
+}
+
 async function applyCalendlyConfirmedBookingCrmEffects(params: {
   userId: string;
   contactId: string;
@@ -297,8 +392,10 @@ async function applyCalendlyConfirmedBookingCrmEffects(params: {
   eventTypeName: string;
   scheduledEventUri?: string;
   meetingLink?: string;
+  inviteeName?: string;
+  inviteeEmail?: string;
 }): Promise<void> {
-  const { userId, contactId, conversationId, appointmentId, title, startIso, eventTypeName, scheduledEventUri, meetingLink } =
+  const { userId, contactId, conversationId, appointmentId, title, startIso, eventTypeName, scheduledEventUri, meetingLink, inviteeName, inviteeEmail } =
     params;
   const contact = await storage.getContact(contactId);
   if (!contact) {
@@ -307,8 +404,14 @@ async function applyCalendlyConfirmedBookingCrmEffects(params: {
   }
 
   const patch: Record<string, unknown> = {};
-  if (contact.tag !== "Appointment Booked") {
-    patch.tag = "Appointment Booked";
+  if (!contact.email && inviteeEmail) {
+    patch.email = inviteeEmail;
+  }
+  if ((!contact.name || contact.name === "Unknown") && inviteeName) {
+    patch.name = inviteeName;
+  }
+  if (contact.tag !== "Appointment Scheduled") {
+    patch.tag = "Appointment Scheduled";
   }
   if (PIPELINE_BEFORE_APPOINTMENT_SET.has(contact.pipelineStage || "")) {
     patch.pipelineStage = "Appointment Set";
@@ -324,6 +427,8 @@ async function applyCalendlyConfirmedBookingCrmEffects(params: {
     title,
     startTime: startIso,
     eventTypeName,
+    inviteeName: inviteeName || null,
+    inviteeEmail: inviteeEmail || null,
     scheduledEventUri: scheduledEventUri || null,
     meetingLink: meetingLink || null,
     bookedAt: new Date().toISOString(),
@@ -345,6 +450,8 @@ async function applyCalendlyConfirmedBookingCrmEffects(params: {
       title,
       startTime: startIso,
       eventType: eventTypeName,
+      inviteeName: inviteeName || null,
+      inviteeEmail: inviteeEmail || null,
       scheduledEventUri: scheduledEventUri || null,
       meetingLink: meetingLink || null,
       source: "calendly",
@@ -371,7 +478,37 @@ async function writeCalendlyConversationActivity(params: {
   content: string;
   externalMessageId: string;
   preferredContactId?: string;
+  preferredConversationId?: string;
 }): Promise<{ contactId: string; conversationId: string }> {
+  if (params.preferredContactId && params.preferredConversationId) {
+    const contact = await storage.getContact(params.preferredContactId);
+    const conversation = await storage.getConversation(params.preferredConversationId);
+    if (contact?.userId === params.userId && conversation?.userId === params.userId && conversation.contactId === contact.id) {
+      const msg = await storage.createMessage({
+        conversationId: conversation.id,
+        contactId: contact.id,
+        userId: params.userId,
+        direction: "inbound",
+        content: params.content,
+        contentType: "text",
+        externalMessageId: params.externalMessageId.slice(0, 500),
+        status: "delivered",
+      } as any);
+      await storage.updateConversation(conversation.id, {
+        lastMessageAt: new Date(),
+        lastMessagePreview: params.content.split("\n")[0].slice(0, 100),
+        lastMessageDirection: "inbound",
+      });
+      logCalendlyWebhook("conversation_booking_event_created", {
+        userId: params.userId,
+        contactId: contact.id,
+        conversationId: conversation.id,
+        messageId: msg.id,
+      });
+      return { contactId: contact.id, conversationId: conversation.id };
+    }
+  }
+
   const { channelService } = await import("./channelService");
   const { contact, conversation } = await channelService.processIncomingMessage({
     userId: params.userId,
@@ -402,6 +539,8 @@ async function handleInviteeCreated(userId: string, body: Record<string, unknown
     scheduledEventUri,
     externalMessageId,
     utmContactId,
+    utmConversationId,
+    utmTrackingToken,
     meetingLink,
   } = parsed;
 
@@ -414,9 +553,32 @@ async function handleInviteeCreated(userId: string, body: Record<string, unknown
     scheduledEventUri: scheduledEventUri || null,
     inviteeUri: inviteeUri || null,
     utmContactId: utmContactId || null,
+    utmConversationId: utmConversationId || null,
+    utmTrackingTokenExists: Boolean(utmTrackingToken),
     meetingLinkExists: Boolean(meetingLink),
   });
 
+  const bookingMatch = await resolveCalendlyBookingMatch({
+    userId,
+    inviteeEmail: email,
+    utmContactId,
+    utmConversationId,
+    utmTrackingToken,
+  });
+  const preferredContactId =
+    bookingMatch?.contactId || (await resolvePreferredCalendlyContactId(userId, email, utmContactId));
+  logCalendlyWebhook("invitee_created_contact_resolution", {
+    userId,
+    email,
+    utmContactId: utmContactId || null,
+    utmConversationId: utmConversationId || null,
+    preferredContactId: preferredContactId || null,
+    preferredConversationId: bookingMatch?.conversationId || null,
+    matchReason: bookingMatch?.reason || null,
+  });
+
+  const timeLabel = formatBookingTime(startTime);
+  const content = `Calendly booked: ${eventTypeName} at ${timeLabel}${meetingLink ? `\n${meetingLink}` : ""}`;
   const stableDedupeKey = (scheduledEventUri || inviteeUri || externalMessageId).trim();
   if (stableDedupeKey) {
     const existingAppt = await storage.getAppointmentByCalendlyScheduledEventUri(userId, stableDedupeKey);
@@ -425,60 +587,101 @@ async function handleInviteeCreated(userId: string, body: Record<string, unknown
         userId,
         email,
         appointmentId: existingAppt.id,
+        existingContactId: existingAppt.contactId,
+        matchedContactId: bookingMatch?.contactId || null,
+        matchedConversationId: bookingMatch?.conversationId || null,
         scheduledEventKey: stableDedupeKey.slice(0, 120),
       });
+      if (bookingMatch?.contactId && bookingMatch.conversationId && existingAppt.contactId !== bookingMatch.contactId) {
+        const startDate = startTime ? new Date(startTime) : new Date();
+        await db
+          .update(appointments)
+          .set({
+            contactId: bookingMatch.contactId,
+            conversationId: bookingMatch.conversationId,
+            contactName: name || email,
+          })
+          .where(eq(appointments.id, existingAppt.id));
+        await writeCalendlyConversationActivity({
+          userId,
+          email,
+          name,
+          content,
+          externalMessageId: `${String(externalMessageId).slice(0, 420)}:repair`,
+          preferredContactId: bookingMatch.contactId,
+          preferredConversationId: bookingMatch.conversationId,
+        });
+        await applyCalendlyConfirmedBookingCrmEffects({
+          userId,
+          contactId: bookingMatch.contactId,
+          conversationId: bookingMatch.conversationId,
+          appointmentId: existingAppt.id,
+          title: existingAppt.title || `${eventTypeName} · ${timeLabel}`,
+          startIso: startDate.toISOString(),
+          eventTypeName,
+          scheduledEventUri: stableDedupeKey || undefined,
+          meetingLink,
+          inviteeName: name,
+          inviteeEmail: email,
+        });
+        logCalendlyWebhook("duplicate_booking_repaired_to_context", {
+          userId,
+          appointmentId: existingAppt.id,
+          fromContactId: existingAppt.contactId,
+          toContactId: bookingMatch.contactId,
+          conversationId: bookingMatch.conversationId,
+        });
+      }
       return;
     }
   }
 
-  const preferredContactId = await resolvePreferredCalendlyContactId(userId, email, utmContactId);
-  logCalendlyWebhook("invitee_created_contact_resolution", {
+  let legacyChat: Awaited<ReturnType<typeof findOrCreateLegacyCalendlyWorkflowChat>> | undefined;
+  let isNewChat = false;
+  if (!bookingMatch?.conversationId) {
+    const chatKey = legacyCalendlyChatStorageKey(email);
+    legacyChat = await findOrCreateLegacyCalendlyWorkflowChat(userId, email, name);
+    await subscriptionService.trackConversationWindow(userId, legacyChat.id, chatKey);
+
+    const newLegacy: WhatsAppMessage = {
+      id: String(externalMessageId || `cal-${Date.now()}`).slice(0, 120),
+      text: content,
+      time: new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
+      sent: false,
+      sender: "them",
+    };
+    const messages = (legacyChat.messages as WhatsAppMessage[]) || [];
+    messages.push(newLegacy);
+    isNewChat = messages.length === 1;
+    await storage.updateChat(legacyChat.id, {
+      messages,
+      lastMessage: content,
+      time: newLegacy.time,
+      unread: (legacyChat.unread || 0) + 1,
+    });
+  }
+
+  const written = await writeCalendlyConversationActivity({
     userId,
     email,
-    utmContactId: utmContactId || null,
-    preferredContactId: preferredContactId || null,
-  });
-
-  const timeLabel = formatBookingTime(startTime);
-  const content = `Calendly booked: ${eventTypeName} at ${timeLabel}${meetingLink ? `\n${meetingLink}` : ""}`;
-
-  const chatKey = legacyCalendlyChatStorageKey(email);
-  const chat = await findOrCreateLegacyCalendlyWorkflowChat(userId, email, name);
-  await subscriptionService.trackConversationWindow(userId, chat.id, chatKey);
-
-  const newLegacy: WhatsAppMessage = {
-    id: String(externalMessageId || `cal-${Date.now()}`).slice(0, 120),
-    text: content,
-    time: new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
-    sent: false,
-    sender: "them",
-  };
-  const messages = (chat.messages as WhatsAppMessage[]) || [];
-  messages.push(newLegacy);
-  const isNewChat = messages.length === 1;
-  await storage.updateChat(chat.id, {
-    messages,
-    lastMessage: content,
-    time: newLegacy.time,
-    unread: (chat.unread || 0) + 1,
-  });
-
-  const { channelService } = await import("./channelService");
-  const { contact, conversation, chatbotWillFire } = await channelService.processIncomingMessage({
-    userId,
-    channel: "calendly",
-    channelContactId: email,
-    contactName: name,
+    name,
     content,
-    contentType: "text",
     externalMessageId: String(externalMessageId).slice(0, 500),
     preferredContactId,
+    preferredConversationId: bookingMatch?.conversationId,
   });
+  const contact = await storage.getContact(written.contactId);
+  const conversation = await storage.getConversation(written.conversationId);
+  if (!contact || !conversation) {
+    throw new Error("Calendly booking wrote activity but contact/conversation could not be reloaded");
+  }
+  const chatbotWillFire = !bookingMatch?.conversationId;
   logCalendlyWebhook("invitee_created_message_processed", {
     userId,
     email,
     contactId: contact.id,
     conversationId: conversation.id,
+    matchedOriginalConversation: Boolean(bookingMatch?.conversationId),
     chatbotWillFire,
   });
 
@@ -552,6 +755,8 @@ async function handleInviteeCreated(userId: string, body: Record<string, unknown
     eventTypeName,
     scheduledEventUri: stableDedupeKey || undefined,
     meetingLink,
+    inviteeName: name,
+    inviteeEmail: email,
   });
 
   notifyUser(userId, {
@@ -565,7 +770,7 @@ async function handleInviteeCreated(userId: string, body: Record<string, unknown
     source: "calendly",
   });
 
-  const updatedChat = await storage.getChat(chat.id);
+  const updatedChat = legacyChat ? await storage.getChat(legacyChat.id) : undefined;
   if (updatedChat) {
     dispatchInboundMessagingAutomation({
       userId,

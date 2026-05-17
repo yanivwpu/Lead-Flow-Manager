@@ -553,6 +553,8 @@ function formatContactActivity(event: ContactActivityEvent): { title: string; de
   const title = typeof data.title === "string" ? data.title : "";
   const eventType = typeof data.eventType === "string" ? data.eventType : "";
   const content = typeof data.content === "string" ? data.content : "";
+  const inviteeName = typeof data.inviteeName === "string" ? data.inviteeName : "";
+  const inviteeEmail = typeof data.inviteeEmail === "string" ? data.inviteeEmail : "";
   const startTime =
     typeof data.startTime === "string"
       ? data.startTime
@@ -563,8 +565,12 @@ function formatContactActivity(event: ContactActivityEvent): { title: string; de
 
   if (event.eventType === "calendly_booking") {
     return {
-      title: "Calendly meeting booked",
-      detail: [title || eventType || "Meeting", when].filter(Boolean).join(" · "),
+      title: "Meeting booked",
+      detail: [
+        eventType || title || "Calendly meeting",
+        when,
+        inviteeName || inviteeEmail ? `Invitee: ${inviteeName || inviteeEmail}` : "",
+      ].filter(Boolean).join(" · "),
       tone: "green",
     };
   }
