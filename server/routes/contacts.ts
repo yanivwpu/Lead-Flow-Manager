@@ -13,6 +13,14 @@ const openai = new OpenAI({
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
 });
 
+const ACTIVE_APPOINTMENT_STATUSES = new Set(["scheduled"]);
+
+function isActiveFutureAppointment(appt: { status?: string | null; appointmentDate?: Date | string | null }): boolean {
+  if (!ACTIVE_APPOINTMENT_STATUSES.has(appt.status || "")) return false;
+  const when = appt.appointmentDate ? new Date(appt.appointmentDate).getTime() : 0;
+  return Number.isFinite(when) && when >= Date.now() - 60 * 1000;
+}
+
 async function resolveEntityForNotes(id: string): Promise<{ userId: string } | null> {
   const contact = await storage.getContact(id);
   if (contact) return { userId: contact.userId };
@@ -658,7 +666,7 @@ export function registerContactRoutes(app: Express): void {
     try {
       if (!req.user) return res.status(401).json({ error: "Unauthorized" });
       const appts = await storage.getAppointmentsByUser(req.user.id);
-      res.json(appts);
+      res.json(appts.filter(isActiveFutureAppointment));
     } catch (err) {
       console.error("Error fetching appointments:", err);
       res.status(500).json({ error: "Failed to fetch appointments" });
@@ -669,7 +677,7 @@ export function registerContactRoutes(app: Express): void {
     try {
       if (!req.user) return res.status(401).json({ error: "Unauthorized" });
       const appts = await storage.getAppointmentsByContact(req.user.id, req.params.id);
-      res.json(appts);
+      res.json(appts.filter(isActiveFutureAppointment));
     } catch (err) {
       console.error("Error fetching contact appointments:", err);
       res.status(500).json({ error: "Failed to fetch appointments" });
