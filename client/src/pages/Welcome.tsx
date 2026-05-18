@@ -2,7 +2,7 @@ import { useState, lazy, Suspense, useLayoutEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { Helmet } from "react-helmet";
 import { useTranslation } from "react-i18next";
-import { ArrowRight, Bot, Calendar, CheckCircle2, ChevronRight, Clock3, Shield, Sparkles, TrendingUp } from "lucide-react";
+import { ArrowRight, Calendar, CheckCircle2, ChevronRight, Clock3, Shield, Sparkles, TrendingUp } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 const SiteFooter = lazy(() =>
   import("@/components/SiteFooter").then((m) => ({ default: m.SiteFooter })),
@@ -47,7 +47,7 @@ function HeroConversationMockup() {
         </div>
 
         <div className="grid gap-0 md:grid-cols-[1.05fr_0.95fr]">
-          <div className="space-y-3 bg-[radial-gradient(circle_at_top_left,_rgba(16,185,129,0.08),_transparent_36%)] px-5 py-5">
+          <div className="space-y-3 bg-gray-50/70 px-5 py-5">
             <div className="max-w-[86%] rounded-2xl rounded-tl-sm bg-white px-4 py-3 text-sm text-gray-800 shadow-sm ring-1 ring-gray-100">
               Hi, I’m interested in a 3-bedroom home in Miami.
             </div>
@@ -58,7 +58,7 @@ function HeroConversationMockup() {
               Around $600k–$800k.
             </div>
             <div className="ml-auto flex max-w-[90%] items-center gap-2 rounded-2xl rounded-tr-sm bg-emerald-50 px-4 py-3 text-sm text-emerald-900 ring-1 ring-emerald-100">
-              <Bot className="h-4 w-4 shrink-0 text-emerald-700" />
+              <Sparkles className="h-4 w-4 shrink-0 text-emerald-700" />
               Budget qualified. I can send available times for a showing.
             </div>
           </div>
@@ -115,7 +115,7 @@ export function Welcome() {
   const [showDemoModal, setShowDemoModal] = useState(false);
   const isRTL = getDirection() === "rtl";
   const heroTitle = t("landing.heroTitle");
-  const zeroPhrase = "Zero Complexity.";
+  const zeroPhrase = "Zero Complexity";
   const zeroIndex = heroTitle.indexOf(zeroPhrase);
 
   const hasStaticShell =
@@ -222,30 +222,30 @@ export function Welcome() {
       </nav>
 
       {/* Hero Section */}
-      <section className="px-4 md:px-6 pt-3 md:pt-6 pb-12 md:pb-14 max-w-7xl xl:max-w-[1440px] 2xl:max-w-[1536px] mx-auto">
+      <section className="px-4 md:px-6 pt-5 md:pt-8 pb-12 md:pb-14 max-w-7xl xl:max-w-[1440px] 2xl:max-w-[1536px] mx-auto">
         <div className="flex flex-col gap-8 md:grid md:grid-cols-[1fr_1.04fr] md:gap-10 xl:gap-14 items-start">
-          <div className="relative order-1 w-full md:order-2 md:mt-12 lg:mt-12 animate-hero-image">
+          <div className="relative order-1 w-full md:order-2 md:mt-16 lg:mt-16 animate-hero-image">
             <HeroConversationMockup />
           </div>
 
           <div className="animate-hero-text order-2 md:order-1 max-w-[640px]">
-            <h1 className="text-4xl md:text-5xl lg:text-[3.45rem] xl:text-6xl font-display font-bold text-gray-950 tracking-tight leading-[1.09] mb-4">
+            <h1 className="text-4xl md:text-5xl lg:text-[3.9rem] xl:text-[4.2rem] font-display font-bold text-gray-950 tracking-tight leading-[1.03] mb-4">
               {zeroIndex >= 0 ? (
                 <>
-                  {heroTitle.slice(0, zeroIndex)}
-                  <span className="whitespace-nowrap">{zeroPhrase}</span>
+                  <span className="block">{heroTitle.slice(0, zeroIndex).trim()}</span>
+                  <span className="block whitespace-nowrap">{zeroPhrase}</span>
                 </>
               ) : (
                 heroTitle
               )}
             </h1>
-            <p className="text-base md:text-lg xl:text-xl text-gray-600 mb-5 leading-7 max-w-xl">{t("landing.heroSubtitle")}</p>
+            <p className="text-base md:text-[1.05rem] text-gray-600 mb-5 leading-7 max-w-xl">{t("landing.heroSubtitle")}</p>
 
-            <div className="flex flex-col sm:flex-row sm:flex-wrap gap-3 mb-4">
+            <div className="flex flex-col sm:flex-row gap-2.5 mb-4">
               <div className="w-full sm:w-auto">
                 <Link href={user ? "/app/inbox" : "/auth"}>
                   <button
-                    className="w-full sm:w-auto h-14 px-8 bg-brand-green hover:bg-emerald-700 text-white font-semibold rounded-full flex items-center justify-center gap-2 transition-all shadow-lg hover:shadow-xl"
+                    className="w-full sm:w-auto h-11 px-5 bg-brand-green hover:bg-emerald-700 text-white text-sm font-semibold rounded-full flex items-center justify-center gap-2 transition-all shadow-md hover:shadow-lg"
                     data-testid="button-hero-cta"
                   >
                     {t("landing.startTrial")}
@@ -256,11 +256,10 @@ export function Welcome() {
               <div className="w-full sm:w-auto">
                 <Link href="/pricing">
                   <button
-                    className="w-full sm:w-auto h-14 px-7 bg-white border border-gray-200 text-gray-800 font-semibold rounded-full flex items-center justify-center gap-2 hover:bg-gray-50 transition-colors shadow-sm"
+                    className="w-full sm:w-auto h-11 px-5 bg-white border border-gray-200 text-gray-800 text-sm font-semibold rounded-full flex items-center justify-center gap-1.5 hover:bg-gray-50 transition-colors"
                     data-testid="button-hero-pricing"
                   >
                     {t("landing.pricing")}
-                    <ChevronRight className="h-4 w-4" />
                   </button>
                 </Link>
               </div>
@@ -268,7 +267,7 @@ export function Welcome() {
                 <button
                   type="button"
                   onClick={() => setShowDemoModal(true)}
-                  className="w-full sm:w-auto h-14 px-7 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-semibold rounded-full flex items-center justify-center gap-2 hover:from-amber-600 hover:to-orange-600 transition-colors shadow-md"
+                  className="w-full sm:w-auto h-11 px-5 bg-gradient-to-r from-amber-500 to-orange-500 text-white text-sm font-semibold rounded-full flex items-center justify-center gap-2 hover:from-amber-600 hover:to-orange-600 transition-colors shadow-md"
                   data-testid="button-book-demo"
                 >
                   <Calendar className="h-4 w-4" />

@@ -72,15 +72,15 @@
       #whachat-static-shell .wcs-btn-header { font-size: 0.875rem; font-weight: 500; padding: 8px 16px; border-radius: 9999px; text-decoration: none; border: none; cursor: pointer; font-family: inherit; }
       #whachat-static-shell .wcs-btn-ghost { color: #4b5563; background: transparent; }
       #whachat-static-shell .wcs-btn-green { background: #059669; color: #fff; font-weight: 500; }
-      #whachat-static-shell .wcs-hero { padding: 12px 16px 56px; max-width: 1280px; margin: 0 auto; box-sizing: border-box; }
+      #whachat-static-shell .wcs-hero { padding: 20px 16px 56px; max-width: 1280px; margin: 0 auto; box-sizing: border-box; }
       #whachat-static-shell .wcs-hero-grid { display: flex; flex-direction: column; gap: 32px; align-items: stretch; }
       #whachat-static-shell .wcs-order-img { order: 1; width: 100%; }
       #whachat-static-shell .wcs-order-txt { order: 2; width: 100%; }
       @media (min-width: 768px) {
         #whachat-static-shell .wcs-nav { padding: 12px 24px; }
-        #whachat-static-shell .wcs-hero { padding: 24px 24px 56px; }
+        #whachat-static-shell .wcs-hero { padding: 32px 24px 56px; }
         #whachat-static-shell .wcs-hero-grid { display: grid; grid-template-columns: 1fr 1.04fr; gap: 40px; align-items: start; }
-        #whachat-static-shell .wcs-order-img { order: 2; margin-top: 48px; }
+        #whachat-static-shell .wcs-order-img { order: 2; margin-top: 64px; }
         #whachat-static-shell .wcs-order-txt { order: 1; }
       }
       #whachat-static-shell .wcs-mockup { position: relative; max-width: 560px; margin: 0 auto; border: 1px solid #e5e7eb; border-radius: 28px; background: #fff; overflow: hidden; box-shadow: 0 24px 50px -24px rgb(17 24 39 / .32); }
@@ -89,22 +89,24 @@
       #whachat-static-shell .wcs-ai { border-radius: 9999px; background: #f5f3ff; color: #6d28d9; border: 1px solid #ede9fe; padding: 4px 10px; font-size: .75rem; font-weight: 700; white-space: nowrap; }
       #whachat-static-shell .wcs-mockup-body { display: grid; }
       @media (min-width: 768px) { #whachat-static-shell .wcs-mockup-body { grid-template-columns: 1.05fr .95fr; } }
-      #whachat-static-shell .wcs-chat { padding: 20px; background: radial-gradient(circle at top left, rgba(16,185,129,.08), transparent 38%); display: grid; gap: 12px; }
+      #whachat-static-shell .wcs-chat { padding: 20px; background: rgba(249,250,251,.7); display: grid; gap: 12px; }
       #whachat-static-shell .wcs-bubble { max-width: 86%; border-radius: 18px; padding: 12px 16px; font-size: .875rem; line-height: 1.45; box-shadow: 0 1px 2px rgb(17 24 39 / .06); }
       #whachat-static-shell .wcs-bubble-in { background: #fff; color: #1f2937; border-top-left-radius: 4px; border: 1px solid #f3f4f6; }
       #whachat-static-shell .wcs-bubble-out { margin-left: auto; background: #059669; color: #fff; border-top-right-radius: 4px; }
-      #whachat-static-shell .wcs-bubble-ai { margin-left: auto; background: #ecfdf5; color: #064e3b; border-top-right-radius: 4px; border: 1px solid #a7f3d0; }
+      #whachat-static-shell .wcs-bubble-ai { margin-left: auto; display: flex; align-items: center; gap: 8px; background: #ecfdf5; color: #064e3b; border-top-right-radius: 4px; border: 1px solid #a7f3d0; }
+      #whachat-static-shell .wcs-spark { width: 16px; height: 16px; color: #047857; flex-shrink: 0; }
       #whachat-static-shell .wcs-panel { padding: 20px; border-top: 1px solid #f3f4f6; }
       @media (min-width: 768px) { #whachat-static-shell .wcs-panel { border-top: 0; border-left: 1px solid #f3f4f6; } }
       #whachat-static-shell .wcs-score { border-radius: 20px; background: #111827; color: #fff; padding: 16px; }
       #whachat-static-shell .wcs-score-num { font-size: 2.25rem; font-weight: 700; letter-spacing: -0.03em; }
       #whachat-static-shell .wcs-status { margin: 14px 0; display: grid; gap: 8px; font-size: .875rem; color: #374151; }
       #whachat-static-shell .wcs-pipeline { border-radius: 18px; background: #f9fafb; border: 1px solid #f3f4f6; padding: 14px; font-size: .75rem; color: #6b7280; }
-      #whachat-static-shell h1 { font-family: 'Plus Jakarta Sans', Inter, sans-serif; font-size: clamp(2.25rem, 6vw, 3rem); font-weight: 700; line-height: 1.09; letter-spacing: -0.035em; margin: 0 0 16px; color: #030712; }
+      #whachat-static-shell h1 { font-family: 'Plus Jakarta Sans', Inter, sans-serif; font-size: clamp(2.25rem, 6vw, 3rem); font-weight: 700; line-height: 1.03; letter-spacing: -0.035em; margin: 0 0 16px; color: #030712; }
       @media (min-width: 768px) {
-        #whachat-static-shell h1 { font-size: clamp(2.75rem, 3.7vw, 3.75rem); margin-bottom: 16px; max-width: 640px; }
+        #whachat-static-shell h1 { font-size: clamp(3rem, 4.05vw, 4.2rem); margin-bottom: 16px; max-width: 640px; }
       }
-      #whachat-static-shell .wcs-nowrap { white-space: nowrap; }
+      #whachat-static-shell .wcs-head-line { display: block; }
+      #whachat-static-shell .wcs-nowrap { display: block; white-space: nowrap; }
       #whachat-static-shell .wcs-sub { font-size: 1.125rem; color: #4b5563; margin: 0 0 24px; line-height: 1.625; max-width: 36rem; }
       @media (min-width: 768px) {
         #whachat-static-shell .wcs-sub { font-size: 1.125rem; margin-bottom: 24px; }
@@ -112,11 +114,12 @@
       #whachat-static-shell .wcs-stack { display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px; max-width: 100%; }
       #whachat-static-shell .wcs-btn-row { width: 100%; }
       @media (min-width: 640px) {
+        #whachat-static-shell .wcs-stack { flex-direction: row; flex-wrap: wrap; gap: 10px; }
         #whachat-static-shell .wcs-btn-row { width: auto; }
       }
-      #whachat-static-shell .wcs-btn-primary { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 56px; padding: 0 32px; background: #059669; color: #fff; font-weight: 600; border-radius: 9999px; text-decoration: none; width: 100%; box-sizing: border-box; box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.08); }
-      #whachat-static-shell .wcs-btn-outline { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; padding: 0 24px; background: #fff; color: #374151; font-weight: 500; border-radius: 9999px; text-decoration: none; border: 1px solid #e5e7eb; width: 100%; box-sizing: border-box; }
-      #whachat-static-shell .wcs-btn-demo { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; padding: 0 24px; background: linear-gradient(to right, #f59e0b, #f97316); color: #fff; font-weight: 600; border-radius: 9999px; text-decoration: none; width: 100%; box-sizing: border-box; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.08); }
+      #whachat-static-shell .wcs-btn-primary { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 0 20px; background: #059669; color: #fff; font-size: .875rem; font-weight: 600; border-radius: 9999px; text-decoration: none; width: 100%; box-sizing: border-box; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.08); }
+      #whachat-static-shell .wcs-btn-outline { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 0 20px; background: #fff; color: #374151; font-size: .875rem; font-weight: 600; border-radius: 9999px; text-decoration: none; border: 1px solid #e5e7eb; width: 100%; box-sizing: border-box; }
+      #whachat-static-shell .wcs-btn-demo { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 0 20px; background: linear-gradient(to right, #f59e0b, #f97316); color: #fff; font-size: .875rem; font-weight: 600; border-radius: 9999px; text-decoration: none; width: 100%; box-sizing: border-box; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.08); }
       #whachat-static-shell .wcs-note { font-size: 0.875rem; color: #6b7280; margin: 0 0 24px; }
       html.wcs-hide-static-marketing #whachat-static-shell { display: none !important; }
     </style>
@@ -224,7 +227,12 @@
                   <div class="wcs-bubble wcs-bubble-in">Hi, I’m interested in a 3-bedroom home in Miami.</div>
                   <div class="wcs-bubble wcs-bubble-out">Great. What’s your budget range?</div>
                   <div class="wcs-bubble wcs-bubble-in">Around $600k–$800k.</div>
-                  <div class="wcs-bubble wcs-bubble-ai">Budget qualified. I can send available times for a showing.</div>
+                  <div class="wcs-bubble wcs-bubble-ai">
+                    <svg class="wcs-spark" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <path d="M12 3l1.8 5.1L19 10l-5.2 1.9L12 17l-1.8-5.1L5 10l5.2-1.9L12 3z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+                    </svg>
+                    <span>Budget qualified. I can send available times for a showing.</span>
+                  </div>
                 </div>
                 <div class="wcs-panel">
                   <div class="wcs-score">
@@ -242,14 +250,14 @@
             </div>
           </div>
           <div class="wcs-order-txt">
-            <h1 id="whachat-static-hero-title">Unified Inbox. <span class="wcs-nowrap">Zero Complexity.</span></h1>
+            <h1 id="whachat-static-hero-title"><span class="wcs-head-line">Unified Inbox</span><span class="wcs-nowrap">Zero Complexity</span></h1>
             <p class="wcs-sub">Bring WhatsApp, Instagram, Facebook Messenger, SMS, Telegram, and web chat into one workspace for faster follow-ups, better visibility, and team collaboration.</p>
             <div class="wcs-stack">
               <div class="wcs-btn-row">
-                <a class="wcs-btn-primary" href="/auth" data-testid="button-hero-cta">Start Your 14-Day Pro Trial →</a>
+                <a class="wcs-btn-primary" href="/auth" data-testid="button-hero-cta">Start Free Trial →</a>
               </div>
               <div class="wcs-btn-row">
-                <a class="wcs-btn-outline" href="/pricing" data-testid="button-hero-pricing">Pricing ›</a>
+                <a class="wcs-btn-outline" href="/pricing" data-testid="button-hero-pricing">Pricing</a>
               </div>
               <div class="wcs-btn-row">
                 <a class="wcs-btn-demo" href="/contact" data-testid="button-book-demo">Book a Demo</a>
