@@ -228,8 +228,8 @@ export function Welcome() {
             <HeroConversationMockup />
           </div>
 
-          <div className="animate-hero-text order-2 md:order-1 max-w-[640px]">
-            <h1 className="text-4xl md:text-5xl lg:text-[3.9rem] xl:text-[4.2rem] font-display font-bold text-gray-950 tracking-tight leading-[1.03] mb-4">
+          <div className="animate-hero-text order-2 md:order-1 max-w-[720px] md:mt-8 lg:mt-10">
+            <h1 className="text-4xl md:text-6xl lg:text-[5rem] xl:text-[5.4rem] font-display font-bold text-gray-950 tracking-tight leading-[0.98] mb-5">
               {zeroIndex >= 0 ? (
                 <>
                   <span className="block">{heroTitle.slice(0, zeroIndex).trim()}</span>
